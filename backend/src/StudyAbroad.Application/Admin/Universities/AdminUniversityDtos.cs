@@ -124,7 +124,7 @@ public record UpdateOfferingRequest(
     string? Notes,
     IReadOnlyList<UpdateOfferingMajor>? Majors);
 
-public record SetUniversityVisibilityRequest(bool IsActive);
+public record SetUniversityVisibilityRequest(bool IsActive, string? Reason = null);
 
 /// <summary>Kết quả của một thao tác sửa: có dữ liệu, không tìm thấy, hoặc lỗi theo từng trường dữ liệu.</summary>
 public record AdminUpdateResult<T>(T? Value, bool NotFound, IReadOnlyDictionary<string, string> Errors)

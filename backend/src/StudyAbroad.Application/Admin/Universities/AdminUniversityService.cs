@@ -22,7 +22,9 @@ public interface IAdminUniversityService
     Task<AdminUpdateResult<AdminUniversityOfferingDto>> UpdateOfferingAsync(
         Guid universityId, Guid offeringId, UpdateOfferingRequest request, Guid actorUserId, CancellationToken ct = default);
     /// <summary>[UC-67] Ẩn trường khỏi tìm kiếm và gợi ý, hoặc hiện lại (kèm ghi audit).</summary>
-    Task<AdminUniversityDetailDto?> SetVisibilityAsync(Guid universityId, bool isActive, Guid actorUserId, CancellationToken ct = default);
+    /// <summary>Ẩn bắt buộc có lý do; lý do được ghi vào audit.</summary>
+    Task<AdminUpdateResult<AdminUniversityDetailDto>> SetVisibilityAsync(
+        Guid universityId, bool isActive, string? reason, Guid actorUserId, CancellationToken ct = default);
 }
 
 public class AdminUniversityService(IAdminUniversityRepository repository) : IAdminUniversityService
@@ -265,21 +267,27 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         return AdminUpdateResult<AdminUniversityOfferingDto>.Ok(ToOfferingDto(offering, majorRows, lastEditedBy));
     }
 
-    public async Task<AdminUniversityDetailDto?> SetVisibilityAsync(Guid universityId, bool isActive, Guid actorUserId, CancellationToken ct = default)
+    public async Task<AdminUpdateResult<AdminUniversityDetailDto>> SetVisibilityAsync(
+        Guid universityId, bool isActive, string? reason, Guid actorUserId, CancellationToken ct = default)
     {
         var university = await repository.GetUniversityAsync(universityId, ct);
-        if (university is null) return null;
+        if (university is null) return AdminUpdateResult<AdminUniversityDetailDto>.Missing();
+
+        reason = Clean(reason);
+        var errors = ValidateVisibilityReason(isActive, reason);
+        if (errors.Count > 0) return AdminUpdateResult<AdminUniversityDetailDto>.Invalid(errors);
 
         // Bấm lại cùng trạng thái là thao tác hợp lệ, chỉ không ghi thêm audit.
-        if (university.IsActive == isActive) return await ToDetailDtoAsync(university, ct);
-
-        university.IsActive = isActive;
-        university.LastEditedByUserId = actorUserId;
-        var action = isActive ? "university.show" : "university.hide";
-        repository.AddAudit(AuditEntry(actorUserId, action, "university", university.Id,
-            new { code = university.Code, from = !isActive, to = isActive }));
-        await repository.SaveChangesAsync(ct);
-        return await ToDetailDtoAsync(university, ct);
+        if (university.IsActive != isActive)
+        {
+            university.IsActive = isActive;
+            university.LastEditedByUserId = actorUserId;
+            var action = isActive ? "university.show" : "university.hide";
+            repository.AddAudit(AuditEntry(actorUserId, action, "university", university.Id,
+                new { code = university.Code, from = !isActive, to = isActive, reason }));
+            await repository.SaveChangesAsync(ct);
+        }
+        return AdminUpdateResult<AdminUniversityDetailDto>.Ok(await ToDetailDtoAsync(university, ct));
     }
 
     private static void ValidateUniversityFields(

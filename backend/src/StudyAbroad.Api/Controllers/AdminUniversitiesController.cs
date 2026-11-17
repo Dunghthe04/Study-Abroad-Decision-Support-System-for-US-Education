@@ -86,7 +86,9 @@ public class AdminUniversitiesController(IAdminUniversityService service) : Cont
     {
         if (User.GetUserId() is not { } actorId) return Unauthorized();
 
-        var university = await service.SetVisibilityAsync(id, request.IsActive, actorId, ct);
-        return university is null ? NotFound() : Ok(university);
+        var result = await service.SetVisibilityAsync(id, request.IsActive, request.Reason, actorId, ct);
+        if (result.NotFound) return NotFound();
+        if (!result.Success) return BadRequest(new { errors = result.Errors });
+        return Ok(result.Value);
     }
 }

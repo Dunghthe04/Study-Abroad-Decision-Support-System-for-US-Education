@@ -264,20 +264,35 @@ public class AdminUniversityServiceTests
         var audit = repo.Audits;
         var service = new AdminUniversityService(repo);
 
-        var first = await service.SetVisibilityAsync(repo.University.Id, false, Actor);
-        var second = await service.SetVisibilityAsync(repo.University.Id, false, Actor);
+        var first = await service.SetVisibilityAsync(repo.University.Id, false, "Dữ liệu sai", Actor);
+        var second = await service.SetVisibilityAsync(repo.University.Id, false, "Dữ liệu sai", Actor);
 
-        Assert.False(first!.IsActive);
-        Assert.False(second!.IsActive);
-        Assert.Equal("university.hide", Assert.Single(audit).Action);
+        Assert.False(first.Value!.IsActive);
+        Assert.False(second.Value!.IsActive);
+        var entry = Assert.Single(audit);
+        Assert.Equal("university.hide", entry.Action);
+        Assert.Contains("reason", entry.DetailJson);
     }
 
     [Fact]
-    public async Task SetVisibilityAsync_UnknownId_ReturnsNull()
+    public async Task SetVisibilityAsync_HideWithoutReason_ReturnsError()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo);
+
+        var result = await service.SetVisibilityAsync(repo.University.Id, false, "  ", Actor);
+
+        Assert.Contains("reason", result.Errors.Keys);
+        Assert.True(repo.University.IsActive);
+        Assert.Empty(repo.Audits);
+    }
+
+    [Fact]
+    public async Task SetVisibilityAsync_UnknownId_ReturnsNotFound()
     {
         var service = new AdminUniversityService(new FakeRepository());
 
-        Assert.Null(await service.SetVisibilityAsync(Guid.NewGuid(), false, Actor));
+        Assert.True((await service.SetVisibilityAsync(Guid.NewGuid(), false, "x", Actor)).NotFound);
     }
 
     private static UpdateOfferingRequest OfferingRequest(FakeRepository repo)
