@@ -49,7 +49,8 @@ public class StudyCenterService(
     IStudyCenterRepository repository,
     IAuditLogRepository auditLogs,
     ICenterVerificationRepository? verificationRepository = null,
-    IEmailSender? emailSender = null) : IStudyCenterService
+    IEmailSender? emailSender = null,
+    StudyAbroad.Application.Notifications.INotificationService? notifications = null) : IStudyCenterService
 {
     private const int MaxPageSize = 100;
     public const int MaxNameLength = 200;
@@ -733,6 +734,21 @@ public class StudyCenterService(
     /// </summary>
     private async Task NotifyCenterAsync(StudyCenter center, string outcome, string? reason, IReadOnlyList<string>? unmet, CancellationToken ct)
     {
+        // [UC-110 / UC-59] Thông báo trong hệ thống cho tài khoản sở hữu trung tâm (service tự nuốt lỗi)
+        if (notifications is not null && center.OwnerUserId is { } ownerId)
+        {
+            var title = outcome switch
+            {
+                "verified" => "Hồ sơ xác minh đã được duyệt",
+                "reject" => "Hồ sơ xác minh bị từ chối",
+                "changes_requested" => "Hồ sơ xác minh cần bổ sung",
+                "revoked" => "Dấu xác minh của trung tâm bị thu hồi",
+                _ => "Cập nhật kết quả xác minh",
+            };
+            await notifications.NotifyAsync(ownerId, StudyAbroad.Application.Notifications.NotificationTypes.VerificationResult,
+                title, string.IsNullOrWhiteSpace(reason) ? null : $"Lý do: {reason}", "/center/verification", ct);
+        }
+
         if (emailSender is null || string.IsNullOrWhiteSpace(center.Email)) return;
         try
         {
