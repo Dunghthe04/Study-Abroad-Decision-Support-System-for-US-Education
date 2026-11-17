@@ -1903,6 +1903,15 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("parent_user_id");
 
+                    b.Property<DateTime?>("ProfileTransferAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("profile_transfer_at");
+
+                    b.Property<string>("ProfileTransferStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("profile_transfer_status");
+
                     b.Property<string>("RevokeTokenHash")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")

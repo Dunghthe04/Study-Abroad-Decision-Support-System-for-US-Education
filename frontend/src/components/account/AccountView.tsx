@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { profileApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { AcademicProfileResponse } from "@/types/api";
+import type { AcademicProfileResponse, ParentProfileOverviewDto } from "@/types/api";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import { AcademicSummaryCard, hasCompleteAcademicProfile } from "@/components/ac
 import { ChangePasswordCard } from "@/components/account/ChangePasswordCard";
 import { DeleteAccountCard } from "@/components/account/DeleteAccountCard";
 import { ParentLinksCard } from "@/components/account/ParentLinksCard";
+import { ParentAcademicSection, StudentParentOffers } from "@/components/account/ParentProfileShareCards";
 import { PersonalInfoCard } from "@/components/account/PersonalInfoCard";
 import { SentLeadsCard } from "@/components/account/SentLeadsCard";
 import {
@@ -89,6 +90,10 @@ export function AccountView() {
   const [profile, setProfile] = useState<AcademicProfileResponse | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(isStudentOrParent);
   const [showWarningModal, setShowWarningModal] = useState(false);
+  // Phụ huynh: hồ sơ các con đã liên kết. Có con liên kết thì xem hồ sơ con (chỉ đọc), không cảnh báo hồ sơ của mình.
+  const [parentOverview, setParentOverview] = useState<ParentProfileOverviewDto | null>(null);
+  const [profileVersion, setProfileVersion] = useState(0);
+  const reloadProfile = useCallback(() => setProfileVersion((v) => v + 1), []);
 
   // Tải thông tin học thuật khi là học sinh hoặc phụ huynh.
   // Chỉ phụ thuộc id + role: lưu thông tin cá nhân gọi refreshUser() tạo object user mới,
@@ -98,22 +103,28 @@ export function AccountView() {
   useEffect(() => {
     if (!userId) return;
     if (userRole === "student" || userRole === "parent") {
-      profileApi
-        .getAcademicProfile()
-        .then((res) => {
+      const overviewRequest =
+        userRole === "parent"
+          ? profileApi
+              .getChildrenProfiles()
+              .then((res) => res.data)
+              .catch(() => null)
+          : Promise.resolve(null);
+      Promise.all([profileApi.getAcademicProfile().catch(() => null), overviewRequest])
+        .then(([res, overview]) => {
           setProfile(res);
-          if (!hasCompleteAcademicProfile(res)) {
+          setParentOverview(overview);
+          const hasLinkedChildren = Boolean(overview && overview.children.length > 0);
+          // Chỉ bật popup ở lần tải đầu, không bật lại sau khi chọn chuyển hồ sơ
+          if (profileVersion === 0 && !hasLinkedChildren && !hasCompleteAcademicProfile(res)) {
             setShowWarningModal(true);
           }
-        })
-        .catch(() => {
-          setShowWarningModal(true);
         })
         .finally(() => {
           setIsLoadingProfile(false);
         });
     }
-  }, [userId, userRole]);
+  }, [userId, userRole, profileVersion]);
 
   if (!user) return null;
 
@@ -183,7 +194,7 @@ export function AccountView() {
             <Button type="button" variant="outline" onClick={() => setShowWarningModal(false)}>
               Để sau
             </Button>
-            <Link href="/profile/academic" className={buttonVariants()}>
+            <Link href="/analysis" className={buttonVariants()}>
               <span>Điền bảng điểm ngay</span>
               <ArrowRightIcon aria-hidden />
             </Link>
@@ -258,7 +269,15 @@ export function AccountView() {
           {/* NỘI DUNG MỤC ĐANG CHỌN */}
           <section className="min-w-0">
             {activeSection === "personal" && <PersonalInfoCard />}
-            {activeSection === "academic" && <AcademicSummaryCard profile={profile} isLoading={isLoadingProfile} />}
+            {activeSection === "academic" &&
+              (parentOverview && parentOverview.children.length > 0 ? (
+                <ParentAcademicSection overview={parentOverview} onChanged={reloadProfile} />
+              ) : (
+                <div className="space-y-4">
+                  {user.role === "student" && <StudentParentOffers onChanged={reloadProfile} />}
+                  <AcademicSummaryCard profile={profile} isLoading={isLoadingProfile} />
+                </div>
+              ))}
             {activeSection === "parent-links" && <ParentLinksCard />}
             {activeSection === "sent-leads" && <SentLeadsCard />}
             {activeSection === "password" && (

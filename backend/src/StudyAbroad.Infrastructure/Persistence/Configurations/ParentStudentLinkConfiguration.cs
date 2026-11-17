@@ -27,5 +27,6 @@ public class ParentStudentLinkConfiguration : IEntityTypeConfiguration<ParentStu
         b.HasIndex(x => x.RevokeTokenHash).IsUnique().HasFilter("revoke_token_hash IS NOT NULL");
         // Npgsql ánh xạ uint IsRowVersion vào cột hệ thống xmin (không tạo cột mới)
         b.Property(x => x.Version).IsRowVersion();
+        b.Property(x => x.ProfileTransferStatus).HasMaxLength(16);
     }
 }

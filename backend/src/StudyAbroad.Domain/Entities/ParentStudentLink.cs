@@ -26,4 +26,8 @@ public class ParentStudentLink : BaseEntity
     public string? RevokeTokenHash { get; set; }
     /// <summary>Concurrency token (cột hệ thống xmin của Postgres): chặn 2 request chấp nhận / rút cùng lúc.</summary>
     public uint Version { get; set; }
+    /// <summary>Hồ sơ học thuật phụ huynh nhập trước khi liên kết đã xử lý với con này chưa: null | offered | copied | declined | skipped
+    /// (ProfileTransferStatuses). Null là chưa xử lý.</summary>
+    public string? ProfileTransferStatus { get; set; }
+    public DateTime? ProfileTransferAt { get; set; }
 }
