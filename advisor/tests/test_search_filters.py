@@ -170,3 +170,38 @@ async def test_placeholder_max_cost_is_dropped():
     assert plan.filters == {}
     assert plan.unresolved == []
     assert plan.sort == "highestTuition"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sort", ["lowest_cost", "highest_cost", "lowest_tuition", "highest_tuition"])
+async def test_max_cost_that_is_a_sort_word_is_dropped_for_every_cost_sort(sort):
+    # Model hay điền chữ "rẻ nhất" vào max_cost khi học sinh chỉ muốn xếp theo tiền; không được hỏi lại, cũng không được lọc
+    plan = await search_filters.normalize({"max_cost": "rẻ nhất"}, sort)
+    assert plan.filters == {}
+    assert plan.unresolved == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message", "sort"),
+    [
+        # Có chữ "học phí": resolve_cost_sort đổi sang lowest_tuition
+        ("Trường nào có học phí rẻ nhất", "lowest_cost"),
+        ("trường nào có học phí đắt nhất", "highest_cost"),
+        ("trường nào rẻ nhất", "lowest_cost"),  # không nói học phí: giữ lowest_cost
+    ],
+)
+async def test_sort_only_question_gets_no_cost_filter_after_resolving_the_sort(message, sort):
+    # Đúng đường đi của KnowledgeBranch: sort qua resolve_cost_sort rồi mới vào normalize
+    resolved = search_filters.resolve_cost_sort(sort, message)
+    plan = await search_filters.normalize({"max_cost": "rẻ nhất"}, resolved)
+    assert plan.filters == {}
+    assert plan.unresolved == []
+
+
+@pytest.mark.asyncio
+async def test_real_cost_limit_is_kept_when_the_student_also_sorts_by_cost():
+    # "học phí dưới 30 nghìn đô, xếp rẻ nhất lên đầu": số tiền thật vẫn là điều kiện lọc
+    plan = await search_filters.normalize({"max_cost": "30 nghìn đô"}, "lowest_tuition")
+    assert plan.filters == {"maxCostUsd": 30000}
+    assert plan.sort == "lowestTuition"

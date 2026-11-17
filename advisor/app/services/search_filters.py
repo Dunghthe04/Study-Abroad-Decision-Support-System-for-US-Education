@@ -31,6 +31,8 @@ SORT = {
     "most_aid": "mostAid",
 }
 DEFAULT_SORT = "quality"
+# Các cách xếp theo tiền: model trả lowest_cost/highest_cost, resolve_cost_sort có thể đổi sang mã học phí
+COST_SORTS = ("lowest_cost", "highest_cost", "lowest_tuition", "highest_tuition")
 NO_VALUE = {"", "none", "null", "n/a", "na", "unknown", "không", "khong", "-"}
 # Tên điều kiện nói với học sinh khi cần hỏi lại
 LABELS = {
@@ -120,9 +122,10 @@ async def normalize(filters: dict[str, Any], sort: str | None = None) -> SearchP
     out = plan.filters
     # Model đôi khi điền chữ giữ chỗ ("none", "null"...) vào điều kiện học sinh không nói: coi như không có điều kiện đó
     filters = {k: v for k, v in filters.items() if not (isinstance(v, str) and v.strip().lower() in NO_VALUE)}
-    # "học phí cao/thấp nhất" là cách xếp, không phải mức chi phí: chữ không đọc ra số tiền thì bỏ, đừng hỏi lại học sinh
+    # "học phí cao/thấp nhất" là cách xếp, không phải mức chi phí: chữ không đọc ra số tiền thì bỏ, đừng hỏi lại học sinh.
+    # sort ở đây đã qua resolve_cost_sort nên có thể là mã học phí (lowest_tuition...) chứ không chỉ mã tổng chi phí
     if (
-        sort in ("lowest_cost", "highest_cost")
+        sort in COST_SORTS
         and isinstance(filters.get("max_cost"), str)
         and read_cost_usd(filters["max_cost"]) is None
     ):
