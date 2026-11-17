@@ -582,7 +582,7 @@ namespace StudyAbroad.Application.Advisor
             var asQuery = new ChatSchoolInfo.Query(query.Question, null, null, query.KbAnswer, false, [], true);
             if (query.Unresolved.Count > 0)
                 return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.SearchUnresolved(query.Unresolved), clearKb: true);
-            if (!ChatSchoolInfo.HasAnyFilter(query.Filters))
+            if (!ChatSchoolInfo.HasAnyFilter(query.Filters) && !query.SortGiven)
                 return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.SearchNoFilter, clearKb: true);
             try
             {
@@ -595,7 +595,7 @@ namespace StudyAbroad.Application.Advisor
                 return merged with
                 {
                     Widget = ChatSchoolInfo.WidgetOfSearch(result, query.Filters, query.Sort, text),
-                    QuickReplies = ChatSchoolInfo.SearchNextSteps(result),
+                    QuickReplies = ChatSchoolInfo.SearchNextSteps(result, query.Sort),
                 };
             }
             catch (InvalidOperationException)

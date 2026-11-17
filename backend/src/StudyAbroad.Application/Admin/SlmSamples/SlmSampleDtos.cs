@@ -65,6 +65,11 @@ public record SlmImportRow(
 
 public record SlmImportErrorDto(string SheetName, int RowNumber, string Message);
 
+public record SlmImportPreviewDto(
+    int TotalRows,
+    IReadOnlyList<SlmImportRow> Rows,
+    IReadOnlyList<SlmImportErrorDto> Errors);
+
 /// <summary>Kết quả import: dòng mới thêm, dòng trùng đã bỏ qua, dòng lỗi (không thêm) kèm lý do.</summary>
 public record SlmImportResultDto(
     int TotalRows,

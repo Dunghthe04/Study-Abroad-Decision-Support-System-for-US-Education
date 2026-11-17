@@ -19,7 +19,8 @@ from typing import Any, Literal, NamedTuple
 from pydantic import BaseModel, Field
 
 from app.schemas.chat import ChatState, ProfileField, QuickReply, Widget
-from app.services.chat_flow import NEED_PROFILE, SkillOutput, ask, go_to
+from app.services.chat_flow import SkillOutput, ask, go_to
+from app.services.replies import NEED_PROFILE
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.skills import buttons, exchange_rate, state_catalog
@@ -125,8 +126,8 @@ EDIT_MENU = (
     'Bạn cũng có thể nhắn thẳng mục và giá trị mới, ví dụ "sửa SAT thành 1450".'
 )
 EDIT_MENU_TEXT = re.compile(
-    r"em muốn sửa\s+(.+)", re.IGNORECASE
-)  # câu ô chọn ghép: "Em muốn sửa Tiếng Anh, Tài chính"
+    r"(?:tôi|em) muốn sửa\s+(.+)", re.IGNORECASE
+)  # câu ô chọn ghép: "Em muốn sửa Tiếng Anh, Tài chính" ("Tôi muốn sửa ..." cũng nhận)
 FORM_REPLY = QuickReply(label="Sửa trên form", value="Sửa trên form")
 RESTART_REPLY = QuickReply(label="Điền lại từ đầu", value="Điền lại từ đầu")
 KEEP_REPLY = QuickReply(label="Giữ như cũ", value="Giữ như cũ")

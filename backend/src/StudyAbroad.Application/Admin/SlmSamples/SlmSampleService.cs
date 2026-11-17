@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using StudyAbroad.Application.Common;
@@ -12,6 +11,7 @@ public class SlmSampleService(ISlmSampleRepository repository, ISlmWorkbookReade
     public const int MaxPageSize = 100;
     public const int MaxReviewIds = 500;
     public const int MaxNoteLength = 1000;
+    public const int MaxPreviewRows = 100;
 
     public async Task<PagedResult<SlmSampleDto>> GetPageAsync(
         SlmSampleFilter filter, int page, int pageSize, CancellationToken ct = default)
@@ -143,7 +143,7 @@ public class SlmSampleService(ISlmSampleRepository repository, ISlmWorkbookReade
 
     public async Task<SlmImportResultDto> ImportAsync(Stream workbook, Guid actorUserId, CancellationToken ct = default)
     {
-        var rows = workbookReader.Read(workbook);
+        var rows = ReadRows(workbook, ct);
 
         var existingKeys = new HashSet<string>();
         foreach (var key in await repository.ExistingKeysAsync(ct))
@@ -155,16 +155,12 @@ public class SlmSampleService(ISlmSampleRepository repository, ISlmWorkbookReade
 
         foreach (var row in rows)
         {
-            var request = new SaveSlmSampleRequest(
-                row.SheetName, row.Question, row.Profile, row.PendingQuestion, row.Intents, row.Context, row.Split, row.SourceReview);
+            ct.ThrowIfCancellationRequested();
 
-            SaveSlmSampleRequest valid;
+            ValidSample valid;
             try
             {
-                var checkedRow = Validate(request);
-                valid = new SaveSlmSampleRequest(
-                    checkedRow.SampleType, checkedRow.Question, checkedRow.Profile, checkedRow.PendingQuestion,
-                    checkedRow.Intents, checkedRow.Context, checkedRow.Split, checkedRow.SourceReview);
+                valid = ValidateRow(row);
             }
             catch (ArgumentException ex)
             {
@@ -172,7 +168,7 @@ public class SlmSampleService(ISlmSampleRepository repository, ISlmWorkbookReade
                 continue;
             }
 
-            var key = BuildKey(valid.SampleType!, valid.Question!, valid.PendingQuestion, valid.Profile, valid.Context, valid.Intents!);
+            var key = BuildKey(valid.SampleType, valid.Question, valid.PendingQuestion, valid.Profile, valid.Context, valid.Intents);
             if (!existingKeys.Add(key))
             {
                 duplicates++;
@@ -181,13 +177,13 @@ public class SlmSampleService(ISlmSampleRepository repository, ISlmWorkbookReade
 
             toInsert.Add(new SlmTrainingSample
             {
-                SampleType = valid.SampleType!,
-                Question = valid.Question!,
+                SampleType = valid.SampleType,
+                Question = valid.Question,
                 Profile = valid.Profile,
                 PendingQuestion = valid.PendingQuestion,
-                Intents = valid.Intents!,
+                Intents = valid.Intents,
                 Context = valid.Context,
-                Split = valid.Split!,
+                Split = valid.Split,
                 SourceReview = valid.SourceReview,
                 ReviewStatus = SlmReviewStatuses.Draft,
                 CreatedByUserId = actorUserId,
@@ -200,42 +196,41 @@ public class SlmSampleService(ISlmSampleRepository repository, ISlmWorkbookReade
         return new SlmImportResultDto(rows.Count, toInsert.Count, duplicates, errors);
     }
 
-    public async Task<string> ExportJsonlAsync(string? split, CancellationToken ct = default)
+    public Task<SlmImportPreviewDto> PreviewAsync(Stream workbook, CancellationToken ct = default)
     {
-        var cleanSplit = string.IsNullOrWhiteSpace(split) ? null : split.Trim();
-        if (cleanSplit is not null && !SlmSampleSplits.All.Contains(cleanSplit))
-            throw new ArgumentException($"Tập phải là một trong: {string.Join(", ", SlmSampleSplits.All)}.");
+        var rows = ReadRows(workbook, ct);
 
-        var samples = await repository.ApprovedAsync(cleanSplit, ct);
-        var builder = new StringBuilder();
-        foreach (var sample in samples)
+        var errors = new List<SlmImportErrorDto>();
+        foreach (var row in rows)
         {
-            var line = new Dictionary<string, object?>
+            ct.ThrowIfCancellationRequested();
+            try
             {
-                ["type"] = sample.SampleType,
-                ["split"] = sample.Split,
-                ["question"] = sample.Question,
-                ["profile"] = ParseJsonOrNull(sample.Profile),
-                ["pending_question"] = sample.PendingQuestion,
-                ["context"] = ParseJsonOrNull(sample.Context),
-                ["intents"] = ParseJsonOrNull(sample.Intents),
-            };
-            builder.Append(JsonSerializer.Serialize(line, ExportOptions));
-            builder.Append('\n');
+                ValidateRow(row);
+            }
+            catch (ArgumentException ex)
+            {
+                errors.Add(new SlmImportErrorDto(row.SheetName, row.RowNumber, ex.Message));
+            }
         }
-        return builder.ToString();
+
+        var firstRows = rows.Take(MaxPreviewRows).ToList();
+        return Task.FromResult(new SlmImportPreviewDto(rows.Count, firstRows, errors));
     }
 
-    private static readonly JsonSerializerOptions ExportOptions = new()
+    private IReadOnlyList<SlmImportRow> ReadRows(Stream workbook, CancellationToken ct)
     {
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
+        var rows = workbookReader.Read(workbook, ct);
+        if (rows.Count == 0)
+            throw new InvalidDataException("File không có dòng dữ liệu nào bên dưới dòng tiêu đề.");
+        return rows;
+    }
 
-    private static object? ParseJsonOrNull(string? json)
+    private static ValidSample ValidateRow(SlmImportRow row)
     {
-        if (string.IsNullOrWhiteSpace(json))
-            return null;
-        return JsonSerializer.Deserialize<JsonElement>(json);
+        var request = new SaveSlmSampleRequest(
+            row.SheetName, row.Question, row.Profile, row.PendingQuestion, row.Intents, row.Context, row.Split, row.SourceReview);
+        return Validate(request);
     }
 
     private static SlmSampleFilter NormalizeFilter(SlmSampleFilter? filter)

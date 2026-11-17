@@ -18,5 +18,7 @@ public class CenterReviewConfiguration : IEntityTypeConfiguration<CenterReview>
         b.Property(x => x.Comment).HasMaxLength(2000);
         b.Property(x => x.Status).HasMaxLength(32).IsRequired().HasDefaultValue("visible");
         b.HasIndex(x => x.StudyCenterId);
+        // [UC-45] Mỗi yêu cầu liên hệ chỉ một đánh giá (chốt chặn ở DB khi hai lượt gửi trùng nhau)
+        b.HasIndex(x => x.LeadId).IsUnique().HasFilter("lead_id IS NOT NULL");
     }
 }

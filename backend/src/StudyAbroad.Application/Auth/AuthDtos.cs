@@ -35,7 +35,9 @@ namespace StudyAbroad.Application.Auth
     // BlockedFeatures: các chức năng trong AgeFeatures.Rules đang bị chặn (server tính, frontend chỉ dùng để ẩn nút).
     public record UserDto(Guid Id, string Email, string FullName, string Role, string Status, string? Phone = null,
         string? AgeGroup = null, string? ParentConsentStatus = null, List<string>? BlockedFeatures = null,
-        string? LockReason = null, DateTime? LockoutEnd = null);
+        string? LockReason = null, DateTime? LockoutEnd = null,
+        // [UC-111] Ngày sinh chỉ trả cho chính chủ (xem tài khoản của mình); người dùng không tự sửa được, chỉ Admin sửa (UC-113)
+        DateOnly? DateOfBirth = null);
 
     // [USAS-362] Kết quả đăng nhập thành công. AccessToken chỉ dùng để đặt HttpOnly cookie, controller không trả nó trong body
     public record AuthResponse(string AccessToken, DateTime ExpiresAt, UserDto User);
@@ -51,7 +53,8 @@ namespace StudyAbroad.Application.Auth
     // [UC-06] Đổi mật khẩu khi đã đăng nhập: bắt buộc nhập mật khẩu hiện tại
     public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 
-    // Sửa thông tin cá nhân: chỉ họ tên và số điện thoại, email đăng nhập không đổi được. Phone rỗng = xóa số
+    // [UC-111] Sửa thông tin cá nhân: chỉ họ tên và số điện thoại. Vai trò, email, ngày sinh không có trong request nên không sửa được.
+    // Phone rỗng = xóa số. Trung tâm đổi số điện thoại qua UC-91, không qua đây.
     public record UpdateProfileRequest(string FullName, string? Phone);
 
     public enum AuthError {

@@ -9,8 +9,6 @@ import logging
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField, QuickReply, Widget
 from app.schemas.slm import INTENTS, SlmTinResult
 from app.services.chat_flow import (
-    BACK_TO_QUESTION,
-    NOT_READY,
     PARALLEL_LIMIT,
     QUESTIONS,
     ChatFlow,
@@ -20,7 +18,16 @@ from app.services.chat_flow import (
     go_to,
     last_user_message,
 )
-from app.services.intake import CHAT_BUTTON, CONTINUE_CHAT, FORM_BUTTON, FORM_DONE, INTAKE_FORM, INTAKE_ID
+from app.services.intake import INTAKE_ID
+from app.services.replies import (
+    BACK_TO_QUESTION,
+    CHAT_BUTTON,
+    CONTINUE_CHAT,
+    FORM_BUTTON,
+    FORM_DONE,
+    INTAKE_FORM,
+    NOT_READY,
+)
 from app.services.skill_rules import REQUIRED_B3
 from tests.fakes import tin
 

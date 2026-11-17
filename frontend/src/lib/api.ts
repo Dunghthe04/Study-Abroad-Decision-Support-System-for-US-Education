@@ -1,5 +1,8 @@
 import type {
   CenterReviewsDto,
+  CenterReviewDto,
+  CenterReviewEligibilityDto,
+  CreateCenterReviewRequest,
   AuthResponse,
   ChangePasswordRequest,
   ForgotPasswordRequest,
@@ -401,6 +404,17 @@ export const studyCentersApi = {
     apiFetch<CenterReviewsDto>(
       `/api/v1/study-centers/${encodeURIComponent(id)}/reviews?page=${page}&pageSize=${pageSize}`,
     ),
+  /** [UC-45] Người dùng hiện tại (học sinh / phụ huynh) có được đánh giá trung tâm này không. */
+  getReviewEligibility: (id: string) =>
+    apiFetch<CenterReviewEligibilityDto>(`/api/v1/study-centers/${encodeURIComponent(id)}/reviews/eligibility`),
+  /** [UC-45] Gửi đánh giá 1 đến 5 sao. Lỗi 400: chưa gửi yêu cầu liên hệ, đã đánh giá, số sao hoặc nhận xét không hợp lệ. */
+  createReview: (id: string, rating: number, comment?: string) => {
+    const payload: CreateCenterReviewRequest = { rating, comment: comment?.trim() || null };
+    return apiFetch<CenterReviewDto>(`/api/v1/study-centers/${encodeURIComponent(id)}/reviews`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
   /** [UC-59] Xác minh hoặc hủy xác minh trung tâm tư vấn (vai trò: Moderator / Admin) */
   verify: (id: string, isVerified: boolean, verificationNote?: string | null) =>
     apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/verify`, {

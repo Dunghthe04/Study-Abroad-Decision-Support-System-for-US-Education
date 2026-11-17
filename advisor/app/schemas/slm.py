@@ -46,7 +46,7 @@ ENTITY_KEYS = {
     "collect_profile": {"tasks", "follow_up"},
     "profile_review": {"tasks", "schools", "follow_up"},
     "scenario": {"mode", "changes", "school", "factor", "target_group", "follow_up"},
-    "knowledge": {"tasks", "schools", "fields", "filters", "sort", "follow_up"},
+    "knowledge": {"tasks", "schools", "fields", "filters", "sort", "group", "follow_up"},
     "center_referral": {"service", "city", "tasks", "centers", "follow_up"},
     "out_of_scope": {"subtype"},
 }
@@ -127,7 +127,8 @@ FILTER_ENUMS = {
 }
 FILTER_KEYS = ("state", *FILTER_TEXT_KEYS, *FILTER_ENUMS)
 # Cách xếp danh sách học sinh muốn; không nói thì xếp theo xếp hạng (điểm chất lượng của trường)
-SORTS = ("ranking", "lowest_cost", "easiest_admission", "most_selective")
+# lowest_cost / highest_cost: chi phí thấp / cao nhất; easiest_admission / most_selective: tỷ lệ nhận cao / thấp nhất; most_aid: học bổng trung bình lớn nhất
+SORTS = ("ranking", "lowest_cost", "highest_cost", "easiest_admission", "most_selective", "most_aid")
 # Chế độ trong kịch bản
 SCENARIO_MODES = ("what_if", "goal_seeking")
 # Nhóm đích của goal_seeking: khó vào, vừa sức, an toàn
@@ -193,16 +194,19 @@ def check_entities(intent: str, entities: dict[str, Any]) -> None:
         _check_filters(filters)
     if entities.get("sort") is not None and entities["sort"] not in SORTS:
         raise ValueError(f"sort phải là một trong {SORTS}")
-    # Câu tiếp nối chỉ đổi cách xếp ("rẻ nhất đi") không có điều kiện mới: điều kiện lấy từ ngữ cảnh
-    if (
-        "search" in tasks
-        and not filters
-        and not (entities.get("follow_up") is True and entities.get("sort") is not None)
-    ):
-        raise ValueError("search cần filters có ít nhất một điều kiện")
+    # Tìm trường cần điều kiện lọc hoặc cách xếp: "trường nào rẻ nhất" chỉ có sort (không điều kiện lọc), câu tiếp nối "rẻ nhất đi" lấy điều kiện từ ngữ cảnh
+    if "search" in tasks and not filters and entities.get("sort") is None:
+        raise ValueError("search cần filters có ít nhất một điều kiện hoặc sort")
     if (filters is not None or entities.get("sort") is not None) and "search" not in tasks:
         raise ValueError("filters và sort chỉ đi với tasks = search")
-    if "compare_facts" in tasks and not _is_text_list(schools, 2):
+    # group: nhóm kết quả của học sinh ("các trường trong nhóm Khó vào của em"), thay cho việc nêu tên trường
+    group = entities.get("group")
+    if group is not None:
+        if group not in TARGET_GROUPS:
+            raise ValueError(f"group phải là một trong {TARGET_GROUPS}")
+        if "compare_facts" not in tasks or schools is not None:
+            raise ValueError("group chỉ đi với tasks = compare_facts và không kèm schools")
+    elif "compare_facts" in tasks and not _is_text_list(schools, 2):
         raise ValueError("compare_facts cần schools từ hai tên trường trở lên")
     fields = entities.get("fields")
     if fields is not None and not (
@@ -459,6 +463,7 @@ _ENTITY_SCHEMA = {
         },
     },
     "target_group": {"enum": list(TARGET_GROUPS)},
+    "group": {"enum": list(TARGET_GROUPS)},
     "factor": {"type": "array", "items": _TEXT},
     "service": {"enum": list(SERVICE_CODES)},
     "city": _TEXT,

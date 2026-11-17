@@ -3,24 +3,16 @@
 Chỉ chứa chữ và hàm thuần (không sửa state), nên không phụ thuộc chat_flow.py.
 """
 
-from app.schemas.chat import ProfileField, QuickReply
+from app.schemas.chat import ProfileField
 from app.schemas.slm import SlmY
 from app.services.profile_sync import DRAFT_KEYS
+from app.services.replies import INTAKE_ASK, INTAKE_ASK_MISSING
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 
 # question_id đặt trong state khi đang chờ học sinh chọn chat hay form
 INTAKE_ID = "INTAKE"
-# Hai câu này không nằm trong QUESTIONS vì model chọn skill chưa được train trên chúng
-INTAKE_ASK = "Để làm bước này mình cần hồ sơ của bạn. Bạn muốn trả lời ngay trong chat hay điền bằng form?"
-INTAKE_FORM = "Bạn điền hồ sơ ở form nhé, điền xong quay lại đây để mình làm tiếp."
-INTAKE_MORE = "Hồ sơ của bạn còn thiếu một vài thông tin. "
-# Nút "Tiếp tục bằng chat" trên form gửi câu này: hỏi tiếp trong chat các mục còn thiếu
-CONTINUE_CHAT = "Tiếp tục bằng chat"
-# Quay về từ form mà hồ sơ đã đủ, không có câu tư vấn nào đang chờ: không hỏi gì thêm
-FORM_DONE = "Hồ sơ của bạn đã đủ thông tin. Bạn muốn mình tư vấn gì tiếp?"
-
-CHAT_BUTTON = QuickReply(label="Trả lời trong chat", value="Trả lời trong chat")
-FORM_BUTTON = QuickReply(label="Điền bằng form", value="Điền bằng form")
+# Các câu và nút của bước chọn cách điền hồ sơ nằm ở replies.py. Hai câu INTAKE_ASK, INTAKE_FORM không nằm trong QUESTIONS
+# vì model chọn skill chưa được train trên chúng
 
 # Khóa hồ sơ còn thiếu -> (bước hội thoại, mã câu hỏi trong QUESTIONS) dùng để hỏi
 FIELD_QUESTION = {
@@ -44,10 +36,7 @@ def intake_ask(profile: dict[str, ProfileField], required: list[str]) -> str:
     missing = len(missing_fields(profile, required))
     if not has_profile(profile) or missing == 0:
         return INTAKE_ASK
-    return (
-        f"Để làm bước này hồ sơ của bạn còn thiếu {missing} mục. "
-        "Bạn muốn trả lời ngay trong chat hay điền bằng form?"
-    )
+    return INTAKE_ASK_MISSING.format(missing=missing)
 
 
 # Học sinh chọn gì: nhận bằng chữ trên nút (hoặc câu ngắn có chữ "form", "chat"), không nhờ model

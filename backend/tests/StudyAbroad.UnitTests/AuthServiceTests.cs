@@ -1960,4 +1960,52 @@ public class AuthServiceTests
         Assert.Equal("0912345678", user.Phone);
         Assert.Equal("Nguyen Van C", user.FullName);
     }
+
+    // [UC-111] Chỉ sửa tên và số điện thoại; vai trò, ngày sinh, email, trạng thái giữ nguyên
+    [Fact]
+    public async Task UpdateProfile_NeverChangesRoleDateOfBirthEmailOrStatus()
+    {
+        var (service, user) = await ActiveUserAsync();
+        user.DateOfBirth = new DateOnly(2000, 5, 20);
+        var role = user.Role;
+
+        var result = await service.UpdateProfileAsync(user.Id, new UpdateProfileRequest("Tên mới", "0912345678"));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(role, user.Role);
+        Assert.Equal(new DateOnly(2000, 5, 20), user.DateOfBirth);
+        Assert.Equal("a@test.com", user.Email);
+        Assert.Equal(UserStatuses.Active, user.Status);
+        // Người dùng xem được ngày sinh của chính mình
+        Assert.Equal(new DateOnly(2000, 5, 20), result.User!.DateOfBirth);
+        Assert.Equal(role, result.User.Role);
+    }
+
+    [Fact]
+    public async Task GetMe_ReturnsOwnDateOfBirth()
+    {
+        var (service, user) = await ActiveUserAsync();
+        user.DateOfBirth = new DateOnly(2001, 1, 2);
+
+        var me = await service.GetMeAsync(user.Id);
+
+        Assert.Equal(new DateOnly(2001, 1, 2), me!.DateOfBirth);
+    }
+
+    [Fact]
+    public async Task UpdateProfile_CenterCannotChangePhoneHere_ButCanChangeNameAndKeepPhone()
+    {
+        var (service, user) = await ActiveUserAsync(phone: "0912345678");
+        user.Role = UserRoles.Center;
+
+        var changePhone = await service.UpdateProfileAsync(user.Id, new UpdateProfileRequest("Tên mới", "0987654321"));
+        var clearPhone = await service.UpdateProfileAsync(user.Id, new UpdateProfileRequest("Tên mới", null));
+        var sameName = await service.UpdateProfileAsync(user.Id, new UpdateProfileRequest("Trung tâm ABC", "0912345678"));
+
+        Assert.Equal(AuthError.Validation, changePhone.Error);
+        Assert.Equal(AuthError.Validation, clearPhone.Error);
+        Assert.Equal(AuthError.None, sameName.Error);
+        Assert.Equal("0912345678", user.Phone);
+        Assert.Equal("Trung tâm ABC", user.FullName);
+    }
 }

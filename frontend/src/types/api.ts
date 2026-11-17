@@ -373,6 +373,8 @@ export interface UserDto {
   blockedFeatures?: string[] | null;
   lockReason?: string | null;
   lockoutEnd?: string | null;
+  /** [UC-111] Ngày sinh (yyyy-MM-dd), chỉ trả về cho chính chủ hoặc Admin */
+  dateOfBirth?: string | null;
 }
 
 // Token chỉ nằm trong HttpOnly cookie, body không chứa token
@@ -729,6 +731,19 @@ export interface CenterReviewDto {
   createdAt: string;
   rating: number;
   comment?: string | null;
+}
+
+/** [USAS-2070 / UC-45] Gửi đánh giá trung tâm: số sao 1 đến 5, nhận xét tùy chọn (tối đa 2000 ký tự). */
+export interface CreateCenterReviewRequest {
+  rating: number;
+  comment?: string | null;
+}
+
+/** [UC-45] Người dùng hiện tại có được đánh giá trung tâm không; `reason` giải thích khi không được. */
+export interface CenterReviewEligibilityDto {
+  canReview: boolean;
+  hasReviewed: boolean;
+  reason?: string | null;
 }
 
 /** Đánh giá hiển thị + số liệu tổng hợp tính từ chính các đánh giá đó. */

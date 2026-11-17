@@ -5,8 +5,9 @@ import pytest
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField
 from app.services.branches import NEXT_AFTER_SAVE
 from app.services.chat_flow import QUESTIONS
-from app.services.intake import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK, INTAKE_ID
+from app.services.intake import INTAKE_ID
 from app.services.ollama import OllamaError
+from app.services.replies import CHAT_BUTTON, FORM_BUTTON, INTAKE_ASK
 from app.services.skill_rules import REQUIRED_B3
 from app.services.skills import build_handlers
 from app.services.skills.skill_ho_so import EDIT_MENU, OPTIONAL_QUESTIONS, SAVED, next_question

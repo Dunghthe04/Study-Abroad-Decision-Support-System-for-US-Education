@@ -618,6 +618,10 @@ namespace StudyAbroad.Application.Auth
             if (user == null)
                 return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản.");
 
+            // [UC-111] Trung tâm đổi số điện thoại ở hồ sơ trung tâm (UC-91, có xác thực), không đổi tại trang tài khoản
+            if (user.Role == UserRoles.Center && normalizedPhone != user.Phone)
+                return AuthResult.Fail(AuthError.Validation, "Trung tâm đổi số điện thoại ở mục Hồ sơ trung tâm (cần xác thực).");
+
             if (normalizedPhone != null && normalizedPhone != user.Phone && await users.PhoneExistAsync(normalizedPhone, ct))
                 return AuthResult.Fail(AuthError.Validation, "Số điện thoại này đã được dùng cho tài khoản khác.");
 
@@ -812,6 +816,7 @@ namespace StudyAbroad.Application.Auth
                 BlockedFeatures = access.BlockedFeatures,
                 LockReason = lockReason,
                 LockoutEnd = user.LockoutEnd,
+                DateOfBirth = user.DateOfBirth,
             };
         }
 

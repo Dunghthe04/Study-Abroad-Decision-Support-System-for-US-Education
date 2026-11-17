@@ -350,9 +350,9 @@ async def test_a_refusal_does_not_vouch_for_any_center_and_offers_the_center_but
     out = await handler_with(FakeLLMWithEmbed(), FakeRetriever([hit(score=0.5)])).run(ChatState(), "q")
 
     assert "uy tín" not in out.answer  # hệ thống không khen hay bảo chứng trung tâm nào
-    assert [(b.label, b.value) for b in out.quick_replies] == [
-        ("Gợi ý trung tâm tư vấn", "Em muốn gặp tư vấn viên")
-    ]
+    buttons = [(b.label, b.value) for b in out.quick_replies]
+    assert ("Tìm trung tâm tư vấn", "Em muốn tìm trung tâm tư vấn") in buttons
+    assert not any(label == "Hỏi về visa, học phí" for label, _ in buttons)  # đang ở đúng việc hỏi kiến thức
 
 
 async def test_a_real_answer_has_no_center_button():

@@ -19,6 +19,8 @@ export const SORT_OPTIONS = [
   { value: "name", label: "Tên trường (A → Z)" },
   { value: "tuition_asc", label: "Học phí: Thấp đến cao" },
   { value: "tuition_desc", label: "Học phí: Cao đến thấp" },
+  { value: "total_cost_asc", label: "Tổng chi phí: Thấp đến cao" },
+  { value: "total_cost_desc", label: "Tổng chi phí: Cao đến thấp" },
   { value: "acceptance_asc", label: "Cạnh tranh nhất (Tỷ lệ nhận thấp)" },
   { value: "acceptance_desc", label: "Dễ trúng tuyển (Tỷ lệ nhận cao)" },
 ];
@@ -37,10 +39,10 @@ export function UniversitySortSelect({ value, onValueChange }: UniversitySortSel
         }}
         items={SORT_OPTIONS}
       >
-        <SelectTrigger className="h-9 w-[200px] text-xs font-medium bg-background">
+        <SelectTrigger className="h-9 w-[220px] text-xs font-medium bg-background">
           <SelectValue placeholder="Sắp xếp theo..." />
         </SelectTrigger>
-        <SelectContent align="end">
+        <SelectContent align="end" className="min-w-64 w-max">
           {SORT_OPTIONS.map((opt) => (
             <SelectItem key={opt.value} value={opt.value} className="text-xs">
               {opt.label}

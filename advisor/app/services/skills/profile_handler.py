@@ -12,6 +12,7 @@ from app.services.chat_flow import (
     start_intake,
 )
 from app.services.intake import form_goals
+from app.services.replies import PROFILE_DONE
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.skills import buttons, skill_bac_hoc, skill_ho_so
 
@@ -19,7 +20,6 @@ from app.services.skills import buttons, skill_bac_hoc, skill_ho_so
 BAC_HOC_FIELDS = set(skill_bac_hoc.READ_FIELDS)
 HO_SO_FIELDS = {name for names in skill_ho_so.QUESTION_FIELDS.values() for name in names}
 
-PROFILE_DONE = "Hồ sơ của bạn đã đầy đủ rồi. Bạn cần mình tư vấn thêm gì không?"
 # Câu hỏi → các mục hồ sơ câu đó ghi, gộp bảng của hai skill
 ALL_QUESTION_FIELDS = {**skill_bac_hoc.QUESTION_FIELDS, **skill_ho_so.QUESTION_FIELDS}
 # Mục hồ sơ → câu hỏi của mục đó (đảo bảng trên). Lớp đang học hỏi cùng câu với bậc đang học

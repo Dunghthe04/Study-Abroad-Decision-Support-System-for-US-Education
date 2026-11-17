@@ -12,11 +12,11 @@ public class SlmWorkbookReader : ISlmWorkbookReader
     private static readonly XNamespace DocRel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     private static readonly XNamespace PkgRel = "http://schemas.openxmlformats.org/package/2006/relationships";
 
-    public IReadOnlyList<SlmImportRow> Read(Stream workbook)
+    public IReadOnlyList<SlmImportRow> Read(Stream workbook, CancellationToken ct = default)
     {
         try
         {
-            return ReadInternal(workbook);
+            return ReadInternal(workbook, ct);
         }
         catch (InvalidDataException)
         {
@@ -28,7 +28,7 @@ public class SlmWorkbookReader : ISlmWorkbookReader
         }
     }
 
-    private static IReadOnlyList<SlmImportRow> ReadInternal(Stream workbook)
+    private static IReadOnlyList<SlmImportRow> ReadInternal(Stream workbook, CancellationToken ct)
     {
         using var archive = new ZipArchive(workbook, ZipArchiveMode.Read, leaveOpen: true);
 
@@ -62,8 +62,11 @@ public class SlmWorkbookReader : ISlmWorkbookReader
         }
 
         var result = new List<SlmImportRow>();
+        var recognizedSheets = 0;
         foreach (var sheet in workbookDoc.Descendants(Main + "sheet"))
         {
+            ct.ThrowIfCancellationRequested();
+
             var name = ((string?)sheet.Attribute("name"))?.Trim();
             if (name == null || !SlmSampleTypes.All.Contains(name))
             {
@@ -83,19 +86,28 @@ public class SlmWorkbookReader : ISlmWorkbookReader
                 continue;
             }
 
-            ReadSheet(name, LoadXml(sheetEntry), sharedStrings, result);
+            recognizedSheets++;
+            ReadSheet(name, LoadXml(sheetEntry), sharedStrings, result, ct);
+        }
+
+        if (recognizedSheets == 0)
+        {
+            throw new InvalidDataException(
+                $"File không có sheet nào đúng tên loại mẫu. Cần ít nhất một trong: {string.Join(", ", SlmSampleTypes.All)}.");
         }
 
         return result;
     }
 
-    private static void ReadSheet(string sheetName, XDocument doc, List<string> sharedStrings, List<SlmImportRow> output)
+    private static void ReadSheet(
+        string sheetName, XDocument doc, List<string> sharedStrings, List<SlmImportRow> output, CancellationToken ct)
     {
         Dictionary<string, int>? columnByHeader = null;
         var nextRowNumber = 0;
 
         foreach (var rowElement in doc.Descendants(Main + "row"))
         {
+            ct.ThrowIfCancellationRequested();
             nextRowNumber++;
             var rowNumber = (int?)rowElement.Attribute("r") ?? nextRowNumber;
             nextRowNumber = rowNumber;
