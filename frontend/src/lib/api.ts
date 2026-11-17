@@ -404,6 +404,12 @@ export const studyCentersApi = {
     apiFetch<CenterReviewsDto>(
       `/api/v1/study-centers/${encodeURIComponent(id)}/reviews?page=${page}&pageSize=${pageSize}`,
     ),
+  /** [USAS-2079 / UC-57] Moderator gỡ một đánh giá vi phạm (lý do tùy chọn, tối đa 500 ký tự). Đánh giá biến khỏi danh sách và điểm trung bình. */
+  removeReview: (centerId: string, reviewId: string, reason: string) =>
+    apiFetch<{ reviewId: string; studyCenterId: string; status: string }>(
+      `/api/v1/study-centers/${encodeURIComponent(centerId)}/reviews/${encodeURIComponent(reviewId)}/remove`,
+      { method: "POST", body: JSON.stringify({ reason: reason.trim() }) },
+    ),
   /** [UC-45] Người dùng hiện tại (học sinh / phụ huynh) có được đánh giá trung tâm này không. */
   getReviewEligibility: (id: string) =>
     apiFetch<CenterReviewEligibilityDto>(`/api/v1/study-centers/${encodeURIComponent(id)}/reviews/eligibility`),
