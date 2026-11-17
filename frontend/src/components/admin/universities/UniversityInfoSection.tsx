@@ -71,17 +71,20 @@ export function UniversityInfoSection({
   const [fieldErrors, setFieldErrors] = useState<AdminFieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
 
   const hasChanges = JSON.stringify(form) !== JSON.stringify(universityToFormState(university));
 
   const setField = <K extends keyof UniversityFormState>(key: K, value: UniversityFormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    if (key === "name") setDuplicateWarning(null);
   };
 
   const handleEdit = () => {
     setForm(universityToFormState(university));
     setFieldErrors({});
     setError(null);
+    setDuplicateWarning(null);
     onStartEdit();
   };
 
@@ -122,11 +125,15 @@ export function UniversityInfoSection({
         isIvy: form.isIvy,
         logoUrl: university.logoUrl,
         coverUrl: university.coverUrl,
+        confirmDuplicateName: duplicateWarning !== null,
       });
       toast.add({ type: "success", title: "Đã lưu thông tin trường", description: saved.name });
       onSaved(saved);
     } catch (err) {
-      if (err instanceof AdminFormError) {
+      if (err instanceof AdminFormError && err.fieldErrors.duplicateName) {
+        setDuplicateWarning(err.fieldErrors.duplicateName);
+        setError(err.fieldErrors.duplicateName);
+      } else if (err instanceof AdminFormError) {
         setError(err.message);
         setFieldErrors(err.fieldErrors);
       } else {
