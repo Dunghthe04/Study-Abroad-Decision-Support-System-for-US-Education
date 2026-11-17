@@ -87,6 +87,7 @@ export interface SlmReviewResult {
   notFound: number;
   skippedOwn: number;
   skippedNotReady: number;
+  skippedNotPending: number;
 }
 
 export interface SlmImportError {

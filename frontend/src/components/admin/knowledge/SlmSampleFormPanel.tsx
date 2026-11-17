@@ -369,7 +369,8 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
     { label: "Ngữ cảnh", text: sample.context },
   ];
 
-  const canReview = sample.reviewStatus === "pending" && currentUserId !== undefined && sample.createdByUserId !== currentUserId;
+  const touchedByMe = detail.data?.history.some((item) => item.actorUserId === currentUserId && (item.action === "create" || item.action === "edit" || item.action === "submit"));
+  const canReview = sample.reviewStatus === "pending" && currentUserId !== undefined && sample.createdByUserId !== currentUserId && detail.data !== undefined && !touchedByMe;
   const ready = isReady(sample.answer, sample.intents);
   const busy = saving || editing !== null;
 

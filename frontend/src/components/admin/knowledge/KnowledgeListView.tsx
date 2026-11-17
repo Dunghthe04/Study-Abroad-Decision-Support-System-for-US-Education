@@ -110,6 +110,7 @@ export function KnowledgeListView() {
   const creatorOptions = [{ value: "", label: "Mọi người tạo" }, ...(creators.data ?? []).map((item) => ({ value: item.userId, label: item.name }))];
 
   const items = list.data?.items ?? [];
+  const pendingSelectedIds = items.filter((sample) => selectedIds.has(sample.id) && sample.reviewStatus === "pending").map((sample) => sample.id);
   const reload = () => setReloadCounter((current) => current + 1);
 
   const apply = (next: Filters) => {
@@ -351,10 +352,10 @@ export function KnowledgeListView() {
 
         {selectedIds.size > 0 && (
           <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/60 px-3 py-2 text-sm">
-            <span className="font-medium">Đã chọn {selectedIds.size} mẫu</span>
-            {BULK_ACTIONS.map((action) => (
+            <span className="font-medium">Đã chọn {selectedIds.size} mẫu{pendingSelectedIds.length > 0 && pendingSelectedIds.length < selectedIds.size ? `, ${pendingSelectedIds.length} chờ duyệt` : ""}</span>
+            {pendingSelectedIds.length > 0 && BULK_ACTIONS.map((action) => (
               <Button key={action.status} type="button" size="sm" variant="outline" className={action.className} onClick={() => {
-                  setReviewIds(Array.from(selectedIds));
+                  setReviewIds(pendingSelectedIds);
                   setReviewStatus(action.status);
                 }}>
                 <action.icon />

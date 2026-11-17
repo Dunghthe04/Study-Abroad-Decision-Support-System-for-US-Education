@@ -43,6 +43,7 @@ function ReviewForm({ status, ids, onClose, onDone }: Omit<Props, "status"> & { 
       const skipped = [
         result.notFound > 0 ? `không tìm thấy ${result.notFound}` : "",
         result.skippedOwn > 0 ? `${result.skippedOwn} mẫu do chính bạn tạo hoặc sửa` : "",
+        result.skippedNotPending > 0 ? `${result.skippedNotPending} mẫu không ở trạng thái chờ duyệt` : "",
         result.skippedNotReady > 0 ? `${result.skippedNotReady} mẫu chưa có câu trả lời` : "",
       ].filter(Boolean);
       onDone(`Đã chuyển ${result.updated} mẫu sang "${statusLabel(status)}"${skipped.length ? `. Bỏ qua: ${skipped.join(", ")}` : ""}.`);
