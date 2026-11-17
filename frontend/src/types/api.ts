@@ -500,13 +500,20 @@ export interface UpdateApplicationRoundRequest {
 }
 
 // [Q11] Liên kết phụ huynh – học sinh (đồng ý xử lý dữ liệu trẻ em)
-export type ParentLinkStatus = "pending" | "active" | "revoked" | "expired";
+export type ParentLinkStatus = "pending" | "active" | "revoked" | "expired" | "rejected";
+
+/** [UC-115] Trạng thái link mời: pending = chưa trả lời; accepted / rejected = đã dùng, chỉ hiện kết quả */
+export type ParentInviteState = "pending" | "accepted" | "rejected";
 
 export interface ParentInviteInfo {
+  state: ParentInviteState;
   studentName: string;
   studentAge: number | null;
   parentEmail: string;
-  expiresAt: string;
+  /** Chỉ có khi còn chờ trả lời */
+  expiresAt: string | null;
+  /** Lúc phụ huynh bấm Đồng ý / Từ chối */
+  decidedAt: string | null;
   policyVersion: string;
 }
 

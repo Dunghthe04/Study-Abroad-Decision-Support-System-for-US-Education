@@ -128,20 +128,35 @@ namespace StudyAbroad.Infrastructure.Auth
             await SendEmailAsync(toEmail, subject, body, ct);
         }
 
+        // [UC-115] Phụ huynh không cần tài khoản: link một lần là xác thực. Hai nút cùng dẫn tới trang xác nhận
+        // (không đổi trạng thái chỉ bằng mở link, tránh máy quét link trong hộp thư tự bấm).
         public async Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, CancellationToken ct = default)
         {
             var link = $"{_options.AppBaseUrl.TrimEnd('/')}/parent-consent?token={Uri.EscapeDataString(inviteToken)}";
-            var subject = "[USAS] Mời phụ huynh liên kết tài khoản học sinh";
+            var rejectLink = link + "&choice=reject";
+            var student = WebUtility.HtmlEncode(studentName);
+            var subject = "[USAS] Phụ huynh xác nhận đồng ý cho con dùng USAS";
             var body = $"""
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-                    <h2 style="color: #2563eb; margin-bottom: 16px;">Lời mời liên kết tài khoản học sinh</h2>
-                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Học sinh <strong>{WebUtility.HtmlEncode(studentName)}</strong> vừa tạo tài khoản trên Hệ thống Hỗ trợ Ra quyết định Du học Mỹ (USAS) và khai địa chỉ email này là email của phụ huynh.</p>
-                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Theo Luật Bảo vệ dữ liệu cá nhân, hệ thống cần cha mẹ hoặc người giám hộ đồng ý trước khi lưu và phân tích hồ sơ học tập của học sinh dưới 16 tuổi. Phụ huynh có thể xem nội dung đồng ý, chấp nhận liên kết và rút lại sự đồng ý bất cứ lúc nào.</p>
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">Xác nhận đồng ý của phụ huynh</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Học sinh <strong>{student}</strong> vừa tạo tài khoản trên Hệ thống Hỗ trợ Ra quyết định Du học Mỹ (USAS) và khai địa chỉ email này là email của phụ huynh.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Theo Luật Bảo vệ dữ liệu cá nhân, hệ thống cần cha mẹ hoặc người giám hộ đồng ý trước khi lưu và phân tích hồ sơ học tập của học sinh dưới 16 tuổi. Bạn không cần tạo tài khoản để trả lời.</p>
+                    <p style="font-size: 14px; color: #0f172a; font-weight: 600; margin-bottom: 4px;">Dữ liệu được xử lý</p>
+                    <ul style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0; padding-left: 20px;">
+                        <li>Họ tên, ngày sinh, email, số điện thoại của con.</li>
+                        <li>Hồ sơ học thuật: trường, lớp, bảng điểm, chứng chỉ, hoạt động ngoại khóa.</li>
+                        <li>Thông tin tài chính du học do gia đình tự khai (nếu nhập).</li>
+                        <li>Nội dung con trao đổi với trợ lý tư vấn AI.</li>
+                    </ul>
+                    <p style="font-size: 14px; color: #0f172a; font-weight: 600; margin-bottom: 4px;">Mục đích</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0;">Lưu hồ sơ, phân tích năng lực và gợi ý trường phù hợp cho việc du học Mỹ. Không bán hay chia sẻ dữ liệu cho bên thứ ba; hồ sơ chỉ gửi cho trung tâm tư vấn khi bạn xác nhận riêng từng lần.</p>
                     <div style="text-align: center; margin: 24px 0;">
-                        <a href="{WebUtility.HtmlEncode(link)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 8px;">Xem và xác nhận</a>
-                        <p style="margin: 8px 0 0; font-size: 13px; color: #64748b;">Link có hiệu lực trong <strong>{expiryDays} ngày</strong> và chỉ dùng được một lần.</p>
+                        <a href="{WebUtility.HtmlEncode(link)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 8px; margin: 4px;">Đồng ý</a>
+                        <a href="{WebUtility.HtmlEncode(rejectLink)}" style="display: inline-block; background-color: #ffffff; color: #b91c1c; text-decoration: none; font-weight: 600; padding: 11px 23px; border-radius: 8px; border: 1px solid #fca5a5; margin: 4px;">Từ chối</a>
+                        <p style="margin: 8px 0 0; font-size: 13px; color: #64748b;">Hai nút mở trang xác nhận để bạn đọc lại và bấm chọn. Link có hiệu lực trong <strong>{expiryDays} ngày</strong> và chỉ trả lời được một lần.</p>
                     </div>
-                    <p style="font-size: 13px; color: #94a3b8; line-height: 1.5;">Nếu bạn không phải phụ huynh của học sinh này, vui lòng bỏ qua email; hệ thống không liên kết khi bạn chưa xác nhận.</p>
+                    <p style="font-size: 13px; color: #475569; line-height: 1.5;">Sau khi đồng ý, bạn nhận thêm một email xác nhận có link <strong>Rút đồng ý</strong>: bấm link đó bất cứ lúc nào để hệ thống ngừng xử lý dữ liệu của con, không cần đăng nhập.</p>
+                    <p style="font-size: 13px; color: #94a3b8; line-height: 1.5;">Nếu bạn không phải phụ huynh của em {student}, hãy bỏ qua email này; hệ thống không xử lý dữ liệu của em khi chưa có phụ huynh đồng ý.</p>
                     <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
                     <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
                 </div>
@@ -227,6 +242,24 @@ namespace StudyAbroad.Infrastructure.Auth
                         <p style="margin: 8px 0 0; font-size: 13px; color: #64748b;">Link dùng được một lần và hết tác dụng khi học sinh đủ 16 tuổi.</p>
                     </div>
                     <p style="font-size: 13px; color: #94a3b8; line-height: 1.5;">Bạn cũng có thể rút đồng ý bất cứ lúc nào bằng cách đăng nhập vào <a href="{WebUtility.HtmlEncode(baseUrl)}" style="color: #2563eb;">USAS</a> và mở trang Tài khoản.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
+        public async Task SendParentConsentRejectedEmailAsync(string toEmail, string studentName, string parentLabel, CancellationToken ct = default)
+        {
+            var student = WebUtility.HtmlEncode(studentName);
+            var parent = WebUtility.HtmlEncode(parentLabel);
+            var subject = "[USAS] Phụ huynh đã từ chối lời mời";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">Phụ huynh đã từ chối lời mời</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Chào <strong>{student}</strong>, phụ huynh <strong>{parent}</strong> đã từ chối cho hệ thống xử lý dữ liệu học tập của bạn. Bạn tạm chưa dùng được các chức năng cần hồ sơ.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Nếu phụ huynh bấm nhầm, bạn có thể gửi lại lời mời hoặc khai email phụ huynh khác trong trang Tài khoản.</p>
                     <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
                     <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
                 </div>
