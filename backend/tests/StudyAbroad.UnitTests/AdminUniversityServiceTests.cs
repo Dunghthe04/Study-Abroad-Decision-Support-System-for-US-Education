@@ -197,6 +197,23 @@ public class AdminUniversityServiceTests
     }
 
     [Fact]
+    public async Task UpdateOfferingAsync_MissingSourceOrFutureDate_ReturnsErrors()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo);
+
+        var noSource = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id,
+            OfferingRequest(repo) with { SourceUrl = null, RetrievedAt = null }, Actor);
+        var future = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id,
+            OfferingRequest(repo) with { RetrievedAt = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(5) }, Actor);
+
+        Assert.Contains("sourceUrl", noSource.Errors.Keys);
+        Assert.Contains("retrievedAt", noSource.Errors.Keys);
+        Assert.Contains("retrievedAt", future.Errors.Keys);
+        Assert.Equal(0, repo.SaveCount);
+    }
+
+    [Fact]
     public async Task UpdateOfferingAsync_UnknownReliability_ReturnsError()
     {
         var repo = new FakeRepository();
@@ -295,6 +312,7 @@ public class AdminUniversityServiceTests
             Offering = new UniversityOffering
             {
                 UniversityId = University.Id, StudyLevel = "undergraduate", TuitionUsd = 60000m, Sat25 = 1500, Sat75 = 1570,
+                SourceUrl = "https://example.edu/cds", RetrievedAt = new DateOnly(2026, 10, 1),
             };
             Links.Add(new UniversityOfferingMajor { UniversityOfferingId = Offering.Id, MajorId = ComputerScience.Id, IsStem = true, IsVerified = true });
             Links.Add(new UniversityOfferingMajor { UniversityOfferingId = Offering.Id, MajorId = Engineering.Id, IsStem = true, IsVerified = true });

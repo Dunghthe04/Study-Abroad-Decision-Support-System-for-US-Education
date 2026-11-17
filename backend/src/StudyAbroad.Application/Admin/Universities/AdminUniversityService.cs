@@ -189,9 +189,8 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         var notes = Clean(request.Notes);
         var requestedMajors = request.Majors;
 
-        var errors = ValidateOffering(request, academicYear, satPolicy, sourceUrl, notes);
-        if (sourceReliability is not null && !SourceReliabilities.Contains(sourceReliability))
-            errors["sourceReliability"] = "Mức tin cậy chỉ nhận official, aggregated hoặc self_reported.";
+        var errors = ValidateOffering(request, academicYear, satPolicy, notes);
+        ValidateSource(sourceUrl, request.RetrievedAt, sourceReliability, errors);
         var knownMajors = await repository.ListMajorsAsync(ct);
         var knownMajorIds = knownMajors.Select(m => m.Id).ToHashSet();
         var seenMajorIds = new HashSet<Guid>();
@@ -311,7 +310,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
     }
 
     private static Dictionary<string, string> ValidateOffering(
-        UpdateOfferingRequest request, string? academicYear, string? satPolicy, string? sourceUrl, string? notes)
+        UpdateOfferingRequest request, string? academicYear, string? satPolicy, string? notes)
     {
         var errors = new Dictionary<string, string>();
 
@@ -343,8 +342,6 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
 
         if (satPolicy is not null && !SatPolicies.Contains(satPolicy))
             errors["satPolicy"] = "Chính sách SAT chỉ nhận required, optional hoặc not_accepted.";
-        if (sourceUrl is not null && (sourceUrl.Length > 512 || !IsHttpUrl(sourceUrl)))
-            errors["sourceUrl"] = "Nguồn phải là đường dẫn http(s), tối đa 512 ký tự.";
         if (notes is not null && notes.Length > 2000)
             errors["notes"] = "Ghi chú tối đa 2000 ký tự.";
 
