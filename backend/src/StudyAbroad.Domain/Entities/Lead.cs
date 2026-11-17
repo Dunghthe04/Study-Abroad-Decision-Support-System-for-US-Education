@@ -19,7 +19,7 @@ public class Lead : BaseEntity
     public List<string> SharedFields { get; set; } = [];
     /// <summary>UC-42: học sinh 16–17 tuổi đã tích "hiểu trung tâm sẽ nhận dữ liệu và liên hệ lại".</summary>
     public bool AcknowledgedCenterContact { get; set; }
-    /// <summary>Xem LeadStatuses: new | contacted | closed | withdrawn | pending_parent | cancelled | expired</summary>
+    /// <summary>Xem LeadStatuses: new | accepted | rejected | contacted | closed | withdrawn | pending_parent | cancelled | expired</summary>
     public string Status { get; set; } = "new";
 
     // [UC-116] Học sinh dưới 16 gửi: phụ huynh xác nhận qua link mail. Token mỗi phụ huynh = bí mật chung + mã liên kết;

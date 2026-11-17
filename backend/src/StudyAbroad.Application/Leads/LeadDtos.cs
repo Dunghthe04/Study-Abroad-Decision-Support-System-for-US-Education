@@ -104,7 +104,11 @@ public record CenterReceivedLeadDto(
     DateTime CreatedAt,
     string? StudentName,
     string? StudentEmail,
-    SharedProfileSummaryDto? ProfileSummary);
+    SharedProfileSummaryDto? ProfileSummary)
+{
+    /// <summary>[UC-73] Yêu cầu đã thu hồi hoặc quá 90 ngày: trung tâm không còn xem được dữ liệu người gửi đã chia sẻ.</summary>
+    public bool DataHidden { get; init; }
+}
 
 /// <summary>
 /// [UC-73] Danh sách phân trang kèm bộ đếm trạng thái dành cho cổng trung tâm.
@@ -116,7 +120,11 @@ public record CenterLeadsSummaryDto(
     int PageSize,
     int NewCount,
     int ContactedCount,
-    int ClosedCount);
+    int ClosedCount)
+{
+    /// <summary>[UC-73] Số yêu cầu bị từ chối. <c>ContactedCount</c> gồm cả yêu cầu đã chấp nhận (accepted) và trạng thái cũ contacted.</summary>
+    public int RejectedCount { get; init; }
+}
 
 /// <summary>
 /// [UC-73] Yêu cầu cập nhật trạng thái liên hệ (new | contacted | closed).

@@ -31,7 +31,7 @@ public class LeadService(
 
     private static readonly HashSet<string> ValidStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
-        "new", "contacted", "closed"
+        "new", "accepted", "contacted", "closed"
     };
 
     /// <summary>[UC-80] Người gửi đã xóa tài khoản: lead bị thu hồi, không ai trao đổi hay đổi trạng thái được nữa.</summary>
@@ -459,7 +459,7 @@ public class LeadService(
     {
         var normalizedStatus = newStatus?.Trim().ToLower() ?? "";
         if (!ValidStatuses.Contains(normalizedStatus))
-            throw new ArgumentException("Trạng thái không hợp lệ. Chỉ chấp nhận 'new', 'contacted', hoặc 'closed'.");
+            throw new ArgumentException("Trạng thái không hợp lệ. Chỉ chấp nhận 'new', 'accepted', 'contacted' hoặc 'closed'. Từ chối yêu cầu dùng thao tác riêng.");
 
         var (centerId, _) = await ResolveCenterScopeAsync(userId, userEmail, userRole, null, ct);
 
@@ -474,8 +474,79 @@ public class LeadService(
 
         EnsureNotWithdrawn(lead);
 
+        // [UC-73] Yêu cầu đã từ chối thì không đổi trạng thái được nữa
+        if (string.Equals(lead.Status, LeadStatuses.Rejected, StringComparison.OrdinalIgnoreCase))
+            throw new LeadRuleException("lead_rejected", 400, "Yêu cầu đã bị từ chối, không đổi trạng thái được.");
+
         lead.Status = normalizedStatus;
         await leads.UpdateAsync(lead, ct);
+
+        var updated = await leads.GetReceivedLeadDetailAsync(leadId, centerId, ct);
+        return updated ?? throw new KeyNotFoundException("Không thể tải thông tin sau khi cập nhật.");
+    }
+
+    /// <summary>[UC-73] Trung tâm chấp nhận yêu cầu "Mới": sang "Đã chấp nhận" và mở nhắn tin (UC-74).</summary>
+    public Task<CenterReceivedLeadDto> AcceptReceivedLeadAsync(
+        Guid userId, string? userEmail, string userRole, Guid leadId, CancellationToken ct = default) =>
+        DecideReceivedLeadAsync(userId, userEmail, userRole, leadId, accept: true, ct);
+
+    /// <summary>[UC-73] Trung tâm từ chối yêu cầu "Mới": sang "Bị từ chối", người gửi nhận thông báo.</summary>
+    public Task<CenterReceivedLeadDto> RejectReceivedLeadAsync(
+        Guid userId, string? userEmail, string userRole, Guid leadId, CancellationToken ct = default) =>
+        DecideReceivedLeadAsync(userId, userEmail, userRole, leadId, accept: false, ct);
+
+    private async Task<CenterReceivedLeadDto> DecideReceivedLeadAsync(
+        Guid userId, string? userEmail, string userRole, Guid leadId, bool accept, CancellationToken ct)
+    {
+        if (leadId == Guid.Empty)
+            throw new ArgumentException("Mã yêu cầu liên hệ không hợp lệ.");
+
+        var (centerId, centerName) = await ResolveCenterScopeAsync(userId, userEmail, userRole, null, ct);
+
+        var lead = await leads.GetLeadForUpdateAsync(leadId, ct);
+        // [UC-116] Lead trung tâm chưa nhận; [Chống IDOR] lead của trung tâm khác báo "không tìm thấy"
+        if (lead is null || LeadStatuses.IsHiddenFromCenter(lead.Status)
+            || (centerId.HasValue && lead.StudyCenterId != centerId.Value))
+            throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
+
+        EnsureNotWithdrawn(lead);
+
+        if (CenterLeadMapper.IsDataHidden(lead))
+            throw new LeadRuleException("lead_expired", 400, "Yêu cầu đã thu hồi hoặc quá 90 ngày, không xử lý được nữa.");
+        if (!string.Equals(lead.Status, LeadStatuses.New, StringComparison.OrdinalIgnoreCase))
+            throw new LeadRuleException("lead_not_new", 400, "Chỉ chấp nhận hoặc từ chối được yêu cầu ở trạng thái Mới.");
+
+        lead.Status = accept ? LeadStatuses.Accepted : LeadStatuses.Rejected;
+        await leads.UpdateAsync(lead, ct);
+
+        if (auditLogs is not null)
+        {
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = userId,
+                Action = accept ? "lead.accept" : "lead.reject",
+                EntityType = "lead",
+                EntityId = lead.Id.ToString(),
+                DetailJson = JsonSerializer.Serialize(new { studyCenterId = lead.StudyCenterId }),
+            }, ct);
+        }
+
+        if (!accept)
+        {
+            if (string.IsNullOrWhiteSpace(centerName))
+                centerName = (await studyCenters.GetByIdAsync(lead.StudyCenterId, ct))?.Name ?? "Trung tâm tư vấn";
+
+            // Thông báo cho người bấm gửi, và học sinh nếu phụ huynh gửi thay
+            var recipients = new[] { lead.SubmittedByUserId ?? lead.UserId, lead.UserId }.Distinct().ToList();
+            await leads.AddNotificationsAsync(recipients.Select(id => new Notification
+            {
+                UserId = id,
+                Type = "lead_rejected",
+                Title = "Yêu cầu liên hệ bị từ chối",
+                Body = $"{centerName} đã từ chối yêu cầu liên hệ của bạn.",
+                LinkUrl = "/account",
+            }).ToList(), ct);
+        }
 
         var updated = await leads.GetReceivedLeadDetailAsync(leadId, centerId, ct);
         return updated ?? throw new KeyNotFoundException("Không thể tải thông tin sau khi cập nhật.");
