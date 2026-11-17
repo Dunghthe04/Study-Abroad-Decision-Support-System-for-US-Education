@@ -27,9 +27,27 @@ public static class SlmSampleSplits
 public static class SlmReviewStatuses
 {
     public const string Draft = "draft";
+    public const string Pending = "pending";
     public const string Approved = "approved";
     public const string Rejected = "rejected";
     public const string NeedsFix = "needs_fix";
 
-    public static readonly IReadOnlyList<string> All = new[] { Draft, Approved, Rejected, NeedsFix };
+    public static readonly IReadOnlyList<string> All = new[] { Draft, Pending, Approved, Rejected, NeedsFix };
+}
+
+public static class SlmSampleSources
+{
+    public const string Manual = "manual";
+    public const string Excel = "excel";
+    public const string ChatUnanswered = "chat-unanswered";
+}
+
+public static class SlmSampleHistoryActions
+{
+    public const string Create = "create";
+    public const string Edit = "edit";
+    public const string Submit = "submit";
+    public const string Review = "review";
+    public const string Delete = "delete";
+    public const string Capture = "capture";
 }
