@@ -1,11 +1,11 @@
 """Đo SLM trên dữ liệu gán nhãn: tách đủ ý, đúng loại, đúng thứ tự, thực thể, tốc độ. Dùng để có baseline trước fine-tune và so sau.
 
 Cần Ollama đang chạy và đã pull model. Chạy trong thư mục advisor, dùng prompt slm_intents (khóa tiếng Anh):
-  python -m scripts.eval_slm --model qwen3:4b-instruct --prompt slm_intents --shots 8     # baseline: model gốc, 8 ví dụ lấy từ train
-  python -m scripts.eval_slm --model usas-slm-v4 --prompt slm_intents                       # model đã fine-tune, không cần ví dụ
+  python -m slm.eval.eval_slm --model qwen3:4b-instruct --prompt slm_intents --shots 8     # baseline: model gốc, 8 ví dụ lấy từ train
+  python -m slm.eval.eval_slm --model usas-slm-v4 --prompt slm_intents                       # model đã fine-tune, không cần ví dụ
 Thêm --split val --limit 20 để thử nhanh. Nhãn lấy từ Excel qua build_slm_jsonl.
 
-Ghi từng dự đoán vào data/slm/ket_qua/<model>[_shotsN]_<split>.jsonl để xem lại câu sai. Dựng bảng và biểu đồ so sánh: scripts.slm_report.
+Ghi từng dự đoán vào slm/results/ket_qua/<model>[_shotsN]_<split>.jsonl để xem lại câu sai. Dựng bảng và biểu đồ so sánh: slm.eval.slm_report.
 """
 
 import argparse
@@ -26,10 +26,10 @@ from app.schemas.slm import INTENTS, SlmTinResult
 from app.services.ollama import OllamaClient, OllamaError
 from app.services.skill_call import SKILLS_DIR, load_skill
 from app.services.slm_classifier import FALLBACK, keep_verbatim, label_confidence
-from scripts.build_slm_jsonl import DEFAULT_EXCEL, DEFAULT_OUT, read_records
-from scripts.export_slm_chat import answer_text, user_message
+from slm.prepare.build_slm_jsonl import DEFAULT_EXCEL, RESULTS_DIR, read_records
+from slm.prepare.export_slm_chat import answer_text, user_message
 
-RESULT_DIR = DEFAULT_OUT.parent / "ket_qua"
+RESULT_DIR = RESULTS_DIR / "ket_qua"
 
 
 # Độ giống nhau của hai đoạn chữ theo từ: F1 giữa hai tập từ (1 là giống hệt từ, 0 là không chung từ nào)

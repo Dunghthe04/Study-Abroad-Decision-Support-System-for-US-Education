@@ -1,6 +1,6 @@
 """Bộ phân loại SLM (Qwen3 4B qua Ollama): đọc tin nhắn, tách thành danh sách ý, mỗi ý có loại và thông tin tách được.
 
-Đầu vào cùng dạng cột đầu vào trong data/slm/du_lieu_slm.jsonl ({"question", "profile", "pending_question", "context"}), đầu ra
+Đầu vào cùng dạng cột đầu vào trong slm/data/du_lieu_slm.jsonl ({"question", "profile", "pending_question", "context"}), đầu ra
 theo SLM_TIN_SCHEMA ({"intents": [...]}). Nhờ vậy model chưa fine-tune, model đã fine-tune và dữ liệu huấn luyện dùng chung một
 khuôn, đổi model chỉ cần đổi settings.slm_model. Hệ thống đọc đúng thứ model trả, không đổi tên khóa hay mã.
 """

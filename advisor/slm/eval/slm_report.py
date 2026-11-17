@@ -1,19 +1,19 @@
 """Báo cáo đo SLM: so sánh các lần chạy (model gốc và model đã huấn luyện) trên cùng một tập, kèm bảng CSV và biểu đồ.
 
-Bước 1: chạy scripts.eval_slm cho từng model, cùng một tập (test), ra data/slm/ket_qua/<model>[_shotsN]_<tập>.jsonl:
-  python -m scripts.eval_slm --model qwen3:4b-instruct --prompt slm_intents --shots 8 --split test
-  python -m scripts.eval_slm --model usas-slm-v4 --prompt slm_intents --split test
+Bước 1: chạy slm.eval.eval_slm cho từng model, cùng một tập (test), ra slm/results/ket_qua/<model>[_shotsN]_<tập>.jsonl:
+  python -m slm.eval.eval_slm --model qwen3:4b-instruct --prompt slm_intents --shots 8 --split test
+  python -m slm.eval.eval_slm --model usas-slm-v4 --prompt slm_intents --split test
 Bước 2: dựng báo cáo. Lần chạy ĐẦU TIÊN là model gốc (baseline), các lần sau là model đã huấn luyện:
 Công cụ dùng được cho cả hai tập: --split val để phát triển (chọn prompt, chọn epoch), --split test MỘT LẦN để lấy số báo cáo cuối.
 Báo cáo tự ghi đúng tập đã đo. Ví dụ dựng báo cáo trên test:
-  python -m scripts.slm_report --run "Model gốc=data/slm/ket_qua/qwen3_4b-instruct_shots8_test.jsonl" \\
-      --run "Đã huấn luyện=data/slm/ket_qua/usas-slm-v4_test.jsonl" --out data/slm/bao_cao/2026-11-10_v4_test_ban_thu \\
+  python -m slm.eval.slm_report --run "Model gốc=slm/results/ket_qua/qwen3_4b-instruct_shots8_test.jsonl" \\
+      --run "Đã huấn luyện=slm/results/ket_qua/usas-slm-v4_test.jsonl" --out slm/results/bao_cao/2026-11-10_v4_test_ban_thu \\
       --log training_log.csv --config "Model gốc: ..." --config "Đã huấn luyện: ..."
 Thêm đường cong huấn luyện (log từ notebook Colab: training_log.csv hoặc trainer_state.json) và val loss của model gốc:
   ... --log training_log.csv --baseline-val-loss 2.31
 
 Mỗi lần dựng báo cáo ra MỘT thư mục tự chứa đủ để xem lại và kiểm tra, đặt tên --out theo dạng
-  data/slm/bao_cao/<YYYY-MM-DD>_<model>_<tập>_<ban_thu|chinh_thuc>
+  slm/results/bao_cao/<YYYY-MM-DD>_<model>_<tập>_<ban_thu|chinh_thuc>
   BAO_CAO.md          báo cáo tổng hợp (đọc trước)
   manifest.json       lần chạy này dùng gì: ngày, commit git (và có sửa chưa commit không), cấu hình, lệnh, mã băm sha256 của đáp án thô, log và dữ liệu
   chi_so.json         toàn bộ chỉ số dạng máy đọc
@@ -34,11 +34,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from scripts import slm_charts as charts
-from scripts import slm_metrics as m
-from scripts.build_slm_jsonl import DEFAULT_OUT
+from slm.eval import slm_charts as charts
+from slm.eval import slm_metrics as m
+from slm.prepare.build_slm_jsonl import DEFAULT_OUT
 
-RESULT_DIR = DEFAULT_OUT.parent
 LEVEL_TEXT = {
     "hop_le": "Trả được kết quả dùng được",
     "dung_tap_loai": "Đúng loại ý (không xét thứ tự)",
@@ -71,7 +70,7 @@ def parse_run(text: str) -> tuple[str, Path]:
     name, sep, path = text.partition("=")
     if not sep or not name.strip() or not path.strip():
         raise argparse.ArgumentTypeError(
-            '--run phải có dạng "Tên=đường dẫn file", ví dụ "Model gốc=data/slm/ket_qua/x_test.jsonl"'
+            '--run phải có dạng "Tên=đường dẫn file", ví dụ "Model gốc=slm/results/ket_qua/x_test.jsonl"'
         )
     return name.strip(), Path(path.strip())
 
@@ -294,7 +293,7 @@ def main() -> None:
         "--out",
         type=Path,
         required=True,
-        help="thư mục báo cáo, đặt tên dạng data/slm/bao_cao/<YYYY-MM-DD>_<model>_<tập>_<ban_thu|chinh_thuc>",
+        help="thư mục báo cáo, đặt tên dạng slm/results/bao_cao/<YYYY-MM-DD>_<model>_<tập>_<ban_thu|chinh_thuc>",
     )
     parser.add_argument(
         "--log", type=Path, default=None, help="log huấn luyện: training_log.csv hoặc trainer_state.json"
@@ -419,7 +418,7 @@ def main() -> None:
         **git_state(),
         "cau_hinh": args.config,
         "lan_chay": [{"ten": name, "so_tin": len(runs[name])} for name, _ in args.run],
-        "lenh_dung_lai": f"python -m scripts.slm_report {shlex.join(sys.argv[1:])}",
+        "lenh_dung_lai": f"python -m slm.eval.slm_report {shlex.join(sys.argv[1:])}",
         **archived,
     }
     (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
