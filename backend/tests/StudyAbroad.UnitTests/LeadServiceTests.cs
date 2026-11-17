@@ -555,6 +555,7 @@ public class LeadServiceTests
         var (s, audit, service) = MessageSetup();
         var student = s.AddStudent(18);
         var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = LeadStatuses.Accepted; // [UC-74] chỉ nhắn khi đã chấp nhận
 
         var result = await service.SendSentLeadMessageAsync(student.Id, lead.Id, "Gọi em số 0912345678, xem https://example.com nhé");
 
@@ -569,6 +570,7 @@ public class LeadServiceTests
         var (s, audit, service) = MessageSetup();
         var student = s.AddStudent(18);
         var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = LeadStatuses.Accepted; // [UC-74] chỉ nhắn khi đã chấp nhận
 
         var result = await service.SendSentLeadMessageAsync(
             student.Id, lead.Id, "  ",
@@ -598,6 +600,52 @@ public class LeadServiceTests
 
         Assert.Equal(0, uploads); // quyền và trạng thái được kiểm tra trước khi tải ảnh lên nhà cung cấp
         Assert.Empty(s.LeadRepo.Messages);
+    }
+
+    // [UC-74] Chỉ nhắn được khi yêu cầu Đã chấp nhận; các trạng thái khác bị chặn ở cả hai phía, trước khi tải ảnh lên
+    [Theory]
+    [InlineData(LeadStatuses.New, "lead_not_accepted")]
+    [InlineData(LeadStatuses.Rejected, "lead_rejected")]
+    [InlineData(LeadStatuses.Closed, "lead_closed")]
+    [InlineData(LeadStatuses.Withdrawn, "lead_withdrawn")]
+    [InlineData(LeadStatuses.Cancelled, "lead_cancelled")]
+    [InlineData(LeadStatuses.Expired, "lead_expired")]
+    public async Task SendMessage_LeadNotAccepted_IsBlockedOnBothSidesWithoutUploading(string status, string expectedCode)
+    {
+        var (s, _, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = status;
+        var centerUser = AddCenterUser(s);
+        s.CenterRepo.Centers.First(c => c.Id == s.CenterId).OwnerUserId = centerUser.Id;
+        var uploads = 0;
+        Task<LeadMessageAttachment> Upload(CancellationToken _) { uploads++; return Task.FromResult(new LeadMessageAttachment("https://x/y.png", "y")); }
+
+        var studentEx = await Assert.ThrowsAsync<LeadRuleException>(() =>
+            service.SendSentLeadMessageAsync(student.Id, lead.Id, "Xin chào", Upload));
+        Assert.Equal(expectedCode, studentEx.Code);
+
+        Task Center() => service.SendLeadMessageForCenterUserAsync(centerUser.Id, null, UserRoles.Center, lead.Id, "Chào em", Upload);
+        if (LeadStatuses.IsHiddenFromCenter(status))
+            await Assert.ThrowsAsync<KeyNotFoundException>(Center); // [UC-116] trung tâm không thấy lead đã hủy / hết hạn chờ phụ huynh
+        else
+            Assert.Equal(expectedCode, (await Assert.ThrowsAsync<LeadRuleException>(Center)).Code);
+        Assert.Equal(0, uploads);
+        Assert.Empty(s.LeadRepo.Messages);
+        Assert.Equal(status, lead.Status);
+    }
+
+    [Fact]
+    public async Task SendMessage_AcceptedLeadOlderThan90Days_IsExpired()
+    {
+        var (s, _, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id, daysAgo: 91);
+        lead.Status = LeadStatuses.Accepted;
+
+        var ex = await Assert.ThrowsAsync<LeadRuleException>(() => service.SendSentLeadMessageAsync(student.Id, lead.Id, "Xin chào"));
+
+        Assert.Equal("lead_expired", ex.Code);
     }
 
     [Fact]
@@ -808,7 +856,7 @@ public class LeadServiceTests
     }
 
     [Fact]
-    public async Task SendLeadMessage_ValidCleanReply_SavesMessageUpdatesNewLeadToContactedAndLogsAudit()
+    public async Task SendLeadMessage_ValidCleanReply_OnAcceptedLead_SavesMessageKeepsStatusAndLogsAudit()
     {
         var centerOwnerId = Guid.NewGuid();
         var centerId = Guid.NewGuid();
@@ -819,7 +867,7 @@ public class LeadServiceTests
         centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm Minh bạch", OwnerUserId = centerOwnerId });
 
         var leadRepo = new FakeLeadRepo();
-        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = studentId, StudyCenterId = centerId, Status = "new" });
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = studentId, StudyCenterId = centerId, Status = LeadStatuses.Accepted });
 
         var auditRepo = new FakeAuditRepo();
         var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository(), auditRepo);
@@ -831,8 +879,8 @@ public class LeadServiceTests
             leadId,
             "  Chào em, trung tâm đã nhận hồ sơ và sẽ tư vấn lộ trình phù hợp.  ");
 
-        Assert.Equal("contacted", res.LeadStatus);
-        Assert.Equal("contacted", leadRepo.Leads[0].Status);
+        Assert.Equal(LeadStatuses.Accepted, res.LeadStatus);
+        Assert.Equal(LeadStatuses.Accepted, leadRepo.Leads[0].Status); // [UC-74] không còn tự chuyển trạng thái
         Assert.Equal("visible", res.Message.Status);
         Assert.Equal("Trung Tâm Minh bạch", res.Message.SenderName);
         Assert.Equal("Chào em, trung tâm đã nhận hồ sơ và sẽ tư vấn lộ trình phù hợp.", res.Message.Content);
@@ -1029,8 +1077,8 @@ public class LeadServiceTests
 
     [Theory]
     [InlineData("contacted")]
-    [InlineData("closed")]
-    public async Task SendLeadMessage_OnContactedOrClosedLead_PreservesExistingStatus(string initialStatus)
+    [InlineData("accepted")]
+    public async Task SendLeadMessage_OnAcceptedOrLegacyContactedLead_PreservesExistingStatus(string initialStatus)
     {
         var centerOwnerId = Guid.NewGuid();
         var centerId = Guid.NewGuid();
@@ -1068,7 +1116,7 @@ public class LeadServiceTests
         centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm Quốc Tế", OwnerUserId = Guid.NewGuid() });
 
         var leadRepo = new FakeLeadRepo();
-        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = "new" });
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.Accepted });
 
         var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
@@ -1082,7 +1130,7 @@ public class LeadServiceTests
         Assert.Equal(expectedName, result.Message.SenderName);
         Assert.Equal(role, result.Message.SenderRole);
         Assert.True(result.Message.IsFromCenter);
-        Assert.Equal("contacted", result.LeadStatus);
+        Assert.Equal(LeadStatuses.Accepted, result.LeadStatus);
     }
 
     [Fact]
@@ -1704,6 +1752,7 @@ public class LeadServiceTests
         var (s, audit, service) = MessageSetup();
         var student = s.AddStudent(18);
         var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = LeadStatuses.Accepted; // [UC-74] chỉ nhắn khi đã chấp nhận
         var centerUser = Guid.NewGuid();
         s.LeadRepo.Users[centerUser] = ("Tư vấn viên", UserRoles.Center);
         s.LeadRepo.Messages.Add(new LeadMessage
@@ -1716,8 +1765,8 @@ public class LeadServiceTests
         Assert.Equal("Em cảm ơn trung tâm", result.Message.Content);
         Assert.Equal(student.Id, result.Message.SenderUserId);
         Assert.False(result.Message.IsFromCenter);
-        Assert.Equal("new", result.LeadStatus); // người gửi nhắn không đổi trạng thái
-        Assert.Equal("new", lead.Status);
+        Assert.Equal(LeadStatuses.Accepted, result.LeadStatus); // người gửi nhắn không đổi trạng thái
+        Assert.Equal(LeadStatuses.Accepted, lead.Status);
         Assert.Equal("lead_message.send", Assert.Single(audit.Logs).Action);
 
         var thread = await service.GetSentLeadMessagesAsync(student.Id, lead.Id);
@@ -1747,7 +1796,9 @@ public class LeadServiceTests
         var child17 = s.AddStudent(17);
         var parent = s.AddParent(child14, child17);
         var forChild14 = AddLead(s, child14.Id, parent.Id);
+        forChild14.Status = LeadStatuses.Accepted; // [UC-74] chỉ nhắn khi đã chấp nhận
         var child17Self = AddLead(s, child17.Id, child17.Id);
+        child17Self.Status = LeadStatuses.Accepted; // [UC-74] chỉ nhắn khi đã chấp nhận
 
         await service.SendSentLeadMessageAsync(parent.Id, forChild14.Id, "Phụ huynh hỏi lịch tư vấn");
         await service.SendSentLeadMessageAsync(parent.Id, child17Self.Id, "Phụ huynh hỏi thêm");
