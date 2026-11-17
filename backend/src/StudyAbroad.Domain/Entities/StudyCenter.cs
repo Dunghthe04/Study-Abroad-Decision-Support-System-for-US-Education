@@ -108,4 +108,10 @@ public class StudyCenter : BaseEntity
 
     public DateOnly? SurveyedAt { get; set; }
     public bool IsActive { get; set; } = true;
+
+    /// <summary>Legal Hold: đóng băng dữ liệu trung tâm khi có điều tra gian lận/tranh chấp. Job nền không được purge.</summary>
+    public bool IsLegalHold { get; set; } = false;
+
+    /// <summary>Lý do áp dụng Legal Hold.</summary>
+    public string? LegalHoldReason { get; set; }
 }

@@ -13,6 +13,7 @@ public class AccountPurgeRepository(AppDbContext db) : IAccountPurgeRepository
         db.Users.AsNoTracking()
             .Where(u => u.Status == UserStatuses.Deleted
                 && u.DeletedAt != null && u.DeletedAt <= deletedBefore
+                && !u.IsLegalHold
                 && roles.Contains(u.Role))
             .OrderBy(u => u.DeletedAt)
             .Select(u => u.Id)
@@ -26,6 +27,7 @@ public class AccountPurgeRepository(AppDbContext db) : IAccountPurgeRepository
             WHERE id = {userId}
               AND status = {UserStatuses.Deleted}
               AND deleted_at IS NOT NULL AND deleted_at <= {deletedBefore}
+              AND is_legal_hold = FALSE
               AND role = ANY({roleArray})
             FOR UPDATE
             """).ToListAsync(ct);

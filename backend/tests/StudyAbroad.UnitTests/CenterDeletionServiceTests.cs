@@ -233,6 +233,22 @@ public class CenterDeletionServiceTests
     }
 
     [Fact]
+    public async Task PurgeDue_SkipsCenterUnderLegalHold_ProtectsEvidence()
+    {
+        var s = new Setup();
+        await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
+        s.Center.IsLegalHold = true;
+        s.Center.LegalHoldReason = "Đang phối hợp cơ quan điều tra xác minh khiếu nại lừa đảo";
+
+        var result = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(35));
+
+        Assert.Equal(0, result.Purged);
+        Assert.Empty(s.Work.PurgedCenters);
+        Assert.Empty(s.Purge.DeletedUsers);
+        Assert.Equal(CenterDeletionRequestStatuses.Approved, s.Request.Status);
+    }
+
+    [Fact]
     public async Task Search_ValidatesFilterAndTreatsAllAsNoFilter()
     {
         var s = new Setup();

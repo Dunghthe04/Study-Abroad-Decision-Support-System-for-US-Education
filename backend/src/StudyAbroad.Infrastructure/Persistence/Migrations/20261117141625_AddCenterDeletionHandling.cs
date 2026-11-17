@@ -47,6 +47,38 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                 type: "timestamp with time zone",
                 nullable: true);
 
+            migrationBuilder.AddColumn<bool>(
+                name: "is_legal_hold",
+                schema: "app",
+                table: "users",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
+            migrationBuilder.AddColumn<string>(
+                name: "legal_hold_reason",
+                schema: "app",
+                table: "users",
+                type: "character varying(500)",
+                maxLength: 500,
+                nullable: true);
+
+            migrationBuilder.AddColumn<bool>(
+                name: "is_legal_hold",
+                schema: "app",
+                table: "study_centers",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
+            migrationBuilder.AddColumn<string>(
+                name: "legal_hold_reason",
+                schema: "app",
+                table: "study_centers",
+                type: "character varying(500)",
+                maxLength: 500,
+                nullable: true);
+
             migrationBuilder.CreateIndex(
                 name: "ix_center_deletion_requests_status_scheduled_purge_at",
                 schema: "app",
@@ -91,6 +123,26 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                 name: "scheduled_purge_at",
                 schema: "app",
                 table: "center_deletion_requests");
+
+            migrationBuilder.DropColumn(
+                name: "is_legal_hold",
+                schema: "app",
+                table: "users");
+
+            migrationBuilder.DropColumn(
+                name: "legal_hold_reason",
+                schema: "app",
+                table: "users");
+
+            migrationBuilder.DropColumn(
+                name: "is_legal_hold",
+                schema: "app",
+                table: "study_centers");
+
+            migrationBuilder.DropColumn(
+                name: "legal_hold_reason",
+                schema: "app",
+                table: "study_centers");
 
             migrationBuilder.AlterColumn<Guid>(
                 name: "requested_by_user_id",
