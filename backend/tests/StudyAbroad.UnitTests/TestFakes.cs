@@ -446,6 +446,7 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
         InviteSentCount = l.InviteSentCount, LastInviteSentAt = l.LastInviteSentAt, AcceptedAt = l.AcceptedAt,
         ConsentId = l.ConsentId, RevokedAt = l.RevokedAt, RevokedByUserId = l.RevokedByUserId, RevokeTokenHash = l.RevokeTokenHash,
         Version = l.Version, ProfileTransferStatus = l.ProfileTransferStatus, ProfileTransferAt = l.ProfileTransferAt,
+        SourceManagedUserId = l.SourceManagedUserId,
     };
 }
 

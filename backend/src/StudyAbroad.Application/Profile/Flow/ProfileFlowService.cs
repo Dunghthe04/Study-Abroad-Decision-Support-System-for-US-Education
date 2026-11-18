@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Domain.Constants;
@@ -39,7 +40,7 @@ public class ProfileFlowService(
     IAiUsageCollector? usageCollector = null,
     ILogger<ProfileFlowService>? logger = null,
     AiPricing? pricing = null,
-    IParentLinkRepository? parentLinks = null) : IProfileFlowService
+    IUserRepository? users = null) : IProfileFlowService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -318,10 +319,10 @@ public class ProfileFlowService(
     }
 
     /// <summary>Người này có được nhập / lưu hồ sơ của chính mình không.
-    /// Chức năng 1: phụ huynh có liên kết còn hiệu lực thì không (hồ sơ do con nhập, phụ huynh xem ở "Con của tôi").
-    /// Học sinh không bao giờ đứng ở vị trí phụ huynh trong liên kết nên luôn được. Từ 1.5d chỉ đổi điều kiện ở đây.</summary>
+    /// 1.5d: tài khoản phụ huynh không bao giờ có hồ sơ riêng, kể cả khi chưa liên kết con nào; hồ sơ nhập trước khi con có
+    /// tài khoản nằm ở con managed. Phụ huynh làm thay thì userId là id con (Role student) nên vẫn được.</summary>
     public async Task<bool> CanEditOwnProfileAsync(Guid userId, CancellationToken ct = default) =>
-        parentLinks is null || (await parentLinks.GetActiveByParentAsync(userId, ct)).Count == 0;
+        users is null || (await users.GetUserById(userId, ct))?.Role != UserRoles.Parent;
 
     // Gọi trước EnsureProfileExistsAsync: chặn sau thì phụ huynh vẫn bị tạo một dòng hồ sơ rỗng
     private async Task EnsureCanEditAsync(Guid userId, CancellationToken ct)

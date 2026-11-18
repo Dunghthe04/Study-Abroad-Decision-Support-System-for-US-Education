@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace StudyAbroad.Application.Advisor;
 
 /// <summary>
-/// Chức năng 1f: phụ huynh đã liên kết không có hồ sơ riêng (hồ sơ do con nhập, phụ huynh xem ở "Con của tôi").
+/// Chức năng 1f, 1.5d: tài khoản phụ huynh không có hồ sơ riêng, kể cả khi chưa liên kết (hồ sơ của con xem / nhập thay ở "Con của tôi").
 /// Lượt chat mà SLM hiểu là việc của hồ sơ (nhập hồ sơ, rà soát, kịch bản, gợi ý trường) thì thay bằng câu báo kèm nút sang "Con của tôi".
 /// Câu hỏi kiến thức, thông tin / tìm / so sánh trường, trung tâm, chào hỏi... vẫn trả lời bình thường.
 /// Đọc nhãn SLM có sẵn, không huấn luyện lại. ChatService gọi trước khi lưu nháp, nên lượt bị thay không ghi gì vào hồ sơ.

@@ -2096,6 +2096,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("revoked_by_user_id");
 
+                    b.Property<Guid?>("SourceManagedUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_managed_user_id");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2140,6 +2144,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RevokedByUserId")
                         .HasDatabaseName("ix_parent_student_links_revoked_by_user_id");
+
+                    b.HasIndex("SourceManagedUserId")
+                        .HasDatabaseName("ix_parent_student_links_source_managed_user_id");
 
                     b.HasIndex("TokenHash")
                         .IsUnique()
@@ -5233,6 +5240,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasForeignKey("RevokedByUserId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_parent_student_links_users_revoked_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("SourceManagedUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_parent_student_links_users_source_managed_user_id");
 
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()

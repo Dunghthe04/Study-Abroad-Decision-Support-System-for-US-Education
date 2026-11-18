@@ -41,6 +41,22 @@ public class ManagedChildService(
         var error = ValidateName(name) ?? ValidateDateOfBirth(request.DateOfBirth);
         if (error is not null)
             return ManagedChildResult.Fail(error);
+        return await CreateAsync(parentId, name, request.DateOfBirth, ct);
+    }
+
+    /// <summary>[1.5d] Job chuyển hồ sơ cũ của phụ huynh tạo con giữ hồ sơ: không biết ngày sinh nên để trống.
+    /// Ngày sinh này chỉ dùng tạm, ghép với con thật thì con thật giữ ngày sinh của mình.</summary>
+    public async Task<ManagedChildResult> AddWithoutDateOfBirthAsync(Guid parentId, string fullName, CancellationToken ct)
+    {
+        var name = NormalizeName(fullName);
+        var error = ValidateName(name);
+        if (error is not null)
+            return ManagedChildResult.Fail(error);
+        return await CreateAsync(parentId, name, null, ct);
+    }
+
+    private async Task<ManagedChildResult> CreateAsync(Guid parentId, string name, DateOnly? dateOfBirth, CancellationToken ct)
+    {
 
         var parent = await users.GetUserById(parentId, ct);
         if (parent is null || parent.Role != UserRoles.Parent)
@@ -57,7 +73,7 @@ public class ManagedChildService(
             FullName = name,
             Role = UserRoles.Student,
             Status = UserStatuses.Managed,
-            DateOfBirth = request.DateOfBirth,
+            DateOfBirth = dateOfBirth,
         };
         var link = new ParentStudentLink
         {
@@ -148,7 +164,8 @@ public class ManagedChildService(
     }
 
     // Đủ 3 điều kiện: liên kết active, của đúng phụ huynh này, con có Status managed. Thiếu một là coi như không có.
-    private async Task<(User Child, ParentStudentLink Link)?> FindManagedChildAsync(Guid parentId, Guid childId, CancellationToken ct)
+    // Public để luồng ghép con (1.5d) kiểm tra con managed được chọn.
+    public async Task<(User Child, ParentStudentLink Link)?> FindManagedChildAsync(Guid parentId, Guid childId, CancellationToken ct)
     {
         var link = (await links.GetActiveByParentAsync(parentId, ct)).FirstOrDefault(l => l.StudentUserId == childId);
         if (link is null)

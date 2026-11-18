@@ -1636,26 +1636,24 @@ public class ProfileFlowServiceTests
         Assert.Empty(ec.Sent.Awards);
     }
 
-    // ===== 1c: phụ huynh có liên kết còn hiệu lực không được lưu hồ sơ của chính mình =====
+    // ===== 1.5d: tài khoản phụ huynh không bao giờ có hồ sơ riêng (trước đây 1c chỉ chặn khi có liên kết) =====
 
-    private static ProfileFlowService ServiceWithLinks(InMemoryProfileFlowRepository repo, FakeParentLinkRepository links) =>
-        new(repo, new FakeFileStorageService(), parentLinks: links);
+    private static ProfileFlowService ServiceWithUsers(InMemoryProfileFlowRepository repo, FakeUserRepository users) =>
+        new(repo, new FakeFileStorageService(), users: users);
 
-    private static FakeParentLinkRepository LinksOf(Guid parentId, Guid childId, string status)
+    private static FakeUserRepository UsersOf(Guid parentId, Guid childId)
     {
-        var links = new FakeParentLinkRepository();
-        links.Links.Add(new ParentStudentLink
-        {
-            StudentUserId = childId, ParentUserId = parentId, ParentEmail = "p@test.com", Status = status,
-        });
-        return links;
+        var users = new FakeUserRepository();
+        users.Users.Add(new User { Id = parentId, Email = "p@test.com", Role = UserRoles.Parent, Status = UserStatuses.Active, PasswordHash = "x" });
+        users.Users.Add(new User { Id = childId, Email = "c@test.com", Role = UserRoles.Student, Status = UserStatuses.Active, PasswordHash = "x" });
+        return users;
     }
 
     [Fact]
-    public async Task NoActiveLink_CanSaveDraft()
+    public async Task UnknownUser_CanSaveDraft()
     {
         var repo = new InMemoryProfileFlowRepository();
-        var service = ServiceWithLinks(repo, new FakeParentLinkRepository());
+        var service = ServiceWithUsers(repo, new FakeUserRepository());
 
         await service.SaveDraftAsync(Guid.NewGuid(), new SaveProfileDraftRequest(1, [], FullDraft()));
 
@@ -1668,7 +1666,7 @@ public class ProfileFlowServiceTests
         var parentId = Guid.NewGuid();
         var childId = Guid.NewGuid();
         var repo = new InMemoryProfileFlowRepository();
-        var service = ServiceWithLinks(repo, LinksOf(parentId, childId, ParentLinkStatuses.Active));
+        var service = ServiceWithUsers(repo, UsersOf(parentId, childId));
 
         await service.SaveDraftAsync(childId, new SaveProfileDraftRequest(1, [], FullDraft()));
 
@@ -1680,7 +1678,7 @@ public class ProfileFlowServiceTests
     {
         var parentId = Guid.NewGuid();
         var repo = new InMemoryProfileFlowRepository();
-        var service = ServiceWithLinks(repo, LinksOf(parentId, Guid.NewGuid(), ParentLinkStatuses.Active));
+        var service = ServiceWithUsers(repo, UsersOf(parentId, Guid.NewGuid()));
 
         await Assert.ThrowsAsync<ProfileLockedForParentException>(() =>
             service.SaveDraftAsync(parentId, new SaveProfileDraftRequest(1, [], FullDraft())));
@@ -1691,7 +1689,7 @@ public class ProfileFlowServiceTests
     public async Task LinkedParent_UploadTranscript_Throws()
     {
         var parentId = Guid.NewGuid();
-        var service = ServiceWithLinks(new InMemoryProfileFlowRepository(), LinksOf(parentId, Guid.NewGuid(), ParentLinkStatuses.Active));
+        var service = ServiceWithUsers(new InMemoryProfileFlowRepository(), UsersOf(parentId, Guid.NewGuid()));
         using var stream = new MemoryStream([1, 2, 3, 4]);
 
         await Assert.ThrowsAsync<ProfileLockedForParentException>(() =>
@@ -1702,7 +1700,7 @@ public class ProfileFlowServiceTests
     public async Task LinkedParent_Commit_Throws()
     {
         var parentId = Guid.NewGuid();
-        var service = ServiceWithLinks(new InMemoryProfileFlowRepository(), LinksOf(parentId, Guid.NewGuid(), ParentLinkStatuses.Active));
+        var service = ServiceWithUsers(new InMemoryProfileFlowRepository(), UsersOf(parentId, Guid.NewGuid()));
 
         await Assert.ThrowsAsync<ProfileLockedForParentException>(() =>
             service.CommitFlowAsync(parentId, new CommitProfileFlowRequest(FullDraft())));
@@ -1712,7 +1710,7 @@ public class ProfileFlowServiceTests
     public async Task LinkedParent_PatchDraftFromChat_Throws()
     {
         var parentId = Guid.NewGuid();
-        var service = ServiceWithLinks(new InMemoryProfileFlowRepository(), LinksOf(parentId, Guid.NewGuid(), ParentLinkStatuses.Active));
+        var service = ServiceWithUsers(new InMemoryProfileFlowRepository(), UsersOf(parentId, Guid.NewGuid()));
 
         // Chat (ChatService) chỉ bắt ArgumentException khi ghi nháp: lỗi này phải là ArgumentException để chat bỏ qua êm
         var ex = await Assert.ThrowsAsync<ProfileLockedForParentException>(() =>
@@ -1721,22 +1719,25 @@ public class ProfileFlowServiceTests
     }
 
     [Fact]
-    public async Task RevokedLink_CanSaveAgain()
+    // Trước 1.5d phụ huynh hủy liên kết thì được lưu lại; nay phụ huynh chưa liên kết ai cũng không có hồ sơ riêng
+    public async Task ParentWithoutAnyLink_StillCannotSave()
     {
         var parentId = Guid.NewGuid();
         var repo = new InMemoryProfileFlowRepository();
-        var service = ServiceWithLinks(repo, LinksOf(parentId, Guid.NewGuid(), ParentLinkStatuses.Revoked));
+        var users = new FakeUserRepository();
+        users.Users.Add(new User { Id = parentId, Email = "p@test.com", Role = UserRoles.Parent, Status = UserStatuses.Active, PasswordHash = "x" });
+        var service = ServiceWithUsers(repo, users);
 
-        await service.SaveDraftAsync(parentId, new SaveProfileDraftRequest(1, [], FullDraft()));
-
-        Assert.Contains(repo.Profiles.Values, p => p.UserId == parentId);
+        await Assert.ThrowsAsync<ProfileLockedForParentException>(() =>
+            service.SaveDraftAsync(parentId, new SaveProfileDraftRequest(1, [], FullDraft())));
+        Assert.Empty(repo.Profiles);
     }
 
     [Fact]
     public async Task LinkedParent_SaveDraftEndpoint_Returns409()
     {
         var parentId = Guid.NewGuid();
-        var service = ServiceWithLinks(new InMemoryProfileFlowRepository(), LinksOf(parentId, Guid.NewGuid(), ParentLinkStatuses.Active));
+        var service = ServiceWithUsers(new InMemoryProfileFlowRepository(), UsersOf(parentId, Guid.NewGuid()));
         var controller = new ProfileFlowController(service)
         {
             ControllerContext = new ControllerContext

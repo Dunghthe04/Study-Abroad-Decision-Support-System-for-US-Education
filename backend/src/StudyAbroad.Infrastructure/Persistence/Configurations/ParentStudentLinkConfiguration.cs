@@ -28,5 +28,7 @@ public class ParentStudentLinkConfiguration : IEntityTypeConfiguration<ParentStu
         // Npgsql ánh xạ uint IsRowVersion vào cột hệ thống xmin (không tạo cột mới)
         b.Property(x => x.Version).IsRowVersion();
         b.Property(x => x.ProfileTransferStatus).HasMaxLength(16);
+        // [1.5d] Con managed bị xóa hẳn (job UC-80) thì bỏ trỏ nguồn, thẻ chọn của con tự biến mất
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.SourceManagedUserId).OnDelete(DeleteBehavior.SetNull);
     }
 }

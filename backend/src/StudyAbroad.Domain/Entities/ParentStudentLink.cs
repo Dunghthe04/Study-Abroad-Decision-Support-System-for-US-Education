@@ -30,4 +30,7 @@ public class ParentStudentLink : BaseEntity
     /// (ProfileTransferStatuses). Null là chưa xử lý.</summary>
     public string? ProfileTransferStatus { get; set; }
     public DateTime? ProfileTransferAt { get; set; }
+    /// <summary>[1.5d] Con managed (phụ huynh nhập thay) là nguồn của bản hồ sơ đang chờ con thật chọn (ProfileTransferStatus = offered).
+    /// Về null khi con chọn xong. Phụ huynh có thể có nhiều con managed nên không suy ra được nguồn, phải ghi ở đây.</summary>
+    public Guid? SourceManagedUserId { get; set; }
 }
