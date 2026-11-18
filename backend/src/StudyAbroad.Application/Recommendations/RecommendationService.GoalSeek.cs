@@ -77,7 +77,9 @@ public record SchoolGoalResult(
     GoalEnglishDto? English = null,
     GoalPosition? Position = null,
     IReadOnlyList<GoalTargetResult>? Targets = null,
-    GoalSchoolStats? Stats = null);
+    GoalSchoolStats? Stats = null,
+    // Cơ sở của kết quả: real (hồ sơ thật) | simulated (có giá trị giả định đang xem được phủ lên hồ sơ)
+    string Basis = "real");
 
 // ============================== GOAL-SEEKING ==============================
 
@@ -113,16 +115,20 @@ public partial class RecommendationService
     }
 
     // Học sinh hỏi "cần gì để vào trường này". target: reach | match | safety; bỏ trống thì nhóm cao hơn một bậc so với hiện tại.
-    // Tính từ hồ sơ thật, giữ các yếu tố khác nguyên. Không lưu, không gọi advisor.
-    public async Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct)
+    // Mặc định tính từ hồ sơ thật, giữ các yếu tố khác nguyên. overrides: giá trị giả định học sinh đang xem; có giá trị thì phủ lên
+    // hồ sơ thật rồi tính (cùng cách phần giải thích dùng), kết quả ghi Basis = simulated. Không lưu, không gọi advisor.
+    public async Task<SchoolGoalResult> GoalSeekAsync(
+        Guid userId, string code, string? target, CancellationToken ct, SimulationOverrides? overrides = null)
     {
-        var profile = await LoadScoredProfileAsync(userId, ct)
+        var real = await LoadScoredProfileAsync(userId, ct)
             ?? throw new InvalidOperationException("Chưa có hồ sơ.");
-        if (string.IsNullOrWhiteSpace(profile.TargetLevel))
+        if (string.IsNullOrWhiteSpace(real.TargetLevel))
             throw new InvalidOperationException("Hồ sơ chưa có bậc học muốn theo.");
+        var simulated = HasValues(overrides);
+        var profile = simulated ? Overlay(real, overrides!) : real;
         EnsureRunnable(profile);
 
-        var tier = EcTierOf(profile);
+        var tier = (simulated ? overrides!.EcTier : null) ?? EcTierOf(real);
         var schools = await recommendations.ListSchoolsAsync(profile.TargetLevel, ct);
         var school = schools.FirstOrDefault(s => string.Equals(s.University.Code, code, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Chưa có trường {code} trong dữ liệu.");
@@ -160,7 +166,8 @@ public partial class RecommendationService
             result.Alone.Select(p => ToDto(p)!).ToList(),
             result.NoEffect.Select(FactorCode).ToList(),
             budget, NonBudgetFilter(filter), alternatives, EnglishOf(filter, school),
-            PositionOf(filter, current), TargetsAbove(student, academics, current), StatsOf(school));
+            PositionOf(filter, current), TargetsAbove(student, academics, current), StatsOf(school),
+            simulated ? "simulated" : "real");
     }
 
     private static GoalSchoolStats StatsOf(RecommendSchoolInput school)

@@ -48,7 +48,7 @@ public static class ChatSimulation
     ];
 
     // Nhóm từ khó vào nhất đến dễ vào nhất. Chưa đủ dữ liệu (NA) coi như Khó vào: biết thêm thông tin không làm trường dễ vào hơn
-    private static int Rank(string status) => status switch
+    internal static int Rank(string status) => status switch
     {
         "OUT" => 0,
         "AID" => 1,
@@ -198,48 +198,6 @@ public static class ChatSimulation
         return string.Join("\n", lines);
     }
 
-    /// <summary>
-    /// Nút bước tiếp theo sau một kết quả what-if, do code chọn từ chính kết quả (tối đa 2):
-    /// hiểu vì sao trường thay đổi nhiều nhất đổi nhóm (hoặc đổi vị trí), rồi xem cần gì để vào một trường Khó vào.
-    /// Nút thứ hai KHÔNG chọn sẵn trường (học sinh chưa nói quan tâm trường nào): mở ô chọn trường để họ tự chọn.
-    /// Trường bị loại khỏi danh sách không có để giải thích nên không được đưa ra.
-    /// </summary>
-    public static IReadOnlyList<QuickReply> NextSteps(SimulationResult result, string? beforeItemsJson = null)
-    {
-        var steps = new List<QuickReply>();
-
-        // Nút không nêu tên trường: bấm vào mở ô chọn, trong ô chỉ có các trường vừa đổi nhóm (hoặc đổi vị trí) để học sinh chọn
-        var changed = result.Changes
-            .Where(c => c.To != "OUT" && Rank(c.To) != Rank(c.From))
-            .OrderByDescending(c => Math.Abs(Rank(c.To) - Rank(c.From)))
-            .Select(c => c.Code)
-            .ToList();
-        if (changed.Count > 0)
-        {
-            steps.Add(ExplainSome("Vì sao các trường đổi nhóm?", changed));
-        }
-        else if (beforeItemsJson is not null)
-        {
-            var moved = Moves(JsonNode.Parse(beforeItemsJson) as JsonObject, JsonNode.Parse(result.ItemsJson) as JsonObject)
-                .Select(m => m.Code).ToList();
-            if (moved.Count > 0)
-                steps.Add(ExplainSome("Vì sao các trường đổi vị trí?", moved));
-        }
-
-        // Có trường Khó vào trong danh sách thì mới có "mục tiêu" để hỏi cần gì
-        var items = JsonNode.Parse(result.ItemsJson) as JsonObject;
-        if ((items?["reach"] as JsonArray)?.Count > 0)
-        {
-            const string text = "Cần gì để vào trường em muốn?";
-            steps.Add(new QuickReply(text, text, new ChatAction("goal_seek")));
-        }
-        return steps;
-    }
-
-    // Giải thích một trong các trường đã đổi: không kèm mã trường, chỉ kèm danh sách mã để ô chọn trường thu hẹp lại
-    private static QuickReply ExplainSome(string label, IReadOnlyList<string> codes) =>
-        new(label, label, new ChatAction("explain", SchoolCodes: codes.Take(ChatActions.MaxPickerCodes).ToList()));
-
     private static string? PriorityFact(int factor, JsonObject school)
     {
         double? Num(string name) => school[name] is JsonValue v && v.TryGetValue<double>(out var x) ? x : null;
@@ -257,10 +215,10 @@ public static class ChatSimulation
         };
     }
 
-    private record Move(string Code, string Name, string GroupTitle, int From, int To);
+    internal record Move(string Code, string Name, string GroupTitle, int From, int To);
 
     // Trường nằm cùng nhóm ở hai danh sách nhưng khác vị trí, nhiều bước nhất trước
-    private static List<Move> Moves(JsonObject? before, JsonObject? after)
+    internal static List<Move> Moves(JsonObject? before, JsonObject? after)
     {
         var names = (after?["scored"] as JsonArray ?? []).OfType<JsonObject>()
             .Where(s => s["code"] is not null && s["name"] is not null)

@@ -1,17 +1,17 @@
-"""Test cho scripts/resplit_slm.py: chia theo nhóm (không rò hồ sơ, không rò đầu vào) và sắp dòng train, val, test."""
+"""Test cho slm/prepare/resplit_slm.py: chia theo nhóm (không rò hồ sơ, không rò đầu vào) và sắp dòng train, val, test."""
 
 import shutil
 from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
 
-from scripts.check_slm_data import (
+from slm.prepare.check_slm_data import (
     Item,
     check_profile_not_in_two_splits,
     check_test_questions_not_in_train,
     read_items,
 )
-from scripts.resplit_slm import apply_to_excel, assign_splits, group_items, skeleton
+from slm.prepare.resplit_slm import apply_to_excel, assign_splits, group_items, skeleton
 
 
 def words(i: int) -> str:
@@ -101,7 +101,7 @@ def test_the_ratio_is_close_to_70_15_15():
 
 
 def test_applying_sorts_every_sheet_train_val_test_and_keeps_every_cell_even_empty_ones(tmp_path: Path):
-    from scripts.build_slm_jsonl import DEFAULT_EXCEL
+    from slm.prepare.build_slm_jsonl import DEFAULT_EXCEL
 
     path = tmp_path / "du_lieu.xlsx"
     shutil.copy(DEFAULT_EXCEL, path)
@@ -147,7 +147,7 @@ def test_applying_does_not_leave_old_values_in_cells_that_should_be_empty(tmp_pa
 
 
 def test_rebalance_moves_groups_to_train_but_never_below_the_minimum_of_a_label():
-    from scripts.resplit_slm import rebalance
+    from slm.prepare.resplit_slm import rebalance
 
     items = []
     for i in range(100):  # nhãn A: 60 dòng đang ở test, vượt xa 15%
@@ -169,7 +169,7 @@ def test_rebalance_moves_groups_to_train_but_never_below_the_minimum_of_a_label(
 
 
 def test_rebalance_keeps_a_group_together_and_does_not_touch_an_already_balanced_split():
-    from scripts.resplit_slm import rebalance
+    from slm.prepare.resplit_slm import rebalance
 
     p = {"gpa": "8 thang 10"}
     items = [

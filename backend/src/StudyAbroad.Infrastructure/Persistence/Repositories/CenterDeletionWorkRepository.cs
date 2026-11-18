@@ -1,0 +1,172 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
+using StudyAbroad.Application.Common;
+using StudyAbroad.Application.StudyCenters;
+using StudyAbroad.Domain.Constants;
+using StudyAbroad.Domain.Entities;
+
+namespace StudyAbroad.Infrastructure.Persistence.Repositories;
+
+/// <summary>[UC-93] Câu lệnh dữ liệu cho việc Administrator xử lý và thực hiện xóa trung tâm.</summary>
+public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env = null) : ICenterDeletionWorkRepository
+{
+    public const string PurgedCenterName = "Trung tâm đã xóa";
+
+    /// <summary>Lead còn mở phía trung tâm: chưa đóng, chưa thu hồi. "accepted" là trạng thái của UC-73.</summary>
+    private static readonly string[] OpenStatuses = [LeadStatuses.New, LeadStatuses.Contacted, "accepted"];
+
+    public async Task<PagedResult<AdminCenterDeletionRequestDto>> SearchAsync(string? status, int page, int pageSize, CancellationToken ct = default)
+    {
+        var safePage = page < 1 ? 1 : page;
+        var safeSize = pageSize is < 1 or > 100 ? 20 : pageSize;
+
+        var q = db.CenterDeletionRequests.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(status))
+            q = q.Where(x => x.Status == status);
+
+        var total = await q.CountAsync(ct);
+        var ids = await q
+            .OrderBy(x => x.Status == CenterDeletionRequestStatuses.Pending ? 0 : 1)
+            .ThenBy(x => x.CreatedAt)
+            .Skip((safePage - 1) * safeSize)
+            .Take(safeSize)
+            .Select(x => x.Id)
+            .ToListAsync(ct);
+
+        var views = await ProjectAsync(ids, ct);
+        var ordered = ids.Select(id => views.First(v => v.Id == id)).ToList();
+        return new PagedResult<AdminCenterDeletionRequestDto>(ordered, safePage, safeSize, total);
+    }
+
+    public async Task<AdminCenterDeletionRequestDto?> GetViewAsync(Guid id, CancellationToken ct = default) =>
+        (await ProjectAsync([id], ct)).FirstOrDefault();
+
+    private async Task<List<AdminCenterDeletionRequestDto>> ProjectAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct)
+    {
+        var rows = await (from r in db.CenterDeletionRequests.AsNoTracking()
+                          where ids.Contains(r.Id)
+                          join c in db.StudyCenters.AsNoTracking() on r.StudyCenterId equals c.Id
+                          join u in db.Users.AsNoTracking() on r.RequestedByUserId equals u.Id into requesters
+                          from u in requesters.DefaultIfEmpty()
+                          select new { Request = r, Center = c, RequesterName = u != null ? u.FullName : null, RequesterEmail = u != null ? u.Email : null })
+            .ToListAsync(ct);
+
+        return rows.Select(x => new AdminCenterDeletionRequestDto(
+            x.Request.Id,
+            x.Center.Id,
+            x.Center.Name,
+            x.Center.Email,
+            x.Center.Phone,
+            x.Center.VerificationStatus,
+            x.Request.RequestedByUserId,
+            x.RequesterName,
+            x.RequesterEmail,
+            x.Request.RequestedByUserId is not null && x.Request.RequestedByUserId == x.Center.OwnerUserId,
+            x.Request.Reason,
+            x.Request.Status,
+            x.Request.CreatedAt,
+            x.Request.HandledByUserId,
+            x.Request.HandledAt,
+            x.Request.DecisionNote,
+            x.Request.ScheduledPurgeAt,
+            x.Request.CompletedAt)).ToList();
+    }
+
+    public async Task<IReadOnlyList<ClosedLeadRecipients>> CloseOpenLeadsAsync(Guid studyCenterId, DateTime now, CancellationToken ct = default)
+    {
+        var leads = await db.Leads
+            .Where(l => l.StudyCenterId == studyCenterId
+                && (OpenStatuses.Contains(l.Status) || l.Status == LeadStatuses.PendingParent))
+            .ToListAsync(ct);
+
+        foreach (var lead in leads)
+        {
+            // Lead chờ phụ huynh xác nhận thì trung tâm chưa nhận: hủy thay vì đóng
+            lead.Status = lead.Status == LeadStatuses.PendingParent ? LeadStatuses.Cancelled : LeadStatuses.Closed;
+            lead.UpdatedAt = now;
+        }
+        await db.SaveChangesAsync(ct);
+
+        return leads.Select(l => new ClosedLeadRecipients(l.Id, l.UserId, l.SubmittedByUserId)).ToList();
+    }
+
+    public async Task AddNotificationsAsync(IReadOnlyCollection<Notification> notifications, CancellationToken ct = default)
+    {
+        db.Notifications.AddRange(notifications);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public Task<List<Guid>> GetDuePurgeRequestIdsAsync(DateTime now, CancellationToken ct = default) =>
+        (from r in db.CenterDeletionRequests.AsNoTracking()
+         join c in db.StudyCenters.AsNoTracking() on r.StudyCenterId equals c.Id
+         where r.Status == CenterDeletionRequestStatuses.Approved
+            && r.ScheduledPurgeAt != null && r.ScheduledPurgeAt <= now
+            && !c.IsLegalHold
+         orderby r.ScheduledPurgeAt
+         select r.Id).ToListAsync(ct);
+
+    public async Task PurgeCenterDataAsync(Guid studyCenterId, DateTime now, CancellationToken ct = default)
+    {
+        // Hồ sơ xác minh (tài liệu xóa theo cascade) và lịch sử sửa hồ sơ thuộc về trung tâm
+        await db.CenterVerificationRequests.Where(r => r.CenterId == studyCenterId).ExecuteDeleteAsync(ct);
+        await db.CenterProfileChanges.Where(c => c.StudyCenterId == studyCenterId).ExecuteDeleteAsync(ct);
+
+        // Giữ dòng trung tâm để lead và đánh giá cũ của người dùng còn tham chiếu, nhưng bỏ hết thông tin nhận diện
+        var center = await db.StudyCenters.FirstOrDefaultAsync(c => c.Id == studyCenterId, ct);
+        if (center is null) return;
+
+        center.Name = PurgedCenterName;
+        center.Code = center.Id.ToString("N");   // mã gốc có thể nhận diện; cột tối đa 32 ký tự, unique
+        center.Website = null;
+        center.Fanpage = null;
+        center.ServiceAreas = [];
+        center.Branches = [];
+        center.Address = null;
+        center.City = null;
+        center.District = null;
+        center.Latitude = null;
+        center.Longitude = null;
+        center.Phone = null;
+        center.Email = null;
+        center.Description = null;
+        center.EmailVerifiedAt = null;
+        center.PhoneVerifiedAt = null;
+        center.RegistrantName = null;
+        center.RegistrantPosition = null;
+        center.FeeMin = null;
+        center.FeeMax = null;
+        center.FeeDescription = null;
+        center.VerificationStatus = CenterVerificationStatuses.Unverified;
+        center.VerifiedAt = null;
+        center.VerifiedByUserId = null;
+        center.VerificationNote = null;
+        center.OwnerUserId = null;
+        center.LogoUrl = null;
+        center.CoverImageUrl = null;
+        center.GalleryImages = [];
+        center.StaffCount = null;
+        center.EstablishedYear = null;
+        center.LicenseNumber = null;
+        center.TaxCode = null;
+        center.LegalRepresentative = null;
+        center.LicenseIssuedBy = null;
+        center.LicenseIssuedDate = null;
+        center.TrainingLicenseNumber = null;
+        center.CertifiedCounselorCount = null;
+        center.LegalDocumentUrls = [];
+        center.Accreditations = [];
+        center.IsActive = false;
+        center.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+    }
+
+    public Task DeleteCenterFilesAsync(Guid studyCenterId, CancellationToken ct = default)
+    {
+        if (env is null) return Task.CompletedTask;
+        // Cùng thư mục CenterPortalController lưu tài liệu xác minh (UC-71)
+        var folder = Path.Combine(env.ContentRootPath, "uploads", "verifications", studyCenterId.ToString());
+        if (Directory.Exists(folder))
+            Directory.Delete(folder, recursive: true);
+        return Task.CompletedTask;
+    }
+}

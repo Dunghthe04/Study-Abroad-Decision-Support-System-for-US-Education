@@ -309,6 +309,8 @@ export interface SchoolGoalResult {
   position?: GoalPosition | null; // bản backend cũ chưa trả
   stats?: GoalSchoolStats | null; // số liệu tuyển sinh và mốc của các luật chặn
   targets?: GoalTargetResult[] | null; // các nhóm cao hơn nhóm hiện tại: Khó vào có Vừa sức và An toàn, Vừa sức có An toàn, An toàn rỗng
+  // Cơ sở đã tính: real (hồ sơ thật) hoặc simulated (giả định học sinh đang xem); bản backend cũ chưa trả thì coi là real
+  basis?: "real" | "simulated";
 }
 
 // Thẻ giải thích một trường do code dựng (số đã lưu và mã lý do của lần gợi ý gần nhất), không có AI.
@@ -421,6 +423,8 @@ export interface SchoolSearchItem {
   aidAvgUsd: number | null;
   quality: number | null;
   bestRank: number | null;
+  // Mức trường coi trọng điểm thi (CDS C7): very_important | important | considered | not_considered
+  testImportance?: string | null;
 }
 
 export interface SchoolSearchData {
@@ -436,8 +440,11 @@ export interface SchoolSearchData {
     major?: string | null;
     maxCostUsd?: number | null;
     maxIelts?: number | null;
+    testPolicy?: string | null;
     ivy?: boolean;
   } | null;
   sort?: string | null;
   coveredText: string | null;
+  // Điều kiện đã bỏ vì không đọc ra (vd "top" không có số), để học sinh biết danh sách không lọc theo điều đó
+  note?: string | null;
 }

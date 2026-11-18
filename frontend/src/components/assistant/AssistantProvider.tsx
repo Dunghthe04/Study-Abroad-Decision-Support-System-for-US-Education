@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { streamAdvisorChat } from "@/lib/advisor-stream";
 import { rememberChatGoals } from "@/lib/form-goals";
-import { PROFILE_SAVED_EVENT, onRecommendationsPage, showSimulation } from "@/lib/simulation-link";
+import { PROFILE_SAVED_EVENT, onRecommendationsPage, resetSimulation, showSimulation } from "@/lib/simulation-link";
 import type { AssistantAction, ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
 import type { SimulationOverrides } from "@/types/recommendation";
 
@@ -242,6 +242,10 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       const stillOwner = () => userIdRef.current === owner;
       lastActionRef.current = action ?? null;
       lastFromFormRef.current = fromForm;
+      // Học sinh chọn "Xem theo hồ sơ thật": trang cũng về hồ sơ thật (bỏ giả định đang kéo) và câu này gửi không kèm giả định,
+      // để trang và câu trả lời cùng một hồ sơ, không còn dải giả định đứng cạnh câu trả lời theo hồ sơ thật
+      const toReal = action?.basis === "real";
+      if (toReal) resetSimulation();
       loadingRef.current = true;
       setLoading(true);
       setError(null);
@@ -255,7 +259,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
             sessionId: sessionIdRef.current,
             messages: history.slice(-MAX_SENT_TURNS).map(({ role, content }) => ({ role, content: content.slice(0, MAX_SENT_CHARS) })),
             studyLevel: pageRef.current.studyLevel || null,
-            simulation: pageRef.current.simulation ?? undefined,
+            simulation: toReal ? undefined : (pageRef.current.simulation ?? undefined),
             action: action ?? undefined,
             fromForm: fromForm || undefined,
           },

@@ -16,7 +16,8 @@ from app.schemas.chat import QuickReply
 MENU = {
     "schools": QuickReply(label="Gợi ý trường từ hồ sơ", value="Gợi ý trường phù hợp với hồ sơ của em"),
     "assess": QuickReply(label="Đánh giá hồ sơ", value="Đánh giá hồ sơ của em"),
-    "scenario": QuickReply(label="Thử thay đổi hồ sơ", value="Nếu điểm SAT của em tăng thì sao?"),
+    # Bấm nút này thì code trả lời luôn (chat_flow.is_try_menu), không qua SLM: câu chung chung "thử thay đổi" model chưa đọc được
+    "scenario": QuickReply(label="Thử thay đổi hồ sơ", value="Em muốn thử thay đổi hồ sơ"),
     "knowledge": QuickReply(label="Hỏi về visa, học phí", value="Visa F-1 cần chuẩn bị gì?"),
     "centers": QuickReply(label="Tìm trung tâm tư vấn", value="Em muốn tìm trung tâm tư vấn"),
 }
@@ -89,6 +90,9 @@ GROUP_TOO_SMALL = "Nhóm {group} trong danh sách của bạn có {count} trư�
 NEED_RESULTS = "Bạn cần có danh sách trường gợi ý trước thì mình mới thử kịch bản được. Bạn muốn mình gợi ý trường trước không?"
 NOTHING_TO_TRY = "Mình chưa thử được thay đổi này. Hiện mình thử được: {supported}."
 TRY_INSTEAD = "Bạn thử đổi được: {supported}."
+TRY_WHAT = (
+    "Bạn muốn thử thay đổi gì? Mình thử được: {supported}. Bạn chọn nhanh bên dưới hoặc gõ mức bạn muốn thử."
+)
 ASK_SCHOOL = "Bạn muốn vào trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé."
 # Mục lọc trường: không thử tạm được, sửa hồ sơ rồi gợi ý lại (.NET không tự chạy lại gợi ý khi hồ sơ đổi)
 FILTER_TEXT = (

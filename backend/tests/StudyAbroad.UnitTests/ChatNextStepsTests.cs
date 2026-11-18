@@ -1,5 +1,6 @@
 using System.Text.Json;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.Recommendations;
 using Xunit;
 
 namespace StudyAbroad.UnitTests;
@@ -105,4 +106,129 @@ public class ChatNextStepsTests
         Assert.Equal("match", data.GetProperty("target").GetString());
         Assert.Equal(JsonValueKind.Null, data.GetProperty("kind").ValueKind);
     }
+
+    [Fact]
+    public void AfterSchoolInfo_OffersTheGoalForThisSchool_ThenUpToThreeFieldsNotAskedYet()
+    {
+        var steps = ChatNextSteps.AfterSchoolInfo("PU", "Purdue", [InfoField.Cost]);
+
+        Assert.Equal(["Cần gì để vào Purdue?", "Học bổng", "Tiếng Anh cần", "Hạn nộp"], steps.Select(s => s.Label));
+        Assert.Equal(ChatGoalSeek.Action, steps[0].Action?.Type);
+        Assert.Equal("PU", steps[0].Action?.SchoolCode);
+        Assert.Equal("Purdue có học bổng cho du học sinh không?", steps[1].Value);
+    }
+
+    [Fact]
+    public void AfterSchoolOverview_KeepsTheSixFieldsInOrder()
+    {
+        Assert.Equal(["Học phí", "Học bổng", "Tiếng Anh cần", "Hạn nộp", "GPA", "Xếp hạng"],
+            ChatNextSteps.AfterSchoolOverview("UCLA").Select(s => s.Label));
+    }
+
+    [Fact]
+    public void AfterCompare_OffersTheGoalForTheFirstTwoSchools_ThenTheCenter()
+    {
+        var steps = ChatNextSteps.AfterCompare([("PU", "Purdue"), ("DU", "Duke"), ("YU", "Yale")]);
+
+        Assert.Equal(["Cần gì để vào Purdue?", "Cần gì để vào Duke?", ChatNextSteps.CenterLabel], steps.Select(s => s.Label));
+        Assert.Equal("DU", steps[1].Action?.SchoolCode);
+    }
+
+    [Fact]
+    public void AfterExplainFailed_OffersAnotherSchoolAndTheCenter()
+    {
+        Assert.Equal([ChatNextSteps.AnotherExplainLabel, ChatNextSteps.CenterLabel],
+            ChatNextSteps.AfterExplainFailed().Select(s => s.Label));
+    }
+
+    [Fact]
+    public void SearchHelp_AndNoSchoolData_AlwaysGiveAWayForward()
+    {
+        Assert.NotEmpty(ChatNextSteps.SearchHelp());
+        Assert.Contains(ChatNextSteps.SearchHelp(), s => s.Label == ChatNextSteps.Recommend.Label);
+        Assert.Equal([ChatNextSteps.Recommend.Label, ChatNextSteps.CenterLabel], ChatNextSteps.NoSchoolData().Select(s => s.Label));
+    }
+
+    [Fact]
+    public void AfterSearch_ByRanking_OffersTopTwentyAndFifty_ThenTheUsualSteps_AtMostFive()
+    {
+        var items = Enumerable.Range(1, 5).Select(i => new SchoolSearchItem($"s{i}", $"S{i}", null, null, null, null, null, null, null, null, i)).ToList();
+
+        var steps = ChatNextSteps.AfterSearch(new SchoolSearchResult(100, items, []), SchoolSort.Quality, new SchoolSearchFilters());
+
+        Assert.Equal(["Chỉ top 20", "Chỉ top 50", "So sánh hai trường đầu", ChatNextSteps.Recommend.Label], steps.Select(s => s.Label));
+        Assert.True(steps.Count <= ChatNextSteps.MaxSteps);
+        Assert.Equal(ChatSchoolInfo.SearchAction, steps[0].Action?.Type);
+        Assert.Equal(20, steps[0].Action!.Search!.Value.GetProperty("filters").GetProperty("maxRank").GetInt32());
+    }
+
+    [Fact]
+    public void AfterSearch_WhenTheCostConditionWasIgnored_OffersCostLevels()
+    {
+        var ignored = new[] { new ChatSchoolInfo.IgnoredFilter("max_cost", "mức chi phí", "rẻ nhất") };
+
+        var steps = ChatNextSteps.AfterSearch(new SchoolSearchResult(10, [], []), SchoolSort.LowestTuition, new SchoolSearchFilters(), ignored);
+
+        Assert.Equal(["Dưới 30.000 USD", "Dưới 40.000 USD"], steps.Take(2).Select(s => s.Label));
+    }
+
+    [Fact]
+    public void AfterSearch_AlreadyLimitedByRank_DoesNotOfferTopAgain()
+    {
+        var steps = ChatNextSteps.AfterSearch(new SchoolSearchResult(100, [], []), SchoolSort.Quality, new SchoolSearchFilters(MaxRank: 20));
+
+        Assert.DoesNotContain(steps, s => s.Label.StartsWith("Chỉ top"));
+    }
+
+    [Fact]
+    public void AfterNoResult_WithNothingToDrop_GivesSampleSearches()
+    {
+        var steps = ChatNextSteps.AfterNoResult(new SchoolSearchResult(0, [], [new RelaxedFilter("bang", 0)]), SchoolSort.Quality, new SchoolSearchFilters());
+
+        Assert.Equal(ChatNextSteps.SearchHelp().Select(s => s.Label), steps.Select(s => s.Label));
+    }
+
+    [Fact]
+    public void AfterSearch_TestOptionalWithHeavyTestSchools_OffersToKeepOnlyLowTestWeight_WithoutReordering()
+    {
+        var items = new[]
+        {
+            new SchoolSearchItem("a", "A", null, null, null, null, null, null, null, null, 1, null, "very_important"),
+            new SchoolSearchItem("b", "B", null, null, null, null, null, null, null, null, 2, null, "considered"),
+        };
+        var filters = new SchoolSearchFilters(TestPolicy: "optional");
+
+        var steps = ChatNextSteps.AfterSearch(new SchoolSearchResult(2, items, []), SchoolSort.LowestCost, filters);
+
+        var button = Assert.Single(steps, s => s.Label == "Chỉ trường ít coi trọng điểm thi");
+        var data = button.Action!.Search!.Value;
+        Assert.True(data.GetProperty("filters").GetProperty("lowTestWeight").GetBoolean());
+        Assert.Equal("optional", data.GetProperty("filters").GetProperty("testPolicy").GetString());
+        Assert.Equal("lowestCost", data.GetProperty("sort").GetString());   // giữ cách xếp học sinh đã chọn
+    }
+
+    [Fact]
+    public void AfterSearch_NoHeavyTestSchoolsOrAlreadyLowTestWeight_DoesNotOfferIt()
+    {
+        var light = new[] { new SchoolSearchItem("b", "B", null, null, null, null, null, null, null, null, 2, null, "considered") };
+        var heavy = new[] { new SchoolSearchItem("a", "A", null, null, null, null, null, null, null, null, 1, null, "very_important") };
+
+        var noHeavy = ChatNextSteps.AfterSearch(new SchoolSearchResult(1, light, []), SchoolSort.Quality, new SchoolSearchFilters(TestPolicy: "optional"));
+        var already = ChatNextSteps.AfterSearch(new SchoolSearchResult(1, heavy, []), SchoolSort.Quality, new SchoolSearchFilters(TestPolicy: "optional", LowTestWeight: true));
+        var notOptional = ChatNextSteps.AfterSearch(new SchoolSearchResult(1, heavy, []), SchoolSort.Quality, new SchoolSearchFilters());
+
+        Assert.DoesNotContain(noHeavy, s => s.Label == "Chỉ trường ít coi trọng điểm thi");
+        Assert.DoesNotContain(already, s => s.Label == "Chỉ trường ít coi trọng điểm thi");
+        Assert.DoesNotContain(notOptional, s => s.Label == "Chỉ trường ít coi trọng điểm thi");
+    }
+
+    [Fact]
+    public void Without_DropsTheLowTestWeightCondition()
+    {
+        var f = ChatNextSteps.Without(new SchoolSearchFilters(TestPolicy: "optional", LowTestWeight: true), "it_coi_trong_diem_thi");
+
+        Assert.False(f.LowTestWeight);
+        Assert.Equal("optional", f.TestPolicy);
+    }
 }
+

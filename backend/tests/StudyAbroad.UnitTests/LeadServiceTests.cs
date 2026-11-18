@@ -782,6 +782,49 @@ public class LeadServiceTests
     }
 
     [Fact]
+    public async Task CreateLead_NotifiesCenterOwner_UC110()
+    {
+        var s = new CreateLeadSetup();
+        var ownerId = Guid.NewGuid();
+        s.CenterRepo.Centers[0].OwnerUserId = ownerId;
+        var notiRepo = new NotificationTests.FakeNotificationRepo();
+        var service = new LeadService(s.LeadRepo, s.CenterRepo, s.UserRepo, s.LinkRepo,
+            notifications: new StudyAbroad.Application.Notifications.NotificationService(notiRepo));
+        var student = s.AddStudent(18);
+
+        await service.CreateLeadAsync(student.Id, s.Request(ack: true));
+
+        var n = Assert.Single(notiRepo.Items);
+        Assert.Equal(ownerId, n.UserId);
+        Assert.Equal("lead_new", n.Type);
+        Assert.Equal("/center/leads", n.LinkUrl);
+    }
+
+    [Fact]
+    public async Task UpdateReceivedLeadStatus_NotifiesSubmitterAndStudentOnlyWhenChanged_UC110()
+    {
+        var centerOwnerId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var studentId = Guid.NewGuid();
+        var parentId = Guid.NewGuid();
+        var centerRepo = new FakeStudyCenterRepo();
+        centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm B", OwnerUserId = centerOwnerId });
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, StudyCenterId = centerId, Status = "new", UserId = studentId, SubmittedByUserId = parentId });
+        var notiRepo = new NotificationTests.FakeNotificationRepo();
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository(),
+            notifications: new StudyAbroad.Application.Notifications.NotificationService(notiRepo));
+
+        await service.UpdateReceivedLeadStatusAsync(centerOwnerId, null, UserRoles.Center, leadId, "contacted");
+        await service.UpdateReceivedLeadStatusAsync(centerOwnerId, null, UserRoles.Center, leadId, "contacted"); // không đổi: không báo
+
+        Assert.Equal(2, notiRepo.Items.Count);
+        Assert.Equal(new[] { parentId, studentId }.OrderBy(x => x), notiRepo.Items.Select(n => n.UserId).OrderBy(x => x));
+        Assert.All(notiRepo.Items, n => Assert.Equal("lead_status_changed", n.Type));
+    }
+
+    [Fact]
     public async Task UpdateReceivedLeadStatus_ValidStatus_UpdatesAndReturnsNewStatus()
     {
         var centerOwnerId = Guid.NewGuid();

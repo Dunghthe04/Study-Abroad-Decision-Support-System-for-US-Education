@@ -1,4 +1,5 @@
 import {
+  ArchiveXIcon,
   BarChart3Icon,
   BookOpenIcon,
   BuildingIcon,
@@ -80,6 +81,15 @@ export const ADMIN_NAV: AdminNavItem[] = [
     useCases: ["UC-59", "UC-64", "UC-71", "UC-72"],
   },
   {
+    href: "/admin/center-profile-changes",
+    label: "Kiểm tra thay đổi trung tâm",
+    description: "Đối chiếu website, fanpage trung tâm tự sửa và đánh giá Đạt hoặc Không đạt",
+    icon: ClipboardCheckIcon,
+    // [UC-114] Chỉ Moderator kiểm tra thay đổi trung tâm
+    roles: ["moderator"],
+    useCases: ["UC-114"],
+  },
+  {
     href: "/admin/plans",
     label: "Gói và giao dịch",
     description: "Quản lý gói dịch vụ, giá và xem giao dịch",
@@ -103,6 +113,14 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: MessagesSquareIcon,
     roles: ["admin", "moderator"],
     useCases: ["UC-54", "UC-55", "UC-56", "UC-57"],
+  },
+  {
+    href: "/admin/center-deletion-requests",
+    label: "Yêu cầu xóa trung tâm",
+    description: "Trung tâm xin xóa tài khoản và dữ liệu: Admin kiểm tra danh tính người gửi rồi duyệt hoặc từ chối",
+    icon: ArchiveXIcon,
+    roles: ["admin"],
+    useCases: ["UC-93"],
   },
   {
     href: "/admin/lead-message-reports",

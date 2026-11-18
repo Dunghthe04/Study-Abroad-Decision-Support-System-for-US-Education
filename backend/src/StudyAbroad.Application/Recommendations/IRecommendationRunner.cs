@@ -20,7 +20,8 @@ namespace StudyAbroad.Application.Recommendations
         Task<ExplainSchoolDto> ExplainCardAsync(Guid userId, string code, CancellationToken ct, SimulationOverrides? overrides = null);
         Task<IReadOnlyList<SchoolOption>> ListSchoolOptionsAsync(Guid userId, CancellationToken ct);
         Task<NameMatch> FindSchoolsAsync(Guid userId, string text, CancellationToken ct);
-        Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct);
+        // overrides: giá trị giả định học sinh đang xem (null là hồ sơ thật)
+        Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct, SimulationOverrides? overrides = null);
         /// <summary>Số liệu thật của một trường theo mã (chi phí, tiếng Anh, điểm thi, tỉ lệ nhận, học bổng, hạn nộp...), không cần hồ sơ.</summary>
         Task<SchoolInfoDto> SchoolInfoAsync(Guid userId, string code, CancellationToken ct);
         /// <summary>Các trường được nhắc trong một câu hỏi (chỉ nhận khi chắc chắn, xem SchoolNameMatcher.FindMentioned).</summary>

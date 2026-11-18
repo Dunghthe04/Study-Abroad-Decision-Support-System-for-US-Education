@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { CenterContactCard } from "@/components/center/CenterContactCard";
+import { CenterDeletionRequestCard } from "@/components/center/CenterDeletionRequestCard";
 import {
   centerNeedsTrainingLicense,
   LEGAL_COMPLIANCE_MODE_DESCRIPTIONS,
@@ -43,6 +44,17 @@ const STUDY_LEVEL_OPTIONS = [
   { key: "CaoDangCongDong", label: "Cao đẳng cộng đồng (Community College)" },
 ];
 
+/** [UC-92] Nhãn các trường cần Moderator kiểm tra. */
+const REVIEW_FIELD_LABELS: Record<string, string> = {
+  website: "Website",
+  fanpage: "Fanpage",
+};
+
+/** Mỗi dòng một mục, bỏ dòng trống và trùng. */
+function splitLines(value: string): string[] {
+  return Array.from(new Set(value.split("\n").map((v) => v.trim()).filter(Boolean)));
+}
+
 export function CenterProfileView() {
   const [center, setCenter] = useState<StudyCenter | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,6 +63,10 @@ export function CenterProfileView() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [website, setWebsite] = useState("");
+  const [fanpage, setFanpage] = useState("");
+  const [serviceAreas, setServiceAreas] = useState("");
+  const [branches, setBranches] = useState("");
+  const [reviewNotice, setReviewNotice] = useState<string | null>(null);
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [district, setDistrict] = useState("");
@@ -98,6 +114,9 @@ export function CenterProfileView() {
           setName(c.name || "");
           setDescription(c.description || "");
           setWebsite(c.website || "");
+          setFanpage(c.fanpage || "");
+          setServiceAreas((c.serviceAreas ?? []).join("\n"));
+          setBranches((c.branches ?? []).join("\n"));
           setAddress(c.address || "");
           setCity(c.city || "");
           setDistrict(c.district || "");
@@ -147,6 +166,7 @@ export function CenterProfileView() {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+    setReviewNotice(null);
 
     const fMin = feeMin ? Number(feeMin) : null;
     const fMax = feeMax ? Number(feeMax) : null;
@@ -169,7 +189,14 @@ export function CenterProfileView() {
       }
     }
 
-    // Đã xác minh: không gửi tên, loại hình và các trường pháp lý (server cũng chặn)
+    // [UC-92] Đang chờ duyệt: không gửi tên, loại hình và các trường pháp lý (server cũng chặn).
+    // Đã xác minh vẫn gửi; server chỉ đưa hồ sơ về Chờ duyệt khi giá trị pháp lý thực sự đổi.
+    if (isVerified && legalChanged) {
+      const ok = window.confirm(
+        "Bạn đang đổi thông tin pháp lý của trung tâm đã xác minh. Hồ sơ sẽ chuyển về Chờ duyệt và tạm ẩn dấu xác minh cho tới khi Moderator duyệt lại. Tiếp tục?"
+      );
+      if (!ok) return;
+    }
     const legalPayload = legalLocked
       ? {}
       : {
@@ -187,10 +214,13 @@ export function CenterProfileView() {
 
     setIsSubmitting(true);
     try {
-      const updated = await centerPortalApi.updateProfile({
+      const { center: updated, outcome } = await centerPortalApi.updateProfile({
         ...legalPayload,
         description: description.trim() || null,
         website: website.trim() || null,
+        fanpage: fanpage.trim() || null,
+        serviceAreas: splitLines(serviceAreas),
+        branches: splitLines(branches),
         address: address.trim() || null,
         city: city.trim() || null,
         district: district.trim() || null,
@@ -206,7 +236,12 @@ export function CenterProfileView() {
       });
 
       setCenter(updated);
-      setSuccess("Hồ sơ trung tâm đã được lưu và cập nhật thành công!");
+      setSuccess(outcome.message);
+      if (outcome.reviewFields.length > 0) {
+        setReviewNotice(
+          `${outcome.reviewFields.map((f) => REVIEW_FIELD_LABELS[f] ?? f).join(", ")} đã hiển thị ngay và đang chờ Moderator kiểm tra.`
+        );
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -218,9 +253,22 @@ export function CenterProfileView() {
     }
   };
 
-  // Đã xác minh hoặc đang chờ duyệt: chỉ sửa được thông tin hiển thị, không sửa được thông tin pháp lý (đặc tả 5.1, UC-71)
+  // [UC-92] Chỉ khóa thông tin pháp lý khi hồ sơ đang chờ duyệt. Đã xác minh vẫn sửa được nhưng hồ sơ sẽ về Chờ duyệt.
   const isPendingReview = center?.verificationStatus === "pending_review";
-  const legalLocked = center?.verificationStatus === "verified" || isPendingReview;
+  const isVerified = center?.verificationStatus === "verified";
+  const legalLocked = isPendingReview;
+  const legalChanged =
+    !!center &&
+    (name.trim() !== (center.name ?? "") ||
+      centerType !== (center.centerType ?? "study_abroad") ||
+      taxCode.trim().replace(/\s/g, "") !== (center.taxCode ?? "") ||
+      legalRepresentative.trim() !== (center.legalRepresentative ?? "") ||
+      complianceMode !== normalizeComplianceMode(center.legalComplianceMode) ||
+      licenseNumber.trim() !== (center.licenseNumber ?? "") ||
+      licenseIssuedBy.trim() !== (center.licenseIssuedBy ?? "") ||
+      (licenseIssuedDate || "") !== (center.licenseIssuedDate ?? "") ||
+      trainingLicenseNumber.trim() !== (center.trainingLicenseNumber ?? "") ||
+      certifiedCount.trim() !== (center.certifiedCounselorCount != null ? String(center.certifiedCounselorCount) : ""));
 
   if (loading) {
     return (
@@ -259,6 +307,13 @@ export function CenterProfileView() {
         </Alert>
       )}
 
+      {reviewNotice && (
+        <Alert>
+          <AlertCircleIcon className="h-5 w-5" />
+          <AlertDescription className="ml-2">{reviewNotice}</AlertDescription>
+        </Alert>
+      )}
+
       {error && (
         <Alert variant="destructive">
           <AlertCircleIcon className="h-5 w-5" />
@@ -270,6 +325,7 @@ export function CenterProfileView() {
         phone={center?.phone}
         email={center?.email}
         emailVerified={Boolean(center?.emailVerifiedAt)}
+        phoneVerified={Boolean(center?.phoneVerifiedAt)}
         onChanged={() => {
           void centerPortalApi.getProfile().then(setCenter).catch(() => undefined);
         }}
@@ -296,9 +352,12 @@ export function CenterProfileView() {
               />
               {legalLocked && (
                 <p className="text-xs text-ink-3">
-                  {isPendingReview
-                    ? "Hồ sơ đang chờ duyệt nên chưa sửa được tên pháp lý. Vui lòng chờ kết quả xét duyệt."
-                    : "Tên trung tâm đã khớp với đăng ký kinh doanh nên không thể sửa sau khi xác minh."}
+                  Hồ sơ đang chờ duyệt nên chưa sửa được tên pháp lý. Vui lòng chờ kết quả xét duyệt.
+                </p>
+              )}
+              {isVerified && (
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  Đổi tên pháp lý sẽ đưa hồ sơ về Chờ duyệt và tạm ẩn dấu xác minh.
                 </p>
               )}
             </Field>
@@ -310,19 +369,19 @@ export function CenterProfileView() {
                   <LockIcon className="h-4 w-4 text-ink-3" />
                   <h3 className="text-sm font-semibold text-ink">Thông tin pháp lý</h3>
                 </div>
-                {legalLocked ? (
-                  <Link href="/center/verification" className="text-xs font-semibold text-brand hover:underline">
-                    Nộp lại xác minh nếu có thay đổi ĐKKD
-                  </Link>
-                ) : (
-                  <span className="text-xs text-ink-3">Có thể chỉnh sửa cho đến khi được xác minh</span>
-                )}
+                <Link href="/center/verification" className="text-xs font-semibold text-brand hover:underline">
+                  Thay tài liệu pháp lý: nộp lại hồ sơ xác minh
+                </Link>
               </div>
               {legalLocked && (
                 <p className="text-xs text-ink-3">
-                  {isPendingReview
-                    ? "Hồ sơ đang chờ duyệt: thông tin pháp lý (tên, mã số thuế...) tạm khóa cho tới khi có kết quả. Bạn vẫn sửa được các thông tin hiển thị bên dưới."
-                    : "Trung tâm đã được xác minh: thông tin pháp lý được khóa để đảm bảo tính xác thực. Bạn vẫn sửa được các thông tin hiển thị bên dưới."}
+                  Hồ sơ đang chờ duyệt: thông tin pháp lý (tên, mã số thuế...) tạm khóa cho tới khi có kết quả. Bạn vẫn sửa được các thông tin hiển thị bên dưới.
+                </p>
+              )}
+              {isVerified && (
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  Trung tâm đã được xác minh: đổi bất kỳ thông tin pháp lý nào sẽ đưa hồ sơ về Chờ duyệt và tạm ẩn dấu xác minh cho tới khi
+                  Moderator duyệt lại. Các thông tin hiển thị bên dưới lưu ngay.
                 </p>
               )}
 
@@ -467,8 +526,11 @@ export function CenterProfileView() {
                 />
               </Field>
 
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field>
-                <FieldLabel htmlFor="website">Website / Fanpage</FieldLabel>
+                <FieldLabel htmlFor="website">Website</FieldLabel>
                 <Input
                   id="website"
                   type="url"
@@ -478,7 +540,21 @@ export function CenterProfileView() {
                   placeholder="https://center.edu.vn"
                 />
               </Field>
+              <Field>
+                <FieldLabel htmlFor="fanpage">Fanpage</FieldLabel>
+                <Input
+                  id="fanpage"
+                  type="url"
+                  maxLength={512}
+                  value={fanpage}
+                  onChange={(e) => setFanpage(e.target.value)}
+                  placeholder="https://facebook.com/trungtam"
+                />
+              </Field>
             </div>
+            <p className="-mt-2 text-xs text-ink-3">
+              Website và fanpage mới hiển thị ngay nhưng sẽ được Moderator kiểm tra lại.
+            </p>
 
             <Field>
               <FieldLabel htmlFor="address">Địa chỉ văn phòng tư vấn</FieldLabel>
@@ -490,6 +566,29 @@ export function CenterProfileView() {
                 placeholder="Địa chỉ học sinh đến tư vấn trực tiếp"
               />
             </Field>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field>
+                <FieldLabel htmlFor="serviceAreas">Khu vực phục vụ</FieldLabel>
+                <Textarea
+                  id="serviceAreas"
+                  rows={3}
+                  value={serviceAreas}
+                  onChange={(e) => setServiceAreas(e.target.value)}
+                  placeholder={"Mỗi dòng một khu vực, VD:\nHà Nội\nOnline toàn quốc"}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="branches">Chi nhánh</FieldLabel>
+                <Textarea
+                  id="branches"
+                  rows={3}
+                  value={branches}
+                  onChange={(e) => setBranches(e.target.value)}
+                  placeholder="Mỗi dòng một địa chỉ chi nhánh"
+                />
+              </Field>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field>
@@ -615,6 +714,8 @@ export function CenterProfileView() {
           </FieldGroup>
         </form>
       </div>
+
+      <CenterDeletionRequestCard />
     </div>
   );
 }

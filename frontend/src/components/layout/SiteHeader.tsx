@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { isAdminRoute } from "@/lib/admin-nav";
 import { isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
@@ -145,7 +146,10 @@ export function SiteHeader() {
             {isLoading ? (
               <Skeleton className="h-9 w-24" />
             ) : user ? (
-              <DropdownMenu>
+              <>
+                {/* [UC-110] Chuông thông báo */}
+                <NotificationBell />
+                <DropdownMenu>
                 <DropdownMenuTrigger
                   aria-label={`Tài khoản của ${user.fullName}`}
                   className="rounded-full outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-white/50 active:scale-95"
@@ -243,7 +247,8 @@ export function SiteHeader() {
                     Đăng xuất
                   </DropdownMenuItem>
                 </DropdownMenuContent>
-              </DropdownMenu>
+                </DropdownMenu>
+              </>
             ) : (
               <>
                 <p className="hidden text-sm text-white/85 lg:block">

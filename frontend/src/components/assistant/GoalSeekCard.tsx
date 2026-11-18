@@ -192,7 +192,9 @@ function Alternatives({ items, group }: { items: GoalAlternative[]; group: strin
   );
 }
 
-export function GoalSeekCard({ result }: { result: SchoolGoalResult }) {
+// basisLabel: mô tả giá trị giả định đã dùng ("ngân sách 25.000 USD mỗi năm"), chỉ có khi result.basis là simulated
+export function GoalSeekCard({ result, basisLabel }: { result: SchoolGoalResult; basisLabel?: string | null }) {
+  const simulated = result.basis === "simulated";
   const { sendAction, loading } = useAssistant();
   const position = result.position;
   if (!position) return null; // bản backend cũ chưa trả vị trí: để lời viết bên trên tự nói
@@ -210,8 +212,8 @@ export function GoalSeekCard({ result }: { result: SchoolGoalResult }) {
 
   return (
     <div className="mt-2.5 space-y-2.5 rounded-xl border border-brand/30 bg-brand-wash/50 p-3 text-sm">
-      {/* Goal-seeking luôn tính từ hồ sơ thật, kể cả khi trang đang xem giả định */}
-      <BasisBadge kind="real" />
+      {/* Tính theo hồ sơ thật, hoặc theo giả định học sinh đang xem (backend ghi result.basis) */}
+      <BasisBadge kind={simulated ? "simulated" : "real"} label={simulated ? basisLabel : null} />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[13px] font-bold text-brand">Cần gì để vào {result.name}?</p>
         <Badge variant={badge.variant}>{badge.text}</Badge>
@@ -249,7 +251,8 @@ export function GoalSeekCard({ result }: { result: SchoolGoalResult }) {
         </Button>
       )}
       <p className="text-xs text-ink-3">
-        Tính từ hồ sơ thật của bạn, so với sinh viên đã trúng tuyển. Đây là mức tham chiếu, không phải cam kết đỗ.
+        {simulated ? "Tính theo giá trị giả định bạn đang xem" : "Tính từ hồ sơ thật của bạn"}, so với sinh viên đã trúng tuyển. Đây là mức
+        tham chiếu, không phải cam kết đỗ.
       </p>
     </div>
   );

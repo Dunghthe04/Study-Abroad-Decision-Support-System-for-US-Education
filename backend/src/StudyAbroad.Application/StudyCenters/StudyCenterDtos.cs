@@ -47,7 +47,10 @@ public record StudyCenterDto(
     decimal? FeeMax = null,
     string? FeeDescription = null,
     string? RegistrantName = null,
-    string? RegistrantPosition = null);
+    string? RegistrantPosition = null,
+    string? Fanpage = null,
+    IReadOnlyList<string>? ServiceAreas = null,
+    IReadOnlyList<string>? Branches = null);
 
 /// <summary>[UC-59] Moderator / Admin gửi yêu cầu xác minh hoặc hủy xác minh trung tâm tư vấn.</summary>
 public record VerifyStudyCenterRequest(bool IsVerified, string? VerificationNote = null);
@@ -96,6 +99,9 @@ public record UpdateStudyCenterRequest(
 /// <summary>[UC-72] Kết quả sửa thông tin trung tâm tư vấn.</summary>
 public record UpdateStudyCenterResult(StudyCenterDto? Center, string? ErrorMessage = null)
 {
+    /// <summary>[UC-92] Phân loại thay đổi khi trung tâm tự sửa hồ sơ (null với các luồng khác).</summary>
+    public CenterProfileUpdateOutcome? Outcome { get; init; }
+
     public bool Success => ErrorMessage is null && Center is not null;
     public static UpdateStudyCenterResult Ok(StudyCenterDto center) => new(center);
     public static UpdateStudyCenterResult Fail(string error) => new(null, error);

@@ -24,7 +24,11 @@ public interface ICenterReviewSubmissionRepository
     /// </summary>
     Task<Lead?> FindLatestUnreviewedLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default);
 
-    Task AddAsync(CenterReview review, CancellationToken ct = default);
+    /// <summary>
+    /// Lưu đánh giá. Trả <c>false</c> nếu yêu cầu liên hệ này vừa được đánh giá bởi một lượt gửi khác
+    /// (index duy nhất trên lead_id chặn ở DB khi hai lượt gửi trùng nhau).
+    /// </summary>
+    Task<bool> TryAddAsync(CenterReview review, CancellationToken ct = default);
 
     Task<CenterReviewDto?> GetPublicDtoAsync(Guid reviewId, CancellationToken ct = default);
 }
@@ -49,6 +53,7 @@ public class CenterReviewService(
     public const int MinRating = 1;
     public const int MaxRating = 5;
     public const int MaxCommentLength = 2000;
+    public const string AlreadyReviewedMessage = "Yêu cầu liên hệ này đã được đánh giá.";
 
     public async Task<CenterReviewEligibilityDto> GetEligibilityAsync(Guid userId, Guid centerId, CancellationToken ct = default)
     {
@@ -83,7 +88,8 @@ public class CenterReviewService(
             IsVerified = true,
             Status = "visible",
         };
-        await reviews.AddAsync(review, ct);
+        if (!await reviews.TryAddAsync(review, ct))
+            throw new ArgumentException(AlreadyReviewedMessage);
 
         await auditLogs.AddAsync(new AuditLog
         {
@@ -116,7 +122,7 @@ public class CenterReviewService(
             return (new CenterReviewEligibilityDto(true, false, null), lead);
 
         if (await reviews.FindLatestLeadAsync(userId, centerId, ct) is not null)
-            return (new CenterReviewEligibilityDto(false, true, "Yêu cầu liên hệ này đã được đánh giá."), null);
+            return (new CenterReviewEligibilityDto(false, true, AlreadyReviewedMessage), null);
 
         return (new CenterReviewEligibilityDto(false, false, "Bạn cần gửi yêu cầu liên hệ tới trung tâm trước khi đánh giá."), null);
     }
