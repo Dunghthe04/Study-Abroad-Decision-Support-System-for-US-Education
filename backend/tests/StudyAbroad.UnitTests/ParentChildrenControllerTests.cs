@@ -20,7 +20,7 @@ public class ParentChildrenControllerTests
     private readonly Guid _child = Guid.NewGuid();
 
     private ParentChildrenController CreateController(params Claim[] claims) =>
-        new(new ParentChildrenService(_links, _targets))
+        new(new ParentChildrenService(_links, _targets, new FakeAuditLogRepository()))
         {
             ControllerContext = new ControllerContext
             {
