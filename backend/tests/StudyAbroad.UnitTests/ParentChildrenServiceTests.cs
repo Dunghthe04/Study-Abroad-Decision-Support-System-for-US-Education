@@ -70,7 +70,7 @@ public class ParentChildrenServiceTests
     }
 
     // Giả lập tối thiểu: service chỉ gọi GetListByUserAsync, hàm khác không được gọi tới.
-    private sealed class FakeTargetSchools : ITargetSchoolRepository
+    internal sealed class FakeTargetSchools : ITargetSchoolRepository
     {
         public List<TargetSchoolDto> Items { get; } = [];
 
