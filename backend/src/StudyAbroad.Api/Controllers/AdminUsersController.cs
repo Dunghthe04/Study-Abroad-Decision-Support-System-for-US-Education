@@ -34,7 +34,8 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
     public async Task<ActionResult<UserDto>> GetUserById(Guid id, CancellationToken ct)
     {
         var user = await auth.GetMeAsync(id, ct);
-        return user is not null ? Ok(user) : NotFound();
+        // [1.5c] Con managed không phải tài khoản thật: admin xem theo id cũng nhận 404. Chặn ở đây, không sửa GetMeAsync vì /me còn dùng khi phụ huynh làm thay
+        return user is not null && user.Status != UserStatuses.Managed ? Ok(user) : NotFound();
     }
 
     /// <summary>[UC-63] Tạo tài khoản moderator (chỉ Admin mới được tạo).</summary>

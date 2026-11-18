@@ -196,6 +196,9 @@ public class UserRepository(AppDbContext db) : IUserRepository
         if (!string.IsNullOrEmpty(query.Role))
             q = q.Where(u => u.Role == query.Role);
 
+        // [1.5c] Con managed (phụ huynh nhập thay, email giả) không phải tài khoản thật: admin không thấy, kể cả khi lọc
+        q = q.Where(u => u.Status != UserStatuses.Managed);
+
         if (!string.IsNullOrEmpty(query.Status))
             q = q.Where(u => u.Status == query.Status);
 
