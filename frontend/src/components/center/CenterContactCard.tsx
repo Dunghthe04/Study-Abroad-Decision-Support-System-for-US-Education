@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { CheckCircle2Icon, MailIcon, PhoneIcon } from "lucide-react";
+import { CheckCircle2Icon, MailIcon, PhoneIcon, XIcon } from "lucide-react";
 import { centerPortalApi, ApiError } from "@/lib/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +51,13 @@ function ContactRow({ kind, current, verified, onChanged }: RowProps) {
     const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
     return () => clearTimeout(t);
   }, [cooldown]);
+
+  // Tự động xóa thông báo kết quả cập nhật số/email sau 5 giây
+  useEffect(() => {
+    if (!info) return;
+    const t = setTimeout(() => setInfo(null), 5000);
+    return () => clearTimeout(t);
+  }, [info]);
 
   const reset = () => {
     setStep("view");
@@ -142,9 +149,18 @@ function ContactRow({ kind, current, verified, onChanged }: RowProps) {
       </div>
 
       {info && step === "view" && (
-        <Alert className="border-ok/25 bg-ok-wash text-ok">
+        <Alert className="relative border-ok/25 bg-ok-wash text-ok pr-9 transition-all duration-300">
           <CheckCircle2Icon className="h-4 w-4" />
           <AlertDescription className="ml-2">{info}</AlertDescription>
+          <button
+            type="button"
+            onClick={() => setInfo(null)}
+            className="absolute top-2.5 right-2.5 p-1 rounded hover:bg-ok/10 text-ok transition-colors"
+            title="Đóng thông báo"
+            aria-label="Đóng thông báo"
+          >
+            <XIcon className="h-3.5 w-3.5" />
+          </button>
         </Alert>
       )}
 
