@@ -175,6 +175,22 @@ public class ParentProfileShareServiceTests
     }
 
     [Fact]
+    public async Task Overview_MarksOnlyManagedChildren()
+    {
+        var parent = AddUser("me@test.com", UserRoles.Parent);
+        var real = AddUser("kid@test.com", UserRoles.Student);
+        var managed = AddUser("managed-1@noreply.usas.local", UserRoles.Student);
+        managed.Status = UserStatuses.Managed;
+        AddActiveLink(real, parent);
+        AddActiveLink(managed, parent);
+
+        var children = (await CreateService().GetParentOverviewAsync(parent.Id)).Value!.Children;
+
+        Assert.False(children.Single(c => c.StudentUserId == real.Id).IsManaged);
+        Assert.True(children.Single(c => c.StudentUserId == managed.Id).IsManaged);
+    }
+
+    [Fact]
     public async Task AutoShare_ParentWithoutProfile_DoesNothing()
     {
         var parent = AddUser("me@test.com", UserRoles.Parent);

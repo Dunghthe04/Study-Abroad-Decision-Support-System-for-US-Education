@@ -7,13 +7,15 @@ using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.ParentLinks;
 
-/// <summary>Một con đã liên kết nhìn từ trang Tài khoản của phụ huynh: hồ sơ học thuật của con (chỉ đọc).</summary>
+/// <summary>Một con đã liên kết nhìn từ trang Tài khoản của phụ huynh: hồ sơ học thuật của con (chỉ đọc).
+/// <see cref="IsManaged"/> (1.5): con chưa có tài khoản do phụ huynh tạo, frontend hiện nút "Nhập hồ sơ cho con".</summary>
 public record ParentChildProfileDto(
     Guid LinkId,
     Guid StudentUserId,
     string StudentName,
     string? ProfileTransferStatus,
-    AcademicProfileResponse Profile);
+    AcademicProfileResponse Profile,
+    bool IsManaged);
 
 /// <summary>
 /// Trang Tài khoản của phụ huynh. <see cref="HasPendingOwnProfile"/>: phụ huynh đã nhập hồ sơ trước khi liên kết và chưa chọn
@@ -83,7 +85,8 @@ public class ParentProfileShareService(
             var profile = await academicProfiles.GetAcademicProfileAsync(student.Id, ct);
             if (profile.Data == null)
                 continue;
-            children.Add(new ParentChildProfileDto(link.Id, student.Id, student.FullName, link.ProfileTransferStatus, profile.Data));
+            children.Add(new ParentChildProfileDto(link.Id, student.Id, student.FullName, link.ProfileTransferStatus, profile.Data,
+                AgeAccess.IsOperatedByParent(student)));
         }
 
         var pending = hasOwnProfile && children.Count > 0 && !IsHandled(activeLinks);
