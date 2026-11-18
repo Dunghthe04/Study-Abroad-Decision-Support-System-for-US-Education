@@ -16,7 +16,7 @@ import { parentChildrenApi } from "@/lib/parent-children-api";
 import { recommendationHistoryApi } from "@/lib/recommendation-history-api";
 import { describeSimulation } from "@/lib/simulation-link";
 import { useFetched } from "@/lib/use-fetched";
-import type { TargetSchoolDto } from "@/types/api";
+import type { ParentChildProfileDto, TargetSchoolDto } from "@/types/api";
 import type { ChildTab } from "@/lib/child-tabs";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -39,24 +39,28 @@ const formatTime = (iso: string) =>
 
 const LINK = "font-semibold text-brand underline-offset-4 hover:underline";
 
-/** /parent/children: có con thì mở con đầu tiên (giữ ?tab= khi được chuyển từ trang hồ sơ riêng), chưa liên kết thì chỉ sang Tài khoản. */
+// Link sang trang một con, giữ thẻ đang cần (vd. đi từ /target-schools thì mở thẻ Trường mục tiêu)
+const childHref = (studentId: string, tab: ChildTab) =>
+  `/parent/children/${encodeURIComponent(studentId)}${tab === "overview" ? "" : `?tab=${tab}`}`;
+
+/** /parent/children: 1 con thì mở thẳng con đó, từ 2 con thì cho chọn con, chưa liên kết thì chỉ sang Tài khoản.
+ *  Giữ ?tab= khi được chuyển từ trang hồ sơ riêng. */
 export function ParentChildrenHome({ tab = "overview" }: { tab?: ChildTab }) {
   const router = useRouter();
   const { data: children, error, loading } = useFetched("parent-children", parentChildrenApi.listChildren);
-  const firstId = children?.[0]?.studentUserId;
+  const onlyId = children?.length === 1 ? children[0].studentUserId : undefined;
 
   useEffect(() => {
-    if (firstId) {
-      const query = tab === "overview" ? "" : `?tab=${tab}`;
-      router.replace(`/parent/children/${encodeURIComponent(firstId)}${query}`);
-    }
-  }, [firstId, router, tab]);
+    if (onlyId) router.replace(childHref(onlyId, tab));
+  }, [onlyId, router, tab]);
 
-  if (loading || firstId) return <Loading />;
+  if (loading || onlyId) return <Loading />;
   return (
     <Page>
       {error ? (
         <Message>Chưa tải được danh sách con. {error}</Message>
+      ) : children && children.length > 1 ? (
+        <ChildPicker items={children} tab={tab} />
       ) : (
         <Message>
           Bạn chưa liên kết với con nào. Con mời email của bạn ở mục Tài khoản của con, bạn chấp nhận lời mời là xem
@@ -140,6 +144,36 @@ export function ChildDashboard({ studentId, initialTab = "overview" }: { student
         </TabsContent>
       </Tabs>
     </Page>
+  );
+}
+
+// Phụ huynh có từ 2 con: chọn con muốn xem
+function ChildPicker({ items, tab }: { items: ParentChildProfileDto[]; tab: ChildTab }) {
+  return (
+    <>
+      <div className="space-y-1">
+        <h1 className="text-h1 text-foreground">Con của tôi</h1>
+        <p className="text-sm text-muted-foreground">Bạn muốn xem con nào?</p>
+      </div>
+      <ul className="grid gap-4 sm:grid-cols-2">
+        {items.map((c) => (
+          <li key={c.studentUserId}>
+            <Link
+              href={childHref(c.studentUserId, tab)}
+              className="block space-y-2 rounded-2xl border border-line bg-surface p-5 transition-colors hover:border-brand"
+            >
+              <p className="text-h3 text-foreground">{c.studentName}</p>
+              <Badge variant={c.profile.isComplete ? "ok" : "neutral"}>
+                {c.profile.isComplete ? "Đã gửi hồ sơ" : "Chưa gửi hồ sơ"}
+              </Badge>
+              {c.profile.intendedMajor && (
+                <p className="text-xs text-muted-foreground">Ngành dự định: {c.profile.intendedMajor}</p>
+              )}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 

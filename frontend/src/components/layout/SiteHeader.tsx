@@ -54,7 +54,8 @@ export function SiteHeader() {
   const isStudentOrParent = user?.role === "student" || user?.role === "parent";
   // 1f: phụ huynh đã liên kết không có hồ sơ riêng, các mục hồ sơ riêng nhường chỗ cho "Con của tôi"
   const { linked: isLinkedParent } = useIsLinkedParent();
-  const hasOwnProfile = isStudentOrParent && !isLinkedParent;
+  // Chỉ hiện khi đã biết chắc là không liên kết (=== false), để lúc đang tải phụ huynh không thấy mục hồ sơ riêng nháy lên
+  const hasOwnProfile = isStudentOrParent && isLinkedParent === false;
 
   const navLinks = [
     { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
@@ -306,16 +307,17 @@ export function SiteHeader() {
               );
             })}
           </ul>
-          {!canOpenAdmin && (
+          {/* Phụ huynh đã liên kết đi qua mục menu "Con của tôi", không có nút riêng (1.5e thay bằng "Thêm con") */}
+          {!canOpenAdmin && isLinkedParent === false && (
             <Link
-              href={isLinkedParent ? "/parent/children" : "/analysis"}
+              href="/analysis"
               className={buttonVariants({
                 variant: "ghost",
                 size: "lg",
                 className: "shrink-0 active:translate-y-px !bg-white !text-brand-ink hover:!bg-white/90",
               })}
             >
-              {isLinkedParent ? "Xem hồ sơ của con" : "Phân tích hồ sơ của tôi"}
+              Phân tích hồ sơ của tôi
             </Link>
           )}
         </nav>
