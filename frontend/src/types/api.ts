@@ -1,3 +1,5 @@
+import type { ProfileFlowDraft } from "@/types/profile-flow";
+
 // Mirrors the DTOs of the ASP.NET Core API (StudyAbroad.Application).
 
 export interface PagedResult<T> {
@@ -557,6 +559,8 @@ export interface AcademicProfileResponse {
   updatedAt?: string | null;
   // Đã gửi hồ sơ 6 bước (hoặc có dữ liệu cũ)
   isComplete: boolean;
+  // Đủ 5 bước của hồ sơ đã gửi (giống bước 6), null khi chưa gửi
+  details?: ProfileFlowDraft | null;
 }
 
 export interface TargetSchoolSummaryDto {
