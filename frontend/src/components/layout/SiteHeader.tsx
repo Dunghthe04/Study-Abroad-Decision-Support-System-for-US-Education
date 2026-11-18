@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { formatUserRole } from "@/lib/user-role-labels";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsLinkedParent } from "@/hooks/use-is-linked-parent";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -51,13 +52,17 @@ export function SiteHeader() {
   const isModerator = user?.role === "moderator";
   const canOpenAdmin = isAdmin || isModerator;
   const isStudentOrParent = user?.role === "student" || user?.role === "parent";
+  // 1f: phụ huynh đã liên kết không có hồ sơ riêng, các mục hồ sơ riêng nhường chỗ cho "Con của tôi"
+  const { linked: isLinkedParent } = useIsLinkedParent();
+  const hasOwnProfile = isStudentOrParent && !isLinkedParent;
 
   const navLinks = [
     { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
     { href: "/universities", label: "Tìm trường" },
     { href: isModerator ? "/admin/centers" : "/centers", label: "Trung tâm" },
     { href: "/methodology", label: "Phương pháp của chúng tôi" },
-    ...(isStudentOrParent ? [{ href: "/target-schools", label: "Trường mục tiêu" }] : []),
+    ...(hasOwnProfile ? [{ href: "/target-schools", label: "Trường mục tiêu" }] : []),
+    ...(user?.role === "parent" ? [{ href: "/parent/children", label: "Con của tôi" }] : []),
     ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ" }] : []),
   ];
 
@@ -176,7 +181,7 @@ export function SiteHeader() {
                     </DropdownMenuLabel>
                   </DropdownMenuGroup>
 
-                  {isStudentOrParent && (
+                  {hasOwnProfile && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem render={<Link href="/target-schools" />}>
@@ -192,7 +197,7 @@ export function SiteHeader() {
                     <UserIcon />
                     Thông tin cá nhân
                   </DropdownMenuItem>
-                  {isStudentOrParent && (
+                  {hasOwnProfile && (
                     <DropdownMenuItem render={<Link href="/account#academic" />}>
                       <BookOpenIcon />
                       Hồ sơ học thuật
@@ -303,14 +308,14 @@ export function SiteHeader() {
           </ul>
           {!canOpenAdmin && (
             <Link
-              href="/analysis"
+              href={isLinkedParent ? "/parent/children" : "/analysis"}
               className={buttonVariants({
                 variant: "ghost",
                 size: "lg",
                 className: "shrink-0 active:translate-y-px !bg-white !text-brand-ink hover:!bg-white/90",
               })}
             >
-              Phân tích hồ sơ của tôi
+              {isLinkedParent ? "Xem hồ sơ của con" : "Phân tích hồ sơ của tôi"}
             </Link>
           )}
         </nav>

@@ -17,6 +17,7 @@ import { recommendationHistoryApi } from "@/lib/recommendation-history-api";
 import { describeSimulation } from "@/lib/simulation-link";
 import { useFetched } from "@/lib/use-fetched";
 import type { TargetSchoolDto } from "@/types/api";
+import type { ChildTab } from "@/lib/child-tabs";
 
 const STATUS_LABEL: Record<string, string> = {
   considering: "Đang cân nhắc",
@@ -38,15 +39,18 @@ const formatTime = (iso: string) =>
 
 const LINK = "font-semibold text-brand underline-offset-4 hover:underline";
 
-/** /parent/children: có con thì mở con đầu tiên, chưa liên kết thì chỉ sang Tài khoản. */
-export function ParentChildrenHome() {
+/** /parent/children: có con thì mở con đầu tiên (giữ ?tab= khi được chuyển từ trang hồ sơ riêng), chưa liên kết thì chỉ sang Tài khoản. */
+export function ParentChildrenHome({ tab = "overview" }: { tab?: ChildTab }) {
   const router = useRouter();
   const { data: children, error, loading } = useFetched("parent-children", parentChildrenApi.listChildren);
   const firstId = children?.[0]?.studentUserId;
 
   useEffect(() => {
-    if (firstId) router.replace(`/parent/children/${encodeURIComponent(firstId)}`);
-  }, [firstId, router]);
+    if (firstId) {
+      const query = tab === "overview" ? "" : `?tab=${tab}`;
+      router.replace(`/parent/children/${encodeURIComponent(firstId)}${query}`);
+    }
+  }, [firstId, router, tab]);
 
   if (loading || firstId) return <Loading />;
   return (
@@ -64,7 +68,7 @@ export function ParentChildrenHome() {
 }
 
 /** /parent/children/[studentId]: 4 tab dữ liệu của một con. */
-export function ChildDashboard({ studentId }: { studentId: string }) {
+export function ChildDashboard({ studentId, initialTab = "overview" }: { studentId: string; initialTab?: ChildTab }) {
   const router = useRouter();
   const { data: children, error, loading } = useFetched("parent-children", parentChildrenApi.listChildren);
 
@@ -114,7 +118,7 @@ export function ChildDashboard({ studentId }: { studentId: string }) {
       </div>
 
       {/* key: đổi con thì về lại tab đầu, không giữ dữ liệu của con trước */}
-      <Tabs key={studentId} defaultValue="overview" className="space-y-4">
+      <Tabs key={studentId} defaultValue={initialTab} className="space-y-4">
         <TabsList className="h-auto flex-wrap">
           <TabsTrigger value="overview">Tổng quan</TabsTrigger>
           <TabsTrigger value="recommend">Trường gợi ý</TabsTrigger>
