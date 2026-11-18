@@ -1,4 +1,7 @@
+using StudyAbroad.Application.AcademicProfiles;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.Common;
+using StudyAbroad.Application.Notifications;
 using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
@@ -20,7 +23,10 @@ public class ParentPreferenceServiceTests
 
     private static readonly int[] Pref = [4, 2, 0];
 
-    private ParentPreferenceService CreateService() => new(_links, _users, _runner, _rates);
+    private readonly FakeProfiles _profiles = new();
+    private readonly FakeNotifications _notifications = new();
+
+    private ParentPreferenceService CreateService() => new(_links, _users, _runner, _rates, _profiles, _notifications);
 
     private void Setup(string linkStatus = ParentLinkStatuses.Active, string childStatus = UserStatuses.Active)
     {
@@ -186,20 +192,224 @@ public class ParentPreferenceServiceTests
         Assert.Equal(ParentLinkError.Conflict, r.Error);
     }
 
-    private sealed class FakeRates : IExchangeRateProvider
+    // ===== 2c: so sánh =====
+
+    private const string ChildItems = """{"match":[{"code":"A"},{"code":"B"}],"scored":[{"code":"A"},{"code":"B"}]}""";
+    private const string ParentItems = """{"match":[{"code":"B"},{"code":"C"}],"scored":[{"code":"B"},{"code":"C"}]}""";
+
+    private Recommendation ChildRun(DateTime? at = null)
+    {
+        var rec = new Recommendation { UserId = _child, ItemsJson = ChildItems, CriteriaJson = """{"pref":[1,3,2]}""" };
+        if (at is { } a) rec.CreatedAt = a;
+        _runner.Latest = rec;
+        _runner.ItemsJson = ParentItems;
+        return rec;
+    }
+
+    // 13
+    [Fact]
+    public async Task Compare_Preview_DoesNotWriteDb()
+    {
+        Setup();
+        ChildRun();
+        var r = await CreateService().CompareForParentAsync(_parent, _child, [4, 0, 2], 1_300_000_000, CancellationToken.None);
+
+        var d = r.Value!;
+        Assert.True(d.IsPreview);
+        Assert.Equal(50_000m, d.ParentBudgetUsd);   // tỷ giá hôm nay
+        Assert.Equal(new CompareCounts(1, 1, 1), d.Comparison!.Counts);
+        Assert.Null(Assert.Single(_links.Links).ParentPreferenceJson);
+        Assert.Empty(_notifications.Sent);
+    }
+
+    // 14
+    [Fact]
+    public async Task Compare_NotSavedYet_PreviewsBalanced()
+    {
+        Setup();
+        ChildRun();
+        var d = (await CreateService().CompareForParentAsync(_parent, _child, null, null, CancellationToken.None)).Value!;
+
+        Assert.False(d.ParentHasPref);
+        Assert.True(d.IsPreview);
+        Assert.Equal([2, 2, 2], d.ParentPref);
+        Assert.Equal([2, 2, 2], _runner.LastPref);
+    }
+
+    // 15
+    [Fact]
+    public async Task Compare_ResultUpToDate_NoSimulate()
+    {
+        Setup();
+        ChildRun();
+        await CreateService().SaveAsync(_parent, _child, Pref, null, CancellationToken.None);
+        var calls = _runner.SimulateCalls;
+
+        var d = (await CreateService().CompareForParentAsync(_parent, _child, null, null, CancellationToken.None)).Value!;
+
+        Assert.Equal(calls, _runner.SimulateCalls);
+        Assert.False(d.IsPreview);
+        Assert.True(d.ParentHasPref);
+        Assert.Equal([1, 3, 2], d.StudentPref);
+        Assert.Equal(Pref, d.ParentPref);
+    }
+
+    // 16
+    [Fact]
+    public async Task Compare_StaleOrOldRun_RecomputesAndSaves()
+    {
+        Setup();
+        ChildRun();
+        await CreateService().SaveAsync(_parent, _child, Pref, null, CancellationToken.None);
+        var newer = ChildRun();   // con chạy gợi ý lần mới, refresher chưa kịp tính
+        var calls = _runner.SimulateCalls;
+
+        await CreateService().CompareForParentAsync(_parent, _child, null, null, CancellationToken.None);
+
+        Assert.Equal(calls + 1, _runner.SimulateCalls);
+        Assert.Equal(newer.Id, StoredRow().BasedOnRecommendationId);
+        Assert.False(StoredRow().Stale);
+    }
+
+    // 17
+    [Fact]
+    public async Task Compare_ProfileChangedAfterRun_Flagged()
+    {
+        Setup();
+        ChildRun(DateTime.UtcNow.AddHours(-2));
+        _profiles.Profile = new StudentProfile { UserId = _child, UpdatedAt = DateTime.UtcNow };
+
+        var d = (await CreateService().CompareForParentAsync(_parent, _child, null, null, CancellationToken.None)).Value!;
+        Assert.True(d.ProfileChangedAfterRun);
+    }
+
+    // 18
+    [Fact]
+    public async Task Compare_ChildNotRunYet_Message()
+    {
+        Setup();
+        var d = (await CreateService().CompareForParentAsync(_parent, _child, null, null, CancellationToken.None)).Value!;
+
+        Assert.False(d.StudentHasRun);
+        Assert.Null(d.Comparison);
+        Assert.Contains("chưa nhận gợi ý", d.Message);
+    }
+
+    // 19
+    [Fact]
+    public async Task Compare_BadPref_Validation_NoLink_NotFound()
+    {
+        Setup();
+        var svc = CreateService();
+        Assert.Equal(ParentLinkError.Validation, (await svc.CompareForParentAsync(_parent, _child, [5, 0, 0], null, CancellationToken.None)).Error);
+        Assert.Equal(ParentLinkError.Validation, (await svc.CompareForParentAsync(_parent, _child, null, 5, CancellationToken.None)).Error);
+        Assert.Equal(ParentLinkError.NotFound, (await svc.CompareForParentAsync(Guid.NewGuid(), _child, null, null, CancellationToken.None)).Error);
+    }
+
+    // 20
+    [Fact]
+    public async Task Compare_ProfileNotReady_Conflict()
+    {
+        Setup();
+        ChildRun();
+        _runner.Throw = true;
+        var r = await CreateService().CompareForParentAsync(_parent, _child, [4, 0, 2], null, CancellationToken.None);
+        Assert.Equal(ParentLinkError.Conflict, r.Error);
+    }
+
+    // 21
+    [Fact]
+    public async Task Save_NotifiesChild_OnlyOnSave()
+    {
+        Setup();
+        await CreateService().SaveAsync(_parent, _child, Pref, null, CancellationToken.None);
+
+        var n = Assert.Single(_notifications.Sent);
+        Assert.Equal(_child, n.UserId);
+        Assert.Equal(ParentPreferenceService.NotificationType, n.Type);
+        Assert.Contains(_parent.ToString(), n.LinkUrl);
+    }
+
+    // 22: có cả bố và mẹ, con chọn theo parentId; mặc định là người đã lưu
+    [Fact]
+    public async Task Child_PicksParent_DefaultsToOneWithPref()
+    {
+        Setup();
+        var mom = Guid.NewGuid();
+        _users.Users.Add(new User { Id = mom, Email = "me@test.com", FullName = "Mẹ Lan" });
+        _links.Links.Add(new ParentStudentLink { StudentUserId = _child, ParentUserId = mom, ParentEmail = "me@test.com", Status = ParentLinkStatuses.Active });
+        ChildRun();
+        await CreateService().SaveAsync(mom, _child, Pref, null, CancellationToken.None);
+
+        var v = (await CreateService().GetForChildAsync(_child, null, CancellationToken.None)).Value!;
+        Assert.Equal(2, v.Parents.Count);
+        Assert.Equal(mom, v.SelectedParentId);
+        Assert.Contains(v.Parents, p => p.Id == mom && p.Name == "Mẹ Lan" && p.HasPref);
+        Assert.Contains(v.Parents, p => p.Id == _parent && p.Name == "p@test.com" && !p.HasPref);
+        Assert.NotNull(v.Compare!.Comparison);
+
+        var dad = (await CreateService().GetForChildAsync(_child, _parent, CancellationToken.None)).Value!;
+        Assert.Equal(_parent, dad.SelectedParentId);
+        Assert.False(dad.Compare!.ParentHasPref);
+        Assert.Null(dad.Compare.Comparison);
+        Assert.Contains("chưa chọn ưu tiên", dad.Compare.Message);
+
+        Assert.Equal(ParentLinkError.NotFound, (await CreateService().GetForChildAsync(_child, Guid.NewGuid(), CancellationToken.None)).Error);
+    }
+
+    // 23
+    [Fact]
+    public async Task Child_Managed_NotFound_NoLinks_Empty()
+    {
+        _users.Users.Add(new User { Id = _child, Email = "con@test.com", Status = UserStatuses.Active });
+        var empty = (await CreateService().GetForChildAsync(_child, null, CancellationToken.None)).Value!;
+        Assert.Empty(empty.Parents);
+        Assert.Null(empty.Compare);
+
+        var managed = Guid.NewGuid();
+        _users.Users.Add(new User { Id = managed, Email = "m@test.com", Status = UserStatuses.Managed });
+        Assert.Equal(ParentLinkError.NotFound, (await CreateService().GetForChildAsync(managed, null, CancellationToken.None)).Error);
+    }
+
+    internal sealed class FakeProfiles : IAcademicProfileRepository
+    {
+        public StudentProfile? Profile { get; set; }
+        public Task<StudentProfile?> GetByUserIdAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(Profile?.UserId == userId ? Profile : null);
+        public Task<List<TranscriptScore>> GetTranscriptScoresAsync(Guid id, CancellationToken ct = default) => Task.FromResult(new List<TranscriptScore>());
+        public Task<List<ProfileCertification>> GetCertificationsAsync(Guid id, CancellationToken ct = default) => Task.FromResult(new List<ProfileCertification>());
+    }
+
+    internal sealed class FakeNotifications : INotificationService
+    {
+        public readonly List<(Guid UserId, string Type, string? LinkUrl)> Sent = [];
+        public Task NotifyAsync(Guid userId, string type, string title, string? body, string? linkUrl, CancellationToken ct = default)
+        {
+            Sent.Add((userId, type, linkUrl));
+            return Task.CompletedTask;
+        }
+        public Task<PagedResult<NotificationDto>> GetMineAsync(Guid userId, bool unreadOnly, int page, int pageSize, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<int> GetUnreadCountAsync(Guid userId, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<bool> MarkReadAsync(Guid userId, Guid notificationId, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<int> MarkAllReadAsync(Guid userId, CancellationToken ct = default) => throw new NotImplementedException();
+    }
+
+    internal sealed class FakeRates : IExchangeRateProvider
     {
         public decimal Rate { get; set; } = 26_000m;
         public Task<decimal> GetVndPerUsdAsync(CancellationToken ct = default) => Task.FromResult(Rate);
     }
 
     // Chỉ GetLatestAsync và SimulateAsync được dùng
-    private sealed class FakeRunner : IRecommendationRunner
+    internal sealed class FakeRunner : IRecommendationRunner
     {
         public Recommendation? Latest { get; set; }
         public bool Throw { get; set; }
         public Guid? LastUserId { get; private set; }
         public SimulationOverrides? LastOverrides { get; private set; }
         public IReadOnlyList<int>? LastPref { get; private set; }
+        public int SimulateCalls { get; private set; }
+        public string ItemsJson { get; set; } = """{"reach":[{"code":"A"}]}""";
 
         public Task<Recommendation?> GetLatestAsync(Guid userId, CancellationToken ct) => Task.FromResult(Latest);
 
@@ -207,9 +417,10 @@ public class ParentPreferenceServiceTests
         {
             if (Throw) throw new InvalidOperationException("Chưa có hồ sơ.");
             (LastUserId, LastOverrides, LastPref) = (userId, overrides, pref);
+            SimulateCalls++;
             var g = new GroupSummary(1, 1, 0, 0, 0, 0);
             var profile = new SimulationProfile(null, null, null, null, null, null, 3);
-            return Task.FromResult(new SimulationResult(profile, g, g, [], "{}", """{"reach":[{"code":"A"}]}"""));
+            return Task.FromResult(new SimulationResult(profile, g, g, [], "{}", ItemsJson));
         }
 
         public Task<Recommendation> CreateAsync(Guid userId, IReadOnlyList<int>? pref, CancellationToken ct) => throw new NotImplementedException();
