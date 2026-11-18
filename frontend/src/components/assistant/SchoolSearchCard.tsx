@@ -20,7 +20,23 @@ const CONTROL: Record<string, string> = {
 };
 const pct = (fraction: number) => formatPct(fraction);
 
-function Row({ index, school, sort }: { index: number; school: SchoolSearchItem; sort?: string | null }) {
+// Lọc "không bắt buộc SAT, ACT" mà dữ liệu trường ghi điểm thi quan trọng: nêu cả hai thông tin, không suy ra nghĩa
+const TEST_CAUTION: Record<string, string> = {
+  very_important: "Không bắt buộc SAT, ACT, nhưng trường ghi điểm thi là yếu tố rất quan trọng",
+  important: "Không bắt buộc SAT, ACT, nhưng trường ghi điểm thi là yếu tố quan trọng",
+};
+
+function Row({
+  index,
+  school,
+  sort,
+  testPolicy,
+}: {
+  index: number;
+  school: SchoolSearchItem;
+  sort?: string | null;
+  testPolicy?: string | null;
+}) {
   const tuitionSort = sort === "lowestTuition" || sort === "highestTuition";
   const totalSort = sort === "lowestCost" || sort === "highestCost";
   const place = [school.city, school.state].filter(Boolean).join(", ");
@@ -53,6 +69,9 @@ function Row({ index, school, sort }: { index: number; school: SchoolSearchItem;
           .filter(Boolean)
           .join(" · ")}
       </p>
+      {testPolicy === "optional" && school.testImportance && TEST_CAUTION[school.testImportance] && (
+        <p className="text-xs text-warn">{TEST_CAUTION[school.testImportance]}</p>
+      )}
       <div className="pt-1">
         <Link
           href={`/university/${encodeURIComponent(school.code)}`}
@@ -82,7 +101,7 @@ export function SchoolSearchCard({ data }: { data: SchoolSearchData }) {
       </div>
       <ol className="list-none">
         {shown.map((school, i) => (
-          <Row key={school.code} index={i + 1} school={school} sort={data.sort} />
+          <Row key={school.code} index={i + 1} school={school} sort={data.sort} testPolicy={data.filters?.testPolicy} />
         ))}
       </ol>
       {more > 0 && (
