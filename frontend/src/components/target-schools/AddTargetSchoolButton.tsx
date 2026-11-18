@@ -76,10 +76,11 @@ const APPLICATION_ROUNDS = [
   { value: "Rolling", label: "Rolling Admission" },
 ];
 
-// Phụ huynh không có danh sách mục tiêu riêng: nút đổi thành "Gợi ý cho con" (hỏi gợi ý cho con nào)
+// Phụ huynh không có danh sách mục tiêu riêng: nút đổi thành "Gợi ý cho con" (hỏi gợi ý cho con nào).
+// 1.5f: đang làm thay con managed thì lưu thẳng vào danh sách của con như học sinh
 export function AddTargetSchoolButton(props: AddTargetSchoolButtonProps) {
-  const { user } = useAuth();
-  if (user?.role === "parent") return <SuggestToChildrenButton {...props} />;
+  const { user, acting } = useAuth();
+  if (user?.role === "parent" && !acting) return <SuggestToChildrenButton {...props} />;
   return <StudentTargetSchoolButton {...props} />;
 }
 
