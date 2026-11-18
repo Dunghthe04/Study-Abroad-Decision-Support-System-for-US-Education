@@ -50,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<IRecommendationRunner>(sp => sp.GetRequiredService<RecommendationService>());
         services.AddScoped<StudyAbroad.Application.Advisor.ChatService>();
         services.AddScoped<RecommendationHistoryService>();   // [UC-87] xem lịch sử gợi ý
+        services.AddScoped<ParentChildrenService>();   // khu "Con của tôi": phụ huynh xem con, chỉ đọc
         return services;
     }
 }
