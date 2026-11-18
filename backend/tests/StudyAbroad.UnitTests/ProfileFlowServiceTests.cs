@@ -1757,4 +1757,38 @@ public class ProfileFlowServiceTests
 
         Assert.IsType<ConflictObjectResult>(result);
     }
+
+    // ===== 1.5e: danh sách con cho chat của phụ huynh (ParentChatGate) =====
+
+    [Fact]
+    public async Task ParentChatChildren_ListsActiveChildren_MarksManaged_SkipsDeleted()
+    {
+        var parentId = Guid.NewGuid();
+        var realId = Guid.NewGuid();
+        var managedId = Guid.NewGuid();
+        var deletedId = Guid.NewGuid();
+        var users = UsersOf(parentId, realId);
+        users.Users.Add(new User { Id = managedId, Email = "m@test.com", FullName = "Con Managed", Role = UserRoles.Student, Status = UserStatuses.Managed, PasswordHash = "" });
+        users.Users.Add(new User { Id = deletedId, Email = "d@test.com", Role = UserRoles.Student, Status = UserStatuses.Deleted, PasswordHash = "" });
+        var links = new FakeParentLinkRepository();
+        foreach (var id in new[] { realId, managedId, deletedId })
+            links.Links.Add(new ParentStudentLink { StudentUserId = id, ParentUserId = parentId, ParentEmail = "p@test.com", Status = ParentLinkStatuses.Active });
+        links.Links.Add(new ParentStudentLink { StudentUserId = Guid.NewGuid(), ParentUserId = parentId, ParentEmail = "p@test.com", Status = ParentLinkStatuses.Revoked });
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService(), users: users, parentLinks: links);
+
+        var children = await service.GetParentChatChildrenAsync(parentId);
+
+        Assert.NotNull(children);
+        Assert.Equal(2, children!.Count);
+        Assert.False(children.Single(c => c.Id == realId).IsManaged);
+        Assert.Equal("Con Managed", children.Single(c => c.Id == managedId && c.IsManaged).Name);
+    }
+
+    [Fact]
+    public async Task ParentChatChildren_WithoutLinkRepository_IsNull()
+    {
+        var service = ServiceWithUsers(new InMemoryProfileFlowRepository(), new FakeUserRepository());
+
+        Assert.Null(await service.GetParentChatChildrenAsync(Guid.NewGuid()));
+    }
 }

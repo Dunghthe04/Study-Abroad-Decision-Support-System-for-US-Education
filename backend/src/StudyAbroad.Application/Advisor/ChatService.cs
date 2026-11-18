@@ -110,7 +110,7 @@ namespace StudyAbroad.Application.Advisor
             var advisorSignals = new TurnSignals(askedAt, response.Slm, response.AiUsage, response.Action, response.Skills);
             // 1f: phụ huynh đã liên kết không có hồ sơ riêng, lượt về hồ sơ được thay trước khi lưu nháp (ParentChatGate)
             if (!await profileFlow.CanEditOwnProfileAsync(userId, ct))
-                response = ParentChatGate.Apply(response, state);
+                response = ParentChatGate.Apply(response, state, await profileFlow.GetParentChatChildrenAsync(userId, ct));
             var changed = await SaveProfileToDraftAsync(userId, response, ct);
 
             // C5: học sinh bấm "Đúng rồi" ở X1 thì chat rời bảng rà soát sang B3, lúc đó lưu hồ sơ chính thức.

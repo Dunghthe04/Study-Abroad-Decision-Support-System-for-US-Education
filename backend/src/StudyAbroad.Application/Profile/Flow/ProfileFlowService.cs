@@ -40,7 +40,8 @@ public class ProfileFlowService(
     IAiUsageCollector? usageCollector = null,
     ILogger<ProfileFlowService>? logger = null,
     AiPricing? pricing = null,
-    IUserRepository? users = null) : IProfileFlowService
+    IUserRepository? users = null,
+    IParentLinkRepository? parentLinks = null) : IProfileFlowService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -323,6 +324,24 @@ public class ProfileFlowService(
     /// tài khoản nằm ở con managed. Phụ huynh làm thay thì userId là id con (Role student) nên vẫn được.</summary>
     public async Task<bool> CanEditOwnProfileAsync(Guid userId, CancellationToken ct = default) =>
         users is null || (await users.GetUserById(userId, ct))?.Role != UserRoles.Parent;
+
+    /// <summary>1.5e: con đang liên kết active của phụ huynh (con managed và con thật) cho nút chat.
+    /// Thiếu repository (test cũ) thì null để chat giữ nút cũ.</summary>
+    public async Task<IReadOnlyList<ParentChatChild>?> GetParentChatChildrenAsync(Guid userId, CancellationToken ct = default)
+    {
+        if (users is null || parentLinks is null)
+            return null;
+
+        var result = new List<ParentChatChild>();
+        foreach (var link in await parentLinks.GetActiveByParentAsync(userId, ct))
+        {
+            var child = await users.GetUserById(link.StudentUserId, ct);
+            if (child is null || child.Status == UserStatuses.Deleted)
+                continue;
+            result.Add(new ParentChatChild(child.Id, child.FullName, AgeAccess.IsOperatedByParent(child)));
+        }
+        return result;
+    }
 
     // Gọi trước EnsureProfileExistsAsync: chặn sau thì phụ huynh vẫn bị tạo một dòng hồ sơ rỗng
     private async Task EnsureCanEditAsync(Guid userId, CancellationToken ct)
