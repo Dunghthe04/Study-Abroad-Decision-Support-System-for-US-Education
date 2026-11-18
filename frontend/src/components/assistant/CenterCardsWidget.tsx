@@ -3,12 +3,15 @@
 // Thẻ trung tâm trong chat: mỗi trung tâm một thẻ, hai nút nhỏ ngay dưới thẻ: Chi tiết (trang trung tâm) và Liên hệ (form gửi yêu cầu).
 // Hiện firstPage trung tâm đầu, nút "Xem thêm" mở phần còn lại ngay trong thẻ (dữ liệu đã có sẵn, không gọi lại).
 // Thanh gõ "Tìm ở thành phố khác" chỉ liệt kê thành phố đang có trung tâm cho dịch vụ này, nên chọn xong luôn có kết quả.
+// Mỗi thẻ có ô tick "So sánh" (tối đa 3); từ 2 thẻ trở lên hiện nút mở trang /centers/compare. Hệ thống không tự chấm hay xếp hạng.
 // Dữ liệu do advisor dựng (chỉ trung tâm đã xác minh), phần chữ "vì sao hợp" do AI viết và code đã kiểm.
 
 import { useState } from "react";
 import Link from "next/link";
 import { SearchIcon } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { COMPARE_MAX, COMPARE_MIN, compareHref } from "@/lib/center-compare";
 import { ContactRequestDialog } from "@/components/centers/ContactRequestDialog";
 import { normalizeSearch } from "@/lib/certification-utils";
 import { cn } from "@/lib/utils";
@@ -89,6 +92,9 @@ export function CenterCardsWidget({
   const cities = parseCities(data);
   const firstPage = typeof data?.firstPage === "number" ? data.firstPage : DEFAULT_FIRST_PAGE;
   const [expanded, setExpanded] = useState(false);
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const toggleCompare = (id: string) =>
+    setCompareIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= COMPARE_MAX ? prev : [...prev, id]));
   if (centers.length === 0 && cities.length === 0) return null;
   const shown = expanded ? centers : centers.slice(0, firstPage);
   const hidden = centers.length - shown.length;
@@ -123,11 +129,40 @@ export function CenterCardsWidget({
                   </Link>
                   {/* Advisor chỉ trả trung tâm đã xác minh nên cho phép gửi yêu cầu; server vẫn kiểm lại */}
                   <ContactRequestDialog centerId={center.id} centerName={center.name} isVerified compact />
+                  <label
+                    className={cn(
+                      "ml-auto flex items-center gap-1.5 text-xs text-ink-2",
+                      !compareIds.includes(center.id) && compareIds.length >= COMPARE_MAX
+                        ? "cursor-not-allowed opacity-50"
+                        : "cursor-pointer",
+                    )}
+                  >
+                    <Checkbox
+                      checked={compareIds.includes(center.id)}
+                      disabled={!compareIds.includes(center.id) && compareIds.length >= COMPARE_MAX}
+                      onCheckedChange={() => toggleCompare(center.id!)}
+                    />
+                    So sánh
+                  </label>
                 </div>
               )}
             </li>
           ))}
         </ul>
+      )}
+      {compareIds.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-brand/30 bg-brand-wash px-3 py-2">
+          {compareIds.length >= COMPARE_MIN ? (
+            <Link href={compareHref(compareIds)} className={cn(buttonVariants({ variant: "default", size: "sm" }))}>
+              So sánh {compareIds.length} nơi
+            </Link>
+          ) : (
+            <span className="text-xs text-ink-2">Chọn thêm ít nhất 1 trung tâm để so sánh</span>
+          )}
+          <Button type="button" variant="ghost" size="sm" onClick={() => setCompareIds([])}>
+            Bỏ chọn
+          </Button>
+        </div>
       )}
       {hidden > 0 && (
         <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setExpanded(true)}>

@@ -1632,7 +1632,7 @@ public class ChatServiceTests
 
         Assert.Equal("BU", runner.SearchedFor);
         Assert.Equal(("188429", "match"), runner.GoalCalledWith);
-        Assert.StartsWith("Mình hiểu bạn hỏi về Boston University, nhóm muốn đạt: Vừa sức.", res.Answer);
+        Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
         Assert.Equal("goal_seek", res.Widget!.Type);
         // trường đang trong danh sách: giải thích trường này, rồi gặp tư vấn viên
         Assert.Equal(new ChatAction("explain", "188429"), res.QuickReplies![0].Action);
@@ -1691,7 +1691,7 @@ public class ChatServiceTests
         var res = await GoalChatWith(null, null, runner);
 
         Assert.Null(runner.GoalOverrides);
-        Assert.StartsWith("Mình hiểu bạn hỏi về Boston University", res.Answer);
+        Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
         Assert.DoesNotContain("Mình tính theo", res.Answer);
         Assert.DoesNotContain(res.QuickReplies!, q => q.Label is "Xem theo hồ sơ thật" or "Tính theo giả định");
     }
@@ -1716,7 +1716,7 @@ public class ChatServiceTests
         Assert.Null(advisor.LastRequest);                 // không gọi SLM
         Assert.Null(runner.SearchedFor);                  // không khớp tên
         Assert.Equal(("188429", "safety"), runner.GoalCalledWith);
-        Assert.StartsWith("Mình hiểu bạn hỏi về Boston University", res.Answer);
+        Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
         Assert.Equal("goal_seek", res.Widget!.Type);
         Assert.Null(res.Action);
     }
@@ -2683,7 +2683,7 @@ public class ChatServiceTests
         // Dữ liệu gửi Gemini: trường đã hiểu, nhóm đích, dữ kiện đã tính, và tên các trường khác (không gồm trường đang hỏi)
         var note = advisor.LastGoalNote!;
         Assert.Equal(("Boston University", "Vừa sức", "reachable"), (note.School, note.Target, note.Outcome));
-        Assert.StartsWith("Tài chính:", note.Facts[0]);
+        Assert.StartsWith("Hiện tại Boston University đang ở nhóm", note.Facts[0]);
         Assert.Equal(["Baylor University", "Harvard University"], note.Others);
     }
 
@@ -2696,7 +2696,7 @@ public class ChatServiceTests
 
         var res = await GoalChatWith(advisor, new FakeRunner { Match = Found(), GoalResult = GoalOf() });
 
-        Assert.StartsWith("Mình hiểu bạn hỏi về Boston University, nhóm muốn đạt: Vừa sức.", res.Answer);
+        Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
         Assert.Equal("goal_seek", res.Widget!.Type);
     }
 
@@ -2709,7 +2709,7 @@ public class ChatServiceTests
 
             var res = await GoalChatWith(advisor, new FakeRunner { Match = Found(), GoalResult = GoalOf() });
 
-            Assert.StartsWith("Mình hiểu bạn hỏi về Boston University", res.Answer);
+            Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
         }
     }
 

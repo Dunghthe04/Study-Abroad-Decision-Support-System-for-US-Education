@@ -80,6 +80,8 @@ export const RESET_SIMULATION_EVENT = "usas:simulate-reset";
 
 // Khung chat báo trang Gợi ý trường: hồ sơ chính thức vừa được lưu, danh sách đang xem có thể đã cũ
 export const PROFILE_SAVED_EVENT = "usas:profile-saved";
+// Học sinh vừa hỏi "cần gì để vào trường X" trong chat: trang Gợi ý trường ghim trường đó (detail là mã trường) để luôn thấy nó
+export const GOAL_SCHOOL_EVENT = "usas:goal-school";
 
 export function resetSimulation(): void {
   window.dispatchEvent(new CustomEvent(RESET_SIMULATION_EVENT));

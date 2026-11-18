@@ -79,7 +79,9 @@ public record SchoolGoalResult(
     IReadOnlyList<GoalTargetResult>? Targets = null,
     GoalSchoolStats? Stats = null,
     // Cơ sở của kết quả: real (hồ sơ thật) | simulated (có giá trị giả định đang xem được phủ lên hồ sơ)
-    string Basis = "real");
+    string Basis = "real",
+    // Bảng "bạn so với trường" theo từng tiêu chí bộ chấm dùng (điểm thi, GPA, ngoại khóa, tỉ lệ nhận); tài chính và tiếng Anh nằm ở Budget, English
+    IReadOnlyList<GoalCompareRow>? Comparison = null);
 
 // ============================== GOAL-SEEKING ==============================
 
@@ -135,7 +137,8 @@ public partial class RecommendationService
 
         var student = new StudentAcademics(profile.OverallGpa, SatScore(profile.Sat), ActScore(profile.Act), tier);
         var academics = ToSchoolAcademics(school);
-        var current = SchoolGrouper.Grade(student, academics).Group;
+        var grade = SchoolGrouper.Grade(student, academics);
+        var current = grade.Group;
         var goal = ParseTarget(target, current);
 
         var result = GoalSeeker.Seek(student, academics, goal);
@@ -167,7 +170,8 @@ public partial class RecommendationService
             result.NoEffect.Select(FactorCode).ToList(),
             budget, NonBudgetFilter(filter), alternatives, EnglishOf(filter, school),
             PositionOf(filter, current), TargetsAbove(student, academics, current), StatsOf(school),
-            simulated ? "simulated" : "real");
+            simulated ? "simulated" : "real",
+            GoalComparison.Rows(student, academics, grade));
     }
 
     private static GoalSchoolStats StatsOf(RecommendSchoolInput school)
