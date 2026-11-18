@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.StudyCenters;
@@ -41,9 +43,12 @@ public class CenterPortalController(
         return center is null ? NotFound("Không tìm thấy thông tin trung tâm.") : Ok(center);
     }
 
-    /// <summary>[UC-92] Cập nhật thông tin công bố của trung tâm.</summary>
+    /// <summary>
+    /// [UC-92] Trung tâm tự sửa hồ sơ. Trả về hồ sơ sau khi lưu và phân loại: lưu ngay, chờ Moderator kiểm tra (website, fanpage),
+    /// hoặc thông tin pháp lý làm hồ sơ về Chờ duyệt.
+    /// </summary>
     [HttpPut("profile")]
-    public async Task<ActionResult<StudyCenterDto>> UpdateProfile(
+    public async Task<ActionResult<CenterProfileUpdateResponse>> UpdateProfile(
         [FromBody] UpdateCenterProfileRequest request,
         CancellationToken ct)
     {
@@ -54,7 +59,35 @@ public class CenterPortalController(
         if (!result.Success || result.Center is null)
             return ValidationProblem(result.ErrorMessage);
 
-        return Ok(result.Center);
+        var outcome = result.Outcome ?? new CenterProfileUpdateOutcome([], [], [], false, "Đã lưu thay đổi hồ sơ.");
+        return Ok(new CenterProfileUpdateResponse(result.Center, outcome));
+    }
+
+    /// <summary>[UC-92] Yêu cầu xóa tài khoản mới nhất của trung tâm (204 nếu chưa gửi).</summary>
+    [HttpGet("deletion-request")]
+    public async Task<ActionResult<CenterDeletionRequestDto>> GetDeletionRequest(CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized();
+
+        var request = await centerService.GetDeletionRequestAsync(userId, ct);
+        return request is null ? NoContent() : Ok(request);
+    }
+
+    /// <summary>[UC-92] Trung tâm gửi yêu cầu xóa tài khoản và dữ liệu; Administrator xử lý ở UC-93. Mỗi lúc một yêu cầu mở.</summary>
+    [HttpPost("deletion-request")]
+    public async Task<ActionResult<CenterDeletionRequestDto>> RequestDeletion(
+        [FromBody] CreateCenterDeletionRequest request,
+        CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized();
+
+        var result = await centerService.RequestDeletionAsync(userId, request?.Reason, ct);
+        if (!result.Success || result.Request is null)
+            return ValidationProblem(result.ErrorMessage);
+
+        return Ok(result.Request);
     }
 
     /// <summary>[UC-71, UC-91] Lấy trạng thái xác minh và tiến độ hoàn thiện hồ sơ của trung tâm.</summary>
@@ -68,18 +101,39 @@ public class CenterPortalController(
         return Ok(status);
     }
 
-    /// <summary>Đổi số điện thoại liên lạc của trung tâm (không cần OTP; email mới là kênh xác thực).</summary>
-    [HttpPut("contact/phone")]
-    public Task<IActionResult> ChangePhone([FromBody] ChangeContactPhoneDto request) =>
-        RunContactChange(userId => authService.ChangeCenterPhoneAsync(userId, request.NewValue));
+    /// <summary>[UC-91] Gửi OTP qua SMS tới số điện thoại hiện tại của trung tâm để xác thực.</summary>
+    [HttpPost("contact/phone/verify/request")]
+    [EnableRateLimiting(AuthRateLimit.PolicyName)]
+    public Task<IActionResult> RequestPhoneVerification(CancellationToken ct) =>
+        RunContactChange(userId => authService.RequestCenterPhoneVerificationAsync(userId, ct));
+
+    /// <summary>[UC-91] Nhập OTP SMS; đúng thì số điện thoại được ghi là đã xác thực.</summary>
+    [HttpPost("contact/phone/verify")]
+    [EnableRateLimiting(AuthRateLimit.PolicyName)]
+    public Task<IActionResult> VerifyPhone([FromBody] VerifyContactCodeDto request, CancellationToken ct) =>
+        RunContactChange(userId => authService.VerifyCenterPhoneAsync(userId, request?.Code, ct));
+
+    /// <summary>[UC-91] Gửi OTP qua SMS tới số điện thoại MỚI để đổi số liên lạc.</summary>
+    [HttpPost("contact/phone/request")]
+    [EnableRateLimiting(AuthRateLimit.PolicyName)]
+    public Task<IActionResult> RequestPhoneChange([FromBody] RequestContactChangeDto request, CancellationToken ct) =>
+        RunContactChange(userId => authService.RequestCenterPhoneChangeAsync(userId, request, ct));
+
+    /// <summary>[UC-91] Xác nhận OTP và đổi số điện thoại liên lạc (số mới được ghi là đã xác thực).</summary>
+    [HttpPost("contact/phone/confirm")]
+    [EnableRateLimiting(AuthRateLimit.PolicyName)]
+    public Task<IActionResult> ConfirmPhoneChange([FromBody] ConfirmContactChangeDto request, CancellationToken ct) =>
+        RunContactChange(userId => authService.ConfirmCenterPhoneChangeAsync(userId, request, ct));
 
     /// <summary>Gửi OTP tới email MỚI để đổi email liên lạc.</summary>
     [HttpPost("contact/email/request")]
+    [EnableRateLimiting(AuthRateLimit.PolicyName)]
     public Task<IActionResult> RequestEmailChange([FromBody] RequestContactChangeDto request, CancellationToken ct) =>
         RunContactChange(userId => authService.RequestCenterEmailChangeAsync(userId, request, ct));
 
     /// <summary>Xác nhận OTP và đổi email liên lạc (email đăng nhập không đổi).</summary>
     [HttpPost("contact/email/confirm")]
+    [EnableRateLimiting(AuthRateLimit.PolicyName)]
     public Task<IActionResult> ConfirmEmailChange([FromBody] ConfirmContactChangeDto request, CancellationToken ct) =>
         RunContactChange(userId => authService.ConfirmCenterEmailChangeAsync(userId, request, ct));
 

@@ -23,6 +23,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
+import { CenterContactCard } from "@/components/center/CenterContactCard";
 
 export function CenterVerificationView() {
   const [center, setCenter] = useState<StudyCenter | null>(null);
@@ -125,8 +126,9 @@ export function CenterVerificationView() {
     setFormError(null);
     setFormSuccess(null);
 
-    if (!status?.isEmailVerified) {
-      setFormError("Bạn phải xác thực email bằng mã OTP trước khi nộp hồ sơ.");
+    // [UC-91] Phải xác thực cả email và số điện thoại trước khi nộp hồ sơ
+    if (!status?.isEmailVerified || !status?.isPhoneVerified) {
+      setFormError("Bạn phải xác thực email và số điện thoại bằng mã OTP trước khi nộp hồ sơ.");
       return;
     }
 
@@ -252,6 +254,27 @@ export function CenterVerificationView() {
             <AlertCircleIcon className="h-5 w-5" />
             <AlertDescription className="ml-2">{formError}</AlertDescription>
           </Alert>
+        )}
+
+        {/* [UC-91] Chưa xác thực đủ email và số điện thoại thì xác thực ngay tại đây trước khi nộp */}
+        {status && (!status.isEmailVerified || !status.isPhoneVerified) && (
+          <div className="space-y-3">
+            <Alert>
+              <InfoIcon className="h-5 w-5" />
+              <AlertDescription className="ml-2">
+                Cần xác thực cả email và số điện thoại bằng mã OTP trước khi nộp hồ sơ. Việc xác thực không tự cấp dấu xác minh.
+              </AlertDescription>
+            </Alert>
+            <CenterContactCard
+              phone={center?.phone}
+              email={center?.email}
+              emailVerified={status.isEmailVerified}
+              phoneVerified={status.isPhoneVerified}
+              onChanged={() => {
+                void fetchStatus();
+              }}
+            />
+          </div>
         )}
 
         <form onSubmit={handleSubmitVerification} className="space-y-6">
@@ -542,7 +565,7 @@ export function CenterVerificationView() {
               <Button
                 type="submit"
                 size="lg"
-                disabled={isSubmitting || !status?.isEmailVerified}
+                disabled={isSubmitting || !status?.isEmailVerified || !status?.isPhoneVerified}
                 className="w-full sm:w-auto"
               >
                 {isSubmitting && <Spinner data-icon="inline-start" />}

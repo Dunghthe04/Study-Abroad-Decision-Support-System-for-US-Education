@@ -55,5 +55,8 @@ namespace StudyAbroad.Application.Auth
 
         /// <summary>Gửi email thông báo tài khoản đã được mở khóa bởi quản trị viên kèm lý do / ghi chú.</summary>
         Task SendAccountUnlockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default);
+
+        /// <summary>[UC-93] Kết quả xử lý yêu cầu xóa trung tâm. outcome: approved (kèm ngày xóa hẳn) | rejected (kèm lý do) | completed.</summary>
+        Task SendCenterDeletionOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? note, DateTime? purgeAt, CancellationToken ct = default);
     }
 }

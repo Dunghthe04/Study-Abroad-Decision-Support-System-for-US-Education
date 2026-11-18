@@ -9,6 +9,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<StudyCenter> StudyCenters => Set<StudyCenter>();
     public DbSet<CenterVerificationRequest> CenterVerificationRequests => Set<CenterVerificationRequest>();
     public DbSet<CenterVerificationDocument> CenterVerificationDocuments => Set<CenterVerificationDocument>();
+    public DbSet<CenterProfileChange> CenterProfileChanges => Set<CenterProfileChange>();
+    public DbSet<CenterDeletionRequest> CenterDeletionRequests => Set<CenterDeletionRequest>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
 

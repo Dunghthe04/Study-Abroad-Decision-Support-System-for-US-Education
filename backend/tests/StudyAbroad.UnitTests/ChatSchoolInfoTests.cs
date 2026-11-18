@@ -443,9 +443,9 @@ public class ChatSchoolInfoTests
     }
 
     [Fact]
-    public void FieldButtons_EachAsksAFullQuestionAboutTheSameSchool()
+    public void AfterSchoolOverview_EachAsksAFullQuestionAboutTheSameSchool()
     {
-        var buttons = ChatSchoolInfo.FieldButtons("UCLA");
+        var buttons = ChatNextSteps.AfterSchoolOverview("UCLA");
 
         Assert.Equal(6, buttons.Count);
         Assert.All(buttons, b => Assert.Contains("UCLA", b.Value));

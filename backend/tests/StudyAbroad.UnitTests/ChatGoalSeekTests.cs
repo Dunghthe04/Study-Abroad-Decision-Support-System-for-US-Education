@@ -32,7 +32,7 @@ public class ChatGoalSeekTests
     [InlineData("CONTROL")]
     public void NextSteps_ForAProfileFilter_SendsTheStudentToEditTheProfile(string reason)
     {
-        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded(reason)));
+        var step = Assert.Single(ChatNextSteps.GoalSeekFixes(Excluded(reason)));
 
         Assert.Equal("Sửa hồ sơ", step.Label);
         Assert.Equal("/analysis?edit=1", step.Href);
@@ -48,7 +48,7 @@ public class ChatGoalSeekTests
     {
         var english = new GoalEnglishDto((decimal?)ielts, toefl, duolingo, 1m);
 
-        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded("ENGLISH", english)));
+        var step = Assert.Single(ChatNextSteps.GoalSeekFixes(Excluded("ENGLISH", english)));
 
         Assert.Equal((label, value), (step.Label, step.Value));
         Assert.Null(step.Href);
@@ -57,8 +57,8 @@ public class ChatGoalSeekTests
     [Fact]
     public void NextSteps_ForEnglishWithoutAPublishedMinimum_OffersNothing()
     {
-        Assert.Empty(ChatGoalSeek.NextSteps(Excluded("ENGLISH_NO_CERT", new GoalEnglishDto(null, null, null, null))));
-        Assert.Empty(ChatGoalSeek.NextSteps(Excluded("ENGLISH")));
+        Assert.Empty(ChatNextSteps.GoalSeekFixes(Excluded("ENGLISH_NO_CERT", new GoalEnglishDto(null, null, null, null))));
+        Assert.Empty(ChatNextSteps.GoalSeekFixes(Excluded("ENGLISH")));
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public class ChatGoalSeekTests
     {
         var budget = new GoalBudgetDto("over_budget", 62_000m, 40_000m, 56_364.5m, 22_000m, null);
 
-        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded("BUDGET", budget: budget)));
+        var step = Assert.Single(ChatNextSteps.GoalSeekFixes(Excluded("BUDGET", budget: budget)));
 
         Assert.Equal("Thử ngân sách 56.365 USD", step.Label);
         Assert.Equal("Nếu ngân sách của em là 56365 USD mỗi năm thì sao?", step.Value);
@@ -75,7 +75,25 @@ public class ChatGoalSeekTests
     [Fact]
     public void NextSteps_ForASchoolThatIsInTheList_OffersNothing()
     {
-        Assert.Empty(ChatGoalSeek.NextSteps(Result()));
+        Assert.Empty(ChatNextSteps.GoalSeekFixes(Result()));
+    }
+
+    [Fact]
+    public void AfterGoalSeek_ForASchoolThatIsInTheList_OffersToExplainIt_ThenTheCenter()
+    {
+        var steps = ChatNextSteps.AfterGoalSeek(Result());
+
+        Assert.Equal(["Giải thích trường này", ChatNextSteps.CenterLabel], steps.Select(s => s.Label));
+        Assert.Equal(ChatExplanation.Action, steps[0].Action?.Type);
+        Assert.Equal("188429", steps[0].Action?.SchoolCode);
+    }
+
+    [Fact]
+    public void AfterGoalSeek_ForAnExcludedSchool_OffersTheFix_ThenTheCenter()
+    {
+        var steps = ChatNextSteps.AfterGoalSeek(Excluded("MAJOR"));
+
+        Assert.Equal(["Sửa hồ sơ", ChatNextSteps.CenterLabel], steps.Select(s => s.Label));
     }
 
     // ---------------------------------------------------------------- đọc câu hỏi
@@ -156,7 +174,7 @@ public class ChatGoalSeekTests
         var lines = ChatGoalSeek.Summarize(Result(alone: [Sat(1290, 1430)])).Split('\n');
 
         Assert.Equal("Mình hiểu bạn hỏi về Boston University, nhóm muốn đạt: Vừa sức.", lines[0]);
-        Assert.StartsWith("Tài chính: Chi phí khoảng 38.000 USD mỗi năm, nằm trong ngân sách", lines[1]);
+        Assert.StartsWith("Tài chính: Ngân sách của bạn là 50.000 USD mỗi năm. Chi phí khoảng 38.000 USD mỗi năm, nằm trong ngân sách", lines[1]);
     }
 
     // Trường bị ẩn vì tiếng Anh: dòng tiếng Anh đứng trước tài chính, nêu mức tối thiểu từng bài thi
@@ -281,8 +299,8 @@ public class ChatGoalSeekTests
     }
 
     [Theory]
-    [InlineData("need_aid", "vượt ngân sách khoảng 7.000 USD: cần ngân sách từ 56.400 USD mỗi năm hoặc học bổng lớn")]
-    [InlineData("over_budget", "vượt ngân sách và trường không có học bổng phù hợp nên không nằm trong danh sách của bạn")]
+    [InlineData("need_aid", "Ngân sách của bạn là 50.000 USD mỗi năm (hệ thống cho phép vượt tới 55.000 USD, dung sai 10%). Chi phí khoảng 62.000 USD mỗi năm, vượt mức đó khoảng 7.000 USD: cần ngân sách từ 56.400 USD mỗi năm hoặc học bổng lớn")]
+    [InlineData("over_budget", "Ngân sách của bạn là 50.000 USD mỗi năm (hệ thống cho phép vượt tới 55.000 USD, dung sai 10%). Chi phí khoảng 62.000 USD mỗi năm, vượt mức đó và trường không có học bổng phù hợp nên không nằm trong danh sách của bạn")]
     [InlineData("no_budget", "Hồ sơ của bạn không đặt trần ngân sách")]
     [InlineData("unknown_cost", "Trường chưa có số liệu chi phí")]
     public void Summarize_FinanceComesFirst_AndSaysWhatTheBudgetMeans(string status, string expected)
@@ -292,6 +310,20 @@ public class ChatGoalSeekTests
         var text = ChatGoalSeek.Summarize(Result(alone: [Sat(1290, 1430)], budget: budget));
 
         Assert.Contains(expected, text);
+    }
+
+    // Nói rõ ngân sách là bao nhiêu trước khi nói vượt; đang xem giả định thì ghi là ngân sách GIẢ ĐỊNH để không nhầm với ngân sách gốc
+    [Fact]
+    public void Summarize_NamesTheBudgetBeforeSayingItIsExceeded_AndMarksASimulatedOne()
+    {
+        var budget = new GoalBudgetDto("need_aid", 92_760m, 25_000m, 84_400m, 65_260m, null);
+
+        var real = ChatGoalSeek.Summarize(Result(alone: [Sat(1290, 1430)], budget: budget));
+        var simulated = ChatGoalSeek.Summarize(Result(alone: [Sat(1290, 1430)], budget: budget) with { Basis = "simulated" });
+
+        Assert.Contains("Ngân sách của bạn là 25.000 USD mỗi năm (hệ thống cho phép vượt tới 27.500 USD, dung sai 10%). Chi phí khoảng 92.760 USD mỗi năm, vượt mức đó khoảng 65.260 USD", real);
+        Assert.Contains("Ngân sách giả định của bạn là 25.000 USD mỗi năm (hệ thống cho phép vượt tới 27.500 USD, dung sai 10%)", simulated);
+        Assert.True(real.IndexOf("Ngân sách của bạn là", StringComparison.Ordinal) < real.IndexOf("vượt mức đó", StringComparison.Ordinal));
     }
 
     // ---------------------------------------------------------------- dữ kiện gửi Gemini
@@ -306,7 +338,7 @@ public class ChatGoalSeekTests
         Assert.Equal(("Boston University", "Vừa sức", "reachable"), (note.School, note.Target, note.Outcome));
         Assert.Equal(
             [
-                "Tài chính: Chi phí khoảng 38.000 USD mỗi năm, nằm trong ngân sách của bạn.",
+                "Tài chính: Ngân sách của bạn là 50.000 USD mỗi năm. Chi phí khoảng 38.000 USD mỗi năm, nằm trong ngân sách.",
                 "Học thuật: để lên nhóm Vừa sức, mức tối thiểu khi chỉ đổi một yếu tố:",
                 "SAT 1290 → 1430 (khó)",
                 "Nên đặt mục tiêu (có đệm): SAT 1290 → 1460 (khó)",

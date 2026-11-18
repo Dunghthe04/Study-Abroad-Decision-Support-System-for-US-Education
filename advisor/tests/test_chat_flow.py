@@ -31,7 +31,7 @@ from app.services.replies import (
     NOT_READY,
 )
 from app.services.skill_rules import REQUIRED_B3
-from tests.fakes import tin
+from tests.fakes import flow_with, tin
 
 
 class CountingSlm:
@@ -849,3 +849,49 @@ def test_log_item_cuts_a_very_long_filter_value():
     logged = log_item(item)
 
     assert logged["filters"] == {"major": "x" * MAX_LOGGED_TEXT, "state": ["a" * MAX_LOGGED_TEXT]}
+
+
+# Nút menu "Thử thay đổi hồ sơ": code nhận thẳng, không hỏi SLM (SLM giả ở đây đọc ra kiến thức, nhánh đó không được chạy)
+async def test_try_menu_button_goes_to_the_scenario_branch_without_the_slm():
+    from app.services.replies import MENU
+
+    flow = flow_with({}, tin("knowledge"))
+
+    res = await flow.reply(request(MENU["scenario"].value, has_results=True))
+
+    assert res.answer.startswith("Bạn muốn thử thay đổi gì?")
+    assert [q.label for q in res.quick_replies][:1] == ["Thử SAT 1400"]
+
+
+def test_log_item_shows_the_what_if_changes_so_the_normalized_value_can_be_checked():
+    item = SlmY(
+        type="scenario",
+        span="giả sử ngân sách nhà em giảm còn 25k mỗi năm",
+        entities={
+            "mode": "what_if",
+            "changes": [
+                {"factor": "budget", "value": "25000", "unit": "USD"},
+                {"factor": "sat", "value": "1450"},
+            ],
+        },
+    )
+
+    assert log_item(item) == {
+        "type": "scenario",
+        "mode": "what_if",
+        "changes": [
+            {"factor": "budget", "value": "25000", "unit": "USD"},
+            {"factor": "sat", "value": "1450"},
+        ],
+        "other_keys": [],
+    }
+
+
+def test_log_item_cuts_a_very_long_change_value():
+    item = SlmY(
+        type="scenario",
+        span="x",
+        entities={"mode": "what_if", "changes": [{"factor": "major", "value": "x" * (MAX_LOGGED_TEXT + 40)}]},
+    )
+
+    assert log_item(item)["changes"] == [{"factor": "major", "value": "x" * MAX_LOGGED_TEXT}]

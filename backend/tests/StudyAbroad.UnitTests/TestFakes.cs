@@ -307,6 +307,15 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
+    /// <summary>[UC-93] Email kết quả xử lý yêu cầu xóa trung tâm.</summary>
+    public List<(string To, string CenterName, string Outcome, string? Note, DateTime? PurgeAt)> CenterDeletionEmails { get; } = [];
+
+    public Task SendCenterDeletionOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? note, DateTime? purgeAt, CancellationToken ct = default)
+    {
+        CenterDeletionEmails.Add((toEmail, centerName, outcome, note, purgeAt));
+        return Task.CompletedTask;
+    }
+
     /// <summary>[UC-59] Email kết quả xét duyệt hồ sơ xác minh gửi cho trung tâm.</summary>
     public List<(string To, string CenterName, string Outcome, string? Reason, IReadOnlyList<string>? Unmet)> CenterVerificationEmails { get; } = [];
 

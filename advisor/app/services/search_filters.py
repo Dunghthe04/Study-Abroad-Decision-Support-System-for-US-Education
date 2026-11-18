@@ -31,8 +31,15 @@ SORT = {
     "most_aid": "mostAid",
 }
 DEFAULT_SORT = "quality"
-# Các cách xếp theo tiền: model trả lowest_cost/highest_cost, resolve_cost_sort có thể đổi sang mã học phí
-COST_SORTS = ("lowest_cost", "highest_cost", "lowest_tuition", "highest_tuition")
+# Điều kiện lọc có giá trị là một con số (mức tối đa, tối thiểu, hạng). Không đọc ra số mà câu đã có cách xếp thì bỏ điều kiện đó
+NUMERIC_THRESHOLDS = {
+    "max_cost",
+    *ENGLISH_RANGES,
+    "min_acceptance_rate",
+    "max_acceptance_rate",
+    "min_graduation_rate",
+    "max_rank",
+}
 NO_VALUE = {"", "none", "null", "n/a", "na", "unknown", "không", "khong", "-"}
 # Tên điều kiện nói với học sinh khi cần hỏi lại
 LABELS = {
@@ -54,6 +61,9 @@ class SearchPlan:
     filters: dict[str, Any] = field(default_factory=dict)
     sort: str = DEFAULT_SORT
     unresolved: list[str] = field(default_factory=list)  # điều học sinh nói mà chưa đọc chắc chắn được
+    # Điều kiện số không đọc ra nhưng câu đã có cách xếp rõ ràng ("trường nào uy tín nhất" bị thêm max_rank "top"): bỏ điều kiện đó,
+    # vẫn tìm theo cách xếp, và báo cho học sinh biết đã bỏ gì ({"key": "max_rank", "text": "top"}) để họ chỉnh bằng nút
+    ignored: list[dict[str, str]] = field(default_factory=list)
 
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
@@ -122,17 +132,15 @@ async def normalize(filters: dict[str, Any], sort: str | None = None) -> SearchP
     out = plan.filters
     # Model đôi khi điền chữ giữ chỗ ("none", "null"...) vào điều kiện học sinh không nói: coi như không có điều kiện đó
     filters = {k: v for k, v in filters.items() if not (isinstance(v, str) and v.strip().lower() in NO_VALUE)}
-    # "học phí cao/thấp nhất" là cách xếp, không phải mức chi phí: chữ không đọc ra số tiền thì bỏ, đừng hỏi lại học sinh.
-    # sort ở đây đã qua resolve_cost_sort nên có thể là mã học phí (lowest_tuition...) chứ không chỉ mã tổng chi phí
-    if (
-        sort in COST_SORTS
-        and isinstance(filters.get("max_cost"), str)
-        and read_cost_usd(filters["max_cost"]) is None
-    ):
-        filters.pop("max_cost")
+    # Câu có cách xếp rõ ràng ("rẻ nhất", "uy tín nhất") thì điều kiện số không đọc ra là phần phụ: bỏ và báo, vẫn tìm theo cách xếp.
+    # Còn lại (không có cách xếp, hoặc điều kiện là bang, ngành... mà học sinh muốn lọc) thì phải hỏi lại, bỏ đi sẽ ra danh sách sai ý
+    sort_given = sort in SORT
 
     def fail(key: str, text: str) -> None:
-        plan.unresolved.append(f"{LABELS.get(key, key)} “{text}”")
+        if sort_given and key in NUMERIC_THRESHOLDS:
+            plan.ignored.append({"key": key, "text": text})
+        else:
+            plan.unresolved.append(f"{LABELS.get(key, key)} “{text}”")
 
     if names := filters.get("state"):
         names = [names] if isinstance(names, str) else names  # model trả một tên hoặc danh sách tên

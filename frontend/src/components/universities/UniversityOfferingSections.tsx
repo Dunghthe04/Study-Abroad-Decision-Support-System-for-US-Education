@@ -31,6 +31,7 @@ import {
   universityMoney,
   universityNumber,
 } from "@/lib/university-display";
+import { satPolicyLabel } from "@/lib/admin-university-display";
 import {
   DetailRows,
   DetailSection,
@@ -312,9 +313,15 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
     },
   ].filter((item): item is typeof item & { value: number } => item.value != null);
 
-  const importanceFactors = [
+  // Chính sách nộp SAT/ACT và mức coi trọng là hai thông tin riêng của dữ liệu trường: hiện cạnh nhau để không trông như mâu thuẫn
+  // ("Không bắt buộc" mà "Rất quan trọng"). Chỉ nêu đúng dữ liệu, không giải thích thêm
+  const importanceFactors: { label: string; value: string | null; note?: string }[] = [
     { label: "Điểm trung bình (GPA)", value: offering.c7GpaImportance },
-    { label: "Điểm thi chuẩn hóa (SAT/ACT)", value: offering.c7TestImportance },
+    {
+      label: "Điểm thi chuẩn hóa (SAT/ACT)",
+      value: offering.c7TestImportance,
+      note: offering.satPolicy ? `Chính sách nộp: ${satPolicyLabel(offering.satPolicy)}` : undefined,
+    },
     { label: "Hoạt động ngoại khóa", value: offering.c7EcImportance },
   ].filter((item) => item.value != null);
 
@@ -489,8 +496,11 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
             <h3 className="text-sm font-semibold text-ink">Mức độ coi trọng các yếu tố tuyển sinh (CDS C7)</h3>
             <div className="divide-y divide-line/70 rounded-xl border border-line bg-surface px-5 sm:px-6">
               {importanceFactors.map((item) => (
-                <div key={item.label} className="flex items-center justify-between py-3">
-                  <span className="text-sm text-ink">{item.label}</span>
+                <div key={item.label} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <span className="text-sm text-ink">{item.label}</span>
+                    {item.note && <p className="text-xs text-ink-3">{item.note}</p>}
+                  </div>
                   <span className={cn("text-sm", schoolImportanceClass(item.value))}>
                     {schoolImportanceLabel(item.value)}
                   </span>
