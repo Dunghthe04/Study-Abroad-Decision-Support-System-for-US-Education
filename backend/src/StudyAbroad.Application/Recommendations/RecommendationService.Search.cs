@@ -29,7 +29,10 @@ public record SchoolSearchFilters(
 public record SchoolSearchItem(
     string Code, string Name, string? City, string? State, string? Control,
     decimal? CostUsd, decimal? AcceptRate, string? AidPolicy, decimal? AidAvgUsd, double? Quality, int? BestRank,
-    decimal? TuitionUsd = null);
+    decimal? TuitionUsd = null,
+    // Mức trường coi trọng điểm thi chuẩn hóa (CDS C7): very_important | important | considered | not_considered.
+    // Khác chính sách nộp (SatPolicy): trường "không bắt buộc" vẫn có thể coi điểm thi rất quan trọng nếu học sinh nộp
+    string? TestImportance = null);
 
 public enum SchoolSort
 {
@@ -148,5 +151,6 @@ public partial class RecommendationService
         TotalCost(s.Offering), AcceptRate(s), s.Offering.IntlAidPolicy, s.Offering.IntlAidAvgUsd,
         SchoolRanker.QualityFromRanks(s.Rankings),
         s.Rankings is { Count: > 0 } ranks ? ranks.Min(r => r.Rank) : null,
-        s.Offering.TuitionUsd);
+        s.Offering.TuitionUsd,
+        s.Offering.C7TestImportance);
 }

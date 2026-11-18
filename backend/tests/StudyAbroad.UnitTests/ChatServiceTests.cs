@@ -1827,6 +1827,41 @@ public class ChatServiceTests
         Assert.Equal(SchoolSort.LowestCost, sort);
     }
 
+    // Lọc "không bắt buộc SAT" mà dữ liệu trường ghi điểm thi quan trọng: nêu cả hai thông tin ngay trên dòng trường, trong chữ và trên thẻ
+    [Fact]
+    public async Task SchoolSearch_ForTestOptional_WarnsWhenTheSchoolStillWeighsTestScoresHeavily()
+    {
+        var items = new[]
+        {
+            SearchItem("Heavy") with { TestImportance = "very_important" },
+            SearchItem("Medium") with { TestImportance = "important" },
+            SearchItem("Light") with { TestImportance = "considered" },
+            SearchItem("Unknown"),
+        };
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(4, items, []) };
+
+        var (res, _) = await SearchChat(SearchAction(new { testPolicy = "optional" }), runner);
+
+        Assert.Contains("1. Heavy (Los Angeles, CA, công lập): chi phí 40.000 USD · tỷ lệ nhận 30% · hạng #20 · không bắt buộc SAT, ACT nhưng trường ghi điểm thi là yếu tố rất quan trọng", res.Answer);
+        Assert.Contains("2. Medium (Los Angeles, CA, công lập): chi phí 40.000 USD · tỷ lệ nhận 30% · hạng #20 · không bắt buộc SAT, ACT nhưng trường ghi điểm thi là yếu tố quan trọng", res.Answer);
+        Assert.Contains("3. Light (Los Angeles, CA, công lập): chi phí 40.000 USD · tỷ lệ nhận 30% · hạng #20\n", res.Answer);
+        Assert.Contains("4. Unknown (Los Angeles, CA, công lập): chi phí 40.000 USD · tỷ lệ nhận 30% · hạng #20", res.Answer);
+        var cardItems = res.Widget!.Data!.Value.GetProperty("items");
+        Assert.Equal("very_important", cardItems[0].GetProperty("testImportance").GetString());
+        Assert.Equal("optional", res.Widget!.Data!.Value.GetProperty("filters").GetProperty("testPolicy").GetString());
+    }
+
+    [Fact]
+    public async Task SchoolSearch_WithoutTheTestOptionalFilter_DoesNotWarnAboutTestScores()
+    {
+        var items = new[] { SearchItem("Heavy") with { TestImportance = "very_important" } };
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(1, items, []) };
+
+        var (res, _) = await SearchChat(SearchAction(new { states = new[] { "CA" } }), runner);
+
+        Assert.DoesNotContain("điểm thi", res.Answer);
+    }
+
     [Fact]
     public async Task SchoolSearch_SaysHowManyAndListsTheFirstFiveInOrder()
     {

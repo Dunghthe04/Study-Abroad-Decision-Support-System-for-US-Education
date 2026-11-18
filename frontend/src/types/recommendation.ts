@@ -421,6 +421,8 @@ export interface SchoolSearchItem {
   aidAvgUsd: number | null;
   quality: number | null;
   bestRank: number | null;
+  // Mức trường coi trọng điểm thi (CDS C7): very_important | important | considered | not_considered
+  testImportance?: string | null;
 }
 
 export interface SchoolSearchData {
@@ -436,6 +438,7 @@ export interface SchoolSearchData {
     major?: string | null;
     maxCostUsd?: number | null;
     maxIelts?: number | null;
+    testPolicy?: string | null;
     ivy?: boolean;
   } | null;
   sort?: string | null;
