@@ -33,6 +33,7 @@ from app.services.replies import (
     DEFAULT_QUESTION,
     EDIT_SECTION_LABEL,
     EDIT_SECTION_VALUE,
+    EXPLAIN_ASK_SCHOOL,
     FILTER_TEXT,
     GOAL_SEEK_WORKING,
     GREETING_REPLY,
@@ -443,8 +444,19 @@ class GeneratedAdviceBranch:
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         y = slm.intents[0]
         question = y.span if y.type == "profile_review" else DEFAULT_QUESTION
-        if y.type == "profile_review" and single_school(y.entities) and state.has_results:
-            return await self._skills["skill_explain"].run(state, question)
+        school = single_school(y.entities) if y.type == "profile_review" else None
+        if school and state.has_results:
+            out = await self._skills["skill_explain"].run(state, question)
+            # Trường học sinh nêu không nằm trong danh sách gợi ý (skill chỉ biết hỏi lại "trường nào trong danh sách"):
+            # học sinh được quyền hỏi bất kỳ trường nào, nên giao .NET khớp tên với toàn bộ trường rồi chạy goal-seek
+            # (nói rõ tài chính, nhóm hiện tại và cần gì để lên nhóm cao hơn), không bắt chọn lại trong danh sách
+            if out.action is None and out.answer == EXPLAIN_ASK_SCHOOL:
+                return SkillOutput(
+                    GOAL_SEEK_WORKING.format(school=school),
+                    action="goal_seek",
+                    action_data={"school": school, "target": None},
+                )
+            return out
 
         # Việc bộ phân loại tách ra. Khuôn chỉ làm assessment, roadmap; chọn trường, so sánh, giải thích trường là
         # phần của Dũng. Câu chỉ có việc của Dũng thì giao code có sẵn (xem others_only_output)
