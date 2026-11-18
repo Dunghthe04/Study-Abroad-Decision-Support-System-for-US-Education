@@ -150,8 +150,8 @@ export function SaveScenarioButton({ overrides, onSave }: { overrides: Simulatio
 
 const DATE = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" });
 
-// "Khó vào 10 → 7 · Vừa sức 12 → 14 · An toàn 8 → 9": kết quả lúc bấm lưu
-function snapshotText(before: GroupSummary | null, after: GroupSummary | null): string | null {
+// "Khó vào 10 → 7 · Vừa sức 12 → 14 · An toàn 8 → 9": kết quả lúc bấm lưu. Trang Con của tôi dùng lại.
+export function snapshotText(before: GroupSummary | null, after: GroupSummary | null): string | null {
   if (!before || !after) return null;
   const part = (label: string, a: number, b: number) => (a === b ? `${label} ${a}` : `${label} ${a} → ${b}`);
   return [

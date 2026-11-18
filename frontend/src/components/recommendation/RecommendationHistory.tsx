@@ -57,7 +57,9 @@ function errorText(err: unknown, fallback: string) {
   return err instanceof Error ? err.message : fallback;
 }
 
-export function RecommendationHistory() {
+// studentId: phụ huynh xem lịch sử của con (trang Con của tôi), chỉ hiện danh sách, không có tiêu đề trang
+export function RecommendationHistory({ studentId }: { studentId?: string } = {}) {
+  const forChild = studentId !== undefined;
   const [runs, setRuns] = useState<RecommendationRunSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
@@ -67,13 +69,13 @@ export function RecommendationHistory() {
 
   useEffect(() => {
     recommendationHistoryApi
-      .list()
+      .list(studentId)
       .then(setRuns)
       .catch((err: unknown) => {
         setRuns([]);
         setError(errorText(err, "Chưa tải được lịch sử gợi ý."));
       });
-  }, []);
+  }, [studentId]);
 
   const toggle = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < 2 ? [...prev, id] : prev));
@@ -117,21 +119,27 @@ export function RecommendationHistory() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 lg:px-8">
-      <div className="space-y-2">
-        <Link
-          href="/recommendations"
-          className="inline-flex items-center gap-1 text-xs font-semibold text-brand underline-offset-4 hover:underline"
-        >
-          <ArrowLeftIcon className="size-3.5" />
-          Về trang Gợi ý trường
-        </Link>
-        <h1 className="text-h1 text-foreground">Lịch sử gợi ý</h1>
+    <div className={forChild ? "space-y-6" : "mx-auto max-w-5xl space-y-6 px-4 py-6 lg:px-8"}>
+      {forChild ? (
         <p className="text-sm text-muted-foreground">
-          50 lần gợi ý gần nhất, gồm cả các lần đổi nút ưu tiên. Chọn hai lần để xem trường nào đổi nhóm hoặc đổi
-          thứ hạng.
+          Các lần con nhận gợi ý trường, mới nhất ở trên. Chọn hai lần để xem trường nào đổi nhóm hoặc đổi thứ hạng.
         </p>
-      </div>
+      ) : (
+        <div className="space-y-2">
+          <Link
+            href="/recommendations"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-brand underline-offset-4 hover:underline"
+          >
+            <ArrowLeftIcon className="size-3.5" />
+            Về trang Gợi ý trường
+          </Link>
+          <h1 className="text-h1 text-foreground">Lịch sử gợi ý</h1>
+          <p className="text-sm text-muted-foreground">
+            50 lần gợi ý gần nhất, gồm cả các lần đổi nút ưu tiên. Chọn hai lần để xem trường nào đổi nhóm hoặc đổi
+            thứ hạng.
+          </p>
+        </div>
+      )}
 
       {error && (
         <Alert variant="destructive">
@@ -143,11 +151,17 @@ export function RecommendationHistory() {
 
       {runs.length === 0 && !error && (
         <div className="rounded-2xl border border-line bg-surface p-8 text-center text-sm text-muted-foreground">
-          Bạn chưa có lần gợi ý nào.{" "}
-          <Link href="/recommendations" className="font-semibold text-brand underline-offset-4 hover:underline">
-            Nhận gợi ý
-          </Link>{" "}
-          trước.
+          {forChild ? (
+            "Con chưa nhận gợi ý trường."
+          ) : (
+            <>
+              Bạn chưa có lần gợi ý nào.{" "}
+              <Link href="/recommendations" className="font-semibold text-brand underline-offset-4 hover:underline">
+                Nhận gợi ý
+              </Link>{" "}
+              trước.
+            </>
+          )}
         </div>
       )}
 
@@ -299,6 +313,19 @@ function ComparisonBody({ comparison }: { comparison: RunComparison }) {
 
 // Xem lại một lần chạy: các nhóm và thẻ trường như trang Gợi ý trường, nhưng chỉ xem (không hỏi trợ lý)
 function RunBody({ rec }: { rec: Recommendation }) {
+  return (
+    <div className="space-y-6">
+      <DialogHeader className="pr-8">
+        <DialogTitle>Lần gợi ý lúc {formatTime(rec.createdAt)}</DialogTitle>
+        <DialogDescription className="text-xs">{describePref(rec.criteria.pref ?? null)}</DialogDescription>
+      </DialogHeader>
+      <RunGroups rec={rec} />
+    </div>
+  );
+}
+
+// Các nhóm trường của một lần gợi ý, không kèm tiêu đề popup. Dùng trong popup trên và ở trang Con của tôi.
+export function RunGroups({ rec }: { rec: Recommendation }) {
   const { criteria, items } = rec;
   const byCode = new Map<string, ScoredSchool>(items.scored.map((s) => [s.code, s]));
   const student = { sat: criteria.studentSat ?? null, gpa: criteria.studentGpa ?? null };
@@ -306,11 +333,6 @@ function RunBody({ rec }: { rec: Recommendation }) {
 
   return (
     <div className="space-y-6">
-      <DialogHeader className="pr-8">
-        <DialogTitle>Lần gợi ý lúc {formatTime(rec.createdAt)}</DialogTitle>
-        <DialogDescription className="text-xs">{describePref(criteria.pref ?? null)}</DialogDescription>
-      </DialogHeader>
-
       {empty && (
         <p className="py-4 text-center text-sm text-muted-foreground">Lần này không có trường nào qua bộ lọc.</p>
       )}
