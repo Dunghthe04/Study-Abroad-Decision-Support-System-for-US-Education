@@ -66,7 +66,9 @@ public record SimulationResult(
     SimulationProfile Profile, GroupSummary Baseline, GroupSummary Simulated, IReadOnlyList<SchoolChange> Changes,
     string CriteriaJson, string ItemsJson);
 
-public partial class RecommendationService(IAdvisorClient advisor, IRecommendationRepository recommendations, IProfileFlowRepository profiles)
+// [UC-76] parentRefresher (tùy chọn): sau mỗi lượt gợi ý của con, tính lại danh sách theo ưu tiên cha mẹ đã lưu. Null thì bỏ qua.
+public partial class RecommendationService(IAdvisorClient advisor, IRecommendationRepository recommendations, IProfileFlowRepository profiles,
+    StudyAbroad.Application.ParentLinks.IParentPreferenceRefresher? parentRefresher = null)
     : IRecommendationRunner
 
 {
@@ -491,7 +493,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         var criteria = BuildCriteria(profile, pref, run);
         var items = BuildItems(profile.BudgetMaxUsd, run);
 
-        await recommendations.AddAsync(new Recommendation
+        var saved = new Recommendation
         {
             UserId = profile.UserId,
             StudentProfileId = profile.Id,
@@ -499,7 +501,10 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             CriteriaJson = JsonSerializer.Serialize(criteria, StoredJson),
             ItemsJson = JsonSerializer.Serialize(items, StoredJson),
             AlgorithmVersion = AlgorithmVersion
-        }, ct);
+        };
+        await recommendations.AddAsync(saved, ct);
+        // [UC-76] Tính lại danh sách theo cha mẹ theo lần gợi ý vừa lưu (refresher tự bắt lỗi, không làm hỏng lượt của con)
+        if (parentRefresher is not null) await parentRefresher.OnChildRunAsync(this, profile.UserId, saved.Id, ct);
 
         return run;
     }

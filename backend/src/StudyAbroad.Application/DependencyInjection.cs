@@ -53,6 +53,7 @@ public static class DependencyInjection
         services.AddScoped<RecommendationHistoryService>();   // [UC-87] xem lịch sử gợi ý
         services.AddScoped<ParentChildrenService>();   // khu "Con của tôi": phụ huynh xem con, chỉ đọc
         services.AddScoped<ParentPreferenceService>();   // UC-76: ưu tiên của phụ huynh cho từng con
+        services.AddScoped<IParentPreferenceRefresher, ParentPreferenceRefresher>();   // UC-76: con chạy gợi ý → tính lại danh sách theo cha mẹ
         services.AddScoped<ManagedChildService>();     // 1.5a: phụ huynh thêm / đổi tên / xóa con chưa có tài khoản
         services.AddScoped<ActingSessionGuard>();      // 1.5b: kiểm tra phiên làm thay con managed ở mỗi request
         services.AddScoped<ActingService>();           // 1.5b: vào / thoát làm thay
