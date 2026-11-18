@@ -240,16 +240,29 @@ public static class ChatGoalSeek
 
     public const string EditProfileHref = "/analysis?edit=1";
 
-    public static Widget WidgetOf(SchoolGoalResult result)
+    // basisLabel: mô tả giá trị giả định đã dùng ("ngân sách 25.000 USD mỗi năm") khi result.Basis là simulated, để thẻ ghi rõ
+    public static Widget WidgetOf(SchoolGoalResult result, string? basisLabel = null)
     {
         var data = new JsonObject
         {
             ["code"] = result.Code,
             ["target"] = TargetCode(result.Target),
             ["result"] = JsonSerializer.SerializeToNode(result, WebJson),
+            ["basisLabel"] = result.Basis == "simulated" ? basisLabel : null,
         };
         return new Widget(WidgetType, JsonSerializer.SerializeToElement(data));
     }
+
+    /// <summary>
+    /// Câu mở đầu nói rõ goal-seeking tính theo cơ sở nào, chỉ khi trang đang xem giả định (không thì không có gì để nhầm).
+    /// simulated: đã tính theo giả định; real mà viewing có giá trị: tính theo hồ sơ thật dù trang đang giả định.
+    /// </summary>
+    public static string? BasisLine(string basis, string? viewingLabel) =>
+        viewingLabel is null
+            ? null
+            : basis == "simulated"
+                ? $"Mình tính theo giả định bạn đang xem ({viewingLabel}), không phải hồ sơ thật."
+                : $"Mình tính theo hồ sơ thật của bạn, không phải giả định đang xem ({viewingLabel}).";
 
     // Mã nhóm của kết quả (R, M, S) → mã API (reach, match, safety)
     private static string TargetCode(string group) => group switch
