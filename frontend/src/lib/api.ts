@@ -30,7 +30,7 @@ import type {
   ParentLinkDto,
   ParentLinkResponse,
   ParentProfileOverviewDto,
-  ShareParentProfileResult,
+  MatchManagedChildResult,
   ParentProfileOfferDto,
   StudyCenter,
   CreateStudyCenterRequest,
@@ -243,17 +243,17 @@ export const profileApi = {
       method: "GET",
     }),
 
-  // Phụ huynh: hồ sơ các con đã liên kết (chỉ đọc) + hồ sơ mình nhập còn chờ chọn con nhận
+  // Phụ huynh: hồ sơ các con đã liên kết (chỉ đọc) + con thật chờ ghép với con managed (1.5d)
   getChildrenProfiles: () =>
     apiFetch<ParentLinkResponse<ParentProfileOverviewDto>>("/api/v1/profile/academic/children", {
       method: "GET",
     }),
 
-  // linkId null = không chuyển cho con nào
-  shareToChild: (linkId: string | null) =>
-    apiFetch<ParentLinkResponse<ShareParentProfileResult>>("/api/v1/profile/academic/share", {
+  // 1.5d: ghép con thật vừa liên kết với con managed đã nhập; managedChildId null = không phải ai trong số này
+  matchManagedChild: (linkId: string, managedChildId: string | null) =>
+    apiFetch<ParentLinkResponse<MatchManagedChildResult>>("/api/v1/profile/academic/match", {
       method: "POST",
-      body: JSON.stringify({ linkId }),
+      body: JSON.stringify({ linkId, managedChildId }),
     }),
 
   // Học sinh: đề nghị dùng hồ sơ phụ huynh khi mình đã có hồ sơ
@@ -263,7 +263,7 @@ export const profileApi = {
     }),
 
   decideParentOffer: (linkId: string, accept: boolean) =>
-    apiFetch<ParentLinkResponse<ShareParentProfileResult>>(
+    apiFetch<ParentLinkResponse<ParentProfileOfferDto>>(
       `/api/v1/profile/academic/parent-offers/${encodeURIComponent(linkId)}/${accept ? "accept" : "decline"}`,
       { method: "POST" },
     ),

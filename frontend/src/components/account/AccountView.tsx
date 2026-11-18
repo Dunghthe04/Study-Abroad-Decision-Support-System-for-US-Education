@@ -114,9 +114,10 @@ export function AccountView() {
         .then(([res, overview]) => {
           setProfile(res);
           setParentOverview(overview);
-          const hasLinkedChildren = Boolean(overview && overview.children.length > 0);
+          // 1.5d: phụ huynh không có hồ sơ riêng nên không cảnh báo thiếu bảng điểm
+          const isParent = userRole === "parent";
           // Chỉ bật popup ở lần tải đầu, không bật lại sau khi chọn chuyển hồ sơ
-          if (profileVersion === 0 && !hasLinkedChildren && !hasCompleteAcademicProfile(res)) {
+          if (profileVersion === 0 && !isParent && !hasCompleteAcademicProfile(res)) {
             setShowWarningModal(true);
           }
         })
@@ -270,7 +271,7 @@ export function AccountView() {
           <section className="min-w-0">
             {activeSection === "personal" && <PersonalInfoCard />}
             {activeSection === "academic" &&
-              (parentOverview && parentOverview.children.length > 0 ? (
+              (parentOverview ? (
                 <ParentAcademicSection overview={parentOverview} onChanged={reloadProfile} />
               ) : (
                 <div className="space-y-4">
