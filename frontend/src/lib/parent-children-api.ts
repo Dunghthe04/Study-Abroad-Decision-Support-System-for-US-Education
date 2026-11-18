@@ -1,4 +1,5 @@
-// Chức năng 1 "Con của tôi": phụ huynh xem dữ liệu của con đã liên kết. Chỉ đọc.
+// Chức năng 1 "Con của tôi": phụ huynh xem dữ liệu của con đã liên kết, và gợi ý trường mục tiêu cho con
+// (con tự thêm vào danh sách hoặc bỏ qua ở trang Trường mục tiêu).
 // Gợi ý (UC-87) và kịch bản (UC-86) đã nhận studentId ở recommendation-history-api / scenario-api.
 
 import { apiFetch, profileApi } from "@/lib/api";
@@ -14,5 +15,23 @@ export const parentChildrenApi = {
     apiFetch<TargetSchoolDto[]>(
       `/api/v1/parent/children/${encodeURIComponent(studentId)}/target-schools`,
       { method: "GET" },
+    ),
+
+  // Gợi ý một trường cho con: thêm dòng status parent_suggested. Con đã có / đã được gợi ý trường đó thì backend trả 400.
+  // Truyền universityId hoặc universityCode (trang chi tiết trường chỉ có mã trường).
+  suggestTargetSchool: (
+    studentId: string,
+    body: { universityId?: string; universityCode?: string; note?: string },
+  ) =>
+    apiFetch<TargetSchoolDto>(
+      `/api/v1/parent/children/${encodeURIComponent(studentId)}/target-schools`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  // Rút lại gợi ý con chưa xem. Con đã thêm hoặc bỏ qua rồi thì backend trả 404.
+  withdrawSuggestion: (studentId: string, targetSchoolId: string) =>
+    apiFetch<void>(
+      `/api/v1/parent/children/${encodeURIComponent(studentId)}/target-schools/${encodeURIComponent(targetSchoolId)}`,
+      { method: "DELETE" },
     ),
 };

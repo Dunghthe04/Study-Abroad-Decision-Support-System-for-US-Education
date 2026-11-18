@@ -2,16 +2,20 @@
 
 // Chức năng 1 "Con của tôi": phụ huynh xem hồ sơ, gợi ý, trường mục tiêu, lịch sử và kịch bản của con. Chỉ đọc.
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AcademicSummaryCard } from "@/components/account/AcademicSummaryCard";
 import { RecommendationHistory, RunGroups } from "@/components/recommendation/RecommendationHistory";
 import { scenarioOverrides, snapshotText, useSavedScenarios } from "@/components/recommendation/SavedScenarios";
+import { SuggestTargetSchool } from "@/components/parent/SuggestTargetSchool";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "@/components/ui/toast";
+import { ApiError } from "@/lib/api";
 import { parentChildrenApi } from "@/lib/parent-children-api";
 import { recommendationHistoryApi } from "@/lib/recommendation-history-api";
 import { describeSimulation } from "@/lib/simulation-link";
@@ -25,6 +29,7 @@ const STATUS_LABEL: Record<string, string> = {
   submitted: "Đã nộp",
   admitted: "Đỗ",
   rejected: "Trượt",
+  parent_suggested: "Chờ con xem",
 };
 
 // Cùng tên nhóm với trang Gợi ý trường
@@ -136,7 +141,7 @@ export function ChildDashboard({ studentId, initialTab = "overview" }: { student
           <LatestRecommendation studentId={studentId} />
         </TabsContent>
         <TabsContent value="targets">
-          <TargetSchoolList studentId={studentId} />
+          <TargetSchoolList studentId={studentId} childName={child.studentName} />
         </TabsContent>
         <TabsContent value="history" className="space-y-8">
           <RecommendationHistory studentId={studentId} />
@@ -195,24 +200,86 @@ function LatestRecommendation({ studentId }: { studentId: string }) {
   );
 }
 
-function TargetSchoolList({ studentId }: { studentId: string }) {
-  const { data, error, loading } = useFetched(`parent-targets-${studentId}`, () =>
+// Trường mục tiêu của con + gợi ý của phụ huynh. Dòng parent_suggested là gợi ý con chưa xem, phụ huynh rút lại được.
+function TargetSchoolList({ studentId, childName }: { studentId: string; childName: string }) {
+  // Tăng version để tải lại sau khi gợi ý / rút lại
+  const [version, setVersion] = useState(0);
+  const reload = () => setVersion((v) => v + 1);
+  const { data, error, loading } = useFetched(`parent-targets-${studentId}-${version}`, () =>
     parentChildrenApi.targetSchools(studentId),
   );
+  const [withdrawing, setWithdrawing] = useState<string | null>(null);
 
-  if (loading) return <Loading />;
-  if (error) return <Message>Chưa tải được trường mục tiêu của con. {error}</Message>;
-  if (!data || data.length === 0) return <Message>Con chưa thêm trường mục tiêu.</Message>;
+  const withdraw = async (t: TargetSchoolDto) => {
+    setWithdrawing(t.id);
+    try {
+      await parentChildrenApi.withdrawSuggestion(studentId, t.id);
+      toast.add({ type: "success", title: "Đã rút lại gợi ý", description: t.universityName });
+    } catch (err) {
+      toast.add({
+        type: "error",
+        title: "Chưa rút lại được",
+        description: err instanceof ApiError ? err.message : "Vui lòng thử lại.",
+      });
+    } finally {
+      setWithdrawing(null);
+      reload();
+    }
+  };
+
+  const suggestions = (data ?? []).filter((t) => t.status === "parent_suggested");
+  const targets = (data ?? []).filter((t) => t.status !== "parent_suggested");
+
   return (
-    <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
-      {data.map((t) => (
-        <TargetRow key={t.id} target={t} />
-      ))}
-    </ul>
+    <div className="space-y-6">
+      <SuggestTargetSchool studentId={studentId} childName={childName} onSuggested={reload} />
+
+      {/* Chỉ hiện "đang tải" lần đầu; tải lại thì giữ danh sách cũ để khung không nhảy */}
+      {loading && !data ? (
+        <Loading />
+      ) : error && !data ? (
+        <Message>Chưa tải được trường mục tiêu của con. {error}</Message>
+      ) : (
+        <>
+          {suggestions.length > 0 && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-foreground">Bạn đã gợi ý, đang chờ con xem</h3>
+              <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+                {suggestions.map((t) => (
+                  <TargetRow key={t.id} target={t}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={withdrawing === t.id}
+                      onClick={() => withdraw(t)}
+                    >
+                      {withdrawing === t.id && <Spinner />}
+                      Rút lại
+                    </Button>
+                  </TargetRow>
+                ))}
+              </ul>
+            </section>
+          )}
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">Danh sách của con</h3>
+            {targets.length === 0 ? (
+              <Message>Con chưa thêm trường mục tiêu.</Message>
+            ) : (
+              <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+                {targets.map((t) => (
+                  <TargetRow key={t.id} target={t} />
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
+    </div>
   );
 }
 
-function TargetRow({ target: t }: { target: TargetSchoolDto }) {
+function TargetRow({ target: t, children }: { target: TargetSchoolDto; children?: ReactNode }) {
   const category = t.category ? CATEGORY[t.category] : undefined;
   const place = [t.city, t.state].filter(Boolean).join(", ");
   return (
@@ -226,6 +293,11 @@ function TargetRow({ target: t }: { target: TargetSchoolDto }) {
         {place || "Chưa rõ địa điểm"}
         {t.deadline && ` · Hạn nộp ${new Date(t.deadline).toLocaleDateString("vi-VN")}`}
       </p>
+      {/* Gợi ý: Notes là lời nhắn của phụ huynh */}
+      {t.status === "parent_suggested" && t.notes && (
+        <p className="text-xs text-ink-2">Lời nhắn: {t.notes}</p>
+      )}
+      {children && <div className="pt-1">{children}</div>}
     </li>
   );
 }
