@@ -10,6 +10,7 @@ import {
   MinusIcon,
   PlusIcon,
   RepeatIcon,
+  SearchIcon,
   StarIcon,
   XIcon,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import { COMPARE_MAX, COMPARE_MIN, compareHref } from "@/lib/center-compare";
 import { formatRating } from "@/lib/rating";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { CenterTypeBadge } from "./CenterBadges";
@@ -105,7 +107,17 @@ function serviceUnion(centers: StudyCenter[]): string[] {
   return [...known, ...other];
 }
 
-/** Nút mở danh sách trung tâm còn lại để chọn (dùng cho cả "Thêm" và "Đổi"). */
+/** Bỏ dấu và hạ chữ thường để tìm "ha noi" ra "Hà Nội". */
+function fold(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+}
+
+/** Nút mở danh sách trung tâm còn lại để chọn (dùng cho cả "Thêm" và "Đổi"): có ô tìm và lọc theo thành phố. */
 function CenterPicker({
   options,
   onPick,
@@ -118,27 +130,80 @@ function CenterPicker({
   title: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [city, setCity] = useState("");
+
+  const cities = [...new Set(options.map((c) => c.city).filter((c): c is string => !!c))].sort();
+  const q = fold(query.trim());
+  const shown = options.filter(
+    (c) =>
+      (!city || c.city === city) &&
+      (!q || fold(`${c.name} ${c.city ?? ""} ${c.district ?? ""} ${c.code}`).includes(q)),
+  );
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) {
+      setQuery("");
+      setCity("");
+    }
+  }
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger render={trigger} />
-      <PopoverContent align="start" className="w-72 gap-1 p-1.5">
-        <p className="px-2 pt-1 pb-0.5 text-xs font-medium text-ink-3">{title}</p>
-        <ul className="max-h-64 overflow-y-auto">
-          {options.map((c) => (
+      <PopoverContent align="start" className="w-80 gap-2 p-2.5">
+        <p className="text-xs font-medium text-ink-3">{title}</p>
+        <div className="relative">
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-ink-3" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Tìm theo tên, thành phố, quận…"
+            className="pl-8"
+            autoFocus
+          />
+        </div>
+        {cities.length > 1 && (
+          <div className="flex flex-wrap gap-1.5">
+            {["", ...cities].map((name) => (
+              <button
+                key={name || "all"}
+                type="button"
+                onClick={() => setCity(name)}
+                className={cn(
+                  "rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+                  city === name
+                    ? "border-brand bg-brand text-white"
+                    : "border-line text-ink-2 hover:border-brand/50",
+                )}
+              >
+                {name || "Tất cả"}
+              </button>
+            ))}
+          </div>
+        )}
+        <ul className="max-h-60 overflow-y-auto">
+          {shown.map((c) => (
             <li key={c.id}>
               <button
                 type="button"
                 onClick={() => {
-                  setOpen(false);
+                  handleOpenChange(false);
                   onPick(c.id);
                 }}
                 className="flex w-full flex-col rounded-md px-2 py-1.5 text-left hover:bg-muted"
               >
                 <span className="text-sm font-medium text-ink">{c.name}</span>
-                {c.city && <span className="text-xs text-ink-3">{c.city}</span>}
+                <span className="text-xs text-ink-3">
+                  {[c.district, c.city].filter(Boolean).join(", ") || MISSING}
+                </span>
               </button>
             </li>
           ))}
+          {shown.length === 0 && (
+            <li className="px-2 py-3 text-center text-sm text-ink-3">Không tìm thấy trung tâm phù hợp</li>
+          )}
         </ul>
       </PopoverContent>
     </Popover>
