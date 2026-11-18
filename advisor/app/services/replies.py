@@ -161,9 +161,13 @@ CENTER_ELSEWHERE = "Hiện chưa có trung tâm đã xác minh ở {city}, các 
 CENTER_MORE = "Còn {count} trung tâm khác, bạn bấm Xem thêm để xem hết."
 # Việc model tách ra (tasks) mà hệ thống chưa làm được: nói rõ rồi vẫn gợi ý trung tâm theo dịch vụ
 CENTER_TASK_NOTES = {
-    "booking": "Mình chưa đặt lịch hẹn thay bạn được, nhưng mình gợi ý các trung tâm để bạn tự tìm hiểu nhé.",
-    "compare": "Mình chưa so sánh các trung tâm với nhau được, nhưng mình gợi ý các trung tâm phù hợp để bạn tự tìm hiểu nhé.",
+    "booking": "Lịch hẹn bạn trao đổi trực tiếp với trung tâm nhé. Bạn bấm Liên hệ trên thẻ trung tâm để gửi yêu cầu tư vấn, trung tâm sẽ phản hồi lại cho bạn. Mình gợi ý sẵn các trung tâm đã xác minh bên dưới.",
+    "compare": "Mỗi trung tâm mạnh một mảng riêng nên mình không chấm hơn thua giữa các nơi. Bạn bấm Chi tiết để xem dịch vụ và địa điểm của từng trung tâm, rồi chọn nơi hợp với mình nhé. Đây là các trung tâm đã xác minh.",
 }
+# Nút kèm câu "so sánh" và "đặt lịch": mở trang Trung tâm (bộ lọc, danh sách đầy đủ). value chỉ dùng khi nút không chuyển trang
+CENTER_PAGE_BUTTON = QuickReply(
+    label="Trang Trung tâm", value="Em muốn xem trang trung tâm tư vấn", href="/centers"
+)
 # Học sinh xin điều hệ thống không cung cấp (số điện thoại, giá, xếp hạng, đánh giá trung tâm)
 CENTER_NOT_PROVIDED = (
     "Mình không cung cấp số điện thoại, mức giá hay xếp hạng, đánh giá của trung tâm. "
