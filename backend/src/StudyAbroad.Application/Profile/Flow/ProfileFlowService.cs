@@ -128,6 +128,20 @@ public class ProfileFlowService(
         return EmptyState(hasCommittedProfile: false) with { DraftTranscript = DraftTranscriptFileDto.FromOrNull(stored?.DraftTranscript) };
     }
 
+    public async Task<ProfileFlowDraftDto?> GetCommittedDetailsAsync(Guid userId, CancellationToken ct = default)
+    {
+        var profile = await repository.GetProfileByUserIdAsync(userId, ct);
+        if (profile is null || !HasCommittedProfile(profile))
+            return null;
+
+        // Cùng cách dựng với nhánh 2 của GetFlowStateAsync, nhưng không đọc nháp: thẻ hồ sơ chỉ hiện bản đã gửi
+        var scores = await repository.GetTranscriptScoresAsync(profile.Id, ct);
+        var activities = await repository.GetProfileActivitiesAsync(profile.Id, ct);
+        var certifications = await repository.GetProfileCertificationsAsync(profile.Id, ct);
+        var scale = await GetGradeScaleAsync(ct);
+        return BuildDraftFromProfile(profile, scores, activities, certifications, scale);
+    }
+
     public async Task<ProfileFlowStateDto> SaveDraftAsync(Guid userId, SaveProfileDraftRequest request, CancellationToken ct = default)
     {
         await EnsureCanEditAsync(userId, ct);

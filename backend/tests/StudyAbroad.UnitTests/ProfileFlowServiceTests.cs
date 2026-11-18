@@ -1233,6 +1233,44 @@ public class ProfileFlowServiceTests
         Assert.Equal("overall", step2.GpaMode);
     }
 
+    // Thẻ hồ sơ ở Tài khoản / "Con của tôi": đủ 5 bước của bản đã gửi, nháp sửa dở sau đó không lọt vào
+    [Fact]
+    public async Task GetCommittedDetails_AfterCommit_ReturnsAllStepsAndIgnoresNewDraft()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft()));
+        var changed = FullDraft() with { Step1 = FullDraft().Step1! with { CurrentSchool = "Trường đang sửa dở" } };
+        await service.SaveDraftAsync(userId, new SaveProfileDraftRequest(1, [], changed));
+
+        var details = await service.GetCommittedDetailsAsync(userId);
+
+        Assert.NotNull(details);
+        Assert.Equal("THPT Chuyên Hà Nội - Amsterdam", details.Step1!.CurrentSchool);
+        Assert.Equal(["CA", "MA"], details.Step1.TargetStates);
+        Assert.Equal("private", details.Step1.TargetSchoolType);
+        Assert.Equal(2, details.Step2!.AcademicYears!.Count);
+        Assert.NotEmpty(details.Step3!.Certifications!);
+        Assert.Equal("tier_above_70k", details.Step4!.AnnualBudgetTier);
+        Assert.Equal(2, details.Step5!.Activities!.Count);
+    }
+
+    [Fact]
+    public async Task GetCommittedDetails_WhenNotCommitted_ReturnsNull()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+
+        Assert.Null(await service.GetCommittedDetailsAsync(userId));
+
+        // Chỉ có nháp, chưa gửi
+        await service.SaveDraftAsync(userId, new SaveProfileDraftRequest(1, [], FullDraft()));
+        Assert.Null(await service.GetCommittedDetailsAsync(userId));
+    }
+
     // overall_gpa bị sửa sau khi lưu (OCR, mod đổi bảng) hoặc hồ sơ cũ không có cách nhập: chỉ trả số thang 4
     [Theory]
     [InlineData("overall", 8.5, 3.9)]

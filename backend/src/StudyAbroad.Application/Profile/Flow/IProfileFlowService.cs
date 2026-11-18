@@ -24,4 +24,9 @@ public interface IProfileFlowService
     Task<UploadDraftTranscriptResultDto> UploadDraftTranscriptAsync(Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default);
     Task<CommitProfileFlowResponse> CommitFlowAsync(Guid userId, CommitProfileFlowRequest? request, CancellationToken ct = default);
     Task ClearDraftAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>Đủ 5 bước của hồ sơ ĐÃ GỬI, dựng từ DB, bỏ qua nháp đang làm dở; chưa gửi thì null.
+    /// Thẻ hồ sơ ở Tài khoản và "Con của tôi" đọc để hiện đủ các trường. Mặc định null để các bản giả trong test không phải sửa.</summary>
+    Task<ProfileFlowDraftDto?> GetCommittedDetailsAsync(Guid userId, CancellationToken ct = default) =>
+        Task.FromResult<ProfileFlowDraftDto?>(null);
 }
