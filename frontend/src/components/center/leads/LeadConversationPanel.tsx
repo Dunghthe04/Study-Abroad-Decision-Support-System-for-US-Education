@@ -265,7 +265,7 @@ export function LeadConversationPanel({
                 className={cn(
                   "flex flex-col max-w-[85%] rounded-lg px-3 py-2 text-xs border",
                   isRemoved
-                    ? "mx-auto max-w-full bg-muted/50 border-dashed text-muted-foreground italic"
+                    ? cn("bg-muted/50 border-dashed text-muted-foreground italic", msg.isFromCenter ? "ml-auto" : "mr-auto")
                     : msg.isFromCenter
                       ? "ml-auto bg-brand-wash/75 border-brand/25"
                       : "mr-auto bg-surface border-line"
@@ -288,7 +288,12 @@ export function LeadConversationPanel({
                 )}
 
                 {msg.content && (
-                  <p className="text-sm text-foreground whitespace-pre-wrap break-words leading-relaxed">
+                  <p
+                    className={cn(
+                      "whitespace-pre-wrap break-words leading-relaxed",
+                      isRemoved ? "text-xs italic text-muted-foreground" : "text-sm text-foreground"
+                    )}
+                  >
                     {msg.content}
                   </p>
                 )}

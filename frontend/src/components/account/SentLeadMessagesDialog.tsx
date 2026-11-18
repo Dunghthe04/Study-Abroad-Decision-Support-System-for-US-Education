@@ -241,7 +241,7 @@ function ThreadBody({
             <MessageBubble
               key={msg.id}
               msg={msg}
-              isMine={msg.senderUserId === user?.id}
+              isMine={!msg.isFromCenter || (!!user?.id && !!msg.senderUserId && msg.senderUserId.toLowerCase() === user.id.toLowerCase())}
               isReported={reportedIds.has(msg.id)}
               onReport={reportMessage}
             />
@@ -315,9 +315,14 @@ function MessageBubble({
   // Backend đã thay nội dung tin bị gỡ bằng câu thông báo
   if (msg.status === "removed") {
     return (
-      <p className="mx-auto rounded-lg border border-dashed bg-muted/50 px-3 py-2 text-center text-xs italic text-muted-foreground">
-        {msg.content}
-      </p>
+      <div
+        className={cn(
+          "flex max-w-[85%] flex-col rounded-lg border border-dashed bg-muted/50 px-3 py-2 text-xs italic text-muted-foreground",
+          isMine ? "ml-auto" : "mr-auto",
+        )}
+      >
+        <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
+      </div>
     );
   }
 
