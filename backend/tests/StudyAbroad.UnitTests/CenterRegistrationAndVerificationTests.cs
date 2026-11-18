@@ -360,7 +360,7 @@ public class CenterRegistrationAndVerificationTests
     }
 
     [Fact]
-    public async Task UpdateCenterProfile_Verified_RejectsLegalChange_ButAllowsMarketingFields()
+    public async Task UpdateCenterProfile_Verified_LegalChangeGoesBackToPendingReview_MarketingFieldsSaveDirectly()
     {
         var centerRepo = new FakeStudyCenterRepo();
         var service = new StudyCenterService(centerRepo, new FakeAuditLogs());
@@ -374,21 +374,20 @@ public class CenterRegistrationAndVerificationTests
         };
         await centerRepo.AddAsync(center);
 
-        var legalChange = await service.UpdateCenterProfileAsync(
-            center.OwnerUserId!.Value, new UpdateCenterProfileRequest(TaxCode: "0999999999"));
-        Assert.False(legalChange.Success);
-        Assert.Equal("0312345678", center.TaxCode);
-
-        var renameAttempt = await service.UpdateCenterProfileAsync(
-            center.OwnerUserId!.Value, new UpdateCenterProfileRequest(Name: "Tên khác"));
-        Assert.False(renameAttempt.Success);
-
         var marketing = await service.UpdateCenterProfileAsync(
             center.OwnerUserId!.Value,
-            new UpdateCenterProfileRequest(Description: "Mô tả mới", Website: "https://abc.edu.vn", FeeMin: 1000000m, FeeMax: 5000000m));
+            new UpdateCenterProfileRequest(Description: "Mô tả mới", FeeMin: 1000000m, FeeMax: 5000000m));
         Assert.True(marketing.Success);
         Assert.Equal("Mô tả mới", center.Description);
-        Assert.Equal("0312345678", center.TaxCode);
+        Assert.Equal(CenterVerificationStatuses.Verified, center.VerificationStatus);
+
+        // [UC-92] Đã xác minh mà đổi thông tin pháp lý: lưu và đưa hồ sơ về Chờ duyệt (tạm ẩn dấu xác minh)
+        var legalChange = await service.UpdateCenterProfileAsync(
+            center.OwnerUserId!.Value, new UpdateCenterProfileRequest(TaxCode: "0999999999"));
+        Assert.True(legalChange.Success);
+        Assert.Equal("0999999999", center.TaxCode);
+        Assert.Equal(CenterVerificationStatuses.PendingReview, center.VerificationStatus);
+        Assert.True(legalChange.Outcome!.VerificationReset);
     }
 
     // ===== [UC-59] Email kết quả xét duyệt cho trung tâm, thứ tự hàng đợi =====
@@ -552,6 +551,7 @@ public class CenterRegistrationAndVerificationTests
             Email = centerEmail,
             OwnerUserId = Guid.NewGuid(),
             EmailVerifiedAt = DateTime.UtcNow,
+            PhoneVerifiedAt = DateTime.UtcNow,
             VerificationStatus = CenterVerificationStatuses.Unverified,
         };
         centers.AddAsync(center).GetAwaiter().GetResult();
@@ -700,5 +700,280 @@ public class CenterRegistrationAndVerificationTests
 
         Assert.True(result.Success);
     }
-}
 
+    [Fact]
+    public async Task Submit_EmailVerifiedButPhoneNotVerified_IsRejected()
+    {
+        // [UC-91] Phải xác thực cả email và số điện thoại trước khi nộp hồ sơ xác minh
+        var (service, _, _, center) = SubmitSetup();
+        center.PhoneVerifiedAt = null;
+
+        var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(1));
+
+        Assert.False(result.Success);
+        Assert.Contains("xác thực số điện thoại", result.ErrorMessage);
+        Assert.Equal(CenterVerificationStatuses.Unverified, center.VerificationStatus);
+    }
+    // ===== [UC-92] Phân loại thay đổi khi trung tâm tự sửa hồ sơ, yêu cầu xóa tài khoản =====
+
+    private sealed class FakeProfileChangeRepo : ICenterProfileChangeRepository
+    {
+        public List<CenterProfileChange> Items { get; } = [];
+
+        public Task<CenterProfileChange?> GetPendingAsync(Guid studyCenterId, string field, CancellationToken ct = default) =>
+            Task.FromResult(Items.FirstOrDefault(x =>
+                x.StudyCenterId == studyCenterId && x.Field == field && x.Status == CenterProfileChangeStatuses.Pending));
+
+        public Task<CenterProfileChange?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+            Task.FromResult(Items.FirstOrDefault(x => x.Id == id));
+
+        public Task AddAsync(CenterProfileChange change, CancellationToken ct = default)
+        {
+            Items.Add(change);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateAsync(CenterProfileChange change, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<PagedResult<CenterProfileChange>> SearchAsync(string? status, int page, int pageSize, CancellationToken ct = default) =>
+            Task.FromResult(new PagedResult<CenterProfileChange>(
+                Items.Where(x => status == null || x.Status == status).ToList(), page, pageSize, Items.Count));
+
+        public Task<IReadOnlyList<CenterChangeCenterInfo>> GetCenterInfosAsync(IReadOnlyCollection<Guid> centerIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<CenterChangeCenterInfo>>([]);
+
+        public Task AddNotificationAsync(Notification notification, CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    private sealed class FakeDeletionRepo : ICenterDeletionRequestRepository
+    {
+        public List<CenterDeletionRequest> Items { get; } = [];
+
+        public Task<CenterDeletionRequest?> GetOpenByCenterIdAsync(Guid studyCenterId, CancellationToken ct = default) =>
+            Task.FromResult(Items.FirstOrDefault(x =>
+                x.StudyCenterId == studyCenterId && x.Status == CenterDeletionRequestStatuses.Pending));
+
+        public Task<CenterDeletionRequest?> GetLatestByCenterIdAsync(Guid studyCenterId, CancellationToken ct = default) =>
+            Task.FromResult(Items.Where(x => x.StudyCenterId == studyCenterId).OrderByDescending(x => x.CreatedAt).FirstOrDefault());
+
+        public Task<CenterDeletionRequest?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+            Task.FromResult(Items.FirstOrDefault(x => x.Id == id));
+
+        public Task AddAsync(CenterDeletionRequest request, CancellationToken ct = default)
+        {
+            Items.Add(request);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateAsync(CenterDeletionRequest request, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<PagedResult<CenterDeletionRequest>> SearchAsync(string? status, int page, int pageSize, CancellationToken ct = default) =>
+            Task.FromResult(new PagedResult<CenterDeletionRequest>(Items, page, pageSize, Items.Count));
+    }
+
+    private sealed record ProfileSetup(
+        StudyCenterService Service,
+        StudyCenter Center,
+        FakeAuditLogs Audit,
+        FakeVerificationRepo Verifications,
+        FakeProfileChangeRepo Changes,
+        FakeDeletionRepo Deletions);
+
+    private static async Task<ProfileSetup> ProfileEditSetup(string status, Action<StudyCenter>? configure = null)
+    {
+        var centers = new FakeStudyCenterRepo();
+        var audit = new FakeAuditLogs();
+        var verifications = new FakeVerificationRepo();
+        var changes = new FakeProfileChangeRepo();
+        var deletions = new FakeDeletionRepo();
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = status,
+            TaxCode = "0312345678",
+            LegalRepresentative = "Nguyễn Văn A",
+            Address = "1 Lê Lợi, Quận 1",
+            Website = "https://abc.edu.vn",
+        };
+        configure?.Invoke(center);
+        await centers.AddAsync(center);
+        var service = new StudyCenterService(centers, audit, verifications, emailSender: null, notifications: null, profileChanges: changes, deletionRequests: deletions);
+        return new ProfileSetup(service, center, audit, verifications, changes, deletions);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_DescriptionServicesLogo_SavedImmediatelyWithoutReviewOrReset()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified);
+
+        var result = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value, new UpdateCenterProfileRequest(
+            Description: "Mô tả mới",
+            Services: ["CHON_TRUONG", "VISA"],
+            LogoUrl: "https://res.cloudinary.com/x/logo.png",
+            ServiceAreas: ["Hà Nội", " Online ", "Hà Nội"],
+            Branches: ["12 Trần Phú, Hà Đông"]));
+
+        Assert.True(result.Success);
+        Assert.Equal(CenterVerificationStatuses.Verified, s.Center.VerificationStatus);
+        Assert.Equal(["Hà Nội", "Online"], s.Center.ServiceAreas);
+        Assert.Equal(["12 Trần Phú, Hà Đông"], s.Center.Branches);
+        var outcome = Assert.IsType<CenterProfileUpdateOutcome>(result.Outcome);
+        Assert.Contains("description", outcome.SavedFields);
+        Assert.Contains("services", outcome.SavedFields);
+        Assert.Contains("logoUrl", outcome.SavedFields);
+        Assert.Contains("serviceAreas", outcome.SavedFields);
+        Assert.Empty(outcome.ReviewFields);
+        Assert.Empty(outcome.LegalFields);
+        Assert.False(outcome.VerificationReset);
+        Assert.Empty(s.Changes.Items);
+        Assert.Empty(s.Verifications.Requests);
+        var log = Assert.Single(s.Audit.Logs);
+        Assert.Equal("center.profile_updated", log.Action);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_WebsiteAndFanpage_SavedButFlaggedForModerator()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified);
+
+        var result = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value, new UpdateCenterProfileRequest(
+            Website: "https://abc-moi.edu.vn", Fanpage: "https://facebook.com/abc"));
+
+        Assert.True(result.Success);
+        Assert.Equal("https://abc-moi.edu.vn", s.Center.Website);
+        Assert.Equal("https://facebook.com/abc", s.Center.Fanpage);
+        Assert.Equal(CenterVerificationStatuses.Verified, s.Center.VerificationStatus);
+        Assert.Equal([CenterProfileChangeFields.Website, CenterProfileChangeFields.Fanpage], result.Outcome!.ReviewFields);
+
+        var website = Assert.Single(s.Changes.Items, x => x.Field == CenterProfileChangeFields.Website);
+        Assert.Equal("https://abc.edu.vn", website.OldValue);
+        Assert.Equal("https://abc-moi.edu.vn", website.NewValue);
+        Assert.Equal(CenterProfileChangeStatuses.Pending, website.Status);
+        Assert.Single(s.Changes.Items, x => x.Field == CenterProfileChangeFields.Fanpage);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_WebsiteChangedTwice_KeepsOnePendingWithOriginalOldValue_AndRevertClosesIt()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified);
+        var owner = s.Center.OwnerUserId!.Value;
+
+        await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(Website: "https://lan-1.edu.vn"));
+        await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(Website: "https://lan-2.edu.vn"));
+
+        var pending = Assert.Single(s.Changes.Items);
+        Assert.Equal("https://abc.edu.vn", pending.OldValue);
+        Assert.Equal("https://lan-2.edu.vn", pending.NewValue);
+
+        await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(Website: "https://abc.edu.vn"));
+        Assert.Equal(CenterProfileChangeStatuses.Passed, pending.Status);
+    }
+
+    [Theory]
+    [InlineData("abc.edu.vn")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("ftp://abc.edu.vn")]
+    public async Task UpdateCenterProfile_InvalidWebsiteOrFanpage_IsRejected(string url)
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified);
+
+        var website = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value, new UpdateCenterProfileRequest(Website: url));
+        var fanpage = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value, new UpdateCenterProfileRequest(Fanpage: url));
+
+        Assert.False(website.Success);
+        Assert.False(fanpage.Success);
+        Assert.Equal("https://abc.edu.vn", s.Center.Website);
+        Assert.Empty(s.Changes.Items);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_VerifiedLegalChange_ResetsToPendingReviewAndCreatesReverificationRequest()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified);
+        var previous = new CenterVerificationRequest
+        {
+            CenterId = s.Center.Id, LegalName = "Trung tâm ABC", TaxCode = "0312345678",
+            Address = "1 Lê Lợi", LegalRepresentative = "Nguyễn Văn A", Status = "approved",
+            SubmittedAt = DateTime.UtcNow.AddDays(-30),
+        };
+        previous.Documents.Add(new CenterVerificationDocument
+        {
+            RequestId = previous.Id, CenterId = s.Center.Id, DocumentType = CenterDocumentTypes.BusinessRegistration,
+            FileUrl = "uploads/dkkd.pdf", FileName = "dkkd.pdf",
+        });
+        await s.Verifications.AddRequestAsync(previous);
+
+        var result = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value,
+            new UpdateCenterProfileRequest(Name: "Công ty ABC Mới", TaxCode: "0999999999", Description: "Mô tả"));
+
+        Assert.True(result.Success);
+        Assert.Equal(CenterVerificationStatuses.PendingReview, s.Center.VerificationStatus);
+        Assert.Equal("0999999999", s.Center.TaxCode);
+        Assert.Equal("Công ty ABC Mới", s.Center.Name);
+        Assert.True(result.Outcome!.VerificationReset);
+        Assert.Contains("name", result.Outcome.LegalFields);
+        Assert.Contains("taxCode", result.Outcome.LegalFields);
+        Assert.Contains("description", result.Outcome.SavedFields);
+
+        var created = Assert.Single(s.Verifications.Requests, r => r.Id != previous.Id);
+        Assert.Equal(CenterVerificationStatuses.PendingReview, created.Status);
+        Assert.Equal("0999999999", created.TaxCode);
+        Assert.Equal("Công ty ABC Mới", created.LegalName);
+        Assert.Equal("uploads/dkkd.pdf", Assert.Single(created.Documents).FileUrl);
+        Assert.Contains(s.Audit.Logs, l => l.Action == "center.verification_reset");
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_VerifiedSameLegalValues_DoesNotReset()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified);
+
+        var result = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value,
+            new UpdateCenterProfileRequest(Name: "Trung tâm ABC", TaxCode: "0312345678", Description: "Mô tả"));
+
+        Assert.True(result.Success);
+        Assert.Equal(CenterVerificationStatuses.Verified, s.Center.VerificationStatus);
+        Assert.False(result.Outcome!.VerificationReset);
+        Assert.Empty(s.Verifications.Requests);
+    }
+
+    [Fact]
+    public async Task RequestDeletion_CreatesOnePendingRequestAndLogsAudit_RejectsDuplicateAndEmptyReason()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified);
+        var owner = s.Center.OwnerUserId!.Value;
+
+        var empty = await s.Service.RequestDeletionAsync(owner, "   ");
+        Assert.False(empty.Success);
+
+        var first = await s.Service.RequestDeletionAsync(owner, "  Ngừng hoạt động  ");
+        Assert.True(first.Success);
+        Assert.Equal("Ngừng hoạt động", first.Request!.Reason);
+        Assert.Equal(CenterDeletionRequestStatuses.Pending, first.Request.Status);
+        Assert.Contains(s.Audit.Logs, l => l.Action == "center.deletion_requested");
+
+        var duplicate = await s.Service.RequestDeletionAsync(owner, "Gửi lại");
+        Assert.False(duplicate.Success);
+        Assert.Single(s.Deletions.Items);
+
+        var latest = await s.Service.GetDeletionRequestAsync(owner);
+        Assert.Equal(first.Request.Id, latest!.Id);
+
+        // Yêu cầu cũ đã được xử lý (UC-93) thì gửi được yêu cầu mới
+        s.Deletions.Items[0].Status = CenterDeletionRequestStatuses.Rejected;
+        Assert.True((await s.Service.RequestDeletionAsync(owner, "Gửi lại")).Success);
+    }
+
+    [Fact]
+    public async Task RequestDeletion_UnknownCenterOrTooLongReason_IsRejected()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Unverified);
+
+        Assert.False((await s.Service.RequestDeletionAsync(Guid.NewGuid(), "Lý do")).Success);
+        Assert.False((await s.Service.RequestDeletionAsync(
+            s.Center.OwnerUserId!.Value, new string('a', StudyCenterService.MaxDeletionReasonLength + 1))).Success);
+        Assert.Empty(s.Deletions.Items);
+    }
+}

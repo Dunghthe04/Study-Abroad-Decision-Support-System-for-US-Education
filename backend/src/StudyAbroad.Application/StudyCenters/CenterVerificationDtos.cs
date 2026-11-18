@@ -16,8 +16,8 @@ public record VerifyCenterEmailRequest(string Email, string Code);
 /// <summary>Yêu cầu gửi OTP tới số điện thoại / email liên lạc MỚI của trung tâm.</summary>
 public record RequestContactChangeDto(string NewValue);
 
-/// <summary>Đổi số điện thoại liên lạc (không cần OTP).</summary>
-public record ChangeContactPhoneDto(string NewValue);
+/// <summary>[UC-91] Mã OTP người dùng nhập để xác thực số điện thoại hiện tại.</summary>
+public record VerifyContactCodeDto(string? Code);
 
 /// <summary>Xác nhận đổi số điện thoại / email liên lạc bằng OTP đã gửi tới giá trị mới.</summary>
 public record ConfirmContactChangeDto(string NewValue, string Code);
@@ -107,7 +107,11 @@ public record UpdateCenterProfileRequest(
     DateOnly? LicenseIssuedDate = null,
     string? LegalComplianceMode = null,
     string? TrainingLicenseNumber = null,
-    int? CertifiedCounselorCount = null);
+    int? CertifiedCounselorCount = null,
+    // [UC-92] Fanpage (Moderator kiểm tra như website), khu vực phục vụ và chi nhánh (lưu ngay).
+    string? Fanpage = null,
+    List<string>? ServiceAreas = null,
+    List<string>? Branches = null);
 
 public record CenterVerificationStatusDto(
     string VerificationStatus,

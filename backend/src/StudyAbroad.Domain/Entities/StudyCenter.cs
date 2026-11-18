@@ -11,6 +11,15 @@ public class StudyCenter : BaseEntity
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Website { get; set; }
+
+    /// <summary>[UC-92] Fanpage chính thức. Đổi thì lưu ngay nhưng Moderator kiểm tra (UC-114).</summary>
+    public string? Fanpage { get; set; }
+
+    /// <summary>[UC-92] Khu vực phục vụ do trung tâm công bố (tỉnh / thành, online...).</summary>
+    public List<string> ServiceAreas { get; set; } = [];
+
+    /// <summary>[UC-92] Địa chỉ các chi nhánh ngoài trụ sở chính.</summary>
+    public List<string> Branches { get; set; } = [];
     public string? Address { get; set; }
     public string? City { get; set; }
 
@@ -99,4 +108,10 @@ public class StudyCenter : BaseEntity
 
     public DateOnly? SurveyedAt { get; set; }
     public bool IsActive { get; set; } = true;
+
+    /// <summary>Legal Hold: đóng băng dữ liệu trung tâm khi có điều tra gian lận/tranh chấp. Job nền không được purge.</summary>
+    public bool IsLegalHold { get; set; } = false;
+
+    /// <summary>Lý do áp dụng Legal Hold.</summary>
+    public string? LegalHoldReason { get; set; }
 }
