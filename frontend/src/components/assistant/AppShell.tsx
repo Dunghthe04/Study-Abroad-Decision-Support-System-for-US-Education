@@ -6,6 +6,7 @@ import { isAuthRoute, isFullRoute, isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
+import { ActingAsBanner } from "@/components/parent/ActingAsBanner";
 import { Toaster } from "@/components/ui/toast";
 import { useAutoHideScrollbar } from "@/hooks/use-auto-hide-scrollbar";
 import { AssistantLauncher, AssistantPanel, useAssistantVisible } from "./AssistantPanel";
@@ -33,6 +34,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     >
       <div className={cn("flex flex-1 flex-col transition-[padding] duration-200", pushed && "min-[900px]:pr-(--assistant-w)")}>
         {!adminRoute && !authRoute && <SiteHeader />}
+        {!adminRoute && !authRoute && <ActingAsBanner />}
         <main
           className={cn(
             "w-full flex-1",
