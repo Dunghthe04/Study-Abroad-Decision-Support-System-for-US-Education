@@ -141,15 +141,21 @@ public static class ChatGoalSeek
         string.Join(" và ", plan.Changes.Select(c => $"{FactorName(c.Factor)} {Number(c.Factor, c.From)} → {Number(c.Factor, c.To)}"))
         + $" ({Difficulty(plan.Difficulty)})";
 
-    // Tài chính đứng trước học thuật
-    private static string Finance(GoalBudgetDto b)
+    // Tài chính đứng trước học thuật. Luôn nói rõ ngân sách của học sinh là bao nhiêu TRƯỚC khi nói vượt: nhất là khi đang xem giả định,
+    // học sinh dễ quên ngân sách gốc. "Vượt" tính so với trần = ngân sách cộng dung sai (như bộ lọc của lượt gợi ý), nên nêu cả trần
+    private static string Finance(GoalBudgetDto b, bool simulated = false)
     {
         var cost = b.CostUsd is { } c ? $"{Money(c)} USD mỗi năm" : null;
+        var who = simulated ? "Ngân sách giả định của bạn" : "Ngân sách của bạn";
+        var budget = b.BudgetUsd is { } bu ? $"{who} là {Money(bu)} USD mỗi năm" : null;
+        var ceiling = b.BudgetUsd is { } cb
+            ? $"hệ thống cho phép vượt tới {Money(cb * (1 + RecommendationService.BudgetTolerance))} USD, dung sai {(int)(RecommendationService.BudgetTolerance * 100)}%"
+            : null;
         return b.Status switch
         {
-            "ok" => $"Chi phí khoảng {cost}, nằm trong ngân sách của bạn.",
-            "need_aid" => $"Chi phí khoảng {cost}, vượt ngân sách khoảng {Money(b.ShortfallUsd ?? 0)} USD: cần ngân sách từ {Money(b.MinBudgetUsd ?? 0)} USD mỗi năm hoặc học bổng lớn.",
-            "over_budget" => $"Chi phí khoảng {cost}, vượt ngân sách và trường không có học bổng phù hợp nên không nằm trong danh sách của bạn. Cần ngân sách từ {Money(b.MinBudgetUsd ?? 0)} USD mỗi năm.",
+            "ok" => $"{budget}. Chi phí khoảng {cost}, nằm trong ngân sách.",
+            "need_aid" => $"{budget} ({ceiling}). Chi phí khoảng {cost}, vượt mức đó khoảng {Money(b.ShortfallUsd ?? 0)} USD: cần ngân sách từ {Money(b.MinBudgetUsd ?? 0)} USD mỗi năm hoặc học bổng lớn.",
+            "over_budget" => $"{budget} ({ceiling}). Chi phí khoảng {cost}, vượt mức đó và trường không có học bổng phù hợp nên không nằm trong danh sách của bạn. Cần ngân sách từ {Money(b.MinBudgetUsd ?? 0)} USD mỗi năm.",
             "no_budget" => $"Chi phí khoảng {cost}. Hồ sơ của bạn không đặt trần ngân sách mỗi năm.",
             _ => "Trường chưa có số liệu chi phí.",
         };
@@ -189,7 +195,7 @@ public static class ChatGoalSeek
         var lines = new List<string>();
         // Tiếng Anh là điều kiện phải đạt trước: trường bị ẩn vì tiếng Anh thì nói trước, rồi mới đến tài chính và học thuật
         if (EnglishLine(r) is { } english) lines.Add(english);
-        lines.Add("Tài chính: " + Finance(r.Budget));
+        lines.Add("Tài chính: " + Finance(r.Budget, r.Basis == "simulated"));
 
         switch (r.Outcome)
         {
@@ -240,16 +246,29 @@ public static class ChatGoalSeek
 
     public const string EditProfileHref = "/analysis?edit=1";
 
-    public static Widget WidgetOf(SchoolGoalResult result)
+    // basisLabel: mô tả giá trị giả định đã dùng ("ngân sách 25.000 USD mỗi năm") khi result.Basis là simulated, để thẻ ghi rõ
+    public static Widget WidgetOf(SchoolGoalResult result, string? basisLabel = null)
     {
         var data = new JsonObject
         {
             ["code"] = result.Code,
             ["target"] = TargetCode(result.Target),
             ["result"] = JsonSerializer.SerializeToNode(result, WebJson),
+            ["basisLabel"] = result.Basis == "simulated" ? basisLabel : null,
         };
         return new Widget(WidgetType, JsonSerializer.SerializeToElement(data));
     }
+
+    /// <summary>
+    /// Câu mở đầu nói rõ goal-seeking tính theo cơ sở nào, chỉ khi trang đang xem giả định (không thì không có gì để nhầm).
+    /// simulated: đã tính theo giả định; real mà viewing có giá trị: tính theo hồ sơ thật dù trang đang giả định.
+    /// </summary>
+    public static string? BasisLine(string basis, string? viewingLabel) =>
+        viewingLabel is null
+            ? null
+            : basis == "simulated"
+                ? $"Mình tính theo giả định bạn đang xem ({viewingLabel}), không phải hồ sơ thật."
+                : $"Mình tính theo hồ sơ thật của bạn, không phải giả định đang xem ({viewingLabel}).";
 
     // Mã nhóm của kết quả (R, M, S) → mã API (reach, match, safety)
     private static string TargetCode(string group) => group switch

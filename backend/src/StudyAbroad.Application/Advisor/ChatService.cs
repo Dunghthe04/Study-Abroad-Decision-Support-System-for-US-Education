@@ -158,7 +158,7 @@ namespace StudyAbroad.Application.Advisor
 
             // Học sinh hỏi "cần gì để vào trường X": khớp tên trường, rồi hỏi lại hoặc chạy goal-seeking có sẵn
             if (response.Action == ChatGoalSeek.Action && recommender is not null)
-                response = await GoalSeekAsync(userId, response, ct, onEvent);
+                response = await GoalSeekAsync(userId, response, ct, onEvent, ExplainBasis(request), ViewingSimulation(request));
 
             // Học sinh hỏi tìm trường theo điều kiện ("trường nào ở California có học bổng"): lọc bằng số liệu thật, sắp theo xếp hạng hoặc theo ý học sinh
             if (response.Action == ChatSchoolInfo.SearchAction && recommender is not null)
@@ -407,6 +407,11 @@ namespace StudyAbroad.Application.Advisor
         private static SimulationOverrides? ExplainBasis(AdvisorChatRequest request) =>
             request.Action?.Basis == "real" || !RecommendationService.HasValues(request.Simulation) ? null : request.Simulation;
 
+        // Giá trị giả định mà trang đang xem (null nếu không có), kể cả khi học sinh chọn xem theo hồ sơ thật: để câu trả lời nói rõ
+        // đã dùng cơ sở nào và có nút chuyển sang cơ sở còn lại
+        private static SimulationOverrides? ViewingSimulation(AdvisorChatRequest request) =>
+            RecommendationService.HasValues(request.Simulation) ? request.Simulation : null;
+
         // Viết lời tư vấn một trường (advisor đã chọn trường, mã ở ActionData.code). Lỗi thì báo, không làm hỏng cả lượt chat
         private async Task<AdvisorChatResponse> ExplainAsync(
             Guid userId, AdvisorChatResponse response, CancellationToken ct, Func<AdvisorStreamEvent, Task>? onEvent = null,
@@ -437,7 +442,7 @@ namespace StudyAbroad.Application.Advisor
                 if (ex.Message.StartsWith("Chưa"))
                 {
                     var data = JsonSerializer.SerializeToElement(new { code });
-                    var why = await GoalSeekAsync(userId, response with { ActionData = data }, ct, onEvent);
+                    var why = await GoalSeekAsync(userId, response with { ActionData = data }, ct, onEvent, overrides, overrides);
                     if (why.Widget is not null)
                         return why;
                 }
@@ -713,8 +718,10 @@ namespace StudyAbroad.Application.Advisor
 
         // Khớp tên trường (chữ thô của SLM). Chắc chắn: chạy goal-seeking. Mơ hồ: hỏi "Ý bạn là...?" kèm nút. Không thấy: báo.
         // Lỗi thì báo, không làm hỏng cả lượt chat
+        // overrides: giá trị giả định dùng để tính (null là hồ sơ thật); viewing: giá trị giả định trang đang xem, để nói rõ cơ sở
         private async Task<AdvisorChatResponse> GoalSeekAsync(
-            Guid userId, AdvisorChatResponse response, CancellationToken ct, Func<AdvisorStreamEvent, Task>? onEvent = null)
+            Guid userId, AdvisorChatResponse response, CancellationToken ct, Func<AdvisorStreamEvent, Task>? onEvent = null,
+            SimulationOverrides? overrides = null, SimulationOverrides? viewing = null)
         {
             var query = ChatGoalSeek.Parse(response.ActionData);
             if (query is null)
@@ -745,13 +752,21 @@ namespace StudyAbroad.Application.Advisor
                     code = match.Schools[0].Code;
                 }
 
-                var result = await recommender!.GoalSeekAsync(userId, code, query.Target, ct);
+                var result = await recommender!.GoalSeekAsync(userId, code, query.Target, ct, overrides);
                 var names = (await recommender.ListSchoolOptionsAsync(userId, ct)).Select(o => o.Name).ToList();
                 // Thẻ kết quả do code dựng: gửi ngay để học sinh thấy đáp án, rồi mới chờ Gemini viết lời (chậm hơn nhiều)
                 if (onEvent is not null)
-                    await onEvent(new AdvisorStreamEvent("card", Widget: ChatGoalSeek.WidgetOf(result)));
+                    await onEvent(new AdvisorStreamEvent("card", Widget: ChatGoalSeek.WidgetOf(result, ChatSimulation.Describe(overrides))));
                 var answer = await WriteGoalNoteAsync(ChatGoalSeek.Note(result, names), result, ct);
-                return response with { Answer = answer, Widget = ChatGoalSeek.WidgetOf(result), QuickReplies = ChatNextSteps.AfterGoalSeek(result) };
+                // Trang đang xem giả định: câu đầu nói rõ đã tính theo cơ sở nào (thẻ có nhãn riêng, lời văn không tự nói)
+                if (ChatGoalSeek.BasisLine(result.Basis, ChatSimulation.Describe(viewing)) is { } basisLine)
+                    answer = $"{basisLine}\n{answer}";
+                return response with
+                {
+                    Answer = answer,
+                    Widget = ChatGoalSeek.WidgetOf(result, ChatSimulation.Describe(overrides)),
+                    QuickReplies = ChatNextSteps.AfterGoalSeek(result, viewing is not null),
+                };
             }
             catch (ArgumentException ex)
             {

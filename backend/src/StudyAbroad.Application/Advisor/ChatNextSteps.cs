@@ -152,11 +152,20 @@ public static class ChatNextSteps
     /// Nút sau kết quả cần gì để vào, kèm nút trung tâm. Trường bị loại thì có nút sửa theo lý do loại (GoalSeekFixes);
     /// trường đang trong danh sách thì có thể giải thích vì sao xếp nhóm này.
     /// </summary>
-    public static IReadOnlyList<QuickReply> AfterGoalSeek(SchoolGoalResult result)
+    // simulationActive: trang đang xem giả định. Có thì thêm nút chuyển cơ sở (hồ sơ thật hoặc giả định) cho đúng trường này
+    public static IReadOnlyList<QuickReply> AfterGoalSeek(SchoolGoalResult result, bool simulationActive = false)
     {
-        var steps = GoalSeekFixes(result);
+        var steps = GoalSeekFixes(result).ToList();
         if (steps.Count == 0)
             steps = [new QuickReply("Giải thích trường này", "Giải thích trường này", new ChatAction(ChatExplanation.Action, result.Code))];
+        if (result.Basis == "simulated")
+            steps.Add(new QuickReply(
+                "Xem theo hồ sơ thật", $"Cần gì để vào {result.Name} theo hồ sơ thật?",
+                new ChatAction(ChatGoalSeek.Action, result.Code, Basis: "real")));
+        else if (simulationActive)
+            steps.Add(new QuickReply(
+                "Tính theo giả định", $"Cần gì để vào {result.Name} theo giả định?",
+                new ChatAction(ChatGoalSeek.Action, result.Code)));
         return WithCenter(steps);
     }
 

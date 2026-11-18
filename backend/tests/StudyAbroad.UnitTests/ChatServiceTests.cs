@@ -1640,6 +1640,62 @@ public class ChatServiceTests
         Assert.Null(res.Action);     // việc nội bộ, không trả cho trình duyệt
     }
 
+    // ---- goal-seeking theo giả định đang xem: mặc định theo giả định, nút chuyển sang hồ sơ thật và ngược lại
+
+    private static readonly SimulationOverrides Budget25k = new(null, null, null, null, 25_000m, null, null);
+
+    private static async Task<AdvisorChatResponse> GoalChatWith(ChatAction? action, SimulationOverrides? simulation, FakeRunner runner) =>
+        await new ChatService(new FakeAdvisor("B4") { Action = "goal_seek", ActionData = BuAction }, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, Action: action, Simulation: simulation));
+
+    [Fact]
+    public async Task GoalSeek_WhileASimulationIsShown_UsesIt_SaysSo_AndOffersTheRealProfile()
+    {
+        var runner = new FakeRunner { Match = Found(), GoalResult = GoalOf() };
+
+        var res = await GoalChatWith(null, Budget25k, runner);
+
+        Assert.Equal(Budget25k, runner.GoalOverrides);   // tính theo giả định
+        Assert.StartsWith("Mình tính theo giả định bạn đang xem (ngân sách 25.000 USD mỗi năm), không phải hồ sơ thật.", res.Answer);
+        var data = res.Widget!.Data!.Value;
+        Assert.Equal("simulated", data.GetProperty("result").GetProperty("basis").GetString());
+        Assert.Equal("ngân sách 25.000 USD mỗi năm", data.GetProperty("basisLabel").GetString());
+        var real = Assert.Single(res.QuickReplies!, q => q.Label == "Xem theo hồ sơ thật");
+        Assert.Equal("real", real.Action!.Basis);
+        Assert.Equal("goal_seek", real.Action.Type);
+        Assert.Equal("188429", real.Action.SchoolCode);
+        Assert.DoesNotContain(res.QuickReplies!, q => q.Label == "Tính theo giả định");
+    }
+
+    [Fact]
+    public async Task GoalSeek_AskedForTheRealProfileWhileASimulationIsShown_UsesTheRealProfile_SaysSo_AndOffersTheSimulation()
+    {
+        var runner = new FakeRunner { Match = Found(), GoalResult = GoalOf() };
+
+        var res = await GoalChatWith(new ChatAction("goal_seek", "188429", Basis: "real"), Budget25k, runner);
+
+        Assert.Null(runner.GoalOverrides);   // hồ sơ thật
+        Assert.StartsWith("Mình tính theo hồ sơ thật của bạn, không phải giả định đang xem (ngân sách 25.000 USD mỗi năm).", res.Answer);
+        Assert.Equal("real", res.Widget!.Data!.Value.GetProperty("result").GetProperty("basis").GetString());
+        Assert.Equal(JsonValueKind.Null, res.Widget!.Data!.Value.GetProperty("basisLabel").ValueKind);
+        var sim = Assert.Single(res.QuickReplies!, q => q.Label == "Tính theo giả định");
+        Assert.Null(sim.Action!.Basis);
+        Assert.DoesNotContain(res.QuickReplies!, q => q.Label == "Xem theo hồ sơ thật");
+    }
+
+    [Fact]
+    public async Task GoalSeek_WithoutASimulation_IsUnchanged_NoBasisSentenceAndNoSwitchButton()
+    {
+        var runner = new FakeRunner { Match = Found(), GoalResult = GoalOf() };
+
+        var res = await GoalChatWith(null, null, runner);
+
+        Assert.Null(runner.GoalOverrides);
+        Assert.StartsWith("Mình hiểu bạn hỏi về Boston University", res.Answer);
+        Assert.DoesNotContain("Mình tính theo", res.Answer);
+        Assert.DoesNotContain(res.QuickReplies!, q => q.Label is "Xem theo hồ sơ thật" or "Tính theo giả định");
+    }
+
     // ---- hành động có cấu trúc từ nút trên thẻ trường: không qua advisor, không khớp tên
 
     private static async Task<(AdvisorChatResponse Res, FakeAdvisor Advisor)> ActionChat(ChatAction? action, FakeRunner runner)
@@ -2812,6 +2868,7 @@ public class ChatServiceTests
         public Exception? GoalError { get; init; }
         public string? SearchedFor { get; private set; }
         public (string Code, string? Target)? GoalCalledWith { get; private set; }
+        public SimulationOverrides? GoalOverrides { get; private set; }
 
         public Task<NameMatch> FindSchoolsAsync(Guid userId, string text, CancellationToken ct)
         {
@@ -2821,14 +2878,16 @@ public class ChatServiceTests
             return Task.FromResult(Match!);
         }
 
-        public Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct)
+        public Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct, SimulationOverrides? overrides = null)
         {
             GoalCalledWith = (code, target);
+            GoalOverrides = overrides;
             if (GoalError is not null)
                 throw GoalError;
             if (GoalResult is null)
                 throw new InvalidOperationException($"Chưa có trường {code} trong dữ liệu.");
-            return Task.FromResult(GoalResult);
+            // như runner thật: có giá trị giả định thì kết quả ghi cơ sở simulated
+            return Task.FromResult(RecommendationService.HasValues(overrides) ? GoalResult with { Basis = "simulated" } : GoalResult);
         }
 
         public SchoolInfoDto? Info { get; init; }
