@@ -2821,7 +2821,7 @@ public class ChatServiceTests
             return Task.FromResult(Match!);
         }
 
-        public Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct)
+        public Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct, SimulationOverrides? overrides = null)
         {
             GoalCalledWith = (code, target);
             if (GoalError is not null)
