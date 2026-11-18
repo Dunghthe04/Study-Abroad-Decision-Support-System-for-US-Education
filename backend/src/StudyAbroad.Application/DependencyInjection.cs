@@ -51,6 +51,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Advisor.ChatService>();
         services.AddScoped<RecommendationHistoryService>();   // [UC-87] xem lịch sử gợi ý
         services.AddScoped<ParentChildrenService>();   // khu "Con của tôi": phụ huynh xem con, chỉ đọc
+        services.AddScoped<ManagedChildService>();     // 1.5a: phụ huynh thêm / đổi tên / xóa con chưa có tài khoản
         return services;
     }
 }
