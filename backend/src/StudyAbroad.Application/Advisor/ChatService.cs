@@ -108,6 +108,9 @@ namespace StudyAbroad.Application.Advisor
             // Chụp ngay các tín hiệu của advisor (nhãn model gán, số đo AI, hành động) trước khi các bước sau thay response.
             // Dùng để đánh giá lượt (ChatTurn) và ghi chat_messages ở cuối
             var advisorSignals = new TurnSignals(askedAt, response.Slm, response.AiUsage, response.Action, response.Skills);
+            // 1f: phụ huynh đã liên kết không có hồ sơ riêng, lượt về hồ sơ được thay trước khi lưu nháp (ParentChatGate)
+            if (!await profileFlow.CanEditOwnProfileAsync(userId, ct))
+                response = ParentChatGate.Apply(response, state);
             var changed = await SaveProfileToDraftAsync(userId, response, ct);
 
             // C5: học sinh bấm "Đúng rồi" ở X1 thì chat rời bảng rà soát sang B3, lúc đó lưu hồ sơ chính thức.

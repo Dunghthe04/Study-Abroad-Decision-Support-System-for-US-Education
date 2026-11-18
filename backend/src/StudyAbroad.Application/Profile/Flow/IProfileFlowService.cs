@@ -29,4 +29,8 @@ public interface IProfileFlowService
     /// Thẻ hồ sơ ở Tài khoản và "Con của tôi" đọc để hiện đủ các trường. Mặc định null để các bản giả trong test không phải sửa.</summary>
     Task<ProfileFlowDraftDto?> GetCommittedDetailsAsync(Guid userId, CancellationToken ct = default) =>
         Task.FromResult<ProfileFlowDraftDto?>(null);
+
+    /// <summary>Người này có được nhập / lưu hồ sơ của chính mình không (phụ huynh đã liên kết thì không).
+    /// Chat đọc để thay các lượt về hồ sơ (ParentChatGate). Mặc định true để các bản giả trong test không phải sửa.</summary>
+    Task<bool> CanEditOwnProfileAsync(Guid userId, CancellationToken ct = default) => Task.FromResult(true);
 }
