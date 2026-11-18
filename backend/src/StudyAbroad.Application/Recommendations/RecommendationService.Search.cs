@@ -23,7 +23,10 @@ public record SchoolSearchFilters(
     decimal? MaxAcceptRate = null,
     int? MaxRank = null,
     decimal? MinGradRate = null,
-    bool Ivy = false);
+    bool Ivy = false,
+    // Chỉ trường mà điểm thi chuẩn hóa KHÔNG phải yếu tố quan trọng (CDS C7: xét hoặc không xét). Trường chưa có dữ liệu thì loại,
+    // vì không xác nhận được. Do nút "Chỉ trường ít coi trọng điểm thi" đặt, advisor không tạo điều kiện này
+    bool LowTestWeight = false);
 
 // Quality: điểm chất lượng 0..1 từ hạng trong các bảng chung (null nếu chưa có hạng); BestRank: hạng tốt nhất trong các bảng chung
 public record SchoolSearchItem(
@@ -109,6 +112,8 @@ public partial class RecommendationService
             tests.Add(("ty_le_tot_nghiep_toi_thieu", s => s.Offering.GradRate6Yr is { } grad && grad >= minGrad));
         if (f.Ivy)
             tests.Add(("ivy", s => s.University.IsIvy));
+        if (f.LowTestWeight)
+            tests.Add(("it_coi_trong_diem_thi", s => s.Offering.C7TestImportance is "considered" or "not_considered"));
         return tests;
     }
 

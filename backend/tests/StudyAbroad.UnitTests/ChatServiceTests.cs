@@ -1948,6 +1948,25 @@ public class ChatServiceTests
         Assert.Equal("school_search", res.Widget!.Type);
     }
 
+    // Nút "Chỉ trường ít coi trọng điểm thi": bấm thì tìm lại với điều kiện mới (không qua advisor), giữ "không bắt buộc SAT" và cách xếp
+    [Fact]
+    public async Task ChatAction_SearchAgain_LowTestWeight_RunsTheSearchWithTheNewConditionAndSaysSo()
+    {
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(1, [SearchItem("UCLA")], []) };
+        var button = ChatNextSteps.SearchAgain(
+            "Chỉ trường ít coi trọng điểm thi", "Chỉ các trường mà điểm thi không phải yếu tố quan trọng",
+            new SchoolSearchFilters(TestPolicy: "optional", LowTestWeight: true), SchoolSort.LowestCost);
+
+        var (res, advisor) = await ActionChat(button.Action, runner);
+
+        Assert.Null(advisor.LastRequest);
+        var (filters, sort) = runner.SearchedWith!.Value;
+        Assert.True(filters.LowTestWeight);
+        Assert.Equal("optional", filters.TestPolicy);
+        Assert.Equal(SchoolSort.LowestCost, sort);
+        Assert.Contains("điểm thi không phải yếu tố quan trọng", res.Answer);
+    }
+
     [Fact]
     public async Task ChatAction_SearchAgain_WithBrokenData_GoesThroughTheAdvisor()
     {

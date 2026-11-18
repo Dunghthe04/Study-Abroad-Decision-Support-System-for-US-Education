@@ -733,6 +733,28 @@ public class RecommendationServiceTests
         Assert.Equal(expected.OrderBy(c => c), result.Items.Select(i => i.Code).OrderBy(c => c));
     }
 
+    // "Chỉ trường ít coi trọng điểm thi": chỉ giữ trường mà C7 ghi điểm thi là "xét" hoặc "không xét"; chưa có dữ liệu thì loại (không xác nhận được)
+    [Fact]
+    public async Task Search_LowTestWeight_KeepsOnlySchoolsThatDoNotRateTestScoresImportant()
+    {
+        static RecommendSchoolInput WithTest(RecommendSchoolInput s, string? importance)
+        {
+            s.Offering.C7TestImportance = importance;
+            return s;
+        }
+
+        var result = await SearchWith(
+            new SchoolSearchFilters(TestPolicy: "optional", LowTestWeight: true), SchoolSort.Quality,
+            WithTest(SearchSchool("light", "TX", "public", 10_000m, sat: "optional"), "considered"),
+            WithTest(SearchSchool("none", "TX", "public", 10_000m, sat: "optional"), "not_considered"),
+            WithTest(SearchSchool("heavy", "TX", "public", 10_000m, sat: "optional"), "very_important"),
+            WithTest(SearchSchool("mid", "TX", "public", 10_000m, sat: "optional"), "important"),
+            WithTest(SearchSchool("unknown", "TX", "public", 10_000m, sat: "optional"), null));
+
+        Assert.Equal(["light", "none"], result.Items.Select(i => i.Code).OrderBy(c => c));
+        Assert.All(result.Items, i => Assert.Contains(i.TestImportance, new[] { "considered", "not_considered" }));
+    }
+
     [Theory]
     [InlineData("need", new[] { "n", "nm" })]
     [InlineData("merit", new[] { "m", "nm" })]
