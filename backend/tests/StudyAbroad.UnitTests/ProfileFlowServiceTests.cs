@@ -1,10 +1,14 @@
-﻿using StudyAbroad.Application.Profile.Flow;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using StudyAbroad.Api.Controllers;
+using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -1592,5 +1596,126 @@ public class ProfileFlowServiceTests
         Assert.Equal(1, act.Scope);
         Assert.Equal("member", act.Role);
         Assert.Empty(ec.Sent.Awards);
+    }
+
+    // ===== 1c: phụ huynh có liên kết còn hiệu lực không được lưu hồ sơ của chính mình =====
+
+    private static ProfileFlowService ServiceWithLinks(InMemoryProfileFlowRepository repo, FakeParentLinkRepository links) =>
+        new(repo, new FakeFileStorageService(), parentLinks: links);
+
+    private static FakeParentLinkRepository LinksOf(Guid parentId, Guid childId, string status)
+    {
+        var links = new FakeParentLinkRepository();
+        links.Links.Add(new ParentStudentLink
+        {
+            StudentUserId = childId, ParentUserId = parentId, ParentEmail = "p@test.com", Status = status,
+        });
+        return links;
+    }
+
+    [Fact]
+    public async Task NoActiveLink_CanSaveDraft()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = ServiceWithLinks(repo, new FakeParentLinkRepository());
+
+        await service.SaveDraftAsync(Guid.NewGuid(), new SaveProfileDraftRequest(1, [], FullDraft()));
+
+        Assert.Single(repo.Profiles);
+    }
+
+    [Fact]
+    public async Task ChildInActiveLink_CanStillSave()
+    {
+        var parentId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
+        var repo = new InMemoryProfileFlowRepository();
+        var service = ServiceWithLinks(repo, LinksOf(parentId, childId, ParentLinkStatuses.Active));
+
+        await service.SaveDraftAsync(childId, new SaveProfileDraftRequest(1, [], FullDraft()));
+
+        Assert.Contains(repo.Profiles.Values, p => p.UserId == childId);
+    }
+
+    [Fact]
+    public async Task LinkedParent_SaveDraft_Throws_AndCreatesNoProfile()
+    {
+        var parentId = Guid.NewGuid();
+        var repo = new InMemoryProfileFlowRepository();
+        var service = ServiceWithLinks(repo, LinksOf(parentId, Guid.NewGuid(), ParentLinkStatuses.Active));
+
+        await Assert.ThrowsAsync<ProfileLockedForParentException>(() =>
+            service.SaveDraftAsync(parentId, new SaveProfileDraftRequest(1, [], FullDraft())));
+        Assert.Empty(repo.Profiles);
+    }
+
+    [Fact]
+    public async Task LinkedParent_UploadTranscript_Throws()
+    {
+        var parentId = Guid.NewGuid();
+        var service = ServiceWithLinks(new InMemoryProfileFlowRepository(), LinksOf(parentId, Guid.NewGuid(), ParentLinkStatuses.Active));
+        using var stream = new MemoryStream([1, 2, 3, 4]);
+
+        await Assert.ThrowsAsync<ProfileLockedForParentException>(() =>
+            service.UploadDraftTranscriptAsync(parentId, stream, "hoc_ba.png", "image/png", 4));
+    }
+
+    [Fact]
+    public async Task LinkedParent_Commit_Throws()
+    {
+        var parentId = Guid.NewGuid();
+        var service = ServiceWithLinks(new InMemoryProfileFlowRepository(), LinksOf(parentId, Guid.NewGuid(), ParentLinkStatuses.Active));
+
+        await Assert.ThrowsAsync<ProfileLockedForParentException>(() =>
+            service.CommitFlowAsync(parentId, new CommitProfileFlowRequest(FullDraft())));
+    }
+
+    [Fact]
+    public async Task LinkedParent_PatchDraftFromChat_Throws()
+    {
+        var parentId = Guid.NewGuid();
+        var service = ServiceWithLinks(new InMemoryProfileFlowRepository(), LinksOf(parentId, Guid.NewGuid(), ParentLinkStatuses.Active));
+
+        // Chat (ChatService) chỉ bắt ArgumentException khi ghi nháp: lỗi này phải là ArgumentException để chat bỏ qua êm
+        var ex = await Assert.ThrowsAsync<ProfileLockedForParentException>(() =>
+            service.PatchDraftAsync(parentId, new JsonObject { ["budget"] = "tier_under_20k" }, ["budget"]));
+        Assert.IsAssignableFrom<ArgumentException>(ex);
+    }
+
+    [Fact]
+    public async Task RevokedLink_CanSaveAgain()
+    {
+        var parentId = Guid.NewGuid();
+        var repo = new InMemoryProfileFlowRepository();
+        var service = ServiceWithLinks(repo, LinksOf(parentId, Guid.NewGuid(), ParentLinkStatuses.Revoked));
+
+        await service.SaveDraftAsync(parentId, new SaveProfileDraftRequest(1, [], FullDraft()));
+
+        Assert.Contains(repo.Profiles.Values, p => p.UserId == parentId);
+    }
+
+    [Fact]
+    public async Task LinkedParent_SaveDraftEndpoint_Returns409()
+    {
+        var parentId = Guid.NewGuid();
+        var service = ServiceWithLinks(new InMemoryProfileFlowRepository(), LinksOf(parentId, Guid.NewGuid(), ParentLinkStatuses.Active));
+        var controller = new ProfileFlowController(service)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [
+                        new Claim(ClaimTypes.NameIdentifier, parentId.ToString()),
+                        new Claim(ClaimTypes.Role, UserRoles.Parent),
+                    ], "test")),
+                },
+            },
+        };
+
+        var result = await controller.SaveDraft(new SaveProfileDraftRequest(1, [], FullDraft()), CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result);
     }
 }

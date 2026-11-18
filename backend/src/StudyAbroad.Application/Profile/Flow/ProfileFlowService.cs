@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -37,7 +38,8 @@ public class ProfileFlowService(
     IAiCallRepository? aiCalls = null,
     IAiUsageCollector? usageCollector = null,
     ILogger<ProfileFlowService>? logger = null,
-    AiPricing? pricing = null) : IProfileFlowService
+    AiPricing? pricing = null,
+    IParentLinkRepository? parentLinks = null) : IProfileFlowService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -128,6 +130,7 @@ public class ProfileFlowService(
 
     public async Task<ProfileFlowStateDto> SaveDraftAsync(Guid userId, SaveProfileDraftRequest request, CancellationToken ct = default)
     {
+        await EnsureCanEditAsync(userId, ct);
         if (request.CurrentStep < 1 || request.CurrentStep > 6)
         {
             throw new ArgumentOutOfRangeException(nameof(request.CurrentStep), "Bước hiện tại phải nằm trong khoảng từ 1 đến 6.");
@@ -155,6 +158,7 @@ public class ProfileFlowService(
     public async Task<ProfileFlowStateDto> PatchDraftAsync(
         Guid userId, JsonObject chatProfile, IReadOnlyCollection<string> changedKeys, CancellationToken ct = default)
     {
+        await EnsureCanEditAsync(userId, ct);
         var current = await GetFlowStateAsync(userId, ct);
         if (changedKeys.Count == 0) return current;
 
@@ -173,6 +177,7 @@ public class ProfileFlowService(
     public async Task<UploadDraftTranscriptResultDto> UploadDraftTranscriptAsync(
         Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default)
     {
+        await EnsureCanEditAsync(userId, ct);
         var profile = await repository.EnsureProfileExistsAsync(userId, ct);
 
         // Đọc toàn bộ nội dung file ra bộ nhớ để vừa lưu nháp vừa gửi sang OCR
@@ -236,6 +241,7 @@ public class ProfileFlowService(
     public async Task<CommitProfileFlowResponse> CommitFlowAsync(
         Guid userId, CommitProfileFlowRequest? request, CancellationToken ct = default)
     {
+        await EnsureCanEditAsync(userId, ct);
         var profile = await repository.EnsureProfileExistsAsync(userId, ct);
         var stored = ReadStoredState(profile.DraftFlowStateJson);
 
@@ -295,6 +301,19 @@ public class ProfileFlowService(
             Message: "Hồ sơ du học đã được lưu chính thức thành công vào hệ thống.",
             Success: true
         );
+    }
+
+    /// <summary>Người này có được nhập / lưu hồ sơ của chính mình không.
+    /// Chức năng 1: phụ huynh có liên kết còn hiệu lực thì không (hồ sơ do con nhập, phụ huynh xem ở "Con của tôi").
+    /// Học sinh không bao giờ đứng ở vị trí phụ huynh trong liên kết nên luôn được. Từ 1.5d chỉ đổi điều kiện ở đây.</summary>
+    public async Task<bool> CanEditOwnProfileAsync(Guid userId, CancellationToken ct = default) =>
+        parentLinks is null || (await parentLinks.GetActiveByParentAsync(userId, ct)).Count == 0;
+
+    // Gọi trước EnsureProfileExistsAsync: chặn sau thì phụ huynh vẫn bị tạo một dòng hồ sơ rỗng
+    private async Task EnsureCanEditAsync(Guid userId, CancellationToken ct)
+    {
+        if (!await CanEditOwnProfileAsync(userId, ct))
+            throw new ProfileLockedForParentException();
     }
 
     public async Task ClearDraftAsync(Guid userId, CancellationToken ct = default)
