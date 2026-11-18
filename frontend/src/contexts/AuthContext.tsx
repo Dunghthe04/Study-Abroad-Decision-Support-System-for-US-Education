@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { authApi } from "@/lib/api";
+import { cancelScheduledRefresh, scheduleRefresh, SESSION_EXPIRED_EVENT } from "@/lib/auth-refresh";
 import type { LoginRequest, RegisterRequest, UserDto } from "@/types/api";
 
 interface AuthContextType {
@@ -38,9 +39,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initAuth();
   }, []);
 
+  // Refresh token hết hạn (quá 7 ngày) hoặc phiên bị thu hồi: auth-refresh báo, client coi như đã đăng xuất
+  useEffect(() => {
+    const onExpired = () => setUser(null);
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
+  }, []);
+
   // [AC-2] Đăng nhập: Backend đặt HttpOnly Cookie, Client chỉ lưu User state trong RAM
   const login = async (data: LoginRequest): Promise<UserDto> => {
     const res = await authApi.login(data);
+    scheduleRefresh(res.expiresAt);
     setUser(res.user);
     return res.user;
   };
@@ -53,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // [USAS-12] Xác thực email OTP: Nhận AuthResponse và cập nhật user state
   const verifyEmail = async (data: { email: string; otpCode: string }): Promise<UserDto> => {
     const res = await authApi.verifyEmail(data);
+    scheduleRefresh(res.expiresAt);
     setUser(res.user);
     return res.user;
   };
@@ -73,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Dù có lỗi mạng thì Client vẫn reset trạng thái
     } finally {
+      cancelScheduledRefresh();
       setUser(null);
     }
   };

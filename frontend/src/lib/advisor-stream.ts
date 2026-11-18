@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api";
+import { authFetch } from "@/lib/auth-refresh";
 import type { AdvisorChatResponse, AdvisorStreamEvent } from "@/types/api";
 
 /** Tin báo tiến độ hoặc câu trả lời của một ý (dòng final trả về qua kết quả của hàm, không qua onEvent). */
@@ -14,7 +15,7 @@ export async function streamAdvisorChat(
   body: unknown,
   onEvent: (event: AdvisorProgressEvent) => void,
 ): Promise<AdvisorChatResponse> {
-  const res = await fetch("/api/v1/advisor/chat/stream", {
+  const res = await authFetch("/api/v1/advisor/chat/stream", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },

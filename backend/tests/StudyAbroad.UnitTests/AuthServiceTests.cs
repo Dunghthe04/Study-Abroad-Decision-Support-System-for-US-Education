@@ -341,6 +341,28 @@ public class AuthServiceTests
         Assert.Equal(UserRoles.Moderator, login.Response.User.Role);
     }
 
+    // Refresh token: đăng nhập trả kèm refresh token, phiên lưu hash của nó và hết hạn sau 7 ngày (không theo access token)
+    [Fact]
+    public async Task Login_ReturnsRefreshToken_SessionStoresItsHashAndLasts7Days()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active;
+
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+
+        var response = login.Response!;
+        Assert.False(string.IsNullOrEmpty(response.RefreshToken));
+        Assert.NotEqual(response.AccessToken, response.RefreshToken);
+
+        var session = Assert.Single(_repo.Sessions);
+        Assert.Equal(_tokens.HashToken(response.RefreshToken!), session.RefreshTokenHash);
+        Assert.Equal(_tokens.HashToken(response.AccessToken), session.TokenHash);
+        Assert.Null(session.PreviousRefreshTokenHash);
+        Assert.Equal(session.ExpiresAt, response.SessionExpiresAt);
+        Assert.InRange(session.ExpiresAt, DateTime.UtcNow.AddDays(7).AddMinutes(-1), DateTime.UtcNow.AddDays(7).AddMinutes(1));
+    }
+
     [Fact]
     public async Task LockUserAccount_LocksStudent_WritesAuditAndRevokesSessions()
     {

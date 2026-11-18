@@ -271,17 +271,7 @@ namespace StudyAbroad.Application.Auth
                 await parentLinkService.LinkParentAccountAsync(user, ct);
 
             // Tự động đăng nhập
-            var (token, expiresAt) = tokens.GenerateToken(user);
-            var tokenHash = tokens.HashToken(token);
-            await users.CreateSessionAsync(new UserSession
-            {
-                UserId = user.Id,
-                TokenHash = tokenHash,
-                ExpiresAt = expiresAt,
-                IsRevoked = false
-            }, ct);
-
-            return AuthResult.Ok(new AuthResponse(token, expiresAt, await ToDtoAsync(user, ct)));
+            return AuthResult.Ok(await CreateSessionAsync(user, null, null, ct));
         }
 
         public async Task<AuthResult> ResendOtpAsync(ResendOtpRequest request, CancellationToken ct = default)
@@ -397,24 +387,25 @@ namespace StudyAbroad.Application.Auth
             return AuthResult.Ok(await CreateSessionAsync(user, ipAddress, userAgent, ct));
         }
 
-        /// <summary>Sinh JWT, lưu phiên đăng nhập và trả về thông tin phiên.</summary>
+        /// <summary>Sinh access token (JWT 15 phút) và refresh token, lưu phiên 7 ngày và trả về thông tin phiên.</summary>
         private async Task<AuthResponse> CreateSessionAsync(User user, string? ipAddress, string? userAgent, CancellationToken ct)
         {
             var (token, expiresAt) = tokens.GenerateToken(user);
-            var tokenHash = tokens.HashToken(token);
+            var refreshToken = RefreshTokens.Generate();
 
             var session = new UserSession
             {
                 UserId = user.Id,
-                TokenHash = tokenHash,
-                ExpiresAt = expiresAt,
+                TokenHash = tokens.HashToken(token),
+                RefreshTokenHash = tokens.HashToken(refreshToken),
+                ExpiresAt = DateTime.UtcNow.Add(RefreshTokens.Lifetime),
                 IsRevoked = false,
                 IpAddress = ipAddress,
                 UserAgent = userAgent
             };
             await users.CreateSessionAsync(session, ct);
 
-            return new AuthResponse(token, expiresAt, await ToDtoAsync(user, ct));
+            return new AuthResponse(token, expiresAt, await ToDtoAsync(user, ct), refreshToken, session.ExpiresAt);
         }
 
         /// <summary>[UC-80] Tài khoản đã xóa mềm còn trong thời hạn khôi phục.</summary>
@@ -1408,17 +1399,7 @@ namespace StudyAbroad.Application.Auth
                 DetailJson = JsonSerializer.Serialize(new { email = user.Email })
             }, ct);
 
-            var (token, expiresAt) = tokens.GenerateToken(user);
-            var tokenHash = tokens.HashToken(token);
-            await users.CreateSessionAsync(new UserSession
-            {
-                UserId = user.Id,
-                TokenHash = tokenHash,
-                ExpiresAt = expiresAt,
-                IsRevoked = false
-            }, ct);
-
-            return AuthResult.Ok(new AuthResponse(token, expiresAt, await ToDtoAsync(user, ct)));
+            return AuthResult.Ok(await CreateSessionAsync(user, null, null, ct));
         }
 
         // ----- Đổi số điện thoại / email liên lạc của trung tâm (xác thực OTP tại giá trị mới) -----

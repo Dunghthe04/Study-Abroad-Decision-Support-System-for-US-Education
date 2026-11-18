@@ -84,6 +84,30 @@ internal sealed class FakeUserRepository : IUserRepository
         return Task.CompletedTask;
     }
 
+    public Task<UserSession?> GetSessionByRefreshTokenHashAsync(string refreshTokenHash, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Sessions.FirstOrDefault(s => s.RefreshTokenHash == refreshTokenHash || s.PreviousRefreshTokenHash == refreshTokenHash));
+
+    public Task<bool> RotateRefreshTokenAsync(Guid sessionId, string oldRefreshHash, string newRefreshHash, string newAccessHash, CancellationToken cancellationToken = default)
+    {
+        var s = Sessions.FirstOrDefault(x => x.Id == sessionId && !x.IsRevoked && x.RefreshTokenHash == oldRefreshHash);
+        if (s is null) return Task.FromResult(false);
+        s.PreviousRefreshTokenHash = oldRefreshHash;
+        s.RefreshTokenHash = newRefreshHash;
+        s.TokenHash = newAccessHash;
+        s.UpdatedAt = DateTime.UtcNow;
+        return Task.FromResult(true);
+    }
+
+    public Task RevokeSessionByIdAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        var s = Sessions.FirstOrDefault(x => x.Id == sessionId);
+        if (s != null) s.IsRevoked = true;
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> HasActiveSessionAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Sessions.Any(s => s.UserId == userId && !s.IsRevoked && s.ExpiresAt > DateTime.UtcNow));
+
     public Task SaveOtpAsync(OtpToken token, CancellationToken cancellationToken = default)
     {
         var idx = Otps.FindIndex(o => o.Id == token.Id);

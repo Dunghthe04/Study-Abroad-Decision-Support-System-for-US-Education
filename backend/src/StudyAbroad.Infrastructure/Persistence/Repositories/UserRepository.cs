@@ -67,6 +67,36 @@ public class UserRepository(AppDbContext db) : IUserRepository
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsRevoked, true).SetProperty(x => x.UpdatedAt, DateTime.UtcNow), cancellationToken);
     }
 
+    public Task<UserSession?> GetSessionByRefreshTokenHashAsync(string refreshTokenHash, CancellationToken cancellationToken = default) =>
+        db.UserSessions.AsNoTracking().FirstOrDefaultAsync(
+            s => s.RefreshTokenHash == refreshTokenHash || s.PreviousRefreshTokenHash == refreshTokenHash, cancellationToken);
+
+    // Một câu UPDATE có điều kiện: hai request gia hạn cùng lúc thì chỉ một cái đổi được, cái kia nhận 0 dòng
+    public async Task<bool> RotateRefreshTokenAsync(Guid sessionId, string oldRefreshHash, string newRefreshHash, string newAccessHash, CancellationToken cancellationToken = default)
+    {
+        var rows = await db.UserSessions
+            .Where(s => s.Id == sessionId && !s.IsRevoked && s.RefreshTokenHash == oldRefreshHash)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.PreviousRefreshTokenHash, oldRefreshHash)
+                .SetProperty(x => x.RefreshTokenHash, newRefreshHash)
+                .SetProperty(x => x.TokenHash, newAccessHash)
+                .SetProperty(x => x.UpdatedAt, DateTime.UtcNow), cancellationToken);
+        return rows == 1;
+    }
+
+    public async Task RevokeSessionByIdAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        await db.UserSessions
+            .Where(s => s.Id == sessionId && !s.IsRevoked)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsRevoked, true).SetProperty(x => x.UpdatedAt, DateTime.UtcNow), cancellationToken);
+    }
+
+    public Task<bool> HasActiveSessionAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        return db.UserSessions.AnyAsync(s => s.UserId == userId && !s.IsRevoked && s.ExpiresAt > now, cancellationToken);
+    }
+
     public async Task SaveOtpAsync(OtpToken token, CancellationToken cancellationToken = default)
     {
         db.OtpTokens.Add(token);

@@ -1,3 +1,4 @@
+import { authFetch } from "@/lib/auth-refresh";
 import type {
   CenterReviewsDto,
   NotificationDto,
@@ -95,7 +96,7 @@ export function buildImageForm(file: File, content?: string): FormData {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${baseUrl}${path}`, {
+  const res = await authFetch(`${baseUrl}${path}`, {
     ...init,
     // [Bảo mật HttpOnly Cookie]: credentials: "include" tự động gửi và nhận cookie an toàn
     credentials: "include",
@@ -708,7 +709,7 @@ export const centerPortalApi = {
     formData.append("file", file);
     formData.append("documentType", documentType);
 
-    const res = await fetch(`${baseUrl}/api/v1/center/verification/upload-document`, {
+    const res = await authFetch(`${baseUrl}/api/v1/center/verification/upload-document`, {
       method: "POST",
       credentials: "include",
       body: formData,

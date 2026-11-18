@@ -9,6 +9,7 @@ using StudyAbroad.Api.Extensions;
 using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Infrastructure;
 using StudyAbroad.Infrastructure.Auth;
@@ -120,6 +121,14 @@ builder.Services.AddAuthentication(options =>
                 if (user == null || user.Status == UserStatuses.Locked || user.Status == UserStatuses.Deleted)
                 {
                     context.Fail("Tài khoản không còn quyền truy cập.");
+                    return;
+                }
+
+                // 1.5b: con managed chỉ vào được qua phụ huynh còn quyền (claim act); tài khoản thường không được mang act
+                var actingGuard = context.HttpContext.RequestServices.GetRequiredService<ActingSessionGuard>();
+                if (!await actingGuard.IsValidAsync(user, context.Principal, context.HttpContext.RequestAborted))
+                {
+                    context.Fail("Phiên làm thay không còn hiệu lực.");
                 }
             }
         }
@@ -204,6 +213,7 @@ if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger
 
 app.UseCors();
 app.UseAuthentication();
+app.UseMiddleware<ActingIdentityMiddleware>();   // 1.5b: đang nhập cho con thì chỉ API hồ sơ chạy dưới tên con
 app.UseAuthorization();
 app.UseRateLimiter();
 

@@ -3666,6 +3666,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsLegalHold")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_legal_hold");
+
                     b.Property<double?>("Latitude")
                         .HasColumnType("double precision")
                         .HasColumnName("latitude");
@@ -3684,6 +3690,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("legal_document_urls")
                         .HasDefaultValueSql("'{}'");
+
+                    b.Property<string>("LegalHoldReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("legal_hold_reason");
 
                     b.Property<string>("LegalRepresentative")
                         .HasMaxLength(150)
@@ -4596,6 +4607,17 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_birthdate_locked");
 
+                    b.Property<bool>("IsLegalHold")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_legal_hold");
+
+                    b.Property<string>("LegalHoldReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("legal_hold_reason");
+
                     b.Property<DateTime?>("LockoutEnd")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("lockout_end");
@@ -4712,6 +4734,16 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_revoked");
 
+                    b.Property<string>("PreviousRefreshTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("previous_refresh_token_hash");
+
+                    b.Property<string>("RefreshTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("refresh_token_hash");
+
                     b.Property<string>("TokenHash")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -4733,6 +4765,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_user_sessions");
+
+                    b.HasIndex("PreviousRefreshTokenHash")
+                        .HasDatabaseName("ix_user_sessions_previous_refresh_token_hash");
+
+                    b.HasIndex("RefreshTokenHash")
+                        .HasDatabaseName("ix_user_sessions_refresh_token_hash");
 
                     b.HasIndex("TokenHash")
                         .HasDatabaseName("ix_user_sessions_token_hash");

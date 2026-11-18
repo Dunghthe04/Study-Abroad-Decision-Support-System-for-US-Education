@@ -10,9 +10,8 @@ namespace StudyAbroad.Api.Controllers
 {
     [ApiController]
     [Route("api/v1/auth")]
-    public class AuthController(IAuthService auth, IWebHostEnvironment env) : ControllerBase
+    public class AuthController(IAuthService auth, SessionRefreshService refresh) : ControllerBase
     {
-        private const string AccessTokenCookie = "usas_access_token";
 
         // [AC-1 / USAS-12] Đăng ký tài khoản: tạo user unverified và gửi mã OTP kích hoạt qua Email.
         // Trùng email/SĐT vẫn trả cùng thông báo (chống dò tài khoản), chủ hộp thư nhận mail báo riêng.
@@ -180,7 +179,7 @@ namespace StudyAbroad.Api.Controllers
             if (result.Error == AuthError.TempLocked)
             {
                 // Mọi phiên đã bị thu hồi: xóa luôn cookie trên trình duyệt này
-                Response.Cookies.Delete(AccessTokenCookie, CreateCookieOptions(expires: null));
+                SessionCookies.ClearSession(HttpContext);
             }
 
             return result.Error switch
@@ -192,8 +191,28 @@ namespace StudyAbroad.Api.Controllers
             };
         }
 
-        // [AC-3] Đăng xuất: thu hồi phiên trên server (đánh dấu IsRevoked = true) và xóa HttpOnly Cookie
-        [Authorize]
+        // Gia hạn phiên: đổi refresh token cũ lấy cặp access token + refresh token mới.
+        // 409 = tab khác vừa gia hạn trước, gửi lại request là được. 401 = phải đăng nhập lại.
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh(CancellationToken ct)
+        {
+            var result = await refresh.RefreshAsync(Request.Cookies[SessionCookies.RefreshToken], ct);
+            switch (result.Outcome)
+            {
+                case RefreshOutcome.Ok:
+                    SessionCookies.AppendSession(HttpContext, result.AccessToken!, result.AccessExpiresAt, result.RefreshToken, result.SessionExpiresAt);
+                    return Ok(new { expiresAt = result.AccessExpiresAt });
+                case RefreshOutcome.Retry:
+                    return Conflict(new { message = "Phiên vừa được gia hạn, vui lòng thử lại." });
+                default:
+                    // 1.5b: giữ cookie phụ huynh, phiên làm thay hết hạn thì DELETE /auth/acting vẫn về được phiên phụ huynh
+                    SessionCookies.ClearSession(HttpContext, includeParent: false);
+                    return Unauthorized(new { message = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." });
+            }
+        }
+
+        // [AC-3] Đăng xuất: thu hồi phiên trên server (đánh dấu IsRevoked = true) và xóa HttpOnly Cookie.
+        // Không cần [Authorize]: access token hết hạn rồi vẫn đăng xuất được nhờ refresh token.
         [HttpPost("logout")]
         public async Task<IActionResult> Logout(CancellationToken ct)
         {
@@ -202,9 +221,12 @@ namespace StudyAbroad.Api.Controllers
             {
                 await auth.LogoutAsync(rawToken, ct);
             }
+            await refresh.RevokeAsync(Request.Cookies[SessionCookies.RefreshToken], ct);
+            // 1.5b: đăng xuất lúc đang làm thay thì đóng luôn phiên phụ huynh
+            await refresh.RevokeAsync(Request.Cookies[SessionCookies.ParentRefreshToken], ct);
 
             // Xóa HttpOnly Cookie trên trình duyệt
-            Response.Cookies.Delete(AccessTokenCookie, CreateCookieOptions(expires: null));
+            SessionCookies.ClearSession(HttpContext);
 
             return Ok(new { message = "Đăng xuất thành công." });
         }
@@ -267,41 +289,19 @@ namespace StudyAbroad.Api.Controllers
             }
 
             // Xóa cookie phiên làm việc
-            Response.Cookies.Delete(AccessTokenCookie, CreateCookieOptions(expires: null));
+            SessionCookies.ClearSession(HttpContext);
 
             return Ok(new { message = result.Message });
         }
 
         // Token của phiên hiện tại: lấy từ HttpOnly Cookie, không có thì từ header Authorization
-        private string GetRawToken()
-        {
-            var rawToken = Request.Cookies[AccessTokenCookie];
-            if (!string.IsNullOrEmpty(rawToken))
-            {
-                return rawToken;
-            }
-
-            var authHeader = Request.Headers.Authorization.ToString();
-            return authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
-                ? authHeader["Bearer ".Length..].Trim()
-                : authHeader.Trim();
-        }
+        private string GetRawToken() => SessionCookies.ReadAccessToken(Request);
 
         // [Chống XSS]: token chỉ nằm trong HttpOnly Cookie, body không chứa token
         private IActionResult SetSessionCookie(AuthResponse response)
         {
-            Response.Cookies.Append(AccessTokenCookie, response.AccessToken, CreateCookieOptions(response.ExpiresAt));
+            SessionCookies.AppendSession(HttpContext, response.AccessToken, response.ExpiresAt, response.RefreshToken, response.SessionExpiresAt);
             return Ok(new { expiresAt = response.ExpiresAt, user = response.User });
         }
-
-        // [Bảo mật] Ngoài Development cookie luôn Secure, không phụ thuộc Request.IsHttps (sau proxy có thể sai)
-        private CookieOptions CreateCookieOptions(DateTimeOffset? expires) => new()
-        {
-            HttpOnly = true,
-            Secure = !env.IsDevelopment() || Request.IsHttps,
-            SameSite = SameSiteMode.Lax,
-            Expires = expires,
-            Path = "/"
-        };
     }
 }
