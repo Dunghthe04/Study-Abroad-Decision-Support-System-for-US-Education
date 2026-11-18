@@ -44,7 +44,7 @@ import { cn } from "@/lib/utils";
  * Trang chủ: nền trong suốt nằm trên ảnh trường, cuộn xuống thì thành nền trắng như các trang khác.
  */
 export function SiteHeader() {
-  const { user, isLoading, logout } = useAuth();
+  const { user, isLoading, logout, acting } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -54,8 +54,14 @@ export function SiteHeader() {
   const isStudentOrParent = user?.role === "student" || user?.role === "parent";
   // 1f: phụ huynh đã liên kết không có hồ sơ riêng, các mục hồ sơ riêng nhường chỗ cho "Con của tôi"
   const { linked: isLinkedParent } = useIsLinkedParent();
-  // Chỉ hiện khi đã biết chắc là không liên kết (=== false), để lúc đang tải phụ huynh không thấy mục hồ sơ riêng nháy lên
-  const hasOwnProfile = isStudentOrParent && isLinkedParent === false;
+  // Chỉ hiện khi đã biết chắc là không liên kết (=== false), để lúc đang tải phụ huynh không thấy mục hồ sơ riêng nháy lên.
+  // 1.5d, 1.5e: phụ huynh không có hồ sơ riêng; đang làm thay con thì các mục hồ sơ là của con đó
+  // (/me vẫn trả role parent khi làm thay, nên xét acting chứ không xét role)
+  const hasOwnProfile = acting !== null || (user?.role === "student" && isLinkedParent === false);
+  // Trang Tài khoản khi làm thay vẫn là của phụ huynh, nên hồ sơ của con mở ở trang nhập hồ sơ
+  const academicHref = acting ? "/profile/academic" : "/account#academic";
+  // Phụ huynh chưa có con nào, không làm thay: nút "Thêm con" thay cho "Phân tích hồ sơ của tôi"
+  const isParentWithoutChild = user?.role === "parent" && !acting && isLinkedParent === false;
 
   const navLinks = [
     { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
@@ -199,7 +205,7 @@ export function SiteHeader() {
                     Thông tin cá nhân
                   </DropdownMenuItem>
                   {hasOwnProfile && (
-                    <DropdownMenuItem render={<Link href="/account#academic" />}>
+                    <DropdownMenuItem render={<Link href={academicHref} />}>
                       <BookOpenIcon />
                       Hồ sơ học thuật
                     </DropdownMenuItem>
@@ -211,7 +217,7 @@ export function SiteHeader() {
                     <KeyRoundIcon />
                     Bảo mật tài khoản
                   </DropdownMenuItem>
-                  {isStudentOrParent && (
+                  {isStudentOrParent && !acting && (
                     <DropdownMenuItem render={<Link href="/account#parent-links" />}>
                       <UsersIcon />
                       {user.role === "student" ? "Liên kết phụ huynh" : "Con đã liên kết"}
@@ -307,8 +313,20 @@ export function SiteHeader() {
               );
             })}
           </ul>
-          {/* Phụ huynh đã liên kết đi qua mục menu "Con của tôi", không có nút riêng (1.5e thay bằng "Thêm con") */}
-          {!canOpenAdmin && isLinkedParent === false && (
+          {/* Phụ huynh đã liên kết đi qua mục menu "Con của tôi", không có nút riêng; chưa có con thì nút "Thêm con" (1.5e) */}
+          {isParentWithoutChild && (
+            <Link
+              href="/parent/children/add"
+              className={buttonVariants({
+                variant: "ghost",
+                size: "lg",
+                className: "shrink-0 active:translate-y-px !bg-white !text-brand-ink hover:!bg-white/90",
+              })}
+            >
+              Thêm con
+            </Link>
+          )}
+          {!canOpenAdmin && (acting !== null || (user?.role !== "parent" && isLinkedParent === false)) && (
             <Link
               href="/analysis"
               className={buttonVariants({

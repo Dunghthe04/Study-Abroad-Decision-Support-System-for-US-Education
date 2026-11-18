@@ -70,14 +70,19 @@ export function ActAsChildButton({
   );
 }
 
-/** Nút + hộp thoại thêm con chưa có tài khoản (tên, ngày sinh). Backend kiểm tra tên, ngày sinh và giới hạn 5 con. */
+/** Nút + hộp thoại thêm con chưa có tài khoản (tên, ngày sinh). Backend kiểm tra tên, ngày sinh và giới hạn 5 con.
+ *  defaultOpen, next: trang /parent/children/add (nút "Thêm con" trong chat, 1.5e) mở sẵn hộp, thêm xong mở lại chat. */
 export function AddManagedChildButton({
   variant = "outline",
+  defaultOpen = false,
+  next,
 }: {
   variant?: "outline" | "default";
+  defaultOpen?: boolean;
+  next?: string;
 }) {
   const { startActing } = useAuth();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [fullName, setFullName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +118,7 @@ export function AddManagedChildButton({
       return;
     }
     try {
-      await startActing(child.studentUserId); // trang tải lại sang /profile/academic
+      await startActing(child.studentUserId, next); // trang tải lại sang /profile/academic hoặc next
     } catch (err) {
       // Con đã được thêm, chỉ chưa vào được: tải lại để danh sách có con mới, phụ huynh bấm nút trên thẻ con
       toast.add({

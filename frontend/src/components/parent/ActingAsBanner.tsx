@@ -34,7 +34,8 @@ export function ActingAsBanner() {
   return (
     <div
       role="status"
-      className="border-b border-line bg-warn-wash print:hidden"
+      // relative z-30: trang chủ có ảnh nền kéo lên dưới header, không có thì lớp phủ của ảnh đè lên thanh này
+      className="relative z-30 border-b border-line bg-warn-wash print:hidden"
     >
       <div className="mx-auto flex max-w-[1560px] items-center gap-3 px-4 py-2 text-sm text-foreground sm:px-8 lg:px-12">
         <UserRoundPen

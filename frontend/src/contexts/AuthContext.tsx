@@ -17,7 +17,8 @@ interface AuthContextType {
   /** 1.5b: phụ huynh đang nhập hồ sơ thay con managed nào. null = không làm thay. */
   acting: ActingChild | null;
   /** Vào làm thay rồi mở trang hồ sơ của con (tải lại cả trang). */
-  startActing: (childId: string) => Promise<void>;
+  /** next: trang mở sau khi vào làm thay, mặc định trang nhập hồ sơ. Chat (1.5e) truyền "/advisor" để mở khung chat. */
+  startActing: (childId: string, next?: string) => Promise<void>;
   /** Thoát làm thay rồi về "Con của tôi" (tải lại cả trang). */
   stopActing: () => Promise<void>;
 }
@@ -136,9 +137,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const startActing = async (childId: string) => {
+  const startActing = async (childId: string, next = "/profile/academic") => {
     await actingApi.start(childId);
-    reloadAt("/profile/academic");
+    reloadAt(next);
   };
 
   const stopActing = async () => {
