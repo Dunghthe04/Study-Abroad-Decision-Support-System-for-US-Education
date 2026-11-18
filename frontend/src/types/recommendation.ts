@@ -309,6 +309,8 @@ export interface SchoolGoalResult {
   position?: GoalPosition | null; // bản backend cũ chưa trả
   stats?: GoalSchoolStats | null; // số liệu tuyển sinh và mốc của các luật chặn
   targets?: GoalTargetResult[] | null; // các nhóm cao hơn nhóm hiện tại: Khó vào có Vừa sức và An toàn, Vừa sức có An toàn, An toàn rỗng
+  // Cơ sở đã tính: real (hồ sơ thật) hoặc simulated (giả định học sinh đang xem); bản backend cũ chưa trả thì coi là real
+  basis?: "real" | "simulated";
 }
 
 // Thẻ giải thích một trường do code dựng (số đã lưu và mã lý do của lần gợi ý gần nhất), không có AI.
