@@ -10,6 +10,13 @@ export const parentChildrenApi = {
   listChildren: async (): Promise<ParentChildProfileDto[]> =>
     (await profileApi.getChildrenProfiles()).data.children,
 
+  // 1.5a: thêm con chưa có tài khoản (tối đa 5). Lỗi tên, ngày sinh, quá số con thì backend trả 400 kèm câu báo.
+  addManagedChild: (body: { fullName: string; dateOfBirth: string }) =>
+    apiFetch<{ studentUserId: string; fullName: string; dateOfBirth: string | null }>("/api/v1/parent/children/managed", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   // Trường mục tiêu của một con. Không còn liên kết thì backend trả 404, apiFetch ném lỗi.
   targetSchools: (studentId: string) =>
     apiFetch<TargetSchoolDto[]>(

@@ -836,6 +836,8 @@ export interface ParentChildProfileDto {
   studentName: string;
   profileTransferStatus: ProfileTransferStatus | null;
   profile: AcademicProfileResponse;
+  /** 1.5: con chưa có tài khoản do phụ huynh tạo; phụ huynh nhập hồ sơ thay con này */
+  isManaged: boolean;
 }
 
 export interface ParentProfileOverviewDto {

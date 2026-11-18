@@ -1,0 +1,196 @@
+"use client";
+
+// 1.5b: nút "Thêm con" (con chưa có tài khoản) và nút "Nhập hồ sơ cho con" ở trang Con của tôi.
+// Thêm con xong thì vào nhập hồ sơ cho con đó luôn. Vào hay thoát làm thay đều tải lại cả trang (AuthContext).
+
+import { useState, type FormEvent } from "react";
+import { Plus, UserRoundPen } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/components/ui/toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { ApiError } from "@/lib/api";
+import { parentChildrenApi } from "@/lib/parent-children-api";
+
+const errorText = (err: unknown) =>
+  err instanceof ApiError ? err.message : "Vui lòng thử lại.";
+
+/** Nút vào nhập hồ sơ thay một con managed. */
+export function ActAsChildButton({
+  childId,
+  childName,
+  className,
+}: {
+  childId: string;
+  childName: string;
+  className?: string;
+}) {
+  const { startActing } = useAuth();
+  const [starting, setStarting] = useState(false);
+
+  const start = async () => {
+    setStarting(true);
+    try {
+      await startActing(childId); // thành công thì trang tải lại sang /profile/academic
+    } catch (err) {
+      setStarting(false);
+      toast.add({
+        type: "error",
+        title: `Chưa mở được hồ sơ của ${childName}`,
+        description: errorText(err),
+      });
+    }
+  };
+
+  return (
+    <Button
+      type="button"
+      className={className}
+      onClick={start}
+      disabled={starting}
+    >
+      {starting ? (
+        <Spinner data-icon="inline-start" />
+      ) : (
+        <UserRoundPen data-icon="inline-start" />
+      )}
+      {starting ? "Đang mở…" : "Nhập hồ sơ cho con"}
+    </Button>
+  );
+}
+
+/** Nút + hộp thoại thêm con chưa có tài khoản (tên, ngày sinh). Backend kiểm tra tên, ngày sinh và giới hạn 5 con. */
+export function AddManagedChildButton({
+  variant = "outline",
+}: {
+  variant?: "outline" | "default";
+}) {
+  const { startActing } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const onOpenChange = (next: boolean) => {
+    if (submitting) return;
+    setOpen(next);
+    if (!next) {
+      setFullName("");
+      setDateOfBirth("");
+      setError(null);
+    }
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!fullName.trim() || !dateOfBirth) {
+      setError("Nhập tên và ngày sinh của con.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    let child: { studentUserId: string; fullName: string };
+    try {
+      child = await parentChildrenApi.addManagedChild({
+        fullName: fullName.trim(),
+        dateOfBirth,
+      });
+    } catch (err) {
+      setSubmitting(false);
+      setError(errorText(err));
+      return;
+    }
+    try {
+      await startActing(child.studentUserId); // trang tải lại sang /profile/academic
+    } catch (err) {
+      // Con đã được thêm, chỉ chưa vào được: tải lại để danh sách có con mới, phụ huynh bấm nút trên thẻ con
+      toast.add({
+        type: "error",
+        title: `Đã thêm ${child.fullName} nhưng chưa mở được hồ sơ`,
+        description: errorText(err),
+      });
+      window.location.reload();
+    }
+  };
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant={variant}
+        onClick={() => onOpenChange(true)}
+      >
+        <Plus data-icon="inline-start" />
+        Thêm con
+      </Button>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <form onSubmit={submit} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Thêm con chưa có tài khoản</DialogTitle>
+              <DialogDescription>
+                Bạn nhập hồ sơ thay con. Sau này con tự tạo tài khoản và liên
+                kết với bạn thì có thể nhận lại hồ sơ này.
+              </DialogDescription>
+            </DialogHeader>
+
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <Field>
+              <FieldLabel htmlFor="managed-child-name">Tên của con</FieldLabel>
+              <Input
+                id="managed-child-name"
+                autoComplete="off"
+                maxLength={128}
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                disabled={submitting}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="managed-child-dob">Ngày sinh</FieldLabel>
+              <Input
+                id="managed-child-dob"
+                type="date"
+                value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+                disabled={submitting}
+              />
+            </Field>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={submitting}
+              >
+                Hủy
+              </Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting && <Spinner data-icon="inline-start" />}
+                {submitting ? "Đang thêm…" : "Thêm và nhập hồ sơ"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

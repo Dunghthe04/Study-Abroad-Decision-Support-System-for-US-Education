@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { AcademicSummaryCard } from "@/components/account/AcademicSummaryCard";
 import { RecommendationHistory, RunGroups } from "@/components/recommendation/RecommendationHistory";
 import { scenarioOverrides, snapshotText, useSavedScenarios } from "@/components/recommendation/SavedScenarios";
+import { ActAsChildButton, AddManagedChildButton } from "@/components/parent/ManagedChildActions";
 import { SuggestTargetSchool } from "@/components/parent/SuggestTargetSchool";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,10 @@ export function ParentChildrenHome({ tab = "overview" }: { tab?: ChildTab }) {
         <Message>
           Bạn chưa liên kết với con nào. Con mời email của bạn ở mục Tài khoản của con, bạn chấp nhận lời mời là xem
           được. <Link href="/account" className={LINK}>Mở Tài khoản</Link>
+          <span className="mt-4 block">Con chưa có tài khoản? Bạn thêm con và nhập hồ sơ thay con.</span>
+          <span className="mt-3 flex justify-center">
+            <AddManagedChildButton variant="default" />
+          </span>
         </Message>
       )}
     </Page>
@@ -108,22 +113,30 @@ export function ChildDashboard({ studentId, initialTab = "overview" }: { student
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-h1 text-foreground">Con của tôi</h1>
-          <p className="text-sm text-muted-foreground">Chỉ xem. Hồ sơ và trường mục tiêu do con tự nhập và sửa.</p>
+          <p className="text-sm text-muted-foreground">
+            {child.isManaged
+              ? `${child.studentName} chưa có tài khoản. Bạn nhập và sửa hồ sơ thay con.`
+              : "Chỉ xem. Hồ sơ và trường mục tiêu do con tự nhập và sửa."}
+          </p>
         </div>
-        {list.length > 1 && (
-          <NativeSelect
-            className="w-56"
-            value={studentId}
-            aria-label="Chọn con"
-            onChange={(e) => router.push(`/parent/children/${encodeURIComponent(e.target.value)}`)}
-          >
-            {list.map((c) => (
-              <NativeSelectOption key={c.studentUserId} value={c.studentUserId}>
-                {c.studentName}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {child.isManaged && <ActAsChildButton childId={child.studentUserId} childName={child.studentName} />}
+          <AddManagedChildButton />
+          {list.length > 1 && (
+            <NativeSelect
+              className="w-56"
+              value={studentId}
+              aria-label="Chọn con"
+              onChange={(e) => router.push(`/parent/children/${encodeURIComponent(e.target.value)}`)}
+            >
+              {list.map((c) => (
+                <NativeSelectOption key={c.studentUserId} value={c.studentUserId}>
+                  {c.studentName}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          )}
+        </div>
       </div>
 
       {/* key: đổi con thì về lại tab đầu, không giữ dữ liệu của con trước */}
@@ -156,13 +169,16 @@ export function ChildDashboard({ studentId, initialTab = "overview" }: { student
 function ChildPicker({ items, tab }: { items: ParentChildProfileDto[]; tab: ChildTab }) {
   return (
     <>
-      <div className="space-y-1">
-        <h1 className="text-h1 text-foreground">Con của tôi</h1>
-        <p className="text-sm text-muted-foreground">Bạn muốn xem con nào?</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-h1 text-foreground">Con của tôi</h1>
+          <p className="text-sm text-muted-foreground">Bạn muốn xem con nào?</p>
+        </div>
+        <AddManagedChildButton />
       </div>
       <ul className="grid gap-4 sm:grid-cols-2">
         {items.map((c) => (
-          <li key={c.studentUserId}>
+          <li key={c.studentUserId} className="space-y-2">
             <Link
               href={childHref(c.studentUserId, tab)}
               className="block space-y-2 rounded-2xl border border-line bg-surface p-5 transition-colors hover:border-brand"
@@ -171,10 +187,12 @@ function ChildPicker({ items, tab }: { items: ParentChildProfileDto[]; tab: Chil
               <Badge variant={c.profile.isComplete ? "ok" : "neutral"}>
                 {c.profile.isComplete ? "Đã gửi hồ sơ" : "Chưa gửi hồ sơ"}
               </Badge>
+              {c.isManaged && <p className="text-xs text-muted-foreground">Chưa có tài khoản, bạn nhập hồ sơ thay con</p>}
               {c.profile.intendedMajor && (
                 <p className="text-xs text-muted-foreground">Ngành dự định: {c.profile.intendedMajor}</p>
               )}
             </Link>
+            {c.isManaged && <ActAsChildButton childId={c.studentUserId} childName={c.studentName} className="w-full" />}
           </li>
         ))}
       </ul>
