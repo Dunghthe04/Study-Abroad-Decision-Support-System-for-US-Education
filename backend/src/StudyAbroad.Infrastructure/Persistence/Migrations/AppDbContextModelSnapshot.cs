@@ -2070,6 +2070,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("parent_email");
 
+                    b.Property<string>("ParentPreferenceJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("parent_preference_json");
+
                     b.Property<Guid?>("ParentUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("parent_user_id");

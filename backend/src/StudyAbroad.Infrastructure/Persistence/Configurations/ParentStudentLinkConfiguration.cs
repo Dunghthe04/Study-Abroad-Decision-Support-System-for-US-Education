@@ -30,5 +30,7 @@ public class ParentStudentLinkConfiguration : IEntityTypeConfiguration<ParentStu
         b.Property(x => x.ProfileTransferStatus).HasMaxLength(16);
         // [1.5d] Con managed bị xóa hẳn (job UC-80) thì bỏ trỏ nguồn, thẻ chọn của con tự biến mất
         b.HasOne<User>().WithMany().HasForeignKey(x => x.SourceManagedUserId).OnDelete(DeleteBehavior.SetNull);
+        // [UC-76] Ưu tiên của phụ huynh + danh sách theo cha mẹ đã tính, lưu nguyên khối
+        b.Property(x => x.ParentPreferenceJson).HasColumnType("jsonb");
     }
 }
