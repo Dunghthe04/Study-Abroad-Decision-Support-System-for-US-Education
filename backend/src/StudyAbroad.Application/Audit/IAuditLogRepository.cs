@@ -11,6 +11,10 @@ public interface IAuditLogRepository
 {
     Task AddAsync(AuditLog entry, CancellationToken cancellationToken = default);
     Task<string?> GetLatestLockReasonAsync(Guid userId, CancellationToken cancellationToken = default);
-    Task<PagedResult<AccessLogDto>> GetAccessLogsAsync(AccessLogFilter filter, CancellationToken cancellationToken = default);
-    Task<AccessLogSummaryDto> GetAccessLogSummaryAsync(DateTime? fromUtc, DateTime? toUtc, CancellationToken cancellationToken = default);
+
+    Task<PagedResult<AccessLogDto>> GetAccessLogsAsync(AccessLogFilter filter, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new PagedResult<AccessLogDto>([], filter.Page, filter.PageSize, 0));
+
+    Task<AccessLogSummaryDto> GetAccessLogSummaryAsync(DateTime? fromUtc, DateTime? toUtc, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new AccessLogSummaryDto(0, 0, 0, 0));
 }
