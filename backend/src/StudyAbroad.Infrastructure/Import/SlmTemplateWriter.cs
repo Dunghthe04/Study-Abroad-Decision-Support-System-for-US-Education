@@ -1,9 +1,5 @@
-using System.IO.Compression;
-using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Xml;
-using System.Xml.Linq;
 using StudyAbroad.Application.Admin.SlmSamples;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -12,17 +8,6 @@ namespace StudyAbroad.Infrastructure.Import;
 
 public class SlmTemplateWriter : ISlmTemplateWriter
 {
-    private static readonly XNamespace Main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-    private static readonly XNamespace DocRel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-    private static readonly XNamespace PkgRel = "http://schemas.openxmlformats.org/package/2006/relationships";
-    private static readonly XNamespace ContentTypes = "http://schemas.openxmlformats.org/package/2006/content-types";
-
-    private const string WorkbookContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
-    private const string WorksheetContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml";
-    private const string RelationshipsContentType = "application/vnd.openxmlformats-package.relationships+xml";
-    private const string WorkbookRelationshipType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
-    private const string WorksheetRelationshipType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
-
     private static readonly string[] Headers =
         ["question", "profile", "pending_question", "intents", "split", "context", "review"];
 
@@ -38,36 +23,17 @@ public class SlmTemplateWriter : ISlmTemplateWriter
         ["question", "answer", "topic", "source", "profile", "pending_question", "intents", "split", "context", "review"];
 
     public byte[] Build() =>
-        Pack(BuildExamples().Select(e => (e.SampleType, BuildSheet(e))).ToList());
+        XlsxPackage.Write(BuildExamples()
+            .Select(e => new XlsxSheetData(e.SampleType, Headers, [ExampleValues(e)]))
+            .ToList());
 
-    public byte[] BuildExport(IReadOnlyList<SlmTrainingSample> samples)
-    {
-        var sheets = new List<(string Name, XDocument Sheet)>();
-        foreach (var sampleType in SlmSampleTypes.All)
-        {
-            var rows = samples.Where(s => s.SampleType == sampleType)
+    public byte[] BuildExport(IReadOnlyList<SlmTrainingSample> samples) =>
+        XlsxPackage.Write(SlmSampleTypes.All
+            .Select(sampleType => new XlsxSheetData(sampleType, ExportHeaders, samples
+                .Where(s => s.SampleType == sampleType)
                 .Select(s => new[] { s.Question, s.Answer, s.Topic, s.Source, s.Profile, s.PendingQuestion, s.Intents, s.Split, s.Context, s.SourceReview })
-                .ToList();
-            sheets.Add((sampleType, Sheet(ExportHeaders, rows)));
-        }
-        return Pack(sheets);
-    }
-
-    private static byte[] Pack(IReadOnlyList<(string Name, XDocument Sheet)> sheets)
-    {
-        using var output = new MemoryStream();
-        using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
-        {
-            WriteEntry(archive, "[Content_Types].xml", BuildContentTypes(sheets.Count));
-            WriteEntry(archive, "_rels/.rels", BuildPackageRelationships());
-            WriteEntry(archive, "xl/workbook.xml", BuildWorkbook(sheets.Select(s => s.Name).ToList()));
-            WriteEntry(archive, "xl/_rels/workbook.xml.rels", BuildWorkbookRelationships(sheets.Count));
-
-            for (var index = 0; index < sheets.Count; index++)
-                WriteEntry(archive, $"xl/worksheets/sheet{index + 1}.xml", sheets[index].Sheet);
-        }
-        return output.ToArray();
-    }
+                .ToList()))
+            .ToList());
 
     private static List<ExampleRow> BuildExamples()
     {
@@ -135,115 +101,14 @@ public class SlmTemplateWriter : ISlmTemplateWriter
         return JsonSerializer.Serialize(new[] { intent }, JsonOptions);
     }
 
-    private static XDocument BuildContentTypes(int sheetCount)
-    {
-        var types = new XElement(ContentTypes + "Types",
-            new XElement(ContentTypes + "Default",
-                new XAttribute("Extension", "rels"), new XAttribute("ContentType", RelationshipsContentType)),
-            new XElement(ContentTypes + "Default",
-                new XAttribute("Extension", "xml"), new XAttribute("ContentType", "application/xml")),
-            new XElement(ContentTypes + "Override",
-                new XAttribute("PartName", "/xl/workbook.xml"), new XAttribute("ContentType", WorkbookContentType)));
-
-        for (var index = 1; index <= sheetCount; index++)
-        {
-            types.Add(new XElement(ContentTypes + "Override",
-                new XAttribute("PartName", $"/xl/worksheets/sheet{index}.xml"),
-                new XAttribute("ContentType", WorksheetContentType)));
-        }
-        return new XDocument(types);
-    }
-
-    private static XDocument BuildPackageRelationships() =>
-        new(new XElement(PkgRel + "Relationships",
-            new XElement(PkgRel + "Relationship",
-                new XAttribute("Id", "rId1"),
-                new XAttribute("Type", WorkbookRelationshipType),
-                new XAttribute("Target", "xl/workbook.xml"))));
-
-    private static XDocument BuildWorkbook(IReadOnlyList<string> names)
-    {
-        var sheets = new XElement(Main + "sheets");
-        for (var index = 0; index < names.Count; index++)
-        {
-            sheets.Add(new XElement(Main + "sheet",
-                new XAttribute("name", names[index]),
-                new XAttribute("sheetId", index + 1),
-                new XAttribute(DocRel + "id", $"rId{index + 1}")));
-        }
-
-        var workbook = new XElement(Main + "workbook", new XAttribute(XNamespace.Xmlns + "r", DocRel.NamespaceName), sheets);
-        return new XDocument(workbook);
-    }
-
-    private static XDocument BuildWorkbookRelationships(int sheetCount)
-    {
-        var relationships = new XElement(PkgRel + "Relationships");
-        for (var index = 1; index <= sheetCount; index++)
-        {
-            relationships.Add(new XElement(PkgRel + "Relationship",
-                new XAttribute("Id", $"rId{index}"),
-                new XAttribute("Type", WorksheetRelationshipType),
-                new XAttribute("Target", $"worksheets/sheet{index}.xml")));
-        }
-        return new XDocument(relationships);
-    }
-
-    private static XDocument BuildSheet(ExampleRow example)
-    {
-        var values = new string?[]
-        {
-            example.Question,
-            example.Profile,
-            example.PendingQuestion,
-            example.Intents,
-            SlmSampleSplits.Train,
-            null,
-            null,
-        };
-
-        return Sheet(Headers, [values]);
-    }
-
-    private static XDocument Sheet(IReadOnlyList<string?> headers, IReadOnlyList<string?[]> rows)
-    {
-        var sheetData = new XElement(Main + "sheetData");
-        sheetData.Add(BuildRow(1, headers));
-        for (var index = 0; index < rows.Count; index++)
-            sheetData.Add(BuildRow(index + 2, rows[index]));
-        return new XDocument(new XElement(Main + "worksheet", sheetData));
-    }
-
-    private static XElement BuildRow(int rowNumber, IReadOnlyList<string?> values)
-    {
-        var row = new XElement(Main + "row", new XAttribute("r", rowNumber));
-        for (var column = 0; column < values.Count; column++)
-        {
-            var text = values[column];
-            if (string.IsNullOrEmpty(text))
-                continue;
-
-            var reference = $"{(char)('A' + column)}{rowNumber}";
-            var textElement = new XElement(Main + "t", text);
-            textElement.SetAttributeValue(XNamespace.Xml + "space", "preserve");
-            row.Add(new XElement(Main + "c",
-                new XAttribute("r", reference),
-                new XAttribute("t", "inlineStr"),
-                new XElement(Main + "is", textElement)));
-        }
-        return row;
-    }
-
-    private static void WriteEntry(ZipArchive archive, string path, XDocument document)
-    {
-        var entry = archive.CreateEntry(path, CompressionLevel.Optimal);
-        using var entryStream = entry.Open();
-        var settings = new XmlWriterSettings
-        {
-            Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-            Indent = false,
-        };
-        using var writer = XmlWriter.Create(entryStream, settings);
-        document.Save(writer);
-    }
+    private static string?[] ExampleValues(ExampleRow example) =>
+    [
+        example.Question,
+        example.Profile,
+        example.PendingQuestion,
+        example.Intents,
+        SlmSampleSplits.Train,
+        null,
+        null,
+    ];
 }

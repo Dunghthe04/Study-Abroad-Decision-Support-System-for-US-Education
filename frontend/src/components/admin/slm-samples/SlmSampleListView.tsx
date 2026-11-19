@@ -21,11 +21,11 @@ import { toast } from "@/components/ui/toast";
 import { DataTable, type DataTableToolbarSlots } from "@/components/admin/shared/DataTable";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
-import { SlmImportDialog } from "@/components/admin/knowledge/SlmImportDialog";
-import { SlmImportResultDialog } from "@/components/admin/knowledge/SlmImportResultDialog";
-import { SlmReviewDialog } from "@/components/admin/knowledge/SlmReviewDialog";
-import { SlmSampleFormPanel } from "@/components/admin/knowledge/SlmSampleFormPanel";
-import { slmSampleColumns } from "@/components/admin/knowledge/slm-sample-columns";
+import { SlmImportDialog } from "@/components/admin/slm-samples/SlmImportDialog";
+import { SlmImportResultDialog } from "@/components/admin/slm-samples/SlmImportResultDialog";
+import { SlmReviewDialog } from "@/components/admin/slm-samples/SlmReviewDialog";
+import { SlmSampleFormPanel } from "@/components/admin/slm-samples/SlmSampleFormPanel";
+import { slmSampleColumns } from "@/components/admin/slm-samples/slm-sample-columns";
 import { useAuth } from "@/contexts/AuthContext";
 import { adminSlmSampleApi } from "@/lib/slm-sample-api";
 import { CHAT_UNANSWERED_SOURCE, REVIEW_STATUSES, SAMPLE_TYPE_OPTIONS, SPLIT_OPTIONS, sampleToRequest } from "@/lib/slm-sample-format";
@@ -72,7 +72,7 @@ function errorText(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-export function KnowledgeListView() {
+export function SlmSampleListView() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [exporting, setExporting] = useState<"jsonl" | "xlsx" | null>(null);

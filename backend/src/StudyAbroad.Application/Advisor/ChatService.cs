@@ -34,7 +34,7 @@ namespace StudyAbroad.Application.Advisor
         IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null,
         IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null,
         IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null, AiPricing? pricing = null,
-        StudyAbroad.Application.Admin.SlmSamples.ISlmSampleService? slmSamples = null)
+        StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeBaseService? knowledgeBase = null)
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
@@ -213,21 +213,21 @@ namespace StudyAbroad.Application.Advisor
 
         private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(1);
 
-        // UC-53: câu chưa trả lời được vào danh sách mẫu SLM ở dạng nháp, chỉ có câu hỏi. Theo công tắc Chat:StoreMessages
+        // UC-53: câu chưa trả lời được vào kho tri thức ở dạng nháp, chỉ có câu hỏi. Theo công tắc Chat:StoreMessages
         // (messages null khi tắt). Lỗi không làm hỏng lượt chat
         private async Task CaptureUnansweredAsync(AdvisorChatRequest request, CancellationToken ct)
         {
-            if (slmSamples is null || messages is null || request.Messages.LastOrDefault(m => m.Role == "user")?.Content is not { Length: > 0 } asked)
+            if (knowledgeBase is null || messages is null || request.Messages.LastOrDefault(m => m.Role == "user")?.Content is not { Length: > 0 } asked)
                 return;
             try
             {
                 using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 bounded.CancelAfter(CaptureTimeout);
-                await slmSamples.CaptureUnansweredAsync(asked, bounded.Token);
+                await knowledgeBase.CaptureUnansweredAsync(asked, bounded.Token);
             }
             catch (Exception ex)
             {
-                logger?.LogWarning(ex, "Không lưu được câu chưa trả lời vào mẫu SLM");
+                logger?.LogWarning(ex, "Không lưu được câu chưa trả lời vào kho tri thức");
             }
         }
 

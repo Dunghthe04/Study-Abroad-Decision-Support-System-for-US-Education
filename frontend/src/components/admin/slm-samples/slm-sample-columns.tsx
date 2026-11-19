@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { DataTableColumn } from "@/components/admin/shared/DataTable";
 import { Badge } from "@/components/ui/badge";
-import { SlmStatusBadge } from "@/components/admin/knowledge/SlmStatusBadge";
+import { SlmStatusBadge } from "@/components/admin/slm-samples/SlmStatusBadge";
 import { InlineSelectCell } from "@/components/admin/shared/InlineSelectCell";
 import { formatDateTime, isFromChat, SAMPLE_TYPE_OPTIONS, SPLIT_OPTIONS } from "@/lib/slm-sample-format";
 import type { SaveSlmSampleRequest, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
