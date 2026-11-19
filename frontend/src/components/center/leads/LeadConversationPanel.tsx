@@ -6,7 +6,15 @@ import { ApiError, centerLeadsApi } from "@/lib/api";
 import { MAX_LEAD_MESSAGE_LENGTH, formatLeadMessageRoleLabel } from "@/lib/lead-message";
 import { getLeadRuleError } from "@/lib/lead-api";
 import { LEAD_MESSAGING_BLOCK_CODES, getLeadMessagingBlockReason } from "@/types/lead";
-import { ImageAttachPicker, LeadMessageAttachment, ReportMessageControl } from "@/components/lead/LeadMessageParts";
+import {
+  ImageAttachPicker,
+  LeadMessageAttachment,
+  MessageReceipt,
+  PeerPresenceBadge,
+  ReportMessageControl,
+  TypingIndicator,
+} from "@/components/lead/LeadMessageParts";
+import { useLeadChat } from "@/hooks/use-lead-chat";
 import type { LeadMessageDto, LeadMessagesThreadDto } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -96,9 +104,29 @@ export function LeadConversationPanel({
     };
   }, [leadId, applyThreadResult]);
 
+  // [Chat realtime] Tải lại im lặng (không bật spinner) khi nối lại mạng, quay lại tab hoặc chưa có realtime
+  const resync = useCallback(() => {
+    centerLeadsApi
+      .getMessages(leadId)
+      .then(applyThreadResult)
+      .catch(() => undefined);
+  }, [leadId, applyThreadResult]);
+
+  const chat = useLeadChat({
+    leadId,
+    onNewMessage: (message) =>
+      setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message])),
+    onMessagesRead: (ids, readAt) =>
+      setMessages((prev) => prev.map((m) => (ids.includes(m.id) ? { ...m, readAt } : m))),
+    onResync: resync,
+  });
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [messages.length]);
+  }, [messages.length, chat.peerTyping]);
+
+  // Tin cuối cùng của trung tâm (chưa gỡ) mang dấu "Đã gửi / Đã xem"
+  const lastOwnId = [...messages].reverse().find((m) => m.isFromCenter && m.status !== "removed")?.id;
 
   const trimmedDraft = draft.trim();
 
@@ -124,10 +152,12 @@ export function LeadConversationPanel({
       const result = imageFile
         ? await centerLeadsApi.sendImageMessage(leadId, imageFile, trimmedDraft)
         : await centerLeadsApi.sendMessage(leadId, trimmedDraft);
-      setMessages((prev) => [...prev, result.message]);
+      // Bản tin có thể đã về qua realtime trước khi REST trả lời: bỏ tin trùng
+      setMessages((prev) => (prev.some((m) => m.id === result.message.id) ? prev : [...prev, result.message]));
       setLastSyncedAt(new Date());
       setDraft("");
       setImageFile(null);
+      chat.notifyTyping(false);
 
       if (result.leadStatus && result.leadStatus !== leadStatus) {
         onLeadStatusChange?.(result.leadStatus);
@@ -201,6 +231,7 @@ export function LeadConversationPanel({
         </div>
 
         <div className="flex items-center gap-2">
+          <PeerPresenceBadge connected={chat.connected} online={chat.peerOnline} peerLabel="Học sinh / phụ huynh" />
           {lastSyncedAt && !isLoading && (
             <span className="text-[11px] text-muted-foreground hidden sm:inline">
               Cập nhật{" "}
@@ -299,6 +330,8 @@ export function LeadConversationPanel({
                 )}
                 {!isRemoved && <LeadMessageAttachment url={msg.attachmentUrl} />}
 
+                {!isRemoved && msg.isFromCenter && msg.id === lastOwnId && <MessageReceipt readAt={msg.readAt} />}
+
                 {/* [UC-58] Trung tâm báo cáo tin của học sinh / phụ huynh */}
                 {!isRemoved && !msg.isFromCenter && (
                   <div className="mt-1.5">
@@ -312,6 +345,7 @@ export function LeadConversationPanel({
             );
           })
         )}
+        {chat.peerTyping && <TypingIndicator peerLabel="Học sinh / phụ huynh" />}
         <div ref={bottomRef} />
       </div>
 
@@ -325,6 +359,7 @@ export function LeadConversationPanel({
             value={draft}
             onChange={(e) => {
               setDraft(e.target.value);
+              chat.notifyTyping(e.target.value.trim().length > 0);
               if (formError) setFormError(null);
             }}
             onKeyDown={handleKeyDown}

@@ -6,7 +6,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { getLeadRuleError, leadApi } from "@/lib/lead-api";
 import { MAX_LEAD_MESSAGE_LENGTH, formatLeadMessageRoleLabel } from "@/lib/lead-message";
-import { ImageAttachPicker, LeadMessageAttachment, ReportMessageControl } from "@/components/lead/LeadMessageParts";
+import {
+  ImageAttachPicker,
+  LeadMessageAttachment,
+  MessageReceipt,
+  PeerPresenceBadge,
+  ReportMessageControl,
+  TypingIndicator,
+} from "@/components/lead/LeadMessageParts";
+import { useLeadChat } from "@/hooks/use-lead-chat";
 import { cn } from "@/lib/utils";
 import type { LeadMessageDto, LeadMessagesThreadDto } from "@/types/api";
 import { LEAD_MESSAGING_BLOCK_CODES, getLeadMessagingBlockReason, type SentLeadDto } from "@/types/lead";
@@ -38,7 +46,8 @@ const loadErrorText = (err: unknown) =>
 
 /**
  * [Nhắn tin phía người gửi] Khung tin nhắn với trung tâm trong một yêu cầu đã gửi.
- * Mở từ nút "Tin nhắn" trên thẻ UC-44 (SentLeadsCard). Không tự làm mới: mở khung thì tải, có nút "Tải lại".
+ * Mở từ nút "Tin nhắn" trên thẻ UC-44 (SentLeadsCard). Mở khung thì tải, rồi nhận tin mới / đang nhập / đã xem / online
+ * qua realtime; chưa có realtime thì tự tải lại định kỳ, và vẫn có nút "Tải lại".
  */
 export function SentLeadMessagesDialog({ lead, open, onOpenChange, onThreadChange }: SentLeadMessagesDialogProps) {
   return (
@@ -149,9 +158,35 @@ function ThreadBody({
     };
   }, [leadId, applyThread]);
 
+  // [Chat realtime] Tải lại im lặng khi nối lại mạng, quay lại tab hoặc chưa có realtime
+  const resync = useCallback(() => {
+    leadApi
+      .listSentMessages(leadId)
+      .then(applyThread)
+      .catch(() => undefined);
+  }, [leadId, applyThread]);
+
+  const chat = useLeadChat({
+    leadId,
+    onNewMessage: (message) =>
+      setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message])),
+    onMessagesRead: (ids, readAt) =>
+      setMessages((prev) => prev.map((m) => (ids.includes(m.id) ? { ...m, readAt } : m))),
+    onResync: resync,
+  });
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [messages.length]);
+  }, [messages.length, chat.peerTyping]);
+
+  // Thẻ UC-44 đếm số tin của trung tâm: cập nhật cả khi tin về qua realtime, không chỉ khi tải lại
+  useEffect(() => {
+    if (isLoading) return;
+    onChangeRef.current?.({ status: leadStatus, centerMessageCount: countCenterMessages(messages) });
+  }, [messages, leadStatus, isLoading]);
+
+  // Tin cuối cùng của mình (chưa gỡ) mang dấu "Đã gửi / Đã xem"
+  const lastOwnId = [...messages].reverse().find((m) => !m.isFromCenter && m.status !== "removed")?.id;
 
   // [UC-74] Chỉ nhắn khi trung tâm đã chấp nhận; server chặn thêm thì giữ lý do server trả về
   const [serverBlockReason, setServerBlockReason] = useState<string | null>(null);
@@ -176,8 +211,10 @@ function ThreadBody({
       const result = imageFile
         ? await leadApi.sendSentImageMessage(leadId, imageFile, trimmedDraft)
         : await leadApi.sendSentMessage(leadId, trimmedDraft);
-      setMessages((prev) => [...prev, result.message]);
+      // Bản tin có thể đã về qua realtime trước khi REST trả lời: bỏ tin trùng
+      setMessages((prev) => (prev.some((m) => m.id === result.message.id) ? prev : [...prev, result.message]));
       setLeadStatus(result.leadStatus);
+      chat.notifyTyping(false);
       setLastSyncedAt(new Date());
       setDraft("");
 
@@ -200,6 +237,7 @@ function ThreadBody({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-end gap-2">
+        <PeerPresenceBadge connected={chat.connected} online={chat.peerOnline} peerLabel="Trung tâm" />
         {lastSyncedAt && !isLoading && (
           <span className="text-[11px] text-muted-foreground">
             Cập nhật {lastSyncedAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
@@ -244,9 +282,11 @@ function ThreadBody({
               isMine={!msg.isFromCenter || (!!user?.id && !!msg.senderUserId && msg.senderUserId.toLowerCase() === user.id.toLowerCase())}
               isReported={reportedIds.has(msg.id)}
               onReport={reportMessage}
+              showReceipt={msg.id === lastOwnId}
             />
           ))
         )}
+        {chat.peerTyping && <TypingIndicator peerLabel="Trung tâm" />}
         <div ref={bottomRef} />
       </div>
 
@@ -266,6 +306,7 @@ function ThreadBody({
             value={draft}
             onChange={(e) => {
               setDraft(e.target.value);
+              chat.notifyTyping(e.target.value.trim().length > 0);
               if (formError) setFormError(null);
             }}
             onKeyDown={(e) => {
@@ -306,11 +347,14 @@ function MessageBubble({
   isMine,
   isReported,
   onReport,
+  showReceipt,
 }: {
   msg: LeadMessageDto;
   isMine: boolean;
   isReported: boolean;
   onReport: (messageId: string, reason: string) => Promise<void>;
+  /** Tin cuối cùng của mình: hiện "Đã gửi / Đã xem". */
+  showReceipt: boolean;
 }) {
   // Backend đã thay nội dung tin bị gỡ bằng câu thông báo
   if (msg.status === "removed") {
@@ -346,6 +390,7 @@ function MessageBubble({
       </div>
       {msg.content && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{msg.content}</p>}
       <LeadMessageAttachment url={msg.attachmentUrl} />
+      {showReceipt && <MessageReceipt readAt={msg.readAt} />}
 
       {/* [UC-58] Học sinh / phụ huynh báo cáo tin của trung tâm (lời lẽ thô tục, quấy rối...) */}
       {msg.isFromCenter && !isMine && (
