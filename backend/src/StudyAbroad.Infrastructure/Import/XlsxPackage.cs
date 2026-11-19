@@ -204,10 +204,27 @@ public static class XlsxPackage
         return index - 1;
     }
 
+    // Giới hạn dung lượng sau giải nén của mỗi phần XML, chống zip bomb (file tải lên tối đa 10 MB nhưng nén có thể phình rất lớn)
+    private const long MaxEntryBytes = 50L * 1024 * 1024;
+
     private static XDocument LoadXml(ZipArchiveEntry entry)
     {
+        if (entry.Length > MaxEntryBytes)
+            throw new InvalidDataException("File xlsx quá lớn sau khi giải nén.");
+
+        // Độ dài khai báo trong header zip có thể bị làm giả nên vẫn đếm byte thật khi đọc
         using var stream = entry.Open();
-        return XDocument.Load(stream);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int read;
+        while ((read = stream.Read(chunk, 0, chunk.Length)) > 0)
+        {
+            if (buffer.Length + read > MaxEntryBytes)
+                throw new InvalidDataException("File xlsx quá lớn sau khi giải nén.");
+            buffer.Write(chunk, 0, read);
+        }
+        buffer.Position = 0;
+        return XDocument.Load(buffer);
     }
 
     /// <summary>Ghi các sheet thành file xlsx (chuỗi inline, không style). Tối đa 26 cột (A–Z).</summary>
