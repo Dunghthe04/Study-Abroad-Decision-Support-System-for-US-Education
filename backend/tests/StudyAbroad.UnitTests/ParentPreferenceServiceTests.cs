@@ -371,6 +371,33 @@ public class ParentPreferenceServiceTests
         Assert.Equal(ParentLinkError.NotFound, (await CreateService().GetForChildAsync(managed, null, CancellationToken.None)).Error);
     }
 
+    // 24: chỉ giữ số liệu các trường có trong khối, khối thiếu thành mảng rỗng
+    [Fact]
+    public void Picked_KeepsOnlyScoredOfPickedSchools()
+    {
+        var items = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(
+            """{"reach":[{"code":"A","x":1}],"aid":[{"code":"b"}],"scored":[{"code":"A","g2":"R"},{"code":"B"},{"code":"Z"}],"failed":["Q"]}""");
+        var p = ParentPreferenceService.Picked(items);
+
+        var codes = p.GetProperty("scored").EnumerateArray().Select(e => e.GetProperty("code").GetString()).ToList();
+        Assert.Equal(["A", "B"], codes);
+        Assert.Equal(1, p.GetProperty("reach")[0].GetProperty("x").GetInt32());
+        Assert.Equal(0, p.GetProperty("match").GetArrayLength());
+        Assert.False(p.TryGetProperty("failed", out _));
+    }
+
+    // 25: màn so sánh trả kèm hai danh sách để vẽ thẻ trường
+    [Fact]
+    public async Task Compare_ReturnsBothItemLists()
+    {
+        Setup();
+        ChildRun();
+        var d = (await CreateService().CompareForParentAsync(_parent, _child, [4, 0, 2], null, CancellationToken.None)).Value!;
+
+        Assert.Equal(2, d.StudentItems!.Value.GetProperty("scored").GetArrayLength());
+        Assert.Equal("C", d.ParentItems!.Value.GetProperty("match")[1].GetProperty("code").GetString());
+    }
+
     internal sealed class FakeProfiles : IAcademicProfileRepository
     {
         public StudentProfile? Profile { get; set; }

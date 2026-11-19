@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using StudyAbroad.Application.AcademicProfiles;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Auth;
@@ -17,12 +18,14 @@ public record ParentPreferenceDto(
 // [UC-76 2c] Màn so sánh. StudentHasRun=false: con chưa nhận gợi ý, Comparison null.
 // IsPreview: danh sách cha mẹ vừa tính từ giá trị chưa lưu (kéo thanh, hoặc cha mẹ chưa lưu lần nào → [2,2,2]).
 // ProfileChangedAfterRun: con sửa hồ sơ sau lần nhận gợi ý mới nhất, hai bên có thể lệch vì hồ sơ chứ không vì ưu tiên.
+// StudentItems / ParentItems: hai danh sách cùng khuôn ItemsJson, chỉ giữ số liệu các trường được xếp nhóm, để frontend vẽ thẻ trường như trang Gợi ý.
 public record PreferenceCompareDto(
     bool StudentHasRun, IReadOnlyList<int>? StudentPref, IReadOnlyList<int> ParentPref,
     long? ParentBudgetVnd, decimal? ParentBudgetUsd, decimal? VndPerUsd,
     bool ParentHasPref, bool IsPreview, bool ProfileChangedAfterRun,
     DateTime? StudentRunAt, DateTime? SavedAt, DateTime? ComputedAt,
-    PreferenceComparison? Comparison, string? Message);
+    PreferenceComparison? Comparison, string? Message,
+    JsonElement? StudentItems = null, JsonElement? ParentItems = null);
 
 // Trang của con: các cha/mẹ liên kết thật (ô chọn Bố / Mẹ) và so sánh của người đang chọn
 public record ParentOption(Guid Id, string Name, bool HasPref);
@@ -282,7 +285,37 @@ public class ParentPreferenceService(
 
         var comparison = PreferenceComparer.Compare(studentItems, parentItems, studentPref, parentPref, budgetUsd);
         return new PreferenceCompareDto(true, studentPref, parentPref, budgetVnd, budgetUsd, vndPerUsd,
-            parentHasPref, isPreview, changed, latest.CreatedAt, savedAt, computedAt, comparison, null);
+            parentHasPref, isPreview, changed, latest.CreatedAt, savedAt, computedAt, comparison, null,
+            Picked(studentItems), Picked(parentItems));
+    }
+
+    private static readonly string[] Blocks = ["reach", "match", "safety", "aid", "other"];
+
+    /// <summary>Giữ 5 khối và số liệu (scored) của đúng các trường có trong khối; bỏ phần scored còn lại cho gọn.
+    /// public để test đọc.</summary>
+    public static JsonElement Picked(JsonElement items)
+    {
+        var result = new JsonObject();
+        var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (items.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var block in Blocks)
+            {
+                if (!items.TryGetProperty(block, out var arr) || arr.ValueKind != JsonValueKind.Array) continue;
+                result[block] = JsonNode.Parse(arr.GetRawText());
+                foreach (var p in arr.EnumerateArray())
+                    if (p.ValueKind == JsonValueKind.Object && p.TryGetProperty("code", out var c) && c.GetString() is { } code)
+                        codes.Add(code);
+            }
+        }
+        var scored = new JsonArray();
+        if (items.ValueKind == JsonValueKind.Object && items.TryGetProperty("scored", out var all) && all.ValueKind == JsonValueKind.Array)
+            foreach (var e in all.EnumerateArray())
+                if (e.ValueKind == JsonValueKind.Object && e.TryGetProperty("code", out var c) && c.GetString() is { } code && codes.Contains(code))
+                    scored.Add(JsonNode.Parse(e.GetRawText()));
+        result["scored"] = scored;
+        foreach (var block in Blocks) result[block] ??= new JsonArray();
+        return JsonSerializer.Deserialize<JsonElement>(result.ToJsonString());
     }
 
     private static PreferenceCompareDto NotRun(IReadOnlyList<int> parentPref, long? budgetVnd, decimal? budgetUsd, decimal? vndPerUsd,
