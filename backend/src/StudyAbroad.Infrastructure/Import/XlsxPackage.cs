@@ -57,16 +57,17 @@ public static class XlsxPackage
     private static IReadOnlyList<XlsxSheet> ReadInternal(Stream workbook, Func<string, bool> includeSheet, CancellationToken ct)
     {
         using var archive = new ZipArchive(workbook, ZipArchiveMode.Read, leaveOpen: true);
+        var budget = new[] { MaxTotalBytes };
 
         var workbookEntry = archive.GetEntry("xl/workbook.xml")
             ?? throw new InvalidDataException("File không phải xlsx hợp lệ (thiếu xl/workbook.xml).");
-        var workbookDoc = LoadXml(workbookEntry);
+        var workbookDoc = LoadXml(workbookEntry, budget);
 
         var targetsById = new Dictionary<string, string>();
         var relsEntry = archive.GetEntry("xl/_rels/workbook.xml.rels");
         if (relsEntry != null)
         {
-            foreach (var rel in LoadXml(relsEntry).Descendants(PkgRel + "Relationship"))
+            foreach (var rel in LoadXml(relsEntry, budget).Descendants(PkgRel + "Relationship"))
             {
                 var id = (string?)rel.Attribute("Id");
                 var target = (string?)rel.Attribute("Target");
@@ -79,7 +80,7 @@ public static class XlsxPackage
         var sharedEntry = archive.GetEntry("xl/sharedStrings.xml");
         if (sharedEntry != null)
         {
-            foreach (var si in LoadXml(sharedEntry).Descendants(Main + "si"))
+            foreach (var si in LoadXml(sharedEntry, budget).Descendants(Main + "si"))
                 sharedStrings.Add(ConcatText(si));
         }
 
@@ -101,7 +102,7 @@ public static class XlsxPackage
             if (sheetEntry == null)
                 continue;
 
-            result.Add(ReadSheet(name, LoadXml(sheetEntry), sharedStrings, ct));
+            result.Add(ReadSheet(name, LoadXml(sheetEntry, budget), sharedStrings, ct));
         }
         return result;
     }
@@ -206,10 +207,12 @@ public static class XlsxPackage
 
     // Giới hạn dung lượng sau giải nén của mỗi phần XML, chống zip bomb (file tải lên tối đa 10 MB nhưng nén có thể phình rất lớn)
     private const long MaxEntryBytes = 50L * 1024 * 1024;
+    // Tổng dung lượng giải nén cho cả một lần đọc (nhiều sheet, nhiều phần), chống nhiều phần cùng phình to
+    private const long MaxTotalBytes = 150L * 1024 * 1024;
 
-    private static XDocument LoadXml(ZipArchiveEntry entry)
+    private static XDocument LoadXml(ZipArchiveEntry entry, long[] budget)
     {
-        if (entry.Length > MaxEntryBytes)
+        if (entry.Length > MaxEntryBytes || entry.Length > budget[0])
             throw new InvalidDataException("File xlsx quá lớn sau khi giải nén.");
 
         // Độ dài khai báo trong header zip có thể bị làm giả nên vẫn đếm byte thật khi đọc
@@ -219,8 +222,9 @@ public static class XlsxPackage
         int read;
         while ((read = stream.Read(chunk, 0, chunk.Length)) > 0)
         {
-            if (buffer.Length + read > MaxEntryBytes)
+            if (buffer.Length + read > MaxEntryBytes || read > budget[0])
                 throw new InvalidDataException("File xlsx quá lớn sau khi giải nén.");
+            budget[0] -= read;
             buffer.Write(chunk, 0, read);
         }
         buffer.Position = 0;

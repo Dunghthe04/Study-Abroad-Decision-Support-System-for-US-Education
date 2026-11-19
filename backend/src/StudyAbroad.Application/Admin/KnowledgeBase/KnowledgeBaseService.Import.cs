@@ -115,6 +115,9 @@ public partial class KnowledgeBaseService
     }
 
     /// <summary>Một dòng file phải đủ nội dung như khi gửi duyệt. Cột level dùng tên tiếng Việt, nhiều bậc cách nhau bởi dấu ;.</summary>
+    // Chặn id quá lớn để không làm sequence entry_no tràn int
+    private const int MaxEntryNo = 1_000_000;
+
     private static (ValidEntry Entry, int? EntryNo) ValidateRow(KnowledgeImportRow row)
     {
         int? entryNo = null;
@@ -122,8 +125,8 @@ public partial class KnowledgeBaseService
         {
             // Excel lưu id dạng số: "1" hoặc "1.0"
             if (!decimal.TryParse(rawId, NumberStyles.Number, CultureInfo.InvariantCulture, out var number)
-                || number < 1 || number > int.MaxValue || number != decimal.Truncate(number))
-                throw new ArgumentException($"Cột id \"{rawId}\" phải là số nguyên từ 1 trở lên.");
+                || number < 1 || number > MaxEntryNo || number != decimal.Truncate(number))
+                throw new ArgumentException($"Cột id \"{rawId}\" phải là số nguyên từ 1 đến {MaxEntryNo}.");
             entryNo = (int)number;
         }
 
