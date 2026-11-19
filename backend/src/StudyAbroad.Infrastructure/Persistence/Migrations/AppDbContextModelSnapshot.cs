@@ -3377,11 +3377,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("Answer")
-                        .HasColumnType("text")
-                        .HasColumnName("answer")
-                        .HasComment("Câu trả lời mẫu. Dòng cũ chỉ có intents thì để trống.");
-
                     b.Property<string>("Context")
                         .HasColumnType("jsonb")
                         .HasColumnName("context")
@@ -3490,12 +3485,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDefaultValue("train")
                         .HasColumnName("split")
                         .HasComment("Tập dùng cho model: train, val hoặc test.");
-
-                    b.Property<string>("Topic")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("topic")
-                        .HasComment("Chủ đề.");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
