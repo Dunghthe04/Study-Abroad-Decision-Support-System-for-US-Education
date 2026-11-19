@@ -182,6 +182,23 @@ public class KnowledgeBaseServiceTests
         Assert.Equal((150, 100, 3), (preview.TotalRows, preview.Rows.Count, preview.Errors.Count));
         Assert.Empty(repo.Items);
     }
+
+    [Fact]
+    public async Task CaptureUnansweredAsync_CollapsesSpaces_SkipsContactsAndDuplicatesIncludingDeleted()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var deleted = repo.Add(KnowledgeReviewStatuses.Draft, "Câu đã xóa?");
+        deleted.DeletedAt = DateTime.UtcNow;
+        var service = Svc(repo);
+
+        Assert.True(await service.CaptureUnansweredAsync("  em   muốn hỏi  "));
+        Assert.False(await service.CaptureUnansweredAsync("em muốn hỏi"));
+        Assert.False(await service.CaptureUnansweredAsync("zalo em 0912345678"));
+        Assert.False(await service.CaptureUnansweredAsync("câu đã xóa?"));
+
+        var captured = repo.Items.Single(e => e.Origin == KnowledgeOrigins.ChatUnanswered);
+        Assert.Equal(("em muốn hỏi", KnowledgeReviewStatuses.Draft, (Guid?)null), (captured.Question, captured.ReviewStatus, captured.CreatedByUserId));
+    }
 }
 
 internal class FakeKnowledgeReader(params KnowledgeImportRow[] rows) : IKnowledgeWorkbookReader

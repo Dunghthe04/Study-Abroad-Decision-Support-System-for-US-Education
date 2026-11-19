@@ -37,6 +37,12 @@ public interface IKnowledgeBaseService
 
     /// <summary>Thêm các dòng hợp lệ, chưa trùng, ở trạng thái pending trong một transaction; dòng lỗi được báo và bỏ qua.</summary>
     Task<KnowledgeImportResultDto> ImportAsync(Stream workbook, Guid actorUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// UC-53: lưu câu chat chưa trả lời được thành mục nháp, chỉ có câu hỏi. Bỏ qua nếu trống, quá dài,
+    /// có thông tin liên hệ hoặc link, hoặc trùng câu đã có (kể cả đã xóa). Trả true nếu đã thêm.
+    /// </summary>
+    Task<bool> CaptureUnansweredAsync(string? question, CancellationToken ct = default);
 }
 
 /// <summary>Đọc sheet knowledge_base của file xlsx thành các dòng thô, chưa kiểm tra nội dung.</summary>

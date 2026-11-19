@@ -120,37 +120,37 @@ public class ChatServiceTests
         Assert.Equal(1, JsonDocument.Parse(reply.MetaJson!).RootElement.GetProperty("v").GetInt32());
     }
 
-    // ---- UC-53: câu chưa trả lời được thành mẫu SLM nháp
+    // ---- UC-53: câu chưa trả lời được thành tri thức nháp
 
     private static FakeAdvisor Ambiguous() => new("B0")
     {
         Slm = new AdvisorSlmDto([new AdvisorSlmIntentDto("out_of_scope", "asdfgh")], ["out_of_scope"], "ambiguous", 0.2, false),
     };
 
-    private static StudyAbroad.Application.Admin.SlmSamples.SlmSampleService Samples(FakeSlmRepository repo) =>
-        new(repo, new FakeReader(), new StudyAbroad.Infrastructure.Import.SlmTemplateWriter(), new FakeAuditLogs());
+    private static StudyAbroad.Application.Admin.KnowledgeBase.KnowledgeBaseService Knowledge(FakeKnowledgeRepository repo) =>
+        new(repo, new FakeKnowledgeReader());
 
     [Fact]
-    public async Task NoAnswerTurn_IsCapturedAsAnonymousSlmDraft()
+    public async Task NoAnswerTurn_IsCapturedAsAnonymousKnowledgeDraft()
     {
-        var repo = new FakeSlmRepository();
+        var repo = new FakeKnowledgeRepository();
 
-        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), knowledgeBase: Knowledge(repo))
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
 
-        var sample = Assert.Single(repo.Items);
-        Assert.Equal(("asdfgh", SlmSampleSources.ChatUnanswered, SlmReviewStatuses.Draft), (sample.Question, sample.Source, sample.ReviewStatus));
-        Assert.Null(sample.CreatedByUserId);
+        var entry = Assert.Single(repo.Items);
+        Assert.Equal(("asdfgh", KnowledgeOrigins.ChatUnanswered, KnowledgeReviewStatuses.Draft), (entry.Question, entry.Origin, entry.ReviewStatus));
+        Assert.Null(entry.CreatedByUserId);
     }
 
     [Fact]
     public async Task AnsweredTurn_OrStoreMessagesOff_CapturesNothing()
     {
-        var repo = new FakeSlmRepository();
+        var repo = new FakeKnowledgeRepository();
 
-        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), knowledgeBase: Knowledge(repo))
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
-        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), slmSamples: Samples(repo))
+        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), knowledgeBase: Knowledge(repo))
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
 
         Assert.Empty(repo.Items);
@@ -159,9 +159,9 @@ public class ChatServiceTests
     [Fact]
     public async Task CaptureFailure_DoesNotBreakTheChatReply()
     {
-        var repo = new FakeSlmRepository { Fail = true };
+        var repo = new FakeKnowledgeRepository { Fail = true };
 
-        var res = await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+        var res = await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), knowledgeBase: Knowledge(repo))
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
 
         Assert.NotNull(res.SessionId);
