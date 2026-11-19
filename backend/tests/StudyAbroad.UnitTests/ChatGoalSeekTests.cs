@@ -32,7 +32,7 @@ public class ChatGoalSeekTests
     [InlineData("CONTROL")]
     public void NextSteps_ForAProfileFilter_SendsTheStudentToEditTheProfile(string reason)
     {
-        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded(reason)));
+        var step = Assert.Single(ChatNextSteps.GoalSeekFixes(Excluded(reason)));
 
         Assert.Equal("Sửa hồ sơ", step.Label);
         Assert.Equal("/analysis?edit=1", step.Href);
@@ -48,7 +48,7 @@ public class ChatGoalSeekTests
     {
         var english = new GoalEnglishDto((decimal?)ielts, toefl, duolingo, 1m);
 
-        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded("ENGLISH", english)));
+        var step = Assert.Single(ChatNextSteps.GoalSeekFixes(Excluded("ENGLISH", english)));
 
         Assert.Equal((label, value), (step.Label, step.Value));
         Assert.Null(step.Href);
@@ -57,8 +57,8 @@ public class ChatGoalSeekTests
     [Fact]
     public void NextSteps_ForEnglishWithoutAPublishedMinimum_OffersNothing()
     {
-        Assert.Empty(ChatGoalSeek.NextSteps(Excluded("ENGLISH_NO_CERT", new GoalEnglishDto(null, null, null, null))));
-        Assert.Empty(ChatGoalSeek.NextSteps(Excluded("ENGLISH")));
+        Assert.Empty(ChatNextSteps.GoalSeekFixes(Excluded("ENGLISH_NO_CERT", new GoalEnglishDto(null, null, null, null))));
+        Assert.Empty(ChatNextSteps.GoalSeekFixes(Excluded("ENGLISH")));
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public class ChatGoalSeekTests
     {
         var budget = new GoalBudgetDto("over_budget", 62_000m, 40_000m, 56_364.5m, 22_000m, null);
 
-        var step = Assert.Single(ChatGoalSeek.NextSteps(Excluded("BUDGET", budget: budget)));
+        var step = Assert.Single(ChatNextSteps.GoalSeekFixes(Excluded("BUDGET", budget: budget)));
 
         Assert.Equal("Thử ngân sách 56.365 USD", step.Label);
         Assert.Equal("Nếu ngân sách của em là 56365 USD mỗi năm thì sao?", step.Value);
@@ -75,7 +75,25 @@ public class ChatGoalSeekTests
     [Fact]
     public void NextSteps_ForASchoolThatIsInTheList_OffersNothing()
     {
-        Assert.Empty(ChatGoalSeek.NextSteps(Result()));
+        Assert.Empty(ChatNextSteps.GoalSeekFixes(Result()));
+    }
+
+    [Fact]
+    public void AfterGoalSeek_ForASchoolThatIsInTheList_OffersToExplainIt_ThenTheCenter()
+    {
+        var steps = ChatNextSteps.AfterGoalSeek(Result());
+
+        Assert.Equal(["Giải thích trường này", ChatNextSteps.CenterLabel], steps.Select(s => s.Label));
+        Assert.Equal(ChatExplanation.Action, steps[0].Action?.Type);
+        Assert.Equal("188429", steps[0].Action?.SchoolCode);
+    }
+
+    [Fact]
+    public void AfterGoalSeek_ForAnExcludedSchool_OffersTheFix_ThenTheCenter()
+    {
+        var steps = ChatNextSteps.AfterGoalSeek(Excluded("MAJOR"));
+
+        Assert.Equal(["Sửa hồ sơ", ChatNextSteps.CenterLabel], steps.Select(s => s.Label));
     }
 
     // ---------------------------------------------------------------- đọc câu hỏi
@@ -148,18 +166,165 @@ public class ChatGoalSeekTests
         Assert.Equal(JsonValueKind.Null, ChatGoalSeek.SchoolPicker(null).Data!.Value.GetProperty("target").ValueKind);
     }
 
-    // ---------------------------------------------------------------- tóm tắt kết quả
+    // ---------------------------------------------------------------- lời giải thích dưới bảng so sánh
+
+    private static string[] Lines(SchoolGoalResult r) => ChatGoalSeek.Summarize(r).Split('\n');
+
+    private static GoalCompareRow SatRow(decimal student, double position, string status = "within", decimal gap = 0) =>
+        new("sat", status, student, 1220, 1420, gap, position, "considered");
+
+    // Ca Cal State Long Beach: đang Vừa sức, không lên được An toàn vì trường nhận dưới 50% hồ sơ.
+    // Người đọc phải biết: đang ở đâu, vì sao không lên được (không phải do hồ sơ yếu), đang đứng ở đâu so với trường,
+    // cần làm gì để mạnh hơn và nên nộp trường này theo vai trò nào
+    private static SchoolGoalResult CalStateLongBeach() =>
+        Result(outcome: "blocked", current: "M", target: "S", best: "M", reasons: [GroupReasons.CappedSelective],
+            alternatives: [new("2", "Texas State University", "TX", "public", 28_000m, "S"), new("3", "Florida Gulf Coast University", "FL", "public", 27_000m, "S")]) with
+        {
+            Stats = new GoalSchoolStats(0.194m, 0.428m, 2.2, 0.15, 0.5, 0.5),
+            Comparison =
+            [
+                SatRow(1300, 0.446),
+                new("gpa", "within", 3.70m, 3.66m, 3.66m, 0, 0.49, "considered"),
+                new("ec", "below", 2, 3, 3, -1, null, "considered"),
+                new("accept", "capped", null, 0.194m, 0.428m, 2.206m),
+            ],
+        };
 
     [Fact]
-    public void Summarize_StartsByRestatingTheSchoolItUnderstood_ThenFinance()
+    public void Summarize_CalStateLongBeach_TellsTheStudentWhereTheyAreWhyAndWhatToDo()
     {
-        var lines = ChatGoalSeek.Summarize(Result(alone: [Sat(1290, 1430)])).Split('\n');
+        var lines = Lines(CalStateLongBeach());
 
-        Assert.Equal("Mình hiểu bạn hỏi về Boston University, nhóm muốn đạt: Vừa sức.", lines[0]);
-        Assert.StartsWith("Tài chính: Chi phí khoảng 38.000 USD mỗi năm, nằm trong ngân sách", lines[1]);
+        // 1. Đang ở đâu
+        Assert.Equal("**Với hồ sơ hiện tại, Boston University đang ở nhóm Vừa sức với bạn, và đây là nhóm cao nhất trường này có thể có.**", lines[0]);
+        // 2. Vì sao không lên được: luật của trường, không phải do hồ sơ yếu
+        Assert.Equal("Vì sao không lên được nhóm An toàn hơn:", lines[1]);
+        Assert.Equal(
+            "- Trường nhận 19,4% hồ sơ, dưới mốc 50%, nên chỉ tối đa là Vừa sức. Đây là luật áp cho mọi hồ sơ, không phải do hồ sơ của bạn yếu và bạn không thể thay đổi.",
+            lines[2]);
+        // 3. Đang đứng ở đâu so với trường
+        Assert.Contains("Bạn đang ở đâu so với trường:", lines);
+        Assert.Contains("- SAT 1300: hơn khoảng 45% sinh viên của trường (khoảng của trường 1220–1420), nằm trong khoảng của trường", lines);
+        Assert.Contains("- GPA 3,7: hơn khoảng 49% sinh viên của trường (trung bình của trường 3,66), ngang mức trung bình", lines);
+        Assert.Contains("- Ngoại khóa bậc 2/5: thấp hơn mức trung bình (bậc 3), kéo nhẹ điểm vị trí của bạn xuống", lines);
+        // 4. Cần làm gì để mạnh hơn: nhóm không đổi nhưng vị trí tốt hơn
+        Assert.Contains("Nhóm sẽ không đổi, nhưng bạn mạnh hơn nếu:", lines);
+        Assert.Contains("- Đưa SAT lên 1420 (mốc trên của trường): bạn sẽ hơn khoảng 75% sinh viên của trường, hiện là khoảng 45%.", lines);
+        Assert.Contains("- Nâng ngoại khóa từ bậc 2 lên bậc 3 (mức trung bình) để không còn bị trừ điểm vị trí.", lines);
+        // 5. Nên nộp theo vai trò nào
+        Assert.Equal("Nên nộp thế nào:", lines[^2]);
+        Assert.Equal(
+            "Coi Boston University là một trường mục tiêu chính. Giữ thêm các trường An toàn hơn như Texas State University, Florida Gulf Coast University để chắc chắn.",
+            lines[^1]);
     }
 
-    // Trường bị ẩn vì tiếng Anh: dòng tiếng Anh đứng trước tài chính, nêu mức tối thiểu từng bài thi
+    [Fact]
+    public void Summarize_NeverSaysImprovingIsPointless_WhenTheGroupCannotChange()
+    {
+        var text = ChatGoalSeek.Summarize(CalStateLongBeach());
+
+        Assert.DoesNotContain("bất kể", text);
+        Assert.DoesNotContain("Dữ liệu không cho thấy", text);
+        Assert.DoesNotContain("đệm", text);
+        Assert.DoesNotContain("một yếu tố", text);
+        Assert.DoesNotContain("thanh kéo", text);
+    }
+
+    [Fact]
+    public void Summarize_WhenEverythingIsAlreadyAtOrAboveTheSchool_SaysNothingMoreIsNeeded()
+    {
+        var result = CalStateLongBeach() with
+        {
+            Comparison = [SatRow(1420, 0.75), new("gpa", "above", 3.9m, 3.66m, 3.66m, 0.24m, 0.7, "considered"), new("ec", "within", 3, 3, 3, 0, null, "considered")],
+        };
+
+        var lines = Lines(result);
+
+        Assert.DoesNotContain("Nhóm sẽ không đổi, nhưng bạn mạnh hơn nếu:", lines);
+        Assert.Contains(lines, l => l.StartsWith("Hồ sơ của bạn đã ngang hoặc cao hơn mặt bằng của trường"));
+    }
+
+    // Ca Oklahoma State: SAT trên mốc, GPA gần trung bình nhưng trường có nhiều sinh viên GPA 4,0, ngoại khóa thấp,
+    // và trường nhận du học sinh ít nên bị hạ một nhóm. Lời giải thích nói đúng các nguyên nhân đó và nói thẳng GPA 4,0 là mức tối đa
+    [Fact]
+    public void Summarize_OklahomaState_ExplainsTheDowngradeAndWhyGpa4IsNotRealistic()
+    {
+        var gpa4 = new GoalPlanDto([new("gpa", 3.7m, 4m)], 4, "veryHard");
+        var result = Result(alone: [gpa4], cheapest: gpa4, recommended: gpa4) with
+        {
+            Comparison =
+            [
+                new("sat", "above", 1300, 1060, 1250, 50, 0.848, "considered"),
+                new("gpa", "below", 3.70m, 3.76m, 3.76m, -0.06m, 0.384, "considered"),
+                new("ec", "below", 2, 3, 3, -1, null, "considered"),
+                new("accept", "downgrade", null, 0.737m, 0.184m, 0.25m),
+            ],
+        };
+
+        var lines = Lines(result);
+
+        Assert.Equal("**Hiện tại Boston University đang ở nhóm Khó vào với bạn. Bạn có thể lên nhóm Vừa sức nếu cải thiện hồ sơ.**", lines[0]);
+        Assert.Contains("- GPA 3,7: hơn khoảng 38% sinh viên của trường (trung bình của trường 3,76), thấp hơn trung bình 0,06", lines);
+        Assert.Contains(
+            "- Tỷ lệ nhận du học sinh 18,4% (chung 73,7%), chỉ bằng 25% mức chung, dưới một nửa nên hệ thống hạ trường xuống một nhóm. Đây là luật áp cho mọi hồ sơ, bạn không thể thay đổi",
+            lines);
+        Assert.Contains("Để lên nhóm Vừa sức:", lines);
+        Assert.Contains("- GPA 3,7 → 4 (rất khó)", lines);
+        Assert.Contains(lines, l => l.StartsWith("Lưu ý: GPA 4,0 là mức tối đa của thang điểm"));
+        Assert.Equal("Coi Boston University là trường thử sức, đừng dựa vào trường này; giữ thêm các trường Vừa sức và An toàn hơn trong danh sách.", lines[^1]);
+    }
+
+    // GPA đã chạm trần 4,0 thì mức "nên đặt" trùng mức tối thiểu: không được nói "đặt cao hơn mức tối thiểu"
+    [Fact]
+    public void Summarize_DoesNotSuggestAHigherTargetWhenItIsTheSamePlanAsTheMinimum()
+    {
+        var gpa4 = new GoalPlanDto([new("gpa", 3.7m, 4m)], 4, "veryHard");
+        var same = new GoalPlanDto([new("gpa", 3.7m, 4m)], 4, "veryHard");
+
+        var text = ChatGoalSeek.Summarize(Result(alone: [gpa4], cheapest: gpa4, recommended: same));
+
+        Assert.DoesNotContain("Nên đặt mục tiêu cao hơn", text);
+    }
+
+    [Fact]
+    public void Summarize_ASchoolOutsideTheList_SaysWhyAndWhichGroupItWouldBeIn()
+    {
+        var excluded = Excluded("BUDGET", budget: new GoalBudgetDto("over_budget", 92_760m, 70_000m, 84_400m, 15_760m, null));
+
+        var first = Lines(excluded)[0];
+
+        Assert.Equal(
+            "**Boston University chưa nằm trong danh sách gợi ý của bạn vì chi phí vượt ngân sách của bạn. Nếu đủ điều kiện đó, trường sẽ ở nhóm Khó vào với bạn.**",
+            first);
+    }
+
+    [Fact]
+    public void Summarize_Reachable_ListsEachThingAloneTheCombinationAndTheSuggestedLevel()
+    {
+        var combined = new GoalPlanDto([new("sat", 1290, 1370), new("ecTier", 2, 3)], 1.1, "hard");
+        var result = Result(alone: [Sat(1290, 1430), new GoalPlanDto([new("gpa", 3.5m, 3.9m)], 4, "veryHard")],
+            cheapest: combined, recommended: Sat(1290, 1460));
+
+        var text = ChatGoalSeek.Summarize(result);
+
+        Assert.Contains("Để lên nhóm Vừa sức:", text);
+        Assert.Contains("Mỗi cách sau đều đủ nếu bạn chỉ thay đổi một thứ:", text);
+        Assert.Contains("- SAT 1290 → 1430 (khó)", text);
+        Assert.Contains("- GPA 3,5 → 3,9 (rất khó)", text);
+        Assert.Contains("Cách kết hợp ít công sức nhất: SAT 1290 → 1370 và bậc ngoại khóa 2 → 3 (khó)", text);
+        Assert.Contains("Nên đặt mục tiêu cao hơn mức tối thiểu một chút cho chắc: SAT 1290 → 1460 (khó)", text);
+        Assert.DoesNotContain("tối đa của thang điểm", text);   // GPA 3,9 chưa phải mức tối đa
+    }
+
+    [Fact]
+    public void Summarize_WhenNoSingleThingWorks_SaysSeveralMustImprove()
+    {
+        var text = ChatGoalSeek.Summarize(Result(alone: [], cheapest: new GoalPlanDto([new("sat", 1290, 1500), new("gpa", 3.5m, 3.9m)], 3, "veryHard")));
+
+        Assert.Contains("Thay đổi riêng một thứ chưa đủ", text);
+        Assert.Contains("Cách kết hợp ít công sức nhất: SAT 1290 → 1500 và GPA 3,5 → 3,9 (rất khó)", text);
+    }
+
     // Lý do bị chặn nói con số cụ thể (tỉ lệ nhận, mốc), không chỉ "ít hơn hẳn"
     [Fact]
     public void Summarize_Blocked_StatesTheAcceptRateAndTheThresholds()
@@ -173,31 +338,41 @@ public class ChatGoalSeekTests
 
         Assert.Contains("nhận du học sinh 9% trong khi tỷ lệ nhận chung là 24%, chỉ bằng 37,5% mức chung và dưới mốc 50%", intlText);
         Assert.Contains("chỉ nhận 8% hồ sơ, dưới mốc 15%", lowText);
+        Assert.Contains("Đây là luật áp cho mọi hồ sơ", lowText);
     }
 
-    // Khung chat dựng thẻ từ chính kết quả code đã tính: widget mang theo toàn bộ kết quả (camelCase), kèm vị trí và các mức đích
     [Fact]
-    public void WidgetOf_CarriesTheWholeResultForTheChatCard()
+    public void Summarize_Blocked_OffersSchoolsInTheTargetGroupAndAdviceForTheCurrentGroup()
     {
-        var result = Result(alone: [Sat(1290, 1430)]) with
-        {
-            Position = new GoalPosition("in_list", "R", null, false),
-            Targets = [new GoalTargetResult("M", "reachable", "M", [], null, null, [Sat(1290, 1430)], [])],
-        };
+        var result = Result(outcome: "blocked", current: "R", target: "M", best: "R", reasons: [GroupReasons.LowAcceptRate],
+            alternatives: [new("2", "Denison University", "OH", "private", 95_900m, "M"), new("3", "University of Puget Sound", "WA", "private", 89_872m, "M")]);
 
-        var widget = ChatGoalSeek.WidgetOf(result);
+        var text = ChatGoalSeek.Summarize(result);
 
-        Assert.Equal("goal_seek", widget.Type);
-        Assert.Equal("188429", widget.Data!.Value.GetProperty("code").GetString());
-        var card = widget.Data.Value.GetProperty("result");
-        Assert.Equal("Boston University", card.GetProperty("name").GetString());
-        Assert.Equal("in_list", card.GetProperty("position").GetProperty("status").GetString());
-        Assert.Equal("M", card.GetProperty("targets")[0].GetProperty("target").GetString());
-        Assert.Equal(1430, card.GetProperty("targets")[0].GetProperty("alone")[0].GetProperty("changes")[0].GetProperty("to").GetDecimal());
+        Assert.Contains("nhóm cao nhất trường này có thể có", text);
+        Assert.Contains("Các trường đang ở nhóm Vừa sức với bạn: Denison University, University of Puget Sound.", text);
+        Assert.DoesNotContain("Trường tương tự", text);   // các trường này chỉ cùng nhóm với bạn, không giống trường hỏi
     }
 
     [Fact]
-    public void Summarize_ASchoolHiddenForEnglish_SaysTheScoreNeededBeforeFinance()
+    public void Summarize_AlreadyReached_SaysNothingIsNeeded()
+    {
+        var text = ChatGoalSeek.Summarize(Result(outcome: "already_reached", current: "M"));
+
+        Assert.Contains("đã ở nhóm Vừa sức với bạn, bạn không cần thay đổi gì", text);
+    }
+
+    [Fact]
+    public void Summarize_NoData_SaysTheLevelCannotBeComputed()
+    {
+        var lines = Lines(Result(outcome: "no_data", current: "NA", reasons: [GroupReasons.NoAcademicData]));
+
+        Assert.Contains("chưa đủ số liệu để xếp Boston University vào nhóm nào", lines[0]);
+        Assert.Contains(lines, l => l.Contains("chưa tính được mức cần đạt"));
+    }
+
+    [Fact]
+    public void Summarize_ASchoolHiddenForEnglish_SaysTheScoreNeeded()
     {
         var result = Result(alone: [Sat(1290, 1430)]) with
         {
@@ -205,11 +380,11 @@ public class ChatGoalSeekTests
             English = new GoalEnglishDto(7.5m, 100m, 130m, 1.5m)
         };
 
-        var lines = ChatGoalSeek.Summarize(result).Split('\n');
+        var lines = Lines(result);
 
-        Assert.StartsWith("Tiếng Anh: điểm của bạn chưa đủ", lines[1]);
-        Assert.Contains("IELTS 7,5, TOEFL 100 hoặc Duolingo 130 (một bài là đủ)", lines[1]);
-        Assert.StartsWith("Tài chính:", lines[2]);
+        Assert.StartsWith("**Boston University chưa nằm trong danh sách gợi ý của bạn vì điểm tiếng Anh của bạn chưa đủ", lines[0]);
+        var english = Assert.Single(lines, l => l.StartsWith("Tiếng Anh: điểm của bạn chưa đủ"));
+        Assert.Contains("IELTS 7,5, TOEFL 100 hoặc Duolingo 130 (một bài là đủ)", english);
     }
 
     [Fact]
@@ -221,83 +396,55 @@ public class ChatGoalSeekTests
             English = new GoalEnglishDto(6.5m, null, null, null)
         };
 
-        var line = ChatGoalSeek.Summarize(result).Split('\n')[1];
+        var line = Assert.Single(Lines(result), l => l.StartsWith("Tiếng Anh: bạn chưa có chứng chỉ"));
 
-        Assert.StartsWith("Tiếng Anh: bạn chưa có chứng chỉ", line);
         Assert.Contains("Cần đạt IELTS 6,5.", line);
     }
 
-    [Fact]
-    public void Summarize_Reachable_ListsEachFactorAloneTheCombinationAndTheRecommendedLevel()
+    // Chi phí chỉ được nói chi tiết khi là rào cản; còn lại đã có ở bảng nên không lặp
+    [Theory]
+    [InlineData("need_aid", "Ngân sách của bạn là 50.000 USD mỗi năm (hệ thống cho phép vượt tới 55.000 USD, dung sai 10%). Chi phí khoảng 62.000 USD mỗi năm, vượt mức đó khoảng 7.000 USD: cần ngân sách từ 56.400 USD mỗi năm hoặc học bổng lớn")]
+    [InlineData("over_budget", "Ngân sách của bạn là 50.000 USD mỗi năm (hệ thống cho phép vượt tới 55.000 USD, dung sai 10%). Chi phí khoảng 62.000 USD mỗi năm, vượt mức đó và trường không có học bổng phù hợp nên không nằm trong danh sách của bạn")]
+    public void Summarize_FinanceIsSaidOnlyWhenItIsABarrier_AndNamesTheBudgetFirst(string status, string expected)
     {
-        var combined = new GoalPlanDto([new("sat", 1290, 1370), new("ecTier", 2, 3)], 1.1, "hard");
-        var result = Result(alone: [Sat(1290, 1430), new GoalPlanDto([new("gpa", 3.5m, 3.9m)], 4, "veryHard")],
-            cheapest: combined, recommended: Sat(1290, 1460));
+        var budget = new GoalBudgetDto(status, 62_000m, 50_000m, 56_400m, 7_000m, null);
 
-        var text = ChatGoalSeek.Summarize(result);
+        var lines = Lines(Result(alone: [Sat(1290, 1430)], budget: budget));
 
-        Assert.Contains("- SAT 1290 → 1430 (khó)", text);
-        Assert.Contains("- GPA 3.5 → 3.9 (rất khó)", text);
-        Assert.Contains("Kết hợp ít công sức nhất: SAT 1290 → 1370 và bậc ngoại khóa 2 → 3 (khó)", text);
-        Assert.Contains("Nên đặt mục tiêu (có đệm): SAT 1290 → 1460 (khó)", text);
-    }
-
-    [Fact]
-    public void Summarize_WhenNoSingleFactorWorks_SaysACombinationIsNeeded()
-    {
-        var text = ChatGoalSeek.Summarize(Result(alone: [], cheapest: new GoalPlanDto([new("sat", 1290, 1500), new("gpa", 3.5m, 3.9m)], 3, "veryHard")));
-
-        Assert.Contains("Một yếu tố riêng chưa đủ", text);
-    }
-
-    [Fact]
-    public void Summarize_Blocked_SaysWhyAndTheBestGroup_AndOffersSimilarSchools()
-    {
-        var result = Result(outcome: "blocked", current: "R", target: "M", best: "R", reasons: [GroupReasons.LowAcceptRate],
-            alternatives: [new("2", "Denison University", "OH", "private", 95_900m, "M"), new("3", "University of Puget Sound", "WA", "private", 89_872m, "M")]);
-
-        var text = ChatGoalSeek.Summarize(result);
-
-        Assert.Contains("chỉ nhận dưới 15% hồ sơ nên luôn xếp Khó vào", text);
-        Assert.Contains("Nhóm cao nhất bạn có thể đạt ở trường này là Khó vào", text);
-        Assert.Contains("Trường tương tự đang ở nhóm này với bạn: Denison University, University of Puget Sound.", text);
-    }
-
-    [Fact]
-    public void Summarize_AlreadyReached_SaysNothingIsNeeded()
-    {
-        var text = ChatGoalSeek.Summarize(Result(outcome: "already_reached", current: "M"));
-
-        Assert.Contains("bạn đã ở nhóm Vừa sức, không cần thay đổi gì", text);
-    }
-
-    [Fact]
-    public void Summarize_NoData_SaysTheLevelCannotBeComputed()
-    {
-        var text = ChatGoalSeek.Summarize(Result(outcome: "no_data", current: "NA", reasons: [GroupReasons.NoAcademicData]));
-
-        Assert.Contains("chưa có đủ số liệu học thuật", text);
-        Assert.Contains("chưa tính được mức cần đạt", text);
+        Assert.Contains(lines, l => l.StartsWith("Về chi phí: " + expected));
     }
 
     [Theory]
-    [InlineData("need_aid", "vượt ngân sách khoảng 7.000 USD: cần ngân sách từ 56.400 USD mỗi năm hoặc học bổng lớn")]
-    [InlineData("over_budget", "vượt ngân sách và trường không có học bổng phù hợp nên không nằm trong danh sách của bạn")]
-    [InlineData("no_budget", "Hồ sơ của bạn không đặt trần ngân sách")]
-    [InlineData("unknown_cost", "Trường chưa có số liệu chi phí")]
-    public void Summarize_FinanceComesFirst_AndSaysWhatTheBudgetMeans(string status, string expected)
+    [InlineData("ok")]
+    [InlineData("no_budget")]
+    [InlineData("unknown_cost")]
+    public void Summarize_DoesNotRepeatFinanceWhenItIsNotABarrier(string status)
     {
-        var budget = new GoalBudgetDto(status, 62_000m, status == "no_budget" ? null : 50_000m, 56_400m, 7_000m, null);
+        var budget = new GoalBudgetDto(status, 38_000m, status == "no_budget" ? null : 50_000m, 34_600m, null, null);
 
         var text = ChatGoalSeek.Summarize(Result(alone: [Sat(1290, 1430)], budget: budget));
 
-        Assert.Contains(expected, text);
+        Assert.DoesNotContain("Về chi phí", text);
     }
 
-    // ---------------------------------------------------------------- dữ kiện gửi Gemini
+    // Đang xem giả định thì ghi là ngân sách GIẢ ĐỊNH để không nhầm với ngân sách gốc
+    [Fact]
+    public void Summarize_MarksASimulatedBudget_AndNamesItBeforeSayingItIsExceeded()
+    {
+        var budget = new GoalBudgetDto("need_aid", 92_760m, 25_000m, 84_400m, 65_260m, null);
+
+        var real = ChatGoalSeek.Summarize(Result(alone: [Sat(1290, 1430)], budget: budget));
+        var simulated = ChatGoalSeek.Summarize(Result(alone: [Sat(1290, 1430)], budget: budget) with { Basis = "simulated" });
+
+        Assert.Contains("Ngân sách của bạn là 25.000 USD mỗi năm (hệ thống cho phép vượt tới 27.500 USD, dung sai 10%). Chi phí khoảng 92.760 USD mỗi năm, vượt mức đó khoảng 65.260 USD", real);
+        Assert.Contains("Ngân sách giả định của bạn là 25.000 USD mỗi năm (hệ thống cho phép vượt tới 27.500 USD, dung sai 10%)", simulated);
+        Assert.True(real.IndexOf("Ngân sách của bạn là", StringComparison.Ordinal) < real.IndexOf("vượt mức đó", StringComparison.Ordinal));
+    }
+
+    // ---------------------------------------------------------------- dữ kiện gửi Claude
 
     [Fact]
-    public void Note_SendsTheComputedFactsWithoutTheEchoLineOrTheBulletMarks()
+    public void Note_SendsTheComputedFactsWithoutBoldOrBulletMarks()
     {
         var result = Result(alone: [Sat(1290, 1430)], recommended: Sat(1290, 1460));
 
@@ -306,12 +453,18 @@ public class ChatGoalSeekTests
         Assert.Equal(("Boston University", "Vừa sức", "reachable"), (note.School, note.Target, note.Outcome));
         Assert.Equal(
             [
-                "Tài chính: Chi phí khoảng 38.000 USD mỗi năm, nằm trong ngân sách của bạn.",
-                "Học thuật: để lên nhóm Vừa sức, mức tối thiểu khi chỉ đổi một yếu tố:",
+                "Hiện tại Boston University đang ở nhóm Khó vào với bạn. Bạn có thể lên nhóm Vừa sức nếu cải thiện hồ sơ.",
+                "Bạn đang ở đâu so với trường:",
+                "Chi phí khoảng 38.000 USD mỗi năm: nằm trong ngân sách của bạn",
+                "Để lên nhóm Vừa sức:",
+                "Mỗi cách sau đều đủ nếu bạn chỉ thay đổi một thứ:",
                 "SAT 1290 → 1430 (khó)",
-                "Nên đặt mục tiêu (có đệm): SAT 1290 → 1460 (khó)",
+                "Nên đặt mục tiêu cao hơn mức tối thiểu một chút cho chắc: SAT 1290 → 1460 (khó)",
+                "Nên nộp thế nào:",
+                "Coi Boston University là trường thử sức, đừng dựa vào trường này; giữ thêm các trường Vừa sức và An toàn hơn trong danh sách.",
             ],
             note.Facts);
+        Assert.DoesNotContain(note.Facts, f => f.Contains("**") || f.StartsWith("- "));
     }
 
     [Fact]
@@ -322,19 +475,32 @@ public class ChatGoalSeekTests
         var note = ChatGoalSeek.Note(result, ["Boston University", "Denison University", "Harvard University", "Harvard University", "Yale College"]);
 
         Assert.Equal(["Denison University"], note.Alternatives);
-        Assert.Equal(["Harvard University", "Yale College"], note.Others);   // không lặp, không gồm trường hỏi và trường tương tự
+        Assert.Equal(["Harvard University", "Yale College"], note.Others);   // không lặp, không gồm trường hỏi và trường cùng nhóm
     }
 
+    // Khung chat dựng thẻ từ chính kết quả code đã tính: widget mang theo toàn bộ kết quả (camelCase), kèm vị trí và các mức đích
     [Fact]
-    public void Note_AlternativesAreListedOnlyOnce_NotAlsoAsAFact()
+    public void WidgetOf_CarriesTheWholeResultForTheChatCard()
     {
-        var result = Result(outcome: "blocked", reasons: [GroupReasons.LowAcceptRate],
-            alternatives: [new("2", "Denison University", "OH", "private", 95_900m, "M")]);
+        var result = Result(alone: [Sat(1290, 1430)]) with
+        {
+            Position = new GoalPosition("in_list", "R", null, false),
+            Targets = [new GoalTargetResult("M", "reachable", "M", [], null, null, [Sat(1290, 1430)], [])],
+            Comparison = [SatRow(1300, 0.848)],
+        };
 
-        var note = ChatGoalSeek.Note(result, []);
+        var widget = ChatGoalSeek.WidgetOf(result);
 
-        Assert.DoesNotContain(note.Facts, f => f.StartsWith("Trường tương tự"));
-        Assert.Contains(note.Facts, f => f.Contains("chỉ nhận dưới 15% hồ sơ"));
+        Assert.Equal("goal_seek", widget.Type);
+        Assert.Equal("188429", widget.Data!.Value.GetProperty("code").GetString());
+        var card = widget.Data.Value.GetProperty("result");
+        Assert.Equal("Boston University", card.GetProperty("name").GetString());
+        Assert.Equal("in_list", card.GetProperty("position").GetProperty("status").GetString());
+        Assert.Equal("M", card.GetProperty("targets")[0].GetProperty("target").GetString());
+        Assert.Equal(1430, card.GetProperty("targets")[0].GetProperty("alone")[0].GetProperty("changes")[0].GetProperty("to").GetDecimal());
+        var row = card.GetProperty("comparison")[0];
+        Assert.Equal(("sat", "within"), (row.GetProperty("factor").GetString(), row.GetProperty("status").GetString()));
+        Assert.Equal(0.848, row.GetProperty("position").GetDouble(), 3);
     }
 
     // ---------------------------------------------------------------- khung kết quả trên trang

@@ -54,6 +54,7 @@ public class StudyCenterService(
     IAuditLogRepository auditLogs,
     ICenterVerificationRepository? verificationRepository = null,
     IEmailSender? emailSender = null,
+    StudyAbroad.Application.Notifications.INotificationService? notifications = null,
     ICenterProfileChangeRepository? profileChanges = null,
     ICenterDeletionRequestRepository? deletionRequests = null) : IStudyCenterService
 {
@@ -615,9 +616,11 @@ public class StudyCenterService(
         if (center is null)
             return CreateStudyCenterResult.Fail("Không tìm thấy thông tin trung tâm cho tài khoản này.");
 
-        // Điều kiện 1 (email đã xác thực bằng OTP) là bắt buộc trước khi nộp hồ sơ; không còn xác thực SMS.
+        // [UC-91] Phải xác thực cả email (OTP email) và số điện thoại (OTP SMS) trước khi nộp hồ sơ xác minh.
         if (!center.EmailVerifiedAt.HasValue)
             return CreateStudyCenterResult.Fail("Bạn cần xác thực email bằng mã OTP trước khi nộp hồ sơ xác minh.");
+        if (!center.PhoneVerifiedAt.HasValue)
+            return CreateStudyCenterResult.Fail("Bạn cần xác thực số điện thoại bằng mã OTP qua SMS trước khi nộp hồ sơ xác minh.");
 
         var existingPending = await verificationRepository.GetCurrentByCenterIdAsync(center.Id, ct);
         if (existingPending is not null && existingPending.Status == CenterVerificationStatuses.PendingReview)
@@ -739,6 +742,21 @@ public class StudyCenterService(
     /// </summary>
     private async Task NotifyCenterAsync(StudyCenter center, string outcome, string? reason, IReadOnlyList<string>? unmet, CancellationToken ct)
     {
+        // [UC-110 / UC-59] Thông báo trong hệ thống cho tài khoản sở hữu trung tâm (service tự nuốt lỗi)
+        if (notifications is not null && center.OwnerUserId is { } ownerId)
+        {
+            var title = outcome switch
+            {
+                "verified" => "Hồ sơ xác minh đã được duyệt",
+                "reject" => "Hồ sơ xác minh bị từ chối",
+                "changes_requested" => "Hồ sơ xác minh cần bổ sung",
+                "revoked" => "Dấu xác minh của trung tâm bị thu hồi",
+                _ => "Cập nhật kết quả xác minh",
+            };
+            await notifications.NotifyAsync(ownerId, StudyAbroad.Application.Notifications.NotificationTypes.VerificationResult,
+                title, string.IsNullOrWhiteSpace(reason) ? null : $"Lý do: {reason}", "/center/verification", ct);
+        }
+
         if (emailSender is null || string.IsNullOrWhiteSpace(center.Email)) return;
         try
         {

@@ -1,5 +1,7 @@
 import type {
   CenterReviewsDto,
+  NotificationDto,
+  UnreadCountDto,
   CenterReviewDto,
   CenterReviewEligibilityDto,
   CreateCenterReviewRequest,
@@ -19,6 +21,7 @@ import type {
   CreateCenterAccountRequest,
   LockUserAccountRequest,
   UnlockUserAccountRequest,
+  UpdateUserBirthDateRequest,
   VerifyEmailRequest,
   AcademicProfileResponse,
   ParentInviteInfo,
@@ -41,6 +44,8 @@ import type {
   AdminLeadMessageReportContextDto,
   AdminLeadMessageReportDto,
   LeadMessageReportFilter,
+  CenterProfileChangeDto,
+  CenterProfileChangeFilter,
   SendLeadMessageRequest,
   SendLeadMessageResultDto,
   RegisterCenterRequest,
@@ -52,7 +57,9 @@ import type {
   ReviewCenterVerificationRequest,
   UpdateCenterProfileRequest,
   CenterProfileUpdateResponse,
+  AdminCenterDeletionRequestDto,
   CenterDeletionRequestDto,
+  CenterDeletionRequestStatus,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -364,6 +371,13 @@ export const adminUsersApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  /** [UC-113] Sửa ngày sinh Học sinh / Phụ huynh theo yêu cầu hỗ trợ (admin, bắt buộc lý do). */
+  updateBirthDate: (id: string, data: UpdateUserBirthDateRequest) =>
+    apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/birth-date`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
 };
 
 // [UC-71] API Quản trị danh bạ trung tâm tư vấn (Moderator / Admin)
@@ -450,7 +464,52 @@ export const studyCentersApi = {
   },
 };
 
+/** [UC-114] Moderator kiểm tra thay đổi website / fanpage do trung tâm tự sửa: Đạt hoặc Không đạt (lý do bắt buộc). */
+export const centerProfileChangesApi = {
+  list: (params?: { status?: CenterProfileChangeFilter; page?: number; pageSize?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set("status", params.status);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<CenterProfileChangeDto>>(`/api/v1/moderator/center-profile-changes${qs ? `?${qs}` : ""}`);
+  },
+
+  pass: (id: string) =>
+    apiFetch<CenterProfileChangeDto>(`/api/v1/moderator/center-profile-changes/${encodeURIComponent(id)}/pass`, { method: "POST" }),
+
+  fail: (id: string, reason: string) =>
+    apiFetch<CenterProfileChangeDto>(`/api/v1/moderator/center-profile-changes/${encodeURIComponent(id)}/fail`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+};
+
 /** [UC-58] Admin xử lý tin nhắn bị báo cáo: bỏ qua báo cáo hoặc khóa tài khoản người gửi (gỡ luôn tin của họ). */
+/** [UC-93] Administrator xử lý yêu cầu xóa tài khoản và dữ liệu trung tâm. */
+export const centerDeletionRequestsApi = {
+  list: (params?: { status?: CenterDeletionRequestStatus | "all"; page?: number; pageSize?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set("status", params.status);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<AdminCenterDeletionRequestDto>>(`/api/v1/admin/center-deletion-requests${qs ? `?${qs}` : ""}`);
+  },
+
+  approve: (id: string, identityCheckNote: string) =>
+    apiFetch<AdminCenterDeletionRequestDto>(`/api/v1/admin/center-deletion-requests/${encodeURIComponent(id)}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ identityCheckNote }),
+    }),
+
+  reject: (id: string, reason: string) =>
+    apiFetch<AdminCenterDeletionRequestDto>(`/api/v1/admin/center-deletion-requests/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+};
+
 export const leadMessageReportsApi = {
   list: (params?: { status?: LeadMessageReportFilter; page?: number; pageSize?: number }) => {
     const sp = new URLSearchParams();
@@ -613,11 +672,25 @@ export const centerPortalApi = {
     }),
   getVerificationStatus: () =>
     apiFetch<CenterVerificationStatusDto>("/api/v1/center/verification/status"),
-  /** Đổi số điện thoại liên lạc (không cần OTP). */
-  changePhone: (newValue: string) =>
-    apiFetch<{ message: string }>("/api/v1/center/contact/phone", {
-      method: "PUT",
+  /** [UC-91] Gửi OTP qua SMS tới số điện thoại hiện tại để xác thực. */
+  requestPhoneVerification: () =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/phone/verify/request", { method: "POST" }),
+  /** [UC-91] Nhập OTP SMS để ghi nhận số điện thoại đã xác thực. */
+  verifyPhone: (code: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/phone/verify", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
+  /** [UC-91] Đổi số điện thoại: gửi OTP qua SMS tới số mới rồi xác nhận bằng mã. */
+  requestPhoneChange: (newValue: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/phone/request", {
+      method: "POST",
       body: JSON.stringify({ newValue }),
+    }),
+  confirmPhoneChange: (newValue: string, code: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/phone/confirm", {
+      method: "POST",
+      body: JSON.stringify({ newValue, code }),
     }),
   /** Đổi email liên lạc: gửi OTP tới email mới rồi xác nhận bằng mã. */
   requestEmailChange: (newValue: string) =>
@@ -671,4 +744,20 @@ export const adminCenterVerificationsApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+};
+
+// [UC-110] Thông báo của người đăng nhập
+export const notificationsApi = {
+  list: (params?: { page?: number; pageSize?: number; unreadOnly?: boolean }) => {
+    const sp = new URLSearchParams();
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    if (params?.unreadOnly) sp.set("unreadOnly", "true");
+    const qs = sp.toString();
+    return apiFetch<PagedResult<NotificationDto>>(`/api/v1/notifications${qs ? `?${qs}` : ""}`);
+  },
+  unreadCount: () => apiFetch<UnreadCountDto>("/api/v1/notifications/unread-count"),
+  markRead: (id: string) =>
+    apiFetch<null>(`/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
+  markAllRead: () => apiFetch<{ updated: number }>("/api/v1/notifications/read-all", { method: "POST" }),
 };

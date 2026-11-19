@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.StudyCenters;
@@ -99,18 +101,39 @@ public class CenterPortalController(
         return Ok(status);
     }
 
-    /// <summary>Đổi số điện thoại liên lạc của trung tâm (không cần OTP; email mới là kênh xác thực).</summary>
-    [HttpPut("contact/phone")]
-    public Task<IActionResult> ChangePhone([FromBody] ChangeContactPhoneDto request) =>
-        RunContactChange(userId => authService.ChangeCenterPhoneAsync(userId, request.NewValue));
+    /// <summary>[UC-91] Gửi OTP qua SMS tới số điện thoại hiện tại của trung tâm để xác thực.</summary>
+    [HttpPost("contact/phone/verify/request")]
+    [EnableRateLimiting(AuthRateLimit.PolicyName)]
+    public Task<IActionResult> RequestPhoneVerification(CancellationToken ct) =>
+        RunContactChange(userId => authService.RequestCenterPhoneVerificationAsync(userId, ct));
+
+    /// <summary>[UC-91] Nhập OTP SMS; đúng thì số điện thoại được ghi là đã xác thực.</summary>
+    [HttpPost("contact/phone/verify")]
+    [EnableRateLimiting(AuthRateLimit.PolicyName)]
+    public Task<IActionResult> VerifyPhone([FromBody] VerifyContactCodeDto request, CancellationToken ct) =>
+        RunContactChange(userId => authService.VerifyCenterPhoneAsync(userId, request?.Code, ct));
+
+    /// <summary>[UC-91] Gửi OTP qua SMS tới số điện thoại MỚI để đổi số liên lạc.</summary>
+    [HttpPost("contact/phone/request")]
+    [EnableRateLimiting(AuthRateLimit.PolicyName)]
+    public Task<IActionResult> RequestPhoneChange([FromBody] RequestContactChangeDto request, CancellationToken ct) =>
+        RunContactChange(userId => authService.RequestCenterPhoneChangeAsync(userId, request, ct));
+
+    /// <summary>[UC-91] Xác nhận OTP và đổi số điện thoại liên lạc (số mới được ghi là đã xác thực).</summary>
+    [HttpPost("contact/phone/confirm")]
+    [EnableRateLimiting(AuthRateLimit.PolicyName)]
+    public Task<IActionResult> ConfirmPhoneChange([FromBody] ConfirmContactChangeDto request, CancellationToken ct) =>
+        RunContactChange(userId => authService.ConfirmCenterPhoneChangeAsync(userId, request, ct));
 
     /// <summary>Gửi OTP tới email MỚI để đổi email liên lạc.</summary>
     [HttpPost("contact/email/request")]
+    [EnableRateLimiting(AuthRateLimit.PolicyName)]
     public Task<IActionResult> RequestEmailChange([FromBody] RequestContactChangeDto request, CancellationToken ct) =>
         RunContactChange(userId => authService.RequestCenterEmailChangeAsync(userId, request, ct));
 
     /// <summary>Xác nhận OTP và đổi email liên lạc (email đăng nhập không đổi).</summary>
     [HttpPost("contact/email/confirm")]
+    [EnableRateLimiting(AuthRateLimit.PolicyName)]
     public Task<IActionResult> ConfirmEmailChange([FromBody] ConfirmContactChangeDto request, CancellationToken ct) =>
         RunContactChange(userId => authService.ConfirmCenterEmailChangeAsync(userId, request, ct));
 

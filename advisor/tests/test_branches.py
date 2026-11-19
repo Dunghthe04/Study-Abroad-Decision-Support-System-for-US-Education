@@ -34,6 +34,7 @@ from app.services.chat_flow import QUESTIONS, SkillOutput, ask, go_to
 from app.services.intake import INTAKE_ID
 from app.services.replies import (
     CHAT_BUTTON,
+    EXPLAIN_ASK_SCHOOL,
     FORM_BUTTON,
     GROUP_NEED_RESULTS,
     INTAKE_ASK,
@@ -152,14 +153,14 @@ async def test_what_if_filter_factors_offer_edit_buttons():
     assert out.action is None
 
 
-# Mục phần gợi ý trường không dùng: nói không làm đổi danh sách, gợi ý mục thử được, không có nút
+# Mục phần gợi ý trường không dùng: nói không làm đổi danh sách, gợi ý mục thử được, kèm nút thử nhanh để đi tiếp
 @pytest.mark.parametrize(("factor", "name"), [("visa_refused", "Lịch sử visa"), ("intake", "Kỳ nhập học")])
 async def test_what_if_no_effect_factors_say_list_unchanged(factor, name):
     out = await run_scenario(ChatState(has_results=True), **what_if({"factor": factor, "value": "x"}))
 
     assert out.answer.startswith(f"{name} không làm thay đổi danh sách trường gợi ý.")
     assert "Bạn thử đổi được: GPA" in out.answer
-    assert out.quick_replies == [] and out.action is None
+    assert [r.label for r in out.quick_replies] == ["Thử SAT 1400", "Thử IELTS 6.5"] and out.action is None
 
 
 # Mục không thuộc hai nhóm trên (hoạt động, giải thưởng...) vẫn trả câu chung
@@ -343,6 +344,7 @@ async def test_a_search_the_model_read_is_normalized_and_goes_to_dotnet_without_
         "filters": {"states": ["TX"], "maxCostUsd": 30000, "aid": "any"},
         "sort": "lowestCost",
         "unresolved": [],
+        "ignored": [],
         "model_filters": {"state": ["texas"], "max_cost": "30 nghìn đô", "aid": "yes"},
         "model_sort": "lowest_cost",
         "kb_answer": LOOKING_UP,
@@ -372,6 +374,19 @@ async def test_a_search_with_only_a_sort_goes_to_dotnet_without_any_filter(model
     assert ran == []
     assert out.action == "school_search"
     assert out.action_data["filters"] == {} and out.action_data["sort"] == dotnet_sort
+
+
+# "trường nào uy tín nhất" bị thêm max_rank "top": vẫn tìm theo thứ hạng, và báo .NET điều kiện đã bỏ (kèm tên tiếng Việt)
+async def test_a_search_reports_the_ignored_condition_to_dotnet():
+    entities = {"tasks": ["search"], "sort": "ranking", "filters": {"max_rank": "top"}}
+
+    out = await build_branches(skills([]))["knowledge"].run(
+        ChatState(), "x", tin(("knowledge", entities, "trường nào uy tín nhất"))
+    )
+
+    assert out.action == "school_search"
+    assert out.action_data["filters"] == {} and out.action_data["unresolved"] == []
+    assert out.action_data["ignored"] == [{"key": "max_rank", "text": "top", "label": "thứ hạng"}]
 
 
 def result_schools():
@@ -773,8 +788,8 @@ class FakeWriter:
         return self.answer
 
 
-def new_advice(ran: list[str], writer=None):
-    return build_branches(skills(ran), writer or FakeWriter())["profile_review"]
+def new_advice(ran: list[str], writer=None, **overrides):
+    return build_branches(skills(ran, **overrides), writer or FakeWriter())["profile_review"]
 
 
 @pytest.mark.parametrize(
@@ -971,6 +986,47 @@ async def test_asking_about_a_suggested_school_runs_the_explanation_without_the_
     assert ran == ["skill_explain"]
 
 
+class AsksWhichSchool:
+    """skill_explain khi không khớp được trường nào trong danh sách: hỏi lại trường nào trong danh sách."""
+
+    async def run(self, state: ChatState, message: str, *args) -> SkillOutput:
+        return SkillOutput(EXPLAIN_ASK_SCHOOL)
+
+
+async def test_a_school_outside_the_suggested_list_goes_to_goal_seek_instead_of_asking_again():
+    # "Purdue có phù hợp với hồ sơ em không": Purdue không nằm trong danh sách gợi ý, nhưng học sinh hỏi được mọi trường
+    branch = new_advice([], skill_explain=AsksWhichSchool())
+    state = ChatState(has_results=True, profile=filled(REQUIRED_B4))
+
+    out = await branch.run(
+        state, "x", tin(("profile_review", {"schools": ["Purdue"]}, "Purdue có phù hợp với hồ sơ em không"))
+    )
+
+    assert out.action == "goal_seek"
+    assert out.action_data == {"school": "Purdue", "target": None}
+    assert "Purdue" in out.answer
+
+
+async def test_a_school_in_the_list_still_goes_to_the_explanation_not_goal_seek():
+    ran: list[str] = []
+    state = ChatState(has_results=True, profile=filled(REQUIRED_B4))
+
+    out = await new_advice(ran).run(
+        state, "x", tin(("profile_review", {"schools": ["Iowa"]}, "vì sao Iowa vừa sức"))
+    )
+
+    assert ran == ["skill_explain"] and out.action is None
+
+
+async def test_asking_which_school_still_happens_when_the_student_names_none():
+    branch = new_advice([], skill_explain=AsksWhichSchool())
+    state = ChatState(has_results=True, profile=filled(REQUIRED_B4))
+
+    out = await branch.run(state, "x", tin(("profile_review", {}, "vì sao em bị xếp nhóm này")))
+
+    assert out.action is None
+
+
 async def test_new_advice_without_a_profile_remembers_the_question_and_asks_for_the_profile():
     state = ChatState()
 
@@ -1044,3 +1100,24 @@ async def test_what_if_writer_not_called_for_other_factors_or_simulate():
     assert other.answer == NOTHING_TO_TRY.format(supported=SUPPORTED_TEXT)
     assert sat.action == "simulate" and sat.action_data["changes"] == {"sat": 1450}
     assert llm.calls == []
+
+
+# Nút menu "Thử thay đổi hồ sơ": hỏi thử gì, kèm nút thử nhanh theo hồ sơ; chưa có danh sách trường thì mời gợi ý trước
+async def test_ask_what_to_try_offers_quick_buttons_from_the_profile():
+    branch = build_branches(skills([]))["scenario"]
+    state = ChatState(has_results=True, profile={"sat": ProfileField(value=1350, status="confirmed")})
+
+    out = branch.ask_what(state)
+    no_list = branch.ask_what(ChatState())
+
+    assert out.answer.startswith("Bạn muốn thử thay đổi gì?") and out.action is None
+    assert [r.label for r in out.quick_replies] == ["Thử SAT 1450", "Thử IELTS 6.5"]
+    assert no_list.answer == NEED_RESULTS
+
+
+# Thiếu số ("nếu SAT tăng"): hỏi lại số, kèm nút thử nhanh để bấm thay vì gõ
+async def test_what_if_asking_again_for_a_number_offers_quick_buttons():
+    out = await run_scenario(ChatState(has_results=True), **what_if({"factor": "sat", "value": "cao hơn"}))
+
+    assert "SAT bao nhiêu" in out.answer and out.action is None
+    assert out.quick_replies and out.quick_replies[0].label == "Thử SAT 1400"

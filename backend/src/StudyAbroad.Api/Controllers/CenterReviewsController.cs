@@ -21,7 +21,7 @@ public class CenterReviewsController(ICenterReviewService service) : ControllerB
     public Task<IActionResult> GetEligibility(Guid centerId, CancellationToken ct) =>
         RunAsync(async userId => Ok(await service.GetEligibilityAsync(userId, centerId, ct)));
 
-    /// <summary>Gửi đánh giá 1 đến 5 sao kèm nhận xét tùy chọn. Mỗi người một đánh giá cho mỗi trung tâm.</summary>
+    /// <summary>Gửi đánh giá 1 đến 5 sao kèm nhận xét tùy chọn. Mỗi yêu cầu liên hệ một đánh giá.</summary>
     [HttpPost]
     [ProducesResponseType(typeof(CenterReviewDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]

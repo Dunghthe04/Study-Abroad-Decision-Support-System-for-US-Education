@@ -2,6 +2,7 @@ using System.Text.Json;
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
+using StudyAbroad.Application.Notifications;
 using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Domain.Constants;
@@ -18,7 +19,8 @@ public class LeadService(
     IUserRepository users,
     IParentLinkRepository parentLinks,
     IAuditLogRepository? auditLogs = null,
-    IEmailSender? emailSender = null) : ILeadService
+    IEmailSender? emailSender = null,
+    INotificationService? notifications = null) : ILeadService
 {
     public const int MaxMessageLength = 2000;
     public const int MaxReplyMessageLength = 4000;
@@ -226,6 +228,10 @@ public class LeadService(
         var created = await leads.CreateLeadAsync(lead, consent, ct);
         if (parentSecret != null)
             await SendParentConfirmEmailsAsync(submitter, center.Name, created, parentSecret, ct);
+        // [UC-110 / UC-42] Báo trung tâm có yêu cầu mới (lead chờ phụ huynh xác nhận thì trung tâm chưa thấy, chưa báo)
+        else if (notifications is not null && center.OwnerUserId is { } ownerId)
+            await notifications.NotifyAsync(ownerId, NotificationTypes.LeadNew, "Có yêu cầu liên hệ mới",
+                "Một học sinh / phụ huynh vừa gửi yêu cầu liên hệ tới trung tâm.", "/center/leads", ct);
         return (await leads.GetDtoByIdAsync(created.Id, ct))!;
     }
 
@@ -474,8 +480,18 @@ public class LeadService(
 
         EnsureNotWithdrawn(lead);
 
+        var previousStatus = lead.Status;
         lead.Status = normalizedStatus;
         await leads.UpdateAsync(lead, ct);
+
+        // [UC-110 / UC-73] Báo người gửi (và học sinh nếu phụ huynh gửi thay) khi trạng thái thật sự thay đổi
+        if (notifications is not null && !string.Equals(previousStatus, normalizedStatus, StringComparison.OrdinalIgnoreCase))
+        {
+            var label = normalizedStatus switch { "contacted" => "Đang trao đổi", "closed" => "Đã hoàn tất", _ => "Mới" };
+            foreach (var recipient in new[] { lead.SubmittedByUserId, (Guid?)lead.UserId }.OfType<Guid>().Distinct())
+                await notifications.NotifyAsync(recipient, NotificationTypes.LeadStatusChanged, "Yêu cầu liên hệ đổi trạng thái",
+                    $"Yêu cầu liên hệ của bạn chuyển sang: {label}.", "/account", ct);
+        }
 
         var updated = await leads.GetReceivedLeadDetailAsync(leadId, centerId, ct);
         return updated ?? throw new KeyNotFoundException("Không thể tải thông tin sau khi cập nhật.");

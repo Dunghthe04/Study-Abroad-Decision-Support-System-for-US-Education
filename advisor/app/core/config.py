@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     slm_model: str = "usas-slm-v4"
     slm_format: str = "json"
     # Prompt tách ý (tên file trong app/skills, không có .md). Model fine-tune phải dùng đúng prompt lúc huấn luyện
-    # (xem scripts/export_slm_chat.py): usas-slm-v4 dùng slm_intents
+    # (xem slm/prepare/export_slm_chat.py): usas-slm-v4 dùng slm_intents
     slm_prompt: str = "slm_intents"
     # Đưa ngữ cảnh hội thoại (context) vào đầu vào của SLM. Chỉ bật với model đã được huấn luyện với khóa này (usas-slm-v4 có):
     # model chưa học thấy khóa lạ có thể đọc sai. Tắt thì chỉ chạy quy tắc dự phòng trong conversation_context

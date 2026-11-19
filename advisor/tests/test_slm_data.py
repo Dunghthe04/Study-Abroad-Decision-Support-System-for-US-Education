@@ -7,7 +7,7 @@ import pytest
 from openpyxl import Workbook
 
 from app.schemas.slm import MAX_RAW_Y, SUBTYPES
-from scripts.build_slm_jsonl import (
+from slm.prepare.build_slm_jsonl import (
     COLUMNS,
     DEFAULT_EXCEL,
     DEFAULT_OUT,

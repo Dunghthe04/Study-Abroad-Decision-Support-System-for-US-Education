@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from app.schemas.chat import ChatState, Citation
+from app.schemas.chat import ChatState, Citation, QuickReply
 from app.services.chat_flow import SkillOutput
 from app.services.knowledge import KnowledgeHit, KnowledgeRetriever
 from app.services.pii_mask import mask_personal_info
@@ -19,6 +19,7 @@ from app.services.replies import (
     KNOWLEDGE_DISCLAIMER,
     KNOWLEDGE_NO_BASIS,
     KNOWLEDGE_UNAVAILABLE,
+    MENU,
     menu_buttons,
 )
 from app.services.skill_call import SKILLS_DIR, SkillCall
@@ -105,6 +106,38 @@ def citation_of(hit: KnowledgeHit) -> Citation:
     )
 
 
+# Câu hỏi liên quan gợi ý sau câu trả lời: các dòng khác trong kho gần câu hỏi (thấp hơn ngưỡng trả lời một chút),
+# khác dòng vừa dùng. Nút gửi đúng câu hỏi mẫu của dòng đó nên lần sau kho tìm ra chính nó
+RELATED_MARGIN = 0.15
+MAX_RELATED = 2
+MAX_LABEL = 40
+
+
+def related_buttons(
+    hits: list[KnowledgeHit], best: KnowledgeHit, message: str, min_score: float
+) -> list[QuickReply]:
+    seen = {best.question.strip().lower(), message.strip().lower()}
+    buttons: list[QuickReply] = []
+    for other in hits:
+        question = other.question.strip()
+        if other.code == best.code or other.score < min_score - RELATED_MARGIN or question.lower() in seen:
+            continue
+        seen.add(question.lower())
+        label = question if len(question) <= MAX_LABEL else question[: MAX_LABEL - 1].rstrip() + "…"
+        buttons.append(QuickReply(label=label, value=question))
+        if len(buttons) == MAX_RELATED:
+            break
+    return buttons
+
+
+# Nút sau câu trả lời kiến thức: tối đa 2 câu hỏi liên quan trong kho, rồi gợi ý trường. Đã trả lời được thì không đưa nút
+# trung tâm tư vấn (nút đó dành cho câu kho không trả lời được, xem các nhánh NO_BASIS)
+def after_answer(
+    hits: list[KnowledgeHit], best: KnowledgeHit, message: str, min_score: float
+) -> list[QuickReply]:
+    return [*related_buttons(hits, best, message, min_score), MENU["schools"].model_copy()]
+
+
 class TraLoiHandler:
     def __init__(
         self,
@@ -153,4 +186,9 @@ class TraLoiHandler:
             answer = best.answer
         else:
             answer = composed.answer
-        return SkillOutput(answer, citations=[citation_of(best)], disclaimer=DISCLAIMER)
+        return SkillOutput(
+            answer,
+            quick_replies=after_answer(hits, best, message, self._min_score),
+            citations=[citation_of(best)],
+            disclaimer=DISCLAIMER,
+        )

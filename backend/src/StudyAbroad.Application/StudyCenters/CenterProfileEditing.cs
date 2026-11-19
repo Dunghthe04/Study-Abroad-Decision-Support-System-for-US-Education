@@ -54,6 +54,12 @@ public interface ICenterProfileChangeRepository
 
     /// <summary>Danh sách theo trạng thái (null = tất cả), cũ nhất trước với pending.</summary>
     Task<PagedResult<CenterProfileChange>> SearchAsync(string? status, int page, int pageSize, CancellationToken ct = default);
+
+    /// <summary>[UC-114] Tên, chủ sở hữu, trạng thái xác minh và ẩn/hiện của các trung tâm để Moderator đối chiếu.</summary>
+    Task<IReadOnlyList<CenterChangeCenterInfo>> GetCenterInfosAsync(IReadOnlyCollection<Guid> centerIds, CancellationToken ct = default);
+
+    /// <summary>[UC-114] Ghi thông báo trong hệ thống cho trung tâm khi thay đổi Không đạt.</summary>
+    Task AddNotificationAsync(Notification notification, CancellationToken ct = default);
 }
 
 /// <summary>

@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from app.schemas.chat import ChatState, ProfileField
 from app.services.chat_flow import SkillOutput, go_to
+from app.services.replies import menu_buttons
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.skills.skill_danh_gia import (
     Facts,
@@ -289,4 +290,10 @@ class LoTrinhHandler:
     async def run(self, state: ChatState, message: str) -> SkillOutput:
         route, intake = await self._planner.plan(state.profile, gpa_table=gpa_table_of(state.grade_scale))
         go_to(state, "B4")
-        return SkillOutput(render(route, intake, value_of(state.profile, "major")), action=action_for(route))
+        # Nút đi tiếp sau lộ trình (gợi ý trường, đánh giá hồ sơ, trung tâm). Lộ trình đi thẳng sang gợi ý trường thì .NET
+        # thay bằng nút của danh sách trường
+        return SkillOutput(
+            render(route, intake, value_of(state.profile, "major")),
+            quick_replies=menu_buttons("scenario", "knowledge"),
+            action=action_for(route),
+        )

@@ -99,7 +99,7 @@ public static class ChatGoalSeek
         ((long)Math.Round(value)).ToString("N0", CultureInfo.InvariantCulture).Replace(",", ".");
 
     private static string Number(string factor, decimal? value) =>
-        value is null ? "chưa có" : factor == "gpa" ? value.Value.ToString("0.##", CultureInfo.InvariantCulture) : ((int)Math.Round(value.Value)).ToString(CultureInfo.InvariantCulture);
+        value is null ? "chưa có" : factor == "gpa" ? value.Value.ToString("0.##", CultureInfo.GetCultureInfo("vi-VN")) : ((int)Math.Round(value.Value)).ToString(CultureInfo.InvariantCulture);
 
     private static string FactorName(string factor) => factor switch
     {
@@ -141,34 +141,229 @@ public static class ChatGoalSeek
         string.Join(" và ", plan.Changes.Select(c => $"{FactorName(c.Factor)} {Number(c.Factor, c.From)} → {Number(c.Factor, c.To)}"))
         + $" ({Difficulty(plan.Difficulty)})";
 
-    // Tài chính đứng trước học thuật
-    private static string Finance(GoalBudgetDto b)
+    // Tài chính đứng trước học thuật. Luôn nói rõ ngân sách của học sinh là bao nhiêu TRƯỚC khi nói vượt: nhất là khi đang xem giả định,
+    // học sinh dễ quên ngân sách gốc. "Vượt" tính so với trần = ngân sách cộng dung sai (như bộ lọc của lượt gợi ý), nên nêu cả trần
+    private static string Finance(GoalBudgetDto b, bool simulated = false)
     {
         var cost = b.CostUsd is { } c ? $"{Money(c)} USD mỗi năm" : null;
+        var who = simulated ? "Ngân sách giả định của bạn" : "Ngân sách của bạn";
+        var budget = b.BudgetUsd is { } bu ? $"{who} là {Money(bu)} USD mỗi năm" : null;
+        var ceiling = b.BudgetUsd is { } cb
+            ? $"hệ thống cho phép vượt tới {Money(cb * (1 + RecommendationService.BudgetTolerance))} USD, dung sai {(int)(RecommendationService.BudgetTolerance * 100)}%"
+            : null;
         return b.Status switch
         {
-            "ok" => $"Chi phí khoảng {cost}, nằm trong ngân sách của bạn.",
-            "need_aid" => $"Chi phí khoảng {cost}, vượt ngân sách khoảng {Money(b.ShortfallUsd ?? 0)} USD: cần ngân sách từ {Money(b.MinBudgetUsd ?? 0)} USD mỗi năm hoặc học bổng lớn.",
-            "over_budget" => $"Chi phí khoảng {cost}, vượt ngân sách và trường không có học bổng phù hợp nên không nằm trong danh sách của bạn. Cần ngân sách từ {Money(b.MinBudgetUsd ?? 0)} USD mỗi năm.",
+            "ok" => $"{budget}. Chi phí khoảng {cost}, nằm trong ngân sách.",
+            "need_aid" => $"{budget} ({ceiling}). Chi phí khoảng {cost}, vượt mức đó khoảng {Money(b.ShortfallUsd ?? 0)} USD: cần ngân sách từ {Money(b.MinBudgetUsd ?? 0)} USD mỗi năm hoặc học bổng lớn.",
+            "over_budget" => $"{budget} ({ceiling}). Chi phí khoảng {cost}, vượt mức đó và trường không có học bổng phù hợp nên không nằm trong danh sách của bạn. Cần ngân sách từ {Money(b.MinBudgetUsd ?? 0)} USD mỗi năm.",
             "no_budget" => $"Chi phí khoảng {cost}. Hồ sơ của bạn không đặt trần ngân sách mỗi năm.",
             _ => "Trường chưa có số liệu chi phí.",
         };
     }
 
     /// <summary>
-    /// Câu trả lời ghép bằng code từ kết quả goal-seeking. Nói lại tên trường đã hiểu để học sinh sửa nếu nhầm.
+    /// Lời giải thích dưới bảng "bạn so với trường", ghép bằng code từ kết quả đã tính nên số luôn khớp với bảng và danh sách gợi ý.
+    /// Năm phần: bạn đang ở nhóm nào; vì sao không lên được nhóm đích (nếu bị chặn); bạn đang đứng ở đâu so với trường; cần cải thiện gì
+    /// và nên nộp trường này theo vai trò nào. Đây là lời dự phòng khi Claude không viết được, đồng thời là dữ kiện gửi Claude diễn đạt lại.
+    /// Câu đầu nói lại tên trường đã hiểu để học sinh sửa nếu nhầm.
     /// </summary>
-    public static string Summarize(SchoolGoalResult r) =>
-        string.Join("\n", [$"Mình hiểu bạn hỏi về {r.Name}, nhóm muốn đạt: {GroupName(r.Target)}.", .. Body(r), SeeTable]);
+    public static string Summarize(SchoolGoalResult r) => string.Join("\n", Body(r));
 
-    private const string SeeTable = "Bạn xem bảng chi tiết và áp dụng thử vào thanh kéo ở trang Gợi ý trường nhé.";
+    // Vì sao trường chưa nằm trong danh sách gợi ý của học sinh (bộ lọc cứng)
+    private static string ExcludeText(string reason) => reason switch
+    {
+        "BUDGET" => "chi phí vượt ngân sách của bạn",
+        "ENGLISH" => "điểm tiếng Anh của bạn chưa đủ",
+        "ENGLISH_NO_CERT" => "bạn chưa có chứng chỉ tiếng Anh",
+        "MAJOR" => "trường không có ngành bạn chọn",
+        "STATE" => "trường không nằm ở bang bạn chọn",
+        "CONTROL" => "loại trường (công lập hoặc tư thục) không đúng điều bạn chọn",
+        _ => "chưa qua bộ lọc của bạn",
+    };
 
-    // Trường chưa nằm trong danh sách vì tiếng Anh: nói rõ cần đạt mức nào (một bài thi là đủ). Cùng nội dung với khung trên trang
+    private static string Gpa(decimal value) => value.ToString("0.##", CultureInfo.GetCultureInfo("vi-VN"));
+
+    private static string Cap(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
+
+    private static bool IsExcluded(SchoolGoalResult r) => r.Position?.Status == "excluded" || r.FilterReason is not null;
+
+    // Câu in đậm đầu tiên: kết luận trường đang ở đâu với học sinh
+    private static string Headline(SchoolGoalResult r)
+    {
+        if (r.Current == "NA")
+            return $"Hệ thống chưa đủ số liệu để xếp {r.Name} vào nhóm nào với hồ sơ của bạn.";
+        if (IsExcluded(r))
+        {
+            var reason = r.Position?.ExcludeReason ?? r.FilterReason ?? "";
+            return $"{r.Name} chưa nằm trong danh sách gợi ý của bạn vì {ExcludeText(reason)}. Nếu đủ điều kiện đó, trường sẽ ở nhóm {GroupName(r.Current)} với bạn.";
+        }
+        return r.Outcome switch
+        {
+            "already_reached" =>
+                $"Với hồ sơ hiện tại, {r.Name} đã ở nhóm {GroupName(r.Current)} với bạn, bạn không cần thay đổi gì để đạt nhóm {GroupName(r.Target)}.",
+            "blocked" when r.Best == r.Current =>
+                $"Với hồ sơ hiện tại, {r.Name} đang ở nhóm {GroupName(r.Current)} với bạn, và đây là nhóm cao nhất trường này có thể có.",
+            "blocked" =>
+                $"Hiện tại {r.Name} đang ở nhóm {GroupName(r.Current)} với bạn; nhóm cao nhất bạn có thể đạt ở trường này là {GroupName(r.Best)}.",
+            "reachable" =>
+                $"Hiện tại {r.Name} đang ở nhóm {GroupName(r.Current)} với bạn. Bạn có thể lên nhóm {GroupName(r.Target)} nếu cải thiện hồ sơ.",
+            _ => $"Hiện tại {r.Name} đang ở nhóm {GroupName(r.Current)} với bạn.",
+        };
+    }
+
+    // Lý do xếp nhóm mà học sinh không thay đổi được (luật của trường áp cho mọi hồ sơ) hay có thể thay đổi
+    private static bool IsSchoolRule(string code) =>
+        code is GroupReasons.LowAcceptRate or GroupReasons.CappedSelective or GroupReasons.IntlDowngrade;
+
+    // "Vì sao không lên được nhóm X": các lý do xếp nhóm của nhóm đích, nói thẳng điều nào là luật của trường (không phải do hồ sơ yếu)
+    private static List<string> WhyNot(SchoolGoalResult r)
+    {
+        var reasons = r.Reasons.Where(c => Reason(c, r.Stats) != "").ToList();
+        if (r.Outcome != "blocked" || r.Current == "NA" || reasons.Count == 0) return [];
+        var lines = new List<string> { $"Vì sao không lên được nhóm {GroupName(r.Target)}:" };
+        foreach (var code in reasons)
+        {
+            var text = Cap(Reason(code, r.Stats));
+            lines.Add(IsSchoolRule(code)
+                ? $"- {text}. Đây là luật áp cho mọi hồ sơ, không phải do hồ sơ của bạn yếu và bạn không thể thay đổi."
+                : $"- {text}.");
+        }
+        return lines;
+    }
+
+    private static bool SamePlan(GoalPlanDto a, GoalPlanDto b) =>
+        a.Changes.Count == b.Changes.Count && a.Changes.Zip(b.Changes).All(x => x.First.Factor == x.Second.Factor && x.First.To == x.Second.To);
+
+    private static string PositionPart(GoalCompareRow row) =>
+        row.Position is { } pos ? $"hơn khoảng {Math.Clamp((int)Math.Round(pos * 100), 0, 100)}% sinh viên của trường" : "";
+
+    // "Bạn đang ở đâu": từng tiêu chí của bảng nói thành lời, kèm ý nghĩa (nằm giữa, thấp hơn, cao hơn)
+    private static List<string> WhereYouAre(SchoolGoalResult r)
+    {
+        var items = new List<string>();
+        foreach (var row in r.Comparison ?? [])
+        {
+            switch (row.Factor)
+            {
+                case "sat" or "act" when row.Student is { } score && row.Low is { } low && row.High is { } high:
+                    var test = row.Factor == "act" ? "ACT" : "SAT";
+                    var where = row.Status switch
+                    {
+                        "below" => $"thấp hơn mốc dưới {Math.Abs((int)(row.Gap ?? 0))} điểm",
+                        "above" => "cao hơn mốc trên của trường",
+                        _ => "nằm trong khoảng của trường",
+                    };
+                    items.Add($"{test} {(int)score}: {Join(PositionPart(row), $"khoảng của trường {(int)low}–{(int)high}")}, {where}");
+                    break;
+                case "gpa" when row.Student is { } gpa && row.Low is { } avg:
+                    var level = row.Status switch
+                    {
+                        "below" => $"thấp hơn trung bình {Gpa(Math.Abs(row.Gap ?? 0))}",
+                        "above" => $"cao hơn trung bình {Gpa(Math.Abs(row.Gap ?? 0))}",
+                        _ => "ngang mức trung bình",
+                    };
+                    items.Add($"GPA {Gpa(gpa)}: {Join(PositionPart(row), $"trung bình của trường {Gpa(avg)}")}, {level}");
+                    break;
+                case "ec" when row.Status == "below":
+                    items.Add($"Ngoại khóa bậc {(int)(row.Student ?? 0)}/5: thấp hơn mức trung bình (bậc 3), kéo nhẹ điểm vị trí của bạn xuống");
+                    break;
+                case "ec" when row.Status == "above":
+                    items.Add($"Ngoại khóa bậc {(int)(row.Student ?? 0)}/5: cao hơn mức trung bình (bậc 3), cộng thêm vào điểm vị trí của bạn");
+                    break;
+                case "accept" when row.Status == "downgrade" && row is { Low: { } rate, High: { } intl, Gap: { } ratio }:
+                    items.Add($"Tỷ lệ nhận du học sinh {Pct(intl)} (chung {Pct(rate)}), chỉ bằng {Pct(ratio)} mức chung, dưới một nửa nên hệ thống hạ trường xuống một nhóm. Đây là luật áp cho mọi hồ sơ, bạn không thể thay đổi");
+                    break;
+            }
+        }
+        if (r.Budget.Status == "ok" && r.Budget.CostUsd is { } cost)
+            items.Add($"Chi phí khoảng {Money(cost)} USD mỗi năm: nằm trong ngân sách của bạn");
+        else if (r.Budget.Status is "need_aid" or "over_budget")
+            items.Add("Chi phí vượt ngân sách của bạn (chi tiết ở dưới)");
+
+        return items.Count == 0 ? [] : ["Bạn đang ở đâu so với trường:", .. items.Select(i => $"- {i}")];
+    }
+
+    private static string Join(string first, string second) => first.Length == 0 ? second : $"{first} ({second})";
+
+    // Cải thiện trong cùng nhóm: nhóm không đổi nhưng vị trí của học sinh so với sinh viên của trường tốt hơn
+    private static List<string> StrengthenWithinGroup(SchoolGoalResult r)
+    {
+        var items = new List<string>();
+        foreach (var row in r.Comparison ?? [])
+        {
+            switch (row.Factor)
+            {
+                case "sat" or "act" when (row.Status is "below" or "within") && row.Student is { } score && row.High is { } high && score < high:
+                    var test = row.Factor == "act" ? "ACT" : "SAT";
+                    items.Add($"Đưa {test} lên {(int)high} (mốc trên của trường): bạn sẽ hơn khoảng 75% sinh viên của trường" +
+                              (row.Position is { } p ? $", hiện là khoảng {Math.Clamp((int)Math.Round(p * 100), 0, 100)}%." : "."));
+                    break;
+                case "gpa" when row.Status == "below" && row.Low is { } avg:
+                    items.Add($"Nâng GPA lên mức trung bình của trường ({Gpa(avg)}).");
+                    break;
+                case "ec" when row.Status == "below":
+                    items.Add($"Nâng ngoại khóa từ bậc {(int)(row.Student ?? 0)} lên bậc 3 (mức trung bình) để không còn bị trừ điểm vị trí.");
+                    break;
+            }
+        }
+        return items;
+    }
+
+    // Phần "cần làm gì". Mức nhảy lên GPA 4,0 được nói thẳng là mức tối đa của thang điểm, không để học sinh tưởng còn khả thi
+    private static List<string> HowToImprove(SchoolGoalResult r)
+    {
+        var lines = new List<string>();
+        var target = GroupName(r.Target);
+        switch (r.Outcome)
+        {
+            case "reachable":
+                lines.Add($"Để lên nhóm {target}:");
+                if (r.Alone.Count > 0)
+                {
+                    lines.Add("Mỗi cách sau đều đủ nếu bạn chỉ thay đổi một thứ:");
+                    lines.AddRange(r.Alone.Select(p => "- " + Describe(p)));
+                }
+                else
+                {
+                    lines.Add("Thay đổi riêng một thứ chưa đủ, bạn cần cải thiện nhiều thứ cùng lúc.");
+                }
+                if (r.Cheapest is { Changes.Count: > 1 } combined)
+                    lines.Add("Cách kết hợp ít công sức nhất: " + Describe(combined));
+                // Chỉ khi mức nên đặt thật sự cao hơn mức tối thiểu (trùng nhau thì không có gì để "cao hơn", vd GPA đã chạm 4,0)
+                if (r.Recommended is { } recommended && !r.Alone.Concat([r.Cheapest]).Any(p => p is not null && SamePlan(p, recommended)))
+                    lines.Add("Nên đặt mục tiêu cao hơn mức tối thiểu một chút cho chắc: " + Describe(recommended));
+                if (r.Alone.Concat([r.Cheapest, r.Recommended]).Any(p => p is not null && p.Changes.Any(c => c.Factor == "gpa" && c.To >= 4m)))
+                    lines.Add("Lưu ý: GPA 4,0 là mức tối đa của thang điểm, nên cách nâng GPA ở trên gần như không thực hiện được nếu GPA của bạn đã cao.");
+                break;
+            case "blocked":
+                var strengthen = StrengthenWithinGroup(r);
+                if (strengthen.Count > 0)
+                {
+                    lines.Add("Nhóm sẽ không đổi, nhưng bạn mạnh hơn nếu:");
+                    lines.AddRange(strengthen.Select(s => $"- {s}"));
+                }
+                else if (r.Comparison is { Count: > 0 })
+                {
+                    lines.Add("Hồ sơ của bạn đã ngang hoặc cao hơn mặt bằng của trường ở các mục trên, nên không còn mục nào cần nâng thêm.");
+                }
+                break;
+            case "no_data":
+                lines.Add("Trường chưa có đủ số liệu nên mình chưa tính được mức cần đạt.");
+                break;
+        }
+
+        if (EnglishLine(r) is { } english) lines.Add(english);
+        // Chi phí chỉ nói chi tiết khi là rào cản; luôn nêu ngân sách của học sinh trước khi nói vượt
+        if (r.Budget.Status is "need_aid" or "over_budget") lines.Add("Về chi phí: " + Finance(r.Budget, r.Basis == "simulated"));
+        return lines;
+    }
+
+    // Trường chưa nằm trong danh sách vì tiếng Anh: nói rõ cần đạt mức nào (một bài thi là đủ). Cùng nội dung với bảng
     private static string? EnglishLine(SchoolGoalResult r)
     {
         if (r.FilterReason is not ("ENGLISH" or "ENGLISH_NO_CERT")) return null;
         var parts = new List<string>();
-        if (r.English?.MinIelts is { } ielts) parts.Add($"IELTS {ielts.ToString("0.#", System.Globalization.CultureInfo.GetCultureInfo("vi-VN"))}");
+        if (r.English?.MinIelts is { } ielts) parts.Add($"IELTS {ielts.ToString("0.#", CultureInfo.GetCultureInfo("vi-VN"))}");
         if (r.English?.MinToefl is { } toefl) parts.Add($"TOEFL {toefl:0}");
         if (r.English?.MinDuolingo is { } duolingo) parts.Add($"Duolingo {duolingo:0}");
         var need = parts.Count switch
@@ -180,56 +375,51 @@ public static class ChatGoalSeek
         var head = r.FilterReason == "ENGLISH_NO_CERT"
             ? "Tiếng Anh: bạn chưa có chứng chỉ tiếng Anh nên trường chưa nằm trong danh sách."
             : "Tiếng Anh: điểm của bạn chưa đủ nên trường chưa nằm trong danh sách.";
-        return head + need + " Phần học thuật dưới đây tính khi bạn đã đủ tiếng Anh.";
+        return head + need + " Phần học thuật ở trên tính khi bạn đã đủ tiếng Anh.";
     }
 
-    // Các dòng dữ kiện do code tính: tài chính, học thuật, trường tương tự. Vừa là thân câu dự phòng, vừa là dữ kiện gửi Gemini
+    // Lời khuyên nộp theo vai trò của trường với học sinh (Khó vào là thử sức, Vừa sức là mục tiêu chính, An toàn hơn là chắc chắn)
+    private static List<string> HowToApply(SchoolGoalResult r)
+    {
+        if (r.Current == "NA" || IsExcluded(r) || r.Outcome == "no_data") return [];
+        var others = r.Alternatives.Count > 0 ? string.Join(", ", r.Alternatives.Select(a => a.Name)) : null;
+        var advice = r.Current switch
+        {
+            "R" => $"Coi {r.Name} là trường thử sức, đừng dựa vào trường này; giữ thêm các trường Vừa sức và An toàn hơn trong danh sách."
+                   + (others is null ? "" : $" Các trường đang ở nhóm {GroupName(r.Target)} với bạn: {others}."),
+            "M" => $"Coi {r.Name} là một trường mục tiêu chính."
+                   + (others is null
+                       ? " Giữ thêm các trường An toàn hơn trong danh sách để chắc chắn."
+                       : $" Giữ thêm các trường An toàn hơn như {others} để chắc chắn."),
+            _ => $"{r.Name} là một trường khá chắc chắn trong danh sách của bạn.",
+        };
+        return ["Nên nộp thế nào:", advice];
+    }
+
+    // Toàn bộ lời giải thích theo thứ tự đã nêu ở Summarize
     private static List<string> Body(SchoolGoalResult r)
     {
-        var lines = new List<string>();
-        // Tiếng Anh là điều kiện phải đạt trước: trường bị ẩn vì tiếng Anh thì nói trước, rồi mới đến tài chính và học thuật
-        if (EnglishLine(r) is { } english) lines.Add(english);
-        lines.Add("Tài chính: " + Finance(r.Budget));
-
-        switch (r.Outcome)
-        {
-            case "already_reached":
-                lines.Add($"Học thuật: bạn đã ở nhóm {GroupName(r.Current)}, không cần thay đổi gì để đạt {GroupName(r.Target)}.");
-                break;
-            case "reachable":
-                lines.Add($"Học thuật: để lên nhóm {GroupName(r.Target)}, mức tối thiểu khi chỉ đổi một yếu tố:");
-                lines.AddRange(r.Alone.Select(p => "- " + Describe(p)));
-                if (r.Alone.Count == 0)
-                    lines.Add("- Một yếu tố riêng chưa đủ, cần kết hợp nhiều yếu tố.");
-                if (r.Cheapest is { Changes.Count: > 1 } combined)
-                    lines.Add("Kết hợp ít công sức nhất: " + Describe(combined));
-                if (r.Recommended is { } recommended)
-                    lines.Add("Nên đặt mục tiêu (có đệm): " + Describe(recommended));
-                break;
-            case "blocked":
-                lines.Add("Học thuật: " + string.Join("; ", r.Reasons.Select(c => Reason(c, r.Stats)).Where(s => s != "")) + ".");
-                lines.Add($"Nhóm cao nhất bạn có thể đạt ở trường này là {GroupName(r.Best)}.");
-                break;
-            default:
-                var why = r.Reasons.Select(c => Reason(c, r.Stats)).FirstOrDefault(s => s != "") ?? "trường chưa đủ dữ liệu";
-                lines.Add($"Học thuật: {why}, nên mình chưa tính được mức cần đạt.");
-                break;
-        }
-
-        if (r.Alternatives.Count > 0)
-            lines.Add("Trường tương tự đang ở nhóm này với bạn: " + string.Join(", ", r.Alternatives.Select(a => a.Name)) + ".");
+        var lines = new List<string> { $"**{Headline(r)}**" };
+        lines.AddRange(WhyNot(r));
+        lines.AddRange(WhereYouAre(r));
+        lines.AddRange(HowToImprove(r));
+        lines.AddRange(HowToApply(r));
         return lines;
     }
 
     /// <summary>
-    /// Dữ liệu cho Gemini diễn đạt lại: tên trường đã hiểu, nhóm đích, các dữ kiện đã tính, trường tương tự, và tên các trường khác để chặn nhắc tên lạ.
+    /// Dữ liệu cho Claude diễn đạt lại: tên trường đã hiểu, nhóm đích, các dữ kiện đã tính (chính là các dòng của lời dự phòng), các trường cùng
+    /// nhóm đích, và tên các trường khác để chặn nhắc tên lạ. Dấu in đậm và gạch đầu dòng bị bỏ, vì Claude tự trình bày.
     /// </summary>
     public static GoalNoteRequestDto Note(SchoolGoalResult r, IEnumerable<string> allSchoolNames)
     {
         var alternatives = r.Alternatives.Select(a => a.Name).ToList();
         var used = new HashSet<string>(alternatives, StringComparer.OrdinalIgnoreCase) { r.Name };
         var others = allSchoolNames.Where(n => !used.Contains(n)).Distinct().Take(MaxOthers).ToList();
-        var facts = Body(r).Where(line => !line.StartsWith("Trường tương tự")).Select(line => line.StartsWith("- ") ? line[2..] : line).ToList();
+        var facts = Body(r)
+            .Select(line => line.Replace("**", ""))
+            .Select(line => line.StartsWith("- ") ? line[2..] : line)
+            .ToList();
         return new GoalNoteRequestDto(r.Name, GroupName(r.Target), r.Outcome, facts, alternatives, others);
     }
 
@@ -240,53 +430,29 @@ public static class ChatGoalSeek
 
     public const string EditProfileHref = "/analysis?edit=1";
 
-    /// <summary>
-    /// Nút bước tiếp theo khi trường bị bộ lọc cứng loại, theo đúng lý do (không bịa nút khi trường đang trong danh sách):
-    /// khác ngành, bang, loại trường thì sửa hồ sơ; thiếu tiếng Anh thì thử mức cần đạt; vượt ngân sách thì thử mức ngân sách tối thiểu.
-    /// </summary>
-    public static IReadOnlyList<QuickReply> NextSteps(SchoolGoalResult r)
-    {
-        if (r.Position is not { Status: "excluded" } position)
-            return [];
-        switch (position.ExcludeReason)
-        {
-            case "MAJOR" or "STATE" or "CONTROL":
-                return [new QuickReply("Sửa hồ sơ", "Sửa hồ sơ", Href: EditProfileHref)];
-            case "ENGLISH" or "ENGLISH_NO_CERT":
-                {
-                    var (test, min) = r.English switch
-                    {
-                        { MinIelts: { } v } => ("IELTS", v),
-                        { MinToefl: { } v } => ("TOEFL", v),
-                        { MinDuolingo: { } v } => ("Duolingo", v),
-                        _ => ("", 0m),
-                    };
-                    if (test == "")
-                        return [];
-                    var number = min.ToString("0.#", CultureInfo.InvariantCulture);
-                    return [new QuickReply($"Thử {test} {number}", $"Nếu {test} của em là {number} thì sao?")];
-                }
-            case "BUDGET" when r.Budget.MinBudgetUsd is { } needed:
-                {
-                    var amount = (long)Math.Ceiling(needed);
-                    var shown = amount.ToString("N0", CultureInfo.InvariantCulture).Replace(",", ".");
-                    return [new QuickReply($"Thử ngân sách {shown} USD", $"Nếu ngân sách của em là {amount} USD mỗi năm thì sao?")];
-                }
-            default:
-                return [];
-        }
-    }
-
-    public static Widget WidgetOf(SchoolGoalResult result)
+    // basisLabel: mô tả giá trị giả định đã dùng ("ngân sách 25.000 USD mỗi năm") khi result.Basis là simulated, để thẻ ghi rõ
+    public static Widget WidgetOf(SchoolGoalResult result, string? basisLabel = null)
     {
         var data = new JsonObject
         {
             ["code"] = result.Code,
             ["target"] = TargetCode(result.Target),
             ["result"] = JsonSerializer.SerializeToNode(result, WebJson),
+            ["basisLabel"] = result.Basis == "simulated" ? basisLabel : null,
         };
         return new Widget(WidgetType, JsonSerializer.SerializeToElement(data));
     }
+
+    /// <summary>
+    /// Câu mở đầu nói rõ goal-seeking tính theo cơ sở nào, chỉ khi trang đang xem giả định (không thì không có gì để nhầm).
+    /// simulated: đã tính theo giả định; real mà viewing có giá trị: tính theo hồ sơ thật dù trang đang giả định.
+    /// </summary>
+    public static string? BasisLine(string basis, string? viewingLabel) =>
+        viewingLabel is null
+            ? null
+            : basis == "simulated"
+                ? $"Mình tính theo giả định bạn đang xem ({viewingLabel}), không phải hồ sơ thật."
+                : $"Mình tính theo hồ sơ thật của bạn, không phải giả định đang xem ({viewingLabel}).";
 
     // Mã nhóm của kết quả (R, M, S) → mã API (reach, match, safety)
     private static string TargetCode(string group) => group switch

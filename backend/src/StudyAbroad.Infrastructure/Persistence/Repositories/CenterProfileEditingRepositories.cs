@@ -47,6 +47,18 @@ public class CenterProfileChangeRepository(AppDbContext db) : ICenterProfileChan
             .ToListAsync(ct);
         return new PagedResult<CenterProfileChange>(items, safePage, safeSize, total);
     }
+
+    public async Task<IReadOnlyList<CenterChangeCenterInfo>> GetCenterInfosAsync(IReadOnlyCollection<Guid> centerIds, CancellationToken ct = default) =>
+        await db.StudyCenters.AsNoTracking()
+            .Where(c => centerIds.Contains(c.Id))
+            .Select(c => new CenterChangeCenterInfo(c.Id, c.Name, c.OwnerUserId, c.VerificationStatus, c.IsActive))
+            .ToListAsync(ct);
+
+    public async Task AddNotificationAsync(Notification notification, CancellationToken ct = default)
+    {
+        db.Notifications.Add(notification);
+        await db.SaveChangesAsync(ct);
+    }
 }
 
 /// <summary>[UC-92 / UC-93] Yêu cầu xóa tài khoản trung tâm.</summary>

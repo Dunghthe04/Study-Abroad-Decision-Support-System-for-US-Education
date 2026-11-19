@@ -230,7 +230,7 @@ public class ScenarioServiceTests
         public Task<ExplainSchoolDto> ExplainCardAsync(Guid userId, string code, CancellationToken ct, SimulationOverrides? overrides = null) => throw new NotImplementedException();
         public Task<IReadOnlyList<SchoolOption>> ListSchoolOptionsAsync(Guid userId, CancellationToken ct) => throw new NotImplementedException();
         public Task<NameMatch> FindSchoolsAsync(Guid userId, string text, CancellationToken ct) => throw new NotImplementedException();
-        public Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct) => throw new NotImplementedException();
+        public Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct, SimulationOverrides? overrides = null) => throw new NotImplementedException();
         public Task<SchoolInfoDto> SchoolInfoAsync(Guid userId, string code, CancellationToken ct) => throw new NotImplementedException();
         public Task<IReadOnlyList<SchoolRef>> FindMentionedSchoolsAsync(Guid userId, string text, CancellationToken ct) => throw new NotImplementedException();
         public Task<SchoolSearchResult> SearchSchoolsAsync(Guid userId, SchoolSearchFilters filters, SchoolSort sort, CancellationToken ct) => throw new NotImplementedException();
