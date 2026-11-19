@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircleIcon, ClockIcon, RefreshCwIcon, UsersIcon } from "lucide-react";
+import { AlertCircleIcon, ClockIcon, PinIcon, RefreshCwIcon, UsersIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ErrorFallback } from "@/components/ui/error-fallback";
@@ -11,8 +11,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
 import { recommendationApi } from "@/lib/recommendation-api";
 import { whyText } from "@/lib/recommendation-labels";
+import { mainGroupOf, restOfGroup, type MainGroup } from "@/lib/recommendation-groups";
 import { useAuth } from "@/contexts/AuthContext";
 import {
+  GOAL_SCHOOL_EVENT,
   PROFILE_SAVED_EVENT,
   RESET_SIMULATION_EVENT,
   SIMULATE_EVENT,
@@ -36,9 +38,9 @@ import { SaveScenarioButton, SavedScenariosButton, scenarioOverrides, useSavedSc
 
 // Bốn khối chính theo đúng thứ tự trên màn. "other" để riêng ở cuối.
 const BLOCKS: { key: PickBlockName; title: string; note: string }[] = [
-  { key: "reach", title: "Khó vào", note: "Tối đa 4 trường" },
-  { key: "match", title: "Vừa sức", note: "Tối đa 4 trường" },
-  { key: "safety", title: "An toàn hơn", note: "Tối đa 4 trường" },
+  { key: "reach", title: "Khó vào", note: "4 trường phù hợp nhất" },
+  { key: "match", title: "Vừa sức", note: "4 trường phù hợp nhất" },
+  { key: "safety", title: "An toàn hơn", note: "4 trường phù hợp nhất" },
   { key: "aid", title: "Chỉ đi được nếu có học bổng lớn", note: "Xếp theo điểm phù hợp" },
 ];
 
@@ -121,6 +123,13 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
   // Chat vừa lưu hồ sơ chính thức: danh sách đang xem tính theo hồ sơ cũ, hiện thanh báo để học sinh tự bấm cập nhật
   // (không tự chạy, tránh thêm lượt vào lịch sử gợi ý khi học sinh chưa muốn)
   const [profileSaved, setProfileSaved] = useState(false);
+  // Trường học sinh vừa hỏi "cần gì để vào" trong chat: luôn hiện (ghim) dù không nằm trong 4 trường đầu của nhóm
+  const [focusCode, setFocusCode] = useState<string | null>(null);
+  useEffect(() => {
+    const onGoalSchool = (event: Event) => setFocusCode((event as CustomEvent<string>).detail ?? null);
+    window.addEventListener(GOAL_SCHOOL_EVENT, onGoalSchool);
+    return () => window.removeEventListener(GOAL_SCHOOL_EVENT, onGoalSchool);
+  }, []);
   useEffect(() => {
     const onSaved = () => setProfileSaved(true);
     window.addEventListener(PROFILE_SAVED_EVENT, onSaved);
@@ -138,6 +147,7 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
   // Chạy cả quy trình (lọc cứng, đọc ngoại khóa, chấm nhóm bằng code, lưu)
   const runNew = async () => {
     setProfileSaved(false);
+    setFocusCode(null);
     setPhase("running");
     setError(null);
     sim.resetAll();
@@ -274,6 +284,7 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
             rec={view}
             changes={simulating ? sim.result!.changes : []}
             simulated={simulating}
+            focusCode={focusCode}
             onExplain={askExplain}
             onGoal={askGoal}
           />
@@ -317,11 +328,12 @@ interface ResultBodyProps {
   rec: Recommendation;
   changes: SchoolChange[]; // trường đổi nhóm khi đang mô phỏng
   simulated: boolean; // đang xem kết quả giả định
+  focusCode?: string | null; // trường học sinh vừa hỏi trong chat, ghim ở đầu nhóm của nó nếu không nằm trong 4 trường đầu
   onExplain?: (code: string) => void; // bỏ trống khi đang mô phỏng
   onGoal?: (code: string) => void;
 }
 
-function ResultBody({ rec, changes, simulated, onExplain, onGoal }: ResultBodyProps) {
+function ResultBody({ rec, changes, simulated, focusCode, onExplain, onGoal }: ResultBodyProps) {
   const { criteria, items } = rec;
   const byCode = new Map<string, ScoredSchool>(items.scored.map((s) => [s.code, s]));
   const changeByCode = new Map<string, SchoolChange>(changes.map((c) => [c.code, c]));
@@ -364,7 +376,25 @@ function ResultBody({ rec, changes, simulated, onExplain, onGoal }: ResultBodyPr
 
       {BLOCKS.map((block) => {
         const list = items[block.key];
-        if (list.length === 0) return null;
+        const group = block.key === "aid" ? null : (block.key as MainGroup);
+        // Trường được ghim: đang nằm ở nhóm này nhưng không thuộc 4 trường đầu
+        const pinned =
+          group && focusCode && mainGroupOf(byCode.get(focusCode)) === group && !list.some((p) => p.code === focusCode)
+            ? byCode.get(focusCode)
+            : undefined;
+        if (list.length === 0 && !pinned) return null;
+        const rest = group ? restOfGroup(items, group).filter((r) => r.picked.code !== pinned?.code) : [];
+        const card = (p: (typeof list)[number]) => (
+          <SchoolCard
+            picked={p}
+            school={byCode.get(p.code)}
+            change={changeByCode.get(p.code)}
+            simulated={simulated}
+            onExplain={onExplain}
+            onGoal={onGoal}
+            student={{ sat: criteria.studentSat ?? null, gpa: criteria.studentGpa ?? null }}
+          />
+        );
         return (
           <section key={block.key} className="space-y-3">
             <div className="flex items-baseline gap-2">
@@ -372,19 +402,22 @@ function ResultBody({ rec, changes, simulated, onExplain, onGoal }: ResultBodyPr
               <span className="text-xs text-muted-foreground">{block.note}</span>
             </div>
             <div className="space-y-3">
+              {/* Không tính vào 4 chỗ và không xen vào thứ tự xếp hạng: chỉ để học sinh thấy trường mình đang hỏi */}
+              {pinned && (
+                <div className="space-y-1.5 rounded-2xl border border-dashed border-brand/50 bg-brand-wash/40 p-2">
+                  <p className="flex items-center gap-1.5 px-2 text-xs font-semibold text-brand">
+                    <PinIcon className="size-3.5" />
+                    Trường đang xem
+                  </p>
+                  {card({ code: pinned.code, x: pinned.fit ?? null, why: pinned.why ?? [] })}
+                </div>
+              )}
               {list.map((p) => (
                 <div key={p.code} className="space-y-2">
-                  <SchoolCard
-                    picked={p}
-                    school={byCode.get(p.code)}
-                    change={changeByCode.get(p.code)}
-                    simulated={simulated}
-                    onExplain={onExplain}
-                    onGoal={onGoal}
-                    student={{ sat: criteria.studentSat ?? null, gpa: criteria.studentGpa ?? null }}
-                  />
+                  {card(p)}
                 </div>
               ))}
+              {group && rest.length > 0 && <MoreSchools rest={rest} card={card} />}
             </div>
           </section>
         );
@@ -407,5 +440,24 @@ function ResultBody({ rec, changes, simulated, onExplain, onGoal }: ResultBodyPr
         </details>
       )}
     </div>
+  );
+}
+
+// "Xem thêm": các trường còn lại của nhóm (backend chỉ xếp 4 trường đầu), cùng thứ tự điểm phù hợp
+function MoreSchools({
+  rest,
+  card,
+}: {
+  rest: ReturnType<typeof restOfGroup>;
+  card: (picked: ReturnType<typeof restOfGroup>[number]["picked"]) => React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      {open && rest.map((r) => <div key={r.picked.code}>{card(r.picked)}</div>)}
+      <Button variant="outline" size="sm" onClick={() => setOpen((v) => !v)}>
+        {open ? "Ẩn bớt" : `Xem thêm ${rest.length} trường`}
+      </Button>
+    </>
   );
 }

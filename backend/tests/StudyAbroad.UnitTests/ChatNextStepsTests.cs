@@ -187,5 +187,48 @@ public class ChatNextStepsTests
 
         Assert.Equal(ChatNextSteps.SearchHelp().Select(s => s.Label), steps.Select(s => s.Label));
     }
+
+    [Fact]
+    public void AfterSearch_TestOptionalWithHeavyTestSchools_OffersToKeepOnlyLowTestWeight_WithoutReordering()
+    {
+        var items = new[]
+        {
+            new SchoolSearchItem("a", "A", null, null, null, null, null, null, null, null, 1, null, "very_important"),
+            new SchoolSearchItem("b", "B", null, null, null, null, null, null, null, null, 2, null, "considered"),
+        };
+        var filters = new SchoolSearchFilters(TestPolicy: "optional");
+
+        var steps = ChatNextSteps.AfterSearch(new SchoolSearchResult(2, items, []), SchoolSort.LowestCost, filters);
+
+        var button = Assert.Single(steps, s => s.Label == "Chỉ trường ít coi trọng điểm thi");
+        var data = button.Action!.Search!.Value;
+        Assert.True(data.GetProperty("filters").GetProperty("lowTestWeight").GetBoolean());
+        Assert.Equal("optional", data.GetProperty("filters").GetProperty("testPolicy").GetString());
+        Assert.Equal("lowestCost", data.GetProperty("sort").GetString());   // giữ cách xếp học sinh đã chọn
+    }
+
+    [Fact]
+    public void AfterSearch_NoHeavyTestSchoolsOrAlreadyLowTestWeight_DoesNotOfferIt()
+    {
+        var light = new[] { new SchoolSearchItem("b", "B", null, null, null, null, null, null, null, null, 2, null, "considered") };
+        var heavy = new[] { new SchoolSearchItem("a", "A", null, null, null, null, null, null, null, null, 1, null, "very_important") };
+
+        var noHeavy = ChatNextSteps.AfterSearch(new SchoolSearchResult(1, light, []), SchoolSort.Quality, new SchoolSearchFilters(TestPolicy: "optional"));
+        var already = ChatNextSteps.AfterSearch(new SchoolSearchResult(1, heavy, []), SchoolSort.Quality, new SchoolSearchFilters(TestPolicy: "optional", LowTestWeight: true));
+        var notOptional = ChatNextSteps.AfterSearch(new SchoolSearchResult(1, heavy, []), SchoolSort.Quality, new SchoolSearchFilters());
+
+        Assert.DoesNotContain(noHeavy, s => s.Label == "Chỉ trường ít coi trọng điểm thi");
+        Assert.DoesNotContain(already, s => s.Label == "Chỉ trường ít coi trọng điểm thi");
+        Assert.DoesNotContain(notOptional, s => s.Label == "Chỉ trường ít coi trọng điểm thi");
+    }
+
+    [Fact]
+    public void Without_DropsTheLowTestWeightCondition()
+    {
+        var f = ChatNextSteps.Without(new SchoolSearchFilters(TestPolicy: "optional", LowTestWeight: true), "it_coi_trong_diem_thi");
+
+        Assert.False(f.LowTestWeight);
+        Assert.Equal("optional", f.TestPolicy);
+    }
 }
 

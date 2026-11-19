@@ -590,7 +590,9 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             a = Round(fit?.Position),
             e = Round(fit?.English),
             fit = Round(fit?.Value),
-            reasons = grade.Reasons
+            reasons = grade.Reasons,
+            // Mã lý do hiển thị của riêng trường này: trường nằm ngoài 4 trường đầu mỗi nhóm ("Xem thêm") vẫn có đủ lý do trên thẻ
+            why = WhyCodes(item)
         };
     }
 

@@ -696,11 +696,14 @@ export interface CenterReceivedLeadDto {
   contactPhone?: string | null;
   message?: string | null;
   sharedProfile: boolean;
-  status: "new" | "contacted" | "closed" | string;
+  /** [UC-73] new | accepted | rejected | contacted (cũ, coi như accepted) | closed | withdrawn */
+  status: "new" | "accepted" | "rejected" | "contacted" | "closed" | string;
   createdAt: string;
   studentName?: string | null;
   studentEmail?: string | null;
   profileSummary?: SharedProfileSummaryDto | null;
+  /** [UC-73] Đã thu hồi hoặc quá 90 ngày: trung tâm không còn xem được dữ liệu đã chia sẻ. */
+  dataHidden?: boolean;
 }
 
 export interface CenterLeadsSummaryDto {
@@ -709,8 +712,11 @@ export interface CenterLeadsSummaryDto {
   page: number;
   pageSize: number;
   newCount: number;
+  /** [UC-73] Đã chấp nhận (gồm contacted cũ). */
   contactedCount: number;
   closedCount: number;
+  /** [UC-73] Bị từ chối. */
+  rejectedCount?: number;
 }
 
 export interface UpdateLeadStatusRequest {

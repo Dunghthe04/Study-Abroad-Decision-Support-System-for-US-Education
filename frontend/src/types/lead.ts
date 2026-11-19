@@ -51,7 +51,11 @@ export interface LeadDto {
 }
 
 /** Trạng thái lead (backend: LeadStatuses). */
-export type LeadStatus = "new" | "contacted" | "closed" | "withdrawn" | "pending_parent" | "cancelled" | "expired";
+export type LeadStatus =
+  | "new" | "accepted" | "rejected" | "contacted" | "closed" | "withdrawn" | "pending_parent" | "cancelled" | "expired";
+
+/** [UC-73] Trung tâm đã chấp nhận (gồm contacted cũ): điều kiện để nhắn tin (UC-74). */
+export const isLeadAccepted = (status: string) => status === "accepted" || status === "contacted";
 
 /** [UC-116] Trung tâm chưa nhận yêu cầu (chờ phụ huynh / phụ huynh từ chối / hết hạn): chưa nhắn tin được. */
 export const isLeadAwaitingCenter = (status: string) =>
@@ -63,6 +67,8 @@ export const isLeadAwaitingCenter = (status: string) =>
  */
 export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
   new: "Mới gửi",
+  accepted: "Trung tâm đã chấp nhận", // [UC-73]
+  rejected: "Trung tâm từ chối", // [UC-73]
   contacted: "Đang trao đổi",
   closed: "Đã hoàn tất",
   withdrawn: "Đã thu hồi", // [UC-80] người gửi đã xóa tài khoản

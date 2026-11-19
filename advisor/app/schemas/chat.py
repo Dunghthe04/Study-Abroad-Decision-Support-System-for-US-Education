@@ -106,6 +106,8 @@ class Citation(CamelModel):
 class QuickReply(CamelModel):
     label: str
     value: str
+    # Có thì nút chuyển sang trang đó (vd "/centers"), không gửi value như tin nhắn
+    href: str | None = None
 
 
 # Công cụ nhập ngay trong chat (ô chọn ngành, bảng rà soát...); frontend vẽ theo type

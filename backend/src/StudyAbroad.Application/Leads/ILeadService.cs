@@ -37,6 +37,11 @@ public interface ILeadService
         string newStatus,
         CancellationToken ct = default);
 
+    // [UC-73] Trung tâm chấp nhận / từ chối yêu cầu liên hệ Mới
+    Task<CenterReceivedLeadDto> AcceptReceivedLeadAsync(Guid userId, string? userEmail, string userRole, Guid leadId, CancellationToken ct = default);
+
+    Task<CenterReceivedLeadDto> RejectReceivedLeadAsync(Guid userId, string? userEmail, string userRole, Guid leadId, CancellationToken ct = default);
+
     // [USAS-2053 / UC-74] Đọc và gửi tin nhắn trả lời trong yêu cầu liên hệ phía Trung tâm
     Task<LeadMessagesThreadDto> GetReceivedLeadMessagesForCenterUserAsync(
         Guid userId,

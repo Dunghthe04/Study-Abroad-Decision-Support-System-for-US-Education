@@ -120,37 +120,37 @@ public class ChatServiceTests
         Assert.Equal(1, JsonDocument.Parse(reply.MetaJson!).RootElement.GetProperty("v").GetInt32());
     }
 
-    // ---- UC-53: câu chưa trả lời được thành mẫu SLM nháp
+    // ---- UC-53: câu chưa trả lời được thành tri thức nháp
 
     private static FakeAdvisor Ambiguous() => new("B0")
     {
         Slm = new AdvisorSlmDto([new AdvisorSlmIntentDto("out_of_scope", "asdfgh")], ["out_of_scope"], "ambiguous", 0.2, false),
     };
 
-    private static StudyAbroad.Application.Admin.SlmSamples.SlmSampleService Samples(FakeSlmRepository repo) =>
-        new(repo, new FakeReader(), new StudyAbroad.Infrastructure.Import.SlmTemplateWriter(), new FakeAuditLogs());
+    private static StudyAbroad.Application.Admin.KnowledgeBase.KnowledgeBaseService Knowledge(FakeKnowledgeRepository repo) =>
+        new(repo, new FakeKnowledgeReader());
 
     [Fact]
-    public async Task NoAnswerTurn_IsCapturedAsAnonymousSlmDraft()
+    public async Task NoAnswerTurn_IsCapturedAsAnonymousKnowledgeDraft()
     {
-        var repo = new FakeSlmRepository();
+        var repo = new FakeKnowledgeRepository();
 
-        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), knowledgeBase: Knowledge(repo))
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
 
-        var sample = Assert.Single(repo.Items);
-        Assert.Equal(("asdfgh", SlmSampleSources.ChatUnanswered, SlmReviewStatuses.Draft), (sample.Question, sample.Source, sample.ReviewStatus));
-        Assert.Null(sample.CreatedByUserId);
+        var entry = Assert.Single(repo.Items);
+        Assert.Equal(("asdfgh", KnowledgeOrigins.ChatUnanswered, KnowledgeReviewStatuses.Draft), (entry.Question, entry.Origin, entry.ReviewStatus));
+        Assert.Null(entry.CreatedByUserId);
     }
 
     [Fact]
     public async Task AnsweredTurn_OrStoreMessagesOff_CapturesNothing()
     {
-        var repo = new FakeSlmRepository();
+        var repo = new FakeKnowledgeRepository();
 
-        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), knowledgeBase: Knowledge(repo))
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
-        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), slmSamples: Samples(repo))
+        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), knowledgeBase: Knowledge(repo))
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
 
         Assert.Empty(repo.Items);
@@ -159,9 +159,9 @@ public class ChatServiceTests
     [Fact]
     public async Task CaptureFailure_DoesNotBreakTheChatReply()
     {
-        var repo = new FakeSlmRepository { Fail = true };
+        var repo = new FakeKnowledgeRepository { Fail = true };
 
-        var res = await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+        var res = await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), knowledgeBase: Knowledge(repo))
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
 
         Assert.NotNull(res.SessionId);
@@ -1689,12 +1689,68 @@ public class ChatServiceTests
 
         Assert.Equal("BU", runner.SearchedFor);
         Assert.Equal(("188429", "match"), runner.GoalCalledWith);
-        Assert.StartsWith("Mình hiểu bạn hỏi về Boston University, nhóm muốn đạt: Vừa sức.", res.Answer);
+        Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
         Assert.Equal("goal_seek", res.Widget!.Type);
         // trường đang trong danh sách: giải thích trường này, rồi gặp tư vấn viên
         Assert.Equal(new ChatAction("explain", "188429"), res.QuickReplies![0].Action);
         Assert.Equal(ChatNextSteps.CenterLabel, res.QuickReplies[1].Label);
         Assert.Null(res.Action);     // việc nội bộ, không trả cho trình duyệt
+    }
+
+    // ---- goal-seeking theo giả định đang xem: mặc định theo giả định, nút chuyển sang hồ sơ thật và ngược lại
+
+    private static readonly SimulationOverrides Budget25k = new(null, null, null, null, 25_000m, null, null);
+
+    private static async Task<AdvisorChatResponse> GoalChatWith(ChatAction? action, SimulationOverrides? simulation, FakeRunner runner) =>
+        await new ChatService(new FakeAdvisor("B4") { Action = "goal_seek", ActionData = BuAction }, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, Action: action, Simulation: simulation));
+
+    [Fact]
+    public async Task GoalSeek_WhileASimulationIsShown_UsesIt_SaysSo_AndOffersTheRealProfile()
+    {
+        var runner = new FakeRunner { Match = Found(), GoalResult = GoalOf() };
+
+        var res = await GoalChatWith(null, Budget25k, runner);
+
+        Assert.Equal(Budget25k, runner.GoalOverrides);   // tính theo giả định
+        Assert.StartsWith("Mình tính theo giả định bạn đang xem (ngân sách 25.000 USD mỗi năm), không phải hồ sơ thật.", res.Answer);
+        var data = res.Widget!.Data!.Value;
+        Assert.Equal("simulated", data.GetProperty("result").GetProperty("basis").GetString());
+        Assert.Equal("ngân sách 25.000 USD mỗi năm", data.GetProperty("basisLabel").GetString());
+        var real = Assert.Single(res.QuickReplies!, q => q.Label == "Xem theo hồ sơ thật");
+        Assert.Equal("real", real.Action!.Basis);
+        Assert.Equal("goal_seek", real.Action.Type);
+        Assert.Equal("188429", real.Action.SchoolCode);
+        Assert.DoesNotContain(res.QuickReplies!, q => q.Label == "Tính theo giả định");
+    }
+
+    [Fact]
+    public async Task GoalSeek_AskedForTheRealProfileWhileASimulationIsShown_UsesTheRealProfile_SaysSo_AndOffersTheSimulation()
+    {
+        var runner = new FakeRunner { Match = Found(), GoalResult = GoalOf() };
+
+        var res = await GoalChatWith(new ChatAction("goal_seek", "188429", Basis: "real"), Budget25k, runner);
+
+        Assert.Null(runner.GoalOverrides);   // hồ sơ thật
+        Assert.StartsWith("Mình tính theo hồ sơ thật của bạn, không phải giả định đang xem (ngân sách 25.000 USD mỗi năm).", res.Answer);
+        Assert.Equal("real", res.Widget!.Data!.Value.GetProperty("result").GetProperty("basis").GetString());
+        Assert.Equal(JsonValueKind.Null, res.Widget!.Data!.Value.GetProperty("basisLabel").ValueKind);
+        var sim = Assert.Single(res.QuickReplies!, q => q.Label == "Tính theo giả định");
+        Assert.Null(sim.Action!.Basis);
+        Assert.DoesNotContain(res.QuickReplies!, q => q.Label == "Xem theo hồ sơ thật");
+    }
+
+    [Fact]
+    public async Task GoalSeek_WithoutASimulation_IsUnchanged_NoBasisSentenceAndNoSwitchButton()
+    {
+        var runner = new FakeRunner { Match = Found(), GoalResult = GoalOf() };
+
+        var res = await GoalChatWith(null, null, runner);
+
+        Assert.Null(runner.GoalOverrides);
+        Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
+        Assert.DoesNotContain("Mình tính theo", res.Answer);
+        Assert.DoesNotContain(res.QuickReplies!, q => q.Label is "Xem theo hồ sơ thật" or "Tính theo giả định");
     }
 
     // ---- hành động có cấu trúc từ nút trên thẻ trường: không qua advisor, không khớp tên
@@ -1717,7 +1773,7 @@ public class ChatServiceTests
         Assert.Null(advisor.LastRequest);                 // không gọi SLM
         Assert.Null(runner.SearchedFor);                  // không khớp tên
         Assert.Equal(("188429", "safety"), runner.GoalCalledWith);
-        Assert.StartsWith("Mình hiểu bạn hỏi về Boston University", res.Answer);
+        Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
         Assert.Equal("goal_seek", res.Widget!.Type);
         Assert.Null(res.Action);
     }
@@ -1884,6 +1940,41 @@ public class ChatServiceTests
         Assert.Equal(SchoolSort.LowestCost, sort);
     }
 
+    // Lọc "không bắt buộc SAT" mà dữ liệu trường ghi điểm thi quan trọng: nêu cả hai thông tin ngay trên dòng trường, trong chữ và trên thẻ
+    [Fact]
+    public async Task SchoolSearch_ForTestOptional_WarnsWhenTheSchoolStillWeighsTestScoresHeavily()
+    {
+        var items = new[]
+        {
+            SearchItem("Heavy") with { TestImportance = "very_important" },
+            SearchItem("Medium") with { TestImportance = "important" },
+            SearchItem("Light") with { TestImportance = "considered" },
+            SearchItem("Unknown"),
+        };
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(4, items, []) };
+
+        var (res, _) = await SearchChat(SearchAction(new { testPolicy = "optional" }), runner);
+
+        Assert.Contains("1. Heavy (Los Angeles, CA, công lập): chi phí 40.000 USD · tỷ lệ nhận 30% · hạng #20 · không bắt buộc SAT, ACT nhưng trường ghi điểm thi là yếu tố rất quan trọng", res.Answer);
+        Assert.Contains("2. Medium (Los Angeles, CA, công lập): chi phí 40.000 USD · tỷ lệ nhận 30% · hạng #20 · không bắt buộc SAT, ACT nhưng trường ghi điểm thi là yếu tố quan trọng", res.Answer);
+        Assert.Contains("3. Light (Los Angeles, CA, công lập): chi phí 40.000 USD · tỷ lệ nhận 30% · hạng #20\n", res.Answer);
+        Assert.Contains("4. Unknown (Los Angeles, CA, công lập): chi phí 40.000 USD · tỷ lệ nhận 30% · hạng #20", res.Answer);
+        var cardItems = res.Widget!.Data!.Value.GetProperty("items");
+        Assert.Equal("very_important", cardItems[0].GetProperty("testImportance").GetString());
+        Assert.Equal("optional", res.Widget!.Data!.Value.GetProperty("filters").GetProperty("testPolicy").GetString());
+    }
+
+    [Fact]
+    public async Task SchoolSearch_WithoutTheTestOptionalFilter_DoesNotWarnAboutTestScores()
+    {
+        var items = new[] { SearchItem("Heavy") with { TestImportance = "very_important" } };
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(1, items, []) };
+
+        var (res, _) = await SearchChat(SearchAction(new { states = new[] { "CA" } }), runner);
+
+        Assert.DoesNotContain("điểm thi", res.Answer);
+    }
+
     [Fact]
     public async Task SchoolSearch_SaysHowManyAndListsTheFirstFiveInOrder()
     {
@@ -1968,6 +2059,25 @@ public class ChatServiceTests
         Assert.Equal(20, runner.SearchedWith!.Value.Filters.MaxRank);
         Assert.Equal(SchoolSort.Quality, runner.SearchedWith!.Value.Sort);
         Assert.Equal("school_search", res.Widget!.Type);
+    }
+
+    // Nút "Chỉ trường ít coi trọng điểm thi": bấm thì tìm lại với điều kiện mới (không qua advisor), giữ "không bắt buộc SAT" và cách xếp
+    [Fact]
+    public async Task ChatAction_SearchAgain_LowTestWeight_RunsTheSearchWithTheNewConditionAndSaysSo()
+    {
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(1, [SearchItem("UCLA")], []) };
+        var button = ChatNextSteps.SearchAgain(
+            "Chỉ trường ít coi trọng điểm thi", "Chỉ các trường mà điểm thi không phải yếu tố quan trọng",
+            new SchoolSearchFilters(TestPolicy: "optional", LowTestWeight: true), SchoolSort.LowestCost);
+
+        var (res, advisor) = await ActionChat(button.Action, runner);
+
+        Assert.Null(advisor.LastRequest);
+        var (filters, sort) = runner.SearchedWith!.Value;
+        Assert.True(filters.LowTestWeight);
+        Assert.Equal("optional", filters.TestPolicy);
+        Assert.Equal(SchoolSort.LowestCost, sort);
+        Assert.Contains("điểm thi không phải yếu tố quan trọng", res.Answer);
     }
 
     [Fact]
@@ -2630,7 +2740,7 @@ public class ChatServiceTests
         // Dữ liệu gửi Gemini: trường đã hiểu, nhóm đích, dữ kiện đã tính, và tên các trường khác (không gồm trường đang hỏi)
         var note = advisor.LastGoalNote!;
         Assert.Equal(("Boston University", "Vừa sức", "reachable"), (note.School, note.Target, note.Outcome));
-        Assert.StartsWith("Tài chính:", note.Facts[0]);
+        Assert.StartsWith("Hiện tại Boston University đang ở nhóm", note.Facts[0]);
         Assert.Equal(["Baylor University", "Harvard University"], note.Others);
     }
 
@@ -2643,7 +2753,7 @@ public class ChatServiceTests
 
         var res = await GoalChatWith(advisor, new FakeRunner { Match = Found(), GoalResult = GoalOf() });
 
-        Assert.StartsWith("Mình hiểu bạn hỏi về Boston University, nhóm muốn đạt: Vừa sức.", res.Answer);
+        Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
         Assert.Equal("goal_seek", res.Widget!.Type);
     }
 
@@ -2656,7 +2766,7 @@ public class ChatServiceTests
 
             var res = await GoalChatWith(advisor, new FakeRunner { Match = Found(), GoalResult = GoalOf() });
 
-            Assert.StartsWith("Mình hiểu bạn hỏi về Boston University", res.Answer);
+            Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
         }
     }
 
@@ -2815,6 +2925,7 @@ public class ChatServiceTests
         public Exception? GoalError { get; init; }
         public string? SearchedFor { get; private set; }
         public (string Code, string? Target)? GoalCalledWith { get; private set; }
+        public SimulationOverrides? GoalOverrides { get; private set; }
 
         public Task<NameMatch> FindSchoolsAsync(Guid userId, string text, CancellationToken ct)
         {
@@ -2824,14 +2935,16 @@ public class ChatServiceTests
             return Task.FromResult(Match!);
         }
 
-        public Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct)
+        public Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct, SimulationOverrides? overrides = null)
         {
             GoalCalledWith = (code, target);
+            GoalOverrides = overrides;
             if (GoalError is not null)
                 throw GoalError;
             if (GoalResult is null)
                 throw new InvalidOperationException($"Chưa có trường {code} trong dữ liệu.");
-            return Task.FromResult(GoalResult);
+            // như runner thật: có giá trị giả định thì kết quả ghi cơ sở simulated
+            return Task.FromResult(RecommendationService.HasValues(overrides) ? GoalResult with { Basis = "simulated" } : GoalResult);
         }
 
         public SchoolInfoDto? Info { get; init; }

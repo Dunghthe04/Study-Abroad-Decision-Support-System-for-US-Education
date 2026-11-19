@@ -18,8 +18,8 @@ import {
   type TableRow,
 } from "@/components/admin/shared/EditableTable";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
-import { SlmSampleHistory } from "@/components/admin/knowledge/SlmSampleHistory";
-import { SlmStatusBadge } from "@/components/admin/knowledge/SlmStatusBadge";
+import { SlmSampleHistory } from "@/components/admin/slm-samples/SlmSampleHistory";
+import { SlmStatusBadge } from "@/components/admin/slm-samples/SlmStatusBadge";
 import { adminSlmSampleApi } from "@/lib/slm-sample-api";
 import { useFetched } from "@/lib/use-fetched";
 import {

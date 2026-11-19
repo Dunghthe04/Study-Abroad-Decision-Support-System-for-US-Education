@@ -15,7 +15,7 @@ import {
   SlmImportErrorTable,
   SlmImportPreviewTable,
   importRowKey,
-} from "@/components/admin/knowledge/SlmImportPreviewTable";
+} from "@/components/admin/slm-samples/SlmImportPreviewTable";
 import { adminSlmSampleApi } from "@/lib/slm-sample-api";
 import type { SlmImportPreview, SlmImportResult } from "@/types/slm-sample";
 

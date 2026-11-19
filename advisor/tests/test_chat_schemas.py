@@ -82,7 +82,15 @@ def test_response_with_buttons_and_widget_round_trips_as_camel_case():
 
     body = res.model_dump(by_alias=True)
 
-    assert body["quickReplies"] == [{"label": "Điền bằng form", "value": "Điền bằng form"}]
+    assert body["quickReplies"] == [{"label": "Điền bằng form", "value": "Điền bằng form", "href": None}]
     assert body["widget"] == {"type": "review", "data": {"sections": 5}}
     assert body["profileChanged"] == ["budget"]
     assert body["profile"]["budget"]["status"] == "confirmed"
+
+
+def test_a_quick_reply_can_carry_a_link_that_the_browser_follows_instead_of_sending_the_text():
+    body = QuickReply(
+        label="Trang Trung tâm", value="Em muốn xem trang trung tâm", href="/centers"
+    ).model_dump(by_alias=True)
+
+    assert body == {"label": "Trang Trung tâm", "value": "Em muốn xem trang trung tâm", "href": "/centers"}

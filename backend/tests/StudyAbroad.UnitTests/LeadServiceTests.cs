@@ -649,6 +649,90 @@ public class LeadServiceTests
                 10));
     }
 
+    private static (LeadService Service, FakeLeadRepo Repo, FakeAuditRepo Audit, Guid OwnerId, Guid CenterId) DecisionSetup()
+    {
+        var ownerId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var centerRepo = new FakeStudyCenterRepo();
+        centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm Quyết Định", OwnerUserId = ownerId });
+        var repo = new FakeLeadRepo();
+        var audit = new FakeAuditRepo();
+        return (new LeadService(repo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository(), audit), repo, audit, ownerId, centerId);
+    }
+
+    [Fact]
+    public async Task AcceptReceivedLead_NewLead_BecomesAcceptedAndLogsAudit()
+    {
+        var (service, repo, audit, ownerId, centerId) = DecisionSetup();
+        var lead = new Lead { Id = Guid.NewGuid(), UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = "new" };
+        repo.Leads.Add(lead);
+
+        await service.AcceptReceivedLeadAsync(ownerId, null, UserRoles.Center, lead.Id);
+
+        Assert.Equal(LeadStatuses.Accepted, lead.Status);
+        Assert.True(LeadStatuses.IsAccepted(lead.Status));
+        Assert.Equal("lead.accept", Assert.Single(audit.Logs).Action);
+        Assert.Empty(repo.Notifications);
+    }
+
+    [Fact]
+    public async Task RejectReceivedLead_ParentSubmitted_NotifiesParentAndStudent()
+    {
+        var (service, repo, _, ownerId, centerId) = DecisionSetup();
+        var studentId = Guid.NewGuid();
+        var parentId = Guid.NewGuid();
+        var lead = new Lead { Id = Guid.NewGuid(), UserId = studentId, SubmittedByUserId = parentId, StudyCenterId = centerId, Status = "new" };
+        repo.Leads.Add(lead);
+
+        await service.RejectReceivedLeadAsync(ownerId, null, UserRoles.Center, lead.Id);
+
+        Assert.Equal(LeadStatuses.Rejected, lead.Status);
+        Assert.Equal(new[] { parentId, studentId }.OrderBy(x => x), repo.Notifications.Select(n => n.UserId).OrderBy(x => x));
+        Assert.All(repo.Notifications, n =>
+        {
+            Assert.Equal("lead_rejected", n.Type);
+            Assert.Contains("Trung Tâm Quyết Định", n.Body);
+        });
+    }
+
+    [Fact]
+    public async Task AcceptOrRejectReceivedLead_NotNewOtherCenterOrExpired_IsRejected()
+    {
+        var (service, repo, _, ownerId, centerId) = DecisionSetup();
+        var accepted = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = "accepted" };
+        var other = new Lead { Id = Guid.NewGuid(), StudyCenterId = Guid.NewGuid(), Status = "new" };
+        var old = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = "new", CreatedAt = DateTime.UtcNow.AddDays(-91) };
+        var withdrawn = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.Withdrawn };
+        var pendingParent = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.PendingParent };
+        repo.Leads.AddRange([accepted, other, old, withdrawn, pendingParent]);
+
+        var notNew = await Assert.ThrowsAsync<LeadRuleException>(() => service.RejectReceivedLeadAsync(ownerId, null, UserRoles.Center, accepted.Id));
+        Assert.Equal("lead_not_new", notNew.Code);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.AcceptReceivedLeadAsync(ownerId, null, UserRoles.Center, other.Id));
+        Assert.Equal("lead_expired", (await Assert.ThrowsAsync<LeadRuleException>(() =>
+            service.AcceptReceivedLeadAsync(ownerId, null, UserRoles.Center, old.Id))).Code);
+        Assert.Equal("lead_withdrawn", (await Assert.ThrowsAsync<LeadRuleException>(() =>
+            service.AcceptReceivedLeadAsync(ownerId, null, UserRoles.Center, withdrawn.Id))).Code);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.AcceptReceivedLeadAsync(ownerId, null, UserRoles.Center, pendingParent.Id));
+        Assert.Equal("new", other.Status);
+        Assert.Empty(repo.Notifications);
+    }
+
+    [Fact]
+    public async Task UpdateReceivedLeadStatus_RejectedLeadOrRejectedTarget_IsRefused()
+    {
+        var (service, repo, _, ownerId, centerId) = DecisionSetup();
+        var rejected = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = "rejected" };
+        var fresh = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = "new" };
+        repo.Leads.AddRange([rejected, fresh]);
+
+        await Assert.ThrowsAsync<LeadRuleException>(() => service.UpdateReceivedLeadStatusAsync(ownerId, null, UserRoles.Center, rejected.Id, "new"));
+        // từ chối phải qua thao tác riêng để người gửi nhận thông báo
+        await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateReceivedLeadStatusAsync(ownerId, null, UserRoles.Center, fresh.Id, "rejected"));
+        Assert.Equal("rejected", rejected.Status);
+        Assert.Equal("new", fresh.Status);
+    }
+
     [Fact]
     public async Task CreateLead_NotifiesCenterOwner_UC110()
     {

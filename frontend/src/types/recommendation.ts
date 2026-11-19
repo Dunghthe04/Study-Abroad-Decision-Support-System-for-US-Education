@@ -68,6 +68,8 @@ export interface ScoredSchool {
   aidPolicy?: string | null; // none | need_only | merit_only | need_and_merit
   sat25?: number | null; // khoảng SAT tổng của sinh viên trúng tuyển (null nếu trường chưa có hoặc dữ liệu sai thang)
   sat75?: number | null;
+  fit?: number | null; // điểm phù hợp 0–1, dùng xếp thứ tự trong nhóm; lần gợi ý cũ chưa có
+  why?: WhyCode[]; // mã lý do của riêng trường này; lần gợi ý cũ chưa có thì thẻ "Xem thêm" không ghi lý do
 }
 
 // Một trường được xếp vào khối
@@ -309,6 +311,28 @@ export interface SchoolGoalResult {
   position?: GoalPosition | null; // bản backend cũ chưa trả
   stats?: GoalSchoolStats | null; // số liệu tuyển sinh và mốc của các luật chặn
   targets?: GoalTargetResult[] | null; // các nhóm cao hơn nhóm hiện tại: Khó vào có Vừa sức và An toàn, Vừa sức có An toàn, An toàn rỗng
+  // Cơ sở đã tính: real (hồ sơ thật) hoặc simulated (giả định học sinh đang xem); bản backend cũ chưa trả thì coi là real
+  basis?: "real" | "simulated";
+  comparison?: GoalCompareRow[] | null; // bảng "bạn so với trường" về học thuật; bản backend cũ chưa trả
+}
+
+// Một dòng "bạn so với trường", mỗi dòng là một tiêu chí bộ chấm nhóm dùng. factor: sat | act | gpa | ec | accept.
+// status: sat/act/gpa: below | within | above | unknown (trường chưa công bố) | no_profile (hồ sơ chưa có);
+//   ec: below | within | above so với bậc trung bình 3, unknown khi trường không xét ngoại khóa;
+//   accept: always_reach (nhận dưới 15%, luôn Khó vào) | downgrade (nhận du học sinh ít, bị hạ một nhóm) | capped (nhận dưới 50%, tối đa Vừa sức) | ok | unknown.
+// student: số của học sinh (ec: bậc 1 đến 5). low, high: khoảng của trường (GPA chỉ có trung bình nên low = high);
+//   riêng accept: low = tỉ lệ nhận chung, high = tỉ lệ nhận du học sinh (0..1).
+// gap: âm là thiếu, dương là vượt, 0 là trong khoảng; ec: bậc trừ 3; accept: du học sinh chia chung.
+// position: vị trí trong sinh viên của trường 0..1 (sat, act, gpa). importance: mức trường coi trọng tiêu chí (CDS C7).
+export interface GoalCompareRow {
+  factor: "sat" | "act" | "gpa" | "ec" | "accept";
+  status: "below" | "within" | "above" | "unknown" | "no_profile" | "always_reach" | "downgrade" | "capped" | "ok";
+  student: number | null;
+  low: number | null;
+  high: number | null;
+  gap: number | null;
+  position?: number | null;
+  importance?: string | null;
 }
 
 // Thẻ giải thích một trường do code dựng (số đã lưu và mã lý do của lần gợi ý gần nhất), không có AI.
@@ -421,6 +445,8 @@ export interface SchoolSearchItem {
   aidAvgUsd: number | null;
   quality: number | null;
   bestRank: number | null;
+  // Mức trường coi trọng điểm thi (CDS C7): very_important | important | considered | not_considered
+  testImportance?: string | null;
 }
 
 export interface SchoolSearchData {
@@ -436,6 +462,7 @@ export interface SchoolSearchData {
     major?: string | null;
     maxCostUsd?: number | null;
     maxIelts?: number | null;
+    testPolicy?: string | null;
     ivy?: boolean;
   } | null;
   sort?: string | null;

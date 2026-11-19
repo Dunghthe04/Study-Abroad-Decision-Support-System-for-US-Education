@@ -25,6 +25,7 @@ from app.services.replies import (
     CENTER_NONE,
     CENTER_NONE_IN_CITY,
     CENTER_NOT_PROVIDED,
+    CENTER_PAGE_BUTTON,
     CENTER_SERVICE_VALUE,
     CENTER_SERVICE_VALUE_IN_CITY,
     CENTER_TASK_NOTES,
@@ -336,6 +337,8 @@ class ChuyenTrungTamHandler:
         )
         return SkillOutput(
             "\n\n".join(parts),
+            # Có câu so sánh hoặc đặt lịch (việc chưa làm trong chat): nút dẫn sang trang Trung tâm để học sinh đi tiếp
+            quick_replies=[CENTER_PAGE_BUTTON.model_copy()] if notes else [],
             widget=centers_widget(centers, reasons, others, need.service),
             disclaimer=DISCLAIMER,
         )

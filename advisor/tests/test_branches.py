@@ -34,6 +34,7 @@ from app.services.chat_flow import QUESTIONS, SkillOutput, ask, go_to
 from app.services.intake import INTAKE_ID
 from app.services.replies import (
     CHAT_BUTTON,
+    EXPLAIN_ASK_SCHOOL,
     FORM_BUTTON,
     GROUP_NEED_RESULTS,
     INTAKE_ASK,
@@ -787,8 +788,8 @@ class FakeWriter:
         return self.answer
 
 
-def new_advice(ran: list[str], writer=None):
-    return build_branches(skills(ran), writer or FakeWriter())["profile_review"]
+def new_advice(ran: list[str], writer=None, **overrides):
+    return build_branches(skills(ran, **overrides), writer or FakeWriter())["profile_review"]
 
 
 @pytest.mark.parametrize(
@@ -983,6 +984,47 @@ async def test_asking_about_a_suggested_school_runs_the_explanation_without_the_
     )
 
     assert ran == ["skill_explain"]
+
+
+class AsksWhichSchool:
+    """skill_explain khi không khớp được trường nào trong danh sách: hỏi lại trường nào trong danh sách."""
+
+    async def run(self, state: ChatState, message: str, *args) -> SkillOutput:
+        return SkillOutput(EXPLAIN_ASK_SCHOOL)
+
+
+async def test_a_school_outside_the_suggested_list_goes_to_goal_seek_instead_of_asking_again():
+    # "Purdue có phù hợp với hồ sơ em không": Purdue không nằm trong danh sách gợi ý, nhưng học sinh hỏi được mọi trường
+    branch = new_advice([], skill_explain=AsksWhichSchool())
+    state = ChatState(has_results=True, profile=filled(REQUIRED_B4))
+
+    out = await branch.run(
+        state, "x", tin(("profile_review", {"schools": ["Purdue"]}, "Purdue có phù hợp với hồ sơ em không"))
+    )
+
+    assert out.action == "goal_seek"
+    assert out.action_data == {"school": "Purdue", "target": None}
+    assert "Purdue" in out.answer
+
+
+async def test_a_school_in_the_list_still_goes_to_the_explanation_not_goal_seek():
+    ran: list[str] = []
+    state = ChatState(has_results=True, profile=filled(REQUIRED_B4))
+
+    out = await new_advice(ran).run(
+        state, "x", tin(("profile_review", {"schools": ["Iowa"]}, "vì sao Iowa vừa sức"))
+    )
+
+    assert ran == ["skill_explain"] and out.action is None
+
+
+async def test_asking_which_school_still_happens_when_the_student_names_none():
+    branch = new_advice([], skill_explain=AsksWhichSchool())
+    state = ChatState(has_results=True, profile=filled(REQUIRED_B4))
+
+    out = await branch.run(state, "x", tin(("profile_review", {}, "vì sao em bị xếp nhóm này")))
+
+    assert out.action is None
 
 
 async def test_new_advice_without_a_profile_remembers_the_question_and_asks_for_the_profile():
