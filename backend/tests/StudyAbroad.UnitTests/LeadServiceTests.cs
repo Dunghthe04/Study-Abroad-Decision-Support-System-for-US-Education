@@ -2334,7 +2334,6 @@ public class LeadServiceTests
     {
         public List<(Guid LeadId, LeadMessageDto Student, LeadMessageDto Center)> NewMessages { get; } = [];
         public List<(Guid LeadId, string SenderSide, IReadOnlyList<Guid> Ids, DateTime ReadAt)> Reads { get; } = [];
-        public List<(Guid UserId, string Title, string? Body, string? Link)> Pushes { get; } = [];
         public bool FailOnNewMessage { get; set; }
 
         public Task NewMessageAsync(Guid leadId, LeadMessageDto studentView, LeadMessageDto centerView, CancellationToken ct = default)
@@ -2349,8 +2348,13 @@ public class LeadServiceTests
             Reads.Add((leadId, senderSide, messageIds, readAt));
             return Task.CompletedTask;
         }
+    }
 
-        public Task NotificationAsync(Guid userId, string title, string? body, string? linkUrl, CancellationToken ct = default)
+    private sealed class FakePusher : StudyAbroad.Application.Notifications.INotificationPusher
+    {
+        public List<(Guid UserId, string Title, string? Body, string? Link)> Pushes { get; } = [];
+
+        public Task PushAsync(Guid userId, string title, string? body, string? linkUrl, CancellationToken ct = default)
         {
             Pushes.Add((userId, title, body, linkUrl));
             return Task.CompletedTask;
@@ -2369,6 +2373,7 @@ public class LeadServiceTests
         public CreateLeadSetup S { get; } = new();
         public FakeChatNotifier Chat { get; } = new();
         public FakeChatPresence Presence { get; } = new();
+        public FakePusher Pusher { get; } = new();
         public NotificationTests.FakeNotificationRepo NotiRepo { get; } = new();
         public LeadService Service { get; }
         public User Student { get; }
@@ -2385,7 +2390,7 @@ public class LeadServiceTests
             Lead = AddLead(S, Student.Id, Student.Id);
             Lead.Status = LeadStatuses.Accepted;
             Service = new LeadService(S.LeadRepo, S.CenterRepo, S.UserRepo, S.LinkRepo,
-                notifications: new StudyAbroad.Application.Notifications.NotificationService(NotiRepo),
+                notifications: new StudyAbroad.Application.Notifications.NotificationService(NotiRepo, pusher: Pusher),
                 chat: Chat, presence: Presence);
         }
     }
@@ -2408,7 +2413,7 @@ public class LeadServiceTests
         Assert.Equal("lead_message_new", noti.Type);
         Assert.Equal("/center/leads", noti.LinkUrl);
         Assert.Equal("Em muốn hỏi học phí", noti.Body);
-        var push = Assert.Single(c.Chat.Pushes);
+        var push = Assert.Single(c.Pusher.Pushes);
         Assert.Equal(c.CenterOwnerId, push.UserId);
     }
 
@@ -2424,7 +2429,7 @@ public class LeadServiceTests
         Assert.Equal(2, c.NotiRepo.Items.Count);
         Assert.Equal(new[] { c.Student.Id, parent.Id }.OrderBy(x => x), c.NotiRepo.Items.Select(n => n.UserId).OrderBy(x => x));
         Assert.All(c.NotiRepo.Items, n => Assert.Equal("/account#sent-leads", n.LinkUrl));
-        Assert.Equal(2, c.Chat.Pushes.Count);
+        Assert.Equal(2, c.Pusher.Pushes.Count);
         var pushed = Assert.Single(c.Chat.NewMessages);
         Assert.Equal("Trung Tâm Xác Minh", pushed.Student.SenderName);
         Assert.Equal(pushed.Student, pushed.Center); // tin của trung tâm hiện giống nhau ở hai phía
@@ -2440,7 +2445,7 @@ public class LeadServiceTests
 
         Assert.Single(c.Chat.NewMessages); // tin vẫn được đẩy vào khung đang mở
         Assert.Empty(c.NotiRepo.Items);
-        Assert.Empty(c.Chat.Pushes);
+        Assert.Empty(c.Pusher.Pushes);
     }
 
     [Fact]
