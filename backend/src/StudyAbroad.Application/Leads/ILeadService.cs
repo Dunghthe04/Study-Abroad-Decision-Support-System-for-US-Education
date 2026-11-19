@@ -101,4 +101,12 @@ public interface ILeadService
     Task<Guid> GetMessageSenderIdAsync(Guid leadId, Guid messageId, CancellationToken ct = default);
 
     Task<int> RemoveAllMessagesOfLockedSenderAsync(Guid adminUserId, Guid senderUserId, string? reason, CancellationToken ct = default);
+
+    // ===== [Chat realtime] =====
+
+    /// <summary>Người dùng được vào phòng chat của yêu cầu liên hệ ở phía nào (chặn IDOR giống đọc tin nhắn).</summary>
+    Task<LeadChatAccessDto> GetChatAccessAsync(Guid userId, string? userEmail, string userRole, Guid leadId, CancellationToken ct = default);
+
+    /// <summary>Đánh dấu đã xem các tin của phía đối diện và báo cho họ biết.</summary>
+    Task MarkThreadReadAsync(Guid userId, string? userEmail, string userRole, Guid leadId, CancellationToken ct = default);
 }

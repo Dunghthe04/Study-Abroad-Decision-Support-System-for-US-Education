@@ -1750,6 +1750,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("lead_id");
 
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("read_at");
+
                     b.Property<Guid?>("RemovedByUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("removed_by_user_id");
@@ -3666,6 +3670,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsLegalHold")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_legal_hold");
+
                     b.Property<double?>("Latitude")
                         .HasColumnType("double precision")
                         .HasColumnName("latitude");
@@ -3684,6 +3694,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("legal_document_urls")
                         .HasDefaultValueSql("'{}'");
+
+                    b.Property<string>("LegalHoldReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("legal_hold_reason");
 
                     b.Property<string>("LegalRepresentative")
                         .HasMaxLength(150)
@@ -4595,6 +4610,17 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsBirthdateLocked")
                         .HasColumnType("boolean")
                         .HasColumnName("is_birthdate_locked");
+
+                    b.Property<bool>("IsLegalHold")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_legal_hold");
+
+                    b.Property<string>("LegalHoldReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("legal_hold_reason");
 
                     b.Property<DateTime?>("LockoutEnd")
                         .HasColumnType("timestamp with time zone")

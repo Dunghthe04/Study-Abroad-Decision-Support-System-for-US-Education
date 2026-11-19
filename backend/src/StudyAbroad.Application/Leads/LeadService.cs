@@ -20,7 +20,9 @@ public class LeadService(
     IParentLinkRepository parentLinks,
     IAuditLogRepository? auditLogs = null,
     IEmailSender? emailSender = null,
-    INotificationService? notifications = null) : ILeadService
+    INotificationService? notifications = null,
+    ILeadChatNotifier? chat = null,
+    ILeadChatPresence? presence = null) : ILeadService
 {
     public const int MaxMessageLength = 2000;
     public const int MaxReplyMessageLength = 4000;
@@ -420,7 +422,124 @@ public class LeadService(
         await AuditMessageSentAsync(user.Id, user.Role, lead, saved, ct);
 
         var dto = LeadMessageMapper.ToDto(saved, user.Role, user.FullName, sharedProfile: true, centerName);
+        // [Chat realtime] Trung tâm thấy tên theo quy tắc chia sẻ hồ sơ (UC-42), khác bản học sinh tự thấy
+        var centerView = LeadMessageMapper.ToDto(
+            saved, user.Role, user.FullName, lead.SharedFields.Contains(LeadSharedFields.Contact), centerName);
+        await PublishNewMessageAsync(lead, saved, LeadChatSides.Student, dto, centerView, centerName, ct);
         return new SendLeadMessageResultDto(dto, lead.Status);
+    }
+
+    // ===== [Chat realtime] =====
+
+    private const int NotificationPreviewLength = 120;
+
+    /// <summary>Người ở phía học sinh của lead: học sinh chủ lead và phụ huynh đã bấm gửi (nếu có).</summary>
+    private static IReadOnlyList<Guid> StudentSideUserIds(Lead lead)
+    {
+        var ids = new List<Guid> { lead.UserId };
+        if (lead.SubmittedByUserId is { } submitted && submitted != lead.UserId) ids.Add(submitted);
+        return ids;
+    }
+
+    /// <summary>
+    /// [Chat realtime] Người dùng được vào phòng chat của lead ở phía nào. Dùng đúng luật phân quyền của đọc tin nhắn
+    /// (học sinh / phụ huynh của lead hoặc trung tâm sở hữu lead), lead không có quyền báo "không tìm thấy".
+    /// </summary>
+    public async Task<LeadChatAccessDto> GetChatAccessAsync(
+        Guid userId,
+        string? userEmail,
+        string userRole,
+        Guid leadId,
+        CancellationToken ct = default)
+    {
+        if (userRole is UserRoles.Student or UserRoles.Parent)
+        {
+            var (_, lead, _) = await GetAuthorizedSentLeadAsync(userId, leadId, ct);
+            var center = await studyCenters.GetByIdAsync(lead.StudyCenterId, ct);
+            return new LeadChatAccessDto(LeadChatSides.Student, center?.OwnerUserId is { } owner ? [owner] : []);
+        }
+
+        if (userRole != UserRoles.Center)
+            throw new LeadRuleException("role_not_allowed", 403, "Chỉ học sinh, phụ huynh hoặc trung tâm tham gia được cuộc trò chuyện này.");
+
+        var (centerLead, _) = await GetAuthorizedLeadForCenterAsync(userId, userEmail, userRole, leadId, ct);
+        return new LeadChatAccessDto(LeadChatSides.Center, StudentSideUserIds(centerLead));
+    }
+
+    /// <summary>
+    /// [Chat realtime] Người đọc đã mở xem cuộc trò chuyện: đánh dấu đã xem các tin của phía đối diện và báo cho họ.
+    /// </summary>
+    public async Task MarkThreadReadAsync(
+        Guid userId,
+        string? userEmail,
+        string userRole,
+        Guid leadId,
+        CancellationToken ct = default)
+    {
+        var access = await GetChatAccessAsync(userId, userEmail, userRole, leadId, ct);
+        var readAt = DateTime.UtcNow;
+        var ids = await leads.MarkMessagesReadAsync(leadId, access.Side == LeadChatSides.Center, readAt, ct);
+        if (ids.Count == 0 || chat is null) return;
+
+        // Tin vừa được xem là tin của phía đối diện với người đọc, nên báo cho đúng phía đó
+        await chat.MessagesReadAsync(leadId, LeadChatSides.Opposite(access.Side), ids, readAt, ct);
+    }
+
+    /// <summary>
+    /// [Chat realtime] Đẩy tin mới tới hai phía, rồi báo người nhận (chuông thông báo + toast) trừ khi họ đang mở đúng
+    /// cuộc trò chuyện này. Lỗi ở đây không được làm hỏng việc gửi tin: tin đã lưu, bên kia vẫn lấy được bằng REST.
+    /// </summary>
+    private async Task PublishNewMessageAsync(
+        Lead lead,
+        LeadMessage saved,
+        string senderSide,
+        LeadMessageDto studentView,
+        LeadMessageDto centerView,
+        string centerName,
+        CancellationToken ct)
+    {
+        try
+        {
+            if (chat is not null)
+                await chat.NewMessageAsync(lead.Id, studentView, centerView, ct);
+
+            IReadOnlyList<Guid> recipients;
+            string title;
+            string link;
+            if (senderSide == LeadChatSides.Student)
+            {
+                var center = await studyCenters.GetByIdAsync(lead.StudyCenterId, ct);
+                recipients = center?.OwnerUserId is { } owner ? [owner] : [];
+                title = $"Tin nhắn mới từ {centerView.SenderName}";
+                link = "/center/leads";
+            }
+            else
+            {
+                recipients = StudentSideUserIds(lead);
+                title = $"Tin nhắn mới từ {centerName}";
+                link = "/account#sent-leads";
+            }
+
+            var body = string.IsNullOrWhiteSpace(saved.Content)
+                ? "Đã gửi một ảnh."
+                : saved.Content.Length > NotificationPreviewLength
+                    ? saved.Content[..NotificationPreviewLength] + "…"
+                    : saved.Content;
+
+            foreach (var recipient in recipients)
+            {
+                if (presence?.IsViewing(recipient, lead.Id) == true) continue;
+
+                if (notifications is not null)
+                    await notifications.NotifyAsync(recipient, "lead_message_new", title, body, link, ct);
+                if (chat is not null)
+                    await chat.NotificationAsync(recipient, title, body, link, ct);
+            }
+        }
+        catch (Exception)
+        {
+            // Cố ý nuốt lỗi: realtime và thông báo chỉ là phần thêm, không được làm thất bại việc gửi tin đã lưu
+        }
     }
 
     private static string ValidateMessageContent(string? content, bool allowEmpty)
@@ -666,6 +785,8 @@ public class LeadService(
             sharedProfile: lead.SharedFields.Contains(LeadSharedFields.Contact),
             centerName: centerName);
 
+        // [Chat realtime] Tin của trung tâm hiện giống nhau ở hai phía (tên là tên trung tâm)
+        await PublishNewMessageAsync(lead, saved, LeadChatSides.Center, dto, dto, centerName, ct);
         return new SendLeadMessageResultDto(dto, lead.Status);
     }
 

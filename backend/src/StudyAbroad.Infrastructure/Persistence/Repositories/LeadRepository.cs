@@ -338,6 +338,35 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
     public Task<LeadMessage?> GetLeadMessageForUpdateAsync(Guid leadId, Guid messageId, CancellationToken ct = default) =>
         db.LeadMessages.FirstOrDefaultAsync(m => m.Id == messageId && m.LeadId == leadId, ct);
 
+    /// <summary>
+    /// [Chat realtime] Đánh dấu đã xem các tin còn hiện của phía đối diện. Phía trung tâm gồm các vai trò trung tâm /
+    /// kiểm duyệt / quản trị (cùng định nghĩa với <see cref="LeadMessageMapper.IsStaffOrCenterRole"/>).
+    /// </summary>
+    public async Task<IReadOnlyList<Guid>> MarkMessagesReadAsync(
+        Guid leadId,
+        bool readerIsCenterSide,
+        DateTime readAt,
+        CancellationToken ct = default)
+    {
+        string[] staffRoles = [UserRoles.Center, UserRoles.Moderator, UserRoles.Admin];
+
+        var unread = from m in db.LeadMessages
+                     join u in db.Users on m.SenderUserId equals u.Id
+                     where m.LeadId == leadId && m.ReadAt == null && m.Status == "visible"
+                     select new { Message = m, u.Role };
+
+        // Trung tâm đọc thì đánh dấu tin của học sinh / phụ huynh, và ngược lại
+        var rows = await (readerIsCenterSide
+                ? unread.Where(x => !staffRoles.Contains(x.Role))
+                : unread.Where(x => staffRoles.Contains(x.Role)))
+            .ToListAsync(ct);
+
+        foreach (var row in rows) row.Message.ReadAt = readAt;
+        if (rows.Count > 0) await db.SaveChangesAsync(ct);
+
+        return rows.Select(x => x.Message.Id).ToList();
+    }
+
     /// <summary>[UC-58] Hàng đợi báo cáo của Admin: tin bị báo cáo đang chờ xử lý, tin đã gỡ, hoặc cả hai.</summary>
     public async Task<PagedResult<AdminLeadMessageReportDto>> GetReportedMessagesAsync(
         string filter,

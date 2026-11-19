@@ -29,4 +29,7 @@ public class LeadMessage : BaseEntity
     /// <summary>Ảnh đính kèm (URL https của nhà cung cấp lưu trữ). Có thể kèm hoặc không kèm văn bản.</summary>
     public string? AttachmentUrl { get; set; }
     public string? AttachmentPublicId { get; set; }
+
+    /// <summary>[Chat realtime] Lúc phía đối diện đã mở xem tin này. Null là chưa xem.</summary>
+    public DateTime? ReadAt { get; set; }
 }
