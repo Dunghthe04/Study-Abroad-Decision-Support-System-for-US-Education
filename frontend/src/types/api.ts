@@ -912,3 +912,51 @@ export interface CenterProfileChangeDto {
   reviewedAt?: string | null;
   reviewReason?: string | null;
 }
+
+/** [UC-97] Danh mục lọc nhật ký truy cập dữ liệu nhạy cảm. */
+export type AccessLogCategory =
+  | "all_sensitive"
+  | "center_document"
+  | "reported_message"
+  | "slm_export"
+  | "all";
+
+/** [UC-97] Một dòng nhật ký truy cập hoặc xuất dữ liệu nhạy cảm (Administrator only). */
+export interface AccessLogDto {
+  id: string;
+  createdAt: string;
+  actorUserId?: string | null;
+  actorFullName?: string | null;
+  actorEmail?: string | null;
+  actorRole?: UserRole | string | null;
+  action: string;
+  actionCategory: string;
+  actionDescription: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  detailJson?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+}
+
+/** [UC-97] Tham số truy vấn bộ lọc nhật ký truy cập. */
+export interface AccessLogFilterQuery {
+  category?: AccessLogCategory | string;
+  action?: string;
+  search?: string;
+  actorUserId?: string;
+  actorRole?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** [UC-97] Thống kê tổng quan số lượt truy cập nhạy cảm theo nhóm thao tác. */
+export interface AccessLogSummaryDto {
+  totalSensitiveCount: number;
+  centerDocumentViews: number;
+  reportedMessageViews: number;
+  slmSampleExports: number;
+}
+
