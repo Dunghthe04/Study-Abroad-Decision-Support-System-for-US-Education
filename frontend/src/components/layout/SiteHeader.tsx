@@ -69,7 +69,8 @@ export function SiteHeader() {
     { href: isModerator ? "/admin/centers" : "/centers", label: "Trung tâm" },
     { href: "/methodology", label: "Phương pháp của chúng tôi" },
     ...(hasOwnProfile ? [{ href: "/target-schools", label: "Trường mục tiêu" }] : []),
-    ...(user?.role === "parent" ? [{ href: "/parent/children", label: "Con của tôi" }] : []),
+    // 2h-1: đang làm thay con thì ẩn "Con của tôi", muốn quay lại thì bấm thoát làm thay trên băng ActingAsBanner
+    ...(user?.role === "parent" && !acting ? [{ href: "/parent/children", label: "Con của tôi" }] : []),
     ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ" }] : []),
   ];
 
