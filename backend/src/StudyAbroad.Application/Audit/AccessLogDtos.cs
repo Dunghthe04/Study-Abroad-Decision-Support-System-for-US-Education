@@ -44,3 +44,4 @@ public record AccessLogSummaryDto(
     int ReportedMessageViews,
     int SlmSampleExports
 );
+

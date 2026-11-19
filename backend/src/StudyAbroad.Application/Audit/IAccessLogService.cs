@@ -27,3 +27,4 @@ public interface IAccessLogService
         DateOnly? to = null,
         CancellationToken ct = default);
 }
+

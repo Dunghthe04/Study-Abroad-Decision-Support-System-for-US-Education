@@ -55,3 +55,4 @@ public class AdminAccessLogsController(IAccessLogService accessLogs) : Controlle
         return Ok(summary);
     }
 }
+

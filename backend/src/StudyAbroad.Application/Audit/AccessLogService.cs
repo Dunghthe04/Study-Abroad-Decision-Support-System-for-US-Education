@@ -57,3 +57,4 @@ public class AccessLogService(IAuditLogRepository auditLogs) : IAccessLogService
     private static DateTime? StartOfDayUtc(DateOnly? day) =>
         day is { } d ? DateTime.SpecifyKind(d.ToDateTime(TimeOnly.MinValue) - VietnamOffset, DateTimeKind.Utc) : null;
 }
+

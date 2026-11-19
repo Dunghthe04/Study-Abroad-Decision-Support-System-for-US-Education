@@ -3,7 +3,7 @@ import { AdminSection } from "@/components/admin/AdminSection";
 import { AccessLogsView } from "@/components/admin/access-logs/AccessLogsView";
 
 export const metadata: Metadata = {
-  title: "Nhật ký truy cập – Quản trị USAS",
+  title: "Nhật ký truy cập – Quản trị USDSS",
 };
 
 /**
@@ -18,3 +18,4 @@ export default function AdminAccessLogsPage() {
     </AdminSection>
   );
 }
+
