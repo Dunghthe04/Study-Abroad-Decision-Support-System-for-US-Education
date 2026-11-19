@@ -18,6 +18,10 @@ on:
       - feature/USAS-2097-set-up-deployment-test-server
       - develop
 
+concurrency:
+  group: deploy-azure-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -84,7 +88,7 @@ jobs:
         run: |
           az containerapp update \
             --name usas-backend \
-            --resource-group usas-rg \
+            --resource-group usas-kr-rg \
             --image usasreg.azurecr.io/usas-backend:${{ github.sha }}
 
       - name: Deploy Advisor to Container App
@@ -92,7 +96,7 @@ jobs:
         run: |
           az containerapp update \
             --name usas-advisor \
-            --resource-group usas-rg \
+            --resource-group usas-kr-rg \
             --image usasreg.azurecr.io/usas-advisor:${{ github.sha }}
 
       - name: Deploy Frontend to Container App
@@ -100,5 +104,5 @@ jobs:
         run: |
           az containerapp update \
             --name usas-frontend \
-            --resource-group usas-rg \
+            --resource-group usas-kr-rg \
             --image usasreg.azurecr.io/usas-frontend:${{ github.sha }}
