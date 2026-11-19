@@ -71,9 +71,6 @@ export interface PreferenceCompareDto {
   /** Hai danh sách cùng khuôn trang Gợi ý, chỉ có số liệu các trường được xếp nhóm. API cũ không có. */
   studentItems?: CompareItems | null;
   parentItems?: CompareItems | null;
-  /** Ngân sách (USD/năm) và nhu cầu học bổng của con trong lần gợi ý đang so. API cũ không có. */
-  studentBudgetUsd?: number | null;
-  studentScholarshipNeed?: string | null;
 }
 
 export type CompareItems = Omit<RecommendationItems, "failed">;

@@ -34,16 +34,7 @@ const GROUPS: { key: CompareGroup; title: string }[] = [
 ];
 const GROUP_TITLE = Object.fromEntries(GROUPS.map((g) => [g.key, g.title])) as Record<CompareGroup, string>;
 
-// Mức dư ngân sách của bộ lọc (RecommendationService.BudgetTolerance). Chỉ áp cho ngân sách của con; ngân sách cha mẹ nhập không có mức dư.
-const BUDGET_TOLERANCE = 0.1;
-
 const VND = new Intl.NumberFormat("vi-VN");
-
-const NEED_LABEL: Record<string, string> = {
-  mandatory: "Bắt buộc có học bổng",
-  preferred: "Nên có học bổng",
-  optional: "Không cần học bổng",
-};
 
 type Variant = "ok" | "brand" | "neutral" | "warn" | "risk";
 
@@ -191,71 +182,35 @@ function Views({
 
 // ---------------------------------------------------------------- ngân sách hai bên
 
-// Ngân sách cha mẹ nhập (đồng, quy ra USD) đặt cạnh ngân sách của con trong lần gợi ý, kèm một câu giải thích
-// vì sao hai danh sách khác nhau: ngân sách cha mẹ là con số chốt, chỉ ngân sách của con có mức dư 10%.
+// Ngân sách cha mẹ nhập: số đồng và số USD quy theo tỷ giá. Ngân sách của con không hiện vì form chỉ chọn một khoảng.
 function BudgetBox({ data, parentName, you }: { data: PreferenceCompareDto; parentName: string; you: string }) {
   const self = parentName === "Bạn";
-  const Parent = self ? "Bạn" : parentName;
   const pb = data.parentBudgetUsd;
   const vnd = data.parentBudgetVnd;
   const rate = data.vndPerUsd;
-  const sb = data.studentBudgetUsd ?? null;
-  const need = data.studentScholarshipNeed ?? null;
-  const needText = need ? NEED_LABEL[need] : null;
-
-  let diff: string | null = null;
-  if (pb != null && sb != null) {
-    const gap = formatUsd(Math.abs(sb - pb));
-    const over =
-      need === "optional"
-        ? `bị loại vì ${you} chọn không cần học bổng`
-        : "sang nhóm Cần học bổng, trường không có học bổng cho du học sinh thì bị loại";
-    if (pb < sb) diff = `${Parent} đặt thấp hơn ${you} ${gap}/năm, nên trường có chi phí trên ${formatUsd(pb)}/năm ${over}.`;
-    else if (pb > sb)
-      diff = `${Parent} đặt cao hơn ${you} ${gap}/năm, nên danh sách theo cha mẹ có thể có trường đắt hơn mà danh sách của ${you} không có.`;
-    else diff = `Hai bên cùng ngân sách. Khác nhau còn do mức dư 10% chỉ tính cho ${you}, và do mức ưu tiên.`;
-  }
 
   return (
-    <section aria-label="Ngân sách hai bên" className="grid gap-4 rounded-2xl border border-line bg-surface p-4 sm:grid-cols-2">
-      <div className="space-y-1">
-        <p className="text-xs font-semibold text-muted-foreground">
-          {self ? "Ngân sách bạn nhập" : `Ngân sách ${parentName} nhập`}
-        </p>
-        {pb != null && vnd != null ? (
-          <>
-            <p className="text-lg font-bold text-foreground">{VND.format(vnd)} đồng/năm</p>
-            <p className="text-xs text-muted-foreground">
-              ≈ {formatUsd(pb)}/năm
-              {rate != null && ` theo tỷ giá ${VND.format(Math.round(rate))} VND/USD ${data.isPreview ? "hôm nay" : "lúc lưu"}`}.
-              Con số chốt, không có mức dư: trường vượt dù ít là sang nhóm Cần học bổng.
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="text-lg font-bold text-foreground">Chưa nhập</p>
-            <p className="text-xs text-muted-foreground">Danh sách theo cha mẹ dùng ngân sách của {you}.</p>
-          </>
-        )}
-      </div>
-      <div className="space-y-1">
-        <p className="text-xs font-semibold text-muted-foreground">Ngân sách của {you} (lần gợi ý này)</p>
-        {sb != null ? (
-          <>
-            <p className="text-lg font-bold text-foreground">{formatUsd(sb)}/năm</p>
-            <p className="text-xs text-muted-foreground">
-              Được dư 10% (tới {formatUsd(Math.round(sb * (1 + BUDGET_TOLERANCE)))}/năm) trước khi sang nhóm Cần học bổng.
-              {needText && ` ${needText}.`}
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="text-lg font-bold text-foreground">Không đặt</p>
-            {needText && <p className="text-xs text-muted-foreground">{needText}.</p>}
-          </>
-        )}
-      </div>
-      {diff && <p className="text-sm text-foreground sm:col-span-2">{diff}</p>}
+    <section aria-label="Ngân sách cha mẹ nhập" className="space-y-1 rounded-2xl border border-line bg-surface p-4">
+      <p className="text-xs font-semibold text-muted-foreground">
+        {self ? "Ngân sách bạn nhập" : `Ngân sách ${parentName} nhập`}
+      </p>
+      {pb != null && vnd != null ? (
+        <>
+          <p className="text-lg font-bold text-foreground">
+            {VND.format(vnd)} đồng/năm ≈ {formatUsd(pb)}/năm
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {rate != null && `Theo tỷ giá ${VND.format(Math.round(rate))} VND/USD ${data.isPreview ? "hôm nay" : "lúc lưu"}. `}
+            Con số chốt, không có mức dư: trường vượt dù ít là sang nhóm Cần học bổng, trường không có học bổng cho du
+            học sinh thì bị loại.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="text-lg font-bold text-foreground">Chưa nhập</p>
+          <p className="text-xs text-muted-foreground">Danh sách theo cha mẹ dùng ngân sách của {you}.</p>
+        </>
+      )}
     </section>
   );
 }
