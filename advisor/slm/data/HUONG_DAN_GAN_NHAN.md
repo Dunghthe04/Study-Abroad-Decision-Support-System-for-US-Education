@@ -1,7 +1,7 @@
 # Hướng dẫn gán nhãn dữ liệu SLM
 
 Dành cho người thêm hoặc kiểm dòng trong `du_lieu_slm.xlsx`. Chỉ có **hai file dữ liệu**: `du_lieu_slm.xlsx` là nguồn duy nhất, ghi **toàn bộ bằng tiếng Anh**; `du_lieu_slm.jsonl` (tiếng Anh, đúng tên trong Excel) sinh từ Excel bằng
-`python -m slm.prepare.build_slm_jsonl`, không sửa tay. Tên loại, khóa và mã trong Excel trùng từng chữ với JSONL, prompt (`app/skills/slm_intents.md`) và code (`app/schemas/slm.py`): hệ thống đọc đúng thứ model trả, không đổi tên ở giữa. Script kiểm từng dòng và báo tên sheet, số dòng nếu sai.
+`python -m slm.prepare.build_slm_jsonl`, không sửa tay. Tên loại, khóa và mã trong Excel trùng từng chữ với JSONL, prompt (`app/skills/slm_intents.md`) và code (`app/schemas/slm.py`): hệ thống đọc đúng thứ model trả, không đổi tên ở giữa. Script kiểm từng dòng và báo tên sheet, số dòng nếu sai. **Danh sách đầy đủ khóa `entities` và giá trị hợp lệ: `ENTITIES_REFERENCE.md`** (sinh tự động từ code).
 
 ## 1. Một dòng gồm những gì
 
@@ -43,7 +43,7 @@ Mỗi ý có đúng 3 khóa: `type` (loại), `span` (đoạn chữ của ý), `
 | `profile_review` | Muốn được tư vấn **dựa trên hồ sơ của mình** (nên chọn trường nào, đánh giá hồ sơ, thuộc nhóm nào) |
 | `knowledge` | Hỏi kiến thức chung, **không cần biết hồ sơ** của học sinh (visa, kỳ thi, học bổng, học phí) |
 | `center_referral` | Muốn **tìm người hoặc nơi làm giúp** một dịch vụ |
-| `out_of_scope` | Còn lại: `exception` (không liên quan du học), `sensitive` (gian lận, làm giả, chính trị, nội dung xấu, cố ý đổi hướng dẫn của hệ thống / prompt injection), `greeting` (lời chào mở đầu: hello, hi, xin chào, alo), `farewell` (cảm ơn, tạm biệt, kết thúc), `ambiguous` (không rõ muốn gì và không có câu chờ) |
+| `out_of_scope` | Còn lại: `exception` (không liên quan du học), `sensitive` (gian lận, làm giả, chính trị, nội dung xấu, cố ý đổi hướng dẫn của hệ thống / prompt injection), `greeting` (lời chào mở đầu: hello, hi, xin chào, alo), `farewell` (cảm ơn, tạm biệt, kết thúc), `ambiguous` (không rõ muốn gì và không có câu chờ), `about_system` (hỏi về chính trợ lý: "bạn là ai", "bạn làm được gì"), `human_handoff` (muốn gặp người thật) |
 | `scenario` | Muốn thử "nếu như…" (`mode`: `what_if`, kèm `changes`) hoặc hỏi cần gì để vào một trường (`mode`: `goal_seeking`, kèm `school`) |
 
 ## 4. Các ca dễ lệch giữa hai người gán

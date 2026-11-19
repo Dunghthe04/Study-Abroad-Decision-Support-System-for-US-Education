@@ -15,31 +15,62 @@ function errorMessage(err: unknown, fallback: string) {
   return "Có lỗi kết nối máy chủ. Vui lòng thử lại sau.";
 }
 
+// "YYYY-MM-DD" → "dd/mm/yyyy"
+function formatDob(dob: string | null) {
+  if (!dob) return null;
+  const [y, m, d] = dob.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+// Lệch quá 1 năm thì nhiều khả năng chọn nhầm con; chưa có ngày sinh thì không so được
+function isDobFarApart(a: string | null, b: string | null) {
+  if (!a || !b) return false;
+  const days = Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000;
+  return days > 366;
+}
+
+function nameWithDob(name: string, dob: string | null) {
+  const formatted = formatDob(dob);
+  return formatted ? `${name} (sinh ${formatted})` : `${name} (chưa có ngày sinh)`;
+}
+
 interface ParentAcademicSectionProps {
   overview: ParentProfileOverviewDto;
   onChanged: () => void;
 }
 
-// Phụ huynh đã liên kết con: xem hồ sơ từng con (chỉ đọc). Hồ sơ phụ huynh tự nhập mà có từ 2 con
-// thì chọn con nhận hồ sơ (hoặc không chuyển). Con đã có hồ sơ riêng thì con tự chọn, không ghi đè.
+// 1.5d: phụ huynh không có hồ sơ riêng, chỉ xem hồ sơ từng con (chỉ đọc). Con thật vừa liên kết mà phụ huynh
+// đang có con managed thì hỏi "Đây có phải con bạn đã nhập?". Con thật đã có hồ sơ riêng thì con tự chọn, không ghi đè.
 export function ParentAcademicSection({ overview, onChanged }: ParentAcademicSectionProps) {
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const managedChildren = overview.children.filter((c) => c.isManaged);
 
-  const share = async (linkId: string | null) => {
-    setSubmitting(linkId ?? "skip");
+  const match = async (linkId: string, managedChildId: string | null) => {
+    setSubmitting(`${linkId}:${managedChildId ?? "none"}`);
     setError(null);
     try {
-      const res = await profileApi.shareToChild(linkId);
+      const res = await profileApi.matchManagedChild(linkId, managedChildId);
       setNotice(res.message);
       onChanged();
     } catch (err) {
-      setError(errorMessage(err, "Không chuyển được hồ sơ."));
+      setError(errorMessage(err, "Không ghi nhận được lựa chọn."));
     } finally {
       setSubmitting(null);
     }
   };
+
+  if (overview.children.length === 0) {
+    return (
+      <Alert role="status">
+        <AlertDescription>
+          Tài khoản phụ huynh không có hồ sơ riêng. Bạn thêm con hoặc liên kết với tài khoản của con ở mục Con của tôi để
+          nhập và xem hồ sơ.
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -49,46 +80,64 @@ export function ParentAcademicSection({ overview, onChanged }: ParentAcademicSec
         </Alert>
       )}
 
-      {overview.hasPendingOwnProfile && (
-        <Card>
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {overview.pendingMatches.map((pending) => (
+        <Card key={pending.linkId}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ArrowRightLeftIcon className="size-5" aria-hidden />
-              <h2>Chuyển hồ sơ bạn đã nhập cho con nào?</h2>
+              <h2>{nameWithDob(pending.studentName, pending.dateOfBirth)} có phải là con bạn đã nhập hồ sơ?</h2>
             </CardTitle>
             <CardDescription>
-              Bạn đã nhập hồ sơ trước khi liên kết. Chọn một con để nhận hồ sơ này. Nếu con đã có hồ sơ riêng, con sẽ tự
-              chọn dùng bản của bạn hay giữ bản của mình.
+              Chọn đúng con bạn đã nhập để chuyển hồ sơ, trường mục tiêu và kịch bản sang tài khoản mới liên kết. Nếu
+              con đã có hồ sơ riêng, con sẽ tự chọn dùng bản của bạn hay giữ bản của mình.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
+            {managedChildren.some((m) => isDobFarApart(m.dateOfBirth, pending.dateOfBirth)) && (
+              <Alert role="status">
+                <AlertDescription>
+                  Ngày sinh {pending.studentName} tự khai lệch hơn 1 năm so với ngày sinh bạn đã nhập cho
+                  {" "}
+                  {managedChildren
+                    .filter((m) => isDobFarApart(m.dateOfBirth, pending.dateOfBirth))
+                    .map((m) => m.studentName)
+                    .join(", ")}
+                  . Kiểm tra lại trước khi chuyển. Sau khi chuyển, tài khoản của con giữ ngày sinh con tự khai.
+                </AlertDescription>
               </Alert>
             )}
             <div className="flex flex-wrap gap-2">
-              {overview.children.map((child) => (
-                <Button key={child.linkId} disabled={submitting !== null} onClick={() => share(child.linkId)}>
-                  {submitting === child.linkId && <Spinner />}
-                  Chuyển cho {child.studentName}
+              {managedChildren.map((managed) => (
+                <Button
+                  key={managed.studentUserId}
+                  disabled={submitting !== null}
+                  onClick={() => match(pending.linkId, managed.studentUserId)}
+                >
+                  {submitting === `${pending.linkId}:${managed.studentUserId}` && <Spinner />}
+                  Là {nameWithDob(managed.studentName, managed.dateOfBirth)}
                 </Button>
               ))}
-              <Button variant="outline" disabled={submitting !== null} onClick={() => share(null)}>
-                {submitting === "skip" && <Spinner />}
-                Không chuyển
+              <Button variant="outline" disabled={submitting !== null} onClick={() => match(pending.linkId, null)}>
+                {submitting === `${pending.linkId}:none` && <Spinner />}
+                Không phải ai trong số này
               </Button>
             </div>
           </CardContent>
         </Card>
-      )}
+      ))}
 
       {overview.children.map((child) => (
         <div key={child.linkId} className="space-y-2">
           {child.profileTransferStatus === "offered" && (
             <Alert role="status">
               <AlertDescription>
-                Đã gửi hồ sơ của bạn cho {child.studentName}. Con đã có hồ sơ riêng nên đang chờ con chọn bản nào.
+                Đã gửi hồ sơ bạn nhập cho {child.studentName}. Con đã có hồ sơ riêng nên đang chờ con chọn bản nào.
               </AlertDescription>
             </Alert>
           )}

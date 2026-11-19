@@ -6,7 +6,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { streamAdvisorChat } from "@/lib/advisor-stream";
 import { rememberChatGoals } from "@/lib/form-goals";
-import { PROFILE_SAVED_EVENT, onRecommendationsPage, resetSimulation, showSimulation } from "@/lib/simulation-link";
+import {
+  GOAL_SCHOOL_EVENT,
+  PROFILE_SAVED_EVENT,
+  onRecommendationsPage,
+  resetSimulation,
+  showSimulation,
+} from "@/lib/simulation-link";
 import type { AssistantAction, ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
 import type { SimulationOverrides } from "@/types/recommendation";
 
@@ -300,7 +306,10 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         // Ở trang khác thì không tự chuyển trang, học sinh bấm nút "Xem trên thanh kéo" trong tin nhắn
         if (res.widget?.type === "simulate" && onRecommendationsPage())
           showSimulation(res.widget.data, router.push);
-        // Goal-seeking và giải thích trường hiện ngay trong khung chat (thẻ do code dựng), không mở khung riêng trên trang
+        // Goal-seeking và giải thích trường hiện ngay trong khung chat (thẻ do code dựng), không mở khung riêng trên trang.
+        // Báo trang Gợi ý trường (nếu đang mở) ghim trường vừa hỏi, để học sinh áp giả định rồi vẫn thấy trường đó
+        if (res.widget?.type === "goal_seek" && typeof res.widget.data?.code === "string")
+          window.dispatchEvent(new CustomEvent(GOAL_SCHOOL_EVENT, { detail: res.widget.data.code }));
         // D2: báo trang biết chat vừa đổi hồ sơ nháp, hoặc đang hỏi sang trang form khác (mục 7)
         if (res.profileChanged?.length || res.formStep != null)
           onProfileChangedRef.current?.(res.profileChanged ?? [], res.formStep ?? null);

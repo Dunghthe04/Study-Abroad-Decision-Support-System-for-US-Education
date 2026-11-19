@@ -101,6 +101,9 @@ def test_profile_values_of_an_intent_are_only_the_profile_keys():
         ("center_referral", {"service": "ESSAY_EDITING", "city": "Hà Nội"}),  # vắng tasks = tìm trung tâm
         ("center_referral", {"tasks": ["booking"], "follow_up": True}),
         ("center_referral", {"tasks": ["compare"], "centers": ["PEC", "Kosam"]}),
+        # "so sánh hai trung tâm đầu tiên": nói theo thứ tự, không có tên để trích. Model trả compare đúng nên không bị loại
+        ("center_referral", {"tasks": ["compare"]}),
+        ("center_referral", {"tasks": ["compare"], "follow_up": True}),
         ("out_of_scope", {"subtype": "about_system"}),
         ("out_of_scope", {"subtype": "human_handoff"}),
     ],
@@ -124,7 +127,6 @@ def test_the_task_keys_are_accepted(kind, entities):
         ("profile_review", {"tasks": ["compare"], "schools": ["BU"]}),  # chỉ một trường
         ("profile_review", {"tasks": ["compare"], "schools": "BU"}),  # schools phải là danh sách
         ("center_referral", {"tasks": ["search"]}),  # nhiệm vụ của kiến thức
-        ("center_referral", {"tasks": ["compare"]}),  # so sánh mà không có tên trung tâm
         ("center_referral", {"tasks": ["compare"], "centers": ["PEC"]}),  # chỉ một trung tâm
         (
             "center_referral",
@@ -463,3 +465,23 @@ async def test_the_fixed_slm_returns_its_result_whatever_the_message_is():
     result = await slm.classify(ChatState(), "6.5 ạ")
 
     assert (result.types(), result.confidence) == (["collect_profile"], 0.9)
+
+
+# Lỗi thật: model trả đúng center_referral + compare cho "so sánh giúp em hai trung tâm đầu tiên" nhưng không có tên trung tâm,
+# luật cũ "compare cần centers" loại cả câu và hệ thống lùi về "chưa hiểu rõ ý bạn"
+def test_a_center_compare_by_position_is_a_valid_answer_not_a_fallback():
+    raw = {
+        "intents": [
+            {
+                "type": "center_referral",
+                "span": "so sánh giúp em hai trung tâm đầu tiên",
+                "entities": {"tasks": ["compare"], "follow_up": False},
+            }
+        ]
+    }
+
+    result = SlmTinResult.from_raw(raw, confidence=1.0)
+
+    assert result.types() == ["center_referral"]
+    assert result.intents[0].entities["tasks"] == ["compare"]
+    assert not result.fallback

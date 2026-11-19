@@ -191,12 +191,6 @@ export function CenterProfileView() {
 
     // [UC-92] Đang chờ duyệt: không gửi tên, loại hình và các trường pháp lý (server cũng chặn).
     // Đã xác minh vẫn gửi; server chỉ đưa hồ sơ về Chờ duyệt khi giá trị pháp lý thực sự đổi.
-    if (isVerified && legalChanged) {
-      const ok = window.confirm(
-        "Bạn đang đổi thông tin pháp lý của trung tâm đã xác minh. Hồ sơ sẽ chuyển về Chờ duyệt và tạm ẩn dấu xác minh cho tới khi Moderator duyệt lại. Tiếp tục?"
-      );
-      if (!ok) return;
-    }
     const legalPayload = legalLocked
       ? {}
       : {
@@ -253,23 +247,14 @@ export function CenterProfileView() {
     }
   };
 
-  // [UC-92] Chỉ khóa thông tin pháp lý khi hồ sơ đang chờ duyệt. Đã xác minh vẫn sửa được nhưng hồ sơ sẽ về Chờ duyệt.
-  const isPendingReview = center?.verificationStatus === "pending_review";
+  // [UC-92] Thông tin pháp lý chỉ sửa được khi chưa xác minh hoặc bị Moderator từ chối.
+  // Đã xác minh: khóa (muốn đổi phải nộp lại hồ sơ xác minh). Đang chờ duyệt: khóa tới khi có kết quả.
   const isVerified = center?.verificationStatus === "verified";
-  const legalLocked = isPendingReview;
-  const legalChanged =
-    !!center &&
-    (name.trim() !== (center.name ?? "") ||
-      centerType !== (center.centerType ?? "study_abroad") ||
-      taxCode.trim().replace(/\s/g, "") !== (center.taxCode ?? "") ||
-      legalRepresentative.trim() !== (center.legalRepresentative ?? "") ||
-      complianceMode !== normalizeComplianceMode(center.legalComplianceMode) ||
-      licenseNumber.trim() !== (center.licenseNumber ?? "") ||
-      licenseIssuedBy.trim() !== (center.licenseIssuedBy ?? "") ||
-      (licenseIssuedDate || "") !== (center.licenseIssuedDate ?? "") ||
-      trainingLicenseNumber.trim() !== (center.trainingLicenseNumber ?? "") ||
-      certifiedCount.trim() !== (center.certifiedCounselorCount != null ? String(center.certifiedCounselorCount) : ""));
-
+  const isPendingReview = center?.verificationStatus === "pending_review";
+  const legalLocked = isVerified || isPendingReview;
+  const legalLockedMessage = isPendingReview
+    ? "Hồ sơ xác minh đang chờ duyệt: thông tin pháp lý (tên, mã số thuế...) tạm khóa cho tới khi Moderator có kết quả. Nếu bị từ chối, bạn sẽ sửa lại được."
+    : "Trung tâm đã được xác minh: thông tin pháp lý (tên, mã số thuế...) bị khóa. Muốn thay đổi, hãy nộp lại hồ sơ xác minh.";
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center gap-2 text-ink-2 text-sm">
@@ -352,17 +337,14 @@ export function CenterProfileView() {
               />
               {legalLocked && (
                 <p className="text-xs text-ink-3">
-                  Hồ sơ đang chờ duyệt nên chưa sửa được tên pháp lý. Vui lòng chờ kết quả xét duyệt.
-                </p>
-              )}
-              {isVerified && (
-                <p className="text-xs text-amber-700 dark:text-amber-300">
-                  Đổi tên pháp lý sẽ đưa hồ sơ về Chờ duyệt và tạm ẩn dấu xác minh.
+                  {isPendingReview
+                    ? "Hồ sơ đang chờ duyệt nên chưa sửa được tên pháp lý."
+                    : "Trung tâm đã được xác minh nên không sửa được tên pháp lý."}
                 </p>
               )}
             </Field>
 
-            {/* Thông tin pháp lý: sửa được khi chưa xác minh, khóa khi đã xác minh */}
+            {/* Thông tin pháp lý: sửa được khi chưa xác minh / bị từ chối, khóa khi đã xác minh hoặc đang chờ duyệt */}
             <div className="rounded-lg border border-line bg-surface-2/50 p-4 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -375,13 +357,7 @@ export function CenterProfileView() {
               </div>
               {legalLocked && (
                 <p className="text-xs text-ink-3">
-                  Hồ sơ đang chờ duyệt: thông tin pháp lý (tên, mã số thuế...) tạm khóa cho tới khi có kết quả. Bạn vẫn sửa được các thông tin hiển thị bên dưới.
-                </p>
-              )}
-              {isVerified && (
-                <p className="text-xs text-amber-700 dark:text-amber-300">
-                  Trung tâm đã được xác minh: đổi bất kỳ thông tin pháp lý nào sẽ đưa hồ sơ về Chờ duyệt và tạm ẩn dấu xác minh cho tới khi
-                  Moderator duyệt lại. Các thông tin hiển thị bên dưới lưu ngay.
+                  {legalLockedMessage} Bạn vẫn sửa được các thông tin hiển thị bên dưới.
                 </p>
               )}
 

@@ -10,6 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { ArrowRightIcon, BookOpenIcon, CheckIcon, PencilIcon, RocketIcon, TriangleAlertIcon } from "lucide-react";
+import { ProfileReviewCards, normalizeProfileDetails } from "@/components/flow/ProfileReviewCards";
+import { profileFlowApi } from "@/lib/profile-flow-api";
+import { useFetched } from "@/lib/use-fetched";
 
 // Nhãn bậc học
 const targetLevelLabels: Record<string, string> = {
@@ -34,6 +37,10 @@ interface AcademicSummaryCardProps {
 
 // Tóm tắt bảng điểm & hồ sơ học thuật cho học sinh / phụ huynh
 export function AcademicSummaryCard({ profile, isLoading, readOnly = false, title }: AcademicSummaryCardProps) {
+  // Nhãn bang, ngành, mức ngân sách, chứng chỉ để hiện đủ 5 bước giống bước 6
+  const metadata = useFetched("profile-metadata", () => profileFlowApi.getMetadata());
+  const details = normalizeProfileDetails(profile?.details);
+
   if (isLoading) {
     return (
       <Card>
@@ -118,7 +125,7 @@ export function AcademicSummaryCard({ profile, isLoading, readOnly = false, titl
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/analysis" className={buttonVariants({ variant: "outline" })}>
             <PencilIcon aria-hidden />
-            Sửa bảng điểm
+            Sửa hồ sơ
           </Link>
           <Link href="/analysis" className={buttonVariants()}>
             <RocketIcon aria-hidden />
@@ -128,6 +135,12 @@ export function AcademicSummaryCard({ profile, isLoading, readOnly = false, titl
         )}
       </CardHeader>
 
+      {details ? (
+        /* Đủ 5 bước của hồ sơ đã gửi, cùng thẻ với bước 6 (không có nút Sửa) */
+        <CardContent>
+          <ProfileReviewCards draft={details} metadata={metadata.data} />
+        </CardContent>
+      ) : (
       <CardContent className="space-y-4">
         {/* Chi tiết học vấn & GPA theo thang trường */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -208,6 +221,7 @@ export function AcademicSummaryCard({ profile, isLoading, readOnly = false, titl
           )}
         </div>
       </CardContent>
+      )}
     </Card>
   );
 }

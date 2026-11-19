@@ -134,20 +134,44 @@ def build_messages(prompt: str, shots: list[dict[str, Any]], data: dict[str, Any
     return messages
 
 
-async def read_intents(
+def classify_failure(ex: Exception) -> str:
+    """Gom lý do một lần gọi model thất bại thành vài nhóm dễ đếm, để báo cáo giải thích vì sao tin lùi về mơ hồ."""
+    text = str(ex).lower()
+    cause = repr(ex.__cause__).lower() if ex.__cause__ else ""
+    if "timeout" in text or "timeout" in cause:
+        return "timeout"
+    if isinstance(ex, OllamaError):
+        if "json" in text:
+            return "invalid_json"
+        if "rỗng" in text:
+            return "empty_output"
+        return "ollama_error"
+    if isinstance(ex, ValueError):  # pydantic.ValidationError là lớp con của ValueError
+        return "schema_violation"
+    return "malformed_structure"
+
+
+async def read_intents_with_reason(
     client: OllamaClient, messages: list[dict[str, str]], question: str, context: dict[str, Any] | None
-) -> SlmTinResult:
+) -> tuple[SlmTinResult, str | None]:
     """Gọi model, làm sạch như lúc chạy thật (keep_verbatim) rồi kiểm bằng hợp đồng.
-    Sai luật hai lần thì lùi về tin mơ hồ (confidence 0), giống OllamaSlm."""
+    Sai luật hai lần thì lùi về tin mơ hồ (confidence 0), giống OllamaSlm. Trả thêm lý do của lần thất bại cuối (None nếu thành công)."""
     names = {name.lower() for name in (context or {}).get("schools", [])}
+    reason: str | None = None
     for _ in range(2):
         try:
             raw, content, logprobs = await client.chat_json_scored(messages, "json")
             raw = keep_verbatim(raw, question, names)
-            return SlmTinResult.from_raw(raw, confidence=label_confidence(content, logprobs))
-        except (OllamaError, ValueError, TypeError, KeyError, AttributeError):
-            continue
-    return FALLBACK.model_copy(deep=True)
+            return SlmTinResult.from_raw(raw, confidence=label_confidence(content, logprobs)), None
+        except (OllamaError, ValueError, TypeError, KeyError, AttributeError) as ex:
+            reason = classify_failure(ex)
+    return FALLBACK.model_copy(deep=True), reason
+
+
+async def read_intents(
+    client: OllamaClient, messages: list[dict[str, str]], question: str, context: dict[str, Any] | None
+) -> SlmTinResult:
+    return (await read_intents_with_reason(client, messages, question, context))[0]
 
 
 async def run(model: str, split: str, limit: int | None, prompt: str, shots: int = 0) -> None:
@@ -164,6 +188,18 @@ async def run(model: str, split: str, limit: int | None, prompt: str, shots: int
         client = OllamaClient(
             http, model, num_ctx=settings.llm_num_ctx, num_gpu=settings.llm_num_gpu, seed=settings.llm_seed
         )
+        # Điều kiện chạy ghi kèm từng dòng để báo cáo tự mô tả thí nghiệm (temperature, thinking và định dạng cố định trong OllamaClient)
+        run_settings = {
+            "temperature": 0.0,
+            "think": False,
+            "format": "json",
+            "logprobs": True,
+            "num_ctx": settings.llm_num_ctx,
+            "num_gpu": settings.llm_num_gpu,
+            "seed": settings.llm_seed,
+            "shots": len(few),
+            "prompt_version": prompt_version,
+        }
         preds, rows, seconds = [], [], []
         fallbacks = 0  # số câu lùi về mơ hồ (model trả sai luật 2 lần)
         for i, r in enumerate(records, start=1):
@@ -172,19 +208,24 @@ async def run(model: str, split: str, limit: int | None, prompt: str, shots: int
                 "context"
             )  # ngữ cảnh của dòng (nếu có), đưa vào đầu vào như lúc chạy thật
             messages = build_messages(system, few, r["input"])
-            result = await read_intents(client, messages, r["input"]["question"], context)
+            result, failure = await read_intents_with_reason(
+                client, messages, r["input"]["question"], context
+            )
             fallbacks += result.confidence == 0.0
             seconds.append(time.perf_counter() - start)
             pred = {"intents": [y.model_dump() for y in result.intents]}
             preds.append(pred)
             rows.append({"id": r["id"], "question": r["input"]["question"], "nhan": r["output"], "du_doan": pred,
                          "confidence": round(result.confidence, 4), "giay": round(seconds[-1], 2),
-                         "context": context, "lui_ve_mo_ho": result.confidence == 0.0, "model": model, "prompt": prompt, "split": split})  # fmt: skip
+                         "context": context, "lui_ve_mo_ho": result.confidence == 0.0, "loi_ly_do": failure, "model": model, "prompt": prompt,
+                         "split": split, "cai_dat": run_settings})  # fmt: skip
             print(f"\r{i}/{len(records)}", end="", flush=True)
     print()
 
     RESULT_DIR.mkdir(parents=True, exist_ok=True)
     tag = f"_shots{len(few)}" if few else ""  # baseline có ví dụ ghi riêng, không đè bản không ví dụ
+    if limit:
+        tag += f"_limit{limit}"  # chạy thử một phần ghi riêng, không đè file chạy đủ cả tập
     out = RESULT_DIR / f"{model.replace(':', '_').replace('/', '_')}{tag}_{split}.jsonl"
     out.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
 

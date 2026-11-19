@@ -341,6 +341,28 @@ public class AuthServiceTests
         Assert.Equal(UserRoles.Moderator, login.Response.User.Role);
     }
 
+    // Refresh token: đăng nhập trả kèm refresh token, phiên lưu hash của nó và hết hạn sau 7 ngày (không theo access token)
+    [Fact]
+    public async Task Login_ReturnsRefreshToken_SessionStoresItsHashAndLasts7Days()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active;
+
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+
+        var response = login.Response!;
+        Assert.False(string.IsNullOrEmpty(response.RefreshToken));
+        Assert.NotEqual(response.AccessToken, response.RefreshToken);
+
+        var session = Assert.Single(_repo.Sessions);
+        Assert.Equal(_tokens.HashToken(response.RefreshToken!), session.RefreshTokenHash);
+        Assert.Equal(_tokens.HashToken(response.AccessToken), session.TokenHash);
+        Assert.Null(session.PreviousRefreshTokenHash);
+        Assert.Equal(session.ExpiresAt, response.SessionExpiresAt);
+        Assert.InRange(session.ExpiresAt, DateTime.UtcNow.AddDays(7).AddMinutes(-1), DateTime.UtcNow.AddDays(7).AddMinutes(1));
+    }
+
     [Fact]
     public async Task LockUserAccount_LocksStudent_WritesAuditAndRevokesSessions()
     {
@@ -2117,5 +2139,124 @@ public class AuthServiceTests
         var result = await CreateService().UpdateUserBirthDateAsync(id, new(BornYearsAgo(31), "x"), Guid.NewGuid());
 
         Assert.Equal(AuthError.Validation, result.Error);
+    }
+
+    // [1.5c] Con managed: phụ huynh nhập thay, không mật khẩu, không tự đăng nhập hay đặt lại mật khẩu
+    private User AddManagedChild()
+    {
+        var child = new User
+        {
+            Email = "managed-abc@noreply.usas.local",
+            PasswordHash = string.Empty,
+            FullName = "Con Managed",
+            Role = UserRoles.Student,
+            Status = UserStatuses.Managed,
+        };
+        _repo.Users.Add(child);
+        return child;
+    }
+
+    [Fact]
+    public async Task Login_ManagedChild_InvalidCredentials_AndStaysManagedAfterManyTries()
+    {
+        var child = AddManagedChild();
+        var service = CreateService();
+
+        AuthResult result = null!;
+        for (var i = 0; i < 6; i++)
+            result = await service.LoginAsync(new LoginRequest(child.Email, "password123"));
+
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+        Assert.Equal(UserStatuses.Managed, child.Status);
+        Assert.Equal(0, child.FailedLoginAttempts);
+        Assert.Empty(_repo.Sessions);
+        Assert.Empty(_emailSender.SentEmails);
+    }
+
+    [Fact]
+    public async Task ForgotPassword_ManagedChild_SameMessage_NoOtpNoEmail()
+    {
+        var child = AddManagedChild();
+
+        var result = await CreateService().ForgotPasswordAsync(new ForgotPasswordRequest(child.Email));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Empty(_repo.Otps);
+        Assert.Empty(_emailSender.SentEmails);
+    }
+
+    [Fact]
+    public async Task ResendOtp_ManagedChild_SameMessage_NoOtpNoEmail()
+    {
+        var child = AddManagedChild();
+
+        var result = await CreateService().ResendOtpAsync(new ResendOtpRequest(child.Email, OtpPurposes.ResetPassword));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Empty(_repo.Otps);
+        Assert.Empty(_emailSender.SentEmails);
+    }
+
+    [Fact]
+    public async Task ResetPassword_ManagedChild_OtpInvalid_PasswordUnchanged()
+    {
+        var child = AddManagedChild();
+
+        var result = await CreateService().ResetPasswordAsync(new ResetPasswordRequest(child.Email, "123456", "NewPassword1!"));
+
+        Assert.Equal(AuthError.OtpInvalid, result.Error);
+        Assert.Equal(string.Empty, child.PasswordHash);
+    }
+
+    [Fact]
+    public async Task ChangePassword_ManagedChild_Rejected_PasswordUnchanged()
+    {
+        var child = AddManagedChild();
+
+        var result = await CreateService().ChangePasswordAsync(child.Id, "token", new ChangePasswordRequest("x", "NewPassword1!"));
+
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+        Assert.Equal(string.Empty, child.PasswordHash);
+        Assert.Equal(0, child.FailedLoginAttempts);
+    }
+
+    [Fact]
+    public async Task LockUserAccount_ManagedChild_NotFound_StaysManaged()
+    {
+        var child = AddManagedChild();
+
+        var result = await CreateService().LockUserAccountAsync(child.Id, new LockUserAccountRequest("lý do"), Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal("Không tìm thấy tài khoản.", result.Message);
+        Assert.Equal(UserStatuses.Managed, child.Status);
+        Assert.Empty(_auditLogs.Entries);
+        Assert.Empty(_emailSender.SentEmails);
+    }
+
+    [Fact]
+    public async Task UnlockUserAccount_ManagedChild_NotFound_StaysManaged()
+    {
+        var child = AddManagedChild();
+
+        var result = await CreateService().UnlockUserAccountAsync(child.Id, new UnlockUserAccountRequest("lý do"), Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal("Không tìm thấy tài khoản.", result.Message);
+        Assert.Equal(UserStatuses.Managed, child.Status);
+        Assert.Empty(_auditLogs.Entries);
+    }
+
+    [Fact]
+    public async Task UpdateUserBirthDate_ManagedChild_NotFound_BirthDateUnchanged()
+    {
+        var child = AddManagedChild();
+
+        var result = await CreateService().UpdateUserBirthDateAsync(child.Id, new UpdateUserBirthDateRequest(BornYearsAgo(14), "Khai sai"), Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal("Không tìm thấy tài khoản.", result.Message);
+        Assert.Null(child.DateOfBirth);
+        Assert.Empty(_auditLogs.Entries);
     }
 }

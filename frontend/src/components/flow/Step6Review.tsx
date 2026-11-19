@@ -1,36 +1,8 @@
 "use client";
 
-import {
-  AlertCircleIcon,
-  ArrowLeftIcon,
-  BookOpenIcon,
-  CheckCircle2Icon,
-  DollarSignIcon,
-  Edit3Icon,
-  type LucideIcon,
-  FileTextIcon,
-  GraduationCapIcon,
-  Loader2Icon,
-  MessageCircleIcon,
-  SparklesIcon,
-  TrophyIcon,
-} from "lucide-react";
+import { AlertCircleIcon, ArrowLeftIcon, Loader2Icon, MessageCircleIcon, SparklesIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useGradeScale } from "@/hooks/use-grade-scale";
-import { cn } from "@/lib/utils";
-import {
-  ACTIVITY_ROLE_OPTIONS,
-  DEFAULT_BUDGET_TIERS,
-  EDUCATION_LEVEL_OPTIONS,
-  EDUCATION_SYSTEM_OPTIONS,
-  FUNDING_SOURCE_OPTIONS,
-  IMPACT_LEVEL_OPTIONS,
-  SCHOLARSHIP_NEED_OPTIONS,
-  SCHOOL_TYPE_OPTIONS,
-  draftGpa,
-  labelOf,
-} from "@/lib/profile-flow-options";
-import { findCertType, formatCertSummary } from "@/lib/certification-utils";
+import { ProfileReviewCards } from "@/components/flow/ProfileReviewCards";
 import type { DraftTranscriptFile, ProfileFlowDraft, ProfileMetadataResponse } from "@/types/profile-flow";
 
 // BE trả lỗi khi gửi hồ sơ thành một chuỗi "Bước 1: ... Bước 3: ..." → tách theo bước để hiện ở thẻ của bước đó
@@ -49,58 +21,6 @@ function splitStepErrors(message: string | null | undefined) {
     }
   }
   return { byStep, other };
-}
-
-/** Một thẻ trong lưới xem lại: eyebrow + nút Sửa, nội dung bên dưới, lỗi của bước (nếu có) ở cuối */
-function ReviewCard({
-  icon: Icon,
-  eyebrow,
-  onEdit,
-  errors,
-  className,
-  children,
-}: {
-  icon: LucideIcon;
-  eyebrow: string;
-  onEdit: () => void;
-  errors?: string[];
-  className?: string;
-  children: React.ReactNode;
-}) {
-  const hasErrors = Boolean(errors && errors.length > 0);
-  return (
-    <div
-      className={cn(
-        "rounded-2xl border bg-surface p-5 transition-colors",
-        hasErrors ? "border-destructive/60" : "border-line hover:border-brand/40",
-        className
-      )}
-    >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-          <Icon className="size-3.5 text-brand" />
-          {eyebrow}
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onEdit}
-          className="h-7 gap-1 px-2 text-xs font-semibold text-brand hover:bg-brand-wash"
-        >
-          <Edit3Icon className="size-3.5" />
-          Sửa
-        </Button>
-      </div>
-      <div className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted-foreground">{children}</div>
-      {hasErrors && (
-        <ul className="mt-3 space-y-1 border-t border-destructive/20 pt-2 text-xs font-medium text-destructive">
-          {errors!.map((e, i) => (
-            <li key={i}>{e}</li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
 }
 
 interface Step6ReviewProps {
@@ -128,46 +48,7 @@ export function Step6Review({
   isSubmitting,
   submitError,
 }: Step6ReviewProps) {
-  useGradeScale(); // GPA thang 4 quy đổi theo bảng moderator sửa, vẽ lại khi bảng tải xong
-  const { step1, step2, step3, step4, step5 } = draft;
   const stepErrors = splitStepErrors(submitError);
-
-  // Resolve state names
-  const allStates = metadata?.states ?? [];
-  const certificationTypes = metadata?.certificationTypes ?? [];
-  const stateNames = (step1.targetStates ?? [])
-    .map((code) => allStates.find((s) => s.code === code)?.name ?? code)
-    .join(", ");
-
-  // Target Degree Level Label
-  const studyLevelLabel =
-    metadata?.studyLevels.find((l) => l.key === step1.targetDegreeLevel)?.label ??
-    step1.targetDegreeLevel ??
-    "Chưa chọn";
-
-  // Ngành lưu tên Anh, hiện tên Việt nếu có trong bảng majors
-  const majorLabel =
-    metadata?.majors.find((m) => m.value.toLowerCase() === step1.targetMajor?.toLowerCase())?.label ??
-    step1.targetMajor;
-
-  // Budget Tier Label
-  const budgetTierLabel =
-    metadata?.budgetTiers.find((b) => b.key === step4.annualBudgetTier)?.label ??
-    DEFAULT_BUDGET_TIERS.find((b) => b.key === step4.annualBudgetTier)?.label ??
-    "Chưa chọn";
-
-  // Financial need label
-  const need = SCHOLARSHIP_NEED_OPTIONS.find((o) => o.value === step4.needFinancialAid);
-  const financialNeedLabel = need ? `${need.label} (${need.description.toLowerCase()})` : "Chưa chọn";
-
-  // Cùng cách tính với BE (TranscriptGpa): GPA tổng hoặc tính từ điểm môn
-  const { gpa10, gpa4 } = draftGpa(step2);
-  const gpa = gpa4 != null ? gpa4.toFixed(2) : "–";
-  const gpa10Text = gpa10 != null ? gpa10.toFixed(1) : "–";
-
-  // Activities & Awards count
-  const activitiesCount = step5.activities.filter((a) => a.category === "activity").length;
-  const awardsCount = step5.activities.filter((a) => a.category === "achievement").length;
 
   return (
     <div className="space-y-8 animate-in fade-in-50 duration-200">
@@ -182,122 +63,13 @@ export function Step6Review({
         </p>
       </div>
 
-      {/* Review Cards Grid */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <ReviewCard icon={GraduationCapIcon} eyebrow="Bạn & mục tiêu" onEdit={() => onEditStep(1)} errors={stepErrors.byStep[1]}>
-          <div className="text-sm font-semibold text-foreground">
-            {labelOf(EDUCATION_LEVEL_OPTIONS, step1.currentEducationLevel) || "Chưa chọn"}
-            {step1.currentGrade && ` · ${step1.currentGrade}`}
-            {" → "}
-            <span className="text-brand">{studyLevelLabel}</span>
-            {step1.targetIntake && ` · ${step1.targetIntake}`}
-          </div>
-          {step1.currentSchool && <div>{step1.currentSchool}</div>}
-          {step1.currentEducationLevel === "high_school" && step1.educationSystem && (
-            <div>
-              <strong className="text-foreground">Hệ chương trình: </strong>
-              {labelOf(EDUCATION_SYSTEM_OPTIONS, step1.educationSystem)}
-            </div>
-          )}
-          <div>
-            <strong className="text-foreground">Ngành: </strong>
-            {majorLabel || "Chưa chọn"}
-          </div>
-          <div>
-            <strong className="text-foreground">Bang: </strong>
-            {stateNames || "Không lọc"}
-            {step1.targetSchoolType && step1.targetSchoolType !== "all" && ` · ${labelOf(SCHOOL_TYPE_OPTIONS, step1.targetSchoolType)}`}
-          </div>
-          {step1.expectedGraduationYear && (
-            <div>
-              <strong className="text-foreground">Tốt nghiệp dự kiến: </strong>
-              {step1.expectedGraduationYear}
-            </div>
-          )}
-        </ReviewCard>
-
-        <ReviewCard icon={FileTextIcon} eyebrow="Bảng điểm" onEdit={() => onEditStep(2)} errors={stepErrors.byStep[2]}>
-          {/* Thẻ chỉ hiện ô điểm tự tính, nhập GPA tổng hay học bạ từng môn đều vậy */}
-          <div className="space-y-2">
-            {draftTranscript && (
-              <div className="flex items-center gap-1 text-xs text-ok">
-                <CheckCircle2Icon className="size-3" />
-                Đã tải tệp: {draftTranscript.originalFileName}
-              </div>
-            )}
-            <div className="mx-auto w-fit rounded-xl bg-brand-wash px-3 py-1.5 text-center">
-              <div className="text-xs font-semibold text-brand-ink">Điểm TB tự tính</div>
-              <div className="text-numeric text-base font-bold text-brand">{gpa10Text}</div>
-              <div className="text-xs text-brand-ink">thang 4 (tham khảo): {gpa}</div>
-            </div>
-          </div>
-        </ReviewCard>
-
-        <ReviewCard icon={BookOpenIcon} eyebrow="Chứng chỉ" onEdit={() => onEditStep(3)} errors={stepErrors.byStep[3]}>
-          {step3.certifications.length > 0 ? (
-            step3.certifications.map((cert) => (
-              <div key={cert.id} className="text-foreground">
-                {formatCertSummary(cert, findCertType(certificationTypes, cert.type))}
-              </div>
-            ))
-          ) : (
-            <div>Chưa có chứng chỉ</div>
-          )}
-          {step3.englishPlanned && <div>Tiếng Anh: chưa thi và chưa có dự định thi</div>}
-          {step3.standardizedPlanned && <div>Bài thi chuẩn hóa: chưa thi và chưa có dự định thi</div>}
-        </ReviewCard>
-
-        <ReviewCard icon={DollarSignIcon} eyebrow="Tài chính" onEdit={() => onEditStep(4)} errors={stepErrors.byStep[4]}>
-          <div className="text-sm font-semibold text-foreground">{budgetTierLabel} / năm</div>
-          <div>
-            <strong className="text-foreground">Học bổng: </strong>
-            {financialNeedLabel}
-          </div>
-          {step4.fundingSource && (
-            <div>
-              <strong className="text-foreground">Nguồn chi trả: </strong>
-              {labelOf(FUNDING_SOURCE_OPTIONS, step4.fundingSource)}
-            </div>
-          )}
-        </ReviewCard>
-
-        <ReviewCard
-          icon={TrophyIcon}
-          eyebrow="Hoạt động & giải thưởng"
-          onEdit={() => onEditStep(5)}
-          errors={stepErrors.byStep[5]}
-          className="sm:col-span-2"
-        >
-          {step5.activities.length > 0 ? (
-            <>
-              <div className="text-sm font-semibold text-foreground">
-                {activitiesCount} hoạt động · {awardsCount} giải
-              </div>
-              <ul className="space-y-2">
-                {step5.activities.map((a, i) => (
-                  <li key={a.id ?? i} className="space-y-0.5">
-                    <div>
-                      <strong className="text-foreground">{a.name}</strong>
-                      {" · "}
-                      {labelOf(IMPACT_LEVEL_OPTIONS, a.impactLevel) || "Chưa chọn phạm vi"}
-                      {a.category === "activity"
-                        ? ` · ${labelOf(ACTIVITY_ROLE_OPTIONS, a.role) || "Chưa chọn vai trò"}${a.durationMonths ? ` · ${a.durationMonths} tháng` : ""}`
-                        : ` · Năm ${a.year ?? "?"}`}
-                    </div>
-                    {a.description && (
-                      <p className="text-xs text-muted-foreground italic pl-2 border-l border-brand/40">
-                        &ldquo;{a.description}&rdquo;
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : (
-            <div>Chưa có hoạt động ngoại khóa</div>
-          )}
-        </ReviewCard>
-      </div>
+      <ProfileReviewCards
+        draft={draft}
+        metadata={metadata}
+        draftTranscript={draftTranscript}
+        onEditStep={onEditStep}
+        errorsByStep={stepErrors.byStep}
+      />
 
       {/* Helpful Hint */}
       <div className="rounded-xl border border-brand/20 bg-brand-wash/30 p-4 text-xs text-muted-foreground leading-relaxed">

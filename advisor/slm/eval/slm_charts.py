@@ -5,7 +5,6 @@ Bộ màu Okabe-Ito, phân biệt được cả với người khó phân biệt
 """
 
 import statistics
-import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -15,21 +14,21 @@ matplotlib.use("Agg")  # vẽ ra file, không mở cửa sổ
 import matplotlib.pyplot as plt  # noqa: E402
 
 from app.schemas.slm import INTENTS  # noqa: E402
-from slm.eval.slm_metrics import ERRORS, LEVELS, NONE, percentile  # noqa: E402
+from slm.eval.slm_metrics import ERRORS, INVALID, LEVELS, NONE, percentile  # noqa: E402
 
 PALETTE = ["#E69F00", "#0072B2", "#009E73", "#CC79A7", "#56B4E9"]
 LEVEL_NAMES = {
-    "hop_le": "Trả được\nkết quả",
-    "dung_tap_loai": "Đúng loại ý",
-    "dung_thu_tu": "Đúng\nthứ tự",
-    "dung_nhiem_vu": "Đúng\nnhiệm vụ",
-    "dung_thuc_the": "Đúng\nthực thể",
-    "dung_het": "Đúng\nhoàn toàn",
+    "hop_le": "Valid\nresponse",
+    "dung_tap_loai": "Correct\ncategory",
+    "dung_thu_tu": "Correct\norder",
+    "dung_nhiem_vu": "Correct\ntask",
+    "dung_thuc_the": "Correct\nentity",
+    "dung_het": "Exact\nmatch",
 }
 ERROR_NAMES = {
-    "dung_het": "Đúng hoàn toàn", "json_loi": "Không dùng được (lùi về mơ hồ)", "thieu_y": "Thiếu ý", "thua_y": "Thừa ý",
-    "sai_loai": "Sai loại ý", "sai_thu_tu": "Sai thứ tự", "sai_nhiem_vu": "Sai nhiệm vụ", "sai_thuc_the": "Sai thực thể",
-    "sai_follow_up": "Sai follow_up",
+    "dung_het": "Exact match", "json_loi": "Invalid response", "thieu_y": "Missing intent", "thua_y": "Extra intent",
+    "sai_loai": "Wrong category", "sai_thu_tu": "Wrong order", "sai_nhiem_vu": "Wrong task", "sai_thuc_the": "Wrong entity",
+    "sai_follow_up": "Wrong follow_up",
 }  # fmt: skip
 ERROR_COLORS = [
     "#009E73",
@@ -54,103 +53,8 @@ def style() -> None:
     )  # fmt: skip
 
 
-# Chú thích dưới mỗi biểu đồ: cách đọc và ý nghĩa, để dán ảnh riêng lẻ vào báo cáo hay slide vẫn hiểu được
-NOTES = {
-    "compare": (
-        "Cách đọc: mỗi nhóm cột là một mức chấm, từ lỏng (trái) đến chặt (phải), cột càng cao càng tốt. Mức sau gồm cả mức trước. "
-        "'Đúng hoàn toàn' là tin được tách đúng loại ý, thứ tự, nhiệm vụ, thực thể và câu nối tiếp.\n"
-        "Vạch đen là khoảng tin cậy 95%, số trong ngoặc vuông dưới mỗi cột là hai đầu của vạch (thấp-cao): hai cột có vạch không chồng "
-        "nhau thì khác biệt là thật, không phải do may rủi."
-    ),
-    "f1_type": (
-        "Cách đọc: mỗi nhóm cột là một loại ý, cột càng cao càng tốt. F1 (0 đến 100%) là điểm tổng hợp của precision (model đoán loại này "
-        "thì đúng bao nhiêu) và recall (trong các ý thật thuộc loại này, model tìm ra bao nhiêu)."
-    ),
-    "precision_recall": (
-        "Cách đọc: mỗi nhóm cột là một loại ý, cột càng cao càng tốt, số trên đầu cột là phần trăm. Precision (khung trái): trong các ý model "
-        "gán cho loại này, bao nhiêu ý thật sự đúng loại. Recall (khung phải): trong các ý thật sự thuộc loại này, model tìm ra bao nhiêu.\n"
-        "Precision thấp mà recall cao nghĩa là model gán loại đó quá tay (nhầm nhiều ý khác vào đây). Recall thấp mà precision cao nghĩa là "
-        "model gán ít nhưng đúng, còn bỏ sót nhiều. F1 (biểu đồ 02) là điểm gộp của hai số này."
-    ),
-    "f1_label": (
-        "Cách đọc: mỗi hàng là một nhãn 'loại/nhiệm vụ' (ví dụ knowledge/school_info), n là số ý thật có nhãn này trong tập đo. "
-        "Thanh càng dài (gần 1.0) càng tốt; số ở đầu thanh là điểm F1 (0 đến 1), ghi 0.00 nghĩa là model không làm đúng lần nào.\n"
-        "Nhãn có n nhỏ (khoảng 10 trở xuống) thì điểm dao động mạnh, chỉ nên xem như gợi ý."
-    ),
-    "confusion": (
-        "Cách đọc: mỗi hàng là loại ý đúng, mỗi cột là loại model đoán, số trong ô là số ý. Ô trên đường chéo là đoán đúng; "
-        "ô ngoài đường chéo là nhầm lẫn. Màu càng đậm là chiếm tỉ lệ càng lớn trong hàng đó.\n"
-        "Cột (không có) là ý bị bỏ sót; dòng (không có) là ý model tự thêm thừa."
-    ),
-    "errors": (
-        "Cách đọc: mỗi thanh là 100% số tin đo. Phần xanh lá (đúng hoàn toàn) càng dài càng tốt, các màu còn lại là lỗi. "
-        "Mỗi tin chỉ vào một nhóm: nhóm lỗi đầu tiên gặp khi chấm từ mức lỏng đến mức chặt (không dùng được, thiếu ý, thừa ý, "
-        "sai loại ý, sai thứ tự, sai nhiệm vụ, sai thực thể, sai câu nối tiếp). Đoạn từ 4% ghi số ngay trong đoạn, đoạn từ 1% đến dưới 4% "
-        "ghi số phía trên thanh; mọi đoạn (kể cả dưới 1%) đều có phần trăm và số tin ở chú thích bên dưới."
-    ),
-    "groups": (
-        "Cách đọc: mỗi cột là tỉ lệ tin đúng hoàn toàn trong một nhóm tin, càng cao càng tốt. Hai biểu đồ chia theo hai cách: số ý trong tin "
-        "(1, 2, 3 trở lên) và tin có hay không có ngữ cảnh câu trước.\n"
-        "Cột thấp cho biết nhóm tin model còn yếu."
-    ),
-    "latency": (
-        "Cách đọc: mỗi cột là số giây model mất để trả lời một tin, càng thấp càng nhanh. Khung trái: thời gian trung bình, mốc mà một nửa "
-        "số tin nhanh hơn (trung vị) và mốc mà 9 trong 10 tin nhanh hơn. Khung phải: thời gian trung bình theo số ý trong tin; tin nhiều ý "
-        "phải viết JSON dài hơn nên lâu hơn.\n"
-        "Dòng dưới tiêu đề ghi tin chậm nhất của mỗi model. Thời gian phụ thuộc phần cứng của máy chạy đo."
-    ),
-    "confidence": (
-        "Cách đọc: trục ngang là độ tin cậy model tự báo (0 đến 1), trục dọc là số tin. Trong mỗi khoảng có hai cột đứng cạnh nhau: "
-        "xanh là tin đúng hoàn toàn, cam là tin sai. Model có độ tin cậy dùng được thì cột cam nằm bên trái và cột xanh dồn bên phải.\n"
-        "Số trên đầu mỗi cột là số tin. Khung trong góc cho biết trong các tin sai có bao nhiêu tin model vẫn báo chắc từ 0.9.\n"
-        "Nếu cột cam cũng dồn ở gần 1.0, model sai mà vẫn rất tự tin, nên không dùng độ tin cậy để tự phát hiện lỗi."
-    ),
-    "dataset": (
-        "Cách đọc: mỗi cột là một loại ý, chia màu theo tập train (để học), val (để theo dõi lúc huấn luyện) và test (chỉ để đo cuối). "
-        "Số trong mỗi đoạn màu là số dòng của tập đó (đoạn thấp ghi bên phải cột), số in đậm trên đầu cột là tổng số dòng của loại đó.\n"
-        "Đây là toàn bộ dữ liệu; khi xuất file huấn luyện có bỏ các câu trùng chữ với câu test nên số dòng train và val thực tế ít hơn."
-    ),
-    "training": (
-        "Cách đọc: trục ngang là bước huấn luyện, trục dọc là loss (độ sai, càng thấp càng tốt). Đường xanh là train loss (sai trên dữ liệu "
-        "đang học, ghi dày); đường cam là val loss (sai trên dữ liệu chưa học, đo thưa hơn). Cả hai cùng giảm là đang học tốt. Khung trái là "
-        "toàn bộ quá trình, khung phải phóng to val loss. Bảng bên dưới ghi số của từng lần đo val; ô tô xanh là lần đo có val loss thấp nhất.\n"
-        "Nếu val loss tăng lại trong khi train loss vẫn giảm là học thuộc (overfit)."
-    ),
-    "gap": (
-        "Cách đọc: mỗi chấm là val loss trừ train loss ở một lần đo val. Chênh nhỏ và ổn định là model học tốt mà không học thuộc; "
-        "chênh tăng đều qua các lần đo là dấu hiệu overfit.\n"
-        "Lưu ý: train loss lấy ở lần ghi gần nhất nên tự dao động, đường lên xuống nhẹ chưa phải bằng chứng."
-    ),
-    "val_metrics": (
-        "Cách đọc: mỗi đường là một chỉ số đo trên tập val sau mỗi lần đánh giá lúc huấn luyện (0 đến 1, càng cao càng tốt). "
-        "Dùng để xem chất lượng thật có tăng theo bước không, bổ sung cho val loss."
-    ),
-}  # fmt: skip
-
-
-def add_note(fig: Any, note: str) -> None:
-    """Chữ chú thích dưới đáy biểu đồ (dưới cả legend), xuống dòng theo bề rộng ảnh."""
-    fig.canvas.draw()
-    box = fig.get_tightbbox(fig.canvas.get_renderer())  # inch, gốc ở góc dưới trái của figure
-    width_in, height_in = fig.get_size_inches()
-    chars = max(40, int(box.width * 14))  # khoảng 14 ký tự mỗi inch ở cỡ chữ 9
-    text = "\n".join(textwrap.fill(part, width=chars) for part in note.split("\n"))
-    fig.text(
-        box.x0 / width_in,
-        (box.y0 - 0.15) / height_in,
-        text,
-        ha="left",
-        va="top",
-        fontsize=9,
-        color="#333333",
-        linespacing=1.4,
-    )
-
-
-def save(fig: Any, path: Path, note: str = "") -> Path:
+def save(fig: Any, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if note:
-        add_note(fig, note)
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
@@ -194,21 +98,19 @@ def grouped_bars(
                     else bar.get_height()
                 )
                 text = f"{v:.0%}" if v <= 1 else f"{v:.2f}"
-                if errors and name in errors:
-                    lo, hi = errors[name][k]
-                    if hi > lo:  # khoảng tin cậy có bề rộng thì ghi số, để không phải gióng xuống trục
-                        text += f"\n[{lo * 100:.0f}-{hi * 100:.0f}%]"
                 ax.text(
                     bar.get_x() + bar.get_width() / 2,
-                    top + 0.012,
+                    top + 0.025,
                     text,
                     ha="center",
                     va="bottom",
-                    fontsize=7.5 if "\n" not in text else 6.8,
-                    linespacing=1.15,
+                    fontsize=8,
+                    rotation=90
+                    if len(series) >= 3
+                    else 0,  # cột hẹp (3 model trở lên): xoay dọc để chữ không dính nhau
                 )
     ax.set_xticks(range(len(groups)), groups)
-    ax.set_ylim(0, 1.2 if errors else 1.12)  # có ghi khoảng tin cậy thì cần thêm chỗ phía trên
+    ax.set_ylim(0, 1.2 if len(series) >= 3 else 1.12)  # chừa chỗ cho nhãn xoay dọc
     ax.set_yticks([0, 0.25, 0.5, 0.75, 1.0], ["0%", "25%", "50%", "75%", "100%"])
 
 
@@ -217,32 +119,52 @@ def legend_below(ax: Any, ncol: int) -> None:
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=ncol, frameon=False)
 
 
-def chart_compare(summaries: dict[str, dict[str, Any]], path: Path, split: str = "test") -> Path:
-    """Cột các mức đúng của từng model, kèm khoảng tin cậy 95% (vạch đen)."""
+def chart_compare(
+    summaries: dict[str, dict[str, Any]], path: Path, split: str = "test", valid_only: bool = False
+) -> Path:
+    """Hai khung: mức TIN NHẮN (các mức đúng) và mức Ý (macro, micro F1), mỗi cột có khoảng tin cậy 95% (vạch đen).
+    Tách hai khung vì hai nhóm đo trên hai đơn vị khác nhau. Bỏ 'đúng thứ tự' vì nó trùng 'đúng loại ý' khi tin chỉ có một ý.
+    valid_only: summaries tính chỉ trên tin hợp lệ nên bỏ cột 'Valid response' (luôn 100%)."""
     style()
-    fig, ax = plt.subplots(figsize=(10, 4.8))
-    groups = [LEVEL_NAMES[k] for k in LEVELS] + ["F1 trung bình\ntheo loại ý"]
-    series = {
-        n: [s["muc_dung"][k] for k in LEVELS] + [s["f1_loai"]["macro_f1"]] for n, s in summaries.items()
-    }
-    errors = {
-        n: [tuple(s["khoang_tin_cay_95"][k]) for k in LEVELS] + [(series[n][-1], series[n][-1])]
+    levels = [k for k in LEVELS if k != "dung_thu_tu" and not (valid_only and k == "hop_le")]
+    fig, (ax_msg, ax_f1) = plt.subplots(
+        1, 2, figsize=(11, 4.8), gridspec_kw={"width_ratios": [len(levels), 2.2]}
+    )
+    series = {n: [s["muc_dung"][k] for k in levels] for n, s in summaries.items()}
+    errors = {n: [tuple(s["khoang_tin_cay_95"][k]) for k in levels] for n, s in summaries.items()}
+    grouped_bars(ax_msg, [LEVEL_NAMES[k] for k in levels], series, errors)
+    ax_msg.set_title("Message level (share of messages)", fontsize=10)
+    f1_series = {n: [s["f1_loai"]["macro_f1"], s["f1_loai"]["micro_f1"]] for n, s in summaries.items()}
+    f1_errors = {
+        n: [tuple(s["khoang_tin_cay_f1"]["macro_f1"]), tuple(s["khoang_tin_cay_f1"]["micro_f1"])]
         for n, s in summaries.items()
     }
-    grouped_bars(ax, groups, series, errors)
-    ax.set_title(f"So sánh các mức đúng trên tập {split} (vạch đen: khoảng tin cậy 95%)")
-    legend_below(ax, len(series))
-    return save(fig, path, NOTES["compare"])
+    grouped_bars(ax_f1, ["Macro-F1", "Micro-F1"], f1_series, f1_errors)
+    ax_f1.set_title("Intent level (F1 over categories)", fontsize=10)
+    handles, names = ax_msg.get_legend_handles_labels()
+    fig.legend(
+        handles, names, loc="lower center", bbox_to_anchor=(0.5, -0.04), ncol=len(names), frameon=False
+    )
+    scope = "same messages, usable for every model" if valid_only else "all messages"
+    fig.suptitle(
+        f"Accuracy on the {split} set, {scope} (black bars: 95% confidence interval)",
+        fontweight="bold",
+        y=1.0,
+    )
+    return save(fig, path)
 
 
 def chart_f1_per_type(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
     style()
     fig, ax = plt.subplots(figsize=(9, 4.5))
     series = {n: [s["theo_loai"].get(t, {}).get("f1") for t in INTENTS] for n, s in summaries.items()}
-    grouped_bars(ax, list(INTENTS), series)
-    ax.set_title("F1 theo từng loại ý")
+    support = {
+        t: max(s["theo_loai"].get(t, {}).get("ho_tro", 0) for s in summaries.values()) for t in INTENTS
+    }
+    grouped_bars(ax, [f"{t}\n(n={support[t]})" for t in INTENTS], series)
+    ax.set_title("F1 per category (n = intents in ground truth)")
     legend_below(ax, len(series))
-    return save(fig, path, NOTES["f1_type"])
+    return save(fig, path)
 
 
 def chart_precision_recall(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
@@ -256,8 +178,8 @@ def chart_precision_recall(summaries: dict[str, dict[str, Any]], path: Path) -> 
         axes,
         ("precision", "recall"),
         (
-            "Precision: khi model nói “ý này thuộc loại X”\nthì đúng bao nhiêu phần trăm",
-            "Recall: trong các ý thật sự thuộc loại X\nmodel tìm ra bao nhiêu phần trăm",
+            "Precision: when the model says\n'this intent is category X',\nhow often it is right",
+            "Recall: of all intents that truly\nbelong to category X,\nhow many the model finds",
         ),
         strict=True,
     ):
@@ -270,44 +192,63 @@ def chart_precision_recall(summaries: dict[str, dict[str, Any]], path: Path) -> 
         )  # xoay nhẹ để tên loại dài không dính vào nhau
     handles, names = axes[0].get_legend_handles_labels()
     fig.legend(handles, names, loc="lower center", bbox_to_anchor=(0.5, -0.1), ncol=len(names), frameon=False)
-    fig.suptitle("Precision và recall theo từng loại ý", fontweight="bold", y=1.08)
-    return save(fig, path, NOTES["precision_recall"])
+    fig.suptitle("Precision and recall per category", fontweight="bold", y=1.08)
+    return save(fig, path)
 
 
 def chart_f1_per_label(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
-    """F1 theo nhãn 'loại/nhiệm vụ' (chi tiết hơn), xếp theo số ý trong nhãn."""
+    """F1 theo nhãn 'loại/nhiệm vụ' dạng bảng nhiệt: mỗi hàng một nhãn (xếp theo số ý), mỗi cột một model.
+    Ô có viền đen là model tốt nhất của hàng đó; nhãn dưới 10 ý tô xám vì điểm dao động mạnh."""
     style()
     support: dict[str, int] = {}
     for s in summaries.values():
         for k, v in s["theo_nhan"].items():
             support[k] = max(support.get(k, 0), v["ho_tro"])
     labels = sorted((k for k, n in support.items() if n > 0), key=lambda k: (-support[k], k))
-    fig, ax = plt.subplots(figsize=(9, max(4, 0.17 * len(labels) * len(summaries) + 1.2)))
-    height = 0.8 / len(summaries)
-    for i, (name, s) in enumerate(summaries.items()):
-        ys = [j + (i - (len(summaries) - 1) / 2) * height for j in range(len(labels))]
-        values = [s["theo_nhan"].get(k, {}).get("f1", 0) for k in labels]
-        ax.barh(ys, values, height * 0.92, label=name, color=color(i))
-        for y, v in zip(
-            ys, values, strict=True
-        ):  # ghi điểm F1 ở đầu thanh; thanh dài 0 vẫn ghi 0.00 để thấy là bằng 0
-            ax.text(v + 0.01, y, f"{v:.2f}", va="center", fontsize=6.5)
-    ax.set_yticks(range(len(labels)), [f"{k}  (n={support[k]})" for k in labels], fontsize=7.5)
-    ax.invert_yaxis()
-    ax.set_xlim(0, 1.1)  # chừa chỗ bên phải cho số
-    ax.set_title("F1 theo nhãn loại/nhiệm vụ (n = số ý có trong nhãn đúng)")
-    ax.legend(
-        loc="upper center", bbox_to_anchor=(0.5, -0.06), ncol=len(summaries), frameon=False
-    )  # dưới trục, không che thanh
-    return save(fig, path, NOTES["f1_label"])
+    names = list(summaries)
+    matrix = [[s["theo_nhan"].get(k, {}).get("f1", 0.0) for s in summaries.values()] for k in labels]
+    fig, ax = plt.subplots(figsize=(2.6 + 1.7 * len(names), 1.6 + 0.3 * len(labels)))
+    ax.imshow(matrix, cmap="Blues", vmin=0, vmax=1, aspect="auto")
+    for i, row in enumerate(matrix):
+        best = max(row)
+        for j, v in enumerate(row):
+            ax.text(
+                j,
+                i,
+                f"{v:.2f}",
+                ha="center",
+                va="center",
+                fontsize=8,
+                color="white" if v > 0.55 else "#222222",
+            )
+            if (
+                v == best and best > 0 and support[labels[i]] >= 10
+            ):  # viền đen quanh ô tốt nhất, chỉ ở nhãn đủ mẫu
+                ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False, edgecolor="black", lw=1.6))
+    ax.set_xticks(range(len(names)), names, fontsize=9)
+    ax.xaxis.tick_top()
+    ax.set_yticks(range(len(labels)), [f"{k}  (n={support[k]})" for k in labels], fontsize=8)
+    for tick, k in zip(ax.get_yticklabels(), labels, strict=True):
+        if support[k] < 10:
+            tick.set_color("#999999")
+    ax.grid(False)
+    ax.tick_params(length=0)
+    fig.suptitle(
+        "F1 per category/task label (n = intents in ground truth; black box = best model"
+        + ("; grey = fewer than 10 intents, unreliable)" if any(n < 10 for n in support.values()) else ")"),
+        fontweight="bold",
+        fontsize=10,
+        y=0.995,
+    )
+    return save(fig, path)
 
 
 def heatmap(ax: Any, c: dict[str, Any], title: str) -> Any:
-    labels, matrix = c["labels"], c["matrix"]
+    rows, cols, matrix = c["labels"], c.get("col_labels", c["labels"]), c["matrix"]
     norm = [[(v / sum(row)) if sum(row) else 0 for v in row] for row in matrix]  # mỗi hàng chia cho tổng hàng
     im = ax.imshow(norm, cmap="Blues", vmin=0, vmax=1)
-    ax.set_xticks(range(len(labels)), labels, rotation=40, ha="right", fontsize=8)
-    ax.set_yticks(range(len(labels)), labels, fontsize=8)
+    ax.set_xticks(range(len(cols)), cols, rotation=40, ha="right", fontsize=8)
+    ax.set_yticks(range(len(rows)), rows, fontsize=8)
     for i, row in enumerate(matrix):
         for j, v in enumerate(row):
             if v:
@@ -320,24 +261,33 @@ def heatmap(ax: Any, c: dict[str, Any], title: str) -> Any:
                     fontsize=8,
                     color="white" if norm[i][j] > 0.55 else "#222222",
                 )
-    ax.set_xlabel("Model dự đoán")
-    ax.set_ylabel("Nhãn đúng")
+    # đường kẻ tách phần loại ý với hai cột đặc biệt (none, invalid) và hàng (none)
+    ax.axvline(len(INTENTS) - 0.5, color="#888888", lw=1)
+    if INVALID in cols:
+        ax.axvline(cols.index(INVALID) - 0.5, color="#888888", lw=1)
+    ax.axhline(len(INTENTS) - 0.5, color="#888888", lw=1)
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("True label")
     ax.set_title(title, fontsize=10)
     ax.grid(False)
     return im
 
 
 def chart_confusion(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
-    """Ma trận nhầm lẫn của từng model đặt cạnh nhau (ô = số ý, màu = tỉ lệ trên hàng)."""
+    """Ma trận nhầm lẫn của từng model đặt cạnh nhau (ô = số ý, màu = tỉ lệ trên hàng).
+    Cột (invalid) là các ý thuộc tin model không trả được kết quả dùng được: tách riêng để không lẫn với nhầm loại ý."""
     style()
     n = len(summaries)
-    fig, axes = plt.subplots(1, n, figsize=(5.8 * n, 5.4), squeeze=False, gridspec_kw={"wspace": 0.75})
+    fig, axes = plt.subplots(1, n, figsize=(6.2 * n, 5.6), squeeze=False, gridspec_kw={"wspace": 0.8})
     for ax, (name, s) in zip(axes[0], summaries.items(), strict=True):
         heatmap(ax, s["nham_lan"], name)
     fig.suptitle(
-        f"Ma trận nhầm lẫn giữa các loại ý. Dòng và cột {NONE} là ý bị thiếu hoặc ý thừa", fontweight="bold"
+        f"Confusion matrix of intent categories (cell = intents, shade = share of the row)\n"
+        f"{NONE}: missing intent (column) or extra intent (row); {INVALID}: no usable response",
+        fontweight="bold",
+        fontsize=11,
     )
-    return save(fig, path, NOTES["confusion"])
+    return save(fig, path)
 
 
 def chart_errors(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
@@ -350,18 +300,15 @@ def chart_errors(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
     bar_h = 0.55
     callouts: list[list[tuple[float, str]]] = [[] for _ in names]  # theo từng thanh: (vị trí giữa đoạn, chữ)
     for k, key in enumerate(ERRORS):
+        if not any(s["loi"][key] for s in summaries.values()):
+            continue  # loại lỗi không xảy ra ở model nào: không đưa vào biểu đồ và chú giải
         shares = [s["loi"][key] / s["so_tin"] for s in summaries.values()]
-        counts = [s["loi"][key] for s in summaries.values()]
-        # Chú thích gom số của mọi model cho nhóm lỗi này, nên đoạn nhỏ đến đâu vẫn đọc được số chính xác
-        detail = " · ".join(
-            f"{name} {share:.1%} ({count})" for name, share, count in zip(names, shares, counts, strict=True)
-        )
         ax.barh(
             names,
             shares,
             left=left,
             color=ERROR_COLORS[k],
-            label=f"{ERROR_NAMES[key]}: {detail}",
+            label=ERROR_NAMES[key],
             height=bar_h,
         )
         for i, (v, lft) in enumerate(zip(shares, left, strict=True)):
@@ -393,9 +340,9 @@ def chart_errors(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
     ax.set_xlim(0, 1)
     ax.set_ylim(len(names) - 0.5, -1.0)  # chừa chỗ phía trên thanh cho số của đoạn nhỏ (trục y đảo)
     ax.set_xticks([0, 0.25, 0.5, 0.75, 1], ["0%", "25%", "50%", "75%", "100%"])
-    ax.set_title("Phân loại kết quả theo từng tin nhắn")
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=2, fontsize=8, frameon=False)
-    return save(fig, path, NOTES["errors"])
+    ax.set_title("Outcome per message")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=3, fontsize=9, frameon=False)
+    return save(fig, path)
 
 
 def chart_groups(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
@@ -405,7 +352,7 @@ def chart_groups(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
     for ax, key, title in zip(
         axes,
         ("theo_so_y", "theo_ngu_canh"),
-        ("Theo số ý trong tin", "Theo ngữ cảnh"),
+        ("By number of intents per message", "By context"),
         strict=True,
     ):
         names = sorted(
@@ -413,16 +360,27 @@ def chart_groups(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
             key=lambda g: (INTENTS.index(g) if g in INTENTS else 0, g),
         )
         series = {n: [s[key].get(g, {}).get("dung_het") for g in names] for n, s in summaries.items()}
-        labels = {"co_ngu_canh": "có ngữ cảnh", "khong_ngu_canh": "không ngữ cảnh"}
-        grouped_bars(ax, [labels.get(g, g) for g in names], series)
+        labels = {
+            "co_ngu_canh": "with context",
+            "khong_ngu_canh": "no context",
+            "1": "1 intent",
+            "2": "2 intents",
+            "3+": "3+ intents",
+        }
+        sizes = {g: max(s[key].get(g, {}).get("so_tin", 0) for s in summaries.values()) for g in names}
+        errors = {
+            n: [tuple(s[key].get(g, {}).get("khoang_tin_cay_dung_het", (0.0, 0.0))) for g in names]
+            for n, s in summaries.items()
+        }
+        grouped_bars(ax, [f"{labels.get(g, g)}\n(n={sizes[g]})" for g in names], series, errors)
         ax.set_title(title)
         ax.tick_params(axis="x", labelsize=8)
     handles, names = axes[0].get_legend_handles_labels()
     fig.legend(
         handles, names, loc="lower center", bbox_to_anchor=(0.5, -0.06), ncol=len(names), frameon=False
     )
-    fig.suptitle("Tỉ lệ đúng hoàn toàn theo nhóm tin", fontweight="bold")
-    return save(fig, path, NOTES["groups"])
+    fig.suptitle("Exact-match rate by message group (black bars: 95% Wilson interval)", fontweight="bold")
+    return save(fig, path)
 
 
 def chart_latency(summaries: dict[str, dict[str, Any]], path: Path) -> Path | None:
@@ -446,78 +404,84 @@ def chart_latency(summaries: dict[str, dict[str, Any]], path: Path) -> Path | No
         for i, (name, values) in enumerate(series.items()):
             xs = [g + (i - (len(series) - 1) / 2) * width for g in range(len(labels))]
             container = ax.bar(xs, values, width * 0.92, label=name, color=color(i))
-            ax.bar_label(container, labels=[f"{v:.2f}s" for v in values], fontsize=9, padding=2)
+            ax.bar_label(
+                container,
+                labels=[f"{v:.2f}s" for v in values],
+                fontsize=9,
+                padding=3,
+                rotation=90 if len(series) >= 3 else 0,
+            )
         ax.set_xticks(range(len(labels)), labels, fontsize=8.5)
-        ax.margins(y=0.16)
-        ax.set_ylabel("Giây cho một tin")
+        ax.margins(y=0.24 if len(series) >= 3 else 0.16)
+        ax.set_ylabel("Seconds per message")
 
     labels = [
-        "Trung bình",
-        "Một nửa số tin\nnhanh hơn mốc này\n(trung vị)",
-        "9 trong 10 tin\nnhanh hơn mốc này",
+        "Mean",
+        "Median\n(half of messages\nare faster)",
+        "P90\n(9 in 10 messages\nare faster)",
     ]
     draw(axes[0][0], labels, overview)
-    axes[0][0].set_title("Một tin mất bao lâu để có kết quả?", fontsize=10)
+    axes[0][0].set_title("How long does one message take?", fontsize=10)
     axes[0][0].legend(loc="upper left")
     if keys:
         counts = {k: max((g[k]["so_tin"] for g in by_count.values() if k in g), default=0) for k in keys}
-        names_y = {"1": "1 ý", "2": "2 ý", "3+": "3 ý trở lên"}
+        names_y = {"1": "1 intent", "2": "2 intents", "3+": "3+ intents"}
         draw(
             axes[0][1],
-            [f"{names_y.get(k, k)}\n({counts[k]} tin)" for k in keys],
+            [f"{names_y.get(k, k)}\n({counts[k]} messages)" for k in keys],
             {n: [by_count[n].get(k, {}).get("trung_binh", 0.0) for k in keys] for n in names},
         )
-        axes[0][1].set_title("Tin càng nhiều ý càng lâu (thời gian trung bình)", fontsize=10)
+        axes[0][1].set_title("More intents per message take longer (mean latency)", fontsize=10)
         axes[0][1].set_ylabel("")
     slowest = "   |   ".join(f"{n}: {max(v):.2f}s" for n, v in data.items())
-    fig.suptitle("Thời gian trả lời", fontweight="bold", y=1.02)
-    fig.text(0.5, 0.955, f"Tin chậm nhất:   {slowest}", ha="center", fontsize=9, color="#444444")
-    return save(fig, path, NOTES["latency"])
+    fig.suptitle("Response time", fontweight="bold", y=1.02)
+    fig.text(0.5, 0.955, f"Slowest message:   {slowest}", ha="center", fontsize=9, color="#444444")
+    return save(fig, path)
 
 
 def chart_confidence(summaries: dict[str, dict[str, Any]], path: Path) -> Path | None:
-    """Độ tin cậy khi đúng và khi sai. Chỉ vẽ khi model có trả độ tin cậy thay đổi (không phải toàn 1.0)."""
-    usable = {
-        n: s for n, s in summaries.items() if len(set(s["tin_cay"]["khi_dung"] + s["tin_cay"]["khi_sai"])) > 1
-    }
+    """Biểu đồ hiệu chuẩn (reliability diagram): trục ngang là confidence, trục dọc là tỉ lệ đúng LOẠI Ý thực tế trong khoảng đó.
+    Điểm nằm trên đường chéo là hiệu chuẩn tốt; nằm dưới là tự tin quá mức. Chỉ tin hợp lệ (tin lùi về mơ hồ có confidence 0
+    là giá trị mặc định của hệ thống). Confidence là xác suất token của chữ type nên chỉ đo độ chắc về loại ý."""
+    usable = {n: s for n, s in summaries.items() if s.get("hieu_chuan") and s["hieu_chuan"]["khoang"]}
     if not usable:
         return None
     style()
-    fig, axes = plt.subplots(1, len(usable), figsize=(5.5 * len(usable), 3.6), squeeze=False)
-    for ax, (name, s) in zip(axes[0], usable.items(), strict=True):
-        bins = [i / 10 for i in range(11)]
-        # hai cột cạnh nhau trong mỗi khoảng (không chồng lên nhau, tránh ra màu nâu khó hiểu ở chỗ chồng)
-        counts, _, containers = ax.hist(
-            [s["tin_cay"]["khi_dung"], s["tin_cay"]["khi_sai"]],
-            bins=bins,
-            color=["#009E73", "#D55E00"],
-            label=["khi đúng hoàn toàn", "khi sai"],
+    fig, axes = plt.subplots(1, len(usable), figsize=(4.6 * len(usable), 4.6), squeeze=False)
+    for i, (ax, (name, s)) in enumerate(zip(axes[0], usable.items(), strict=True)):
+        cal = s["hieu_chuan"]
+        ax.plot([0, 1], [0, 1], ls="--", color="#888888", lw=1, label="Perfect calibration")
+        xs = [b["confidence"] for b in cal["khoang"]]
+        ys = [b["accuracy"] for b in cal["khoang"]]
+        sizes = [20 + 400 * b["so_tin"] / cal["so_tin"] for b in cal["khoang"]]
+        ax.plot(xs, ys, color=color(i), lw=1.2, alpha=0.7)
+        ax.scatter(
+            xs,
+            ys,
+            s=sizes,
+            color=color(i),
+            edgecolor="white",
+            zorder=3,
+            label="Confidence bin (size = messages)",
         )
-        for container, series in zip(
-            containers, counts, strict=True
-        ):  # ghi số tin trên đầu mỗi cột, khỏi gióng xuống trục
-            ax.bar_label(
-                container, labels=[str(int(c)) if c > 0 else "" for c in series], fontsize=7, padding=1.5
+        for b, x, y in zip(cal["khoang"], xs, ys, strict=True):
+            ax.annotate(
+                str(b["so_tin"]), (x, y), xytext=(0, 9), textcoords="offset points", ha="center", fontsize=7
             )
-        wrong = s["tin_cay"]["khi_sai"]
-        sure = sum(c >= 0.9 for c in wrong)
-        if wrong:  # câu hỏi chính của biểu đồ: trong các tin sai, bao nhiêu tin model vẫn báo rất chắc
-            ax.text(
-                0.02,
-                0.97,
-                f"Tin sai: {len(wrong)}\nvẫn báo chắc từ 0.9: {sure} ({sure / len(wrong):.0%})",
-                transform=ax.transAxes,
-                va="top",
-                fontsize=8,
-                bbox={"facecolor": "white", "edgecolor": "#D55E00", "boxstyle": "round,pad=0.3"},
-            )
-        ax.margins(y=0.12)  # chừa chỗ cho số trên cột cao nhất
-        ax.set_title(name, fontsize=10)
-        ax.set_xlabel("Độ tin cậy")
-        ax.set_ylabel("Số tin")
-        ax.legend()
-    fig.suptitle("Độ tin cậy của model khi đúng và khi sai", fontweight="bold")
-    return save(fig, path, NOTES["confidence"])
+        ax.set_xlim(0, 1.05)
+        ax.set_ylim(0, 1.1)
+        invalid = s["so_tin"] - s["so_tin_hop_le"]
+        ax.set_title(
+            f"{name}\nECE = {cal['ece']:.3f}  (n = {cal['so_tin']} valid, {invalid} invalid excluded)",
+            fontsize=9,
+        )
+        ax.set_xlabel("Confidence (probability of the predicted category)")
+        ax.set_ylabel("Share of messages with correct category")
+        ax.legend(loc="upper left", fontsize=7.5, frameon=False)
+    fig.suptitle(
+        "Reliability of the confidence score (below the diagonal = overconfident)", fontweight="bold", y=1.08
+    )
+    return save(fig, path)
 
 
 def chart_dataset(records: list[dict[str, Any]], path: Path) -> Path:
@@ -550,10 +514,10 @@ def chart_dataset(records: list[dict[str, Any]], path: Path) -> Path:
     for i, total in enumerate(bottom):
         ax.text(i, total + max(bottom) * 0.01, str(total), ha="center", fontsize=8, fontweight="bold")
     ax.set_xlim(-0.6, len(kinds) - 0.4 + 0.5)  # chừa chỗ bên phải cho số của các đoạn thấp ở cột cuối
-    ax.set_ylabel("Số dòng")
-    ax.set_title(f"Dữ liệu theo loại và theo tập (tổng {len(records)} dòng)")
+    ax.set_ylabel("Rows")
+    ax.set_title(f"Messages by primary category and split (total {len(records)})")
     ax.legend()
-    return save(fig, path, NOTES["dataset"])
+    return save(fig, path)
 
 
 def chart_training(
@@ -589,20 +553,20 @@ def chart_training(
                 color="#E69F00",
                 ls=":",
                 lw=1.5,
-                label=f"model gốc ({baseline_val_loss:.3f})",
+                label=f"base model ({baseline_val_loss:.3f})",
             )
-        ax.set_xlabel("Bước huấn luyện")
-        ax.set_ylabel("Loss (càng thấp càng tốt)")
+        ax.set_xlabel("Training step")
+        ax.set_ylabel("Loss (lower is better)")
         ax.legend(loc="upper right")
 
     # Khung trái: toàn bộ quá trình, chỉ ghi điểm đầu, train loss cuối và val loss thấp nhất
     if trains:
         ax_full.annotate(
-            f"bước {trains[0]['step']:.0f}: {trains[0]['train_loss']:.4f}", (trains[0]["step"], trains[0]["train_loss"]),
+            f"step {trains[0]['step']:.0f}: {trains[0]['train_loss']:.4f}", (trains[0]["step"], trains[0]["train_loss"]),
             xytext=(10, -4), textcoords="offset points", fontsize=9,
         )  # fmt: skip
         ax_full.text(
-            0.97, 0.5, f"Train loss cuối: {trains[-1]['train_loss']:.4f} (bước {trains[-1]['step']:.0f})",
+            0.97, 0.5, f"Final train loss: {trains[-1]['train_loss']:.4f} (step {trains[-1]['step']:.0f})",
             transform=ax_full.transAxes, ha="right", va="center", fontsize=9,
             bbox={"facecolor": "white", "edgecolor": "#0072B2", "boxstyle": "round,pad=0.3"},
         )  # fmt: skip
@@ -612,29 +576,30 @@ def chart_training(
         )
         ax_full.axvline(summary["buoc_tot_nhat"], color="#009E73", ls="--", lw=1.3)
         ax_full.text(
-            0.97, 0.36, f"Val loss thấp nhất: {summary['val_loss_tot_nhat']:.4f} (bước {summary['buoc_tot_nhat']:.0f}{epoch})",
+            0.97, 0.36, f"Lowest val loss: {summary['val_loss_tot_nhat']:.4f} (step {summary['buoc_tot_nhat']:.0f}{epoch})",
             transform=ax_full.transAxes, ha="right", va="center", fontsize=9,
             bbox={"facecolor": "white", "edgecolor": "#009E73", "boxstyle": "round,pad=0.3"},
         )  # fmt: skip
-    ax_full.set_title("Loss giảm thế nào trong cả quá trình", fontsize=10)
+    ax_full.set_title("Loss over the whole run", fontsize=10)
 
     # Khung phải: phóng to val loss từ lần đo đầu tiên, mỗi chấm có số
     if evals:
         ax_zoom.set_xlim(val_x[0] - 30, val_x[-1] + 40)
         ax_zoom.set_ylim(0, max(val_y) * 1.4)
-        prev = None
-        for step, value in zip(val_x, val_y, strict=True):
-            near = (
-                prev is not None and step - prev < 60
-            )  # hai lần đo sát nhau thì nhãn nâng cao hơn để khỏi chồng chữ
+        # Chỉ ghi số ở điểm đầu, điểm thấp nhất và điểm cuối: ghi hết thì các số sát nhau dính vào nhau (bảng bên dưới đã có mọi lần đo)
+        shown = {0, len(val_y) - 1, val_y.index(min(val_y))}
+        for idx in sorted(shown):
+            step, value = val_x[idx], val_y[idx]
+            edge = (
+                "left" if idx == 0 else "right" if idx == len(val_y) - 1 else "center"
+            )  # nhãn ở mép thì đẩy vào trong, khỏi bị cắt
             ax_zoom.annotate(
-                f"{value:.4f}", (step, value), xytext=(0, 32 if near else 17), textcoords="offset points",
-                ha="center", fontsize=9, color="#D55E00", fontweight="bold",
+                f"{value:.4f}", (step, value), xytext=(8 if edge == "left" else -8 if edge == "right" else 0, 14), textcoords="offset points",
+                ha=edge, fontsize=9, color="#D55E00", fontweight="bold",
                 bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none", "pad": 0.6},
             )  # fmt: skip
-            prev = step
     ax_zoom.set_ylabel("")
-    ax_zoom.set_title("Phóng to val loss từ lần đo đầu tiên", fontsize=10)
+    ax_zoom.set_title("Val loss zoomed in from the first evaluation", fontsize=10)
 
     # Bảng số của từng lần đo val
     ax_table.axis("off")
@@ -650,7 +615,7 @@ def chart_training(
         ]
         table = ax_table.table(
             cellText=rows,
-            rowLabels=["Bước huấn luyện", "Epoch", "Train loss (lần ghi gần nhất)", "Val loss", "Val trừ train"],
+            rowLabels=["Training step", "Epoch", "Train loss (latest logged)", "Val loss", "Val minus train"],
             loc="center", cellLoc="center",
         )  # fmt: skip
         table.auto_set_font_size(False)
@@ -659,8 +624,8 @@ def chart_training(
         best = min(range(len(evals)), key=lambda i: val_y[i])
         for row in range(len(rows)):
             table[(row, best)].set_facecolor("#E3F4EC")  # tô nhạt lần đo có val loss thấp nhất
-    fig.suptitle("Đường cong huấn luyện", fontweight="bold", y=0.97)
-    return save(fig, path, NOTES["training"])
+    fig.suptitle("Training curves", fontweight="bold", y=0.97)
+    return save(fig, path)
 
 
 def chart_gap(log: list[dict[str, float]], path: Path) -> Path | None:
@@ -679,16 +644,21 @@ def chart_gap(log: list[dict[str, float]], path: Path) -> Path | None:
     style()
     fig, ax = plt.subplots(figsize=(8, 3.6))
     ax.plot([p[0] for p in pts], [p[1] for p in pts], color="#CC79A7", marker="o", ms=4)
-    for step, gap in pts:  # ghi số chênh ở từng chấm, khỏi gióng xuống trục
+    gaps = [g for _, g in pts]
+    for i, (step, gap) in enumerate(pts):  # ghi số chênh ở từng chấm, khỏi gióng xuống trục
+        neighbours = [gaps[j] for j in (i - 1, i + 1) if 0 <= j < len(gaps)]
+        below = bool(neighbours) and gap < min(neighbours)  # đáy: nhãn nằm dưới để không đè lên đường kẻ
         ax.annotate(
-            f"{gap:.4f}", (step, gap), xytext=(0, 8), textcoords="offset points", ha="center", fontsize=8.5
-        )
+            f"{gap:.4f}", (step, gap), xytext=(0, -14 if below else 9), textcoords="offset points",
+            ha="center", fontsize=8.5,
+            bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none", "pad": 0.6},
+        )  # fmt: skip
     ax.margins(y=0.15)
     ax.axhline(0, color="#555555", lw=0.8)
-    ax.set_xlabel("Bước huấn luyện")
-    ax.set_ylabel("val loss trừ train loss")
-    ax.set_title("Khoảng cách val và train (tăng dần = overfit)")
-    return save(fig, path, NOTES["gap"])
+    ax.set_xlabel("Training step")
+    ax.set_ylabel("val loss minus train loss")
+    ax.set_title("Val-train gap (steadily rising = overfitting)")
+    return save(fig, path)
 
 
 def chart_val_metrics(log: list[dict[str, float]], path: Path) -> Path | None:
@@ -702,7 +672,73 @@ def chart_val_metrics(log: list[dict[str, float]], path: Path) -> Path | None:
         pts = [(p["step"], p[key]) for p in log if key in p]
         ax.plot([a for a, _ in pts], [b for _, b in pts], marker="o", ms=4, color=color(i), label=key[4:])
     ax.set_ylim(0, 1.02)
-    ax.set_xlabel("Bước huấn luyện")
-    ax.set_title("Chỉ số trên val theo bước huấn luyện")
+    ax.set_xlabel("Training step")
+    ax.set_title("Validation metrics over training steps")
     ax.legend()
-    return save(fig, path, NOTES["val_metrics"])
+    return save(fig, path)
+
+
+def chart_invalid_causes(summaries: dict[str, dict[str, Any]], path: Path) -> Path | None:
+    """Vì sao tin lùi về mơ hồ (không trả được kết quả dùng được), theo từng model. Chỉ vẽ khi file dự đoán có ghi lý do (loi_ly_do)
+    nghĩa là được tạo bằng eval_slm bản mới; file cũ không có thì trả None."""
+    have = {n: s["ly_do_loi"] for n, s in summaries.items() if s.get("ly_do_loi")}
+    if not have:
+        return None
+    style()
+    reasons = sorted({r for d in have.values() for r in d})
+    fig, ax = plt.subplots(figsize=(9, 1.6 + 0.8 * len(have)))
+    names = list(have)
+    left = [0] * len(names)
+    for k, reason in enumerate(reasons):
+        counts = [have[n].get(reason, 0) for n in names]
+        ax.barh(names, counts, left=left, color=color(k), label=reason.replace("_", " "), height=0.55)
+        for i, (c, lft) in enumerate(zip(counts, left, strict=True)):
+            if c:
+                ax.text(lft + c / 2, i, str(c), ha="center", va="center", fontsize=8, color="white")
+        left = [a + b for a, b in zip(left, counts, strict=True)]
+    ax.invert_yaxis()
+    ax.set_xlabel("Messages with no usable response")
+    ax.set_title("Why responses were invalid (messages)")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.25), ncol=min(len(reasons), 4), frameon=False)
+    return save(fig, path)
+
+
+def chart_paired(comparisons: dict[str, dict[str, Any]], base: str, path: Path) -> Path | None:
+    """Biểu đồ rừng (forest plot): hiệu của model gốc so (base) trừ từng model khác, kèm khoảng tin cậy 95% bootstrap theo cặp.
+    Khoảng không chạm đường 0 nghĩa là base hơn hẳn (có ý nghĩa thống kê)."""
+    if not comparisons:
+        return None
+    style()
+    metrics = [
+        ("valid", "Valid response"),
+        ("category", "Correct category"),
+        ("exact", "Exact match"),
+        ("macro_f1", "Macro-F1"),
+    ]
+    fig, ax = plt.subplots(figsize=(9, 1.6 + 0.9 * len(metrics)))
+    others = list(comparisons)
+    step = 0.8 / max(len(others), 1)
+    for g, (key, _label) in enumerate(metrics):
+        for i, other in enumerate(others):
+            c = comparisons[other][key]
+            y = g + (i - (len(others) - 1) / 2) * step
+            lo, hi = c["khoang_tin_cay_95"]
+            ax.errorbar(
+                c["hieu"] * 100, y, xerr=[[(c["hieu"] - lo) * 100], [(hi - c["hieu"]) * 100]],
+                fmt="o", color=color(i + 1), capsize=3, label=f"vs {other}" if g == 0 else None,
+            )  # fmt: skip
+            ax.annotate(
+                f"{c['hieu'] * 100:+.1f}",
+                (hi * 100, y),
+                xytext=(6, 0),
+                textcoords="offset points",
+                va="center",
+                fontsize=8,
+            )
+    ax.axvline(0, color="#444444", lw=1)
+    ax.set_yticks(range(len(metrics)), [m[1] for m in metrics])
+    ax.invert_yaxis()
+    ax.set_xlabel(f"{base} minus other model (percentage points, 95% paired bootstrap interval)")
+    ax.set_title(f"How much better is {base}? (right of 0 = {base} is better)")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=len(others), frameon=False)
+    return save(fig, path)

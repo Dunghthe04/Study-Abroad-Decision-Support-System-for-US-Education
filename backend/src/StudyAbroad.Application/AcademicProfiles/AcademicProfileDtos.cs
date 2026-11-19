@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using StudyAbroad.Application.Profile.Flow;
 
 namespace StudyAbroad.Application.AcademicProfiles;
 
@@ -39,5 +40,7 @@ public record AcademicProfileResponse(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     // Đã gửi qua luồng 6 bước hoặc có dữ liệu cũ: tài khoản không báo "chưa điền" nữa
-    bool IsComplete = false
+    bool IsComplete = false,
+    // Đủ 5 bước của hồ sơ đã gửi (giống bước 6), null khi chưa gửi
+    ProfileFlowDraftDto? Details = null
 );

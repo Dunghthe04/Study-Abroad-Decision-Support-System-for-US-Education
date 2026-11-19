@@ -214,6 +214,38 @@ public class AgeFeaturesTests
         Assert.Equal(ParentConsentStatuses.None, access.ParentConsentStatus);
     }
 
+    // 1.5: con managed do phụ huynh thao tác, không coi là trẻ dưới 16 / dưới 18
+    [Theory]
+    [InlineData(10)]
+    [InlineData(14)]
+    [InlineData(17)]
+    public async Task ManagedChild_NeverAgeRestricted(int age)
+    {
+        var child = AddUser(UserRoles.Student, age);
+        child.Status = UserStatuses.Managed;
+
+        foreach (var feature in AgeFeatures.Rules.Keys)
+            Assert.True((await AuthorizeAsync(child, feature)).HasSucceeded, feature);
+
+        var access = await AgeAccess.EvaluateAsync(child, _links, DateTime.UtcNow);
+        Assert.Equal(ParentConsentStatuses.NotRequired, access.ParentConsentStatus);
+        Assert.Empty(access.BlockedFeatures);
+        Assert.Equal(AgePolicy.GetAgeGroup(child.DateOfBirth, AgePolicy.TodayInVietnam(DateTime.UtcNow)), access.AgeGroup); // vẫn có nhóm tuổi để phân tích
+    }
+
+    // Tài khoản của chính trẻ 14 tuổi chưa có phụ huynh đồng ý: vẫn bị chặn như cũ
+    [Fact]
+    public async Task OwnChildAccount_Under16WithoutConsent_StillBlocked()
+    {
+        var child = AddUser(UserRoles.Student, 14);
+
+        var context = await AuthorizeAsync(child, AgeFeatures.ProcessStudentData);
+
+        Assert.True(context.HasFailed);
+        var access = await AgeAccess.EvaluateAsync(child, _links, DateTime.UtcNow);
+        Assert.Contains(AgeFeatures.ProcessStudentData, access.BlockedFeatures);
+    }
+
     [Fact]
     public async Task Evaluate_Parent_NotRequiredAndNoAgeGroup()
     {

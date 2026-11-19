@@ -34,7 +34,7 @@ namespace StudyAbroad.Application.Advisor
         IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null,
         IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null,
         IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null, AiPricing? pricing = null,
-        StudyAbroad.Application.Admin.SlmSamples.ISlmSampleService? slmSamples = null)
+        StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeBaseService? knowledgeBase = null)
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
@@ -108,6 +108,9 @@ namespace StudyAbroad.Application.Advisor
             // Chụp ngay các tín hiệu của advisor (nhãn model gán, số đo AI, hành động) trước khi các bước sau thay response.
             // Dùng để đánh giá lượt (ChatTurn) và ghi chat_messages ở cuối
             var advisorSignals = new TurnSignals(askedAt, response.Slm, response.AiUsage, response.Action, response.Skills);
+            // 1f: phụ huynh đã liên kết không có hồ sơ riêng, lượt về hồ sơ được thay trước khi lưu nháp (ParentChatGate)
+            if (!await profileFlow.CanEditOwnProfileAsync(userId, ct))
+                response = ParentChatGate.Apply(response, state, await profileFlow.GetParentChatChildrenAsync(userId, ct));
             var changed = await SaveProfileToDraftAsync(userId, response, ct);
 
             // C5: học sinh bấm "Đúng rồi" ở X1 thì chat rời bảng rà soát sang B3, lúc đó lưu hồ sơ chính thức.
@@ -213,21 +216,21 @@ namespace StudyAbroad.Application.Advisor
 
         private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(1);
 
-        // UC-53: câu chưa trả lời được vào danh sách mẫu SLM ở dạng nháp, chỉ có câu hỏi. Theo công tắc Chat:StoreMessages
+        // UC-53: câu chưa trả lời được vào kho tri thức ở dạng nháp, chỉ có câu hỏi. Theo công tắc Chat:StoreMessages
         // (messages null khi tắt). Lỗi không làm hỏng lượt chat
         private async Task CaptureUnansweredAsync(AdvisorChatRequest request, CancellationToken ct)
         {
-            if (slmSamples is null || messages is null || request.Messages.LastOrDefault(m => m.Role == "user")?.Content is not { Length: > 0 } asked)
+            if (knowledgeBase is null || messages is null || request.Messages.LastOrDefault(m => m.Role == "user")?.Content is not { Length: > 0 } asked)
                 return;
             try
             {
                 using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 bounded.CancelAfter(CaptureTimeout);
-                await slmSamples.CaptureUnansweredAsync(asked, bounded.Token);
+                await knowledgeBase.CaptureUnansweredAsync(asked, bounded.Token);
             }
             catch (Exception ex)
             {
-                logger?.LogWarning(ex, "Không lưu được câu chưa trả lời vào mẫu SLM");
+                logger?.LogWarning(ex, "Không lưu được câu chưa trả lời vào kho tri thức");
             }
         }
 
