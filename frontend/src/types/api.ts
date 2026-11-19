@@ -55,6 +55,11 @@ export interface StudyCenter {
   feeDescription?: string | null;
   registrantName?: string | null;
   registrantPosition?: string | null;
+  /** [UC-92] Fanpage chính thức; đổi thì Moderator kiểm tra (UC-114). */
+  fanpage?: string | null;
+  /** [UC-92] Khu vực phục vụ và chi nhánh do trung tâm công bố. */
+  serviceAreas?: string[] | null;
+  branches?: string[] | null;
 }
 
 export interface RegisterCenterRequest {
@@ -178,6 +183,63 @@ export interface UpdateCenterProfileRequest {
   legalComplianceMode?: string | null;
   trainingLicenseNumber?: string | null;
   certifiedCounselorCount?: number | null;
+  /** [UC-92] Lưu ngay nhưng Moderator kiểm tra (UC-114). */
+  fanpage?: string | null;
+  serviceAreas?: string[];
+  branches?: string[];
+}
+
+/** [UC-92] Phân loại thay đổi sau khi trung tâm tự sửa hồ sơ. */
+export interface CenterProfileUpdateOutcome {
+  /** Lưu và hiển thị ngay. */
+  savedFields: string[];
+  /** Lưu ngay nhưng chờ Moderator kiểm tra (website, fanpage). */
+  reviewFields: string[];
+  /** Thông tin pháp lý đã đổi. */
+  legalFields: string[];
+  /** Trung tâm đã xác minh đổi thông tin pháp lý: hồ sơ về Chờ duyệt, tạm ẩn dấu xác minh. */
+  verificationReset: boolean;
+  message: string;
+}
+
+export interface CenterProfileUpdateResponse {
+  center: StudyCenter;
+  outcome: CenterProfileUpdateOutcome;
+}
+
+/** [UC-93] Trạng thái yêu cầu xóa trung tâm: chờ xử lý, đã duyệt (chờ tới hạn xóa hẳn), đã xóa, bị từ chối. */
+export type CenterDeletionRequestStatus = "pending" | "approved" | "completed" | "rejected";
+
+/** [UC-93] Yêu cầu xóa trong danh sách của Administrator, kèm thông tin kiểm tra danh tính người gửi. */
+export interface AdminCenterDeletionRequestDto {
+  id: string;
+  studyCenterId: string;
+  centerName: string;
+  centerEmail: string | null;
+  centerPhone: string | null;
+  centerVerificationStatus: string;
+  requestedByUserId: string | null;
+  requesterName: string | null;
+  requesterEmail: string | null;
+  requesterIsOwner: boolean;
+  reason: string;
+  status: CenterDeletionRequestStatus;
+  createdAt: string;
+  handledByUserId: string | null;
+  handledAt: string | null;
+  decisionNote: string | null;
+  scheduledPurgeAt: string | null;
+  completedAt: string | null;
+}
+
+/** [UC-92 / UC-93] Yêu cầu xóa tài khoản trung tâm. status: pending | approved | completed | rejected. */
+export interface CenterDeletionRequestDto {
+  id: string;
+  studyCenterId: string;
+  reason: string;
+  status: string;
+  createdAt: string;
+  handledAt: string | null;
 }
 
 export interface VerifyStudyCenterRequest {
@@ -290,7 +352,7 @@ export interface ChatWidget {
  * không qua SLM hiểu câu nên nhanh và không nhầm tên trường. target chỉ dùng cho goal_seek (bỏ trống thì hệ thống chọn nhóm cao hơn một bậc).
  */
 export interface AssistantAction {
-  type: "goal_seek" | "explain" | "school_info" | "school_compare";
+  type: "goal_seek" | "explain" | "school_info" | "school_compare" | "school_search";
   schoolCodes?: string[] | null; // school_compare: mã từ hai đến bốn trường (hoặc tên chưa được chọn)
   fields?: string[] | null; // school_compare: mã mục so sánh, giữ nguyên khi chọn lại trường mơ hồ
   schoolCode?: string | null; // goal_seek không kèm trường: hỏi lại bằng ô chọn trường
@@ -299,6 +361,8 @@ export interface AssistantAction {
   suggested?: string[] | null; // ô chọn trường: các trường nên hiện sẵn dạng nút (backend điền, giao diện gửi lại nguyên)
   /** "real": giải thích theo hồ sơ thật dù trang đang xem giả định (nút "Xem theo hồ sơ thật"); bỏ trống: theo cái đang xem */
   basis?: "real" | null;
+  /** school_search: bộ điều kiện tìm dựng sẵn (nút "Chỉ top 20", "Bỏ điều kiện bang"...), backend điền, giao diện gửi lại nguyên */
+  search?: Record<string, unknown> | null;
 }
 
 export interface AdvisorChatResponse {
@@ -356,6 +420,12 @@ export interface LockUserAccountRequest {
 }
 
 /** [UC-62] Admin mở khóa tài khoản kèm lý do. */
+/** [UC-113] Admin sửa ngày sinh Học sinh / Phụ huynh theo yêu cầu hỗ trợ. birthDate dạng yyyy-MM-dd, lý do bắt buộc. */
+export interface UpdateUserBirthDateRequest {
+  birthDate: string;
+  reason: string;
+}
+
 export interface UnlockUserAccountRequest {
   reason: string;
 }
@@ -375,6 +445,8 @@ export interface UserDto {
   lockoutEnd?: string | null;
   /** [UC-111] Ngày sinh (yyyy-MM-dd), chỉ trả về cho chính chủ hoặc Admin */
   dateOfBirth?: string | null;
+  /** [UC-113] Tuổi tròn theo giờ VN, tính từ ngày sinh (có khi xem chi tiết hoặc sau khi Admin sửa ngày sinh) */
+  age?: number | null;
 }
 
 // Token chỉ nằm trong HttpOnly cookie, body không chứa token
@@ -785,4 +857,40 @@ export interface ParentProfileOfferDto {
   parentName: string;
   offeredAt: string;
   parentProfile: AcademicProfileResponse;
+}
+
+// [UC-110] Thông báo trong hệ thống (chỉ của người đăng nhập)
+export interface NotificationDto {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  linkUrl: string | null;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface UnreadCountDto {
+  count: number;
+}
+
+/** [UC-114] Bộ lọc danh sách thay đổi trung tâm chờ Moderator kiểm tra. */
+export type CenterProfileChangeFilter = "pending" | "passed" | "failed" | "all";
+
+/** [UC-114] Một thay đổi website / fanpage do trung tâm tự sửa (UC-92). */
+export interface CenterProfileChangeDto {
+  id: string;
+  studyCenterId: string;
+  studyCenterName: string;
+  centerVerificationStatus: string;
+  centerIsActive: boolean;
+  field: "website" | "fanpage" | string;
+  oldValue?: string | null;
+  newValue?: string | null;
+  status: "pending" | "passed" | "failed" | string;
+  createdAt: string;
+  reviewedByUserId?: string | null;
+  reviewedAt?: string | null;
+  reviewReason?: string | null;
 }

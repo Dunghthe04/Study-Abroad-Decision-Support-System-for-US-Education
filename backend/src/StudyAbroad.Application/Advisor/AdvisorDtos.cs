@@ -47,7 +47,10 @@ public record ChatAction(
     string Type, string? SchoolCode = null, string? Target = null, string? Basis = null, string? Question = null,
     IReadOnlyList<string>? SchoolCodes = null, IReadOnlyList<string>? Fields = null,
     // Chỉ cho ô chọn trường: các trường nên hiện sẵn dạng nút bấm (vd các trường đầu danh sách gợi ý)
-    IReadOnlyList<string>? Suggested = null);
+    IReadOnlyList<string>? Suggested = null,
+    // Chỉ cho school_search (nút lọc lại sau tìm trường): dữ liệu tìm dựng sẵn {question, filters, sort, model_sort},
+    // cùng dạng advisor gửi, để tìm lại thẳng không qua SLM
+    JsonElement? Search = null);
 
 /// <summary>Một trường trong danh sách gợi ý. Group là mã nhóm đã chấm (R, RF, M, S, NA, O), advisor đổi sang chữ.</summary>
 public record ChatSchool(string Code, string Name, string? Group);

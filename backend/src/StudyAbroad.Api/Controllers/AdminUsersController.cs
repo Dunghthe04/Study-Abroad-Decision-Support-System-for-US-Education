@@ -79,4 +79,19 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
 
         return Ok(result.User);
     }
+
+    /// <summary>[UC-113] Sửa ngày sinh Học sinh / Phụ huynh theo yêu cầu hỗ trợ, bắt buộc lý do, ghi audit giá trị cũ và mới (chỉ Admin).</summary>
+    [HttpPut("{id:guid}/birth-date")]
+    [Authorize(Roles = UserRoles.Admin)]
+    public async Task<ActionResult<UserDto>> UpdateBirthDate(Guid id, UpdateUserBirthDateRequest request, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId)
+            return Unauthorized();
+
+        var result = await auth.UpdateUserBirthDateAsync(id, request, actorId, ct);
+        if (result.Error != AuthError.None || result.User is null)
+            return ValidationProblem(result.Message);
+
+        return Ok(result.User);
+    }
 }

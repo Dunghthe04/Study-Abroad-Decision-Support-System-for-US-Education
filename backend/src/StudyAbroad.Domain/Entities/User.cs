@@ -43,5 +43,11 @@ namespace StudyAbroad.Domain.Entities
 
         /// <summary>UC-80: thời điểm yêu cầu xóa tài khoản (UTC). Null = chưa yêu cầu. Hết thời hạn xóa mềm thì job xóa hẳn.</summary>
         public DateTime? DeletedAt { get; set; }
+
+        /// <summary>Legal Hold: đóng băng tài khoản khi có khiếu nại, tố cáo lừa đảo hoặc cơ quan điều tra yêu cầu (Nghị định 13/2023/NĐ-CP). Job dọn dẹp không xóa tài khoản này.</summary>
+        public bool IsLegalHold { get; set; } = false;
+
+        /// <summary>Lý do áp dụng Legal Hold.</summary>
+        public string? LegalHoldReason { get; set; }
     }
 }

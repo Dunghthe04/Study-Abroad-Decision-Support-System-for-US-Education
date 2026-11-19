@@ -31,7 +31,10 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Universities.IUniversityDetailRepository, UniversityDetailRepository>();
         services.AddScoped<StudyAbroad.Application.TargetSchools.ITargetSchoolRepository, TargetSchoolRepository>();
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
+        services.AddScoped<StudyAbroad.Application.Notifications.INotificationRepository, NotificationRepository>();
         services.AddScoped<ICenterVerificationRepository, CenterVerificationRepository>();
+        services.AddScoped<ICenterProfileChangeRepository, CenterProfileChangeRepository>();
+        services.AddScoped<ICenterDeletionRequestRepository, CenterDeletionRequestRepository>();
         services.AddScoped<ICenterReviewRepository, CenterReviewRepository>();
         services.AddScoped<ICenterReviewSubmissionRepository, CenterReviewSubmissionRepository>();
         services.AddScoped<ICenterReviewModerationRepository, CenterReviewModerationRepository>();
@@ -43,7 +46,8 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Admin.ReviewBatches.IReviewBatchRepository, ReviewBatchRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadWithdrawalRepository, LeadWithdrawalRepository>();   // [UC-80] thu hồi lead khi xóa tài khoản
-        services.AddScoped<StudyAbroad.Application.Auth.IAccountPurgeRepository, AccountPurgeRepository>();   // [UC-80] xóa hẳn tài khoản quá hạn
+        services.AddScoped<StudyAbroad.Application.Auth.IAccountPurgeRepository, AccountPurgeRepository>();
+        services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterDeletionWorkRepository, CenterDeletionWorkRepository>();   // [UC-93]   // [UC-80] xóa hẳn tài khoản quá hạn
         services.AddSingleton<StudyAbroad.Application.Admin.SlmSamples.ISlmWorkbookReader, StudyAbroad.Infrastructure.Import.SlmWorkbookReader>();
         services.AddSingleton<StudyAbroad.Application.Admin.SlmSamples.ISlmTemplateWriter, StudyAbroad.Infrastructure.Import.SlmTemplateWriter>();
         services.AddScoped<IUserRepository, UserRepository>();
@@ -100,6 +104,11 @@ public static class DependencyInjection
         services.AddSingleton<SmtpEmailSender>();
         services.AddSingleton<EmailQueue>();
         services.AddSingleton<IEmailSender, QueuedEmailSender>();
+        // [UC-91] OTP qua SMS: chưa có nhà cung cấp thật. Ngoài Production chỉ ghi log mã; Production báo kênh chưa sẵn sàng.
+        services.AddSingleton<ISmsSender>(sp =>
+            sp.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>().EnvironmentName == "Production"
+                ? new UnavailableSmsSender()
+                : ActivatorUtilities.CreateInstance<LoggingSmsSender>(sp));
         services.AddHostedService<EmailDispatchBackgroundService>();
 
         // [UC-80] Thời hạn chờ xóa tài khoản và chu kỳ job xóa hẳn (appsettings "AccountDeletion")

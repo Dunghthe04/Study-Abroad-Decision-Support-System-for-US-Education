@@ -10,6 +10,7 @@ Khóa đầu ra trùng SimulateRequest bên .NET, và chỉ gồm yếu tố mô
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.schemas.chat import ProfileField, QuickReply
 from app.services.priority import PRIORITY_KEY
 from app.services.skills import validators
 from app.services.skills.validators import AskAgain
@@ -195,3 +196,78 @@ def parse_what_if(changes: list[dict[str, Any]]) -> WhatIf:
         name, value = checked
         result.changes[name] = value
     return result
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Nút thử nhanh: mỗi nút là một thay đổi cụ thể, cao hơn hồ sơ hiện tại một bậc. Câu gửi đi đều đã thử bằng model
+# (đọc đúng what_if kèm số), nên bấm là chạy được, không bị hỏi lại. Học sinh vẫn gõ được mức khác.
+# ---------------------------------------------------------------------------------------------------------------------
+TRY_SAT = "Nếu SAT của em là {value} thì sao?"
+TRY_GPA = "Nếu GPA của em là {value} thì sao?"
+TRY_IELTS = "Nếu IELTS của em là {value} thì sao?"
+TRY_BUDGET = "Nếu ngân sách của em là {value} USD mỗi năm thì sao?"
+SAT_STEP, SAT_START, SAT_MAX = 100, 1400, 1600
+IELTS_STEP, IELTS_START, IELTS_MAX = 0.5, 6.5, 9.0
+GPA_STEP = {4: 0.2, 10: 0.5}
+BUDGET_EXTRA = 10_000  # mức trên cùng không có trần: thử thêm chừng này
+
+
+def _value(profile: dict[str, ProfileField], key: str) -> Any:
+    item = profile.get(key)
+    return item.value if item is not None else None
+
+
+def _shown(number: float) -> str:
+    return f"{number:g}"
+
+
+def _usd(amount: int) -> str:
+    return f"{amount:,}".replace(",", ".")
+
+
+def try_buttons(profile: dict[str, ProfileField]) -> list[QuickReply]:
+    """Nút thử nhanh SAT, GPA, IELTS, ngân sách theo hồ sơ. Mục đã ở mức cao nhất thì bỏ."""
+    buttons: list[QuickReply] = []
+
+    sat = _value(profile, "sat")
+    if isinstance(sat, int | float) and not isinstance(sat, bool):
+        sat_try = min(int(sat) + SAT_STEP, SAT_MAX) if sat < SAT_MAX else None
+    else:
+        sat_try = SAT_START
+    if sat_try is not None:
+        buttons.append(QuickReply(label=f"Thử SAT {sat_try}", value=TRY_SAT.format(value=sat_try)))
+
+    gpa = _value(profile, "gpa")
+    if isinstance(gpa, dict) and isinstance(gpa.get("value"), int | float) and gpa.get("scale") in GPA_STEP:
+        scale = gpa["scale"]
+        if gpa["value"] < scale:
+            target = round(min(gpa["value"] + GPA_STEP[scale], scale), 1)
+            buttons.append(
+                QuickReply(label=f"Thử GPA {_shown(target)}", value=TRY_GPA.format(value=_shown(target)))
+            )
+
+    english = _value(profile, "english")
+    ielts = english.get("value") if isinstance(english, dict) and english.get("type") == "ielts" else None
+    if isinstance(ielts, int | float):
+        ielts_try = min(ielts + IELTS_STEP, IELTS_MAX) if ielts < IELTS_MAX else None
+    elif not isinstance(english, dict):
+        ielts_try = IELTS_START  # chưa có chứng chỉ tiếng Anh
+    else:
+        ielts_try = None  # TOEFL, Duolingo...: không đoán mức quy đổi
+    if ielts_try is not None:
+        buttons.append(
+            QuickReply(
+                label=f"Thử IELTS {_shown(ielts_try)}", value=TRY_IELTS.format(value=_shown(ielts_try))
+            )
+        )
+
+    budget = _value(profile, "budget")
+    tiers = list(validators.BUDGET_RANGES)
+    if isinstance(budget, str) and budget in tiers and budget != tiers[-1]:
+        floor, ceiling = validators.BUDGET_RANGES[tiers[tiers.index(budget) + 1]]
+        amount = ceiling if ceiling is not None else floor + BUDGET_EXTRA
+        buttons.append(
+            QuickReply(label=f"Thử ngân sách {_usd(amount)} USD", value=TRY_BUDGET.format(value=amount))
+        )
+
+    return buttons

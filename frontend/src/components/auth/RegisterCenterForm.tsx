@@ -214,7 +214,7 @@ export function RegisterCenterForm() {
                 <Link href="/privacy" target="_blank" className="font-medium text-brand hover:underline">
                   Chính sách quyền riêng tư
                 </Link>{" "}
-                của USAS.
+                của USAS (bao gồm điều khoản lưu trữ dữ liệu định danh và nhật ký giao dịch phục vụ phòng chống gian lận và tuân thủ quy định pháp luật).
               </span>
             </label>
 

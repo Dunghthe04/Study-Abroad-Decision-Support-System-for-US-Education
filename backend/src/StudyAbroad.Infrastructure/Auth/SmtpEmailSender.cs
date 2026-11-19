@@ -202,6 +202,38 @@ namespace StudyAbroad.Infrastructure.Auth
             await SendEmailAsync(toEmail, subject, body, ct);
         }
 
+        public async Task SendCenterDeletionOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? note, DateTime? purgeAt, CancellationToken ct = default)
+        {
+            var center = WebUtility.HtmlEncode(centerName);
+            // Ngày hiển thị theo giờ Việt Nam
+            var purgeDate = purgeAt?.AddHours(7).ToString("dd/MM/yyyy");
+            var (subject, title, content) = outcome switch
+            {
+                "approved" => ("[USAS] Yêu cầu xóa tài khoản trung tâm đã được duyệt", "Yêu cầu xóa đã được duyệt",
+                    $"Yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> đã được duyệt. Tài khoản đã bị khóa, trung tâm không còn hiển thị và các yêu cầu liên hệ đang mở đã được đóng. Dữ liệu sẽ được xóa hẳn vào ngày <strong>{purgeDate}</strong>."),
+                "completed" => ("[USAS] Đã xóa tài khoản và dữ liệu trung tâm", "Đã xóa dữ liệu trung tâm",
+                    $"Tài khoản và dữ liệu của <strong>{center}</strong> đã được xóa khỏi USAS theo yêu cầu của bạn."),
+                _ => ("[USAS] Yêu cầu xóa tài khoản trung tâm chưa được chấp nhận", "Yêu cầu xóa chưa được chấp nhận",
+                    $"Yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> chưa được chấp nhận. Tài khoản vẫn hoạt động bình thường."),
+            };
+            var label = outcome == "rejected" ? "Lý do" : "Ghi chú";
+            var detail = string.IsNullOrWhiteSpace(note) || outcome == "approved"
+                ? string.Empty
+                : $"<p style=\"font-size: 14px; color: #475569; line-height: 1.6;\"><strong>{label}:</strong> {WebUtility.HtmlEncode(note)}</p>";
+
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">{title}</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">{content}</p>
+                    {detail}
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
         public async Task SendParentLinkChangedEmailAsync(string toEmail, string studentName, string parentLabel, bool linked, CancellationToken ct = default)
         {
             var student = WebUtility.HtmlEncode(studentName);

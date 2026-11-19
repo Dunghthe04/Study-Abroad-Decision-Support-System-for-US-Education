@@ -24,8 +24,8 @@ from app.schemas.slm import (
 )
 from app.services.skill_call import SKILLS_DIR, load_skill
 from app.services.slm_classifier import PROMPT_PATH, OllamaSlm, prompt_path
-from scripts.export_slm_chat import PROMPT_PATH as TRAIN_PROMPT_PATH
-from scripts.export_slm_chat import TRAIN_PROMPT, to_chat
+from slm.prepare.export_slm_chat import PROMPT_PATH as TRAIN_PROMPT_PATH
+from slm.prepare.export_slm_chat import TRAIN_PROMPT, to_chat
 
 NAME = "slm_intents"
 
