@@ -635,7 +635,14 @@ public class LeadService(
         // [UC-110 / UC-73] Báo người gửi (và học sinh nếu phụ huynh gửi thay) khi trạng thái thật sự thay đổi
         if (notifications is not null && !string.Equals(previousStatus, normalizedStatus, StringComparison.OrdinalIgnoreCase))
         {
-            var label = normalizedStatus switch { "contacted" => "Đang trao đổi", "closed" => "Đã hoàn tất", _ => "Mới" };
+            // Cùng cách gọi với màn hình của người gửi (types/lead.ts); "Mới" đứng một mình khó hiểu nên nói rõ là đang chờ trung tâm
+            var label = normalizedStatus switch
+            {
+                "accepted" => "Đã được trung tâm chấp nhận",
+                "contacted" => "Đang trao đổi",
+                "closed" => "Đã hoàn tất",
+                _ => "Chờ trung tâm phản hồi",
+            };
             foreach (var recipient in new[] { lead.SubmittedByUserId, (Guid?)lead.UserId }.OfType<Guid>().Distinct())
                 await notifications.NotifyAsync(recipient, NotificationTypes.LeadStatusChanged, "Yêu cầu liên hệ đổi trạng thái",
                     $"Yêu cầu liên hệ của bạn chuyển sang: {label}.", "/account", ct);
