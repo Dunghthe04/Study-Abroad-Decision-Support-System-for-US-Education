@@ -1,12 +1,13 @@
 "use client";
 
 // UC-76: màn so sánh danh sách của con với danh sách theo ưu tiên cha mẹ. Chỉ hiển thị, dùng chung cho phụ huynh và con.
+// Mỗi nhóm là một bảng 2 cột: hạng trong danh sách của con | hạng theo cha mẹ, kèm ô chi phí so với ngân sách.
 
-import { useState, type ReactNode } from "react";
-import { AlertTriangleIcon, HandshakeIcon } from "lucide-react";
+import { Fragment, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { AlertTriangleIcon, ChevronDownIcon, HandshakeIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { SchoolCard } from "@/components/recommendation/SchoolCard";
+import { formatPct, formatUsd } from "@/lib/recommendation-labels";
 import type {
   CompareGroup,
   CompareItems,
@@ -14,7 +15,8 @@ import type {
   ComparedSchool,
   PreferenceCompareDto,
 } from "@/lib/parent-preference-api";
-import type { PickedSchool, ScoredSchool } from "@/types/recommendation";
+import type { ScoredSchool } from "@/types/recommendation";
+import { cn } from "@/lib/utils";
 
 // Cùng tên với thanh ưu tiên bên trình mô phỏng
 export const PREF_NAMES = ["Chi phí thấp", "Học bổng nhiều", "Danh tiếng"];
@@ -30,18 +32,16 @@ const GROUPS: { key: CompareGroup; title: string }[] = [
 ];
 const GROUP_TITLE = Object.fromEntries(GROUPS.map((g) => [g.key, g.title])) as Record<CompareGroup, string>;
 
+// Mức dư ngân sách của bộ lọc (RecommendationService.BudgetTolerance)
+const BUDGET_TOLERANCE = 0.1;
+
 type Variant = "ok" | "brand" | "neutral" | "warn" | "risk";
 
-const LABEL: Record<CompareLabel, { text: string; variant: Variant }> = {
-  both: { text: "Cha mẹ cũng chọn", variant: "ok" },
-  parent_higher: { text: "Cha mẹ xếp cao hơn", variant: "brand" },
-  parent_lower: { text: "Cha mẹ xếp thấp hơn", variant: "neutral" },
-  moved_to_aid: { text: "Cha mẹ chuyển sang Cần học bổng lớn", variant: "warn" },
-  moved_out_of_aid: { text: "Theo cha mẹ không cần học bổng lớn", variant: "brand" },
-  group_changed: { text: "Khác nhóm", variant: "neutral" },
-  parent_drops: { text: "Cha mẹ sẽ bỏ", variant: "risk" },
-  dropped_over_budget: { text: "Bị loại vì vượt ngân sách cha mẹ", variant: "risk" },
-  parent_adds: { text: "Cha mẹ sẽ thêm", variant: "ok" },
+const AID_POLICY: Record<string, string> = {
+  none: "Không cấp cho du học sinh",
+  need_only: "Theo hoàn cảnh tài chính",
+  merit_only: "Theo thành tích",
+  need_and_merit: "Theo hoàn cảnh và thành tích",
 };
 
 // "18/11/2026 lúc 17:34"
@@ -50,9 +50,7 @@ const formatDate = (iso: string) => {
   return `${d.toLocaleDateString("vi-VN")} lúc ${d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`;
 };
 
-type View = "student" | "parent";
-
-/** parentName: "Bố", "Mẹ" hoặc tên cha/mẹ, dùng trong tiêu đề cột ưu tiên. forChild: con đang xem, gọi con là "bạn". */
+/** parentName: "Bố", "Mẹ" hoặc "Bạn" (phụ huynh tự xem), dùng trong tiêu đề cột. forChild: con đang xem, gọi con là "bạn". */
 export function PreferenceComparison({
   data,
   parentName = "Cha mẹ",
@@ -62,22 +60,24 @@ export function PreferenceComparison({
   parentName?: string;
   forChild?: boolean;
 }) {
-  const [view, setView] = useState<View>("student");
   const you = forChild ? "bạn" : "con";
+  const You = forChild ? "Bạn" : "Con";
 
   if (!data.studentHasRun || !data.comparison) {
     return <Box>{data.message ?? "Con chưa nhận gợi ý trường, chưa so được."}</Box>;
   }
 
   const c = data.comparison;
-  const added = c.schools.filter((s) => s.studentGroup == null);
+  // "ngân sách của bạn" khi phụ huynh tự xem, "ngân sách của Bố" khi con xem
+  const parentOwner = parentName === "Bạn" ? "bạn" : parentName;
+  const budget = data.parentBudgetUsd;
 
   return (
     <div className="space-y-4">
       {data.studentRunAt && (
         <p className="text-xs text-muted-foreground">
-          Theo lần nhận gợi ý của {you} ngày {formatDate(data.studentRunAt)}. {forChild ? "Bạn" : "Con"} chạy lại gợi ý thì
-          danh sách theo cha mẹ được tính lại theo hồ sơ mới.
+          Theo lần nhận gợi ý của {you} ngày {formatDate(data.studentRunAt)}. {You} chạy lại gợi ý thì danh sách theo cha mẹ
+          được tính lại theo hồ sơ mới.
         </p>
       )}
 
@@ -85,13 +85,13 @@ export function PreferenceComparison({
         <div className="flex gap-2 rounded-2xl border border-warn/30 bg-warn-wash p-3 text-sm text-warn" role="status">
           <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
           <span>
-            {forChild ? "Bạn" : "Con"} đã sửa hồ sơ sau lần nhận gợi ý ngày {formatDate(data.studentRunAt)},{" "}
+            {You} đã sửa hồ sơ sau lần nhận gợi ý ngày {formatDate(data.studentRunAt)},{" "}
             {forChild ? "bấm" : "nhắc con bấm"} Nhận gợi ý lại để so cho đúng.
           </span>
         </div>
       )}
 
-      <PrefTable studentPref={data.studentPref} parentPref={data.parentPref} parentName={parentName} youName={forChild ? "Bạn" : "Con"} />
+      <PrefTable studentPref={data.studentPref} parentPref={data.parentPref} parentName={parentName} youName={You} />
 
       <ul className="grid gap-2 sm:grid-cols-3">
         <Count label="Cả hai cùng có" value={c.counts.both} />
@@ -109,60 +109,14 @@ export function PreferenceComparison({
         </div>
       )}
 
-      <ToggleGroup
-        value={[view]}
-        onValueChange={(v) => {
-          const next = (Array.isArray(v) ? v[0] : v) as View | undefined;
-          if (next) setView(next);
-        }}
-        variant="outline"
-        aria-label="Cách xem"
-      >
-        <ToggleGroupItem value="student">So với {you}</ToggleGroupItem>
-        <ToggleGroupItem value="parent">Danh sách theo cha mẹ</ToggleGroupItem>
-      </ToggleGroup>
+      <p className="text-xs text-muted-foreground">
+        {budget != null
+          ? `Cột chi phí so với ngân sách của ${parentOwner}: ${formatUsd(budget)}/năm. Bộ lọc vẫn giữ trường vượt dưới 10% ngân sách.`
+          : `Cha mẹ chưa đặt ngân sách, cột chi phí so với ngân sách của ${you}.`}{" "}
+        Bấm vào một trường để xem chi tiết.
+      </p>
 
-      {view === "student" ? (
-        <div className="space-y-4">
-          <Grouped
-            schools={c.schools}
-            items={data.studentItems}
-            groupOf={(s) => s.studentGroup}
-            rankOf={(s) => s.studentRank}
-            badges={(s) => <Badge variant={LABEL[s.label].variant}>{LABEL[s.label].text}</Badge>}
-            empty={`Danh sách của ${you} trống.`}
-          />
-          {added.length > 0 && (
-            <section className="space-y-2 rounded-2xl border border-ok/30 p-4">
-              <h3 className="text-sm font-semibold text-foreground">Cha mẹ sẽ thêm</h3>
-              <div className="space-y-3">
-                {added.map((s) => (
-                  <CompareCard key={s.code} school={s} rank={s.parentRank} items={data.parentItems}>
-                    {s.parentGroup && <Badge variant="neutral">{GROUP_TITLE[s.parentGroup]}</Badge>}
-                  </CompareCard>
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
-      ) : (
-        <Grouped
-          schools={c.schools}
-          items={data.parentItems}
-          groupOf={(s) => s.parentGroup}
-          rankOf={(s) => s.parentRank}
-          badges={(s) =>
-            s.studentGroup == null ? (
-              <Badge variant="ok">{forChild ? "Bạn" : "Con"} chưa có</Badge>
-            ) : s.studentGroup !== s.parentGroup ? (
-              <Badge variant="warn">{forChild ? "Bạn" : "Con"} để ở nhóm {GROUP_TITLE[s.studentGroup]}</Badge>
-            ) : s.studentRank !== s.parentRank && s.studentRank != null ? (
-              <Badge variant="neutral">{forChild ? "Bạn" : "Con"} xếp thứ {s.studentRank}</Badge>
-            ) : null
-          }
-          empty="Danh sách theo cha mẹ trống."
-        />
-      )}
+      <CompareTables data={data} youName={You} parentName={parentName} />
     </div>
   );
 }
@@ -209,102 +163,248 @@ function PrefTable({
   );
 }
 
-// Danh sách theo nhóm Khó / Vừa / An toàn..., trong nhóm theo hạng
-function Grouped({
-  schools,
-  items,
-  groupOf,
-  rankOf,
-  badges,
-  empty,
-}: {
-  schools: ComparedSchool[];
-  items: CompareItems | null | undefined;
-  groupOf: (s: ComparedSchool) => CompareGroup | null;
-  rankOf: (s: ComparedSchool) => number | null;
-  badges: (s: ComparedSchool) => ReactNode;
-  empty: string;
-}) {
+// ---------------------------------------------------------------- bảng 2 cột theo nhóm
+
+// Mỗi trường một hàng, đặt theo nhóm của con; trường chỉ cha mẹ có thì đặt theo nhóm của cha mẹ.
+// Trong nhóm: các trường của con theo hạng của con trước, rồi các trường cha mẹ thêm theo hạng của cha mẹ.
+function CompareTables({ data, youName, parentName }: { data: PreferenceCompareDto; youName: string; parentName: string }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const schools = data.comparison?.schools ?? [];
   const sections = GROUPS.map((g) => ({
     ...g,
-    items: schools.filter((s) => groupOf(s) === g.key).sort((a, b) => (rankOf(a) ?? 99) - (rankOf(b) ?? 99)),
-  })).filter((g) => g.items.length > 0);
+    rows: schools
+      .filter((s) => (s.studentGroup ?? s.parentGroup) === g.key)
+      .sort((a, b) => order(a) - order(b)),
+  })).filter((g) => g.rows.length > 0);
 
-  if (sections.length === 0) return <Box>{empty}</Box>;
+  if (sections.length === 0) return <Box>Cả hai danh sách đều trống.</Box>;
+
+  const toggle = (code: string) => setOpen((cur) => (cur === code ? null : code));
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {sections.map((g) => (
-        <section key={g.key} className="space-y-2">
-          <h3 className="text-h3 text-foreground">{g.title}</h3>
-          <div className="space-y-3">
-            {g.items.map((s) => (
-              <CompareCard key={s.code} school={s} rank={rankOf(s)} items={items}>
-                {badges(s)}
-              </CompareCard>
-            ))}
+        <section key={g.key} className="space-y-2" aria-labelledby={`cmp-${g.key}`}>
+          <h3 id={`cmp-${g.key}`} className="text-h3 text-foreground">
+            {g.title} <span className="text-sm font-normal text-muted-foreground">({g.rows.length})</span>
+          </h3>
+
+          {/* Màn rộng: bảng */}
+          <div className="hidden overflow-hidden rounded-2xl border border-line bg-surface sm:block">
+            <table className="w-full table-fixed text-sm">
+              <thead>
+                <tr className="border-b border-line text-left text-xs text-muted-foreground">
+                  <th className="w-[30%] p-3 font-medium">Trường</th>
+                  <th className="w-[11%] p-3 font-medium">{youName}</th>
+                  <th className="w-[17%] p-3 font-medium">{parentName}</th>
+                  <th className="w-[20%] p-3 font-medium">Chi phí</th>
+                  <th className="p-3 font-medium">Lý do</th>
+                </tr>
+              </thead>
+              <tbody>
+                {g.rows.map((s) => {
+                  const isOpen = open === s.code;
+                  const info = schoolInfo(data, s.code);
+                  return (
+                    <Fragment key={s.code}>
+                      <tr
+                        className={cn(
+                          "cursor-pointer border-b border-line align-top last:border-0 hover:bg-ground",
+                          isOpen && "bg-ground",
+                        )}
+                        onClick={() => toggle(s.code)}
+                      >
+                        <td className="p-3">
+                          <button
+                            type="button"
+                            className="flex items-start gap-1 text-left font-semibold text-foreground"
+                            aria-expanded={isOpen}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggle(s.code);
+                            }}
+                          >
+                            <ChevronDownIcon
+                              className={cn("mt-0.5 size-4 shrink-0 text-ink-3 transition-transform", isOpen && "rotate-180")}
+                              aria-hidden
+                            />
+                            <span>{s.name ?? s.code}</span>
+                          </button>
+                        </td>
+                        <td className="p-3 text-ink-2">{s.studentRank != null ? `#${s.studentRank}` : "—"}</td>
+                        <td className="p-3">
+                          <ParentPlace school={s} />
+                        </td>
+                        <td className="p-3">
+                          <CostBadge info={info} budget={data.parentBudgetUsd} />
+                        </td>
+                        <td className="p-3 text-xs text-ink-2">
+                          <span className="line-clamp-2">{s.reason ?? "—"}</span>
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <tr className="border-b border-line bg-ground last:border-0">
+                          <td colSpan={5} className="px-3 pb-4 pt-1">
+                            <Detail school={s} info={info} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+
+          {/* Điện thoại: mỗi trường một thẻ nhỏ */}
+          <ul className="space-y-2 sm:hidden">
+            {g.rows.map((s) => {
+              const isOpen = open === s.code;
+              const info = schoolInfo(data, s.code);
+              return (
+                <li key={s.code} className="rounded-2xl border border-line bg-surface">
+                  <button
+                    type="button"
+                    className="w-full space-y-1.5 p-3 text-left"
+                    aria-expanded={isOpen}
+                    onClick={() => toggle(s.code)}
+                  >
+                    <span className="flex items-start justify-between gap-2">
+                      <span className="text-sm font-semibold text-foreground">{s.name ?? s.code}</span>
+                      <ChevronDownIcon
+                        className={cn("mt-0.5 size-4 shrink-0 text-ink-3 transition-transform", isOpen && "rotate-180")}
+                        aria-hidden
+                      />
+                    </span>
+                    <span className="flex flex-wrap items-center gap-2 text-xs text-ink-2">
+                      <span>
+                        {youName} {s.studentRank != null ? `#${s.studentRank}` : "—"}
+                      </span>
+                      <span aria-hidden>→</span>
+                      <span>{parentName}</span>
+                      <ParentPlace school={s} />
+                    </span>
+                    <CostBadge info={info} budget={data.parentBudgetUsd} />
+                    {s.reason && <span className="block text-xs text-ink-2">{s.reason}</span>}
+                  </button>
+                  {isOpen && (
+                    <div className="border-t border-line p-3">
+                      <Detail school={s} info={info} />
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </section>
       ))}
     </div>
   );
 }
 
-// Nhãn so sánh + lý do ở trên, thẻ trường y như trang Gợi ý ở dưới (không có nút Vì sao / Cần gì để vào:
-// hai nút đó chạy theo hồ sơ thật của con). API cũ không trả danh sách thì về dạng một dòng.
-function CompareCard({
-  school: s,
-  rank,
-  items,
-  children,
-}: {
-  school: ComparedSchool;
-  rank: number | null;
-  items: CompareItems | null | undefined;
-  children?: ReactNode;
-}) {
-  const found = items ? findSchool(items, s.code) : null;
-  if (!found) {
-    return (
-      <ul className="overflow-hidden rounded-2xl border border-line bg-surface">
-        <SchoolRow school={s} rank={rank}>
-          {children}
-        </SchoolRow>
-      </ul>
+const order = (s: ComparedSchool) => (s.studentRank != null ? s.studentRank : 100 + (s.parentRank ?? 99));
+
+// Ô của cha mẹ: cùng nhóm thì hạng kèm mũi tên, khác nhóm thì "→ nhóm #hạng", con có mà cha mẹ không có thì "Bỏ"
+function ParentPlace({ school: s }: { school: ComparedSchool }) {
+  if (s.parentGroup == null) {
+    return s.label === ("dropped_over_budget" satisfies CompareLabel) ? (
+      <Badge variant="risk">Bỏ, vượt ngân sách</Badge>
+    ) : (
+      <Badge variant="risk">Bỏ</Badge>
     );
   }
+  const rank = s.parentRank != null ? `#${s.parentRank}` : "";
+  if (s.studentGroup == null) return <Badge variant="ok">+ Thêm {rank}</Badge>;
+  if (s.studentGroup !== s.parentGroup) {
+    return (
+      <Badge variant={s.parentGroup === "aid" ? "warn" : "brand"}>
+        → {GROUP_TITLE[s.parentGroup]} {rank}
+      </Badge>
+    );
+  }
+  const moved = s.studentRank != null && s.parentRank != null ? s.studentRank - s.parentRank : 0;
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {rank != null && <span className="text-xs font-semibold text-muted-foreground">#{rank}</span>}
-        {children}
-        {s.reason && <span className="text-xs text-ink-2">{s.reason}</span>}
-      </div>
-      <SchoolCard picked={found.picked} school={found.school} />
+    <span className="inline-flex items-center gap-1.5">
+      <span className="text-ink-2">{rank}</span>
+      {moved > 0 && <Badge variant="brand">↑ {moved}</Badge>}
+      {moved < 0 && <Badge variant="neutral">↓ {-moved}</Badge>}
+      {moved === 0 && <Badge variant="ok">Giữ nguyên</Badge>}
+    </span>
+  );
+}
+
+type Info = ScoredSchool | undefined;
+
+// Số liệu của trường: ưu tiên bản trong danh sách theo cha mẹ (gap, outcome tính theo ngân sách cha mẹ)
+function schoolInfo(data: PreferenceCompareDto, code: string): Info {
+  return find(data.parentItems, code) ?? find(data.studentItems, code);
+}
+
+function find(items: CompareItems | null | undefined, code: string): Info {
+  const same = (c: string) => c.toLowerCase() === code.toLowerCase();
+  return items?.scored?.find((x) => same(x.code));
+}
+
+// 3 mức: trong ngân sách / vượt nhưng trong mức dư 10% / cần học bổng lớn
+function costStatus(info: Info, budget: number | null): { text: string; variant: Variant } {
+  const cost = info?.cost ?? null;
+  if (cost == null) return { text: "Chưa có số liệu chi phí", variant: "neutral" };
+  const total = `${formatUsd(cost)}/năm`;
+  if (budget != null) {
+    if (cost <= budget) return { text: `✓ ${total}, trong ngân sách`, variant: "ok" };
+    if (cost <= budget * (1 + BUDGET_TOLERANCE))
+      return { text: `⚠ ${total}, vượt ${formatUsd(cost - budget)} (trong mức dư 10%)`, variant: "warn" };
+    return { text: `${total}, vượt ${formatUsd(cost - budget)}, cần học bổng lớn`, variant: "risk" };
+  }
+  if (info?.outcome === "AidBlock") return { text: `${total}, cần học bổng lớn`, variant: "risk" };
+  if (info?.gap != null && info.gap > 0)
+    return { text: `⚠ ${total}, vượt ${formatUsd(info.gap)} (trong mức dư 10%)`, variant: "warn" };
+  return { text: total, variant: "neutral" };
+}
+
+function CostBadge({ info, budget }: { info: Info; budget: number | null }) {
+  const st = costStatus(info, budget);
+  return (
+    <Badge variant={st.variant} className="h-auto whitespace-normal text-left">
+      {st.text}
+    </Badge>
+  );
+}
+
+// Chi tiết gọn khi bấm vào hàng
+function Detail({ school: s, info }: { school: ComparedSchool; info: Info }) {
+  const sat = info?.sat25 != null && info?.sat75 != null ? `${info.sat25}–${info.sat75}` : "Chưa có số liệu";
+  const aid =
+    info?.aidPolicy === "none"
+      ? AID_POLICY.none
+      : [info?.aidPolicy ? AID_POLICY[info.aidPolicy] : null, info?.aidAvg ? `trung bình ${formatUsd(info.aidAvg)}/năm` : null]
+          .filter(Boolean)
+          .join(", ") || "Chưa có số liệu";
+  return (
+    <div className="space-y-3">
+      <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+        <Fact label="Tổng chi phí" value={info?.cost != null ? `${formatUsd(info.cost)}/năm` : "Chưa có số liệu"} />
+        <Fact label="Tỷ lệ nhận" value={info?.acceptRate != null ? formatPct(info.acceptRate) : "Chưa có số liệu"} />
+        <Fact label="SAT 25–75%" value={sat} />
+        <Fact label="Học bổng du học sinh" value={aid} />
+      </dl>
+      {s.reason && <p className="text-sm text-ink-2">{s.reason}</p>}
+      <Link
+        href={`/university/${encodeURIComponent(s.code)}?from=recommendations`}
+        className="inline-block text-sm font-semibold text-brand underline-offset-4 hover:underline"
+      >
+        Xem trang trường
+      </Link>
     </div>
   );
 }
 
-const BLOCKS = ["reach", "match", "safety", "aid", "other"] as const;
-
-function findSchool(items: CompareItems, code: string): { picked: PickedSchool; school: ScoredSchool | undefined } | null {
-  const same = (c: string) => c.toLowerCase() === code.toLowerCase();
-  for (const b of BLOCKS) {
-    const picked = items[b]?.find((p) => same(p.code));
-    if (picked) return { picked, school: items.scored?.find((x) => same(x.code)) };
-  }
-  return null;
-}
-
-function SchoolRow({ school: s, rank, children }: { school: ComparedSchool; rank: number | null; children?: ReactNode }) {
+function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <li className="space-y-1 p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {rank != null && <span className="text-xs text-muted-foreground">#{rank}</span>}
-        <span className="text-sm font-semibold text-foreground">{s.name ?? s.code}</span>
-        {children}
-      </div>
-      {s.reason && <p className="text-xs text-ink-2">{s.reason}</p>}
-    </li>
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="text-foreground">{value}</dd>
+    </div>
   );
 }
 
