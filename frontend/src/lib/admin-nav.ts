@@ -7,6 +7,7 @@ import {
   CreditCardIcon,
   GraduationCapIcon,
   LayoutDashboardIcon,
+  LibraryBigIcon,
   MailWarningIcon,
   MessagesSquareIcon,
   SchoolIcon,
@@ -70,6 +71,14 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: BookOpenIcon,
     roles: ["admin", "moderator"],
     useCases: ["UC-51", "UC-52"],
+  },
+  {
+    href: "/admin/knowledge-base",
+    label: "Kho tri thức",
+    description: "Quản lý câu hỏi – câu trả lời đã kiểm chứng: thêm, sửa, duyệt và nhập từ Excel",
+    icon: LibraryBigIcon,
+    roles: ["admin", "moderator"],
+    useCases: ["UC-118", "UC-119", "UC-120", "UC-121", "UC-122", "UC-123", "UC-124", "UC-125", "UC-53"],
   },
   {
     href: "/admin/centers",
