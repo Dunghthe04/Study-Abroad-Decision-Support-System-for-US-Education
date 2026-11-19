@@ -5,8 +5,9 @@
 
 import { Fragment, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { AlertTriangleIcon, ChevronDownIcon, HandshakeIcon } from "lucide-react";
+import { AlertTriangleIcon, ChevronDownIcon, HandshakeIcon, MapPinIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { SchoolPhoto } from "@/components/recommendation/SchoolPhoto";
 import { formatPct, formatUsd } from "@/lib/recommendation-labels";
 import type {
   CompareGroup,
@@ -16,6 +17,7 @@ import type {
   PreferenceCompareDto,
 } from "@/lib/parent-preference-api";
 import type { ScoredSchool } from "@/types/recommendation";
+import { useStateNames } from "@/lib/us-state-names";
 import { cn } from "@/lib/utils";
 
 // Cùng tên với thanh ưu tiên bên trình mô phỏng
@@ -67,13 +69,55 @@ export function PreferenceComparison({
     return <Box>{data.message ?? "Con chưa nhận gợi ý trường, chưa so được."}</Box>;
   }
 
-  const c = data.comparison;
+  return <Views data={data} parentName={parentName} forChild={forChild} you={you} You={You} />;
+}
+
+// Hai chế độ: chỉ danh sách theo cha mẹ (thẻ có ảnh, xếp theo hạng của cha mẹ) hoặc so sánh với con (bảng 2 cột)
+function Views({
+  data,
+  parentName,
+  forChild,
+  you,
+  You,
+}: {
+  data: PreferenceCompareDto;
+  parentName: string;
+  forChild: boolean;
+  you: string;
+  You: string;
+}) {
+  const [view, setView] = useState<"parent" | "compare">("parent");
+  const c = data.comparison!;
   // "ngân sách của bạn" khi phụ huynh tự xem, "ngân sách của Bố" khi con xem
   const parentOwner = parentName === "Bạn" ? "bạn" : parentName;
   const budget = data.parentBudgetUsd;
+  const parentListTitle = parentName === "Bạn" ? "Danh sách của bạn" : `Danh sách theo ${parentName}`;
 
   return (
     <div className="space-y-4">
+      <div role="tablist" aria-label="Cách xem" className="inline-flex rounded-xl border border-line bg-surface p-1">
+        {(
+          [
+            ["parent", parentListTitle],
+            ["compare", `So sánh với ${you}`],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={view === key}
+            onClick={() => setView(key)}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors",
+              view === key ? "bg-brand text-white" : "text-ink-2 hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {data.studentRunAt && (
         <p className="text-xs text-muted-foreground">
           Theo lần nhận gợi ý của {you} ngày {formatDate(data.studentRunAt)}. {You} chạy lại gợi ý thì danh sách theo cha mẹ
@@ -91,33 +135,152 @@ export function PreferenceComparison({
         </div>
       )}
 
-      <PrefTable studentPref={data.studentPref} parentPref={data.parentPref} parentName={parentName} youName={You} />
+      {view === "parent" ? (
+        <>
+          <p className="text-xs text-muted-foreground">
+            {budget != null
+              ? `Chi phí so với ngân sách của ${parentOwner}: ${formatUsd(budget)}/năm. Bộ lọc vẫn giữ trường vượt dưới 10% ngân sách.`
+              : `Cha mẹ chưa đặt ngân sách, chi phí so với ngân sách của ${you}.`}{" "}
+            Bấm vào một trường để xem chi tiết.
+          </p>
+          <ParentList data={data} />
+        </>
+      ) : (
+        <>
+          <PrefTable studentPref={data.studentPref} parentPref={data.parentPref} parentName={parentName} youName={You} />
 
-      <ul className="grid gap-2 sm:grid-cols-3">
-        <Count label="Cả hai cùng có" value={c.counts.both} />
-        <Count label={`Chỉ ${you} có`} value={c.counts.studentOnly} />
-        <Count label="Chỉ cha mẹ có" value={c.counts.parentOnly} />
-      </ul>
+          <ul className="grid gap-2 sm:grid-cols-3">
+            <Count label="Cả hai cùng có" value={c.counts.both} />
+            <Count label={`Chỉ ${you} có`} value={c.counts.studentOnly} />
+            <Count label="Chỉ cha mẹ có" value={c.counts.parentOnly} />
+          </ul>
 
-      {c.sameResult && (
-        <div className="flex gap-2 rounded-2xl border border-ok/30 bg-ok-wash p-4 text-sm text-ok">
-          <HandshakeIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
-          <div className="space-y-1">
-            <p className="font-semibold">Hai bên đồng thuận</p>
-            {c.sameNote && <p>{c.sameNote}</p>}
-          </div>
-        </div>
+          {c.sameResult && (
+            <div className="flex gap-2 rounded-2xl border border-ok/30 bg-ok-wash p-4 text-sm text-ok">
+              <HandshakeIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <div className="space-y-1">
+                <p className="font-semibold">Hai bên đồng thuận</p>
+                {c.sameNote && <p>{c.sameNote}</p>}
+              </div>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            {budget != null
+              ? `Cột chi phí so với ngân sách của ${parentOwner}: ${formatUsd(budget)}/năm. Bộ lọc vẫn giữ trường vượt dưới 10% ngân sách.`
+              : `Cha mẹ chưa đặt ngân sách, cột chi phí so với ngân sách của ${you}.`}{" "}
+            Bấm vào một trường để xem chi tiết.
+          </p>
+
+          <CompareTables data={data} youName={You} parentName={parentName} />
+        </>
       )}
-
-      <p className="text-xs text-muted-foreground">
-        {budget != null
-          ? `Cột chi phí so với ngân sách của ${parentOwner}: ${formatUsd(budget)}/năm. Bộ lọc vẫn giữ trường vượt dưới 10% ngân sách.`
-          : `Cha mẹ chưa đặt ngân sách, cột chi phí so với ngân sách của ${you}.`}{" "}
-        Bấm vào một trường để xem chi tiết.
-      </p>
-
-      <CompareTables data={data} youName={You} parentName={parentName} />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- danh sách riêng theo cha mẹ
+
+// Chỉ các trường cha mẹ có, chia nhóm như trang Gợi ý, trong nhóm xếp theo hạng của cha mẹ (không theo thứ tự của con).
+// Mỗi trường một thẻ có ảnh (cùng ảnh với thẻ trang Gợi ý), bấm "Xem chi tiết" thì mở số liệu.
+function ParentList({ data }: { data: PreferenceCompareDto }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const stateName = useStateNames();
+  const schools = data.comparison?.schools ?? [];
+  const sections = GROUPS.map((g) => ({
+    ...g,
+    rows: schools
+      .filter((s) => s.parentGroup === g.key)
+      .sort((a, b) => (a.parentRank ?? 999) - (b.parentRank ?? 999)),
+  })).filter((g) => g.rows.length > 0);
+
+  if (sections.length === 0)
+    return <Box>Danh sách theo cha mẹ trống: không trường nào hợp hồ sơ của con với ngân sách này.</Box>;
+
+  return (
+    <div className="space-y-5">
+      {sections.map((g) => (
+        <section key={g.key} className="space-y-2" aria-labelledby={`par-${g.key}`}>
+          <h3 id={`par-${g.key}`} className="text-h3 text-foreground">
+            {g.title} <span className="text-sm font-normal text-muted-foreground">({g.rows.length})</span>
+          </h3>
+          <ul className="space-y-3">
+            {g.rows.map((s) => {
+              const info = schoolInfo(data, s.code);
+              const name = s.name ?? info?.name ?? s.code;
+              const href = `/university/${encodeURIComponent(s.code)}?from=recommendations`;
+              const isOpen = open === s.code;
+              return (
+                <li key={s.code} className="@container">
+                  <div className="flex flex-col overflow-hidden rounded-xl border border-line bg-surface transition-colors hover:border-brand/40 @2xl:flex-row">
+                    <SchoolPhoto name={name} coverUrl={info?.coverUrl} logoUrl={info?.logoUrl} href={href} />
+                    <div className="min-w-0 flex-1 space-y-2 p-4">
+                      <div className="flex items-start gap-2">
+                        {s.parentRank != null && <Badge variant="brand">#{s.parentRank}</Badge>}
+                        <h4 className="text-base font-bold text-foreground">
+                          <Link href={href} className="hover:text-brand hover:underline">
+                            {name}
+                          </Link>
+                        </h4>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        {info?.state && (
+                          <span className="inline-flex items-center gap-1">
+                            <MapPinIcon className="size-3" aria-hidden />
+                            {stateName(info.state)}
+                          </span>
+                        )}
+                        {info?.control && <span>{info.control === "public" ? "Công lập" : "Tư thục"}</span>}
+                        {info?.acceptRate != null && <span>Tỷ lệ nhận {formatPct(info.acceptRate)}</span>}
+                      </div>
+                      <CostBadge info={info} budget={data.parentBudgetUsd} />
+                      <button
+                        type="button"
+                        aria-expanded={isOpen}
+                        onClick={() => setOpen((cur) => (cur === s.code ? null : s.code))}
+                        className="flex items-center gap-1 text-sm font-semibold text-brand"
+                      >
+                        <ChevronDownIcon className={cn("size-4 transition-transform", isOpen && "rotate-180")} aria-hidden />
+                        {isOpen ? "Ẩn chi tiết" : "Xem chi tiết"}
+                      </button>
+                      {isOpen && (
+                        <div className="border-t border-line pt-3">
+                          <Detail school={s} info={info} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+// Ảnh nhỏ cạnh tên trường trong bảng so sánh: logo, thiếu logo thì ảnh bìa, thiếu cả hai thì chữ cái đầu
+function SchoolThumb({ name, info }: { name: string; info: Info }) {
+  const [failed, setFailed] = useState(false);
+  const url = info?.logoUrl ?? info?.coverUrl ?? null;
+  return (
+    <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-brand-wash">
+      {url && !failed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt=""
+          loading="lazy"
+          className={info?.logoUrl ? "size-full object-contain p-1" : "size-full object-cover"}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span aria-hidden className="text-xs font-bold text-brand/60">
+          {name.slice(0, 2).toUpperCase()}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -194,8 +357,8 @@ function CompareTables({ data, youName, parentName }: { data: PreferenceCompareD
             <table className="w-full table-fixed text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs text-muted-foreground">
-                  <th className="w-[30%] p-3 font-medium">Trường</th>
-                  <th className="w-[11%] p-3 font-medium">{youName}</th>
+                  <th className="w-[34%] p-3 font-medium">Trường</th>
+                  <th className="w-[9%] p-3 font-medium">{youName}</th>
                   <th className="w-[17%] p-3 font-medium">{parentName}</th>
                   <th className="w-[20%] p-3 font-medium">Chi phí</th>
                   <th className="p-3 font-medium">Lý do</th>
@@ -217,7 +380,7 @@ function CompareTables({ data, youName, parentName }: { data: PreferenceCompareD
                         <td className="p-3">
                           <button
                             type="button"
-                            className="flex items-start gap-1 text-left font-semibold text-foreground"
+                            className="flex items-center gap-2 text-left font-semibold text-foreground"
                             aria-expanded={isOpen}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -225,9 +388,10 @@ function CompareTables({ data, youName, parentName }: { data: PreferenceCompareD
                             }}
                           >
                             <ChevronDownIcon
-                              className={cn("mt-0.5 size-4 shrink-0 text-ink-3 transition-transform", isOpen && "rotate-180")}
+                              className={cn("size-4 shrink-0 text-ink-3 transition-transform", isOpen && "rotate-180")}
                               aria-hidden
                             />
+                            <SchoolThumb name={s.name ?? s.code} info={info} />
                             <span>{s.name ?? s.code}</span>
                           </button>
                         </td>
@@ -269,8 +433,11 @@ function CompareTables({ data, youName, parentName }: { data: PreferenceCompareD
                     aria-expanded={isOpen}
                     onClick={() => toggle(s.code)}
                   >
-                    <span className="flex items-start justify-between gap-2">
-                      <span className="text-sm font-semibold text-foreground">{s.name ?? s.code}</span>
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                        <SchoolThumb name={s.name ?? s.code} info={info} />
+                        {s.name ?? s.code}
+                      </span>
                       <ChevronDownIcon
                         className={cn("mt-0.5 size-4 shrink-0 text-ink-3 transition-transform", isOpen && "rotate-180")}
                         aria-hidden
