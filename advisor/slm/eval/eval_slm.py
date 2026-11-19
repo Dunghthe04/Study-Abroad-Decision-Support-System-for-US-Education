@@ -182,8 +182,12 @@ async def run(model: str, split: str, limit: int | None, prompt: str, shots: int
     test_questions = {r["input"]["question"].lower() for r in all_records if r["split"] == "test"}
     few = pick_shots(all_records, shots, test_questions)
     print(f"Prompt {prompt} {prompt_version}, {len(few)} ví dụ lấy từ tập train")
+    slm_url = settings.slm_base_url or settings.ollama_base_url
+    headers = {}
+    if settings.slm_api_key:
+        headers["Authorization"] = f"Bearer {settings.slm_api_key}"
     async with httpx.AsyncClient(
-        base_url=settings.ollama_base_url, timeout=settings.llm_timeout_seconds
+        base_url=slm_url, timeout=settings.llm_timeout_seconds, headers=headers
     ) as http:
         client = OllamaClient(
             http, model, num_ctx=settings.llm_num_ctx, num_gpu=settings.llm_num_gpu, seed=settings.llm_seed
