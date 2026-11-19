@@ -1,4 +1,5 @@
 using StudyAbroad.Application.AcademicProfiles;
+using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using System;
@@ -147,5 +148,41 @@ public class AcademicProfileServiceTests
         Assert.Equal(GradeScales.Scale10, result.Data.GradeScale);
         Assert.Empty(result.Data.Terms);
         Assert.False(result.Data.IsComplete);
+    }
+
+    // Chỉ GetCommittedDetailsAsync được gọi; các hàm khác không dùng trong test này
+    private sealed class FakeProfileFlowService(ProfileFlowDraftDto? details) : IProfileFlowService
+    {
+        public Guid? AskedUserId { get; private set; }
+
+        public Task<ProfileFlowDraftDto?> GetCommittedDetailsAsync(Guid userId, CancellationToken ct = default)
+        {
+            AskedUserId = userId;
+            return Task.FromResult(details);
+        }
+
+        public Task<ProfileFlowStateDto> GetFlowStateAsync(Guid userId, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<ProfileFlowStateDto> SaveDraftAsync(Guid userId, SaveProfileDraftRequest request, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<ProfileFlowStateDto> PatchDraftAsync(Guid userId, System.Text.Json.Nodes.JsonObject chatProfile, IReadOnlyCollection<string> changedKeys, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<UploadDraftTranscriptResultDto> UploadDraftTranscriptAsync(Guid userId, System.IO.Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<CommitProfileFlowResponse> CommitFlowAsync(Guid userId, CommitProfileFlowRequest? request, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task ClearDraftAsync(Guid userId, CancellationToken ct = default) => throw new NotImplementedException();
+    }
+
+    [Fact]
+    public async Task GetAcademicProfileAsync_WithProfileFlow_FillsDetailsOfSameUser()
+    {
+        var repo = new FakeAcademicProfileRepository();
+        var userId = Guid.NewGuid();
+        var profileId = Guid.NewGuid();
+        repo.Profiles[profileId] = new StudentProfile { Id = profileId, UserId = userId, TargetLevel = StudyLevels.Undergraduate };
+        var details = new ProfileFlowDraftDto(Step4: new FlowFinancialDraftDto("tier_20k_35k", "preferred", "parents"));
+        var flow = new FakeProfileFlowService(details);
+        var service = new AcademicProfileService(repo, flow);
+
+        var result = await service.GetAcademicProfileAsync(userId);
+
+        Assert.Equal(userId, flow.AskedUserId);
+        Assert.Same(details, result.Data!.Details);
     }
 }

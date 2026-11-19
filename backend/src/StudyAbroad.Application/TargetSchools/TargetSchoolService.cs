@@ -1,5 +1,6 @@
 using System.Text.Json;
 using StudyAbroad.Application.Audit;
+using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.TargetSchools;
@@ -29,8 +30,10 @@ public class TargetSchoolService(
         if (university == null)
             return AddTargetSchoolResult.Fail("Trường đại học không tồn tại hoặc đã ngừng hoạt động trong hệ thống.");
 
-        // 2. Kiểm tra xem trường đã có trong danh sách mục tiêu của học sinh chưa (UC-30 chặn thêm trùng)
-        if (await repository.ExistsAsync(userId, university.Id, ct))
+        // 2. Kiểm tra xem trường đã có trong danh sách mục tiêu của học sinh chưa (UC-30 chặn thêm trùng).
+        // Dòng phụ huynh gợi ý chưa phải trường của con: con thêm trường đó là nhận gợi ý, dùng lại dòng đó.
+        var existing = await repository.GetByUserAndUniversityAsync(userId, university.Id, ct);
+        if (existing is not null && !TargetSchoolStatuses.IsParentSuggestion(existing.Status))
             return AddTargetSchoolResult.Fail("Trường này đã có trong danh sách mục tiêu của bạn.");
 
         // 3. Chuẩn hóa Category (reach / match / safety)
@@ -63,19 +66,34 @@ public class TargetSchoolService(
         if (notes?.Length > 1000)
             notes = notes[..1000];
 
-        var targetSchool = new TargetSchool
+        TargetSchool targetSchool;
+        if (existing is not null)
         {
-            UserId = userId,
-            UniversityId = university.Id,
-            Category = category,
-            Status = "considering",
-            Priority = 0,
-            Notes = notes,
-            ApplicationRound = round,
-            Deadline = deadline,
-        };
+            // Nhận gợi ý của phụ huynh: thành trường của con. Không ghi chú mới thì giữ lời nhắn của phụ huynh.
+            existing.Category = category;
+            existing.Status = TargetSchoolStatuses.Considering;
+            existing.Notes = notes ?? existing.Notes;
+            existing.ApplicationRound = round;
+            existing.Deadline = deadline;
+            await repository.UpdateAsync(existing, ct);
+            targetSchool = existing;
+        }
+        else
+        {
+            targetSchool = new TargetSchool
+            {
+                UserId = userId,
+                UniversityId = university.Id,
+                Category = category,
+                Status = TargetSchoolStatuses.Considering,
+                Priority = 0,
+                Notes = notes,
+                ApplicationRound = round,
+                Deadline = deadline,
+            };
 
-        await repository.AddAsync(targetSchool, ct);
+            await repository.AddAsync(targetSchool, ct);
+        }
 
         // Ghi Audit Log hành động thêm trường mục tiêu
         var detailJson = JsonSerializer.Serialize(new
@@ -86,6 +104,7 @@ public class TargetSchoolService(
             category = targetSchool.Category,
             round = targetSchool.ApplicationRound,
             deadline = targetSchool.Deadline,
+            fromParentSuggestion = existing is not null,
         });
 
         await auditLogs.AddAsync(new AuditLog
@@ -114,7 +133,12 @@ public class TargetSchoolService(
 
     public async Task<TargetSchoolSummaryDto> GetTargetSchoolsAsync(Guid userId, string? category = null, string? status = null, CancellationToken ct = default)
     {
-        var allItems = await repository.GetListByUserAsync(userId, null, null, ct);
+        var rows = await repository.GetListByUserAsync(userId, null, null, ct);
+
+        // Gợi ý của phụ huynh chưa phải trường của con: không đếm, không vào danh sách chính.
+        // Chỉ trả khi hỏi đúng status=parent_suggested (mục "Phụ huynh gợi ý").
+        var allItems = rows.Where(x => !TargetSchoolStatuses.IsParentSuggestion(x.Status)).ToList();
+        var wantSuggestions = TargetSchoolStatuses.IsParentSuggestion(status?.Trim());
 
         var reachCount = allItems.Count(x => string.Equals(x.Category, "reach", StringComparison.OrdinalIgnoreCase));
         var matchCount = allItems.Count(x => string.Equals(x.Category, "match", StringComparison.OrdinalIgnoreCase));
@@ -128,7 +152,9 @@ public class TargetSchoolService(
             .Select(x => x.Deadline)
             .FirstOrDefault();
 
-        var filteredItems = allItems;
+        var filteredItems = wantSuggestions
+            ? rows.Where(x => TargetSchoolStatuses.IsParentSuggestion(x.Status)).ToList()
+            : allItems;
         if (!string.IsNullOrWhiteSpace(category))
         {
             var cat = category.Trim().ToLowerInvariant();
@@ -274,6 +300,13 @@ public class TargetSchoolService(
     }
 
     public async Task<TargetSchoolDto?> CheckTargetSchoolAsync(Guid userId, string? universityCode, Guid? universityId, CancellationToken ct = default)
+    {
+        // Trường phụ huynh mới gợi ý thì coi như con chưa có: trang trường vẫn hiện nút Thêm (thêm = nhận gợi ý)
+        var dto = await FindTargetSchoolAsync(userId, universityCode, universityId, ct);
+        return dto is not null && TargetSchoolStatuses.IsParentSuggestion(dto.Status) ? null : dto;
+    }
+
+    private async Task<TargetSchoolDto?> FindTargetSchoolAsync(Guid userId, string? universityCode, Guid? universityId, CancellationToken ct)
     {
         if (universityId.HasValue && universityId.Value != Guid.Empty)
         {

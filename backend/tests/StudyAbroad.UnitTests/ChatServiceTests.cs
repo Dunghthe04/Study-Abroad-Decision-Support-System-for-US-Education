@@ -783,6 +783,63 @@ public class ChatServiceTests
         Assert.Null(res.Profile);
     }
 
+    // 1f: phụ huynh đã liên kết không có hồ sơ riêng (ParentChatGate)
+    private static AdvisorSlmDto Intent(string type) => new(Intents: [type]);
+
+    [Fact]
+    public async Task LinkedParent_AsksKnowledge_GetsNormalAnswer()
+    {
+        var flow = new FakeProfileFlow { CanEdit = false };
+        var advisor = new FakeAdvisor("B0") { Answer = "IELTS là bài thi tiếng Anh", Slm = Intent("knowledge") };
+
+        var res = await new ChatService(advisor, new FakeSessions(), flow).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("IELTS là bài thi tiếng Anh", res.Answer);
+    }
+
+    [Fact]
+    public async Task LinkedParent_CollectProfile_GetsGateAnswer_AndNoDraftIsSaved()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = new ChatSession { UserId = userId, StateJson = "{\"currentStep\":\"B0\"}", CurrentStep = "B0" };
+        store.Rows.Add(session);
+        var flow = new FakeProfileFlow { CanEdit = false };
+        var advisor = new FakeAdvisor("B1") { Profile = Json(BudgetChanged), Changed = ["budget"], Slm = Intent("collect_profile") };
+
+        var res = await new ChatService(advisor, store, flow).ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
+        Assert.Equal(ParentChatGate.Answer, res.Answer);
+        Assert.Equal(ParentChatGate.ChildrenHref, Assert.Single(res.QuickReplies!).Href);
+        Assert.Null(flow.PatchedKeys);           // không ghi gì vào nháp
+        Assert.Empty(res.ProfileChanged ?? []);   // form không phải nạp lại nháp
+        Assert.Equal("B0", session.CurrentStep); // chat giữ trạng thái cũ, không sang câu hỏi hồ sơ
+    }
+
+    [Fact]
+    public async Task LinkedParent_RecommendButton_IsBlocked()
+    {
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+
+        var res = await new ChatService(new FakeAdvisor("B4") { Action = "recommend" }, new FakeSessions(), new FakeProfileFlow { CanEdit = false }, null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Null(runner.CalledFor);           // không chạy gợi ý trường
+        Assert.Equal(ParentChatGate.Answer, res.Answer);
+    }
+
+    [Fact]
+    public async Task Student_CollectProfile_IsNotAffected()
+    {
+        var flow = new FakeProfileFlow();
+        var advisor = new FakeAdvisor("B1") { Profile = Json(BudgetChanged), Changed = ["budget"], Slm = Intent("collect_profile") };
+
+        var res = await new ChatService(advisor, new FakeSessions(), flow).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("ok", res.Answer);
+        Assert.Equal(["budget"], flow.PatchedKeys);
+    }
+
     [Fact]
     public async Task NothingChanged_DoesNotTouchDraft()
     {
@@ -3124,5 +3181,9 @@ public class ChatServiceTests
             return Task.FromResult<CommitProfileFlowResponse>(null!);
         }
         public Task ClearDraftAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
+
+        // false = phụ huynh đã liên kết, không có hồ sơ riêng (1f)
+        public bool CanEdit { get; init; } = true;
+        public Task<bool> CanEditOwnProfileAsync(Guid userId, CancellationToken ct = default) => Task.FromResult(CanEdit);
     }
 }

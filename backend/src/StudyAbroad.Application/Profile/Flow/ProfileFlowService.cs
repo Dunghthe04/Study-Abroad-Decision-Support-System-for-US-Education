@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -37,7 +39,9 @@ public class ProfileFlowService(
     IAiCallRepository? aiCalls = null,
     IAiUsageCollector? usageCollector = null,
     ILogger<ProfileFlowService>? logger = null,
-    AiPricing? pricing = null) : IProfileFlowService
+    AiPricing? pricing = null,
+    IUserRepository? users = null,
+    IParentLinkRepository? parentLinks = null) : IProfileFlowService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -126,8 +130,23 @@ public class ProfileFlowService(
         return EmptyState(hasCommittedProfile: false) with { DraftTranscript = DraftTranscriptFileDto.FromOrNull(stored?.DraftTranscript) };
     }
 
+    public async Task<ProfileFlowDraftDto?> GetCommittedDetailsAsync(Guid userId, CancellationToken ct = default)
+    {
+        var profile = await repository.GetProfileByUserIdAsync(userId, ct);
+        if (profile is null || !HasCommittedProfile(profile))
+            return null;
+
+        // Cùng cách dựng với nhánh 2 của GetFlowStateAsync, nhưng không đọc nháp: thẻ hồ sơ chỉ hiện bản đã gửi
+        var scores = await repository.GetTranscriptScoresAsync(profile.Id, ct);
+        var activities = await repository.GetProfileActivitiesAsync(profile.Id, ct);
+        var certifications = await repository.GetProfileCertificationsAsync(profile.Id, ct);
+        var scale = await GetGradeScaleAsync(ct);
+        return BuildDraftFromProfile(profile, scores, activities, certifications, scale);
+    }
+
     public async Task<ProfileFlowStateDto> SaveDraftAsync(Guid userId, SaveProfileDraftRequest request, CancellationToken ct = default)
     {
+        await EnsureCanEditAsync(userId, ct);
         if (request.CurrentStep < 1 || request.CurrentStep > 6)
         {
             throw new ArgumentOutOfRangeException(nameof(request.CurrentStep), "Bước hiện tại phải nằm trong khoảng từ 1 đến 6.");
@@ -155,6 +174,7 @@ public class ProfileFlowService(
     public async Task<ProfileFlowStateDto> PatchDraftAsync(
         Guid userId, JsonObject chatProfile, IReadOnlyCollection<string> changedKeys, CancellationToken ct = default)
     {
+        await EnsureCanEditAsync(userId, ct);
         var current = await GetFlowStateAsync(userId, ct);
         if (changedKeys.Count == 0) return current;
 
@@ -173,6 +193,7 @@ public class ProfileFlowService(
     public async Task<UploadDraftTranscriptResultDto> UploadDraftTranscriptAsync(
         Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default)
     {
+        await EnsureCanEditAsync(userId, ct);
         var profile = await repository.EnsureProfileExistsAsync(userId, ct);
 
         // Đọc toàn bộ nội dung file ra bộ nhớ để vừa lưu nháp vừa gửi sang OCR
@@ -236,6 +257,7 @@ public class ProfileFlowService(
     public async Task<CommitProfileFlowResponse> CommitFlowAsync(
         Guid userId, CommitProfileFlowRequest? request, CancellationToken ct = default)
     {
+        await EnsureCanEditAsync(userId, ct);
         var profile = await repository.EnsureProfileExistsAsync(userId, ct);
         var stored = ReadStoredState(profile.DraftFlowStateJson);
 
@@ -295,6 +317,37 @@ public class ProfileFlowService(
             Message: "Hồ sơ du học đã được lưu chính thức thành công vào hệ thống.",
             Success: true
         );
+    }
+
+    /// <summary>Người này có được nhập / lưu hồ sơ của chính mình không.
+    /// 1.5d: tài khoản phụ huynh không bao giờ có hồ sơ riêng, kể cả khi chưa liên kết con nào; hồ sơ nhập trước khi con có
+    /// tài khoản nằm ở con managed. Phụ huynh làm thay thì userId là id con (Role student) nên vẫn được.</summary>
+    public async Task<bool> CanEditOwnProfileAsync(Guid userId, CancellationToken ct = default) =>
+        users is null || (await users.GetUserById(userId, ct))?.Role != UserRoles.Parent;
+
+    /// <summary>1.5e: con đang liên kết active của phụ huynh (con managed và con thật) cho nút chat.
+    /// Thiếu repository (test cũ) thì null để chat giữ nút cũ.</summary>
+    public async Task<IReadOnlyList<ParentChatChild>?> GetParentChatChildrenAsync(Guid userId, CancellationToken ct = default)
+    {
+        if (users is null || parentLinks is null)
+            return null;
+
+        var result = new List<ParentChatChild>();
+        foreach (var link in await parentLinks.GetActiveByParentAsync(userId, ct))
+        {
+            var child = await users.GetUserById(link.StudentUserId, ct);
+            if (child is null || child.Status == UserStatuses.Deleted)
+                continue;
+            result.Add(new ParentChatChild(child.Id, child.FullName, AgeAccess.IsOperatedByParent(child)));
+        }
+        return result;
+    }
+
+    // Gọi trước EnsureProfileExistsAsync: chặn sau thì phụ huynh vẫn bị tạo một dòng hồ sơ rỗng
+    private async Task EnsureCanEditAsync(Guid userId, CancellationToken ct)
+    {
+        if (!await CanEditOwnProfileAsync(userId, ct))
+            throw new ProfileLockedForParentException();
     }
 
     public async Task ClearDraftAsync(Guid userId, CancellationToken ct = default)

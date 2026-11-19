@@ -24,7 +24,7 @@ public class RecommendationHistoryServiceTests
     private Recommendation AddRun(
         Guid userId, DateTime createdAt,
         string[]? reach = null, string[]? match = null, string[]? safety = null, string[]? aid = null,
-        int[]? pref = null)
+        int[]? pref = null, object? criteria = null)
     {
         static object Block(string[]? codes) => (codes ?? []).Select(c => new { code = c, x = 0.5, why = Array.Empty<string>() }).ToList();
         var all = new[] { reach, match, safety, aid }.SelectMany(b => b ?? []).Distinct();
@@ -33,7 +33,7 @@ public class RecommendationHistoryServiceTests
             UserId = userId,
             CreatedAt = createdAt,
             StudyLevel = "undergraduate",
-            CriteriaJson = JsonSerializer.Serialize(new { major = "Computer Science", pref = pref ?? [2, 2, 2], tier = 1 }),
+            CriteriaJson = JsonSerializer.Serialize(criteria ?? new { major = "Computer Science", pref = pref ?? [2, 2, 2], tier = 1 }),
             ItemsJson = JsonSerializer.Serialize(new
             {
                 scored = all.Select(c => new { code = c, name = "Trường " + c }).ToList(),
@@ -234,6 +234,52 @@ public class RecommendationHistoryServiceTests
         var result = await CreateService().CompareAsync(_parent, a.Id, b.Id, CancellationToken.None);
 
         Assert.Equal("safety", Assert.Single(result!.Changes).ToGroup);
+    }
+
+    // 15 (UC-76 2h-2)
+    [Fact]
+    public async Task Compare_InputChanges_ListsOnlyDifferentInputs()
+    {
+        var from = AddRun(_student, Day1, match: ["B"], criteria: new
+        {
+            major = "CS", states = new[] { "CA" }, budget = (decimal?)null, scholarshipNeed = "optional",
+            pref = new[] { 2, 2, 2 }, tier = 1, studentGpa = 3.78, studentSat = (int?)null,
+        });
+        var to = AddRun(_student, Day1.AddDays(1), match: ["B"], criteria: new
+        {
+            major = "CS", states = new[] { "NY", "CA" }, budget = 77809m, scholarshipNeed = "preferred",
+            pref = new[] { 2, 2, 4 }, tier = 1, studentGpa = 3.78, studentSat = 1450,
+        });
+
+        var result = await CreateService().CompareAsync(_student, from.Id, to.Id, CancellationToken.None);
+
+        Assert.Empty(result!.Changes);   // danh sách giống nhau vẫn trả đầu vào đổi
+        Assert.Equal(
+            [
+                new RunInputChange("studentSat", "SAT", "Chưa có", "1450"),
+                new RunInputChange("states", "Bang", "CA", "CA, NY"),
+                new RunInputChange("budget", "Ngân sách", "Không đặt", "77.809 USD/năm"),
+                new RunInputChange("scholarshipNeed", "Nhu cầu học bổng", "Không cần", "Nên có"),
+                new RunInputChange("pref.2", "Ưu tiên danh tiếng", "Bình thường", "Quan tâm nhất"),
+            ],
+            result.InputChanges);
+    }
+
+    // 16 (UC-76 2h-2)
+    [Fact]
+    public async Task Compare_InputChanges_SameInputsEmpty_MissingKeyIsUnknown()
+    {
+        var a = AddRun(_student, Day1, match: ["B"]);
+        var b = AddRun(_student, Day1.AddDays(1), match: ["C"]);
+        // lần chạy cũ không có khóa budget, lần sau có mà không đặt
+        var c = AddRun(_student, Day1.AddDays(2), match: ["C"],
+            criteria: new { major = "Computer Science", pref = new[] { 2, 2, 2 }, tier = 1, budget = (decimal?)null });
+
+        var same = await CreateService().CompareAsync(_student, a.Id, b.Id, CancellationToken.None);
+        var missing = await CreateService().CompareAsync(_student, b.Id, c.Id, CancellationToken.None);
+
+        Assert.Empty(same!.InputChanges);
+        Assert.Equal([new RunInputChange("budget", "Ngân sách", "Không rõ", "Không đặt")], missing!.InputChanges);
     }
 }
 

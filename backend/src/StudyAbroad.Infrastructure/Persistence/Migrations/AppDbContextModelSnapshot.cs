@@ -2277,6 +2277,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("parent_email");
 
+                    b.Property<string>("ParentPreferenceJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("parent_preference_json");
+
                     b.Property<Guid?>("ParentUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("parent_user_id");
@@ -2302,6 +2306,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("RevokedByUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("revoked_by_user_id");
+
+                    b.Property<Guid?>("SourceManagedUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_managed_user_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -2347,6 +2355,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RevokedByUserId")
                         .HasDatabaseName("ix_parent_student_links_revoked_by_user_id");
+
+                    b.HasIndex("SourceManagedUserId")
+                        .HasDatabaseName("ix_parent_student_links_source_managed_user_id");
 
                     b.HasIndex("TokenHash")
                         .IsUnique()
@@ -4941,6 +4952,16 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_revoked");
 
+                    b.Property<string>("PreviousRefreshTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("previous_refresh_token_hash");
+
+                    b.Property<string>("RefreshTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("refresh_token_hash");
+
                     b.Property<string>("TokenHash")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -4962,6 +4983,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_user_sessions");
+
+                    b.HasIndex("PreviousRefreshTokenHash")
+                        .HasDatabaseName("ix_user_sessions_previous_refresh_token_hash");
+
+                    b.HasIndex("RefreshTokenHash")
+                        .HasDatabaseName("ix_user_sessions_refresh_token_hash");
 
                     b.HasIndex("TokenHash")
                         .HasDatabaseName("ix_user_sessions_token_hash");
@@ -5461,6 +5488,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasForeignKey("RevokedByUserId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_parent_student_links_users_revoked_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("SourceManagedUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_parent_student_links_users_source_managed_user_id");
 
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()

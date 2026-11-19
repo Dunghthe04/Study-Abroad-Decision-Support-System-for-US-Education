@@ -32,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewModerationService, StudyAbroad.Application.StudyCenters.CenterReviewModerationService>();
         services.AddScoped<ICenterDeletionService, CenterDeletionService>();   // [UC-93] Admin xử lý yêu cầu xóa trung tâm
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<SessionRefreshService>();   // gia hạn phiên bằng refresh token (đổi token mỗi lần)
         services.AddScoped<IAccountPurgeService, AccountPurgeService>();   // [UC-80] job xóa hẳn tài khoản gọi qua scope
         // [Q11] Liên kết phụ huynh–học sinh và sự đồng ý xử lý dữ liệu trẻ em
         services.AddScoped<IParentLinkService, ParentLinkService>();
@@ -51,6 +52,12 @@ public static class DependencyInjection
         services.AddScoped<IRecommendationRunner>(sp => sp.GetRequiredService<RecommendationService>());
         services.AddScoped<StudyAbroad.Application.Advisor.ChatService>();
         services.AddScoped<RecommendationHistoryService>();   // [UC-87] xem lịch sử gợi ý
+        services.AddScoped<ParentChildrenService>();   // khu "Con của tôi": phụ huynh xem con, chỉ đọc
+        services.AddScoped<ParentPreferenceService>();   // UC-76: ưu tiên của phụ huynh cho từng con
+        services.AddScoped<IParentPreferenceRefresher, ParentPreferenceRefresher>();   // UC-76: con chạy gợi ý → tính lại danh sách theo cha mẹ
+        services.AddScoped<ManagedChildService>();     // 1.5a: phụ huynh thêm / đổi tên / xóa con chưa có tài khoản
+        services.AddScoped<ActingSessionGuard>();      // 1.5b: kiểm tra phiên làm thay con managed ở mỗi request
+        services.AddScoped<ActingService>();           // 1.5b: vào / thoát làm thay
         return services;
     }
 }

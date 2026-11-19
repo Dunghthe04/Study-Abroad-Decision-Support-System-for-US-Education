@@ -7,9 +7,13 @@ namespace StudyAbroad.Application.Auth;
 /// </summary>
 public interface ITokenService
 {
-    /// <summary>Sinh chuỗi JWT Token và trả về thời điểm hết hạn.</summary>
+    /// <summary>Sinh access token (JWT sống ngắn) và trả về thời điểm hết hạn.</summary>
     (string Token, DateTime ExpiresAt) GenerateToken(User user);
 
-    /// <summary>Băm chuỗi JWT bằng SHA-256 để lưu vào bảng user_sessions (tìm kiếm nhanh, an toàn).</summary>
+    /// <summary>1.5b: access token của con managed khi phụ huynh làm thay. Thêm claim chuẩn RFC 8693 <c>act: { sub: id phụ huynh }</c>.
+    /// Mặc định bỏ qua phụ huynh để các lớp giả trong test không phải cài thêm.</summary>
+    (string Token, DateTime ExpiresAt) GenerateToken(User user, Guid actingParentId) => GenerateToken(user);
+
+    /// <summary>Băm token bằng SHA-256 để lưu vào bảng user_sessions (tìm kiếm nhanh, an toàn).</summary>
     string HashToken(string token);
 }

@@ -179,7 +179,7 @@ public class ParentLinkService(
                 $"{parentLabel} đã liên kết với tài khoản của bạn.", ct);
             await emailSender.SendParentConsentConfirmedEmailAsync(link.ParentEmail, student.FullName, revokeToken!, ct);
             if (parentAccount != null && profileShare != null)
-                await profileShare.AutoShareAfterLinkAsync(parentAccount.Id, [link], ct);
+                await profileShare.PrepareMatchAfterLinkAsync(parentAccount.Id, [link], ct);
         }
         else
         {
@@ -358,7 +358,7 @@ public class ParentLinkService(
         }
 
         if (linked.Count > 0 && profileShare != null)
-            await profileShare.AutoShareAfterLinkAsync(parent.Id, linked, ct);
+            await profileShare.PrepareMatchAfterLinkAsync(parent.Id, linked, ct);
     }
 
     public async Task<List<ParentLinkRevokeNotice>> RevokeAllForAccountDeletionAsync(Guid userId, CancellationToken ct = default)

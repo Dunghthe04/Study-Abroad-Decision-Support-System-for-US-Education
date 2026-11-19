@@ -1,3 +1,4 @@
+import { authFetch } from "@/lib/auth-refresh";
 import type {
   CenterReviewsDto,
   NotificationDto,
@@ -29,7 +30,7 @@ import type {
   ParentLinkDto,
   ParentLinkResponse,
   ParentProfileOverviewDto,
-  ShareParentProfileResult,
+  MatchManagedChildResult,
   ParentProfileOfferDto,
   StudyCenter,
   CreateStudyCenterRequest,
@@ -95,7 +96,7 @@ export function buildImageForm(file: File, content?: string): FormData {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${baseUrl}${path}`, {
+  const res = await authFetch(`${baseUrl}${path}`, {
     ...init,
     // [Bảo mật HttpOnly Cookie]: credentials: "include" tự động gửi và nhận cookie an toàn
     credentials: "include",
@@ -242,17 +243,17 @@ export const profileApi = {
       method: "GET",
     }),
 
-  // Phụ huynh: hồ sơ các con đã liên kết (chỉ đọc) + hồ sơ mình nhập còn chờ chọn con nhận
+  // Phụ huynh: hồ sơ các con đã liên kết (chỉ đọc) + con thật chờ ghép với con managed (1.5d)
   getChildrenProfiles: () =>
     apiFetch<ParentLinkResponse<ParentProfileOverviewDto>>("/api/v1/profile/academic/children", {
       method: "GET",
     }),
 
-  // linkId null = không chuyển cho con nào
-  shareToChild: (linkId: string | null) =>
-    apiFetch<ParentLinkResponse<ShareParentProfileResult>>("/api/v1/profile/academic/share", {
+  // 1.5d: ghép con thật vừa liên kết với con managed đã nhập; managedChildId null = không phải ai trong số này
+  matchManagedChild: (linkId: string, managedChildId: string | null) =>
+    apiFetch<ParentLinkResponse<MatchManagedChildResult>>("/api/v1/profile/academic/match", {
       method: "POST",
-      body: JSON.stringify({ linkId }),
+      body: JSON.stringify({ linkId, managedChildId }),
     }),
 
   // Học sinh: đề nghị dùng hồ sơ phụ huynh khi mình đã có hồ sơ
@@ -262,7 +263,7 @@ export const profileApi = {
     }),
 
   decideParentOffer: (linkId: string, accept: boolean) =>
-    apiFetch<ParentLinkResponse<ShareParentProfileResult>>(
+    apiFetch<ParentLinkResponse<ParentProfileOfferDto>>(
       `/api/v1/profile/academic/parent-offers/${encodeURIComponent(linkId)}/${accept ? "accept" : "decline"}`,
       { method: "POST" },
     ),
@@ -716,7 +717,7 @@ export const centerPortalApi = {
     formData.append("file", file);
     formData.append("documentType", documentType);
 
-    const res = await fetch(`${baseUrl}/api/v1/center/verification/upload-document`, {
+    const res = await authFetch(`${baseUrl}/api/v1/center/verification/upload-document`, {
       method: "POST",
       credentials: "include",
       body: formData,

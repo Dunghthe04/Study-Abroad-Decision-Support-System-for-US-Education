@@ -151,4 +151,19 @@ public class ProfileFlowRepository(AppDbContext context) : IProfileFlowRepositor
             .OrderBy(c => c.SortOrder)
             .ToListAsync(ct);
     }
+
+    public async Task<IReadOnlyList<Guid>> GetParentUserIdsWithProfileAsync(CancellationToken ct = default)
+    {
+        return await context.StudentProfiles
+            .AsNoTracking()
+            .Where(p => context.Users.Any(u => u.Id == p.UserId && u.Role == UserRoles.Parent))
+            .Select(p => p.UserId)
+            .ToListAsync(ct);
+    }
+
+    public async Task DeleteProfileAsync(Guid userId, CancellationToken ct = default)
+    {
+        // Bảng điểm, hoạt động, chứng chỉ, kết quả phân tích, kịch bản xóa theo (cascade); gợi ý giữ lại, cột hồ sơ về null
+        await context.StudentProfiles.Where(p => p.UserId == userId).ExecuteDeleteAsync(ct);
+    }
 }

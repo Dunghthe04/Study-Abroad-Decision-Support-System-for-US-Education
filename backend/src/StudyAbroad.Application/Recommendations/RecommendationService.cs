@@ -46,9 +46,11 @@ public record SchoolExplanation(
     IReadOnlyList<string> Improvements);
 
 // Giá trị giả định của trình mô phỏng hồ sơ. Trường nào null thì giữ nguyên hồ sơ thật.
+// BudgetTolerance: mức dư ngân sách của lần mô phỏng, null = BudgetTolerance (10%). UC-76: ngân sách cha mẹ nhập là con số chốt nên truyền 0.
 public record SimulationOverrides(
     decimal? Gpa, decimal? Sat, decimal? Act, decimal? Ielts,
-    decimal? BudgetUsd, string? ScholarshipNeed, int? EcTier, decimal? Toefl = null, decimal? Duolingo = null);
+    decimal? BudgetUsd, string? ScholarshipNeed, int? EcTier, decimal? Toefl = null, decimal? Duolingo = null,
+    decimal? BudgetTolerance = null);
 
 // Số trường mỗi nhóm của một lượt tính (đếm trên mọi trường còn sau lọc cứng).
 public record GroupSummary(int Kept, int Reach, int Match, int Safety, int AidBlock, int NoData);
@@ -66,7 +68,9 @@ public record SimulationResult(
     SimulationProfile Profile, GroupSummary Baseline, GroupSummary Simulated, IReadOnlyList<SchoolChange> Changes,
     string CriteriaJson, string ItemsJson);
 
-public partial class RecommendationService(IAdvisorClient advisor, IRecommendationRepository recommendations, IProfileFlowRepository profiles)
+// [UC-76] parentRefresher (tùy chọn): sau mỗi lượt gợi ý của con, tính lại danh sách theo ưu tiên cha mẹ đã lưu. Null thì bỏ qua.
+public partial class RecommendationService(IAdvisorClient advisor, IRecommendationRepository recommendations, IProfileFlowRepository profiles,
+    StudyAbroad.Application.ParentLinks.IParentPreferenceRefresher? parentRefresher = null)
     : IRecommendationRunner
 
 {
@@ -111,11 +115,12 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
 
     // Gắn thông báo tiếng Anh (số trường bị ẩn chỉ vì tiếng Anh và bậc thang mở khóa) vào kết quả của lượt.
     private static RecommendationRun WithEnglishNotice(
-        RecommendationRun run, StudentProfile profile, IReadOnlyList<RecommendSchoolInput> schools) =>
+        RecommendationRun run, StudentProfile profile, IReadOnlyList<RecommendSchoolInput> schools,
+        decimal budgetTolerance = BudgetTolerance) =>
         run with
         {
             English = EnglishNotice.Build(
-                CriteriaOf(profile), schools.Select(ToFilterSchool).ToList(), run.Filters, BudgetTolerance)
+                CriteriaOf(profile), schools.Select(ToFilterSchool).ToList(), run.Filters, budgetTolerance)
         };
 
     // Hồ sơ phải có đủ hai thứ trước khi gợi ý (bắt đầu bằng "Hồ sơ" để controller trả 400).
@@ -143,10 +148,10 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
 
     // Lọc cứng. filtered = mọi trường kèm kết quả; kept = các trường còn lại (trong ngân sách hoặc cần học bổng lớn).
     private static (IReadOnlyList<FilterResult> Filtered, IReadOnlyList<FilterResult> Kept) FilterSchools(
-        StudentProfile profile, IReadOnlyList<RecommendSchoolInput> schools)
+        StudentProfile profile, IReadOnlyList<RecommendSchoolInput> schools, decimal budgetTolerance = BudgetTolerance)
     {
         // filtered = danh sách các trường đã lọc cứng (tiêu chí, danh sách trường, dung sai)
-        var filtered = HardFilter.Apply(CriteriaOf(profile), schools.Select(ToFilterSchool), BudgetTolerance);
+        var filtered = HardFilter.Apply(CriteriaOf(profile), schools.Select(ToFilterSchool), budgetTolerance);
         // Chỉ giữ các trường kept, aid
         var kept = filtered.Where(r => r.Outcome != FilterOutcome.Excluded).ToList();
         return (filtered, kept);
@@ -272,7 +277,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
 
         var schools = await recommendations.ListSchoolsAsync(profile.TargetLevel, ct);
         var baselineRun = Evaluate(profile, pref, schools, tier);
-        var simulatedRun = Evaluate(simulated, pref, schools, overrides.EcTier ?? tier);
+        var simulatedRun = Evaluate(simulated, pref, schools, overrides.EcTier ?? tier, overrides.BudgetTolerance ?? BudgetTolerance);
 
         return new SimulationResult(
             new SimulationProfile(
@@ -318,13 +323,14 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
 
     // Lọc cứng rồi chấm: phần thuần dùng chung cho mô phỏng (không đọc ngoại khóa, không lưu).
     private static RecommendationRun Evaluate(
-        StudentProfile profile, IReadOnlyList<int>? pref, IReadOnlyList<RecommendSchoolInput> schools, int tier)
+        StudentProfile profile, IReadOnlyList<int>? pref, IReadOnlyList<RecommendSchoolInput> schools, int tier,
+        decimal budgetTolerance = BudgetTolerance)
     {
-        var (filtered, kept) = FilterSchools(profile, schools);
+        var (filtered, kept) = FilterSchools(profile, schools, budgetTolerance);
         var run = kept.Count == 0
             ? new RecommendationRun(tier, filtered, [], null)
             : Compute(profile, pref, schools, filtered, kept, tier);
-        return WithEnglishNotice(run, profile, schools);
+        return WithEnglishNotice(run, profile, schools, budgetTolerance);
     }
 
     private static GroupSummary Summarize(RecommendationRun run)
@@ -491,7 +497,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         var criteria = BuildCriteria(profile, pref, run);
         var items = BuildItems(profile.BudgetMaxUsd, run);
 
-        await recommendations.AddAsync(new Recommendation
+        var saved = new Recommendation
         {
             UserId = profile.UserId,
             StudentProfileId = profile.Id,
@@ -499,7 +505,10 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             CriteriaJson = JsonSerializer.Serialize(criteria, StoredJson),
             ItemsJson = JsonSerializer.Serialize(items, StoredJson),
             AlgorithmVersion = AlgorithmVersion
-        }, ct);
+        };
+        await recommendations.AddAsync(saved, ct);
+        // [UC-76] Tính lại danh sách theo cha mẹ theo lần gợi ý vừa lưu (refresher tự bắt lỗi, không làm hỏng lượt của con)
+        if (parentRefresher is not null) await parentRefresher.OnChildRunAsync(this, profile.UserId, saved.Id, ct);
 
         return run;
     }

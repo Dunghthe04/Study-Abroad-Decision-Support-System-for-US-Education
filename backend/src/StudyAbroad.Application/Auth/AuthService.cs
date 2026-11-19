@@ -271,17 +271,7 @@ namespace StudyAbroad.Application.Auth
                 await parentLinkService.LinkParentAccountAsync(user, ct);
 
             // Tự động đăng nhập
-            var (token, expiresAt) = tokens.GenerateToken(user);
-            var tokenHash = tokens.HashToken(token);
-            await users.CreateSessionAsync(new UserSession
-            {
-                UserId = user.Id,
-                TokenHash = tokenHash,
-                ExpiresAt = expiresAt,
-                IsRevoked = false
-            }, ct);
-
-            return AuthResult.Ok(new AuthResponse(token, expiresAt, await ToDtoAsync(user, ct)));
+            return AuthResult.Ok(await CreateSessionAsync(user, null, null, ct));
         }
 
         public async Task<AuthResult> ResendOtpAsync(ResendOtpRequest request, CancellationToken ct = default)
@@ -297,7 +287,7 @@ namespace StudyAbroad.Application.Auth
             var genericMessage = $"Nếu email hợp lệ, mã xác thực mới đã được gửi (hiệu lực {OtpExpiryMinutes} phút). Mỗi lần gửi cách nhau ít nhất {MinSecondsBetweenOtpRequests} giây.";
 
             var user = await users.GetUserByEmail(NormalizeEmail(request.Email), ct);
-            if (user == null || user.Status == UserStatuses.Locked)
+            if (user == null || user.Status == UserStatuses.Locked || user.Status == UserStatuses.Managed)
                 return AuthResult.Ok(genericMessage);
 
             if (request.Purpose == OtpPurposes.VerifyEmail && user.Status != UserStatuses.Unverified)
@@ -325,7 +315,9 @@ namespace StudyAbroad.Application.Auth
             }
 
             var user = await users.GetUserByEmail(NormalizeEmail(request.Email), ct);
-            if (user == null)
+            // [1.5c] Con managed không có mật khẩu, không tự đăng nhập: coi như email không tồn tại
+            // (hash rỗng làm BCrypt ném lỗi, và đếm sai 5 lần sẽ đổi trạng thái managed thành temp_locked).
+            if (user == null || user.Status == UserStatuses.Managed)
             {
                 // Vẫn so mật khẩu với một hash giả để thời gian phản hồi như khi email tồn tại
                 _dummyPasswordHash ??= hasher.Hash(Guid.NewGuid().ToString());
@@ -397,24 +389,25 @@ namespace StudyAbroad.Application.Auth
             return AuthResult.Ok(await CreateSessionAsync(user, ipAddress, userAgent, ct));
         }
 
-        /// <summary>Sinh JWT, lưu phiên đăng nhập và trả về thông tin phiên.</summary>
+        /// <summary>Sinh access token (JWT 15 phút) và refresh token, lưu phiên 7 ngày và trả về thông tin phiên.</summary>
         private async Task<AuthResponse> CreateSessionAsync(User user, string? ipAddress, string? userAgent, CancellationToken ct)
         {
             var (token, expiresAt) = tokens.GenerateToken(user);
-            var tokenHash = tokens.HashToken(token);
+            var refreshToken = RefreshTokens.Generate();
 
             var session = new UserSession
             {
                 UserId = user.Id,
-                TokenHash = tokenHash,
-                ExpiresAt = expiresAt,
+                TokenHash = tokens.HashToken(token),
+                RefreshTokenHash = tokens.HashToken(refreshToken),
+                ExpiresAt = DateTime.UtcNow.Add(RefreshTokens.Lifetime),
                 IsRevoked = false,
                 IpAddress = ipAddress,
                 UserAgent = userAgent
             };
             await users.CreateSessionAsync(session, ct);
 
-            return new AuthResponse(token, expiresAt, await ToDtoAsync(user, ct));
+            return new AuthResponse(token, expiresAt, await ToDtoAsync(user, ct), refreshToken, session.ExpiresAt);
         }
 
         /// <summary>[UC-80] Tài khoản đã xóa mềm còn trong thời hạn khôi phục.</summary>
@@ -505,6 +498,7 @@ namespace StudyAbroad.Application.Auth
             // Anti-enumeration: Luôn trả về thông báo thành công dù email có tồn tại hay không.
             // Mail đi qua hàng đợi nền nên thời gian phản hồi cũng như nhau.
             if (user != null && user.Status != UserStatuses.Locked && user.Status != UserStatuses.TempLocked &&
+                user.Status != UserStatuses.Managed &&
                 await CanSendOtpAsync(user.Id, OtpPurposes.ResetPassword, ct))
             {
                 var otpCode = await IssueOtpAsync(user.Id, OtpPurposes.ResetPassword, ct);
@@ -522,7 +516,8 @@ namespace StudyAbroad.Application.Auth
 
             var email = NormalizeEmail(request.Email);
             var user = await users.GetUserByEmail(email, ct);
-            if (user == null || user.Status == UserStatuses.Locked || user.Status == UserStatuses.TempLocked)
+            if (user == null || user.Status == UserStatuses.Locked || user.Status == UserStatuses.TempLocked ||
+                user.Status == UserStatuses.Managed)
                 return AuthResult.Fail(AuthError.OtpInvalid, OtpFailedMessage);
 
             if (!await TryConsumeOtpAsync(user.Id, OtpPurposes.ResetPassword, request.OtpCode, ct))
@@ -557,7 +552,8 @@ namespace StudyAbroad.Application.Auth
                 return AuthResult.Fail(AuthError.Validation, passwordError);
 
             var user = await users.GetUserById(userId, ct);
-            if (user == null || user.Status == UserStatuses.Locked || user.Status == UserStatuses.TempLocked)
+            if (user == null || user.Status == UserStatuses.Locked || user.Status == UserStatuses.TempLocked ||
+                user.Status == UserStatuses.Managed)
                 return AuthResult.Fail(AuthError.InvalidCredentials, WrongCurrentPasswordMessage);
 
             // Ghi nhận lần thử TRƯỚC khi so mật khẩu, như đăng nhập
@@ -1006,7 +1002,8 @@ namespace StudyAbroad.Application.Auth
                 return AuthResult.Fail(AuthError.Validation, $"Lý do khóa tối đa {MaxLockReasonLength} ký tự.");
 
             var user = await users.GetUserById(targetUserId, ct);
-            if (user is null)
+            // [1.5c] Con managed không phải tài khoản thật: admin thao tác theo id cũng coi như không tồn tại
+            if (user is null || user.Status == UserStatuses.Managed)
                 return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản.");
 
             if (user.Id == actorAdminId)
@@ -1080,7 +1077,8 @@ namespace StudyAbroad.Application.Auth
                 return AuthResult.Fail(AuthError.Validation, "Vui lòng nhập ngày sinh mới.");
 
             var user = await users.GetUserById(targetUserId, ct);
-            if (user is null)
+            // [1.5c] Con managed không phải tài khoản thật: admin thao tác theo id cũng coi như không tồn tại
+            if (user is null || user.Status == UserStatuses.Managed)
                 return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản.");
 
             if (user.Role != UserRoles.Student && user.Role != UserRoles.Parent)
@@ -1139,7 +1137,8 @@ namespace StudyAbroad.Application.Auth
                 return AuthResult.Fail(AuthError.Validation, $"Lý do mở khóa tối đa {MaxLockReasonLength} ký tự.");
 
             var user = await users.GetUserById(targetUserId, ct);
-            if (user is null)
+            // [1.5c] Con managed không phải tài khoản thật: admin thao tác theo id cũng coi như không tồn tại
+            if (user is null || user.Status == UserStatuses.Managed)
                 return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản.");
 
             if (user.Role == UserRoles.Admin)
@@ -1408,17 +1407,7 @@ namespace StudyAbroad.Application.Auth
                 DetailJson = JsonSerializer.Serialize(new { email = user.Email })
             }, ct);
 
-            var (token, expiresAt) = tokens.GenerateToken(user);
-            var tokenHash = tokens.HashToken(token);
-            await users.CreateSessionAsync(new UserSession
-            {
-                UserId = user.Id,
-                TokenHash = tokenHash,
-                ExpiresAt = expiresAt,
-                IsRevoked = false
-            }, ct);
-
-            return AuthResult.Ok(new AuthResponse(token, expiresAt, await ToDtoAsync(user, ct)));
+            return AuthResult.Ok(await CreateSessionAsync(user, null, null, ct));
         }
 
         // ----- Đổi số điện thoại / email liên lạc của trung tâm (xác thực OTP tại giá trị mới) -----

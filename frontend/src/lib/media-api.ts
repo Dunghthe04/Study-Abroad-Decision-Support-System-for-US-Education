@@ -1,3 +1,5 @@
+import { authFetch } from "@/lib/auth-refresh";
+
 export type ImageUploadPurpose = "school-logo" | "school-cover";
 
 export interface UploadedImage {
@@ -23,7 +25,7 @@ export async function uploadImage(file: File, purpose: ImageUploadPurpose, signa
   const body = new FormData();
   body.append("file", file);
   body.append("purpose", purpose);
-  const response = await fetch("/api/v1/media/images", {
+  const response = await authFetch("/api/v1/media/images", {
     method: "POST",
     credentials: "include",
     body,
