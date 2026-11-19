@@ -44,9 +44,18 @@ const formatDate = (iso: string) => {
 
 type View = "student" | "parent";
 
-/** parentName: "Bố", "Mẹ" hoặc tên cha/mẹ, dùng trong tiêu đề cột ưu tiên. */
-export function PreferenceComparison({ data, parentName = "Cha mẹ" }: { data: PreferenceCompareDto; parentName?: string }) {
+/** parentName: "Bố", "Mẹ" hoặc tên cha/mẹ, dùng trong tiêu đề cột ưu tiên. forChild: con đang xem, gọi con là "bạn". */
+export function PreferenceComparison({
+  data,
+  parentName = "Cha mẹ",
+  forChild = false,
+}: {
+  data: PreferenceCompareDto;
+  parentName?: string;
+  forChild?: boolean;
+}) {
   const [view, setView] = useState<View>("student");
+  const you = forChild ? "bạn" : "con";
 
   if (!data.studentHasRun || !data.comparison) {
     return <Box>{data.message ?? "Con chưa nhận gợi ý trường, chưa so được."}</Box>;
@@ -59,8 +68,8 @@ export function PreferenceComparison({ data, parentName = "Cha mẹ" }: { data: 
     <div className="space-y-4">
       {data.studentRunAt && (
         <p className="text-xs text-muted-foreground">
-          Theo lần nhận gợi ý của con ngày {formatDate(data.studentRunAt)}. Con chạy lại gợi ý thì danh sách theo cha mẹ
-          được tính lại theo hồ sơ mới.
+          Theo lần nhận gợi ý của {you} ngày {formatDate(data.studentRunAt)}. {forChild ? "Bạn" : "Con"} chạy lại gợi ý thì
+          danh sách theo cha mẹ được tính lại theo hồ sơ mới.
         </p>
       )}
 
@@ -68,17 +77,17 @@ export function PreferenceComparison({ data, parentName = "Cha mẹ" }: { data: 
         <div className="flex gap-2 rounded-2xl border border-warn/30 bg-warn-wash p-3 text-sm text-warn" role="status">
           <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
           <span>
-            Con đã sửa hồ sơ sau lần nhận gợi ý ngày {formatDate(data.studentRunAt)}, nhắc con bấm Nhận gợi ý lại để so
-            cho đúng.
+            {forChild ? "Bạn" : "Con"} đã sửa hồ sơ sau lần nhận gợi ý ngày {formatDate(data.studentRunAt)},{" "}
+            {forChild ? "bấm" : "nhắc con bấm"} Nhận gợi ý lại để so cho đúng.
           </span>
         </div>
       )}
 
-      <PrefTable studentPref={data.studentPref} parentPref={data.parentPref} parentName={parentName} />
+      <PrefTable studentPref={data.studentPref} parentPref={data.parentPref} parentName={parentName} youName={forChild ? "Bạn" : "Con"} />
 
       <ul className="grid gap-2 sm:grid-cols-3">
         <Count label="Cả hai cùng có" value={c.counts.both} />
-        <Count label="Chỉ con có" value={c.counts.studentOnly} />
+        <Count label={`Chỉ ${you} có`} value={c.counts.studentOnly} />
         <Count label="Chỉ cha mẹ có" value={c.counts.parentOnly} />
       </ul>
 
@@ -101,7 +110,7 @@ export function PreferenceComparison({ data, parentName = "Cha mẹ" }: { data: 
         variant="outline"
         aria-label="Cách xem"
       >
-        <ToggleGroupItem value="student">So với con</ToggleGroupItem>
+        <ToggleGroupItem value="student">So với {you}</ToggleGroupItem>
         <ToggleGroupItem value="parent">Danh sách theo cha mẹ</ToggleGroupItem>
       </ToggleGroup>
 
@@ -112,7 +121,7 @@ export function PreferenceComparison({ data, parentName = "Cha mẹ" }: { data: 
             groupOf={(s) => s.studentGroup}
             rankOf={(s) => s.studentRank}
             badges={(s) => <Badge variant={LABEL[s.label].variant}>{LABEL[s.label].text}</Badge>}
-            empty="Danh sách của con trống."
+            empty={`Danh sách của ${you} trống.`}
           />
           {added.length > 0 && (
             <section className="space-y-2 rounded-2xl border border-ok/30 p-4">
@@ -134,11 +143,11 @@ export function PreferenceComparison({ data, parentName = "Cha mẹ" }: { data: 
           rankOf={(s) => s.parentRank}
           badges={(s) =>
             s.studentGroup == null ? (
-              <Badge variant="ok">Con chưa có</Badge>
+              <Badge variant="ok">{forChild ? "Bạn" : "Con"} chưa có</Badge>
             ) : s.studentGroup !== s.parentGroup ? (
-              <Badge variant="warn">Con để ở nhóm {GROUP_TITLE[s.studentGroup]}</Badge>
+              <Badge variant="warn">{forChild ? "Bạn" : "Con"} để ở nhóm {GROUP_TITLE[s.studentGroup]}</Badge>
             ) : s.studentRank !== s.parentRank && s.studentRank != null ? (
-              <Badge variant="neutral">Con xếp thứ {s.studentRank}</Badge>
+              <Badge variant="neutral">{forChild ? "Bạn" : "Con"} xếp thứ {s.studentRank}</Badge>
             ) : null
           }
           empty="Danh sách theo cha mẹ trống."
@@ -153,10 +162,12 @@ function PrefTable({
   studentPref,
   parentPref,
   parentName,
+  youName,
 }: {
   studentPref: number[] | null;
   parentPref: number[];
   parentName: string;
+  youName: string;
 }) {
   return (
     <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
@@ -164,7 +175,7 @@ function PrefTable({
         <thead>
           <tr className="border-b border-line text-left text-xs text-muted-foreground">
             <th className="p-3 font-medium">Ưu tiên</th>
-            <th className="p-3 font-medium">Con</th>
+            <th className="p-3 font-medium">{youName}</th>
             <th className="p-3 font-medium">{parentName}</th>
           </tr>
         </thead>
