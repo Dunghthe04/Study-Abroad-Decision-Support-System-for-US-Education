@@ -298,6 +298,12 @@ public class LeadsControllerTests
 
         public Task<Guid> GetMessageSenderIdAsync(Guid leadId, Guid messageId, CancellationToken ct = default) => Task.FromResult(Guid.NewGuid());
 
+        public Task<LeadChatAccessDto> GetChatAccessAsync(Guid userId, string? userEmail, string userRole, Guid leadId, CancellationToken ct = default) =>
+            Task.FromResult(new LeadChatAccessDto(LeadChatSides.Student, []));
+
+        public Task MarkThreadReadAsync(Guid userId, string? userEmail, string userRole, Guid leadId, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
         public Task<int> RemoveAllMessagesOfLockedSenderAsync(Guid adminUserId, Guid senderUserId, string? reason, CancellationToken ct = default) =>
             Task.FromResult(0);
     }
