@@ -64,12 +64,12 @@ export const ADMIN_NAV: AdminNavItem[] = [
     useCases: ["UC-109"],
   },
   {
-    href: "/admin/knowledge",
-    label: "Tri thức",
-    description: "Quản lý dữ liệu huấn luyện SLM: duyệt, sửa và nhập từ Excel có xem trước",
+    href: "/admin/slm-samples",
+    label: "Mẫu huấn luyện SLM",
+    description: "Duyệt, sửa và nhập mẫu huấn luyện SLM từ Excel",
     icon: BookOpenIcon,
     roles: ["admin", "moderator"],
-    useCases: ["UC-51", "UC-52", "UC-53"],
+    useCases: ["UC-51", "UC-52"],
   },
   {
     href: "/admin/centers",

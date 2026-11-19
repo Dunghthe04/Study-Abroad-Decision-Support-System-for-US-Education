@@ -1,4 +1,4 @@
-import { SlmStatusBadge } from "@/components/admin/knowledge/SlmStatusBadge";
+import { SlmStatusBadge } from "@/components/admin/slm-samples/SlmStatusBadge";
 import { TableFrame } from "@/components/admin/shared/EditableTable";
 import { fieldLabels, formatDateTime, historyActionLabel } from "@/lib/slm-sample-format";
 import type { SlmSampleHistoryItem } from "@/types/slm-sample";
