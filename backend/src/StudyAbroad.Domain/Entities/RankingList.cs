@@ -9,8 +9,6 @@ public class RankingList
     public string Name { get; set; } = string.Empty;
     /// <summary>Tổng quát | Nhóm con | Giá trị | Theo ngành | Khu vực</summary>
     public string? ListGroup { get; set; }
-    /// <summary>ordinal | ordinal+range</summary>
-    public string? RankType { get; set; }
     public string? Edition { get; set; }
     public int? EditionYear { get; set; }
     public string? Url { get; set; }
