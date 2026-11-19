@@ -11,6 +11,7 @@ public class KnowledgeBaseEntryHistoryConfiguration : IEntityTypeConfiguration<K
         b.ToTable("knowledge_base_entry_history", t => t.HasComment("Lịch sử sửa và duyệt của mục kho tri thức."));
 
         b.HasKey(x => x.Id);
+        b.Ignore(x => x.UpdatedAt); // lịch sử chỉ thêm, không bao giờ sửa
         b.HasOne<KnowledgeBaseEntry>().WithMany().HasForeignKey(x => x.EntryId).OnDelete(DeleteBehavior.Cascade);
         b.HasOne<User>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.SetNull);
 

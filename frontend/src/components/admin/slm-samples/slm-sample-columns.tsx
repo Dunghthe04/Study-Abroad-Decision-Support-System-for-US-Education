@@ -52,7 +52,7 @@ export function slmSampleColumns({ selectedIds, onToggle, onEdit, onDelete, onCh
             {sample.question}
           </button>
           {isFromChat(sample) && (
-            <Badge variant="reach" className="mt-1" title="Câu hỏi chưa trả lời lấy từ chat, cần bổ sung câu trả lời">Từ chat chưa trả lời</Badge>
+            <Badge variant="reach" className="mt-1" title="Câu hỏi chưa trả lời lấy từ chat, cần gán ý định">Từ chat chưa trả lời</Badge>
           )}
           {sample.reviewNote && (
             <div className="text-xs text-muted-foreground">{sample.reviewStatus === "approved" ? "Ghi chú" : "Lý do"}: {sample.reviewNote}</div>

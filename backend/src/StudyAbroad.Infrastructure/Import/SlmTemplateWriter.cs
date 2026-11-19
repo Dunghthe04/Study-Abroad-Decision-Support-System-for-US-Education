@@ -20,7 +20,7 @@ public class SlmTemplateWriter : ISlmTemplateWriter
         string SampleType, string Question, string? Profile, string? PendingQuestion, string Intents);
 
     private static readonly string[] ExportHeaders =
-        ["question", "answer", "topic", "source", "profile", "pending_question", "intents", "split", "context", "review"];
+        ["question", "source", "profile", "pending_question", "intents", "split", "context", "review"];
 
     public byte[] Build() =>
         XlsxPackage.Write(BuildExamples()
@@ -31,7 +31,7 @@ public class SlmTemplateWriter : ISlmTemplateWriter
         XlsxPackage.Write(SlmSampleTypes.All
             .Select(sampleType => new XlsxSheetData(sampleType, ExportHeaders, samples
                 .Where(s => s.SampleType == sampleType)
-                .Select(s => new[] { s.Question, s.Answer, s.Topic, s.Source, s.Profile, s.PendingQuestion, s.Intents, s.Split, s.Context, s.SourceReview })
+                .Select(s => new[] { s.Question, s.Source, s.Profile, s.PendingQuestion, s.Intents, s.Split, s.Context, s.SourceReview })
                 .ToList()))
             .ToList());
 

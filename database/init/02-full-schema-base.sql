@@ -420,21 +420,6 @@ FOR EACH ROW EXECUTE FUNCTION app.update_timestamp();
 
 CREATE INDEX IF NOT EXISTS ix_target_schools_user_id ON app.target_schools(user_id);
 
--- 3.5 state_living_costs (UC-28)
-CREATE TABLE IF NOT EXISTS app.state_living_costs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    state_code VARCHAR(8) NOT NULL UNIQUE,
-    state_name VARCHAR(64) NOT NULL,
-    index_score NUMERIC(6,2) NOT NULL DEFAULT 100.0,
-    avg_annual_living_usd NUMERIC(12,2) NOT NULL,
-    notes VARCHAR(500),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TRIGGER trg_state_living_costs_updated_at BEFORE UPDATE ON app.state_living_costs
-FOR EACH ROW EXECUTE FUNCTION app.update_timestamp();
-
 -- ==============================================================================
 -- 4. MÔ HÌNH DSS, PHÂN TÍCH, GỢI Ý & KỊCH BẢN (FE-04, FE-16)
 -- ==============================================================================
@@ -983,20 +968,7 @@ CREATE TABLE IF NOT EXISTS app.policy_alerts (
 CREATE TRIGGER trg_policy_alerts_updated_at BEFORE UPDATE ON app.policy_alerts
 FOR EACH ROW EXECUTE FUNCTION app.update_timestamp();
 
--- 9.4 data_import_batches & field_evidence: Minh chứng quy trình ETL
-CREATE TABLE IF NOT EXISTS app.data_import_batches (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    batch_code VARCHAR(64) NOT NULL UNIQUE,
-    source_name VARCHAR(128) NOT NULL,
-    data_year VARCHAR(32) NOT NULL,
-    total_rows INT NOT NULL DEFAULT 0,
-    passed_rows INT NOT NULL DEFAULT 0,
-    flagged_rows INT NOT NULL DEFAULT 0,
-    checked_by VARCHAR(128) DEFAULT 'USAS Research Team / DuongNX',
-    status VARCHAR(32) DEFAULT 'verified',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
+-- 9.4 field_evidence: Minh chứng nguồn dữ liệu
 CREATE TABLE IF NOT EXISTS app.field_evidence (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     university_id UUID REFERENCES app.universities(id) ON DELETE CASCADE,
