@@ -198,6 +198,47 @@ public class NotificationTests
         Assert.IsType<NoContentResult>(await controller.MarkRead(list.Items[0].Id, CancellationToken.None));
     }
 
+    private sealed class FakePusher : INotificationPusher
+    {
+        public List<(Guid UserId, string Title, string? Body, string? Link)> Pushes { get; } = [];
+        public bool Fail { get; set; }
+
+        public Task PushAsync(Guid userId, string title, string? body, string? linkUrl, CancellationToken ct = default)
+        {
+            if (Fail) throw new InvalidOperationException("hub down");
+            Pushes.Add((userId, title, body, linkUrl));
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task Notify_PushesSavedNotificationToTheUserRealtime()
+    {
+        var repo = new FakeNotificationRepo();
+        var pusher = new FakePusher();
+        var service = new NotificationService(repo, pusher: pusher);
+
+        await service.NotifyAsync(Me, "lead_status_changed", "Yêu cầu liên hệ đổi trạng thái", "Đã hoàn tất", "/account");
+        await service.NotifyAsync(Me, "lead_new", "Ngoài", null, "https://evil.example.com");
+
+        Assert.Equal(2, pusher.Pushes.Count);
+        Assert.Equal((Me, "Yêu cầu liên hệ đổi trạng thái", (string?)"Đã hoàn tất", (string?)"/account"), pusher.Pushes[0]);
+        Assert.Null(pusher.Pushes[1].Link); // liên kết ngoài bị bỏ, giống bản lưu
+    }
+
+    [Fact]
+    public async Task Notify_DoesNotPushWhenNothingWasSaved_AndPushFailureIsSwallowed()
+    {
+        var failingRepo = new FakeNotificationRepo { FailOnAdd = true };
+        var pusher = new FakePusher();
+        await new NotificationService(failingRepo, pusher: pusher).NotifyAsync(Me, "lead_new", "x", null, null);
+        Assert.Empty(pusher.Pushes); // lưu lỗi thì không báo thông báo không có thật
+
+        var repo = new FakeNotificationRepo();
+        await new NotificationService(repo, pusher: new FakePusher { Fail = true }).NotifyAsync(Me, "lead_new", "x", null, null);
+        Assert.Single(repo.Items); // đẩy lỗi: thông báo vẫn được lưu
+    }
+
     [Fact]
     public async Task Controller_WithoutUser_ReturnsUnauthorized_AndRequiresAuthentication()
     {

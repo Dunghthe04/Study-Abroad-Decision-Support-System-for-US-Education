@@ -736,6 +736,8 @@ export interface LeadMessageDto {
   attachmentUrl?: string | null;
   status: "visible" | "removed" | string;
   createdAt: string;
+  /** [Chat realtime] Lúc phía đối diện đã xem tin này, null nếu chưa xem. */
+  readAt?: string | null;
 }
 
 export interface LeadMessagesThreadDto {

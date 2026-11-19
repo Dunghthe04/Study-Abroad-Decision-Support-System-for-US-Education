@@ -184,6 +184,15 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
     .AllowAnyMethod()
     .AllowCredentials()));
 
+// [Chat realtime] SignalR cho chat yêu cầu liên hệ: tin mới, đang nhập, đã xem, online và thông báo tin mới.
+// Trạng thái hiện diện nằm trong bộ nhớ của một tiến trình API (xem ChatPresenceTracker).
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<StudyAbroad.Api.Realtime.ChatPresenceTracker>();
+builder.Services.AddSingleton<StudyAbroad.Application.Leads.ILeadChatPresence>(
+    sp => sp.GetRequiredService<StudyAbroad.Api.Realtime.ChatPresenceTracker>());
+builder.Services.AddSingleton<StudyAbroad.Application.Leads.ILeadChatNotifier, StudyAbroad.Api.Realtime.SignalRLeadChatNotifier>();
+builder.Services.AddSingleton<StudyAbroad.Application.Notifications.INotificationPusher, StudyAbroad.Api.Realtime.SignalRNotificationPusher>();
+
 builder.Services.AddHealthChecks()
     .AddNpgSql(builder.Configuration.GetConnectionString("Default")!, name: "postgres", tags: ["ready"]);
 
@@ -218,6 +227,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapControllers();
+app.MapHub<StudyAbroad.Api.Realtime.LeadChatHub>(StudyAbroad.Api.Realtime.LeadChatHub.Path).RequireAuthorization();
 app.MapAppHealthChecks();
 
 await app.ApplyDatabaseMigrationsAsync();

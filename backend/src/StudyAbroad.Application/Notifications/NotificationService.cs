@@ -5,7 +5,10 @@ using StudyAbroad.Domain.Entities;
 namespace StudyAbroad.Application.Notifications;
 
 /// <summary>[UC-110] Xem, đánh dấu đã đọc thông báo của chính mình và tạo thông báo cho các UC khác.</summary>
-public class NotificationService(INotificationRepository repository, ILogger<NotificationService>? logger = null) : INotificationService
+public class NotificationService(
+    INotificationRepository repository,
+    ILogger<NotificationService>? logger = null,
+    INotificationPusher? pusher = null) : INotificationService
 {
     public const int MaxPageSize = 50;
     public const int MaxTitleLength = 256;
@@ -40,7 +43,7 @@ public class NotificationService(INotificationRepository repository, ILogger<Not
             if (userId == Guid.Empty || string.IsNullOrWhiteSpace(type) || string.IsNullOrWhiteSpace(title))
                 return;
 
-            await repository.AddAsync(new Notification
+            var notification = new Notification
             {
                 UserId = userId,
                 Type = type.Trim(),
@@ -48,7 +51,12 @@ public class NotificationService(INotificationRepository repository, ILogger<Not
                 Body = Truncate(body?.Trim(), MaxBodyLength),
                 // Chỉ nhận đường dẫn nội bộ để thông báo không dẫn người dùng ra trang ngoài
                 LinkUrl = IsInternalLink(linkUrl) ? Truncate(linkUrl!.Trim(), MaxLinkLength) : null,
-            }, ct);
+            };
+            await repository.AddAsync(notification, ct);
+
+            // [Chat realtime] Thông báo đã lưu: báo ngay cho trình duyệt đang mở (nếu có)
+            if (pusher is not null)
+                await pusher.PushAsync(userId, notification.Title, notification.Body, notification.LinkUrl, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

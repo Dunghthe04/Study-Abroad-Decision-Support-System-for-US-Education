@@ -146,7 +146,8 @@ public record LeadMessageDto(
     string Content,
     string? AttachmentUrl,
     string Status,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    DateTime? ReadAt = null);
 
 /// <summary>
 /// [USAS-2053 / UC-74] Toàn bộ luồng tin nhắn của một yêu cầu liên hệ kèm trạng thái hiện tại.

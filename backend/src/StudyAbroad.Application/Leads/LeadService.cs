@@ -20,7 +20,9 @@ public class LeadService(
     IParentLinkRepository parentLinks,
     IAuditLogRepository? auditLogs = null,
     IEmailSender? emailSender = null,
-    INotificationService? notifications = null) : ILeadService
+    INotificationService? notifications = null,
+    ILeadChatNotifier? chat = null,
+    ILeadChatPresence? presence = null) : ILeadService
 {
     public const int MaxMessageLength = 2000;
     public const int MaxReplyMessageLength = 4000;
@@ -41,6 +43,31 @@ public class LeadService(
     {
         if (string.Equals(lead.Status, LeadStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase))
             throw new LeadRuleException("lead_withdrawn", 400, "Yêu cầu đã được người gửi thu hồi, không thể tiếp tục trao đổi.");
+    }
+
+    /// <summary>
+    /// [UC-74] Chỉ nhắn tin được khi yêu cầu Đã chấp nhận (gồm "contacted" cũ). Chặn khi yêu cầu còn Mới, Bị từ chối,
+    /// Đã đóng, Đã thu hồi, Đã hủy, Hết hạn (7 ngày chờ phụ huynh) hoặc quá 90 ngày. Gọi trước khi tải ảnh lên.
+    /// </summary>
+    internal static void EnsureCanMessage(Lead lead)
+    {
+        var status = lead.Status;
+        EnsureNotWithdrawn(lead);
+
+        if (string.Equals(status, LeadStatuses.Closed, StringComparison.OrdinalIgnoreCase))
+            throw new LeadRuleException("lead_closed", 400, "Yêu cầu đã đóng, không gửi thêm tin nhắn được.");
+        if (string.Equals(status, LeadStatuses.Rejected, StringComparison.OrdinalIgnoreCase))
+            throw new LeadRuleException("lead_rejected", 400, "Yêu cầu đã bị trung tâm từ chối, không nhắn tin được.");
+        if (string.Equals(status, LeadStatuses.Cancelled, StringComparison.OrdinalIgnoreCase))
+            throw new LeadRuleException("lead_cancelled", 400, "Yêu cầu đã bị hủy, không nhắn tin được.");
+        if (string.Equals(status, LeadStatuses.Expired, StringComparison.OrdinalIgnoreCase)
+            || CenterLeadMapper.IsDataHidden(lead))
+            throw new LeadRuleException("lead_expired", 400, "Yêu cầu đã hết hạn, không nhắn tin được.");
+        // [UC-116] Còn chờ phụ huynh xác nhận: trung tâm chưa nhận yêu cầu
+        if (string.Equals(status, LeadStatuses.PendingParent, StringComparison.OrdinalIgnoreCase))
+            throw new LeadRuleException("lead_not_open", 400, "Trung tâm chưa nhận yêu cầu này nên chưa nhắn tin được.");
+        if (!LeadStatuses.IsAccepted(status))
+            throw new LeadRuleException("lead_not_accepted", 400, "Trung tâm chưa chấp nhận yêu cầu này nên chưa nhắn tin được.");
     }
 
     private async Task<(Guid? CenterId, string? CenterName)> ResolveCenterScopeAsync(
@@ -373,14 +400,12 @@ public class LeadService(
 
         var (user, lead, centerName) = await GetAuthorizedSentLeadAsync(userId, leadId, ct);
 
-        if (string.Equals(lead.Status, "closed", StringComparison.OrdinalIgnoreCase))
-            throw new LeadRuleException("lead_closed", 400, "Yêu cầu đã hoàn tất, không gửi thêm tin nhắn được.");
-        EnsureNotWithdrawn(lead);
-        // [UC-116] Chờ phụ huynh / phụ huynh từ chối / hết hạn: trung tâm chưa nhận yêu cầu nên chưa trao đổi được
-        if (lead.Status is LeadStatuses.PendingParent or LeadStatuses.Cancelled or LeadStatuses.Expired)
-            throw new LeadRuleException("lead_not_open", 400, "Trung tâm chưa nhận yêu cầu này nên chưa nhắn tin được.");
+        // [UC-74] Chặn theo trạng thái trước khi tải ảnh lên
+        EnsureCanMessage(lead);
 
         var attachment = attachmentFactory is null ? null : await attachmentFactory(ct);
+
+        var inspection = LeadMessageContentFilter.Inspect(trimmedContent);
 
         var saved = await leads.AddLeadMessageAsync(new LeadMessage
         {
@@ -390,12 +415,130 @@ public class LeadService(
             AttachmentUrl = attachment?.Url,
             AttachmentPublicId = attachment?.PublicId,
             Status = "visible",
+            IsFlagged = inspection.IsFlagged,
+            FlagReason = inspection.FlagReason,
         }, leadToUpdate: null, ct);
 
         await AuditMessageSentAsync(user.Id, user.Role, lead, saved, ct);
 
         var dto = LeadMessageMapper.ToDto(saved, user.Role, user.FullName, sharedProfile: true, centerName);
+        // [Chat realtime] Trung tâm thấy tên theo quy tắc chia sẻ hồ sơ (UC-42), khác bản học sinh tự thấy
+        var centerView = LeadMessageMapper.ToDto(
+            saved, user.Role, user.FullName, lead.SharedFields.Contains(LeadSharedFields.Contact), centerName);
+        await PublishNewMessageAsync(lead, saved, LeadChatSides.Student, dto, centerView, centerName, ct);
         return new SendLeadMessageResultDto(dto, lead.Status);
+    }
+
+    // ===== [Chat realtime] =====
+
+    private const int NotificationPreviewLength = 120;
+
+    /// <summary>Người ở phía học sinh của lead: học sinh chủ lead và phụ huynh đã bấm gửi (nếu có).</summary>
+    private static IReadOnlyList<Guid> StudentSideUserIds(Lead lead)
+    {
+        var ids = new List<Guid> { lead.UserId };
+        if (lead.SubmittedByUserId is { } submitted && submitted != lead.UserId) ids.Add(submitted);
+        return ids;
+    }
+
+    /// <summary>
+    /// [Chat realtime] Người dùng được vào phòng chat của lead ở phía nào. Dùng đúng luật phân quyền của đọc tin nhắn
+    /// (học sinh / phụ huynh của lead hoặc trung tâm sở hữu lead), lead không có quyền báo "không tìm thấy".
+    /// </summary>
+    public async Task<LeadChatAccessDto> GetChatAccessAsync(
+        Guid userId,
+        string? userEmail,
+        string userRole,
+        Guid leadId,
+        CancellationToken ct = default)
+    {
+        if (userRole is UserRoles.Student or UserRoles.Parent)
+        {
+            var (_, lead, _) = await GetAuthorizedSentLeadAsync(userId, leadId, ct);
+            var center = await studyCenters.GetByIdAsync(lead.StudyCenterId, ct);
+            return new LeadChatAccessDto(LeadChatSides.Student, center?.OwnerUserId is { } owner ? [owner] : []);
+        }
+
+        if (userRole != UserRoles.Center)
+            throw new LeadRuleException("role_not_allowed", 403, "Chỉ học sinh, phụ huynh hoặc trung tâm tham gia được cuộc trò chuyện này.");
+
+        var (centerLead, _) = await GetAuthorizedLeadForCenterAsync(userId, userEmail, userRole, leadId, ct);
+        return new LeadChatAccessDto(LeadChatSides.Center, StudentSideUserIds(centerLead));
+    }
+
+    /// <summary>
+    /// [Chat realtime] Người đọc đã mở xem cuộc trò chuyện: đánh dấu đã xem các tin của phía đối diện và báo cho họ.
+    /// </summary>
+    public async Task MarkThreadReadAsync(
+        Guid userId,
+        string? userEmail,
+        string userRole,
+        Guid leadId,
+        CancellationToken ct = default)
+    {
+        var access = await GetChatAccessAsync(userId, userEmail, userRole, leadId, ct);
+        var readAt = DateTime.UtcNow;
+        var ids = await leads.MarkMessagesReadAsync(leadId, access.Side == LeadChatSides.Center, readAt, ct);
+        if (ids.Count == 0 || chat is null) return;
+
+        // Tin vừa được xem là tin của phía đối diện với người đọc, nên báo cho đúng phía đó
+        await chat.MessagesReadAsync(leadId, LeadChatSides.Opposite(access.Side), ids, readAt, ct);
+    }
+
+    /// <summary>
+    /// [Chat realtime] Đẩy tin mới tới hai phía, rồi báo người nhận (chuông thông báo + toast) trừ khi họ đang mở đúng
+    /// cuộc trò chuyện này. Lỗi ở đây không được làm hỏng việc gửi tin: tin đã lưu, bên kia vẫn lấy được bằng REST.
+    /// </summary>
+    private async Task PublishNewMessageAsync(
+        Lead lead,
+        LeadMessage saved,
+        string senderSide,
+        LeadMessageDto studentView,
+        LeadMessageDto centerView,
+        string centerName,
+        CancellationToken ct)
+    {
+        try
+        {
+            if (chat is not null)
+                await chat.NewMessageAsync(lead.Id, studentView, centerView, ct);
+
+            IReadOnlyList<Guid> recipients;
+            string title;
+            string link;
+            if (senderSide == LeadChatSides.Student)
+            {
+                var center = await studyCenters.GetByIdAsync(lead.StudyCenterId, ct);
+                recipients = center?.OwnerUserId is { } owner ? [owner] : [];
+                title = $"Tin nhắn mới từ {centerView.SenderName}";
+                link = "/center/leads";
+            }
+            else
+            {
+                recipients = StudentSideUserIds(lead);
+                title = $"Tin nhắn mới từ {centerName}";
+                link = "/account#sent-leads";
+            }
+
+            var body = string.IsNullOrWhiteSpace(saved.Content)
+                ? "Đã gửi một ảnh."
+                : saved.Content.Length > NotificationPreviewLength
+                    ? saved.Content[..NotificationPreviewLength] + "…"
+                    : saved.Content;
+
+            foreach (var recipient in recipients)
+            {
+                if (presence?.IsViewing(recipient, lead.Id) == true) continue;
+
+                // NotifyAsync lưu thông báo rồi tự đẩy realtime tới trình duyệt người nhận
+                if (notifications is not null)
+                    await notifications.NotifyAsync(recipient, "lead_message_new", title, body, link, ct);
+            }
+        }
+        catch (Exception)
+        {
+            // Cố ý nuốt lỗi: realtime và thông báo chỉ là phần thêm, không được làm thất bại việc gửi tin đã lưu
+        }
     }
 
     private static string ValidateMessageContent(string? content, bool allowEmpty)
@@ -491,7 +634,17 @@ public class LeadService(
         // [UC-110 / UC-73] Báo người gửi (và học sinh nếu phụ huynh gửi thay) khi trạng thái thật sự thay đổi
         if (notifications is not null && !string.Equals(previousStatus, normalizedStatus, StringComparison.OrdinalIgnoreCase))
         {
-            var label = normalizedStatus switch { "contacted" => "Đang trao đổi", "closed" => "Đã hoàn tất", _ => "Mới" };
+            // Cùng cách gọi với màn hình của người gửi (types/lead.ts); "Mới" đứng một mình khó hiểu nên nói rõ là đang chờ trung tâm
+            // "accepted" cũng là trạng thái khi trung tâm bấm "Mở lại trao đổi" sau khi đã đóng: lúc đó không phải vừa được chấp nhận
+            var reopened = string.Equals(previousStatus, LeadStatuses.Closed, StringComparison.OrdinalIgnoreCase);
+            var label = normalizedStatus switch
+            {
+                "accepted" when reopened => "Trung tâm đã mở lại trao đổi",
+                "accepted" => "Đã được trung tâm chấp nhận",
+                "contacted" => "Đang trao đổi",
+                "closed" => "Đã hoàn tất",
+                _ => "Chờ trung tâm phản hồi",
+            };
             foreach (var recipient in new[] { lead.SubmittedByUserId, (Guid?)lead.UserId }.OfType<Guid>().Distinct())
                 await notifications.NotifyAsync(recipient, NotificationTypes.LeadStatusChanged, "Yêu cầu liên hệ đổi trạng thái",
                     $"Yêu cầu liên hệ của bạn chuyển sang: {label}.", "/account", ct);
@@ -608,9 +761,13 @@ public class LeadService(
         var trimmedContent = ValidateMessageContent(content, allowEmpty: attachmentFactory is not null);
 
         var (lead, centerName) = await GetAuthorizedLeadForCenterAsync(userId, userEmail, userRole, leadId, ct);
-        EnsureNotWithdrawn(lead);
+        // [UC-74] Chỉ nhắn khi đã chấp nhận (UC-73); chặn trước khi tải ảnh lên
+        EnsureCanMessage(lead);
 
         var attachment = attachmentFactory is null ? null : await attachmentFactory(ct);
+
+        // [UC-74 / Phòng chống lừa đảo] Kiểm tra và gắn cờ nếu tin nhắn chứa STK ngân hàng, SĐT hoặc chào mời giao dịch ngoài
+        var inspection = LeadMessageContentFilter.Inspect(trimmedContent);
 
         var entity = new LeadMessage
         {
@@ -621,17 +778,12 @@ public class LeadService(
             AttachmentPublicId = attachment?.PublicId,
             Status = "visible",
             RemovedByUserId = null,
+            IsFlagged = inspection.IsFlagged,
+            FlagReason = inspection.FlagReason,
         };
 
-        Lead? leadToUpdate = null;
-        if (string.Equals(lead.Status, "new", StringComparison.OrdinalIgnoreCase))
-        {
-            lead.Status = "contacted";
-            lead.UpdatedAt = DateTime.UtcNow;
-            leadToUpdate = lead;
-        }
-
-        var saved = await leads.AddLeadMessageAsync(entity, leadToUpdate, ct);
+        // [UC-74] Không tự chuyển trạng thái nữa: chấp nhận yêu cầu là thao tác riêng ở UC-73
+        var saved = await leads.AddLeadMessageAsync(entity, leadToUpdate: null, ct);
 
         await AuditMessageSentAsync(userId, userRole, lead, saved, ct);
 
@@ -642,6 +794,8 @@ public class LeadService(
             sharedProfile: lead.SharedFields.Contains(LeadSharedFields.Contact),
             centerName: centerName);
 
+        // [Chat realtime] Tin của trung tâm hiện giống nhau ở hai phía (tên là tên trung tâm)
+        await PublishNewMessageAsync(lead, saved, LeadChatSides.Center, dto, dto, centerName, ct);
         return new SendLeadMessageResultDto(dto, lead.Status);
     }
 

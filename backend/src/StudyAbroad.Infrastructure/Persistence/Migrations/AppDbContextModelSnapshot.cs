@@ -1888,6 +1888,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("lead_id");
 
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("read_at");
+
                     b.Property<Guid?>("RemovedByUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("removed_by_user_id");

@@ -72,6 +72,12 @@ public interface ILeadRepository
 
     Task SaveLeadMessageAsync(LeadMessage message, CancellationToken ct = default);
 
+    /// <summary>
+    /// [Chat realtime] Đánh dấu đã xem các tin còn hiện của phía đối diện trong lead. readerIsCenterSide = true thì người đọc là
+    /// trung tâm (đánh dấu tin của học sinh / phụ huynh), ngược lại là tin của trung tâm. Trả về mã các tin vừa đánh dấu.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> MarkMessagesReadAsync(Guid leadId, bool readerIsCenterSide, DateTime readAt, CancellationToken ct = default);
+
     /// <summary>[UC-58] Hàng đợi báo cáo cho Admin, mới báo trước. filter: "pending" (chưa xử lý), "resolved" (đã gỡ, cảnh cáo hoặc khóa) hoặc "all".</summary>
     Task<PagedResult<AdminLeadMessageReportDto>> GetReportedMessagesAsync(
         string filter,
