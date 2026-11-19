@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.core.config import Settings, get_settings
 from app.main import create_app
 from app.schemas.slm import INTENTS
 from app.services.centers import CenterFinder
@@ -8,10 +9,43 @@ from app.services.ollama import OllamaClient
 from app.services.slm_classifier import OllamaSlm
 
 
+def test_default_slm_model_is_v5(monkeypatch):
+    monkeypatch.delenv("SLM_MODEL", raising=False)
+    assert Settings(_env_file=None).slm_model == "usas-slm-v5"
+
+
 def test_startup_creates_llm_client():
     # Có "with" thì TestClient mới chạy lifespan (không gọi Ollama, chỉ tạo client)
     with TestClient(create_app()) as client:
         assert isinstance(client.app.state.llm, OllamaClient)
+
+
+def test_startup_attaches_bearer_headers_for_slm_and_vision(monkeypatch):
+    monkeypatch.setenv("SLM_API_KEY", "slm-secret")
+    monkeypatch.setenv("VISION_API_KEY", "vision-secret")
+    get_settings.cache_clear()
+    try:
+        with TestClient(create_app()) as client:
+            slm_headers = client.app.state.chat_flow._slm._slm._http.headers
+            vision_headers = client.app.state.transcript_reader._http.headers
+            assert slm_headers.get("authorization") == "Bearer slm-secret"
+            assert vision_headers.get("authorization") == "Bearer vision-secret"
+    finally:
+        get_settings.cache_clear()
+
+
+def test_startup_omits_bearer_headers_when_keys_are_empty(monkeypatch):
+    monkeypatch.delenv("SLM_API_KEY", raising=False)
+    monkeypatch.delenv("VISION_API_KEY", raising=False)
+    get_settings.cache_clear()
+    try:
+        with TestClient(create_app()) as client:
+            slm_headers = client.app.state.chat_flow._slm._slm._http.headers
+            vision_headers = client.app.state.transcript_reader._http.headers
+            assert "authorization" not in slm_headers
+            assert "authorization" not in vision_headers
+    finally:
+        get_settings.cache_clear()
 
 
 def test_startup_builds_the_chat_flow_from_the_slm_and_the_branches(monkeypatch):
