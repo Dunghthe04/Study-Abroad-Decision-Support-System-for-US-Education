@@ -31,9 +31,6 @@ public interface ILeadChatNotifier
 
     /// <summary>Các tin vừa được xem. Gửi cho phía đã gửi những tin đó.</summary>
     Task MessagesReadAsync(Guid leadId, string senderSide, IReadOnlyList<Guid> messageIds, DateTime readAt, CancellationToken ct = default);
-
-    /// <summary>Báo trình duyệt của người dùng có thông báo mới (chuông và toast) mà không cần chờ làm mới định kỳ.</summary>
-    Task NotificationAsync(Guid userId, string title, string? body, string? linkUrl, CancellationToken ct = default);
 }
 
 /// <summary>

@@ -530,10 +530,9 @@ public class LeadService(
             {
                 if (presence?.IsViewing(recipient, lead.Id) == true) continue;
 
+                // NotifyAsync lưu thông báo rồi tự đẩy realtime tới trình duyệt người nhận
                 if (notifications is not null)
                     await notifications.NotifyAsync(recipient, "lead_message_new", title, body, link, ct);
-                if (chat is not null)
-                    await chat.NotificationAsync(recipient, title, body, link, ct);
             }
         }
         catch (Exception)

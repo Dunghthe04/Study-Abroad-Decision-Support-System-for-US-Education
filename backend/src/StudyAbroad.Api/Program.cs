@@ -182,6 +182,7 @@ builder.Services.AddSingleton<StudyAbroad.Api.Realtime.ChatPresenceTracker>();
 builder.Services.AddSingleton<StudyAbroad.Application.Leads.ILeadChatPresence>(
     sp => sp.GetRequiredService<StudyAbroad.Api.Realtime.ChatPresenceTracker>());
 builder.Services.AddSingleton<StudyAbroad.Application.Leads.ILeadChatNotifier, StudyAbroad.Api.Realtime.SignalRLeadChatNotifier>();
+builder.Services.AddSingleton<StudyAbroad.Application.Notifications.INotificationPusher, StudyAbroad.Api.Realtime.SignalRNotificationPusher>();
 
 builder.Services.AddHealthChecks()
     .AddNpgSql(builder.Configuration.GetConnectionString("Default")!, name: "postgres", tags: ["ready"]);

@@ -15,7 +15,4 @@ public sealed class SignalRLeadChatNotifier(IHubContext<LeadChatHub> hub) : ILea
     public Task MessagesReadAsync(Guid leadId, string senderSide, IReadOnlyList<Guid> messageIds, DateTime readAt, CancellationToken ct = default) =>
         hub.Clients.Group(LeadChatHub.RoomGroup(leadId, senderSide))
             .SendAsync("messagesRead", new { leadId, messageIds, readAt }, ct);
-
-    public Task NotificationAsync(Guid userId, string title, string? body, string? linkUrl, CancellationToken ct = default) =>
-        hub.Clients.Group(LeadChatHub.UserGroup(userId)).SendAsync("notification", new { title, body, linkUrl }, ct);
 }
