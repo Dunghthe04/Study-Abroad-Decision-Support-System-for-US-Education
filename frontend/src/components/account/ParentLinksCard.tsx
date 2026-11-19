@@ -1,13 +1,16 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { CheckIcon, HourglassIcon, MailIcon, UsersIcon, XIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { parentLinksApi, ApiError } from "@/lib/api";
 import type { ParentLinkDto } from "@/types/api";
+import { parentChildrenApi } from "@/lib/parent-children-api";
+import { useFetched } from "@/lib/use-fetched";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -32,6 +35,11 @@ export function ParentLinksCard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [newParentEmail, setNewParentEmail] = useState("");
   const [revokeTarget, setRevokeTarget] = useState<ParentLinkDto | null>(null);
+  // UC-76: nút So sánh ưu tiên chỉ cho con có tài khoản thật (getMine có thể trả cả con managed)
+  const { data: children } = useFetched(isStudent ? "no-children" : "parent-children", () =>
+    isStudent ? Promise.resolve([]) : parentChildrenApi.listChildren(),
+  );
+  const realChildIds = new Set((children ?? []).filter((c) => !c.isManaged).map((c) => c.studentUserId));
 
   const load = useCallback(
     () =>
@@ -164,6 +172,14 @@ export function ParentLinksCard() {
                           {busy === "resend" ? <Spinner data-icon="inline-start" /> : <MailIcon aria-hidden />}
                           Gửi lại
                         </Button>
+                      )}
+                      {!isStudent && link.status === "active" && realChildIds.has(link.studentUserId) && (
+                        <Link
+                          href={`/parent/children/${encodeURIComponent(link.studentUserId)}?tab=preference`}
+                          className={buttonVariants({ variant: "outline", size: "sm" })}
+                        >
+                          So sánh ưu tiên
+                        </Link>
                       )}
                       {link.canRevoke && (
                         <Button

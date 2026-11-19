@@ -10,6 +10,7 @@ import { RecommendationHistory, RunGroups } from "@/components/recommendation/Re
 import { scenarioOverrides, snapshotText, useSavedScenarios } from "@/components/recommendation/SavedScenarios";
 import { ActAsChildButton, AddManagedChildButton } from "@/components/parent/ManagedChildActions";
 import { SuggestTargetSchool } from "@/components/parent/SuggestTargetSchool";
+import { ParentPreferencePanel } from "@/components/parent/ParentPreferencePanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -146,6 +147,7 @@ export function ChildDashboard({ studentId, initialTab = "overview" }: { student
           <TabsTrigger value="recommend">Trường gợi ý</TabsTrigger>
           <TabsTrigger value="targets">Trường mục tiêu</TabsTrigger>
           <TabsTrigger value="history">Lịch sử và kịch bản</TabsTrigger>
+          {!child.isManaged && <TabsTrigger value="preference">So sánh ưu tiên</TabsTrigger>}
         </TabsList>
         <TabsContent value="overview">
           <AcademicSummaryCard profile={child.profile} isLoading={false} readOnly title={`Hồ sơ của ${child.studentName}`} />
@@ -160,6 +162,11 @@ export function ChildDashboard({ studentId, initialTab = "overview" }: { student
           <RecommendationHistory studentId={studentId} />
           <ScenarioList studentId={studentId} />
         </TabsContent>
+        {!child.isManaged && (
+          <TabsContent value="preference">
+            <ParentPreferencePanel studentId={studentId} />
+          </TabsContent>
+        )}
       </Tabs>
     </Page>
   );
