@@ -725,7 +725,7 @@ class TranscriptReader:
     async def _get_available_ollama_models(self) -> list[str]:
         """Lấy danh sách các mô hình hiện có trong Ollama."""
         try:
-            resp = await self._http.get("/api/tags", timeout=5.0)
+            resp = await self._http.get("/api/tags", timeout=15.0)
             if resp.status_code == 200:
                 return [m.get("name", "") for m in resp.json().get("models", [])]
         except Exception as ex:
