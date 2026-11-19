@@ -400,32 +400,30 @@ public class ParentPreferenceServiceTests
         Assert.Equal("C", d.ParentItems!.Value.GetProperty("match")[1].GetProperty("code").GetString());
     }
 
-    // 26: ngân sách và nhu cầu học bổng của con đọc từ criteria_json; thiếu, sai kiểu hoặc hỏng thì null
-    [Theory]
-    [InlineData("""{"budget":45000,"scholarshipNeed":"preferred"}""", 45000.0, "preferred")]
-    [InlineData("""{"budget":null,"scholarshipNeed":"optional"}""", null, "optional")]
-    [InlineData("""{"pref":[1,3,2]}""", null, null)]
-    [InlineData("""{"budget":"abc"}""", null, null)]
-    [InlineData("không phải json", null, null)]
-    [InlineData(null, null, null)]
-    public void StudentBudget_ReadsCriteria(string? criteria, double? budget, string? need)
-    {
-        var (b, n) = ParentPreferenceService.StudentBudget(criteria);
-        Assert.Equal(budget is null ? null : (decimal)budget.Value, b);
-        Assert.Equal(need, n);
-    }
-
-    // 27: màn so sánh trả kèm ngân sách của con trong lần gợi ý để đặt cạnh ngân sách cha mẹ
+    // 26: kết quả lưu theo luật lọc cũ (trước khi bỏ mức dư 10% cho ngân sách cha mẹ, chưa có Rule) thì tính lại và ghi Rule mới
     [Fact]
-    public async Task Compare_ReturnsStudentBudget()
+    public async Task Compare_OldRule_RecomputesAndSaves()
     {
         Setup();
         ChildRun();
-        _runner.Latest!.CriteriaJson = """{"pref":[1,3,2],"budget":60000,"scholarshipNeed":"mandatory"}""";
-        var d = (await CreateService().CompareForParentAsync(_parent, _child, [4, 0, 2], null, CancellationToken.None)).Value!;
+        await CreateService().SaveAsync(_parent, _child, Pref, 1_300_000_000, CancellationToken.None);
+        Assert.Equal(ParentPreferenceService.CurrentRule, StoredRow().Rule);
 
-        Assert.Equal(60000m, d.StudentBudgetUsd);
-        Assert.Equal("mandatory", d.StudentScholarshipNeed);
+        var link = Assert.Single(_links.Links);
+        var old = System.Text.Json.Nodes.JsonNode.Parse(link.ParentPreferenceJson!)!.AsObject();
+        old.Remove("rule");   // bản lưu trước khi có Rule
+        link.ParentPreferenceJson = old.ToJsonString();
+        Assert.Equal(0, StoredRow().Rule);
+        var calls = _runner.SimulateCalls;
+
+        await CreateService().CompareForParentAsync(_parent, _child, null, null, CancellationToken.None);
+
+        Assert.Equal(calls + 1, _runner.SimulateCalls);
+        Assert.Equal(0m, _runner.LastOverrides!.BudgetTolerance);
+        Assert.Equal(ParentPreferenceService.CurrentRule, StoredRow().Rule);
+
+        await CreateService().CompareForParentAsync(_parent, _child, null, null, CancellationToken.None);
+        Assert.Equal(calls + 1, _runner.SimulateCalls);   // đã đúng luật: không tính lại nữa
     }
 
     internal sealed class FakeProfiles : IAcademicProfileRepository

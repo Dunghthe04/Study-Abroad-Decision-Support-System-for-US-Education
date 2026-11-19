@@ -57,6 +57,7 @@ public class ParentPreferenceRefresherTests
         Assert.Equal("NEW", s.Result!.Value.GetProperty("reach")[0].GetProperty("code").GetString());
         Assert.Equal(_recId, s.BasedOnRecommendationId);
         Assert.False(s.Stale);
+        Assert.Equal(ParentPreferenceService.CurrentRule, s.Rule);   // tính theo luật lọc hiện tại
         Assert.Equal(Pref, s.Pref);                    // ý cha mẹ giữ nguyên
         Assert.Equal(1_300_000_000, s.BudgetVnd);
         Assert.Equal(26_000m, s.VndPerUsd);            // tỷ giá đã chốt, không đổi

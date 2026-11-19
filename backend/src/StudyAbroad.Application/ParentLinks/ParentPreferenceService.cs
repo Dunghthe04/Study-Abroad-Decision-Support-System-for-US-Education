@@ -19,16 +19,13 @@ public record ParentPreferenceDto(
 // IsPreview: danh sách cha mẹ vừa tính từ giá trị chưa lưu (kéo thanh, hoặc cha mẹ chưa lưu lần nào → [2,2,2]).
 // ProfileChangedAfterRun: con sửa hồ sơ sau lần nhận gợi ý mới nhất, hai bên có thể lệch vì hồ sơ chứ không vì ưu tiên.
 // StudentItems / ParentItems: hai danh sách cùng khuôn ItemsJson, chỉ giữ số liệu các trường được xếp nhóm, để frontend vẽ thẻ trường như trang Gợi ý.
-// StudentBudgetUsd / StudentScholarshipNeed: ngân sách và nhu cầu học bổng của con trong lần gợi ý đó (criteria_json),
-// để con thấy ngân sách cha mẹ nhập đặt cạnh ngân sách của mình mà hiểu vì sao hai danh sách khác nhau.
 public record PreferenceCompareDto(
     bool StudentHasRun, IReadOnlyList<int>? StudentPref, IReadOnlyList<int> ParentPref,
     long? ParentBudgetVnd, decimal? ParentBudgetUsd, decimal? VndPerUsd,
     bool ParentHasPref, bool IsPreview, bool ProfileChangedAfterRun,
     DateTime? StudentRunAt, DateTime? SavedAt, DateTime? ComputedAt,
     PreferenceComparison? Comparison, string? Message,
-    JsonElement? StudentItems = null, JsonElement? ParentItems = null,
-    decimal? StudentBudgetUsd = null, string? StudentScholarshipNeed = null);
+    JsonElement? StudentItems = null, JsonElement? ParentItems = null);
 
 // Trang của con: các cha/mẹ liên kết thật (ô chọn Bố / Mẹ) và so sánh của người đang chọn
 public record ParentOption(Guid Id, string Name, bool HasPref);
@@ -55,9 +52,13 @@ public class ParentPreferenceService(
 
     // Cách lưu trong cột jsonb. Result: ItemsJson của SimulateAsync, cùng khuôn danh sách của con.
     // BasedOnRecommendationId: lần gợi ý của con mà Result được tính theo. Stale: lần tính gần nhất bị lỗi, trang so sánh sẽ tính bù.
+    // Rule: phiên bản luật lọc lúc tính Result. Khác CurrentRule (bản lưu trước khi đổi luật thì thiếu, đọc ra 0) thì tính lại.
     public record Stored(
         IReadOnlyList<int> Pref, long? BudgetVnd, decimal? VndPerUsd, decimal? BudgetUsd, DateTime UpdatedAt,
-        JsonElement? Result, Guid? BasedOnRecommendationId, DateTime? ComputedAt, bool Stale);
+        JsonElement? Result, Guid? BasedOnRecommendationId, DateTime? ComputedAt, bool Stale, int Rule = 0);
+
+    // 2: ngân sách cha mẹ không có mức dư 10%, vượt là sang khối cần học bổng (UC-76 2j-1)
+    public const int CurrentRule = 2;
 
     public async Task<ParentLinkResult<ParentPreferenceDto?>> GetAsync(Guid parentId, Guid childId, CancellationToken ct)
     {
@@ -105,7 +106,7 @@ public class ParentPreferenceService(
             }
         }
 
-        var stored = new Stored(pref.ToArray(), budgetVnd, vndPerUsd, budgetUsd, now, result, basedOn, computedAt, stale);
+        var stored = new Stored(pref.ToArray(), budgetVnd, vndPerUsd, budgetUsd, now, result, basedOn, computedAt, stale, CurrentRule);
         link.ParentPreferenceJson = JsonSerializer.Serialize(stored, WebJson);
         try
         {
@@ -215,7 +216,7 @@ public class ParentPreferenceService(
         return ParentLinkResult<PreferenceCompareDto>.Ok(dto);
     }
 
-    // Ý đã lưu: đọc danh sách đã tính sẵn. Chỉ tính bù (rồi lưu) khi chưa có, bị đánh dấu stale, hoặc theo lần gợi ý cũ của con.
+    // Ý đã lưu: đọc danh sách đã tính sẵn. Chỉ tính bù (rồi lưu) khi chưa có, bị đánh dấu stale, theo lần gợi ý cũ của con, hoặc theo luật lọc cũ.
     private async Task<ParentLinkResult<PreferenceCompareDto>> CompareSavedAsync(
         ParentStudentLink link, Guid childId, Stored stored, CancellationToken ct)
     {
@@ -225,12 +226,12 @@ public class ParentPreferenceService(
                 NotRun(stored.Pref, stored.BudgetVnd, stored.BudgetUsd, stored.VndPerUsd, true, false, stored.UpdatedAt));
 
         var current = stored;
-        if (stored.Result is null || stored.Stale || stored.BasedOnRecommendationId != latest.Id)
+        if (stored.Result is null || stored.Stale || stored.BasedOnRecommendationId != latest.Id || stored.Rule != CurrentRule)
         {
             try
             {
                 var items = await SimulateAsync(childId, stored.Pref, stored.BudgetUsd, ct);
-                current = stored with { Result = items, BasedOnRecommendationId = latest.Id, ComputedAt = DateTime.UtcNow, Stale = false };
+                current = stored with { Result = items, BasedOnRecommendationId = latest.Id, ComputedAt = DateTime.UtcNow, Stale = false, Rule = CurrentRule };
             }
             catch (InvalidOperationException ex)
             {
@@ -291,29 +292,9 @@ public class ParentPreferenceService(
         var changed = profile?.UpdatedAt is { } u && u > latest.CreatedAt;
 
         var comparison = PreferenceComparer.Compare(studentItems, parentItems, studentPref, parentPref, budgetUsd);
-        var (studentBudget, studentNeed) = StudentBudget(latest.CriteriaJson);
         return new PreferenceCompareDto(true, studentPref, parentPref, budgetVnd, budgetUsd, vndPerUsd,
             parentHasPref, isPreview, changed, latest.CreatedAt, savedAt, computedAt, comparison, null,
-            Picked(studentItems), Picked(parentItems), studentBudget, studentNeed);
-    }
-
-    /// <summary>Ngân sách (USD/năm) và nhu cầu học bổng của con lưu trong criteria_json của lần gợi ý. Thiếu hoặc hỏng: null. public để test đọc.</summary>
-    public static (decimal? BudgetUsd, string? ScholarshipNeed) StudentBudget(string? criteriaJson)
-    {
-        try
-        {
-            if (criteriaJson is not null && JsonNode.Parse(criteriaJson) is JsonObject o)
-            {
-                decimal? budget = o["budget"] is JsonValue b && b.TryGetValue<decimal>(out var d) ? d : null;
-                string? need = o["scholarshipNeed"] is JsonValue n && n.TryGetValue<string>(out var t) ? t : null;
-                return (budget, need);
-            }
-        }
-        catch (JsonException)
-        {
-            // criteria hỏng: coi như không biết
-        }
-        return (null, null);
+            Picked(studentItems), Picked(parentItems));
     }
 
     private static readonly string[] Blocks = ["reach", "match", "safety", "aid", "other"];

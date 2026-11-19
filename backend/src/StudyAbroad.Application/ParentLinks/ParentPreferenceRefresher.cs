@@ -45,6 +45,7 @@ public class ParentPreferenceRefresher(
                         BasedOnRecommendationId = recommendationId,
                         ComputedAt = DateTime.UtcNow,
                         Stale = false,
+                        Rule = ParentPreferenceService.CurrentRule,
                     };
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
