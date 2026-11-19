@@ -155,7 +155,7 @@ public class PreferenceComparerTests
 
         var r = PreferenceComparer.Compare(student, parent, [0, 2, 2], [4, 2, 3], null);
 
-        Assert.Equal("Tổng chi phí 30.000 USD/năm, rẻ hơn, trong ngân sách", Of(r, "B").Reason);
+        Assert.Equal("Tổng chi phí 30.000 USD/năm, rẻ hơn các trường cùng nhóm", Of(r, "B").Reason);   // không có ngân sách để so
         Assert.Equal("Tổng chi phí 55.000 USD/năm, vượt ngân sách 50.000 USD", Of(r, "A").Reason);
     }
 
@@ -197,5 +197,41 @@ public class PreferenceComparerTests
         Assert.Empty(r.Schools);
         Assert.True(r.SameResult);
         Assert.Equal(0, r.Kept);
+    }
+
+    // 12: trường rẻ hơn cùng nhóm nhưng vẫn vượt ngân sách cha mẹ (nằm trong mức dư 10%) → không được nói "trong ngân sách"
+    [Fact]
+    public void Reason_CheaperButOverParentBudget_SaysStillOver()
+    {
+        var student = Items(new() { ["reach"] = ["A", "B"] },
+            S("A", cost: 90_000, f: 0.0), S("B", cost: 82_678, f: 0.4));
+        var parent = Items(new() { ["reach"] = ["B", "A"] },
+            S("A", cost: 90_000, f: 0.0), S("B", cost: 82_678, f: 0.4, gap: 4_869));
+
+        var r = PreferenceComparer.Compare(student, parent, [0, 2, 2], [4, 2, 2], 77_809m);
+
+        Assert.Equal("Tổng chi phí 82.678 USD/năm, rẻ hơn các trường cùng nhóm nhưng vẫn vượt ngân sách cha mẹ 4.869 USD",
+            Of(r, "B").Reason);
+    }
+
+    // 13: rẻ hơn và không vượt ngân sách cha mẹ → "trong ngân sách cha mẹ"; không có ngân sách cha mẹ thì dựa vào gap của trường
+    [Fact]
+    public void Reason_CheaperWithinParentBudget_OrByGap()
+    {
+        var student = Items(new() { ["match"] = ["A", "B"] },
+            S("A", cost: 60_000, f: 0.0), S("B", cost: 40_000, f: 0.4, gap: 0));
+        var parent = Items(new() { ["match"] = ["B", "A"] },
+            S("A", cost: 60_000, f: 0.0), S("B", cost: 40_000, f: 0.4, gap: 0));
+
+        var withBudget = PreferenceComparer.Compare(student, parent, [0, 2, 2], [4, 2, 2], 50_000m);
+        Assert.Equal("Tổng chi phí 40.000 USD/năm, rẻ hơn các trường cùng nhóm, trong ngân sách cha mẹ", Of(withBudget, "B").Reason);
+
+        var noBudget = PreferenceComparer.Compare(student, parent, [0, 2, 2], [4, 2, 2], null);
+        Assert.Equal("Tổng chi phí 40.000 USD/năm, rẻ hơn các trường cùng nhóm, trong ngân sách", Of(noBudget, "B").Reason);
+
+        var overByGap = Items(new() { ["match"] = ["B", "A"] },
+            S("A", cost: 60_000, f: 0.0), S("B", cost: 40_000, f: 0.4, gap: 2_000));
+        var r = PreferenceComparer.Compare(student, overByGap, [0, 2, 2], [4, 2, 2], null);
+        Assert.Equal("Tổng chi phí 40.000 USD/năm, rẻ hơn các trường cùng nhóm nhưng vẫn vượt ngân sách 2.000 USD", Of(r, "B").Reason);
     }
 }

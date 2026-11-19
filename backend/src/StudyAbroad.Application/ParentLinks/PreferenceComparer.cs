@@ -203,7 +203,19 @@ public static class PreferenceComparer
     {
         if (Num(entry, "cost") is not double cost) return cheaper ? "Rẻ hơn các trường cùng nhóm" : "Đắt hơn các trường cùng nhóm";
         var total = $"Tổng chi phí {Money((decimal)cost)} USD/năm";
-        if (cheaper) return $"{total}, rẻ hơn, trong ngân sách";
+        if (cheaper)
+        {
+            // "Trong ngân sách" chỉ khi chi phí không vượt ngân sách; rẻ hơn các trường cùng nhóm chưa chắc đã đủ tiền
+            if (parentBudgetUsd is decimal b)
+                return (decimal)cost <= b
+                    ? $"{total}, rẻ hơn các trường cùng nhóm, trong ngân sách cha mẹ"
+                    : $"{total}, rẻ hơn các trường cùng nhóm nhưng vẫn vượt ngân sách cha mẹ {Money((decimal)cost - b)} USD";
+            if (Num(entry, "gap") is double g)
+                return g > 0
+                    ? $"{total}, rẻ hơn các trường cùng nhóm nhưng vẫn vượt ngân sách {Money((decimal)g)} USD"
+                    : $"{total}, rẻ hơn các trường cùng nhóm, trong ngân sách";
+            return $"{total}, rẻ hơn các trường cùng nhóm";
+        }
         if (BudgetReason(entry, parentBudgetUsd) is { } over) return over;
         if (Num(entry, "gap") is double gap && gap > 0) return $"{total}, vượt ngân sách {Money((decimal)(cost - gap))} USD";
         return $"{total}, đắt hơn các trường cùng nhóm";
