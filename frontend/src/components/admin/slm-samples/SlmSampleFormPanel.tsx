@@ -42,8 +42,6 @@ interface FormState {
   sampleType: SlmSampleType;
   split: SlmSplit;
   question: string;
-  answer: string;
-  topic: string;
   source: string;
   pendingQuestion: string;
   sourceReview: string;
@@ -52,7 +50,7 @@ interface FormState {
   context: string;
 }
 
-type FieldKey = "question" | "answer" | "intents" | "profile" | "context";
+type FieldKey = "question" | "intents" | "profile" | "context";
 type FieldErrors = Partial<Record<FieldKey, string>>;
 type EditingTable = "info" | "labels";
 
@@ -62,8 +60,6 @@ function toForm(sample: SlmSample | null): FormState {
       sampleType: "knowledge",
       split: "train",
       question: "",
-      answer: "",
-      topic: "",
       source: "",
       pendingQuestion: "",
       sourceReview: "",
@@ -76,8 +72,6 @@ function toForm(sample: SlmSample | null): FormState {
     sampleType: sample.sampleType,
     split: sample.split,
     question: sample.question,
-    answer: sample.answer ?? "",
-    topic: sample.topic ?? "",
     source: sample.source,
     pendingQuestion: sample.pendingQuestion ?? "",
     sourceReview: sample.sourceReview ?? "",
@@ -93,8 +87,6 @@ function toPayload(form: FormState, submit: boolean): SaveSlmSampleRequest {
     sampleType: form.sampleType,
     split: form.split,
     question: form.question.trim(),
-    answer: orNull(form.answer),
-    topic: orNull(form.topic),
     source: orNull(form.source),
     submit,
     pendingQuestion: orNull(form.pendingQuestion),
@@ -110,7 +102,7 @@ function validate(form: FormState, submit: boolean): FieldErrors {
   if (form.question.trim() === "") errors.question = "Vui lòng nhập câu hỏi.";
   const intentsProblem = jsonArrayProblem(form.intents);
   if (intentsProblem) errors.intents = intentsProblem;
-  else if (submit && !isReady(form.answer, form.intents)) errors.answer = "Cần nhập câu trả lời (hoặc ý định) trước khi gửi duyệt.";
+  else if (submit && !isReady(form.intents)) errors.intents = "Cần nhập ý định trước khi gửi duyệt.";
   const profileProblem = optionalJsonProblem(form.profile);
   if (profileProblem) errors.profile = profileProblem;
   const contextProblem = optionalJsonProblem(form.context);
@@ -240,19 +232,6 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
       ),
     },
     {
-      label: "Câu trả lời",
-      inputId: "slm-answer",
-      error: errors.answer,
-      value: (
-        <Textarea id="slm-answer" rows={5} value={form.answer} disabled={inputsOff} aria-invalid={errors.answer ? true : undefined} placeholder="Nhập câu trả lời cho câu hỏi" onChange={(event) => patch({ answer: event.target.value })} />
-      ),
-    },
-    {
-      label: "Chủ đề",
-      inputId: "slm-topic",
-      value: <Input id="slm-topic" value={form.topic} maxLength={128} disabled={inputsOff} onChange={(event) => patch({ topic: event.target.value })} />,
-    },
-    {
       label: "Nguồn",
       inputId: "slm-source-text",
       value: (
@@ -304,7 +283,7 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
 
   if (isCreate) {
     return (
-      <DetailPanel title="Thêm mẫu mới" description="Lưu nháp để sửa tiếp sau, hoặc gửi duyệt khi đã có câu trả lời." onClose={onClose} closeDisabled={saving}>
+      <DetailPanel title="Thêm mẫu mới" description="Lưu nháp để sửa tiếp sau, hoặc gửi duyệt khi đã có ý định." onClose={onClose} closeDisabled={saving}>
         <form onSubmit={(event) => event.preventDefault()} className="space-y-5">
           {submitError && <Alert variant="destructive"><AlertDescription>{submitError}</AlertDescription></Alert>}
           <TableFrame title="Thông tin mẫu">
@@ -346,8 +325,6 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
     { label: "Loại mẫu", value: sampleTypeLabel(sample.sampleType) },
     { label: "Tập dữ liệu", value: sample.split },
     { label: "Câu hỏi", value: pre(sample.question) },
-    { label: "Câu trả lời", value: pre(sample.answer) },
-    { label: "Chủ đề", value: sample.topic ?? "—" },
     { label: "Nguồn", value: SOURCE_LABELS[sample.source] ?? sample.source },
     { label: "Câu hệ thống đã hỏi", value: sample.pendingQuestion ?? "—" },
     { label: "Nhãn rà soát", value: sample.sourceReview ?? "—" },
@@ -371,7 +348,7 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
 
   const touchedByMe = detail.data?.history.some((item) => item.actorUserId === currentUserId && (item.action === "create" || item.action === "edit" || item.action === "submit"));
   const canReview = sample.reviewStatus === "pending" && currentUserId !== undefined && sample.createdByUserId !== currentUserId && detail.data !== undefined && !touchedByMe;
-  const ready = isReady(sample.answer, sample.intents);
+  const ready = isReady(sample.intents);
   const busy = saving || editing !== null;
 
   return (
@@ -379,7 +356,7 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
       <div className="space-y-5">
         {isFromChat(sample) && sample.reviewStatus === "draft" && (
           <Alert>
-            <AlertDescription>Câu hỏi này lấy từ chat mà hệ thống chưa trả lời được. Hãy nhập câu trả lời rồi gửi duyệt, hoặc xóa nếu không phù hợp.</AlertDescription>
+            <AlertDescription>Câu hỏi này lấy từ chat mà hệ thống chưa trả lời được. Hãy gán ý định rồi gửi duyệt, hoặc xóa nếu không phù hợp.</AlertDescription>
           </Alert>
         )}
         {actionError && <Alert variant="destructive"><AlertDescription>{actionError}</AlertDescription></Alert>}
@@ -387,7 +364,7 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
 
         <div className="flex flex-wrap gap-2">
           {canSubmit(sample.reviewStatus) && (
-            <Button type="button" size="sm" disabled={busy || !ready} title={ready ? undefined : "Cần có câu trả lời hoặc ý định trước khi gửi duyệt"} onClick={() => void submitExisting()}>
+            <Button type="button" size="sm" disabled={busy || !ready} title={ready ? undefined : "Cần có ý định trước khi gửi duyệt"} onClick={() => void submitExisting()}>
               {saving ? <Spinner /> : <SendIcon />} Gửi duyệt
             </Button>
           )}
