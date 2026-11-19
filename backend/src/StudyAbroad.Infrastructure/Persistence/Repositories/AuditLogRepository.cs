@@ -61,16 +61,25 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
         var category = filter.Category?.Trim().ToLowerInvariant() ?? AuditLogConstants.CategoryAllSensitive;
         if (category == AuditLogConstants.CategoryCenterDocument)
         {
-            baseQuery = baseQuery.Where(x => x.log.Action == AuditLogConstants.CenterDocumentViewed);
+            baseQuery = baseQuery.Where(x => x.log.Action == AuditLogConstants.CenterDocumentViewed || x.log.Action.StartsWith("center."));
         }
         else if (category == AuditLogConstants.CategoryReportedMessage)
         {
             baseQuery = baseQuery.Where(x => x.log.Action == AuditLogConstants.LeadMessageReportQueueView ||
-                                             x.log.Action == AuditLogConstants.LeadMessageReportView);
+                                             x.log.Action == AuditLogConstants.LeadMessageReportView ||
+                                             x.log.Action.StartsWith("lead_message."));
         }
         else if (category == AuditLogConstants.CategorySlmExport)
         {
-            baseQuery = baseQuery.Where(x => x.log.Action == AuditLogConstants.SlmSampleExport);
+            baseQuery = baseQuery.Where(x => x.log.Action == AuditLogConstants.SlmSampleExport || x.log.Action.StartsWith("slm"));
+        }
+        else if (category == AuditLogConstants.CategoryParent)
+        {
+            baseQuery = baseQuery.Where(x => x.log.Action.StartsWith("parent."));
+        }
+        else if (category == AuditLogConstants.CategoryAccount)
+        {
+            baseQuery = baseQuery.Where(x => x.log.Action.StartsWith("user.") || x.log.Action.StartsWith("auth."));
         }
         else if (category == AuditLogConstants.CategoryAllSensitive)
         {
@@ -189,17 +198,54 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
     private static string MapCategory(string action) => action switch
     {
         AuditLogConstants.CenterDocumentViewed => AuditLogConstants.CategoryCenterDocument,
+        var a when a.StartsWith("center.") => AuditLogConstants.CategoryCenterDocument,
         AuditLogConstants.LeadMessageReportQueueView or AuditLogConstants.LeadMessageReportView => AuditLogConstants.CategoryReportedMessage,
+        var a when a.StartsWith("lead_message.") => AuditLogConstants.CategoryReportedMessage,
         AuditLogConstants.SlmSampleExport => AuditLogConstants.CategorySlmExport,
+        var a when a.StartsWith("slm") => AuditLogConstants.CategorySlmExport,
+        var a when a.StartsWith("parent.") => AuditLogConstants.CategoryParent,
+        var a when a.StartsWith("user.") || a.StartsWith("auth.") => AuditLogConstants.CategoryAccount,
         _ => "other"
     };
 
     private static string MapDescription(string action) => action switch
     {
         AuditLogConstants.CenterDocumentViewed => "Xem tài liệu xác minh trung tâm",
-        AuditLogConstants.LeadMessageReportQueueView => "Xem hàng đợi tin nhắn bị báo cáo",
+        AuditLogConstants.LeadMessageReportQueueView => "Xem danh sách tin nhắn bị báo cáo",
         AuditLogConstants.LeadMessageReportView => "Đọc tin nhắn bị báo cáo và ngữ cảnh",
         AuditLogConstants.SlmSampleExport => "Xuất dữ liệu mẫu huấn luyện SLM (UC-102)",
-        _ => action
+        "parent.acting.start" => "Bắt đầu quyền đại diện con",
+        "parent.acting.stop" => "Kết thúc quyền đại diện con",
+        "parent.link.create" => "Gửi yêu cầu liên kết phụ huynh",
+        "parent.link.confirm" => "Xác nhận liên kết phụ huynh",
+        "parent.share.consent" => "Đồng ý chia sẻ hồ sơ học sinh",
+        "parent.managed_child.create" => "Tạo hồ sơ học sinh được quản lý",
+        "user.lock" => "Khóa tài khoản người dùng",
+        "user.unlock" => "Mở khóa tài khoản người dùng",
+        "user.role_change" => "Thay đổi phân quyền vai trò",
+        "user.birth_date_edit" => "Cập nhật ngày sinh và tuổi",
+        "user.anonymized" => "Ẩn danh tài khoản",
+        "user.deleted" => "Xóa vĩnh viễn tài khoản",
+        "center.verify" => "Phê duyệt/Từ chối xác minh trung tâm",
+        "center.review_remove" => "Gỡ đánh giá trung tâm vi phạm",
+        "center.change_review" => "Duyệt thay đổi thông tin trung tâm",
+        "center.delete_request" => "Yêu cầu xóa tài khoản trung tâm",
+        "lead_message.remove" => "Gỡ bỏ tin nhắn vi phạm",
+        "target_school.add" => "Thêm trường mục tiêu",
+        "target_school.remove" => "Xóa trường mục tiêu",
+        "target_school.update" => "Cập nhật trường mục tiêu",
+        "lead.status_change" => "Cập nhật trạng thái yêu cầu tư vấn",
+        "university.update" => "Cập nhật thông tin trường ĐH",
+        "university.hide" => "Ẩn thông tin trường ĐH",
+        "scholarship.update" => "Cập nhật thông tin học bổng",
+        "grade_scale.update" => "Cập nhật bảng quy đổi điểm",
+        _ => HumanizeAction(action)
     };
+
+    private static string HumanizeAction(string action)
+    {
+        if (string.IsNullOrWhiteSpace(action)) return "Thao tác hệ thống";
+        var parts = action.Split(new[] { '.', '_' }, StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(" ", parts.Select(p => p.Length > 0 ? char.ToUpperInvariant(p[0]) + p[1..].ToLowerInvariant() : p));
+    }
 }

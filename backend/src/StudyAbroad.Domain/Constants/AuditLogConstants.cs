@@ -30,6 +30,12 @@ public static class AuditLogConstants
     /// <summary>Danh mục lọc: Tất cả thao tác hệ thống.</summary>
     public const string CategoryAll = "all";
 
+    /// <summary>Danh mục lọc: Đại diện và liên kết phụ huynh.</summary>
+    public const string CategoryParent = "parent";
+
+    /// <summary>Danh mục lọc: Tài khoản và phân quyền.</summary>
+    public const string CategoryAccount = "account";
+
     /// <summary>Danh sách mọi thao tác truy cập hoặc xuất dữ liệu nhạy cảm.</summary>
     public static readonly IReadOnlyList<string> SensitiveActions = new[]
     {

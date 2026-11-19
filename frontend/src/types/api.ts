@@ -915,11 +915,13 @@ export interface CenterProfileChangeDto {
 
 /** [UC-97] Danh mục lọc nhật ký truy cập dữ liệu nhạy cảm. */
 export type AccessLogCategory =
+  | "all"
   | "all_sensitive"
   | "center_document"
   | "reported_message"
   | "slm_export"
-  | "all";
+  | "parent"
+  | "account";
 
 /** [UC-97] Một dòng nhật ký truy cập hoặc xuất dữ liệu nhạy cảm (Administrator only). */
 export interface AccessLogDto {
