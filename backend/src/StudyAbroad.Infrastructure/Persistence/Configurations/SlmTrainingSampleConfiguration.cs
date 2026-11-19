@@ -50,8 +50,6 @@ public class SlmTrainingSampleConfiguration : IEntityTypeConfiguration<SlmTraini
         b.Property(x => x.CreatedByUserId).HasComment("Người tạo hoặc import dòng này. Xóa tài khoản thì để trống.");
 
         b.HasOne<User>().WithMany().HasForeignKey(x => x.DeletedByUserId).OnDelete(DeleteBehavior.SetNull);
-        b.Property(x => x.Answer).HasComment("Câu trả lời mẫu. Dòng cũ chỉ có intents thì để trống.");
-        b.Property(x => x.Topic).HasMaxLength(128).HasComment("Chủ đề.");
         b.Property(x => x.Source).HasMaxLength(256).IsRequired().HasDefaultValue(SlmSampleSources.Manual)
             .HasComment("Nguồn: manual, excel, chat-unanswered hoặc nguồn tham khảo.");
         b.Property(x => x.DeletedAt).HasComment("Xóa mềm: khác null thì không hiện, không xuất.");
@@ -60,7 +58,6 @@ public class SlmTrainingSampleConfiguration : IEntityTypeConfiguration<SlmTraini
 
         b.HasIndex(x => new { x.ReviewStatus, x.SampleType });
         b.HasIndex(x => x.CreatedByUserId);
-        b.HasIndex(x => x.Split);
         b.HasIndex(x => x.CreatedAt);
     }
 }

@@ -3,7 +3,7 @@
 -- Generated automatically by scripts/generate_base_data_from_excel.py
 -- Target Database: PostgreSQL 16 (Schema: app)
 -- Tables Seeded: universities, university_offerings, scholarships,
---                state_living_costs, knowledge_documents, study_centers
+--                knowledge_documents, study_centers
 -- Idempotent Transaction: BEGIN ... COMMIT
 -- ==============================================================================
 
@@ -679,67 +679,6 @@ ON CONFLICT (university_id, name) DO UPDATE SET
     deadline = EXCLUDED.deadline,
     requirements_json = EXCLUDED.requirements_json,
     source_url = EXCLUDED.source_url,
-    updated_at = CURRENT_TIMESTAMP;
-
--- ==============================================================================
--- 4. Table: app.state_living_costs (46 rows)
--- Source: Derived from CDS 2025-26 Section G1 Room & Board across 249 universities
--- Base National Average: $17247.57/year (Index Base 100.0)
--- Note: avg_annual_living_usd is derived from schools; index_score is calculated relative index.
--- ==============================================================================
-INSERT INTO app.state_living_costs (id, state_code, state_name, index_score, avg_annual_living_usd, notes)
-VALUES
-  (gen_random_uuid(), 'AL', 'Alabama', 78.82, 13594.00, 'Số dẫn xuất từ trung bình living_usd của 4 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'AR', 'Arkansas', 82.59, 14244.00, 'Số dẫn xuất từ trung bình living_usd của 1 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'AZ', 'Arizona', 99.28, 17123.33, 'Số dẫn xuất từ trung bình living_usd của 3 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'CA', 'California', 120.88, 20848.57, 'Số dẫn xuất từ trung bình living_usd của 28 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'CO', 'Colorado', 101.16, 17447.67, 'Số dẫn xuất từ trung bình living_usd của 3 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'CT', 'Connecticut', 108.33, 18685.00, 'Số dẫn xuất từ trung bình living_usd của 4 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'DC', 'District of Columbia', 114.53, 19754.50, 'Số dẫn xuất từ trung bình living_usd của 4 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'FL', 'Florida', 87.80, 15143.00, 'Số dẫn xuất từ trung bình living_usd của 12 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'GA', 'Georgia', 87.54, 15097.86, 'Số dẫn xuất từ trung bình living_usd của 7 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'IA', 'Iowa', 69.13, 11924.00, 'Số dẫn xuất từ trung bình living_usd của 2 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'IL', 'Illinois', 100.16, 17274.43, 'Số dẫn xuất từ trung bình living_usd của 7 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'IN', 'Indiana', 91.38, 15760.78, 'Số dẫn xuất từ trung bình living_usd của 9 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'KS', 'Kansas', 66.32, 11439.00, 'Số dẫn xuất từ trung bình living_usd của 2 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'KY', 'Kentucky', 92.06, 15878.00, 'Số dẫn xuất từ trung bình living_usd của 2 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'LA', 'Louisiana', 100.80, 17386.00, 'Số dẫn xuất từ trung bình living_usd của 2 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'MA', 'Massachusetts', 114.59, 19764.38, 'Số dẫn xuất từ trung bình living_usd của 16 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'MD', 'Maryland', 101.65, 17532.25, 'Số dẫn xuất từ trung bình living_usd của 4 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'ME', 'Maine', 106.35, 18342.00, 'Số dẫn xuất từ trung bình living_usd của 3 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'MI', 'Michigan', 87.88, 15156.33, 'Số dẫn xuất từ trung bình living_usd của 3 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'MN', 'Minnesota', 96.16, 16585.50, 'Số dẫn xuất từ trung bình living_usd của 4 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'MS', 'Mississippi', 73.93, 12751.00, 'Số dẫn xuất từ trung bình living_usd của 2 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'MT', 'Montana', 81.17, 14000.00, 'Số dẫn xuất từ trung bình living_usd của 1 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'NC', 'North Carolina', 96.64, 16667.88, 'Số dẫn xuất từ trung bình living_usd của 8 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'ND', 'North Dakota', 57.56, 9928.00, 'Số dẫn xuất từ trung bình living_usd của 1 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'NE', 'Nebraska', 80.88, 13950.00, 'Số dẫn xuất từ trung bình living_usd của 1 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'NH', 'New Hampshire', 104.23, 17977.00, 'Số dẫn xuất từ trung bình living_usd của 2 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'NJ', 'New Jersey', 106.78, 18417.60, 'Số dẫn xuất từ trung bình living_usd của 5 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'NM', 'New Mexico', 69.73, 12026.00, 'Số dẫn xuất từ trung bình living_usd của 1 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'NV', 'Nevada', 77.02, 13284.00, 'Số dẫn xuất từ trung bình living_usd của 2 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'NY', 'New York', 110.00, 18973.00, 'Số dẫn xuất từ trung bình living_usd của 26 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'OH', 'Ohio', 94.93, 16372.67, 'Số dẫn xuất từ trung bình living_usd của 9 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'OK', 'Oklahoma', 76.03, 13113.00, 'Số dẫn xuất từ trung bình living_usd của 2 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'OR', 'Oregon', 103.21, 17801.00, 'Số dẫn xuất từ trung bình living_usd của 6 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'PA', 'Pennsylvania', 105.14, 18133.58, 'Số dẫn xuất từ trung bình living_usd của 19 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'RI', 'Rhode Island', 87.37, 15070.00, 'Số dẫn xuất từ trung bình living_usd của 1 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'SC', 'South Carolina', 89.77, 15484.00, 'Số dẫn xuất từ trung bình living_usd của 4 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'SD', 'South Dakota', 55.13, 9508.00, 'Số dẫn xuất từ trung bình living_usd của 1 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'TN', 'Tennessee', 94.83, 16355.50, 'Số dẫn xuất từ trung bình living_usd của 4 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'TX', 'Texas', 88.07, 15190.00, 'Số dẫn xuất từ trung bình living_usd của 14 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'UT', 'Utah', 90.08, 15537.00, 'Số dẫn xuất từ trung bình living_usd của 1 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'VA', 'Virginia', 94.30, 16264.00, 'Số dẫn xuất từ trung bình living_usd của 8 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'VT', 'Vermont', 106.04, 18290.00, 'Số dẫn xuất từ trung bình living_usd của 3 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'WA', 'Washington', 92.67, 15983.33, 'Số dẫn xuất từ trung bình living_usd của 3 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'WI', 'Wisconsin', 87.14, 15029.33, 'Số dẫn xuất từ trung bình living_usd của 3 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'WV', 'West Virginia', 84.55, 14582.00, 'Số dẫn xuất từ trung bình living_usd của 1 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.'),
-  (gen_random_uuid(), 'WY', 'Wyoming', 80.36, 13860.00, 'Số dẫn xuất từ trung bình living_usd của 1 trường trong bang (CDS Section G1). index_score là chỉ số tương đối so với trung bình toàn quốc ($17248) do script tính, không phải số nguồn trực tiếp từ Excel.')
-ON CONFLICT (state_code) DO UPDATE SET
-    state_name = EXCLUDED.state_name,
-    index_score = EXCLUDED.index_score,
-    avg_annual_living_usd = EXCLUDED.avg_annual_living_usd,
-    notes = EXCLUDED.notes,
     updated_at = CURRENT_TIMESTAMP;
 
 -- ==============================================================================

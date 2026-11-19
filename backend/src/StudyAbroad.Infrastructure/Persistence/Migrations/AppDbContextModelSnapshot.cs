@@ -972,71 +972,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("consents", "app");
                 });
 
-            modelBuilder.Entity("StudyAbroad.Domain.Entities.DataImportBatch", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("BatchCode")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("batch_code");
-
-                    b.Property<string>("CheckedBy")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasDefaultValue("USAS Research Team")
-                        .HasColumnName("checked_by");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("DataYear")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("data_year");
-
-                    b.Property<int>("FlaggedRows")
-                        .HasColumnType("integer")
-                        .HasColumnName("flagged_rows");
-
-                    b.Property<int>("PassedRows")
-                        .HasColumnType("integer")
-                        .HasColumnName("passed_rows");
-
-                    b.Property<string>("SourceName")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("source_name");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasDefaultValue("verified")
-                        .HasColumnName("status");
-
-                    b.Property<int>("TotalRows")
-                        .HasColumnType("integer")
-                        .HasColumnName("total_rows");
-
-                    b.HasKey("Id")
-                        .HasName("pk_data_import_batches");
-
-                    b.HasIndex("BatchCode")
-                        .IsUnique()
-                        .HasDatabaseName("ix_data_import_batches_batch_code");
-
-                    b.ToTable("data_import_batches", "app");
-                });
-
             modelBuilder.Entity("StudyAbroad.Domain.Entities.EvalCase", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1646,10 +1581,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("to_status");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
 
                     b.HasKey("Id")
                         .HasName("pk_knowledge_base_entry_history");
@@ -2696,11 +2627,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("publisher");
 
-                    b.Property<string>("RankType")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("rank_type");
-
                     b.Property<string>("Url")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
@@ -3351,10 +3277,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("to_status");
 
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
                     b.HasKey("Id")
                         .HasName("pk_slm_sample_history");
 
@@ -3376,11 +3298,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
-
-                    b.Property<string>("Answer")
-                        .HasColumnType("text")
-                        .HasColumnName("answer")
-                        .HasComment("Câu trả lời mẫu. Dòng cũ chỉ có intents thì để trống.");
 
                     b.Property<string>("Context")
                         .HasColumnType("jsonb")
@@ -3491,12 +3408,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnName("split")
                         .HasComment("Tập dùng cho model: train, val hoặc test.");
 
-                    b.Property<string>("Topic")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("topic")
-                        .HasComment("Chủ đề.");
-
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -3516,9 +3427,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasIndex("ReviewedByUserId")
                         .HasDatabaseName("ix_slm_training_samples_reviewed_by_user_id");
 
-                    b.HasIndex("Split")
-                        .HasDatabaseName("ix_slm_training_samples_split");
-
                     b.HasIndex("ReviewStatus", "SampleType")
                         .HasDatabaseName("ix_slm_training_samples_review_status_sample_type");
 
@@ -3532,59 +3440,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_slm_training_samples_type", "sample_type IN ('collect_profile','profile_review','scenario','knowledge','center_referral','out_of_scope')");
                         });
-                });
-
-            modelBuilder.Entity("StudyAbroad.Domain.Entities.StateLivingCost", b =>
-                {
-                    b.Property<string>("StateCode")
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)")
-                        .HasColumnName("state_code");
-
-                    b.Property<decimal?>("AvgLivingUsdYearly")
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("avg_annual_living_usd");
-
-                    b.Property<decimal>("CostIndex")
-                        .ValueGeneratedOnAdd()
-                        .HasPrecision(6, 2)
-                        .HasColumnType("numeric(6,2)")
-                        .HasDefaultValue(100.0m)
-                        .HasColumnName("index_score");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("notes");
-
-                    b.Property<DateOnly?>("RetrievedAt")
-                        .HasColumnType("date")
-                        .HasColumnName("retrieved_at");
-
-                    b.Property<string>("SourceUrl")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("source_url");
-
-                    b.Property<string>("StateName")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("state_name");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("StateCode")
-                        .HasName("pk_state_living_costs");
-
-                    b.ToTable("state_living_costs", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.StudentProfile", b =>
