@@ -27,12 +27,14 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     # Địa chỉ riêng cho SLM, đọc ảnh và embedding (hạ tầng cloud). Để trống = dùng ollama_base_url
     slm_base_url: str = ""
+    slm_api_key: str = ""
     vision_base_url: str = ""
+    vision_api_key: str = ""
     embedding_base_url: str = ""
     embedding_api_key: str = ""
     # Chỉ dùng khi không có ANTHROPIC_API_KEY (bước B đọc bảng điểm chạy trên Ollama). Có khóa Claude thì để trống
     llm_model: str = ""
-    slm_model: str = "usas-slm-v4"
+    slm_model: str = "usas-slm-v5"
     slm_format: str = "json"
     # Prompt tách ý (tên file trong app/skills, không có .md). Model fine-tune phải dùng đúng prompt lúc huấn luyện
     # (xem slm/prepare/export_slm_chat.py): usas-slm-v4 dùng slm_intents
