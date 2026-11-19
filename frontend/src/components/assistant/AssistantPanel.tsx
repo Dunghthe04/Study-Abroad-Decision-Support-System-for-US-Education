@@ -36,7 +36,8 @@ import { ScholarshipWidget } from "./ScholarshipWidget";
 import { SchoolSearchCard } from "./SchoolSearchCard";
 import { SchoolWidget } from "./SchoolWidget";
 import { SelectWidget } from "./SelectWidget";
-import type { SchoolSearchData } from "@/types/recommendation";
+import { GoalCompareTable } from "./GoalCompareTable";
+import type { SchoolGoalResult, SchoolSearchData } from "@/types/recommendation";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
 export function useAssistantVisible() {
@@ -360,8 +361,13 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
   // Thẻ trường đã nói đủ đoạn chữ này (tổng số, cách xếp, danh sách): bỏ đoạn đó, các đoạn khác của lượt vẫn hiện
   const content =
     searchData?.coveredText && turn.content ? turn.content.replace(searchData.coveredText, "").trim() : turn.content;
+  const goalData = turn.widget?.type === "goal_seek" ? turn.widget.data : null;
+  const goalResult = (goalData?.result as SchoolGoalResult | undefined) ?? null;
+  const goalBasisLabel = typeof goalData?.basisLabel === "string" ? goalData.basisLabel : null;
   return (
     <div className="w-full px-1 text-foreground">
+      {/* Cần gì để vào trường X: bảng "bạn so với trường" đứng trước, lời giải thích nằm bên dưới */}
+      {goalResult && <GoalCompareTable result={goalResult} basisLabel={goalBasisLabel} />}
       {/* Có thẻ trung tâm thì danh sách chữ (các dòng bắt đầu bằng "- ") đã nằm trong thẻ: chỉ hiện phần mở đầu */}
       {content && <ChatText text={turn.widget?.type === "centers" ? content.split("\n- ")[0] : content} />}
       {turn.widget?.type === "centers" && <CenterCardsWidget data={turn.widget.data} onPick={onReply} />}

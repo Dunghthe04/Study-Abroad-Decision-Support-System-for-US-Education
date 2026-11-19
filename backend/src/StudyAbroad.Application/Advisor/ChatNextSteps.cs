@@ -152,11 +152,20 @@ public static class ChatNextSteps
     /// Nút sau kết quả cần gì để vào, kèm nút trung tâm. Trường bị loại thì có nút sửa theo lý do loại (GoalSeekFixes);
     /// trường đang trong danh sách thì có thể giải thích vì sao xếp nhóm này.
     /// </summary>
-    public static IReadOnlyList<QuickReply> AfterGoalSeek(SchoolGoalResult result)
+    // simulationActive: trang đang xem giả định. Có thì thêm nút chuyển cơ sở (hồ sơ thật hoặc giả định) cho đúng trường này
+    public static IReadOnlyList<QuickReply> AfterGoalSeek(SchoolGoalResult result, bool simulationActive = false)
     {
-        var steps = GoalSeekFixes(result);
+        var steps = GoalSeekFixes(result).ToList();
         if (steps.Count == 0)
             steps = [new QuickReply("Giải thích trường này", "Giải thích trường này", new ChatAction(ChatExplanation.Action, result.Code))];
+        if (result.Basis == "simulated")
+            steps.Add(new QuickReply(
+                "Xem theo hồ sơ thật", $"Cần gì để vào {result.Name} theo hồ sơ thật?",
+                new ChatAction(ChatGoalSeek.Action, result.Code, Basis: "real")));
+        else if (simulationActive)
+            steps.Add(new QuickReply(
+                "Tính theo giả định", $"Cần gì để vào {result.Name} theo giả định?",
+                new ChatAction(ChatGoalSeek.Action, result.Code)));
         return WithCenter(steps);
     }
 
@@ -211,7 +220,7 @@ public static class ChatNextSteps
     {
         var steps = new List<QuickReply>();
         if (filters is not null)
-            steps.AddRange(Refinements(result, sort, filters, ignored).Take(MaxRefinements));
+            steps.AddRange(Refinements(result, sort, filters, ignored).Take(MaxSearchRefinements));
         // Đang xếp theo tiền: cho học sinh đổi cách tính giữa "chỉ học phí" và "tổng chi phí cả ăn ở, sinh hoạt" (cùng chiều cao/thấp)
         if (sort is SchoolSort.LowestTuition or SchoolSort.HighestTuition)
         {
@@ -235,7 +244,8 @@ public static class ChatNextSteps
     }
 
     public const int MaxSteps = 5;
-    private const int MaxRefinements = 2;
+    private const int MaxRefinements = 2;            // nút bỏ điều kiện khi 0 kết quả
+    private const int MaxSearchRefinements = 3;       // nút lọc lại sau khi có kết quả
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
 
     // Nút lọc lại: chưa giới hạn hạng mà danh sách dài (hoặc advisor vừa bỏ điều kiện hạng không đọc ra) thì gợi ý top 20, 50;
@@ -249,6 +259,12 @@ public static class ChatNextSteps
             foreach (var top in new[] { 20, 50 }.Where(top => result.Total > top))
                 yield return SearchAgain($"Chỉ top {top}", $"Các trường trong top {top}", f with { MaxRank = top }, sort);
         }
+        // Lọc "không bắt buộc SAT" mà trong kết quả có trường ghi điểm thi quan trọng: cho học sinh chọn chỉ giữ trường ít coi trọng
+        // điểm thi. Không tự đổi thứ tự kết quả vì học sinh đã chọn cách xếp (rẻ nhất, hạng...)
+        if (f.TestPolicy == "optional" && !f.LowTestWeight && result.Items.Any(i => i.TestImportance is "important" or "very_important"))
+            yield return SearchAgain(
+                "Chỉ trường ít coi trọng điểm thi", "Chỉ các trường mà điểm thi không phải yếu tố quan trọng",
+                f with { LowTestWeight = true }, sort);
         if (f.MaxCostUsd is null && dropped.Contains("max_cost"))
         {
             foreach (var cost in new[] { 30_000m, 40_000m })
@@ -312,6 +328,7 @@ public static class ChatNextSteps
         "xep_hang_toi_da" => f with { MaxRank = null },
         "ty_le_tot_nghiep_toi_thieu" => f with { MinGradRate = null },
         "ivy" => f with { Ivy = false },
+        "it_coi_trong_diem_thi" => f with { LowTestWeight = false },
         _ => f,
     };
 

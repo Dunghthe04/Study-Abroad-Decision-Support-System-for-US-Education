@@ -861,3 +861,37 @@ async def test_try_menu_button_goes_to_the_scenario_branch_without_the_slm():
 
     assert res.answer.startswith("Bạn muốn thử thay đổi gì?")
     assert [q.label for q in res.quick_replies][:1] == ["Thử SAT 1400"]
+
+
+def test_log_item_shows_the_what_if_changes_so_the_normalized_value_can_be_checked():
+    item = SlmY(
+        type="scenario",
+        span="giả sử ngân sách nhà em giảm còn 25k mỗi năm",
+        entities={
+            "mode": "what_if",
+            "changes": [
+                {"factor": "budget", "value": "25000", "unit": "USD"},
+                {"factor": "sat", "value": "1450"},
+            ],
+        },
+    )
+
+    assert log_item(item) == {
+        "type": "scenario",
+        "mode": "what_if",
+        "changes": [
+            {"factor": "budget", "value": "25000", "unit": "USD"},
+            {"factor": "sat", "value": "1450"},
+        ],
+        "other_keys": [],
+    }
+
+
+def test_log_item_cuts_a_very_long_change_value():
+    item = SlmY(
+        type="scenario",
+        span="x",
+        entities={"mode": "what_if", "changes": [{"factor": "major", "value": "x" * (MAX_LOGGED_TEXT + 40)}]},
+    )
+
+    assert log_item(item)["changes"] == [{"factor": "major", "value": "x" * MAX_LOGGED_TEXT}]

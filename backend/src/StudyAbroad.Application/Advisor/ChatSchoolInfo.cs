@@ -196,7 +196,7 @@ public static class ChatSchoolInfo
         f.States is { Count: > 0 } || !string.IsNullOrWhiteSpace(f.City) || !string.IsNullOrWhiteSpace(f.Major)
         || !string.IsNullOrWhiteSpace(f.Control) || !string.IsNullOrWhiteSpace(f.Aid) || !string.IsNullOrWhiteSpace(f.TestPolicy)
         || f.MaxCostUsd is not null || f.MaxIelts is not null || f.MaxToefl is not null || f.MaxDuolingo is not null
-        || f.MinAcceptRate is not null || f.MaxAcceptRate is not null || f.MaxRank is not null || f.MinGradRate is not null || f.Ivy;
+        || f.MinAcceptRate is not null || f.MaxAcceptRate is not null || f.MaxRank is not null || f.MinGradRate is not null || f.Ivy || f.LowTestWeight;
 
     /// <summary>Nói lại các điều kiện đang lọc bằng lời, để học sinh kiểm tra hệ thống hiểu đúng.</summary>
     public static string FilterSummary(SchoolSearchFilters f)
@@ -221,6 +221,7 @@ public static class ChatSchoolInfo
         if (f.MaxRank is { } rank) parts.Add($"top {rank} bảng xếp hạng");
         if (f.MinGradRate is { } grad) parts.Add($"tỷ lệ tốt nghiệp từ {Pct(grad)} trở lên");
         if (f.Ivy) parts.Add("thuộc Ivy League");
+        if (f.LowTestWeight) parts.Add("điểm thi không phải yếu tố quan trọng");
         return string.Join(", ", parts);
     }
 
@@ -277,6 +278,7 @@ public static class ChatSchoolInfo
         "xep_hang_toi_da" => "thứ hạng",
         "ty_le_tot_nghiep_toi_thieu" => "tỷ lệ tốt nghiệp",
         "ivy" => "Ivy League",
+        "it_coi_trong_diem_thi" => "mức coi trọng điểm thi",
         _ => key,
     };
 
@@ -305,13 +307,28 @@ public static class ChatSchoolInfo
         var lines = new List<string> { $"Có {what}. Xếp theo {SortLabel(sort)}." };
         var shown = result.Items.Take(SearchTextItems).ToList();
         for (var i = 0; i < shown.Count; i++)
-            lines.Add($"{i + 1}. {SearchLine(shown[i], sort)}");
+            lines.Add($"{i + 1}. {SearchLine(shown[i], sort, filters)}");
         if (result.Total > shown.Count)
             lines.Add($"Và {result.Total - shown.Count} trường khác.");
         return string.Join("\n", lines);
     }
 
-    private static string SearchLine(SchoolSearchItem s, SchoolSort sort = SchoolSort.Quality)
+    /// <summary>
+    /// Học sinh lọc "không bắt buộc SAT, ACT" mà trường coi điểm thi quan trọng: nói rõ để khỏi hiểu là trường không cần điểm thi.
+    /// Hai thông tin đến từ hai mục khác nhau của dữ liệu trường (chính sách nộp, mức coi trọng ở CDS C7) nên chỉ nêu cả hai đúng như dữ liệu,
+    /// không suy ra nghĩa (vd "nếu nộp"). Không nhắc khi trường ít coi trọng điểm thi.
+    /// </summary>
+    public static string? TestCaution(SchoolSearchItem s, SchoolSearchFilters? filters) =>
+        filters?.TestPolicy == "optional"
+            ? s.TestImportance switch
+            {
+                "very_important" => "không bắt buộc SAT, ACT nhưng trường ghi điểm thi là yếu tố rất quan trọng",
+                "important" => "không bắt buộc SAT, ACT nhưng trường ghi điểm thi là yếu tố quan trọng",
+                _ => null,
+            }
+            : null;
+
+    private static string SearchLine(SchoolSearchItem s, SchoolSort sort = SchoolSort.Quality, SchoolSearchFilters? filters = null)
     {
         var place = string.Join(", ", new[] { s.City, s.State }.Where(x => !string.IsNullOrWhiteSpace(x)));
         var control = ControlText(s.Control);
@@ -329,6 +346,7 @@ public static class ChatSchoolInfo
         if (s.BestRank is { } rank) facts.Add($"hạng #{rank}");
         if (sort == SchoolSort.MostAid)
             facts.Add(s.AidAvgUsd is { } aid ? $"học bổng trung bình {Money(aid)} USD" : "chưa có số liệu học bổng");
+        if (TestCaution(s, filters) is { } caution) facts.Add(caution);
         return $"{s.Name}" + (head.Length > 0 ? $" ({head})" : "") + $": {string.Join(" · ", facts)}";
     }
 
