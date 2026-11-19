@@ -8,7 +8,7 @@ using StudyAbroad.Domain.Entities;
 namespace StudyAbroad.Application.Admin.KnowledgeBase;
 
 public partial class KnowledgeBaseService(
-    IKnowledgeBaseRepository repository) : IKnowledgeBaseService
+    IKnowledgeBaseRepository repository, IKnowledgeWorkbookReader workbookReader) : IKnowledgeBaseService
 {
     public const int MaxPageSize = 100;
     public const int MaxReviewIds = 500;

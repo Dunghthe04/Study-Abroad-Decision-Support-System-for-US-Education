@@ -31,4 +31,22 @@ public interface IKnowledgeBaseService
     /// Bỏ qua mục do chính người duyệt tạo, sửa hoặc gửi duyệt, mục không ở pending, và mục chưa đủ nội dung khi duyệt.
     /// </summary>
     Task<ReviewKnowledgeEntriesResultDto> ReviewAsync(ReviewKnowledgeEntriesRequest request, Guid actorUserId, CancellationToken ct = default);
+
+    /// <summary>Đọc file xlsx, kiểm tra mọi dòng, trả 100 dòng đầu và mọi lỗi. Không ghi gì. File hỏng thì InvalidDataException.</summary>
+    Task<KnowledgeImportPreviewDto> PreviewAsync(Stream workbook, CancellationToken ct = default);
+
+    /// <summary>Thêm các dòng hợp lệ, chưa trùng, ở trạng thái pending trong một transaction; dòng lỗi được báo và bỏ qua.</summary>
+    Task<KnowledgeImportResultDto> ImportAsync(Stream workbook, Guid actorUserId, CancellationToken ct = default);
+}
+
+/// <summary>Đọc sheet knowledge_base của file xlsx thành các dòng thô, chưa kiểm tra nội dung.</summary>
+public interface IKnowledgeWorkbookReader
+{
+    /// <summary>Thiếu sheet knowledge_base, thiếu cột bắt buộc, hoặc file hỏng thì ném InvalidDataException.</summary>
+    IReadOnlyList<KnowledgeImportRow> Read(Stream workbook, CancellationToken ct = default);
+}
+
+public interface IKnowledgeTemplateWriter
+{
+    byte[] Build();
 }
