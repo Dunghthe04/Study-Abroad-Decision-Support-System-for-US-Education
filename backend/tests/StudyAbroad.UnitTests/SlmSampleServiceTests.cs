@@ -700,62 +700,6 @@ public class SlmSampleServiceTests
     }
 
     [Fact]
-    public async Task CaptureUnansweredAsync_StoresOnlyTheQuestionAsAnonymousDraft()
-    {
-        var repo = new FakeSlmRepository();
-
-        Assert.True(await Svc(repo, new FakeReader()).CaptureUnansweredAsync("  em muốn học   ngành hải dương học ở Hawaii  "));
-
-        var sample = Assert.Single(repo.Items);
-        Assert.Equal("em muốn học ngành hải dương học ở Hawaii", sample.Question);
-        Assert.Equal((SlmReviewStatuses.Draft, SlmSampleSources.ChatUnanswered, "[]"), (sample.ReviewStatus, sample.Source, sample.Intents));
-        Assert.Null(sample.CreatedByUserId);
-        Assert.Null(sample.Answer);
-        Assert.Null(sample.Profile);
-        Assert.Null(sample.Context);
-        var history = Assert.Single(repo.History);
-        Assert.Equal((SlmSampleHistoryActions.Capture, (Guid?)null), (history.Action, history.ActorUserId));
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData("gọi em số 0987654321 nha")]
-    [InlineData("mail em: hs.lop12@yahoo.com")]
-    [InlineData("xem giúp em https://example.org/ho-so")]
-    [InlineData("facebook.com/nguyenvana của em")]
-    [InlineData("CCCD em 001 203 004 567 có cần không")]
-    public async Task CaptureUnansweredAsync_SkipsEmptyAndPersonalData(string question)
-    {
-        var repo = new FakeSlmRepository();
-
-        Assert.False(await Svc(repo, new FakeReader()).CaptureUnansweredAsync(question));
-        Assert.Empty(repo.Items);
-    }
-
-    [Fact]
-    public async Task CaptureUnansweredAsync_SkipsQuestionsOverTheLengthCap()
-    {
-        var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
-
-        Assert.False(await service.CaptureUnansweredAsync(new string('a', SlmSampleService.MaxCapturedQuestionLength + 1)));
-        Assert.True(await service.CaptureUnansweredAsync(new string('a', SlmSampleService.MaxCapturedQuestionLength)));
-    }
-
-    [Fact]
-    public async Task CaptureUnansweredAsync_DedupesAgainstAllRowsIncludingDeleted()
-    {
-        var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
-        await service.CaptureUnansweredAsync("Ngành nào dễ xin học bổng?");
-        await service.DeleteAsync(repo.Items.Single().Id, Actor);
-
-        Assert.False(await service.CaptureUnansweredAsync("ngành nào  dễ xin học bổng?"));
-        Assert.Single(repo.Items);
-    }
-
-    [Fact]
     public async Task ExportAsync_Jsonl_HasOnlyApprovedLiveRows_AsParsedJson_AndIsLogged()
     {
         var repo = new FakeSlmRepository();

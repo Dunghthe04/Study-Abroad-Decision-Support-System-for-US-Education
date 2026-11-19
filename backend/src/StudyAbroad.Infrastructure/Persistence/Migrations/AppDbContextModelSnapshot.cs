@@ -1459,6 +1459,213 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("forum_reports", "app");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.KnowledgeBaseEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Answer")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("answer")
+                        .HasComment("Câu trả lời đã kiểm chứng; nháp có thể trống.");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id")
+                        .HasComment("Người tạo hoặc import. Trống với câu lấy từ chat.");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at")
+                        .HasComment("Xóa mềm: khác null thì chỉ hiện trong mục Đã xóa.");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by_user_id")
+                        .HasComment("Người xóa.");
+
+                    b.Property<int>("EntryNo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("entry_no")
+                        .HasComment("Mã số ổn định, trùng cột id của file Excel. Thêm tay thì database cấp số tiếp theo.");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("EntryNo"));
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("label")
+                        .HasComment("Nhãn chủ đề LABEL_...; nháp có thể trống.");
+
+                    b.Property<List<string>>("Levels")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("levels")
+                        .HasDefaultValueSql("'{}'")
+                        .HasComment("Mã bậc học: chung, thcs, thpt, dai_hoc, thac_si, tien_si.");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("manual")
+                        .HasColumnName("origin")
+                        .HasComment("Dòng đến từ đâu: manual, excel hoặc chat-unanswered.");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("question")
+                        .HasComment("Câu hỏi.");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("review_note")
+                        .HasComment("Ghi chú của người duyệt.");
+
+                    b.Property<string>("ReviewStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("draft")
+                        .HasColumnName("review_status")
+                        .HasComment("Trạng thái duyệt: draft, pending, approved, rejected hoặc needs_fix.");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at")
+                        .HasComment("Thời điểm duyệt gần nhất.");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id")
+                        .HasComment("Người duyệt gần nhất. Xóa tài khoản thì để trống.");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("source")
+                        .HasComment("Trích dẫn nguồn, giữ nguyên văn nhiều dòng.");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_knowledge_base_entries");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_knowledge_base_entries_created_at");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("ix_knowledge_base_entries_created_by_user_id");
+
+                    b.HasIndex("DeletedByUserId")
+                        .HasDatabaseName("ix_knowledge_base_entries_deleted_by_user_id");
+
+                    b.HasIndex("EntryNo")
+                        .IsUnique()
+                        .HasDatabaseName("ix_knowledge_base_entries_entry_no");
+
+                    b.HasIndex("ReviewedByUserId")
+                        .HasDatabaseName("ix_knowledge_base_entries_reviewed_by_user_id");
+
+                    b.HasIndex("ReviewStatus", "Label")
+                        .HasDatabaseName("ix_knowledge_base_entries_review_status_label");
+
+                    b.ToTable("knowledge_base_entries", "app", t =>
+                        {
+                            t.HasComment("Kho tri thức do Moderator quản lý: câu hỏi, câu trả lời đã kiểm chứng, nhãn, bậc học, nguồn. Chỉ dòng approved chưa xóa được chat dùng.");
+
+                            t.HasCheckConstraint("ck_knowledge_base_entries_label", "label IS NULL OR label ~ '^LABEL_[A-Z0-9_]+$'");
+
+                            t.HasCheckConstraint("ck_knowledge_base_entries_levels", "levels <@ ARRAY['chung','thcs','thpt','dai_hoc','thac_si','tien_si']::text[]");
+
+                            t.HasCheckConstraint("ck_knowledge_base_entries_origin", "origin IN ('manual','excel','chat-unanswered')");
+
+                            t.HasCheckConstraint("ck_knowledge_base_entries_ready", "review_status NOT IN ('pending','approved') OR (coalesce(btrim(answer),'') <> '' AND label IS NOT NULL AND coalesce(btrim(source),'') <> '' AND cardinality(levels) > 0)");
+
+                            t.HasCheckConstraint("ck_knowledge_base_entries_review_status", "review_status IN ('draft','pending','approved','rejected','needs_fix')");
+                        });
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.KnowledgeBaseEntryHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("action");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<string>("ChangedFields")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("changed_fields");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("EntryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entry_id");
+
+                    b.Property<string>("FromStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("from_status");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<string>("ToStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("to_status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_knowledge_base_entry_history");
+
+                    b.HasIndex("ActorUserId")
+                        .HasDatabaseName("ix_knowledge_base_entry_history_actor_user_id");
+
+                    b.HasIndex("EntryId", "CreatedAt")
+                        .HasDatabaseName("ix_knowledge_base_entry_history_entry_id_created_at");
+
+                    b.ToTable("knowledge_base_entry_history", "app", t =>
+                        {
+                            t.HasComment("Lịch sử sửa và duyệt của mục kho tri thức.");
+                        });
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.KnowledgeDocument", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2070,6 +2277,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("parent_email");
 
+                    b.Property<string>("ParentPreferenceJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("parent_preference_json");
+
                     b.Property<Guid?>("ParentUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("parent_user_id");
@@ -2095,6 +2306,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("RevokedByUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("revoked_by_user_id");
+
+                    b.Property<Guid?>("SourceManagedUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_managed_user_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -2140,6 +2355,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RevokedByUserId")
                         .HasDatabaseName("ix_parent_student_links_revoked_by_user_id");
+
+                    b.HasIndex("SourceManagedUserId")
+                        .HasDatabaseName("ix_parent_student_links_source_managed_user_id");
 
                     b.HasIndex("TokenHash")
                         .IsUnique()
@@ -3666,6 +3884,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsLegalHold")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_legal_hold");
+
                     b.Property<double?>("Latitude")
                         .HasColumnType("double precision")
                         .HasColumnName("latitude");
@@ -3684,6 +3908,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("legal_document_urls")
                         .HasDefaultValueSql("'{}'");
+
+                    b.Property<string>("LegalHoldReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("legal_hold_reason");
 
                     b.Property<string>("LegalRepresentative")
                         .HasMaxLength(150)
@@ -4596,6 +4825,17 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_birthdate_locked");
 
+                    b.Property<bool>("IsLegalHold")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_legal_hold");
+
+                    b.Property<string>("LegalHoldReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("legal_hold_reason");
+
                     b.Property<DateTime?>("LockoutEnd")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("lockout_end");
@@ -4712,6 +4952,16 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_revoked");
 
+                    b.Property<string>("PreviousRefreshTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("previous_refresh_token_hash");
+
+                    b.Property<string>("RefreshTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("refresh_token_hash");
+
                     b.Property<string>("TokenHash")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -4733,6 +4983,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_user_sessions");
+
+                    b.HasIndex("PreviousRefreshTokenHash")
+                        .HasDatabaseName("ix_user_sessions_previous_refresh_token_hash");
+
+                    b.HasIndex("RefreshTokenHash")
+                        .HasDatabaseName("ix_user_sessions_refresh_token_hash");
 
                     b.HasIndex("TokenHash")
                         .HasDatabaseName("ix_user_sessions_token_hash");
@@ -5089,6 +5345,43 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_forum_reports_users_reporter_user_id");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.KnowledgeBaseEntry", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_knowledge_base_entries_users_created_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_knowledge_base_entries_users_deleted_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_knowledge_base_entries_users_reviewed_by_user_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.KnowledgeBaseEntryHistory", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_knowledge_base_entry_history_users_actor_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.KnowledgeBaseEntry", null)
+                        .WithMany()
+                        .HasForeignKey("EntryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_knowledge_base_entry_history_knowledge_base_entries_entry_id");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.KnowledgeDocument", b =>
                 {
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
@@ -5195,6 +5488,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasForeignKey("RevokedByUserId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_parent_student_links_users_revoked_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("SourceManagedUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_parent_student_links_users_source_managed_user_id");
 
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()

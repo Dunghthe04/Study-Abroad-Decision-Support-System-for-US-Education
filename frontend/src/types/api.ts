@@ -1,3 +1,5 @@
+import type { ProfileFlowDraft } from "@/types/profile-flow";
+
 // Mirrors the DTOs of the ASP.NET Core API (StudyAbroad.Application).
 
 export interface PagedResult<T> {
@@ -557,6 +559,8 @@ export interface AcademicProfileResponse {
   updatedAt?: string | null;
   // Đã gửi hồ sơ 6 bước (hoặc có dữ liệu cũ)
   isComplete: boolean;
+  // Đủ 5 bước của hồ sơ đã gửi (giống bước 6), null khi chưa gửi
+  details?: ProfileFlowDraft | null;
 }
 
 export interface TargetSchoolSummaryDto {
@@ -692,11 +696,14 @@ export interface CenterReceivedLeadDto {
   contactPhone?: string | null;
   message?: string | null;
   sharedProfile: boolean;
-  status: "new" | "contacted" | "closed" | string;
+  /** [UC-73] new | accepted | rejected | contacted (cũ, coi như accepted) | closed | withdrawn */
+  status: "new" | "accepted" | "rejected" | "contacted" | "closed" | string;
   createdAt: string;
   studentName?: string | null;
   studentEmail?: string | null;
   profileSummary?: SharedProfileSummaryDto | null;
+  /** [UC-73] Đã thu hồi hoặc quá 90 ngày: trung tâm không còn xem được dữ liệu đã chia sẻ. */
+  dataHidden?: boolean;
 }
 
 export interface CenterLeadsSummaryDto {
@@ -705,8 +712,11 @@ export interface CenterLeadsSummaryDto {
   page: number;
   pageSize: number;
   newCount: number;
+  /** [UC-73] Đã chấp nhận (gồm contacted cũ). */
   contactedCount: number;
   closedCount: number;
+  /** [UC-73] Bị từ chối. */
+  rejectedCount?: number;
 }
 
 export interface UpdateLeadStatusRequest {
@@ -832,18 +842,30 @@ export interface ParentChildProfileDto {
   studentName: string;
   profileTransferStatus: ProfileTransferStatus | null;
   profile: AcademicProfileResponse;
+  /** 1.5: con chưa có tài khoản do phụ huynh tạo; phụ huynh nhập hồ sơ thay con này */
+  isManaged: boolean;
+  /** 1.5d: "YYYY-MM-DD", null = chưa nhập (con giữ hồ sơ cũ của phụ huynh) */
+  dateOfBirth: string | null;
 }
 
+/** 1.5d: con thật vừa liên kết, chờ phụ huynh chọn con managed tương ứng */
+export interface PendingMatchDto {
+  linkId: string;
+  studentUserId: string;
+  studentName: string;
+  /** Ngày sinh con tự khai, "YYYY-MM-DD" */
+  dateOfBirth: string | null;
+}
+
+/** 1.5d: phụ huynh không có hồ sơ riêng, chỉ xem hồ sơ các con và ghép con thật với con managed */
 export interface ParentProfileOverviewDto {
-  hasOwnProfile: boolean;
-  /** Phụ huynh có hồ sơ tự nhập, có từ 2 con và chưa chọn con nào nhận */
-  hasPendingOwnProfile: boolean;
   children: ParentChildProfileDto[];
+  pendingMatches: PendingMatchDto[];
 }
 
-export interface ShareParentProfileResult {
+export interface MatchManagedChildResult {
   status: ProfileTransferStatus;
-  studentName: string | null;
+  studentName: string;
 }
 
 export interface ParentProfileOfferDto {

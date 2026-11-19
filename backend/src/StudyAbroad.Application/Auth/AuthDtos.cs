@@ -45,7 +45,8 @@ namespace StudyAbroad.Application.Auth
         int? Age = null);
 
     // [USAS-362] Kết quả đăng nhập thành công. AccessToken chỉ dùng để đặt HttpOnly cookie, controller không trả nó trong body
-    public record AuthResponse(string AccessToken, DateTime ExpiresAt, UserDto User);
+    // RefreshToken và SessionExpiresAt cũng chỉ để controller đặt cookie refresh (HttpOnly, chỉ gửi tới /api/v1/auth)
+    public record AuthResponse(string AccessToken, DateTime ExpiresAt, UserDto User, string? RefreshToken = null, DateTime? SessionExpiresAt = null);
 
     public record LoginRequest(string Email, string Password);
 

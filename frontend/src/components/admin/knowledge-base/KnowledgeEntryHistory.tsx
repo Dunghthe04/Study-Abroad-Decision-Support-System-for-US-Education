@@ -1,9 +1,9 @@
-import { SlmStatusBadge } from "@/components/admin/knowledge/SlmStatusBadge";
+import { SlmStatusBadge } from "@/components/admin/slm-samples/SlmStatusBadge";
 import { TableFrame } from "@/components/admin/shared/EditableTable";
-import { fieldLabels, formatDateTime, historyActionLabel } from "@/lib/slm-sample-format";
-import type { SlmSampleHistoryItem } from "@/types/slm-sample";
+import { fieldLabels, formatDateTime, historyActionLabel } from "@/lib/knowledge-base-format";
+import type { KnowledgeHistoryItem } from "@/types/knowledge-base";
 
-function Timeline({ items, emptyText }: { items: SlmSampleHistoryItem[]; emptyText: string }) {
+function Timeline({ items, emptyText }: { items: KnowledgeHistoryItem[]; emptyText: string }) {
   if (items.length === 0) return <p className="border-t border-border px-3 py-2 text-sm text-muted-foreground">{emptyText}</p>;
   return (
     <ol className="divide-y divide-border border-t border-border">
@@ -29,7 +29,7 @@ function Timeline({ items, emptyText }: { items: SlmSampleHistoryItem[]; emptyTe
   );
 }
 
-export function SlmSampleHistory({ history }: { history: SlmSampleHistoryItem[] }) {
+export function KnowledgeEntryHistory({ history }: { history: KnowledgeHistoryItem[] }) {
   return (
     <>
       <TableFrame title="Lịch sử chỉnh sửa">

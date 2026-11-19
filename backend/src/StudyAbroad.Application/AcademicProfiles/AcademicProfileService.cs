@@ -11,7 +11,8 @@ using System.Threading.Tasks;
 namespace StudyAbroad.Application.AcademicProfiles;
 
 public class AcademicProfileService(
-    IAcademicProfileRepository repository) : IAcademicProfileService
+    IAcademicProfileRepository repository,
+    IProfileFlowService? profileFlow = null) : IAcademicProfileService
 {
     public async Task<AcademicProfileResult> GetAcademicProfileAsync(Guid userId, CancellationToken ct = default)
     {
@@ -57,6 +58,9 @@ public class AcademicProfileService(
 
         var certifications = await repository.GetCertificationsAsync(profile.Id, ct);
         var response = MapToResponse(profile, terms, certifications);
+        // Đủ 5 bước cho thẻ hồ sơ ở Tài khoản và "Con của tôi"
+        if (profileFlow is not null)
+            response = response with { Details = await profileFlow.GetCommittedDetailsAsync(userId, ct) };
         return AcademicProfileResult.Ok(response);
     }
 

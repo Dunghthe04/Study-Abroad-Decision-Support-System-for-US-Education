@@ -74,6 +74,10 @@ public class ProfileFlowController(IProfileFlowService flowService) : Controller
             var updatedState = await flowService.SaveDraftAsync(userId.Value, req, ct);
             return Ok(updatedState);
         }
+        catch (ProfileLockedForParentException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
         catch (ArgumentException ex)
         {
             return BadRequest(new { error = ex.Message });
@@ -131,6 +135,10 @@ public class ProfileFlowController(IProfileFlowService flowService) : Controller
 
             return Ok(draftInfo);
         }
+        catch (ProfileLockedForParentException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
         catch (ArgumentException ex)
         {
             return BadRequest(new { error = ex.Message });
@@ -158,6 +166,10 @@ public class ProfileFlowController(IProfileFlowService flowService) : Controller
         {
             var result = await flowService.CommitFlowAsync(userId.Value, request, ct);
             return Ok(result);
+        }
+        catch (ProfileLockedForParentException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

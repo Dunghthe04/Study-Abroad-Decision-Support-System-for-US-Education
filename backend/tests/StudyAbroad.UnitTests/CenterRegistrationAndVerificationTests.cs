@@ -360,7 +360,7 @@ public class CenterRegistrationAndVerificationTests
     }
 
     [Fact]
-    public async Task UpdateCenterProfile_Verified_LegalChangeGoesBackToPendingReview_MarketingFieldsSaveDirectly()
+    public async Task UpdateCenterProfile_Verified_LegalChangeIsRejected_MarketingFieldsSaveDirectly()
     {
         var centerRepo = new FakeStudyCenterRepo();
         var service = new StudyCenterService(centerRepo, new FakeAuditLogs());
@@ -381,13 +381,12 @@ public class CenterRegistrationAndVerificationTests
         Assert.Equal("Mô tả mới", center.Description);
         Assert.Equal(CenterVerificationStatuses.Verified, center.VerificationStatus);
 
-        // [UC-92] Đã xác minh mà đổi thông tin pháp lý: lưu và đưa hồ sơ về Chờ duyệt (tạm ẩn dấu xác minh)
+        // [UC-92] Đã xác minh: khóa thông tin pháp lý, đổi thì bị từ chối và dữ liệu giữ nguyên
         var legalChange = await service.UpdateCenterProfileAsync(
             center.OwnerUserId!.Value, new UpdateCenterProfileRequest(TaxCode: "0999999999"));
-        Assert.True(legalChange.Success);
-        Assert.Equal("0999999999", center.TaxCode);
-        Assert.Equal(CenterVerificationStatuses.PendingReview, center.VerificationStatus);
-        Assert.True(legalChange.Outcome!.VerificationReset);
+        Assert.False(legalChange.Success);
+        Assert.Equal("0312345678", center.TaxCode);
+        Assert.Equal(CenterVerificationStatuses.Verified, center.VerificationStatus);
     }
 
     // ===== [UC-59] Email kết quả xét duyệt cho trung tâm, thứ tự hàng đợi =====
@@ -889,40 +888,31 @@ public class CenterRegistrationAndVerificationTests
     }
 
     [Fact]
-    public async Task UpdateCenterProfile_VerifiedLegalChange_ResetsToPendingReviewAndCreatesReverificationRequest()
+    public async Task UpdateCenterProfile_VerifiedLegalChange_IsRejectedAndNothingIsSaved()
     {
         var s = await ProfileEditSetup(CenterVerificationStatuses.Verified);
-        var previous = new CenterVerificationRequest
-        {
-            CenterId = s.Center.Id, LegalName = "Trung tâm ABC", TaxCode = "0312345678",
-            Address = "1 Lê Lợi", LegalRepresentative = "Nguyễn Văn A", Status = "approved",
-            SubmittedAt = DateTime.UtcNow.AddDays(-30),
-        };
-        previous.Documents.Add(new CenterVerificationDocument
-        {
-            RequestId = previous.Id, CenterId = s.Center.Id, DocumentType = CenterDocumentTypes.BusinessRegistration,
-            FileUrl = "uploads/dkkd.pdf", FileName = "dkkd.pdf",
-        });
-        await s.Verifications.AddRequestAsync(previous);
 
         var result = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value,
             new UpdateCenterProfileRequest(Name: "Công ty ABC Mới", TaxCode: "0999999999", Description: "Mô tả"));
 
+        Assert.False(result.Success);
+        Assert.Equal(CenterVerificationStatuses.Verified, s.Center.VerificationStatus);
+        Assert.Equal("0312345678", s.Center.TaxCode);
+        Assert.Equal("Trung tâm ABC", s.Center.Name);
+        Assert.Empty(s.Verifications.Requests);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_RejectedCenter_CanEditLegalFields()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Rejected);
+
+        var result = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value,
+            new UpdateCenterProfileRequest(Name: "Công ty ABC Mới", TaxCode: "0999999999"));
+
         Assert.True(result.Success);
-        Assert.Equal(CenterVerificationStatuses.PendingReview, s.Center.VerificationStatus);
         Assert.Equal("0999999999", s.Center.TaxCode);
         Assert.Equal("Công ty ABC Mới", s.Center.Name);
-        Assert.True(result.Outcome!.VerificationReset);
-        Assert.Contains("name", result.Outcome.LegalFields);
-        Assert.Contains("taxCode", result.Outcome.LegalFields);
-        Assert.Contains("description", result.Outcome.SavedFields);
-
-        var created = Assert.Single(s.Verifications.Requests, r => r.Id != previous.Id);
-        Assert.Equal(CenterVerificationStatuses.PendingReview, created.Status);
-        Assert.Equal("0999999999", created.TaxCode);
-        Assert.Equal("Công ty ABC Mới", created.LegalName);
-        Assert.Equal("uploads/dkkd.pdf", Assert.Single(created.Documents).FileUrl);
-        Assert.Contains(s.Audit.Logs, l => l.Action == "center.verification_reset");
     }
 
     [Fact]

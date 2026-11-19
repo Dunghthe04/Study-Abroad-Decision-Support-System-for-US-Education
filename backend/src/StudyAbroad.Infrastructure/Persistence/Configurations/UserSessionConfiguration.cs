@@ -14,8 +14,12 @@ public class UserSessionConfiguration : IEntityTypeConfiguration<UserSession>
         b.Property(x => x.TokenHash).HasMaxLength(64).IsRequired();
         b.Property(x => x.IpAddress).HasMaxLength(64);
         b.Property(x => x.UserAgent).HasMaxLength(512);
+        b.Property(x => x.RefreshTokenHash).HasMaxLength(64);
+        b.Property(x => x.PreviousRefreshTokenHash).HasMaxLength(64);
 
         b.HasIndex(x => x.TokenHash);
+        b.HasIndex(x => x.RefreshTokenHash);
+        b.HasIndex(x => x.PreviousRefreshTokenHash);
         b.HasIndex(x => new { x.UserId, x.IsRevoked });
     }
 }

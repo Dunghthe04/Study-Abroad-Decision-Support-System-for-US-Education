@@ -20,7 +20,6 @@ public class SlmSampleService(
     public const int MaxPreviewRows = 100;
     public const int MaxTopicLength = 128;
     public const int MaxSourceLength = 256;
-    public const int MaxCapturedQuestionLength = 500;
     public const string ExportAction = "slm_sample.export";
     private const string XlsxContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     private const string PersonalDataMessage = "Nội dung có số điện thoại hoặc e-mail. Hãy bỏ thông tin cá nhân trước khi lưu.";
@@ -299,28 +298,6 @@ public class SlmSampleService(
 
         var firstRows = rows.Take(MaxPreviewRows).ToList();
         return Task.FromResult(new SlmImportPreviewDto(rows.Count, firstRows, errors));
-    }
-
-    public async Task<bool> CaptureUnansweredAsync(string? question, CancellationToken ct = default)
-    {
-        var text = Clean(question) is { } q ? Regex.Replace(q, @"\s+", " ") : null;
-        if (text is null || text.Length > MaxCapturedQuestionLength || SlmPersonalDataCheck.HasContactOrLink(text))
-            return false;
-        // ponytail: check-then-insert, two identical questions at the same instant can both land; add a unique index if that shows up
-        if ((await repository.SameQuestionAsync(text, includeDeleted: true, ct)).Count > 0)
-            return false;
-
-        var sample = new SlmTrainingSample
-        {
-            SampleType = SlmSampleTypes.Knowledge,
-            Question = text,
-            Intents = "[]",
-            Source = SlmSampleSources.ChatUnanswered,
-            ReviewStatus = SlmReviewStatuses.Draft,
-        };
-        await repository.AddAsync(
-            sample, History(SlmSampleHistoryActions.Capture, null, null, SlmReviewStatuses.Draft, sample.Id), ct);
-        return true;
     }
 
     public async Task<SlmExportFile> ExportAsync(

@@ -6,6 +6,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace StudyAbroad.Infrastructure.Auth;
 
@@ -14,11 +15,18 @@ namespace StudyAbroad.Infrastructure.Auth;
 /// </summary>
 public class TokenService(IOptions<JwtOptions> options) : ITokenService
 {
+    /// <summary>Tên claim "người đang làm thay" theo RFC 8693.</summary>
+    public const string ActorClaim = "act";
+
     private readonly JwtOptions _jwt = options.Value;
 
-    public (string Token, DateTime ExpiresAt) GenerateToken(User user)
+    public (string Token, DateTime ExpiresAt) GenerateToken(User user) => Create(user, null);
+
+    public (string Token, DateTime ExpiresAt) GenerateToken(User user, Guid actingParentId) => Create(user, actingParentId);
+
+    private (string Token, DateTime ExpiresAt) Create(User user, Guid? actingParentId)
     {
-        var expiresAt = DateTime.UtcNow.AddDays(_jwt.ExpiryDays);
+        var expiresAt = DateTime.UtcNow.AddMinutes(_jwt.AccessTokenMinutes);
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.SecretKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
@@ -30,6 +38,8 @@ public class TokenService(IOptions<JwtOptions> options) : ITokenService
             new(ClaimTypes.Role, user.Role),
             new("status", user.Status)
         };
+        if (actingParentId is { } parentId)
+            claims.Add(new Claim(ActorClaim, JsonSerializer.Serialize(new { sub = parentId.ToString() }), JsonClaimValueTypes.Json));
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {

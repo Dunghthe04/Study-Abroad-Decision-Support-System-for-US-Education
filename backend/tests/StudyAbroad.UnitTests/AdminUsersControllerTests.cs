@@ -279,6 +279,21 @@ public class AdminUsersControllerTests
     }
 
     [Fact]
+    public async Task GetUserById_ManagedChild_ReturnsNotFound()
+    {
+        var childId = Guid.NewGuid();
+        var fakeAuth = new FakeAuthService
+        {
+            Users = [new UserDto(childId, "managed-abc@noreply.usas.local", "Con Managed", UserRoles.Student, UserStatuses.Managed)]
+        };
+        var controller = new AdminUsersController(fakeAuth);
+
+        var result = await controller.GetUserById(childId, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
     public async Task CreateModerator_WhenValid_ReturnsCreatedAtRoute()
     {
         var fakeAuth = new FakeAuthService();

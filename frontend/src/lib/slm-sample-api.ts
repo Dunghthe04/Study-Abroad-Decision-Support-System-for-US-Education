@@ -1,4 +1,5 @@
 import { ApiError, apiFetch } from "@/lib/api";
+import { authFetch } from "@/lib/auth-refresh";
 import type {
   PagedResult,
   SaveSlmSampleRequest,
@@ -49,7 +50,7 @@ const TEMPLATE_FILE_NAME = "slm-training-template.xlsx";
 async function postXlsx<T>(action: "preview" | "import", file: File, signal?: AbortSignal): Promise<T> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${base}/${action}`, {
+  const res = await authFetch(`${base}/${action}`, {
     method: "POST",
     credentials: "include",
     body: form,
@@ -101,7 +102,7 @@ function fileNameOf(res: Response, fallback: string): string {
 }
 
 async function download(path: string, fallbackName: string): Promise<void> {
-  const res = await fetch(path, {
+  const res = await authFetch(path, {
     credentials: "include",
     cache: "no-store",
   });
