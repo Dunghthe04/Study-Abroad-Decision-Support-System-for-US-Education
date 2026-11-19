@@ -636,8 +636,11 @@ public class LeadService(
         if (notifications is not null && !string.Equals(previousStatus, normalizedStatus, StringComparison.OrdinalIgnoreCase))
         {
             // Cùng cách gọi với màn hình của người gửi (types/lead.ts); "Mới" đứng một mình khó hiểu nên nói rõ là đang chờ trung tâm
+            // "accepted" cũng là trạng thái khi trung tâm bấm "Mở lại trao đổi" sau khi đã đóng: lúc đó không phải vừa được chấp nhận
+            var reopened = string.Equals(previousStatus, LeadStatuses.Closed, StringComparison.OrdinalIgnoreCase);
             var label = normalizedStatus switch
             {
+                "accepted" when reopened => "Trung tâm đã mở lại trao đổi",
                 "accepted" => "Đã được trung tâm chấp nhận",
                 "contacted" => "Đang trao đổi",
                 "closed" => "Đã hoàn tất",

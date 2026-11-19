@@ -838,6 +838,31 @@ public class LeadServiceTests
     }
 
     [Fact]
+    public async Task UpdateReceivedLeadStatus_Wording_ReopenAfterCloseIsNotShownAsAccepted()
+    {
+        var centerOwnerId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var centerRepo = new FakeStudyCenterRepo();
+        centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm C", OwnerUserId = centerOwnerId });
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, StudyCenterId = centerId, Status = "closed", UserId = Guid.NewGuid() });
+        var notiRepo = new NotificationTests.FakeNotificationRepo();
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository(),
+            notifications: new StudyAbroad.Application.Notifications.NotificationService(notiRepo));
+
+        await service.UpdateReceivedLeadStatusAsync(centerOwnerId, null, UserRoles.Center, leadId, "accepted");   // mở lại sau khi đóng
+        await service.UpdateReceivedLeadStatusAsync(centerOwnerId, null, UserRoles.Center, leadId, "closed");
+        await service.UpdateReceivedLeadStatusAsync(centerOwnerId, null, UserRoles.Center, leadId, "new");
+
+        Assert.Equal(
+            ["Yêu cầu liên hệ của bạn chuyển sang: Trung tâm đã mở lại trao đổi.",
+             "Yêu cầu liên hệ của bạn chuyển sang: Đã hoàn tất.",
+             "Yêu cầu liên hệ của bạn chuyển sang: Chờ trung tâm phản hồi."],
+            notiRepo.Items.OrderBy(n => n.CreatedAt).Select(n => n.Body));
+    }
+
+    [Fact]
     public async Task UpdateReceivedLeadStatus_ValidStatus_UpdatesAndReturnsNewStatus()
     {
         var centerOwnerId = Guid.NewGuid();
