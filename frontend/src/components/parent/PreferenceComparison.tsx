@@ -6,7 +6,15 @@ import { useState, type ReactNode } from "react";
 import { AlertTriangleIcon, HandshakeIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { CompareGroup, CompareLabel, ComparedSchool, PreferenceCompareDto } from "@/lib/parent-preference-api";
+import { SchoolCard } from "@/components/recommendation/SchoolCard";
+import type {
+  CompareGroup,
+  CompareItems,
+  CompareLabel,
+  ComparedSchool,
+  PreferenceCompareDto,
+} from "@/lib/parent-preference-api";
+import type { PickedSchool, ScoredSchool } from "@/types/recommendation";
 
 // Cùng tên với thanh ưu tiên bên trình mô phỏng
 export const PREF_NAMES = ["Chi phí thấp", "Học bổng nhiều", "Danh tiếng"];
@@ -118,6 +126,7 @@ export function PreferenceComparison({
         <div className="space-y-4">
           <Grouped
             schools={c.schools}
+            items={data.studentItems}
             groupOf={(s) => s.studentGroup}
             rankOf={(s) => s.studentRank}
             badges={(s) => <Badge variant={LABEL[s.label].variant}>{LABEL[s.label].text}</Badge>}
@@ -126,19 +135,20 @@ export function PreferenceComparison({
           {added.length > 0 && (
             <section className="space-y-2 rounded-2xl border border-ok/30 p-4">
               <h3 className="text-sm font-semibold text-foreground">Cha mẹ sẽ thêm</h3>
-              <ul className="divide-y divide-line">
+              <div className="space-y-3">
                 {added.map((s) => (
-                  <SchoolRow key={s.code} school={s} rank={s.parentRank}>
+                  <CompareCard key={s.code} school={s} rank={s.parentRank} items={data.parentItems}>
                     {s.parentGroup && <Badge variant="neutral">{GROUP_TITLE[s.parentGroup]}</Badge>}
-                  </SchoolRow>
+                  </CompareCard>
                 ))}
-              </ul>
+              </div>
             </section>
           )}
         </div>
       ) : (
         <Grouped
           schools={c.schools}
+          items={data.parentItems}
           groupOf={(s) => s.parentGroup}
           rankOf={(s) => s.parentRank}
           badges={(s) =>
@@ -202,12 +212,14 @@ function PrefTable({
 // Danh sách theo nhóm Khó / Vừa / An toàn..., trong nhóm theo hạng
 function Grouped({
   schools,
+  items,
   groupOf,
   rankOf,
   badges,
   empty,
 }: {
   schools: ComparedSchool[];
+  items: CompareItems | null | undefined;
   groupOf: (s: ComparedSchool) => CompareGroup | null;
   rankOf: (s: ComparedSchool) => number | null;
   badges: (s: ComparedSchool) => ReactNode;
@@ -223,18 +235,64 @@ function Grouped({
     <div className="space-y-4">
       {sections.map((g) => (
         <section key={g.key} className="space-y-2">
-          <h3 className="text-sm font-semibold text-foreground">{g.title}</h3>
-          <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+          <h3 className="text-h3 text-foreground">{g.title}</h3>
+          <div className="space-y-3">
             {g.items.map((s) => (
-              <SchoolRow key={s.code} school={s} rank={rankOf(s)}>
+              <CompareCard key={s.code} school={s} rank={rankOf(s)} items={items}>
                 {badges(s)}
-              </SchoolRow>
+              </CompareCard>
             ))}
-          </ul>
+          </div>
         </section>
       ))}
     </div>
   );
+}
+
+// Nhãn so sánh + lý do ở trên, thẻ trường y như trang Gợi ý ở dưới (không có nút Vì sao / Cần gì để vào:
+// hai nút đó chạy theo hồ sơ thật của con). API cũ không trả danh sách thì về dạng một dòng.
+function CompareCard({
+  school: s,
+  rank,
+  items,
+  children,
+}: {
+  school: ComparedSchool;
+  rank: number | null;
+  items: CompareItems | null | undefined;
+  children?: ReactNode;
+}) {
+  const found = items ? findSchool(items, s.code) : null;
+  if (!found) {
+    return (
+      <ul className="overflow-hidden rounded-2xl border border-line bg-surface">
+        <SchoolRow school={s} rank={rank}>
+          {children}
+        </SchoolRow>
+      </ul>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {rank != null && <span className="text-xs font-semibold text-muted-foreground">#{rank}</span>}
+        {children}
+        {s.reason && <span className="text-xs text-ink-2">{s.reason}</span>}
+      </div>
+      <SchoolCard picked={found.picked} school={found.school} />
+    </div>
+  );
+}
+
+const BLOCKS = ["reach", "match", "safety", "aid", "other"] as const;
+
+function findSchool(items: CompareItems, code: string): { picked: PickedSchool; school: ScoredSchool | undefined } | null {
+  const same = (c: string) => c.toLowerCase() === code.toLowerCase();
+  for (const b of BLOCKS) {
+    const picked = items[b]?.find((p) => same(p.code));
+    if (picked) return { picked, school: items.scored?.find((x) => same(x.code)) };
+  }
+  return null;
 }
 
 function SchoolRow({ school: s, rank, children }: { school: ComparedSchool; rank: number | null; children?: ReactNode }) {

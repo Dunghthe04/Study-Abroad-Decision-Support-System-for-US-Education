@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircleIcon, ClockIcon, RefreshCwIcon } from "lucide-react";
+import { AlertCircleIcon, ClockIcon, RefreshCwIcon, UsersIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ErrorFallback } from "@/components/ui/error-fallback";
@@ -217,6 +217,20 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
               <ClockIcon className="size-3.5" />
               Lịch sử gợi ý
             </Button>
+            {/* [UC-76] con xem danh sách theo ưu tiên cha mẹ (chỉ đọc); phụ huynh đang xem hộ thì không có */}
+            {user?.role !== "parent" && (
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                role="link"
+                render={<Link href="/parent-preferences" />}
+                className="gap-1"
+              >
+                <UsersIcon className="size-3.5" />
+                So với cha mẹ
+              </Button>
+            )}
           </div>
         )}
       </div>

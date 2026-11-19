@@ -2,6 +2,7 @@
 // Con managed / không liên kết: backend trả 404. Hồ sơ con chưa đủ để tính: 409. pref hoặc số tiền sai: 400.
 
 import { apiFetch } from "@/lib/api";
+import type { RecommendationItems } from "@/types/recommendation";
 
 /** [chi phí thấp, học bổng nhiều, danh tiếng], mỗi mức 0..4 */
 export type PrefTriple = [number, number, number];
@@ -67,7 +68,12 @@ export interface PreferenceCompareDto {
   computedAt: string | null;
   comparison: PreferenceComparisonResult | null;
   message: string | null;
+  /** Hai danh sách cùng khuôn trang Gợi ý, chỉ có số liệu các trường được xếp nhóm. API cũ không có. */
+  studentItems?: CompareItems | null;
+  parentItems?: CompareItems | null;
 }
+
+export type CompareItems = Omit<RecommendationItems, "failed">;
 
 export interface ChildPreferenceView {
   parents: { id: string; name: string; hasPref: boolean }[];
