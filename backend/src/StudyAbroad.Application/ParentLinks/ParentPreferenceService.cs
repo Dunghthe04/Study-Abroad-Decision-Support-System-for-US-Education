@@ -19,13 +19,16 @@ public record ParentPreferenceDto(
 // IsPreview: danh sách cha mẹ vừa tính từ giá trị chưa lưu (kéo thanh, hoặc cha mẹ chưa lưu lần nào → [2,2,2]).
 // ProfileChangedAfterRun: con sửa hồ sơ sau lần nhận gợi ý mới nhất, hai bên có thể lệch vì hồ sơ chứ không vì ưu tiên.
 // StudentItems / ParentItems: hai danh sách cùng khuôn ItemsJson, chỉ giữ số liệu các trường được xếp nhóm, để frontend vẽ thẻ trường như trang Gợi ý.
+// StudentBudgetUsd / StudentScholarshipNeed: ngân sách và nhu cầu học bổng của con trong lần gợi ý đó (criteria_json),
+// để con thấy ngân sách cha mẹ nhập đặt cạnh ngân sách của mình mà hiểu vì sao hai danh sách khác nhau.
 public record PreferenceCompareDto(
     bool StudentHasRun, IReadOnlyList<int>? StudentPref, IReadOnlyList<int> ParentPref,
     long? ParentBudgetVnd, decimal? ParentBudgetUsd, decimal? VndPerUsd,
     bool ParentHasPref, bool IsPreview, bool ProfileChangedAfterRun,
     DateTime? StudentRunAt, DateTime? SavedAt, DateTime? ComputedAt,
     PreferenceComparison? Comparison, string? Message,
-    JsonElement? StudentItems = null, JsonElement? ParentItems = null);
+    JsonElement? StudentItems = null, JsonElement? ParentItems = null,
+    decimal? StudentBudgetUsd = null, string? StudentScholarshipNeed = null);
 
 // Trang của con: các cha/mẹ liên kết thật (ô chọn Bố / Mẹ) và so sánh của người đang chọn
 public record ParentOption(Guid Id, string Name, bool HasPref);
@@ -288,9 +291,29 @@ public class ParentPreferenceService(
         var changed = profile?.UpdatedAt is { } u && u > latest.CreatedAt;
 
         var comparison = PreferenceComparer.Compare(studentItems, parentItems, studentPref, parentPref, budgetUsd);
+        var (studentBudget, studentNeed) = StudentBudget(latest.CriteriaJson);
         return new PreferenceCompareDto(true, studentPref, parentPref, budgetVnd, budgetUsd, vndPerUsd,
             parentHasPref, isPreview, changed, latest.CreatedAt, savedAt, computedAt, comparison, null,
-            Picked(studentItems), Picked(parentItems));
+            Picked(studentItems), Picked(parentItems), studentBudget, studentNeed);
+    }
+
+    /// <summary>Ngân sách (USD/năm) và nhu cầu học bổng của con lưu trong criteria_json của lần gợi ý. Thiếu hoặc hỏng: null. public để test đọc.</summary>
+    public static (decimal? BudgetUsd, string? ScholarshipNeed) StudentBudget(string? criteriaJson)
+    {
+        try
+        {
+            if (criteriaJson is not null && JsonNode.Parse(criteriaJson) is JsonObject o)
+            {
+                decimal? budget = o["budget"] is JsonValue b && b.TryGetValue<decimal>(out var d) ? d : null;
+                string? need = o["scholarshipNeed"] is JsonValue n && n.TryGetValue<string>(out var t) ? t : null;
+                return (budget, need);
+            }
+        }
+        catch (JsonException)
+        {
+            // criteria hỏng: coi như không biết
+        }
+        return (null, null);
     }
 
     private static readonly string[] Blocks = ["reach", "match", "safety", "aid", "other"];
