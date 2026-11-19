@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BellIcon, CheckCheckIcon } from "lucide-react";
 import { notificationsApi } from "@/lib/api";
+import { onRealtime } from "@/lib/realtime";
 import type { NotificationDto, PagedResult } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -46,6 +47,20 @@ export function NotificationsView() {
   // Tăng để tải lại danh sách sau khi đánh dấu đã đọc
   const [reloadKey, setReloadKey] = useState(0);
   const load = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  // Thông báo mới tự hiện, không cần tải lại trang: ngay khi server đẩy xuống, và khi quay lại tab
+  // (phòng khi chưa có kết nối realtime). Không nghe "notifications:changed" vì chính trang này phát sự kiện đó sau khi đánh dấu đã đọc.
+  useEffect(() => {
+    const offPush = onRealtime("notification", load);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      offPush();
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [load]);
 
   useEffect(() => {
     let cancelled = false;
