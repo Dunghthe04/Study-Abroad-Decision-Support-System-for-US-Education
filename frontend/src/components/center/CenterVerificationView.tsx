@@ -54,11 +54,14 @@ export function CenterVerificationView() {
   }, [formSuccess]);
 
   useEffect(() => {
-    try {
-      if (sessionStorage.getItem("center_verified_banner_dismissed") === "true") {
-        setDismissedVerified(true);
-      }
-    } catch {}
+    // Đọc sau một tick (không setState đồng bộ trong effect); sessionStorage có thể không khả dụng
+    void Promise.resolve().then(() => {
+      try {
+        if (sessionStorage.getItem("center_verified_banner_dismissed") === "true") {
+          setDismissedVerified(true);
+        }
+      } catch {}
+    });
   }, []);
 
   const fetchStatus = async () => {

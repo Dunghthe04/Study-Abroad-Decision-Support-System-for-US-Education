@@ -82,13 +82,16 @@ export function CenterStatusBanner() {
 
   useEffect(() => {
     // Kiểm tra xem user đã đóng banner "đã xác minh" trước đó chưa
-    try {
-      if (sessionStorage.getItem("center_verified_banner_dismissed") === "true") {
-        setDismissed(true);
+    // Đọc sau một tick (không setState đồng bộ trong effect); sessionStorage có thể không khả dụng
+    void Promise.resolve().then(() => {
+      try {
+        if (sessionStorage.getItem("center_verified_banner_dismissed") === "true") {
+          setDismissed(true);
+        }
+      } catch {
+        // sessionStorage không khả dụng
       }
-    } catch {
-      // sessionStorage không khả dụng
-    }
+    });
 
     let active = true;
     void (async () => {
