@@ -120,6 +120,7 @@ public class ParentPreferenceServiceTests
         Assert.Null(s.VndPerUsd);
         Assert.Null(s.BudgetUsd);
         Assert.Null(_runner.LastOverrides!.BudgetUsd);   // dùng ngân sách trong hồ sơ của con
+        Assert.Null(_runner.LastOverrides!.BudgetTolerance);   // ngân sách của con: mức dư như con (10%)
     }
 
     // 8
@@ -153,6 +154,7 @@ public class ParentPreferenceServiceTests
         Assert.Equal(_child, _runner.LastUserId);   // tính trên hồ sơ của con
         Assert.Equal(Pref, _runner.LastPref);
         Assert.Equal(50_000m, _runner.LastOverrides!.BudgetUsd);
+        Assert.Equal(0m, _runner.LastOverrides!.BudgetTolerance);   // ngân sách cha mẹ là con số chốt, không có mức dư
     }
 
     // 10

@@ -257,10 +257,14 @@ public class ParentPreferenceService(
         return (rate, Math.Round(vnd / rate, 0));
     }
 
+    /// <summary>Giả định để tính danh sách theo cha mẹ. Cha mẹ có nhập ngân sách thì đó là con số chốt: mức dư 0%,
+    /// vượt dù 1 USD là sang khối cần học bổng (trường không có học bổng thì loại). Bỏ trống thì dùng ngân sách của con kèm mức dư như con.</summary>
+    public static SimulationOverrides OverridesFor(decimal? budgetUsd) =>
+        new(null, null, null, null, budgetUsd, null, null, BudgetTolerance: budgetUsd is null ? null : 0m);
+
     private async Task<JsonElement> SimulateAsync(Guid childId, IReadOnlyList<int> pref, decimal? budgetUsd, CancellationToken ct)
     {
-        var overrides = new SimulationOverrides(null, null, null, null, budgetUsd, null, null);
-        var sim = await runner.SimulateAsync(childId, overrides, pref, ct);
+        var sim = await runner.SimulateAsync(childId, OverridesFor(budgetUsd), pref, ct);
         return JsonSerializer.Deserialize<JsonElement>(sim.ItemsJson);
     }
 

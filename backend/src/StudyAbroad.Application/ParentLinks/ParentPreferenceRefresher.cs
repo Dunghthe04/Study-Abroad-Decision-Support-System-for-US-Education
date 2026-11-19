@@ -38,8 +38,7 @@ public class ParentPreferenceRefresher(
                 try
                 {
                     // Ý của cha mẹ giữ nguyên (pref + ngân sách USD đã chốt), chỉ tính lại trên hồ sơ / lần gợi ý mới của con
-                    var overrides = new SimulationOverrides(null, null, null, null, stored.BudgetUsd, null, null);
-                    var sim = await runner.SimulateAsync(childId, overrides, stored.Pref, ct);
+                    var sim = await runner.SimulateAsync(childId, ParentPreferenceService.OverridesFor(stored.BudgetUsd), stored.Pref, ct);
                     next = stored with
                     {
                         Result = JsonSerializer.Deserialize<JsonElement>(sim.ItemsJson),

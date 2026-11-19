@@ -64,6 +64,7 @@ public class ParentPreferenceRefresherTests
         Assert.Equal(_child, call.UserId);
         Assert.Equal(Pref, call.Pref);
         Assert.Equal(50_000m, call.Overrides.BudgetUsd);
+        Assert.Equal(0m, call.Overrides.BudgetTolerance);
     }
 
     // 2
