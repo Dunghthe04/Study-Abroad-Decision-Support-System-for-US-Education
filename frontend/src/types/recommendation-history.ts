@@ -33,10 +33,19 @@ export interface RunSchoolChange {
   toRank: number | null;
 }
 
+// [UC-76 2h-2] Một mục đầu vào khác nhau giữa hai lần chạy, giá trị backend đã ghi thành chữ ("Không rõ" với lần chạy cũ thiếu mục)
+export interface RunInputChange {
+  key: string;
+  label: string;
+  from: string;
+  to: string;
+}
+
 export interface RunComparison {
   from: RecommendationRunSummary;
   to: RecommendationRunSummary;
   changes: RunSchoolChange[];
+  inputChanges: RunInputChange[];
 }
 
 export type RunChangeKind = "new" | "dropped" | "group" | "rank";

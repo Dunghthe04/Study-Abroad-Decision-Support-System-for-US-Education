@@ -249,6 +249,7 @@ function Place({ group, rank }: { group: HistoryGroup | null; rank: number | nul
 
 function ComparisonBody({ comparison }: { comparison: RunComparison }) {
   const { from, to, changes } = comparison;
+  const inputs = comparison.inputChanges ?? [];
   return (
     <>
       <DialogHeader className="pr-8">
@@ -257,6 +258,32 @@ function ComparisonBody({ comparison }: { comparison: RunComparison }) {
           Lần trước {formatTime(from.createdAt)} → lần sau {formatTime(to.createdAt)}
         </DialogDescription>
       </DialogHeader>
+
+      {/* UC-76 2h-3: đầu vào khác gì giữa hai lần, để hiểu vì sao danh sách đổi */}
+      <section className="rounded-xl border border-line bg-ground p-3" aria-labelledby="input-changes">
+        <h3 id="input-changes" className="text-sm font-semibold text-foreground">
+          Đầu vào đã đổi
+        </h3>
+        {inputs.length === 0 ? (
+          <p className="mt-1 text-sm text-ink-2">
+            {changes.length === 0
+              ? "Đầu vào giữ nguyên."
+              : "Đầu vào giữ nguyên; danh sách đổi do dữ liệu trường được cập nhật."}
+          </p>
+        ) : (
+          <ul className="mt-2 space-y-1 text-sm">
+            {inputs.map((c) => (
+              <li key={c.key} className="flex flex-wrap items-center gap-x-1.5">
+                <span className="text-muted-foreground">{c.label}:</span>
+                <span className="text-ink-2">{c.from}</span>
+                <ArrowRightIcon className="size-3.5 text-ink-3" aria-label="thành" />
+                <span className="font-semibold text-foreground">{c.to}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-2 text-xs text-ink-3">Điểm tiếng Anh không được lưu theo từng lần nên không so được.</p>
+      </section>
 
       {changes.length === 0 ? (
         <p className="py-4 text-center text-sm text-muted-foreground">
