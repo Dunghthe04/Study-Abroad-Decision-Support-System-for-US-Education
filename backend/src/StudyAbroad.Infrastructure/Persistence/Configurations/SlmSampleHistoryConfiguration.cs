@@ -11,6 +11,7 @@ public class SlmSampleHistoryConfiguration : IEntityTypeConfiguration<SlmSampleH
         b.ToTable("slm_sample_history", t => t.HasComment("Lịch sử sửa và duyệt của mẫu SLM."));
 
         b.HasKey(x => x.Id);
+        b.Ignore(x => x.UpdatedAt); // lịch sử chỉ thêm, không bao giờ sửa
         b.HasOne<SlmTrainingSample>().WithMany().HasForeignKey(x => x.SampleId).OnDelete(DeleteBehavior.Cascade);
         b.HasOne<User>().WithMany().HasForeignKey(x => x.ActorUserId).OnDelete(DeleteBehavior.SetNull);
 

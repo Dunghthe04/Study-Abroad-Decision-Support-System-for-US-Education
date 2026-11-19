@@ -58,7 +58,6 @@ public class SlmTrainingSampleConfiguration : IEntityTypeConfiguration<SlmTraini
 
         b.HasIndex(x => new { x.ReviewStatus, x.SampleType });
         b.HasIndex(x => x.CreatedByUserId);
-        b.HasIndex(x => x.Split);
         b.HasIndex(x => x.CreatedAt);
     }
 }

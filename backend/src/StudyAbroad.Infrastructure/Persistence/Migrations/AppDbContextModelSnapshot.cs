@@ -1647,10 +1647,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("to_status");
 
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
                     b.HasKey("Id")
                         .HasName("pk_knowledge_base_entry_history");
 
@@ -3351,10 +3347,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("to_status");
 
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
                     b.HasKey("Id")
                         .HasName("pk_slm_sample_history");
 
@@ -3504,9 +3496,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ReviewedByUserId")
                         .HasDatabaseName("ix_slm_training_samples_reviewed_by_user_id");
-
-                    b.HasIndex("Split")
-                        .HasDatabaseName("ix_slm_training_samples_split");
 
                     b.HasIndex("ReviewStatus", "SampleType")
                         .HasDatabaseName("ix_slm_training_samples_review_status_sample_type");
