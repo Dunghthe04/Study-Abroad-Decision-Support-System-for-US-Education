@@ -122,6 +122,26 @@ public class LeadsControllerTests
             return Task.FromResult(updated);
         }
 
+        public List<(Guid LeadId, bool Accept)> Decisions { get; } = [];
+
+        public Task<CenterReceivedLeadDto> AcceptReceivedLeadAsync(Guid userId, string? userEmail, string userRole, Guid leadId, CancellationToken ct = default) =>
+            Decide(leadId, true);
+
+        public Task<CenterReceivedLeadDto> RejectReceivedLeadAsync(Guid userId, string? userEmail, string userRole, Guid leadId, CancellationToken ct = default) =>
+            Decide(leadId, false);
+
+        private Task<CenterReceivedLeadDto> Decide(Guid leadId, bool accept)
+        {
+            var lead = ReceivedLeads.FirstOrDefault(l => l.Id == leadId)
+                ?? throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
+            if (lead.Status != "new")
+                throw new LeadRuleException("lead_not_new", 400, "Chỉ chấp nhận hoặc từ chối được yêu cầu ở trạng thái Mới.");
+            Decisions.Add((leadId, accept));
+            var updated = lead with { Status = accept ? "accepted" : "rejected" };
+            ReceivedLeads[ReceivedLeads.IndexOf(lead)] = updated;
+            return Task.FromResult(updated);
+        }
+
         public Dictionary<Guid, List<LeadMessageDto>> MessagesByLead { get; } = [];
         public Guid? ForbiddenLeadId { get; set; }
 
@@ -1052,5 +1072,49 @@ public class LeadsControllerTests
         var thread = Assert.IsType<LeadMessagesThreadDto>(ok.Value);
         Assert.Single(thread.Messages);
     }
-}
 
+    private static CenterReceivedLeadDto NewReceivedLead(Guid leadId, string status = "new") =>
+        new(leadId, Guid.NewGuid(), "Du Học Á Âu", "bachelor", null, "Em hỏi học bổng", true, status, DateTime.UtcNow,
+            "Nguyen Van A", "a@example.com", null);
+
+    [Fact]
+    public async Task AcceptAndRejectLead_AsCenter_ReturnUpdatedStatus()
+    {
+        var (controller, service) = CreateCenterController(Guid.NewGuid());
+        var a = Guid.NewGuid();
+        var r = Guid.NewGuid();
+        service.ReceivedLeads.Add(NewReceivedLead(a));
+        service.ReceivedLeads.Add(NewReceivedLead(r));
+
+        var accepted = Assert.IsType<CenterReceivedLeadDto>(Assert.IsType<OkObjectResult>(await controller.AcceptLead(a, CancellationToken.None)).Value);
+        var rejected = Assert.IsType<CenterReceivedLeadDto>(Assert.IsType<OkObjectResult>(await controller.RejectLead(r, CancellationToken.None)).Value);
+
+        Assert.Equal("accepted", accepted.Status);
+        Assert.Equal("rejected", rejected.Status);
+        Assert.Equal([(a, true), (r, false)], service.Decisions);
+    }
+
+    [Fact]
+    public async Task AcceptLead_NotNewOrUnknown_ReturnsRuleErrorOr404()
+    {
+        var (controller, service) = CreateCenterController(Guid.NewGuid());
+        var closed = Guid.NewGuid();
+        service.ReceivedLeads.Add(NewReceivedLead(closed, "closed"));
+
+        var notNew = Assert.IsType<ObjectResult>(await controller.AcceptLead(closed, CancellationToken.None));
+        Assert.Equal(400, notNew.StatusCode);
+        Assert.IsType<NotFoundObjectResult>(await controller.RejectLead(Guid.NewGuid(), CancellationToken.None));
+    }
+
+    [Fact]
+    public void AcceptAndRejectLead_AreCenterOnly()
+    {
+        static string? RolesOf(string method) =>
+            typeof(LeadsController).GetMethod(method)
+                ?.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
+                .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>().Single().Roles;
+
+        Assert.Equal(UserRoles.Center, RolesOf(nameof(LeadsController.AcceptLead)));
+        Assert.Equal(UserRoles.Center, RolesOf(nameof(LeadsController.RejectLead)));
+    }
+}

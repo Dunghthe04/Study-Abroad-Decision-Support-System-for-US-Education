@@ -173,13 +173,18 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         }
 
         var newCount = await baseLeads.CountAsync(l => l.Status == "new", ct);
-        var contactedCount = await baseLeads.CountAsync(l => l.Status == "contacted", ct);
+        // [UC-73] "Đã chấp nhận" gồm cả accepted và contacted (trạng thái cũ)
+        var contactedCount = await baseLeads.CountAsync(l => l.Status == "contacted" || l.Status == "accepted", ct);
         var closedCount = await baseLeads.CountAsync(l => l.Status == "closed", ct);
+        var rejectedCount = await baseLeads.CountAsync(l => l.Status == "rejected", ct);
 
         var filteredLeads = baseLeads;
         if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "all", StringComparison.OrdinalIgnoreCase))
         {
-            filteredLeads = filteredLeads.Where(l => l.Status == status.ToLower());
+            var wanted = status.ToLower();
+            filteredLeads = wanted is "contacted" or "accepted"
+                ? filteredLeads.Where(l => l.Status == "contacted" || l.Status == "accepted")
+                : filteredLeads.Where(l => l.Status == wanted);
         }
 
         var query = from l in filteredLeads
@@ -194,6 +199,9 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
             var term = search.Trim();
             // [UC-80] Lead đã thu hồi không khớp tìm kiếm, để không lộ tên/SĐT/lời nhắn của người đã xóa tài khoản
             query = query.Where(x => x.Lead.Status != LeadStatuses.Withdrawn);
+            // [UC-73] Lead quá 90 ngày cũng không khớp tìm kiếm theo dữ liệu đã chia sẻ
+            var visibleSince = DateTime.UtcNow.AddDays(-CenterLeadMapper.DataVisibleDays);
+            query = query.Where(x => x.Lead.CreatedAt >= visibleSince);
             query = query.Where(x => (x.Lead.ContactPhone != null && EF.Functions.ILike(x.Lead.ContactPhone, $"%{term}%"))
                                   || (x.Lead.Message != null && EF.Functions.ILike(x.Lead.Message, $"%{term}%"))
                                   || (x.Lead.SharedFields.Contains(LeadSharedFields.Contact) && EF.Functions.ILike(x.User.FullName, $"%{term}%")));
@@ -224,7 +232,10 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
             safePageSize,
             newCount,
             contactedCount,
-            closedCount);
+            closedCount)
+        {
+            RejectedCount = rejectedCount,
+        };
     }
 
     public async Task<CenterReceivedLeadDto?> GetReceivedLeadDetailAsync(
