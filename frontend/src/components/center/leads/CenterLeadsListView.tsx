@@ -728,7 +728,9 @@ export function CenterLeadsListView() {
                           <span className="text-ink-3 block">GPA tích lũy:</span>
                           <span className="font-heading text-base font-bold text-ok tabular-nums">
                             {selectedLead.profileSummary.overallGpa != null
-                              ? `${selectedLead.profileSummary.overallGpa} / 4.0`
+                              ? `${Number(selectedLead.profileSummary.overallGpa).toFixed(
+                                  Math.max(1, (String(selectedLead.profileSummary.overallGpa).split(".")[1] ?? "").length)
+                                )} / 4.0`
                               : "Chưa cập nhật"}
                           </span>
                         </div>
