@@ -1,3 +1,5 @@
+using StudyAbroad.Domain.Entities;
+
 namespace StudyAbroad.Application.Billing;
 
 /// <summary>
@@ -17,4 +19,17 @@ public interface IEntitlementService
 
     /// <summary>Các gói đang bán, theo thứ tự hiển thị (GET plans).</summary>
     Task<IReadOnlyList<PlanDto>> GetPlansOnSaleAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Đưa một làn (chủ, loại) tới nowUtc và trả kỳ active, kỳ queued, token đã dùng của kỳ active (thực thể đang theo dõi, đã lưu các chuyển kỳ).
+    /// Làn family không còn kỳ nào thì nhóm active của chủ bị kết thúc (family_lapsed) như khi đọc quyền dùng.
+    /// Mặc định ném lỗi để các bản giả trong test không phải cài; <see cref="EntitlementService"/> là bản thật.
+    /// </summary>
+    Task<LaneState> AdvanceLaneAsync(Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default) =>
+        throw new NotSupportedException();
 }
+
+/// <summary>Trạng thái một làn sau khi chuyển kỳ. Active / Queued là thực thể đang theo dõi (sửa được rồi lưu).</summary>
+/// <param name="ActiveUsed">Token đã dùng của kỳ active (0 nếu không có).</param>
+/// <param name="ActiveExhausted">Có kỳ active và đã dùng hết hạn mức (hạn mức 0 luôn hết).</param>
+public sealed record LaneState(UserSubscription? Active, UserSubscription? Queued, long ActiveUsed, bool ActiveExhausted);
