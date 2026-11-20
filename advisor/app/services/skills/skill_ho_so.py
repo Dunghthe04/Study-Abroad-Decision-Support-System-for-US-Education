@@ -791,7 +791,7 @@ def confirm(state: ChatState) -> SkillOutput:
             profile_field.status = "confirmed"
     missing = missing_fields(state.profile, REQUIRED_B3)
     if not missing:
-        # Sang B3, chat_flow chạy skill_danh_gia ngay trong lượt này
+        # Sang B3: hồ sơ đủ để tư vấn (nhánh tư vấn dựng skill từ khuôn rồi nhờ Claude viết)
         go_to(state, "B3")
         return SkillOutput(SAVED)
     if missing[0] == "target_level":

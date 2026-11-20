@@ -206,8 +206,6 @@ WRITING_SKILLS = [
     "skill_goal_seek",
     "skill_kich_ban",
     "skill_explain",
-    "skill_danh_gia",
-    "skill_lo_trinh",
     "viet_tra_loi_ho_so",
 ]
 

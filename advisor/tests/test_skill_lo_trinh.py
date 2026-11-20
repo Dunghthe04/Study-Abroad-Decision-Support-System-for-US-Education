@@ -1,10 +1,14 @@
 from datetime import date
 
-from app.schemas.chat import ChatState, ProfileField
-from app.services.ollama import OllamaError
-from app.services.skills.skill_lo_trinh import LoTrinhHandler, RoutePlanner, choose_route
-from tests.fakes import FakeLLM
-from tests.vef import VEF, VEF_RULES
+from app.schemas.chat import ProfileField
+from app.services.skills.skill_lo_trinh import (
+    RECOMMEND_ACTION,
+    action_for,
+    choose_route,
+    render,
+    template_reasons,
+)
+from tests.vef import VEF
 
 TODAY = date(2026, 10, 28)
 
@@ -60,59 +64,42 @@ def test_th35_deadline_soon_postpone():
     assert route.months_to_deadline < 1
 
 
-def ai_answer(route, alt=(), reasons=("Hồ sơ của bạn đủ điều kiện nộp thẳng vào đại học.",)):
-    return {"route": route, "alt_routes": list(alt), "reasons": list(reasons)}
+def planned(p):
+    route, _, intake = choose_route(p, TODAY, VEF)
+    route.reasons = template_reasons(route)
+    return route, intake
 
 
-async def test_ai_reasons_used_when_route_matches():
-    llm = FakeLLM(ai_answer("direct"))
-    route, _ = await RoutePlanner(llm, "qwen3:8b").plan(good(), TODAY, VEF)
-
-    assert route.ai_used is True
-    assert route.reasons == ["Hồ sơ của bạn đủ điều kiện nộp thẳng vào đại học."]
-
-
-# TH-36: Qwen đổi lộ trình hoặc bịa số → gọi lại, vẫn sai thì lộ trình của code và câu mẫu
-async def test_th36_wrong_route_or_made_up_number_falls_back(caplog):
-    llm = FakeLLM(ai_answer("pathway"), ai_answer("direct", reasons=["Tỉ lệ đỗ của bạn khoảng 90%."]))
-    route, _ = await RoutePlanner(llm, "qwen3:8b").plan(good(), TODAY, VEF)
-
-    assert len(llm.calls) == 2
-    assert (route.route, route.ai_used) == ("direct", False)
-    assert route.reasons == ["Hồ sơ của bạn đủ điều kiện nộp thẳng vào đại học."]
-    assert "skill_lo_trinh" in caplog.text
-
-
-async def test_ollama_down_uses_template():
-    p = good(budget="tier_under_20k")
-    route, _ = await RoutePlanner(FakeLLM(OllamaError("x"), OllamaError("x")), "qwen3:8b").plan(p, TODAY, VEF)
+def test_template_reasons_name_the_cause_of_the_route():
+    route, _ = planned(good(budget="tier_under_20k"))
 
     assert route.route == "cc_2plus2"
     assert route.reasons[0].startswith("Ngân sách còn hẹp")
 
 
-async def test_handler_direct_has_timeline_and_deadline_note():
-    state = ChatState(current_step="B4", grade_scale=VEF_RULES, profile=good())
-    out = await LoTrinhHandler(FakeLLM(ai_answer("direct")), "qwen3:8b").run(state, "Có")
+def test_direct_route_text_has_timeline_and_deadline_note():
+    route, intake = planned(good())
+    text = render(route, intake, "Computer Science")
 
-    assert "Lộ trình phù hợp với bạn: Đại học thẳng." in out.answer
-    assert "Nộp sớm (EA/ED): khoảng tháng 11/2026" in out.answer
-    assert "Nộp thường lệ (RD): khoảng tháng 1/2027" in out.answer
-    assert "Xin visa: khoảng tháng 5/2027" in out.answer
-    assert "kiểm tra hạn nộp chính xác trên trang của từng trường" in out.answer
-    assert state.question_id is None
+    assert "Lộ trình phù hợp với bạn: Đại học thẳng." in text
+    assert "Hồ sơ của bạn đủ điều kiện nộp thẳng vào đại học." in text
+    assert "Nộp sớm (EA/ED): khoảng tháng 11/2026" in text
+    assert "Nộp thường lệ (RD): khoảng tháng 1/2027" in text
+    assert "Xin visa: khoảng tháng 5/2027" in text
+    assert "kiểm tra hạn nộp chính xác trên trang của từng trường" in text
 
 
-async def test_handler_other_route_says_no_list_and_gives_criteria():
-    state = ChatState(current_step="B4", grade_scale=VEF_RULES, profile=good(budget="tier_under_20k"))
-    reasons = ["Ngân sách còn hẹp, 2+2 tiết kiệm hơn."]
-    out = await LoTrinhHandler(FakeLLM(ai_answer("cc_2plus2", reasons=reasons)), "qwen3:8b").run(state, "Có")
+def test_other_route_text_says_no_list_and_gives_criteria():
+    route, intake = planned(good(budget="tier_under_20k"))
+    text = render(route, intake, "Computer Science")
 
-    assert "Hệ thống chưa có danh sách trường cho lộ trình này" in out.answer
-    assert "Có ngành bạn muốn học (Computer Science)" in out.answer
-    # Lộ trình không đi thẳng sang gợi ý trường: vẫn có nút đi tiếp (gợi ý trường, đánh giá hồ sơ, trung tâm)
-    assert [r.label for r in out.quick_replies] == [
-        "Gợi ý trường từ hồ sơ",
-        "Đánh giá hồ sơ",
-        "Tìm trung tâm tư vấn",
-    ]
+    assert "Hệ thống chưa có danh sách trường cho lộ trình này" in text
+    assert "Có ngành bạn muốn học (Computer Science)" in text
+
+
+def test_only_the_direct_route_leads_to_the_school_list():
+    direct, _ = planned(good())
+    other, _ = planned(good(budget="tier_under_20k"))
+
+    assert action_for(direct) == RECOMMEND_ACTION
+    assert action_for(other) is None
