@@ -355,6 +355,256 @@ public class ChatServiceTests
         Assert.All(staff.Rows, c => Assert.Equal(((Guid?)null, (string?)null), (c.UserSubscriptionId, c.PlanCode)));
     }
 
+    // ---- Cổng Premium của chat (billing-plan-v2: G2 đến G13). Pure helper nằm ở ChatPremiumGateTests ----
+
+    private const string InterviewState = """{"currentStep":"B1","questionId":"D2"}""";
+    private static readonly DateTime FreeResets = new(2026, 11, 30, 17, 0, 0, DateTimeKind.Utc);   // 00:00 ngày 1/12 giờ Việt Nam
+
+    private static StudyAbroad.Application.Billing.ChatCharge FreeCharge(bool exhausted = false) =>
+        new(false, false, null, "free", PlanKinds.Free, PremiumIntents.FreeAllowed, exhausted, FreeResets);
+
+    // Premium còn token: không giới hạn ý định
+    private static StudyAbroad.Application.Billing.ChatCharge PremiumCharge() =>
+        new(false, true, Guid.NewGuid(), "personal-1m", PlanKinds.Personal, null, false, FreeResets);
+
+    // Premium nhưng mọi pool trả phí đã hết: chat rơi về hạn mức Free (còn lượt), chỉ cho kiến thức
+    private static StudyAbroad.Application.Billing.ChatCharge PremiumSpentCharge() =>
+        new(false, true, null, "free", PlanKinds.Free, PremiumIntents.FreeAllowed, false, FreeResets);
+
+    private static StudyAbroad.Application.Billing.ChatCharge StaffCharge() =>
+        new(true, true, null, null, PlanKinds.Free, null, false, FreeResets);
+
+    private sealed record GatedTurn(
+        Guid UserId, AdvisorChatResponse Res, FakeAdvisor Advisor, FakeRunner Runner, ChatSession? Session, FakeMessages Messages, FakeAiCalls Calls);
+
+    // stateJson: phiên đang dở (đang ở câu hỏi D2 của buổi nhập hồ sơ); null = phiên mới
+    private static async Task<GatedTurn> GatedChat(
+        StudyAbroad.Application.Billing.ChatCharge charge, AdvisorChatRequest? request = null, FakeAdvisor? advisor = null,
+        FakeRunner? runner = null, string? stateJson = null, FakeProfileFlow? flow = null, string role = UserRoles.Student)
+    {
+        var userId = Guid.NewGuid();
+        advisor ??= new FakeAdvisor("B1");
+        runner ??= new FakeRunner();
+        var sessions = new FakeSessions();
+        var messages = new FakeMessages();
+        var calls = new FakeAiCalls();
+        ChatSession? session = null;
+        if (stateJson is not null)
+        {
+            session = new ChatSession { UserId = userId, StateJson = stateJson, CurrentStep = "B1" };
+            sessions.Rows.Add(session);
+        }
+        var asked = (request ?? new AdvisorChatRequest(Hello)) with { SessionId = session?.Id.ToString() };
+        var res = await new ChatService(advisor, sessions, flow ?? new FakeProfileFlow(), recommender: runner, messages: messages, aiCalls: calls,
+                entitlements: new FakeEntitlements(advisor, charge))
+            .ChatAsync(userId, asked, role: role);
+        return new(userId, res, advisor, runner, session, messages, calls);
+    }
+
+    // Không nhánh nào sau advisor chạy: gợi ý, giải thích, mô phỏng, goal-seeking, tra và tìm trường
+    private static void AssertNoDispatch(FakeRunner r)
+    {
+        Assert.Null(r.CalledFor);
+        Assert.Null(r.ExplainedCode);
+        Assert.Null(r.SimulatedWith);
+        Assert.Null(r.GoalCalledWith);
+        Assert.Null(r.InfoCode);
+        Assert.Null(r.SearchedWith);
+    }
+
+    [Fact]
+    public async Task G2_AdvisorSaysPremiumRequired_SetsLocked_AndNothingRunsAfterIt()
+    {
+        var advisor = new FakeAdvisor("B1") { Action = "premium_required", ActionData = IowaCode, Answer = "Cần Premium" };
+        var runner = new FakeRunner { Explanation = Explanation(), Result = new Recommendation { ItemsJson = OneSchool }, Info = InfoOf() };
+
+        var t = await GatedChat(FreeCharge(), advisor: advisor, runner: runner);
+
+        Assert.Equal(new ChatLock(ChatLockReasons.PremiumRequired, null), t.Res.Locked);
+        Assert.Equal("Cần Premium", t.Res.Answer);
+        Assert.Null(t.Res.Widget);   // thẻ giải thích sẽ có Widget nếu action bị chạy
+        Assert.Null(t.Res.Action);
+        Assert.Null(t.Res.LockedIntents);
+        AssertNoDispatch(runner);
+    }
+
+    [Fact]
+    public async Task G3_AdvisorLockedIntents_SetsLocked_AndStillRunsTheReturnedAction()
+    {
+        var advisor = new FakeAdvisor("B4") { Action = "recommend", LockedIntents = ["scenario"] };
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+
+        var t = await GatedChat(FreeCharge(), advisor: advisor, runner: runner);
+
+        Assert.Equal(t.UserId, runner.CalledFor);   // phần được phép vẫn chạy
+        Assert.Contains("Arizona State University", t.Res.Answer);
+        Assert.Equal(new ChatLock(ChatLockReasons.PremiumRequired, null), t.Res.Locked);
+        Assert.Null(t.Res.LockedIntents);   // nội bộ, không tới trình duyệt
+    }
+
+    [Theory]
+    [InlineData("explain")]
+    [InlineData("goal_seek")]
+    public async Task G4_FreeTapsAPremiumButton_IsLockedBeforeAnyCall_AndTheInterviewIsNotReset(string type)
+    {
+        var runner = new FakeRunner { Explanation = Explanation(), GoalResult = GoalOf() };
+
+        var t = await GatedChat(FreeCharge(), new AdvisorChatRequest(Hello, Action: new ChatAction(type, "188429")), runner: runner, stateJson: InterviewState);
+
+        Assert.Equal(new ChatLock(ChatLockReasons.PremiumRequired, null), t.Res.Locked);
+        Assert.Equal(ChatPremiumGate.PremiumRequiredAnswer, t.Res.Answer);
+        Assert.Equal("/plans", Assert.Single(t.Res.QuickReplies!).Href);
+        Assert.Null(t.Res.Widget);
+        Assert.Null(t.Advisor.LastRequest);
+        Assert.Equal(0, t.Advisor.StreamCalls);
+        Assert.False(runner.LatestRead);   // cả việc đọc dữ liệu gợi ý cũng bỏ qua
+        AssertNoDispatch(runner);
+        Assert.Equal(InterviewState, t.Session!.StateJson);   // state của DB đi nguyên qua: câu hỏi đang dở còn đó
+        Assert.Equal("B1", t.Session.CurrentStep);
+        Assert.Null(t.Res.Action);
+    }
+
+    [Fact]
+    public async Task G5_FreeTapsSchoolInfo_RunsAsToday()
+    {
+        var runner = new FakeRunner { Info = InfoOf("Boston University") };
+
+        var t = await GatedChat(FreeCharge(), new AdvisorChatRequest(Hello, Action: new ChatAction("school_info", "bu")), runner: runner);
+
+        Assert.Null(t.Res.Locked);
+        Assert.Equal("bu", runner.InfoCode);
+        Assert.StartsWith("Tóm tắt về Boston University", t.Res.Answer);
+        Assert.Null(t.Advisor.LastRequest);   // nút không qua advisor, như trước
+    }
+
+    [Theory]
+    [InlineData(false)]   // tin gõ
+    [InlineData(true)]    // nút của kiến thức (miễn phí) cũng bị khóa
+    public async Task G8_FreeAllowanceUsedUp_LocksWithTheResetDate_WithoutCallingTheAdvisor(bool button)
+    {
+        var request = new AdvisorChatRequest(Hello, Action: button ? new ChatAction("school_info", "bu") : null);
+        var runner = new FakeRunner { Info = InfoOf("Boston University") };
+
+        var t = await GatedChat(FreeCharge(exhausted: true), request, runner: runner, stateJson: InterviewState);
+
+        Assert.Equal(ChatLockReasons.QuotaExhausted, t.Res.Locked!.Reason);
+        Assert.Equal(new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.FromHours(7)), t.Res.Locked.ResetsAt);
+        Assert.Equal(TimeSpan.FromHours(7), t.Res.Locked.ResetsAt!.Value.Offset);
+        Assert.Equal(ChatPremiumGate.QuotaExhaustedAnswer, t.Res.Answer);
+        Assert.Null(t.Advisor.LastRequest);
+        Assert.False(runner.LatestRead);
+        AssertNoDispatch(runner);
+        Assert.Equal(InterviewState, t.Session!.StateJson);   // state đi nguyên qua
+    }
+
+    [Fact]
+    public async Task G9_PremiumWithEveryPoolUsedUp_TypedGoesToTheAdvisorWithTheFreeList_PremiumButtonsAreLocked()
+    {
+        var typed = await GatedChat(PremiumSpentCharge());
+        var button = await GatedChat(PremiumSpentCharge(), new AdvisorChatRequest(Hello, Action: new ChatAction("explain", "188429")));
+
+        Assert.Equal(PremiumIntents.FreeAllowed, typed.Advisor.LastRequest!.AllowedIntents);
+        Assert.Null(typed.Res.Locked);
+        Assert.Equal(ChatLockReasons.PremiumRequired, button.Res.Locked!.Reason);
+        Assert.Null(button.Advisor.LastRequest);
+    }
+
+    [Fact]
+    public async Task G12_AllowedIntents_AreAlwaysTheServers_NeverTheBrowsers()
+    {
+        string[] fromBrowser = ["collect_profile", "profile_review", "scenario"];
+        var cases = new (StudyAbroad.Application.Billing.ChatCharge? Charge, IReadOnlyList<string>? Expected)[]
+        {
+            (FreeCharge(), PremiumIntents.FreeAllowed),
+            (PremiumSpentCharge(), PremiumIntents.FreeAllowed),
+            (PremiumCharge(), null),   // Premium còn token: không giới hạn, kể cả khi trình duyệt gửi danh sách
+            (StaffCharge(), null),
+            (null, null),              // chưa nối dịch vụ gói
+        };
+
+        foreach (var (charge, expected) in cases)
+        {
+            var advisor = new FakeAdvisor("B1");
+            var service = new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(),
+                entitlements: charge is null ? null : new FakeEntitlements(advisor, charge));
+
+            var res = await service.ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, AllowedIntents: fromBrowser));
+
+            Assert.Equal(expected, advisor.LastRequest!.AllowedIntents);
+            Assert.Null(res.Locked);
+        }
+    }
+
+    [Fact]
+    public async Task G12_StaffTapsAPremiumButton_RunsIt()
+    {
+        var runner = new FakeRunner { Explanation = Explanation() };
+
+        var t = await GatedChat(StaffCharge(), new AdvisorChatRequest(Hello, Action: new ChatAction("explain", "188429")), runner: runner, role: UserRoles.Admin);
+
+        Assert.Null(t.Res.Locked);
+        Assert.Equal("188429", runner.ExplainedCode);
+    }
+
+    [Fact]
+    public async Task G13_LockedReplyOverStreaming_IsOneFinalLine_WithLockedAsTheFrontendReadsIt()
+    {
+        var advisor = new FakeAdvisor("B1") { Events = [new("progress", Answers: 1)] };
+        var controller = StreamController(advisor, out var body, FreeCharge(exhausted: true));
+
+        await controller.ChatStream(new AdvisorChatRequest(Hello), Json(), CancellationToken.None);
+
+        var final = Assert.Single(Lines(body));   // không có progress / partial
+        Assert.Equal("final", final.GetProperty("type").GetString());
+        var response = final.GetProperty("response");
+        Assert.Equal("""{"reason":"quota_exhausted","resetsAt":"2026-12-01T00:00:00+07:00"}""", response.GetProperty("locked").GetRawText());
+        Assert.Equal(ChatPremiumGate.QuotaExhaustedAnswer, response.GetProperty("answer").GetString());
+        Assert.Equal(JsonValueKind.Null, response.GetProperty("lockedIntents").ValueKind);
+        Assert.Equal(0, advisor.StreamCalls);
+    }
+
+    [Fact]
+    public async Task G13_AdvisorLockOverStreaming_FinalCarriesLocked()
+    {
+        var advisor = new FakeAdvisor("B1") { Events = [new("progress", Answers: 1)], Action = "premium_required", LockedIntents = ["profile_review"] };
+        var controller = StreamController(advisor, out var body, FreeCharge());
+
+        await controller.ChatStream(new AdvisorChatRequest(Hello), Json(), CancellationToken.None);
+
+        var lines = Lines(body);
+        Assert.Equal(["progress", "final"], lines.Select(l => l.GetProperty("type").GetString()));
+        var response = lines[1].GetProperty("response");
+        Assert.Equal("""{"reason":"premium_required","resetsAt":null}""", response.GetProperty("locked").GetRawText());
+        Assert.Equal(JsonValueKind.Null, response.GetProperty("lockedIntents").ValueKind);
+        Assert.Equal(PremiumIntents.FreeAllowed, advisor.LastRequest!.AllowedIntents);
+    }
+
+    [Fact]
+    public async Task LockedTurn_IsRecordedAsAnswered_WithTheLockInTheMeta_AndMeteredNothing()
+    {
+        var t = await GatedChat(FreeCharge(exhausted: true), stateJson: InterviewState);
+        var button = await GatedChat(FreeCharge(), new AdvisorChatRequest(Hello, Action: new ChatAction("goal_seek", "188429")));
+
+        Assert.Equal(["user", "assistant"], t.Messages.Rows.Select(m => m.Role));
+        var reply = t.Messages.Rows[1];
+        Assert.Equal((ChatOutcomes.Answered, (string?)null, ChatPremiumGate.QuotaExhaustedAnswer), (reply.Outcome, reply.ReviewStatus, reply.Content));
+        Assert.Contains("\"action\":\"quota_exhausted\"", reply.MetaJson);
+        Assert.Contains("\"action\":\"premium_required\"", button.Messages.Rows[1].MetaJson);
+        Assert.Empty(t.Calls.Rows);   // không gọi AI nên không có gì để tính
+        Assert.Empty(button.Calls.Rows);
+    }
+
+    [Fact]
+    public async Task LinkedParent_AnAdvisorLock_LosesToTheParentGate()
+    {
+        var advisor = new FakeAdvisor("B1") { Action = "premium_required", Slm = Intent("profile_review"), LockedIntents = ["profile_review"] };
+
+        var t = await GatedChat(FreeCharge(), advisor: advisor, flow: new FakeProfileFlow { CanEdit = false }, role: UserRoles.Parent);
+
+        Assert.Equal(ParentChatGate.Answer, t.Res.Answer);   // ParentChatGate giữ nguyên vị trí và quyền ưu tiên
+        Assert.Null(t.Res.Locked);
+    }
+
     [Fact]
     public async Task TokensAreStillLogged_WhenStoringMessagesIsSwitchedOff()
     {
@@ -1292,7 +1542,8 @@ public class ChatServiceTests
     private static Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Mvc.JsonOptions> Json() =>
         Microsoft.Extensions.Options.Options.Create(new Microsoft.AspNetCore.Mvc.JsonOptions());
 
-    private static StudyAbroad.Api.Controllers.AdvisorController StreamController(FakeAdvisor advisor, out MemoryStream body)
+    private static StudyAbroad.Api.Controllers.AdvisorController StreamController(
+        FakeAdvisor advisor, out MemoryStream body, StudyAbroad.Application.Billing.ChatCharge? charge = null)
     {
         body = new MemoryStream();
         var http = new Microsoft.AspNetCore.Http.DefaultHttpContext
@@ -1301,7 +1552,8 @@ public class ChatServiceTests
                 [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())], "test")),
         };
         http.Response.Body = body;
-        var service = new ChatService(advisor, new FakeSessions(), new FakeProfileFlow());
+        var service = new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(),
+            entitlements: charge is null ? null : new FakeEntitlements(advisor, charge));
         return new StudyAbroad.Api.Controllers.AdvisorController(service, Microsoft.Extensions.Logging.Abstractions.NullLogger<StudyAbroad.Api.Controllers.AdvisorController>.Instance)
         {
             ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext { HttpContext = http },
@@ -3076,6 +3328,7 @@ public class ChatServiceTests
         public IReadOnlyList<AiUsageDto>? AiUsage { get; init; }
         public AdvisorSlmDto? Slm { get; init; }
         public IReadOnlyList<string>? FormGoals { get; init; }
+        public IReadOnlyList<string>? LockedIntents { get; init; }   // ý advisor bỏ vì gói không cho (allowedIntents)
 
         public Exception? ChatError { get; init; }   // advisor sập hẳn: ChatAsync ném lỗi này
 
@@ -3089,7 +3342,7 @@ public class ChatServiceTests
             var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}{editing}}}").RootElement;
             return Task.FromResult(new AdvisorChatResponse(
                 Answer, [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills, Action: Action, ActionData: ActionData,
-                AiUsage: AiUsage, Slm: Slm, FormGoals: FormGoals));
+                AiUsage: AiUsage, Slm: Slm, FormGoals: FormGoals, LockedIntents: LockedIntents));
         }
 
         // Trả lời theo từng ý: gọi onEvent cho từng tin trong Events rồi trả kết quả như ChatAsync
