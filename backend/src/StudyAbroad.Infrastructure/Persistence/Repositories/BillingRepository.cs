@@ -30,17 +30,10 @@ public class BillingRepository(AppDbContext db) : IBillingRepository
             .ToListAsync(ct);
 
     public async Task<long> SumCycleTokensAsync(Guid cycleId, CancellationToken ct = default) =>
-        await db.AiCalls
-            .Where(a => a.UserSubscriptionId == cycleId && a.Kind == BillingRules.MeteredAiKind)
-            .SumAsync(a => (long?)a.TotalTokens, ct) ?? 0;
+        await db.AiCalls.Where(MeteringFilters.Cycle(cycleId)).SumAsync(a => (long?)a.TotalTokens, ct) ?? 0;
 
-    // plan_code chỉ được đóng dấu trên lượt chat, nên plan_code có mà không có kỳ = lượt chat dùng hạn mức Free.
-    // Không lọc theo chat_message_id: tắt lưu tin (Chat:StoreMessages) hay lưu tin lỗi thì cột đó trống
     public async Task<long> SumFreeTokensAsync(Guid userId, DateTime fromUtc, CancellationToken ct = default) =>
-        await db.AiCalls
-            .Where(a => a.UserId == userId && a.UserSubscriptionId == null && a.PlanCode != null
-                && a.Kind == BillingRules.MeteredAiKind && a.CreatedAt >= fromUtc)
-            .SumAsync(a => (long?)a.TotalTokens, ct) ?? 0;
+        await db.AiCalls.Where(MeteringFilters.Free(userId, fromUtc)).SumAsync(a => (long?)a.TotalTokens, ct) ?? 0;
 
     public Task<string?> GetUserNameAsync(Guid userId, CancellationToken ct = default) =>
         db.Users.Where(u => u.Id == userId).Select(u => u.FullName).FirstOrDefaultAsync(ct);
