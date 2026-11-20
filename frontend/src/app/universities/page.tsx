@@ -74,7 +74,7 @@ export default async function UniversitiesPage({ searchParams }: UniversitiesPag
   }
 
   return (
-    <section className="py-6 pb-16 space-y-6">
+    <section className="mx-auto w-full max-w-[1560px] px-4 pt-4 pb-8 sm:px-8 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden lg:px-12 lg:pb-0">
       <UniversityListView
         initialData={data}
         options={options}

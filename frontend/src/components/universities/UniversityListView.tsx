@@ -152,9 +152,9 @@ export function UniversityListView({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
-        <aside className="hidden lg:block lg:col-span-1 sticky top-20">
+    <div className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+      <div className="grid grid-cols-1 items-start gap-8 lg:min-h-0 lg:flex-1 lg:grid-cols-4 lg:items-stretch">
+        <aside className="hidden lg:col-span-1 lg:block lg:h-full lg:overflow-y-auto lg:pr-2 lg:pb-6">
           <UniversityFilters
             options={options}
             values={currentParams}
@@ -163,7 +163,7 @@ export function UniversityListView({
           />
         </aside>
 
-        <div className="lg:col-span-3 space-y-5">
+        <div className="space-y-5 lg:col-span-3 lg:h-full lg:overflow-y-auto lg:pr-1 lg:pb-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="lg:hidden">
