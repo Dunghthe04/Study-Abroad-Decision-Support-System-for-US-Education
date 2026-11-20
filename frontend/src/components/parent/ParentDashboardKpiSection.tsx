@@ -1,13 +1,20 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { WalletIcon } from "lucide-react";
+import { PencilIcon, WalletIcon } from "lucide-react";
 import { StudentDashboardView } from "@/components/dashboard/StudentDashboardView";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { dashboardApi } from "@/lib/api";
+import { ApiError, dashboardApi } from "@/lib/api";
+import { MAX_BUDGET_VND, MIN_BUDGET_VND, parentPreferenceApi } from "@/lib/parent-preference-api";
+import { profileFlowApi } from "@/lib/profile-flow-api";
+import { useFetched } from "@/lib/use-fetched";
 import type { ParentChildDashboard, ParentFinancialKpi } from "@/types/dashboard";
 
 // Link trong thẻ của con → tab tương ứng trong trang Con của tôi; hồ sơ đã hiện ngay bên dưới nên không link
@@ -17,6 +24,83 @@ const childLinks = (studentId: string) => {
 };
 
 const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+const VND = new Intl.NumberFormat("vi-VN");
+const digits = (text: string) => text.replace(/\D/g, "");
+
+/** UC-94: phụ huynh (con liên kết thật) chưa nhập số tiền ở UC-76 → nhập ở đây. Chỉ lưu tiền, không lưu ưu tiên, không báo con. */
+function BudgetDialog({ studentId, open, onOpenChange, onSaved }: {
+  studentId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  // Tỷ giá hôm nay cùng nguồn với form hồ sơ; chưa tải được thì không hiện dòng quy đổi
+  const meta = useFetched(open ? "profile-metadata" : "closed", () =>
+    open ? profileFlowApi.getMetadata() : Promise.resolve(null));
+  const rate = meta.data?.vndPerUsd ?? null;
+
+  const amount = digits(text) ? Number(digits(text)) : null;
+  const rangeError = amount != null && (amount < MIN_BUDGET_VND || amount > MAX_BUDGET_VND)
+    ? `Số tiền phải từ ${VND.format(MIN_BUDGET_VND)} đến ${VND.format(MAX_BUDGET_VND)} VND.`
+    : null;
+  const canSave = amount != null && !rangeError && !saving;
+
+  const save = async () => {
+    if (amount == null) return;
+    setSaving(true);
+    setServerError(null);
+    try {
+      await parentPreferenceApi.saveBudget(studentId, amount);
+      setText("");
+      onSaved();
+    } catch (e) {
+      setServerError(e instanceof ApiError ? e.message : "Không lưu được, thử lại sau.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const error = rangeError ?? serverError;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!saving) { setServerError(null); onOpenChange(o); } }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Số tiền tối đa chi trả được mỗi năm</DialogTitle>
+          <DialogDescription>
+            Chỉ lưu số tiền để so với chi phí các trường. Số này cũng tự điền vào tab So sánh ưu tiên. Con không nhận thông báo.
+          </DialogDescription>
+        </DialogHeader>
+        <Field data-invalid={error ? true : undefined}>
+          <FieldLabel htmlFor="parent-budget-vnd">Số tiền mỗi năm (VND)</FieldLabel>
+          <Input
+            id="parent-budget-vnd"
+            inputMode="numeric"
+            placeholder="Ví dụ 1.300.000.000"
+            value={text}
+            onChange={(e) => { setServerError(null); setText(digits(e.target.value) ? VND.format(Number(digits(e.target.value))) : ""); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && canSave) void save(); }}
+            aria-invalid={error ? true : undefined}
+          />
+          <FieldDescription>
+            Từ 100 triệu đến 10 tỷ đồng.
+            {amount != null && rate ? ` ≈ ${usd(amount / rate)}/năm theo tỷ giá hôm nay (${VND.format(Math.round(rate))} VND/USD).` : ""}
+          </FieldDescription>
+          {error && <FieldError>{error}</FieldError>}
+        </Field>
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={saving} onClick={() => onOpenChange(false)}>Hủy</Button>
+          <Button type="button" disabled={!canSave} onClick={() => void save()}>
+            {saving && <Spinner className="size-4" />} Lưu số tiền
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function Stat({ label, value, sub, note }: { label: string; value: ReactNode; sub?: ReactNode; note: string }) {
   return (
@@ -31,7 +115,7 @@ function Stat({ label, value, sub, note }: { label: string; value: ReactNode; su
   );
 }
 
-function FinancialCard({ fin }: { fin: ParentFinancialKpi }) {
+function FinancialCard({ fin, onEnterBudget }: { fin: ParentFinancialKpi; onEnterBudget?: () => void }) {
   const most = fin.mostShortfallSchool;
   const mostGap = most?.shortfall4Years ?? 0;
 
@@ -42,7 +126,14 @@ function FinancialCard({ fin }: { fin: ParentFinancialKpi }) {
           <WalletIcon className="size-5 text-muted-foreground" aria-hidden />
           <h3>Chi phí so với ngân sách</h3>
         </CardTitle>
-        <CardDescription>{fin.budgetSourceLabel}</CardDescription>
+        <CardDescription className="space-y-2">
+          <span className="block">{fin.budgetSourceLabel}</span>
+          {onEnterBudget && (
+            <Button type="button" size="sm" variant="outline" onClick={onEnterBudget}>
+              <PencilIcon aria-hidden /> Nhập số tiền tối đa chi trả được/năm
+            </Button>
+          )}
+        </CardDescription>
         <CardAction className="text-right">
           <span className="block text-label">Ngân sách/năm</span>
           <span className="text-numeric text-lg font-bold text-foreground">
@@ -125,6 +216,8 @@ function FinancialCard({ fin }: { fin: ParentFinancialKpi }) {
 export function ParentDashboardKpiSection({ studentId, childName }: { studentId: string; childName: string }) {
   // Kết quả gắn với studentId: đổi con thì coi như đang tải, không cần setState trong effect
   const [state, setState] = useState<{ id: string; data?: ParentChildDashboard; error?: string } | null>(null);
+  const [reload, setReload] = useState(0);
+  const [budgetOpen, setBudgetOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -133,7 +226,7 @@ export function ParentDashboardKpiSection({ studentId, childName }: { studentId:
       .then((data) => { if (alive) setState({ id: studentId, data }); })
       .catch((err) => { if (alive) setState({ id: studentId, error: err?.message || "Chưa tải được chỉ số tổng quan." }); });
     return () => { alive = false; };
-  }, [studentId]);
+  }, [studentId, reload]);
 
   const isLoading = state?.id !== studentId;
   const data = isLoading ? null : state?.data ?? null;
@@ -160,7 +253,19 @@ export function ParentDashboardKpiSection({ studentId, childName }: { studentId:
     <div className="space-y-6">
       <section className="space-y-3">
         <h2 className="text-h3 text-foreground">Tài chính</h2>
-        <FinancialCard fin={data.financialKpis} />
+        <FinancialCard
+          fin={data.financialKpis}
+          // Con liên kết thật chưa có số tiền của phụ huynh (UC-76): cho nhập ngay ở đây
+          onEnterBudget={!data.isManaged && data.financialKpis.budgetSource !== "parent_preference" ? () => setBudgetOpen(true) : undefined}
+        />
+        {!data.isManaged && (
+          <BudgetDialog
+            studentId={studentId}
+            open={budgetOpen}
+            onOpenChange={setBudgetOpen}
+            onSaved={() => { setBudgetOpen(false); setReload((k) => k + 1); }}
+          />
+        )}
       </section>
       <section className="space-y-3">
         <h2 className="text-h3 text-foreground">Tiến độ của {childName}</h2>
