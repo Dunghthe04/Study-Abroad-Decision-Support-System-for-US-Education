@@ -1,4 +1,5 @@
 from app.schemas.chat import ChatState
+from app.schemas.slm import SlmY
 from app.services.skills import profile_handler, skill_ho_so
 from tests.test_chat_skills_flow import field
 
@@ -58,3 +59,15 @@ def test_not_editing_has_no_current():
     out = profile_handler.ask_edit_question(state, "B1.1")
     assert "current" not in out.widget.data
     assert not keep_shown(out)
+
+
+# Bấm "Sửa trên form" ở bảng rà soát: đang chờ gợi ý trường thì form tích Gợi ý trường, không chờ gì thì tích Chỉ sửa hồ sơ
+def test_form_button_ticks_waiting_task_or_edit_only():
+    waiting = SlmY(type="profile_review", span="gợi ý trường cho em", entities={"tasks": ["school_list"]})
+    state = ChatState(current_step="B3", question_id="X1", pending_advice=waiting)
+    out = profile_handler.edit_choice(state, skill_ho_so.FORM_REPLY.value)
+    assert out.widget.data == {"goals": ["goi_y_truong"]}
+    assert state.pending_advice is waiting  # lưu form xong chat vẫn chạy gợi ý trường
+
+    out = profile_handler.edit_choice(ChatState(current_step="B3", question_id="X1"), skill_ho_so.FORM_REPLY.value)
+    assert out.widget.data == {"goals": ["chi_sua"]}
