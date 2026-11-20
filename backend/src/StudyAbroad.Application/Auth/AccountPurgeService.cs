@@ -1,4 +1,5 @@
 using StudyAbroad.Application.Audit;
+using StudyAbroad.Application.Billing;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
@@ -35,7 +36,8 @@ public class AccountPurgeService(
     IAuditLogRepository auditLogs,
     IUnitOfWork unitOfWork,
     IProfileFileStorageService fileStorage,
-    AccountDeletionOptions? options = null) : IAccountPurgeService
+    AccountDeletionOptions? options = null,
+    IBillingAccountHooks? billingHooks = null) : IAccountPurgeService
 {
     public const string AuditAction = "user.purge_account";
 
@@ -58,6 +60,7 @@ public class AccountPurgeService(
             try
             {
                 var done = false;
+                Func<CancellationToken, Task>? billingAfterCommit = null;
                 await unitOfWork.ExecuteInTransactionAsync(async txCt =>
                 {
                     // Người dùng có thể vừa khôi phục sau lúc lấy danh sách: kiểm tra lại và khóa dòng
@@ -66,6 +69,9 @@ public class AccountPurgeService(
 
                     await purge.ClearPaymentPayloadsAsync(userId, txCt);
                     await purge.PurgeForumPostsAsync(userId, now, txCt);
+                    // Nhóm Gia đình và kỳ của chủ gói kết thúc trước khi dòng user mất (cascade xóa nốt)
+                    if (billingHooks is not null)
+                        billingAfterCommit = await billingHooks.OnBeforePurgeAsync(userId, now, txCt);
                     await purge.DeleteUserAsync(userId, txCt);
 
                     // Nhật ký chỉ giữ id, không giữ email hay tên đã xóa
@@ -86,6 +92,8 @@ public class AccountPurgeService(
                 }
 
                 purged++;
+                if (billingAfterCommit is not null)
+                    await billingAfterCommit(ct);   // báo thành viên: không ném lỗi, user đã mất khỏi DB
                 try
                 {
                     await fileStorage.DeleteAllUserFilesAsync(userId, ct);
