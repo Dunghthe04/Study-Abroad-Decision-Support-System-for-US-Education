@@ -366,7 +366,7 @@ internal sealed class OrderHarness
     public PaymentTransaction Order(long code) => Store.Orders.Single(o => o.OrderCode == code);
 
     /// <summary>Body webhook payOS đã ký như thật cho một đơn.</summary>
-    public string WebhookBody(PaymentTransaction order, long? amount = null, string code = "00", string signingKey = ChecksumKey)
+    public string WebhookBody(PaymentTransaction order, long? amount = null, string code = "00", string signingKey = ChecksumKey, string? outerCode = null)
     {
         var data = new Dictionary<string, object?>
         {
@@ -376,6 +376,6 @@ internal sealed class OrderHarness
         };
         var dataJson = JsonSerializer.Serialize(data);
         using var doc = JsonDocument.Parse(dataJson);
-        return $"{{\"code\":\"{code}\",\"desc\":\"success\",\"success\":true,\"data\":{dataJson},\"signature\":\"{PayOsSignature.Sign(doc.RootElement, signingKey)}\"}}";
+        return $"{{\"code\":\"{outerCode ?? code}\",\"desc\":\"success\",\"success\":true,\"data\":{dataJson},\"signature\":\"{PayOsSignature.Sign(doc.RootElement, signingKey)}\"}}";
     }
 }
