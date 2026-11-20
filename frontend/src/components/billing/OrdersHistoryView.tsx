@@ -66,7 +66,7 @@ export function OrdersHistoryView() {
                     </TableCell>
                     <TableCell>{o.planName}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatVnd(o.amountVnd)}</TableCell>
-                    <TableCell>{formatVnDateTime(o.paidAt ?? o.createdAt)}</TableCell>
+                    <TableCell>{formatVnDateTime(o.createdAt)}</TableCell>
                     <TableCell>
                       <Badge variant={ORDER_STATUS_BADGE[o.status]}>
                         {ORDER_STATUS_LABEL[o.status]}

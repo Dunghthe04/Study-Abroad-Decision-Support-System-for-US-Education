@@ -51,7 +51,7 @@ const FAMILY_ERROR_MESSAGES: Record<string, string> = {
   invite_expired: "Lời mời đã hết hạn. Hãy nhờ chủ gói gửi lại lời mời.",
   wrong_account: "Bạn đang đăng nhập bằng tài khoản khác với email được mời",
   role_mismatch: "Loại tài khoản của bạn không khớp với chỗ được mời. Hãy nhờ chủ gói hủy và mời lại đúng loại.",
-  already_in_family: "Bạn đang là thành viên của một gói Gia đình khác còn hạn.",
+  already_in_family: "Bạn đang ở trong một gói Gia đình khác còn hạn (là chủ gói hoặc thành viên). Bạn có thể tham gia khi gói đó kết thúc.",
   pending_family_order: "Bạn có đơn mua gói Gia đình chưa thanh toán. Hãy hủy đơn hoặc đợi đơn hết hạn rồi chấp nhận lại.",
   cannot_remove_owner: "Không thể xóa chủ gói khỏi gói.",
   owner_cannot_leave: "Chủ gói không thể rời gói của mình.",
