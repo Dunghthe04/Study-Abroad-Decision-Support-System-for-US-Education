@@ -5,9 +5,9 @@ import pytest
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
 from app.services.chat_flow import SkillOutput
 from app.services.replies import CONTINUE_CHAT
-from app.services.skills.skill_ho_so import FORM_SAVED
 from app.services.skills import build_handlers, buttons
 from app.services.skills.skill_ho_so import (
+    FORM_SAVED,
     NO_MORE_CERT,
     NO_MORE_PLAN,
     OVERDUE_DROP,
