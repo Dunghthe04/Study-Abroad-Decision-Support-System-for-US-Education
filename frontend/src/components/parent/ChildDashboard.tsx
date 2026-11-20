@@ -11,6 +11,7 @@ import { scenarioOverrides, snapshotText, useSavedScenarios } from "@/components
 import { ActAsChildButton, AddManagedChildButton } from "@/components/parent/ManagedChildActions";
 import { SuggestTargetSchool } from "@/components/parent/SuggestTargetSchool";
 import { ParentPreferencePanel } from "@/components/parent/ParentPreferencePanel";
+import { ParentDashboardKpiSection } from "@/components/parent/ParentDashboardKpiSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -149,7 +150,8 @@ export function ChildDashboard({ studentId, initialTab = "overview" }: { student
           <TabsTrigger value="history">Lịch sử và kịch bản</TabsTrigger>
           {!child.isManaged && <TabsTrigger value="preference">So sánh ưu tiên</TabsTrigger>}
         </TabsList>
-        <TabsContent value="overview">
+        <TabsContent value="overview" className="space-y-6">
+          <ParentDashboardKpiSection studentId={studentId} childName={child.studentName} />
           <AcademicSummaryCard profile={child.profile} isLoading={false} readOnly title={`Hồ sơ của ${child.studentName}`} />
         </TabsContent>
         <TabsContent value="recommend">
