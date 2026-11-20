@@ -58,6 +58,7 @@ public static class DependencyInjection
         services.AddScoped<ManagedChildService>();     // 1.5a: phụ huynh thêm / đổi tên / xóa con chưa có tài khoản
         services.AddScoped<ActingSessionGuard>();      // 1.5b: kiểm tra phiên làm thay con managed ở mỗi request
         services.AddScoped<ActingService>();           // 1.5b: vào / thoát làm thay
+        services.AddScoped<StudyAbroad.Application.Audit.IAccessLogService, StudyAbroad.Application.Audit.AccessLogService>();   // [UC-97] nhật ký truy cập dữ liệu nhạy cảm
         return services;
     }
 }

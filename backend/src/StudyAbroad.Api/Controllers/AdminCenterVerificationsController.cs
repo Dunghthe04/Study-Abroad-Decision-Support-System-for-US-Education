@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Extensions;
@@ -53,7 +54,12 @@ public class AdminCenterVerificationsController(
             Action = "center.document_viewed",
             EntityType = "CenterVerificationDocument",
             EntityId = doc.Id.ToString(),
-            DetailJson = $"{{\"requestId\":\"{id}\",\"documentType\":\"{doc.DocumentType}\",\"fileName\":\"{doc.FileName}\"}}",
+            DetailJson = JsonSerializer.Serialize(new
+            {
+                requestId = id,
+                documentType = doc.DocumentType,
+                fileName = doc.FileName
+            }),
             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
             UserAgent = Request.Headers.UserAgent.ToString()
         }, ct);

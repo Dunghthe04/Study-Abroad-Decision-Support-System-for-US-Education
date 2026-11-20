@@ -1,5 +1,8 @@
 import { authFetch } from "@/lib/auth-refresh";
 import type {
+  AccessLogDto,
+  AccessLogFilterQuery,
+  AccessLogSummaryDto,
   CenterReviewsDto,
   NotificationDto,
   UnreadCountDto,
@@ -770,3 +773,30 @@ export const notificationsApi = {
     apiFetch<null>(`/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
   markAllRead: () => apiFetch<{ updated: number }>("/api/v1/notifications/read-all", { method: "POST" }),
 };
+
+// [UC-97] Admin xem và lọc nhật ký truy cập dữ liệu nhạy cảm
+export const accessLogsApi = {
+  list: (params?: AccessLogFilterQuery) => {
+    const sp = new URLSearchParams();
+    if (params?.category) sp.set("category", params.category);
+    if (params?.action) sp.set("action", params.action);
+    if (params?.search?.trim()) sp.set("search", params.search.trim());
+    if (params?.actorUserId) sp.set("actorUserId", params.actorUserId);
+    if (params?.actorRole) sp.set("actorRole", params.actorRole);
+    if (params?.from) sp.set("from", params.from);
+    if (params?.to) sp.set("to", params.to);
+    if (params?.page != null) sp.set("page", String(params.page));
+    if (params?.pageSize != null) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<AccessLogDto>>(`/api/v1/admin/access-logs${qs ? `?${qs}` : ""}`);
+  },
+
+  summary: (params?: { from?: string; to?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.from) sp.set("from", params.from);
+    if (params?.to) sp.set("to", params.to);
+    const qs = sp.toString();
+    return apiFetch<AccessLogSummaryDto>(`/api/v1/admin/access-logs/summary${qs ? `?${qs}` : ""}`);
+  },
+};
+

@@ -11,6 +11,7 @@ import {
   MailWarningIcon,
   MessagesSquareIcon,
   SchoolIcon,
+  ShieldAlertIcon,
   SlidersHorizontalIcon,
   UsersIcon,
   type LucideIcon,
@@ -154,6 +155,14 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: ClipboardCheckIcon,
     roles: ["admin"],
     useCases: [],
+  },
+  {
+    href: "/admin/access-logs",
+    label: "Nhật ký truy cập",
+    description: "Xem và lọc nhật ký ai đã xem hoặc xuất dữ liệu nhạy cảm (tài liệu xác minh, tin nhắn báo cáo, xuất mẫu)",
+    icon: ShieldAlertIcon,
+    roles: ["admin"],
+    useCases: ["UC-97"],
   },
 ];
 
