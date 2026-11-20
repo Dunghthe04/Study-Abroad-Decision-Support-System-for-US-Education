@@ -75,7 +75,10 @@ public interface ICenterProfileChangeRepository
 /// </summary>
 public interface ICenterDeletionRequestRepository
 {
-    /// <summary>Yêu cầu đang mở (pending) của trung tâm; mỗi trung tâm tối đa một yêu cầu mở.</summary>
+    /// <summary>
+    /// Yêu cầu đang mở của trung tâm: pending (chờ duyệt) hoặc approved (đã duyệt, chờ xóa hẳn).
+    /// Mỗi trung tâm tối đa một yêu cầu mở.
+    /// </summary>
     Task<CenterDeletionRequest?> GetOpenByCenterIdAsync(Guid studyCenterId, CancellationToken ct = default);
 
     /// <summary>Yêu cầu mới nhất của trung tâm (bất kể trạng thái) để hiện trên trang hồ sơ.</summary>

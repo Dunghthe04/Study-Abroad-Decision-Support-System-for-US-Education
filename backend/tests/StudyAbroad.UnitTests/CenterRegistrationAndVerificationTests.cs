@@ -751,7 +751,8 @@ public class CenterRegistrationAndVerificationTests
 
         public Task<CenterDeletionRequest?> GetOpenByCenterIdAsync(Guid studyCenterId, CancellationToken ct = default) =>
             Task.FromResult(Items.FirstOrDefault(x =>
-                x.StudyCenterId == studyCenterId && x.Status == CenterDeletionRequestStatuses.Pending));
+                x.StudyCenterId == studyCenterId
+                && (x.Status == CenterDeletionRequestStatuses.Pending || x.Status == CenterDeletionRequestStatuses.Approved)));
 
         public Task<CenterDeletionRequest?> GetLatestByCenterIdAsync(Guid studyCenterId, CancellationToken ct = default) =>
             Task.FromResult(Items.Where(x => x.StudyCenterId == studyCenterId).OrderByDescending(x => x.CreatedAt).FirstOrDefault());
@@ -1051,6 +1052,37 @@ public class CenterRegistrationAndVerificationTests
         Assert.Null(result.Request!.DueAt);
         var mail = Assert.Single(email.CenterDeletionEmails);
         Assert.Equal("held", mail.Outcome);
+    }
+
+    [Fact]
+    public async Task RequestDeletion_WhenEarlierRequestAlreadyApproved_IsRejected()
+    {
+        var centers = new FakeStudyCenterRepo();
+        var deletions = new FakeDeletionRepo();
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = "info@abc.vn",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.Verified,
+        };
+        await centers.AddAsync(center);
+        deletions.Items.Add(new CenterDeletionRequest
+        {
+            StudyCenterId = center.Id,
+            RequestedByUserId = center.OwnerUserId!.Value,
+            Reason = "Lần trước",
+            Status = CenterDeletionRequestStatuses.Approved,
+        });
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), new FakeVerificationRepo(), emailSender: new FakeEmailSender(),
+            notifications: null, profileChanges: new FakeProfileChangeRepo(), deletionRequests: deletions);
+
+        var result = await service.RequestDeletionAsync(center.OwnerUserId!.Value, "Gửi lại");
+
+        // Đã duyệt và đang chờ xóa hẳn thì vẫn tính là yêu cầu đang mở
+        Assert.False(result.Success);
+        Assert.Single(deletions.Items);
     }
 
     [Fact]

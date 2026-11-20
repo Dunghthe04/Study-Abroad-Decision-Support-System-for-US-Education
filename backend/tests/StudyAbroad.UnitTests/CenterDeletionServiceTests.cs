@@ -29,7 +29,8 @@ public class CenterDeletionServiceTests
     {
         public List<CenterDeletionRequest> Items { get; } = [];
         public Task<CenterDeletionRequest?> GetOpenByCenterIdAsync(Guid studyCenterId, CancellationToken ct = default) =>
-            Task.FromResult(Items.FirstOrDefault(x => x.StudyCenterId == studyCenterId && x.Status == CenterDeletionRequestStatuses.Pending));
+            Task.FromResult(Items.FirstOrDefault(x => x.StudyCenterId == studyCenterId
+                && (x.Status == CenterDeletionRequestStatuses.Pending || x.Status == CenterDeletionRequestStatuses.Approved)));
         public Task<CenterDeletionRequest?> GetLatestByCenterIdAsync(Guid studyCenterId, CancellationToken ct = default) =>
             Task.FromResult(Items.Where(x => x.StudyCenterId == studyCenterId).OrderByDescending(x => x.CreatedAt).FirstOrDefault());
         public Task<CenterDeletionRequest?> GetByIdAsync(Guid id, CancellationToken ct = default) => Task.FromResult(Items.FirstOrDefault(x => x.Id == id));
