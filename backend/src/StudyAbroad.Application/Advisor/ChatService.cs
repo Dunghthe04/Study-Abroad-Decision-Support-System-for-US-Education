@@ -1,4 +1,4 @@
-﻿using StudyAbroad.Application.Profile.Academic;
+using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Constants;

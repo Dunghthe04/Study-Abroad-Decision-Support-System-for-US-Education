@@ -1,4 +1,4 @@
-﻿using StudyAbroad.Domain.Entities;
+using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.Advisor;
 

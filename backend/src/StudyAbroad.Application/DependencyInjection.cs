@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using StudyAbroad.Application.AcademicProfiles;
 using StudyAbroad.Application.Admin.Universities;
 using StudyAbroad.Application.Advisor;
