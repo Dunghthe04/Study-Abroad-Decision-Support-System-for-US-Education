@@ -19,6 +19,8 @@ public interface IOrderService
     /// <summary>
     /// Áp dụng một khoản thanh toán cho đơn (webhook, job đối soát, admin kích hoạt): một transaction, khóa dòng đơn,
     /// thử lại một lần khi vướng index duy nhất. Gọi lại với đơn đã trả thì trả AlreadyPaid, không đổi gì.
+    /// LƯU Ý cho người gọi (job đối soát, admin): hàm xóa theo dõi của DbContext trong scope (đọc lại dữ liệu mới và không ghi lại phần dang dở),
+    /// nên mọi thực thể đã nạp trước đó bị tách ra. Cần sửa tiếp đơn hay kỳ nào thì nạp lại sau khi gọi, nếu không SaveChanges không ghi gì và không báo lỗi.
     /// </summary>
     Task<PaymentApplyResult> ApplyPaymentAsync(long orderCode, long amountPaid, string? payloadJson, DateTime nowUtc, CancellationToken ct = default, PaymentApplyOptions? options = null);
 
