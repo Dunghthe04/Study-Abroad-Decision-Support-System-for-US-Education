@@ -883,7 +883,7 @@ def save_exact_budget(state: ChatState, amount: float, currency: str | None) -> 
     try:
         vnd = check_exact_budget(amount, currency)
     except AskAgain as err:
-        return ask_question(state, "F1", err.question)
+        return buttons.ask_parent_budget(state, err.question)
     state.profile["budget_vnd"] = buttons.confirmed(vnd)
     state.profile["budget"] = buttons.confirmed(budget_tier(vnd / exchange_rate.vnd_per_usd()))
     state.profile.pop("budget_usd", None)

@@ -71,3 +71,14 @@ async def test_student_keeps_tier_question():
 
     assert res.state.profile["budget"] == field("tier_20k_35k")
     assert "budget_vnd" not in res.state.profile
+
+
+def test_generic_budget_question_is_replaced_by_vnd_question():
+    # Qwen hiểu "sửa ngân sách" là mục budget nhưng không có số: validators hỏi lại bằng câu chung, phụ huynh vẫn thấy câu VNĐ
+    from app.schemas.chat import ChatState
+
+    state = ChatState(**parent())
+    out = buttons.ask_with_buttons(state, "F1", "Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm? Bạn cho mình một con số nhé.")
+
+    assert out.answer == buttons.EXACT_BUDGET_TEXT
+    assert out.widget is not None and out.widget.data["exact"] is True

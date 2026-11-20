@@ -746,8 +746,9 @@ def press(state: ChatState, button: Button) -> None:
 def ask_with_buttons(
     state: ChatState, question_id: str, text: str | None = None, can_skip: bool = False
 ) -> SkillOutput:
+    # Phụ huynh nhập hộ: luôn hỏi bằng câu số tiền VNĐ / chọn mức, không dùng câu hỏi lại chung về ngân sách
     if question_id == "F1" and state.exact_budget:
-        return ask_parent_budget(state, text)
+        return ask_parent_budget(state)
     question = ask(state, question_id)
     if question_id == "D2" and text is None and is_middle_school_profile(state.profile):
         text = "Em đặt mục tiêu điểm trung bình (GPA) các năm cấp 3 khoảng bao nhiêu? Em có thể chọn ước lượng hoặc gõ điểm nhé."
