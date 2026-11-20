@@ -90,10 +90,20 @@ public class EntitlementService(IBillingRepository repository) : IEntitlementSer
             lane.Queued is null ? null : new QueuedCycleDto(lane.Queued.PlanName, cycle.EndsAt));
     }
 
+    public async Task<LaneState> AdvanceLaneAsync(Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default)
+    {
+        var lane = await AdvanceCyclesAsync(ownerUserId, kind, nowUtc, ct);
+        // Làn family hết kỳ: nhóm của chủ phải kết thúc trước khi ai đó (kể cả chính chủ vừa mua lại) dùng nó (C8, SW9)
+        if (kind == PlanKinds.Family && lane.Active is null && lane.Queued is null
+            && await repository.FindActiveOwnedGroupAsync(ownerUserId, ct) is { } dead)
+            await LapseAsync(dead, nowUtc, ct);
+        return new LaneState(lane.Active, lane.Queued, lane.Used, lane.Active is not null && CycleRules.IsExhausted(lane.Used, lane.Active.TokenQuota));
+    }
+
     private async Task<Entitlement> LoadAsync(Guid userId, DateTime nowUtc, CancellationToken ct)
     {
         var plans = await repository.GetPlansAsync(ct);
-        var personal = await AdvanceLaneAsync(userId, PlanKinds.Personal, nowUtc, ct);
+        var personal = await AdvanceCyclesAsync(userId, PlanKinds.Personal, nowUtc, ct);
 
         // Gói Gia đình: nhóm mình làm chủ, nếu không thì nhóm mình là thành viên active (C9: tối đa một)
         var group = await repository.FindActiveOwnedGroupAsync(userId, ct);
@@ -102,10 +112,10 @@ public class EntitlementService(IBillingRepository repository) : IEntitlementSer
         var family = new Lane(null, null, 0);
         if (group is not null)
         {
-            family = await AdvanceLaneAsync(group.OwnerUserId, PlanKinds.Family, nowUtc, ct);
+            var state = await AdvanceLaneAsync(group.OwnerUserId, PlanKinds.Family, nowUtc, ct);   // hết kỳ thì nhóm đã bị kết thúc ở đây
+            family = new Lane(state.Active, state.Queued, state.ActiveUsed);
             if (family.Active is null && family.Queued is null)
             {
-                await LapseAsync(group, nowUtc, ct);
                 group = null;
                 isOwner = false;
             }
@@ -113,7 +123,7 @@ public class EntitlementService(IBillingRepository repository) : IEntitlementSer
         return new Entitlement(personal, family, group, isOwner, plans);
     }
 
-    private async Task<Lane> AdvanceLaneAsync(Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct)
+    private async Task<Lane> AdvanceCyclesAsync(Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct)
     {
         var cycles = await repository.GetOpenCyclesAsync(ownerUserId, kind, ct);
         var active = cycles.FirstOrDefault(c => c.Status == CycleStatuses.Active);
