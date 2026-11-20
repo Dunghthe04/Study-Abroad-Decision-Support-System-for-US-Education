@@ -18,11 +18,13 @@ import { ParentLinksCard } from "@/components/account/ParentLinksCard";
 import { ParentAcademicSection, StudentParentOffers } from "@/components/account/ParentProfileShareCards";
 import { PersonalInfoCard } from "@/components/account/PersonalInfoCard";
 import { SentLeadsCard } from "@/components/account/SentLeadsCard";
+import { SubscriptionCard } from "@/components/account/SubscriptionCard";
 import {
   ArrowRightIcon,
   BookmarkCheckIcon,
   BookOpenIcon,
   Building2Icon,
+  CrownIcon,
   GraduationCapIcon,
   KeyRoundIcon,
   LogOutIcon,
@@ -35,7 +37,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-type SectionId = "personal" | "academic" | "parent-links" | "sent-leads" | "password";
+type SectionId = "personal" | "subscription" | "academic" | "parent-links" | "sent-leads" | "password";
 
 interface SectionItem {
   id: SectionId;
@@ -60,6 +62,7 @@ export function AccountView() {
     { id: "personal", label: "Thông tin cá nhân", icon: UserIcon },
     ...(isStudentOrParent
       ? [
+          { id: "subscription" as const, label: "Gói dịch vụ", icon: CrownIcon },
           { id: "academic" as const, label: "Hồ sơ học thuật", icon: BookOpenIcon },
           {
             id: "parent-links" as const,
@@ -270,6 +273,7 @@ export function AccountView() {
           {/* NỘI DUNG MỤC ĐANG CHỌN */}
           <section className="min-w-0">
             {activeSection === "personal" && <PersonalInfoCard />}
+            {activeSection === "subscription" && <SubscriptionCard />}
             {activeSection === "academic" &&
               (parentOverview ? (
                 <ParentAcademicSection overview={parentOverview} onChanged={reloadProfile} />
