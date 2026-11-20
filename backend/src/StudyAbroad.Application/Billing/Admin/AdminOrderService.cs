@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Billing.Jobs;
@@ -28,6 +29,8 @@ public sealed class AdminOrderService(
     public const int MaxPageSize = 50;
     private const int MaxNoteLength = 1000;
     private const string AuditEntityType = "payment_transaction";
+    // Ghi chú tiếng Việt giữ nguyên chữ trong nhật ký (không bị đổi thành mã thoát unicode); chuỗi chỉ lưu và hiện dạng văn bản, không nhúng vào HTML
+    private static readonly JsonSerializerOptions AuditJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     public async Task<PagedResult<AdminOrderDto>> ListAsync(string? status, string? q, int page, int pageSize, CancellationToken ct = default)
     {
@@ -130,7 +133,7 @@ public sealed class AdminOrderService(
             Action = action,
             EntityType = AuditEntityType,
             EntityId = order.Id.ToString(),
-            DetailJson = JsonSerializer.Serialize(detail),
+            DetailJson = JsonSerializer.Serialize(detail, AuditJson),
         }, ct);
 
     private static string RequireNote(string? note)
