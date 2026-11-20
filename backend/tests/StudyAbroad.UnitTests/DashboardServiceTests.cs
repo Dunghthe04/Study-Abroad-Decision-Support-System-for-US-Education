@@ -250,6 +250,40 @@ public class DashboardServiceTests
         Assert.True(result.IsManaged);
         Assert.Equal(35000m, result.FinancialKpis.BudgetPerYear);
         Assert.Equal("student_profile_tier", result.FinancialKpis.BudgetSource);
+        // Chọn theo hạng (không có số chính xác): ghi rõ là ước tính và nhắc cập nhật
+        Assert.Contains("ước tính", result.FinancialKpis.BudgetSourceLabel);
+        Assert.Contains("Cập nhật số tiền chính xác", result.FinancialKpis.BudgetSourceLabel);
+    }
+
+    [Fact]
+    public async Task GetParentChildDashboard_ManagedChild_ExactBudget_LabelSaysParentEntered()
+    {
+        var managedStudentId = Guid.NewGuid();
+        _userRepo.Users.Add(new User
+        {
+            Id = managedStudentId,
+            Email = "managed-exact@test.com",
+            FullName = "Con Nhập Số Chính Xác",
+            Role = UserRoles.Student,
+            Status = UserStatuses.Managed
+        });
+        _linkRepo.Links.Add(new ParentStudentLink
+        {
+            StudentUserId = managedStudentId,
+            ParentUserId = _parentId,
+            ParentEmail = "parent@test.com",
+            Status = ParentLinkStatuses.Active
+        });
+        _profileRepo.Profiles[managedStudentId] = new StudentProfile { UserId = managedStudentId, BudgetMaxUsd = 52000 };
+        // Hồ sơ đã lưu mang số USD chính xác phụ huynh nhập (khác trần của hạng)
+        _flowService.Committed = new ProfileFlowDraftDto(Step4: new FlowFinancialDraftDto(AnnualBudgetTier: "tier_50k_70k", AnnualBudgetUsd: 52000));
+
+        var result = await _dashboardService.GetParentChildDashboardAsync(_parentId, managedStudentId);
+
+        Assert.NotNull(result);
+        Assert.Equal(52000m, result.FinancialKpis.BudgetPerYear);
+        Assert.Contains("phụ huynh nhập", result.FinancialKpis.BudgetSourceLabel);
+        Assert.DoesNotContain("ước tính", result.FinancialKpis.BudgetSourceLabel);
     }
 
     [Fact]

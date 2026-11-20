@@ -255,14 +255,19 @@ public class DashboardService(
         string budgetSource = "none";
         string budgetSourceLabel = "Chưa có thông tin ngân sách";
 
-        // Con managed: không có tab UC-76 -> luôn dùng hạng ngân sách của con
+        // Con managed: không có tab UC-76 -> luôn dùng trần ngân sách trong hồ sơ của con.
+        // UC-94: phụ huynh nhập số tiền chính xác ở bước 4 (form / chat) thì là số thật; chọn theo hạng thì chỉ là ước tính
         if (isManaged)
         {
             if (profile?.BudgetMaxUsd is decimal managedBudget && managedBudget > 0)
             {
                 budgetPerYear = managedBudget;
                 budgetSource = "student_profile_tier";
-                budgetSourceLabel = $"Theo mức trần ngân sách của con: ${budgetPerYear:N0}/năm";
+                var committed = await flowService.GetCommittedDetailsAsync(studentId, ct);
+                budgetSourceLabel = committed?.Step4?.AnnualBudgetUsd is not null
+                    ? $"Theo số tiền tối đa phụ huynh nhập trong hồ sơ của con: ${budgetPerYear:N0}/năm"
+                    : $"Theo trần của mức ngân sách đã chọn, là ước tính: ${budgetPerYear:N0}/năm. "
+                      + "Cập nhật số tiền chính xác ở bước Tài chính trong hồ sơ của con để kết quả sát hơn.";
             }
         }
         else
