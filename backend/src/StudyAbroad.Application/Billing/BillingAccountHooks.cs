@@ -27,8 +27,9 @@ public sealed class BillingAccountHooks(
 
     public async Task<Func<CancellationToken, Task>> OnAccountSoftDeletedAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default)
     {
-        var membership = await repository.EndActiveMembershipAsync(userId, nowUtc, ct);
+        // Đơn trước, thành viên sau: ApplyPaymentAsync khóa dòng đơn rồi mới đổi dòng thành viên (C15), cùng thứ tự thì hai bên không chờ vòng nhau
         var cancelled = await repository.CancelPendingOrdersAsync(userId, nowUtc, ct);
+        var membership = await repository.EndActiveMembershipAsync(userId, nowUtc, ct);
         if (membership is null && cancelled.Count == 0)
             return Nothing;
 
