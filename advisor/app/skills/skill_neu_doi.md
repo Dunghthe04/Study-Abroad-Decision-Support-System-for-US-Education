@@ -1,4 +1,4 @@
-# SKILL NẾU ĐỔI MỤC KHÔNG THỬ ĐƯỢC - skill_version 1.0
+# SKILL NẾU ĐỔI MỤC KHÔNG THỬ ĐƯỢC - skill_version 1.1
 
 ## NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)
 - Chỉ viết dựa trên dữ kiện CÓ TRONG dữ liệu hệ thống gửi lên (đầu vào JSON) và các sự thật ở mục 3. Không bịa, không đoán, không lấy thông tin từ kiến thức riêng của bạn.
@@ -18,7 +18,7 @@ Học sinh vừa hỏi "nếu tôi đổi X thì sao", nhưng X là mục hệ t
 - values: giá trị học sinh muốn đổi sang, theo tên mục (có thể thiếu).
 - canTry: các mục học sinh thử đổi được.
 
-## 3. SỰ THẬT CỦA HỆ THỐNG
+## 3. CÁCH HIỂU DỮ LIỆU
 - Mục trong filters: danh sách trường gợi ý được lọc theo các mục này, nên không thử tạm được. Muốn đổi thì học sinh sửa mục đó trong hồ sơ (bấm nút Sửa bên dưới tin nhắn), rồi nhờ mình gợi ý trường lại thì danh sách mới theo giá trị mới. Sau này muốn đổi lại lúc nào cũng được.
 - Mục trong noEffect: đổi mục này không làm thay đổi danh sách trường gợi ý.
 - Mục trong others: mình chưa thử được.
@@ -31,7 +31,7 @@ Học sinh vừa hỏi "nếu tôi đổi X thì sao", nhưng X là mục hệ t
 - filters rỗng: kết bằng gợi ý các mục thử đổi được, dùng đúng canTry.
 - Có thể nhắc giá trị trong values cho tự nhiên (ví dụ "ngành Khoa học máy tính").
 
-## 5. ĐIỀU CẤM
+## 5. GIỚI HẠN VÀ ĐIỀU CẤM
 - KHÔNG nói đã thử, đã chạy, hay có kết quả mới. Hệ thống chưa chạy gì.
 - KHÔNG đoán danh sách sẽ đổi ra sao, KHÔNG nêu tên trường, KHÔNG thêm con số.
 - KHÔNG nhắc mã kỹ thuật.

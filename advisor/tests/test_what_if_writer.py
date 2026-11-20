@@ -24,7 +24,7 @@ def user() -> dict:
 
 
 def test_skill_file_has_version():
-    assert load_skill(SKILL_PATH)[1] == "1.0"
+    assert load_skill(SKILL_PATH)[1] == "1.1"
 
 
 # Gửi Claude tên mục theo nhóm và giá trị muốn đổi, không gửi nguyên tin nhắn

@@ -241,7 +241,7 @@ def ask_question(state: ChatState, question_id: str) -> SkillOutput:
     return buttons.ask_with_buttons(state, question_id, can_skip=question_id in SKIPPABLE_QUESTIONS)
 
 
-# Hỏi câu B1 tiếp theo; hết câu thì sang B2 và hỏi câu đầu của skill_ho_so. skill_nhu_cau gọi hàm này
+# Hỏi câu B1 tiếp theo; hết câu thì sang B2 và hỏi câu đầu của skill_ho_so. Luồng thu thập hồ sơ gọi hàm này
 def ask_next(state: ChatState) -> SkillOutput:
     if skill_ho_so.reviewed(state):  # đang sửa hồ sơ: quay về bảng rà soát, không đổi bước
         return skill_ho_so.review(state)

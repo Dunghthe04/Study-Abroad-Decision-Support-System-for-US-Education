@@ -1,8 +1,7 @@
 """Các nhánh xử lý tin nhắn theo loại câu hỏi SLM (kiến trúc mới: không còn chuỗi bước B0 đến B6).
 
 SLM tách mỗi tin thành các ý, mỗi ý thuộc một trong 6 loại, mỗi loại là một nhánh. ChatFlow gọi nhánh của
-từng ý. Nhánh nào chưa làm xong thì tạm dùng skill cũ bên trong (lớp tên Legacy...);
-làm xong thì thay lớp đó trong build_branches, không phải sửa ChatFlow.
+từng ý. Thêm hay đổi cách xử lý một loại ý thì sửa lớp nhánh và bảng trong build_branches, không phải sửa ChatFlow.
 """
 
 import datetime
@@ -58,7 +57,7 @@ from app.services.replies import (
 )
 from app.services.scenario import FILTER_FACTORS, LABELS, SUPPORTED_TEXT, WhatIf, parse_what_if, try_buttons
 from app.services.skill_input import skill_request_of
-from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, REQUIRED_BY_SKILL, missing_fields
+from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
 from app.services.skill_template import TEMPLATE_TASKS, build_skill, tasks_of
 from app.services.skills import skill_ho_so
 from app.services.skills.profile_handler import ChatProfileHandler
@@ -328,26 +327,6 @@ class OutOfScopeBranch:
         return SkillOutput(OUT_OF_SCOPE.get(kind, OUT_OF_SCOPE["ambiguous"]), quick_replies=menu_buttons())
 
 
-# TẠM, phần của bạn: tư vấn theo hồ sơ bằng skill cũ (đánh giá, lộ trình, giải thích một trường).
-# Làm xong nhánh mới (SLM sinh skill cá nhân hóa, Claude trả lời) thì thay lớp này
-class LegacyAdviceBranch:
-    def __init__(self, skills: dict[str, SkillHandler]) -> None:
-        self._skills = skills
-
-    async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
-        if not state.has_results:
-            name = "skill_danh_gia"
-        elif single_school(slm.intents[0].entities):
-            name = "skill_explain"
-        else:
-            name = "skill_lo_trinh"
-        if name in REQUIRED_BY_SKILL:
-            asked = ask_missing_profile(state, slm.intents[0], REQUIRED_BY_SKILL[name])
-            if asked is not None:
-                return asked
-        return await self._skills[name].run(state, message)
-
-
 # Thiếu hồ sơ: hỏi tiếp hồ sơ (thiếu ngành thì hiện ô chọn ngành) thay vì tư vấn khi chưa đủ thông tin.
 # Đang hỏi hồ sơ dở (có câu đang chờ) thì chỉ báo cần thêm hồ sơ, ChatFlow nhắc lại câu đang chờ.
 # Đủ hồ sơ thì trả None để nhánh tư vấn làm tiếp
@@ -522,17 +501,14 @@ class ProfileBranch:
         return output
 
 
-# Bảng nhánh theo loại câu hỏi SLM. skills: các skill cũ do skills.build_handlers tạo.
-# main.py luôn truyền writer nên chạy thật dùng nhánh tư vấn mới. Chỉ test cũ (chưa viết lại) không
-# truyền, khi đó tạm dùng LegacyAdviceBranch
+# Bảng nhánh theo loại câu hỏi SLM. skills: các skill do skills.build_handlers tạo.
+# writer: Claude viết lời tư vấn hồ sơ. Không có writer (chưa cấu hình Claude) thì nhánh tư vấn báo chưa sẵn sàng
 def build_branches(
     skills: dict[str, SkillHandler],
     writer: AdviceWriter | None = None,
     what_if_writer: WhatIfWriter | None = None,
 ) -> dict[str, Branch]:
-    advice: Branch = (
-        GeneratedAdviceBranch(skills, writer) if writer is not None else LegacyAdviceBranch(skills)
-    )
+    advice: Branch = GeneratedAdviceBranch(skills, writer) if writer is not None else NotReadyBranch()
     return {
         "collect_profile": ProfileBranch(ChatProfileHandler(skills), advice),
         "profile_review": advice,

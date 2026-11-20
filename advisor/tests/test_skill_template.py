@@ -15,16 +15,16 @@ from app.services.skills.skill_lo_trinh import choose_route, timeline_numbers
 from tests.vef import VEF, VEF_RULES
 
 TODAY = date(2026, 11, 5)
-SECTIONS = (
+SECTIONS = (  # khuôn chung của mọi skill viết lời, xem tests/test_skill_format.py
+    "## NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)",
     "## 0. VAI TRÒ",
     "## 1. NHIỆM VỤ",
-    "## 2. NGUYÊN TẮC DỮ LIỆU",
-    "## 3. DỮ LIỆU BẠN NHẬN",
-    "## 4. CÁCH HIỂU DỮ LIỆU",
-    "## 5. NỘI DUNG CẦN NÓI",
-    "## 6. GIỚI HẠN VÀ ĐIỀU CẤM",
-    "## 7. ĐỊNH DẠNG ĐẦU RA",
-    "## 8. VÍ DỤ",
+    "## 2. DỮ LIỆU BẠN NHẬN",
+    "## 3. CÁCH HIỂU DỮ LIỆU",
+    "## 4. NỘI DUNG CẦN NÓI",
+    "## 5. GIỚI HẠN VÀ ĐIỀU CẤM",
+    "## 6. ĐỊNH DẠNG TRẢ LỜI",
+    "## 7. VÍ DỤ",
 )
 PLACEHOLDER = re.compile(r"\{(nhiem_vu|du_lieu|noi_dung)\}")
 ASSESS = '### Phần "Đánh giá hồ sơ"'
@@ -87,12 +87,12 @@ def skill_of(state: ChatState, tasks: list[str] | None = None) -> str:
     return build_skill(req, tasks, state.profile, TODAY, gpa_table_of(state.grade_scale))
 
 
-def test_nine_sections_in_order_and_no_placeholder_left():
+def test_common_sections_in_order_and_no_placeholder_left():
     skill = skill_of(state_of(FULL))
 
     positions = [skill.index(title) for title in SECTIONS]
     assert positions == sorted(positions)
-    assert skill.startswith("# SKILL TƯ VẤN HỒ SƠ (skill_ho_so_khuon) - skill_version 1.0")
+    assert skill.startswith("# SKILL TƯ VẤN HỒ SƠ (skill_ho_so_khuon) - skill_version 1.1")
     assert not PLACEHOLDER.search(skill)
     assert "None" not in skill
 
@@ -197,7 +197,7 @@ def test_gpa_uses_grade_scale_table():
     assert "3.3 thang 4" in skill_of(state_of(values, grade_scale=rules))
 
 
-# Mọi số code điền vào (mục 3 và 5) phải có trong hồ sơ, dòng tính sẵn, mốc lộ trình hoặc số được phép của hồ sơ
+# Mọi số code điền vào (mục 2 và 4) phải có trong hồ sơ, dòng tính sẵn, mốc lộ trình hoặc số được phép của hồ sơ
 @pytest.mark.parametrize(
     "values",
     [FULL, FULL | {"gpa": {"value": 6.0, "scale": 10}, "budget": "tier_under_20k"}, {"intake": "Fall 2027"}],

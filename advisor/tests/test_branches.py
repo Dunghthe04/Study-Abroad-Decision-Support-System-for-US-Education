@@ -565,32 +565,11 @@ def test_the_thanks_and_goodbye_sentence_does_not_ask_what_to_help_with():
     assert "greeting" not in OUT_OF_SCOPE  # lời chào có câu riêng (GREETING_REPLY) kèm nút gợi ý
 
 
-# ---- tư vấn theo hồ sơ (tạm dùng skill cũ) ----
-@pytest.mark.parametrize(
-    ("state_fields", "school", "expected"),
-    [
-        ({"profile": filled(REQUIRED_B3)}, None, "skill_danh_gia"),  # chưa có danh sách: đánh giá trước
-        ({"has_results": True, "profile": filled(REQUIRED_B4)}, "Iowa", "skill_explain"),  # hỏi một trường
-        ({"has_results": True, "profile": filled(REQUIRED_B4)}, None, "skill_lo_trinh"),
-    ],
-)
-async def test_advice_picks_the_old_skill_from_the_results_and_the_school_asked(
-    state_fields, school, expected
-):
-    ran: list[str] = []
-    slm = tin(("profile_review", {"schools": [school]} if school else {}))
-
-    await build_branches(skills(ran))["profile_review"].run(ChatState(**state_fields), "x", slm)
-
-    assert ran == [expected]
-
-
+# ---- tư vấn theo hồ sơ: thiếu hồ sơ thì hỏi tiếp (trước khi Claude viết) ----
 async def test_advice_without_a_profile_offers_chat_or_form():
     ran: list[str] = []
 
-    out = await build_branches(skills(ran))["profile_review"].run(
-        state := ChatState(), "đánh giá hồ sơ em", tin("profile_review")
-    )
+    out = await new_advice(ran).run(state := ChatState(), "đánh giá hồ sơ em", tin("profile_review"))
 
     assert ran == [] and out.answer == INTAKE_ASK
     assert out.quick_replies == [CHAT_BUTTON, FORM_BUTTON] and state.question_id == INTAKE_ID
@@ -600,15 +579,13 @@ async def test_advice_on_the_opening_question_offers_chat_or_form():
     state = ChatState()
     ask(state, "B0.1")
 
-    out = await build_branches(skills([]))["profile_review"].run(
-        state, "tôi muốn đi du học", tin("profile_review")
-    )
+    out = await new_advice([]).run(state, "tôi muốn đi du học", tin("profile_review"))
 
     assert out.quick_replies == [CHAT_BUTTON, FORM_BUTTON] and state.question_id == INTAKE_ID
 
 
 async def test_advice_with_a_partial_profile_says_how_many_items_are_missing():
-    out = await build_branches(skills([]))["profile_review"].run(ChatState(profile=filled(["target_level"])), "x",
+    out = await new_advice([]).run(ChatState(profile=filled(["target_level"])), "x",
                                                          tin("profile_review"))  # fmt: skip
 
     assert "còn thiếu 5 mục" in out.answer  # GPA, tiếng Anh, SAT/ACT, ngân sách, học bổng
@@ -617,7 +594,7 @@ async def test_advice_with_a_partial_profile_says_how_many_items_are_missing():
 async def test_advice_while_answering_in_chat_keeps_asking_the_missing_items():
     state = ChatState(profile=filled(["target_level"]), intake_mode="chat")
 
-    out = await build_branches(skills([]))["profile_review"].run(state, "x", tin("profile_review"))
+    out = await new_advice([]).run(state, "x", tin("profile_review"))
 
     assert out.answer.startswith(INTAKE_MORE)
     assert (state.current_step, state.question_id) == ("B1", "B1.1")
@@ -627,9 +604,7 @@ async def test_advice_asked_in_the_middle_of_the_profile_does_not_start_the_prof
     state = ChatState(current_step="B2", profile=filled(["target_level"]))
     ask(state, "D2")
 
-    out = await build_branches(skills([]))["profile_review"].run(
-        state, "em nên chọn trường nào", tin("profile_review")
-    )
+    out = await new_advice([]).run(state, "em nên chọn trường nào", tin("profile_review"))
 
     assert out.answer == NEED_PROFILE
     assert (state.question_id, state.last_question) == ("D2", QUESTIONS["D2"])  # câu đang chờ vẫn giữ nguyên
@@ -639,8 +614,8 @@ async def test_roadmap_with_only_the_major_missing_shows_the_major_widget():
     profile = filled([k for k in REQUIRED_B4 if k != "major"]) | {"major": ProfileField(status="unknown")}
     state = ChatState(has_results=True, profile=profile)
 
-    out = await build_branches(skills([]))["profile_review"].run(
-        state, "gợi ý trường cho em", tin("profile_review")
+    out = await new_advice([]).run(
+        state, "gợi ý trường cho em", tin(("profile_review", {}, "gợi ý trường cho em"))
     )
 
     assert out.answer == NEED_MAJOR and out.widget == Widget(type="major")
@@ -676,16 +651,14 @@ async def test_the_last_profile_answer_asks_what_next_without_advising():
 async def test_advice_without_a_profile_remembers_the_question():
     state = ChatState()
 
-    await build_branches(skills([]))["profile_review"].run(
-        state, "em cần lên lộ trình", tin(("profile_review", {}, "em cần lên lộ trình"))
-    )
+    await new_advice([]).run(state, "em cần lên lộ trình", tin(("profile_review", {}, "em cần lên lộ trình")))
 
     assert state.pending_advice is not None and state.pending_advice.span == "em cần lên lộ trình"
 
 
 async def test_a_second_advice_question_while_waiting_keeps_the_first_one():
     state = ChatState()
-    branch = build_branches(skills([]))["profile_review"]
+    branch = new_advice([])
 
     await branch.run(state, "em cần lên lộ trình", tin(("profile_review", {}, "em cần lên lộ trình")))
     await branch.run(state, "em nên chọn trường nào", tin(("profile_review", {}, "em nên chọn trường nào")))
@@ -693,31 +666,18 @@ async def test_a_second_advice_question_while_waiting_keeps_the_first_one():
     assert state.pending_advice.span == "em cần lên lộ trình"
 
 
-class RecordingMessage(Recording):
-    """Skill cũ giả ghi cả tin nhận được, để biết nhánh tư vấn trả lời câu nào."""
-
-    def __init__(self, name: str, ran: list[str], messages: list[str]) -> None:
-        super().__init__(name, ran)
-        self.messages = messages
-
-    async def run(self, state, message, entities=None):
-        self.messages.append(message)
-        return await super().run(state, message)
-
-
 async def test_confirming_the_profile_answers_the_question_that_was_waiting():
     ran: list[str] = []
-    messages: list[str] = []
-    branches = build_branches(skills(ran, skill_ho_so=Recording("skill_ho_so", ran, moves_to="B3"),
-                                     skill_danh_gia=RecordingMessage("skill_danh_gia", ran, messages)))  # fmt: skip
+    writer = FakeWriter()
+    branches = build_branches(skills(ran, skill_ho_so=Recording("skill_ho_so", ran, moves_to="B3")), writer)
     state = ChatState(current_step="B2", profile=filled(REQUIRED_B3))
     state.pending_advice = tin(("profile_review", {}, "em cần lên lộ trình")).intents[0]
     ask(state, "X1")
 
     await branches["collect_profile"].run(state, "Đúng rồi", tin("collect_profile"))
 
-    assert ran == ["skill_ho_so", "skill_danh_gia"]
-    assert messages == ["em cần lên lộ trình"]  # câu hỏi gốc, không phải "Đúng rồi"
+    assert ran == ["skill_ho_so"]
+    assert writer.questions == ["em cần lên lộ trình"]  # câu hỏi gốc, không phải "Đúng rồi"
     assert state.pending_advice is None
 
 
@@ -755,17 +715,19 @@ async def test_the_profile_branch_leaves_the_advice_to_the_advice_intent_of_the_
 
 async def test_a_profile_answer_with_an_advice_question_gives_the_advice_once():
     ran: list[str] = []
+    writer = FakeWriter()
     handlers = skills(ran, skill_ho_so=Recording("skill_ho_so", ran, moves_to="B3"))
     state = ChatState(current_step="B2", profile=filled(REQUIRED_B3))
     ask(state, "X1")
     message = ChatMessage(role="user", content="8.5, em nên nộp trường nào")
 
-    res = await flow_with(handlers, tin("collect_profile", "profile_review")).reply(
+    res = await flow_with(handlers, tin("collect_profile", "profile_review"), writer).reply(
         ChatRequest(messages=[message], state=state)
     )
 
-    assert ran == ["skill_ho_so", "skill_danh_gia"]
-    assert res.answer.count("trả lời của skill_danh_gia") == 1
+    assert ran == ["skill_ho_so"]
+    assert len(writer.questions) == 1  # Claude chỉ được nhờ viết một lần
+    assert res.answer.count("lời tư vấn") == 1
 
 
 # ---- tư vấn theo hồ sơ (nhánh mới: code dựng skill từ khuôn, Claude viết) ----
