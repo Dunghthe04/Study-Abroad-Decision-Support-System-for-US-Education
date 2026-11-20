@@ -185,14 +185,6 @@ export function LeadMessageReportsView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-h2">Tin nhắn bị báo cáo</h1>
-        <p className="text-sm text-ink-2">
-          Tin nhắn trong yêu cầu liên hệ bị học sinh, phụ huynh hoặc trung tâm báo cáo. Xem tin kèm ngữ cảnh liền kề rồi chọn cách xử lý:
-          gỡ tin nhắn, cảnh cáo người gửi, khóa tài khoản người gửi, hoặc bỏ qua báo cáo. Người báo cáo được thông báo kết quả.
-        </p>
-      </header>
-
       <Segmented label="Lọc báo cáo" value={filter} options={FILTER_OPTIONS} onChange={changeFilter} />
 
       {queue.error ? (

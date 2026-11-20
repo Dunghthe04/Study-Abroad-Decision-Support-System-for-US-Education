@@ -4,17 +4,13 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BanIcon,
   CakeIcon,
-  CheckCircle2Icon,
-  ClockIcon,
   EyeIcon,
   FilterIcon,
   KeyRoundIcon,
   RotateCcwIcon,
   SearchIcon,
-  ShieldAlertIcon,
   ShieldCheckIcon,
   UserPlusIcon,
-  UsersIcon,
 } from "lucide-react";
 import { adminUsersApi, ApiError } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -544,11 +540,6 @@ export function AdminUsersView() {
     }
   };
 
-  // Tính số liệu nhanh từ danh sách đang tải
-  const activeCount = users.filter((u) => u.status === "active").length;
-  const lockedCount = users.filter((u) => u.status === "locked" || u.status === "temp_locked").length;
-  const pendingCount = users.filter((u) => u.status === "unverified" || u.status === "pending").length;
-
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [draftRole, setDraftRole] = useState<string>("all");
   const [draftStatus, setDraftStatus] = useState<string>("all");
@@ -833,55 +824,6 @@ export function AdminUsersView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <header className="shrink-0">
-        <h1 className="text-h2">Quản trị người dùng</h1>
-        <p className="text-sm text-ink-2 mt-1">
-          {isModerator
-            ? "Xem danh sách tài khoản hệ thống."
-            : "Quản lý toàn bộ tài khoản người dùng và cấp tài khoản kiểm duyệt viên."}
-        </p>
-      </header>
-
-      {/* Compact KPI summary tiles */}
-      <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-line bg-surface px-4 py-3 flex items-center gap-3">
-          <div className="size-9 rounded-lg bg-brand-wash text-brand flex items-center justify-center shrink-0">
-            <UsersIcon className="size-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-ink-2 truncate">Tổng kết quả</p>
-            <p className="font-heading text-lg font-bold tabular-nums text-ink">{totalCount}</p>
-          </div>
-        </div>
-        <div className="rounded-xl border border-line bg-surface px-4 py-3 flex items-center gap-3">
-          <div className="size-9 rounded-lg bg-ok-wash text-ok flex items-center justify-center shrink-0">
-            <CheckCircle2Icon className="size-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-ink-2 truncate">Hoạt động (trang)</p>
-            <p className="font-heading text-lg font-bold tabular-nums text-ink">{activeCount}</p>
-          </div>
-        </div>
-        <div className="rounded-xl border border-line bg-surface px-4 py-3 flex items-center gap-3">
-          <div className="size-9 rounded-lg bg-risk-wash text-risk flex items-center justify-center shrink-0">
-            <ShieldAlertIcon className="size-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-ink-2 truncate">Bị khóa / Tạm khóa</p>
-            <p className="font-heading text-lg font-bold tabular-nums text-ink">{lockedCount}</p>
-          </div>
-        </div>
-        <div className="rounded-xl border border-line bg-surface px-4 py-3 flex items-center gap-3">
-          <div className="size-9 rounded-lg bg-warn-wash text-warn flex items-center justify-center shrink-0">
-            <ClockIcon className="size-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-ink-2 truncate">Chờ xác thực</p>
-            <p className="font-heading text-lg font-bold tabular-nums text-ink">{pendingCount}</p>
-          </div>
-        </div>
-      </div>
-
       {/* Master-detail table & side panel */}
       <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">

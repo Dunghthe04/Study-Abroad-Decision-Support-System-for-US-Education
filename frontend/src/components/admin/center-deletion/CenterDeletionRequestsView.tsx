@@ -122,14 +122,6 @@ export function CenterDeletionRequestsView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-h2">Yêu cầu xóa trung tâm</h1>
-        <p className="text-sm text-ink-2">
-          Trung tâm gửi yêu cầu xóa tài khoản và dữ liệu từ trang hồ sơ. Kiểm tra danh tính người gửi (đúng tài khoản chủ trung tâm, liên hệ
-          lại qua email hoặc số điện thoại đã xác thực) trước khi duyệt. Sau khi duyệt, dữ liệu được xóa hẳn khi hết thời hạn chờ.
-        </p>
-      </header>
-
       <Segmented label="Lọc yêu cầu" value={filter} options={FILTER_OPTIONS} onChange={changeFilter} />
 
       {query.error ? (
