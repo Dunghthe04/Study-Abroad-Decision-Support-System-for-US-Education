@@ -32,8 +32,13 @@ public record CenterDeletionRequestDto(
     string Status,
     DateTime CreatedAt,
     DateTime? HandledAt,
-    /// <summary>Hạn xử lý của USAS (20 ngày kể từ khi nhận, có thể gia hạn một lần).</summary>
-    DateTime? DueAt = null);
+    /// <summary>
+    /// Hạn xử lý của USAS (20 ngày kể từ khi nhận, có thể gia hạn một lần). Null khi trung tâm đang bị giữ pháp lý:
+    /// hệ thống không thể hứa mốc xử lý, và không để lộ việc đang giữ.
+    /// </summary>
+    DateTime? DueAt = null,
+    /// <summary>Thời điểm gia hạn (null nếu chưa gia hạn).</summary>
+    DateTime? ExtendedAt = null);
 
 public record CenterDeletionRequestResult(CenterDeletionRequestDto? Request, string? ErrorMessage = null)
 {

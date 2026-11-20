@@ -474,6 +474,36 @@ public class CenterDeletionServiceTests
     }
 
     [Fact]
+    public async Task ReleaseLegalHold_WithOpenDeletionRequest_SendsGenericResumedNotice()
+    {
+        var s = new Setup();
+        await s.Service.SetLegalHoldAsync(Guid.NewGuid(), s.Center.Id, "Công văn số 12/CSĐT");
+        s.Email.CenterDeletionEmails.Clear();
+
+        await s.Service.ReleaseLegalHoldAsync(Guid.NewGuid(), s.Center.Id, "Đã có kết luận");
+
+        Assert.Equal(new[] { "info@aau.vn", "owner@center.vn" }, s.Email.CenterDeletionEmails.Select(e => e.To).OrderBy(x => x));
+        Assert.All(s.Email.CenterDeletionEmails, e =>
+        {
+            Assert.Equal("resumed", e.Outcome);
+            Assert.Null(e.Note);   // không nhắc kết luận hay lý do gỡ
+        });
+    }
+
+    [Fact]
+    public async Task ReleaseLegalHold_WithoutOpenDeletionRequest_SendsNoNotice()
+    {
+        var s = new Setup();
+        await s.Service.SetLegalHoldAsync(Guid.NewGuid(), s.Center.Id, "Khiếu nại");
+        await s.Service.RejectAsync(Guid.NewGuid(), s.Request.Id, "Không xác minh được");
+        s.Email.CenterDeletionEmails.Clear();
+
+        await s.Service.ReleaseLegalHoldAsync(Guid.NewGuid(), s.Center.Id, "Đã giải quyết");
+
+        Assert.Empty(s.Email.CenterDeletionEmails);
+    }
+
+    [Fact]
     public async Task SetLegalHold_RefusedAfterDataWasPurged()
     {
         var s = new Setup();

@@ -1202,8 +1202,9 @@ public class StudyCenterService(
         }, ct);
     }
 
-    private static CenterDeletionRequestDto ToDeletionDto(CenterDeletionRequest r) =>
-        new(r.Id, r.StudyCenterId, r.Reason, r.Status, r.CreatedAt, r.HandledAt, r.DueAt);
+    private static CenterDeletionRequestDto ToDeletionDto(CenterDeletionRequest r, bool underLegalHold = false) =>
+        new(r.Id, r.StudyCenterId, r.Reason, r.Status, r.CreatedAt, r.HandledAt,
+            underLegalHold ? null : r.DueAt, underLegalHold ? null : r.ExtendedAt);
 
     /// <summary>[UC-92] Yêu cầu xóa mới nhất của trung tâm (null nếu chưa gửi).</summary>
     public async Task<CenterDeletionRequestDto?> GetDeletionRequestAsync(Guid userId, CancellationToken ct = default)
@@ -1212,7 +1213,7 @@ public class StudyCenterService(
         var center = await repository.GetByOwnerOrEmailAsync(userId, null, ct);
         if (center is null) return null;
         var latest = await deletionRequests.GetLatestByCenterIdAsync(center.Id, ct);
-        return latest is null ? null : ToDeletionDto(latest);
+        return latest is null ? null : ToDeletionDto(latest, center.IsLegalHold);
     }
 
     /// <summary>
@@ -1275,7 +1276,7 @@ public class StudyCenterService(
             }
         }
 
-        return CenterDeletionRequestResult.Ok(ToDeletionDto(entity));
+        return CenterDeletionRequestResult.Ok(ToDeletionDto(entity, center.IsLegalHold));
     }
 
     private static CenterVerificationDto ToVerificationDto(CenterVerificationRequest req, StudyCenter? center) =>

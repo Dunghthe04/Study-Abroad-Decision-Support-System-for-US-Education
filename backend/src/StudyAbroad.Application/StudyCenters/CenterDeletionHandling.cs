@@ -568,6 +568,14 @@ public class CenterDeletionService(
             }, txCt);
         }, ct);
 
+        // Khép vòng thông báo: yêu cầu xóa đang mở được xử lý tiếp. Nội dung chung, không nhắc việc điều tra.
+        var latest = await requests.GetLatestByCenterIdAsync(center.Id, ct);
+        if (latest?.Status is CenterDeletionRequestStatuses.Pending or CenterDeletionRequestStatuses.Approved)
+        {
+            foreach (var email in await CollectRecipientsAsync(latest, center.Email, ct))
+                await emailSender.SendCenterDeletionOutcomeEmailAsync(email, center.Name, "resumed", null, null, ct);
+        }
+
         return CenterLegalHoldResult.Ok(await ToHoldDtoAsync(center, ct));
     }
 

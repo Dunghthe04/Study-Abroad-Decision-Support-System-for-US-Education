@@ -1025,6 +1025,35 @@ public class CenterRegistrationAndVerificationTests
     }
 
     [Fact]
+    public async Task GetDeletionRequest_HidesDeadlineWhileCenterUnderLegalHold()
+    {
+        var centers = new FakeStudyCenterRepo();
+        var deletions = new FakeDeletionRepo();
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = "info@abc.vn",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.Verified,
+        };
+        await centers.AddAsync(center);
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), new FakeVerificationRepo(), emailSender: new FakeEmailSender(),
+            notifications: null, profileChanges: new FakeProfileChangeRepo(), deletionRequests: deletions);
+        await service.RequestDeletionAsync(center.OwnerUserId!.Value, "Ngừng hoạt động");
+
+        var normal = await service.GetDeletionRequestAsync(center.OwnerUserId!.Value);
+        Assert.NotNull(normal!.DueAt);
+
+        // Đang giữ: không hứa mốc xử lý và không để lộ việc đang giữ
+        center.IsLegalHold = true;
+        var held = await service.GetDeletionRequestAsync(center.OwnerUserId!.Value);
+        Assert.Null(held!.DueAt);
+        Assert.Null(held.ExtendedAt);
+        Assert.Equal("pending", held.Status);
+    }
+
+    [Fact]
     public async Task RequestDeletion_UnknownCenterOrTooLongReason_IsRejected()
     {
         var s = await ProfileEditSetup(CenterVerificationStatuses.Unverified);
