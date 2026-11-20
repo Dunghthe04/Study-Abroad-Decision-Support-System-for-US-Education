@@ -17,13 +17,17 @@ public static class CenterLeadMapper
         StudentProfile? profile,
         IReadOnlyList<ProfileCertification>? certifications = null)
     {
-        // [UC-80] Người gửi đã xóa tài khoản: chỉ giữ mã, trung tâm, trạng thái, ngày gửi; ẩn mọi dữ liệu của người gửi
-        if (string.Equals(lead.Status, LeadStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase))
+        // [UC-80 / UC-73] Người gửi đã thu hồi (xóa tài khoản) hoặc yêu cầu quá 90 ngày: chỉ giữ mã, trung tâm, trạng thái,
+        // ngày gửi; ẩn mọi dữ liệu người gửi đã chia sẻ
+        if (IsDataHidden(lead))
             return new CenterReceivedLeadDto(
                 lead.Id, lead.StudyCenterId, centerName,
                 null, null, null, false,
                 lead.Status, lead.CreatedAt,
-                null, null, null);
+                null, null, null)
+            {
+                DataHidden = true,
+            };
 
         var fields = lead.SharedFields ?? [];
         bool Has(string group) => fields.Contains(group);
@@ -99,4 +103,12 @@ public static class CenterLeadMapper
             .OrderBy(c => c.SortOrder)
             .Select(c => new SharedPlannedTestDto(c.TestType, c.CustomName, c.Subject, c.OverallScore, c.ScaleText, c.TestDate))
             .ToList();
+
+    /// <summary>[UC-73] Số ngày trung tâm còn xem được dữ liệu đã chia sẻ, tính từ lúc người dùng gửi yêu cầu.</summary>
+    public const int DataVisibleDays = 90;
+
+    /// <summary>[UC-73] Đã thu hồi hoặc quá 90 ngày: trung tâm không còn xem được dữ liệu đã chia sẻ.</summary>
+    public static bool IsDataHidden(Lead lead) =>
+        string.Equals(lead.Status, LeadStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase)
+        || lead.CreatedAt < DateTime.UtcNow.AddDays(-DataVisibleDays);
 }

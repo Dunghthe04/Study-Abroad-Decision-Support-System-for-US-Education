@@ -24,4 +24,21 @@ public interface IProfileFlowService
     Task<UploadDraftTranscriptResultDto> UploadDraftTranscriptAsync(Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default);
     Task<CommitProfileFlowResponse> CommitFlowAsync(Guid userId, CommitProfileFlowRequest? request, CancellationToken ct = default);
     Task ClearDraftAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>Đủ 5 bước của hồ sơ ĐÃ GỬI, dựng từ DB, bỏ qua nháp đang làm dở; chưa gửi thì null.
+    /// Thẻ hồ sơ ở Tài khoản và "Con của tôi" đọc để hiện đủ các trường. Mặc định null để các bản giả trong test không phải sửa.</summary>
+    Task<ProfileFlowDraftDto?> GetCommittedDetailsAsync(Guid userId, CancellationToken ct = default) =>
+        Task.FromResult<ProfileFlowDraftDto?>(null);
+
+    /// <summary>Người này có được nhập / lưu hồ sơ của chính mình không (tài khoản phụ huynh thì không, 1.5d).
+    /// Chat đọc để thay các lượt về hồ sơ (ParentChatGate). Mặc định true để các bản giả trong test không phải sửa.</summary>
+    Task<bool> CanEditOwnProfileAsync(Guid userId, CancellationToken ct = default) => Task.FromResult(true);
+
+    /// <summary>1.5e: các con đang liên kết của phụ huynh, để chat hỏi "Bạn muốn làm cho con nào?" (ParentChatGate).
+    /// Mặc định null (không biết) để các bản giả trong test không phải sửa; chat khi đó chỉ có nút sang Con của tôi.</summary>
+    Task<IReadOnlyList<ParentChatChild>?> GetParentChatChildrenAsync(Guid userId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ParentChatChild>?>(null);
 }
+
+/// <summary>Một con của phụ huynh cho nút chat. IsManaged: con chưa có tài khoản, phụ huynh vào làm thay được.</summary>
+public record ParentChatChild(Guid Id, string Name, bool IsManaged);

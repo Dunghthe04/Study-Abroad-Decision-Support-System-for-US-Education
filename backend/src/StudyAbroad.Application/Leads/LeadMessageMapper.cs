@@ -16,7 +16,8 @@ public sealed record RawLeadMessageRow(
     string Status,
     DateTime CreatedAt,
     string SenderRole,
-    string? SenderFullName);
+    string? SenderFullName,
+    DateTime? ReadAt = null);
 
 /// <summary>
 /// [USAS-2053 / UC-74] Bộ chuyển đổi và truy vấn chuẩn cho luồng tin nhắn yêu cầu liên hệ.
@@ -78,7 +79,8 @@ public static class LeadMessageMapper
             m.Status,
             m.CreatedAt,
             u != null ? u.Role : UserRoles.Student,
-            u != null ? u.FullName : null);
+            u != null ? u.FullName : null,
+            m.ReadAt);
 
     /// <summary>
     /// Chuyển đổi một bản ghi truy vấn thô sang DTO, tự động che nội dung/lý do nếu tin nhắn đã bị gỡ.
@@ -102,7 +104,8 @@ public static class LeadMessageMapper
             isRemoved ? RemovedContentPlaceholder : row.Content,
             isRemoved ? null : row.AttachmentUrl,
             row.Status,
-            row.CreatedAt);
+            row.CreatedAt,
+            row.ReadAt);
     }
 
     /// <summary>
@@ -124,7 +127,8 @@ public static class LeadMessageMapper
                 entity.Status,
                 entity.CreatedAt,
                 senderRole,
-                senderFullName),
+                senderFullName,
+                entity.ReadAt),
             sharedProfile,
             centerName);
 }

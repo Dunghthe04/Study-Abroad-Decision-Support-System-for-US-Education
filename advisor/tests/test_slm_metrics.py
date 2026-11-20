@@ -5,8 +5,8 @@ import sys
 
 import pytest
 
-from scripts import slm_report
-from scripts.slm_metrics import (
+from slm.eval import slm_report
+from slm.eval.slm_metrics import (
     NONE,
     align,
     bootstrap_ci,
@@ -383,20 +383,20 @@ def test_the_report_builds_every_table_and_chart(tmp_path, monkeypatch):
     slm_report.main()
 
     for name in (
-        "BAO_CAO.md", "chi_so.json", "bang_so_sanh.csv", "bang_theo_loai.csv", "bang_theo_nhan.csv", "nham_lan_1.csv", "cau_sai_2.csv",
-        "01_so_sanh.png", "02_f1_theo_loai.png", "03_f1_theo_nhan.png", "04_nham_lan.png", "05_phan_loai_ket_qua.png", "06_theo_nhom_tin.png",
-        "07_thoi_gian.png", "09_du_lieu.png", "10_huan_luyen.png", "11_chenh_val_train.png", "12_chi_so_val_theo_buoc.png",
+        "REPORT.md", "metrics.json", "table_comparison.csv", "table_per_category.csv", "table_per_label.csv", "confusion_1.csv", "wrong_messages_2.csv",
+        "01_model_comparison.png", "02_f1_per_category.png", "03_f1_per_label.png", "04_confusion_matrix.png", "05_outcome_per_message.png", "06_message_groups.png",
+        "07_latency.png", "09_dataset.png", "10_training_curves.png", "11_val_train_gap.png", "12_validation_metrics.png",
     ):  # fmt: skip
         assert (out / name).is_file() and (out / name).stat().st_size > (
             3000 if name.endswith(".png") else 0
         ), name
-    assert (out / "du_doan_tho" / "goc.jsonl").read_bytes() == base.read_bytes()
-    assert (out / "du_doan_tho" / "moi.jsonl").is_file() and (out / "training_log.csv").is_file()
+    assert (out / "raw_predictions" / "goc.jsonl").read_bytes() == base.read_bytes()
+    assert (out / "raw_predictions" / "moi.jsonl").is_file() and (out / "training_log.csv").is_file()
     manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["cau_hinh"] == ["Model gốc: qwen3:4b-instruct, 8 ví dụ từ train"]
     assert [r["ten"] for r in manifest["lan_chay"]] == ["Model gốc", "Đã huấn luyện"]
     assert (
-        manifest["dap_an_tho"][0]["file"] == "du_doan_tho/goc.jsonl"
+        manifest["dap_an_tho"][0]["file"] == "raw_predictions/goc.jsonl"
         and len(manifest["dap_an_tho"][0]["sha256"]) == 64
     )
     assert (
@@ -405,24 +405,24 @@ def test_the_report_builds_every_table_and_chart(tmp_path, monkeypatch):
     )
     assert "slm_report" in manifest["lenh_dung_lai"]
     assert "git_commit" in manifest and manifest["co_sua_chua_commit"] in (True, False, None)
-    report = (out / "BAO_CAO.md").read_text(encoding="utf-8")
-    assert "manifest.json" in report and "du_doan_tho/" in report
+    report = (out / "REPORT.md").read_text(encoding="utf-8")
+    assert "manifest.json" in report and "raw_predictions/" in report
     assert (
         "Model gốc" in report
         and "Đã huấn luyện" in report
         and "30.0%" in report
         and "90.0%" in report
         and "Overfit" in report
-        and "## Cấu hình thí nghiệm" in report
+        and "## Experiment configuration" in report
         and "8 ví dụ từ train" in report
-        and "Chênh val loss trừ train loss" in report
+        and "Val loss minus train loss" in report
     )
-    metrics = json.loads((out / "chi_so.json").read_text(encoding="utf-8"))
+    metrics = json.loads((out / "metrics.json").read_text(encoding="utf-8"))
     assert (
         metrics["lan_chay"]["Model gốc"]["muc_dung"]["dung_het"] == 0.3
         and metrics["huan_luyen"]["buoc_tot_nhat"] == 60
     )
-    assert (out / "cau_sai_1.csv").read_text(encoding="utf-8-sig").count(
+    assert (out / "wrong_messages_1.csv").read_text(encoding="utf-8-sig").count(
         "\n"
     ) == 8  # tiêu đề + 7 câu sai của model gốc
 
@@ -456,7 +456,7 @@ def test_the_split_is_read_from_the_rows_or_from_the_file_name(tmp_path):
     assert (
         slm_report.split_of(Path("ten_la.jsonl"), [{"id": "a", "split": "val"}]) == "val"
     )  # cột split ưu tiên hơn tên file
-    assert slm_report.split_of(Path("ten_la.jsonl"), [{"id": "a"}]) == "không rõ"
+    assert slm_report.split_of(Path("ten_la.jsonl"), [{"id": "a"}]) == "unknown"
 
 
 def run_report(tmp_path, monkeypatch, base_name, tuned_name, base_split=None, tuned_split=None):
@@ -483,19 +483,19 @@ def run_report(tmp_path, monkeypatch, base_name, tuned_name, base_split=None, tu
         ],
     )
     slm_report.main()
-    return (out / "BAO_CAO.md").read_text(encoding="utf-8")
+    return (out / "REPORT.md").read_text(encoding="utf-8")
 
 
 def test_a_report_on_val_says_it_is_for_development_not_the_final_number(tmp_path, monkeypatch):
     report = run_report(tmp_path, monkeypatch, "goc_val.jsonl", "moi_val.jsonl")
 
-    assert "tập val" in report and "KHÔNG phải số báo cáo cuối cùng" in report
+    assert "validation set" in report and "NOT the final reported numbers" in report
 
 
 def test_a_report_on_test_says_it_is_the_final_number(tmp_path, monkeypatch):
     report = run_report(tmp_path, monkeypatch, "goc.jsonl", "moi.jsonl", "test", "test")
 
-    assert "tập test" in report and "số liệu báo cáo cuối cùng" in report
+    assert "test set" in report and "final reported numbers" in report
 
 
 def test_runs_measured_on_different_splits_are_refused(tmp_path, monkeypatch):

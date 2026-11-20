@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Domain.Entities;
@@ -14,7 +15,12 @@ public record RecommendationRunSummaryDto(
 // Một trường thay đổi giữa hai lần chạy. Group null = không có trong lần đó (mới vào / rơi ra). Rank tính từ 1 trong nhóm.
 public record RunSchoolChange(string Code, string Name, string? FromGroup, string? ToGroup, int? FromRank, int? ToRank);
 
-public record RunComparisonDto(RecommendationRunSummaryDto From, RecommendationRunSummaryDto To, IReadOnlyList<RunSchoolChange> Changes);
+// Một mục đầu vào khác nhau giữa hai lần chạy (đọc từ criteria_json). Giá trị đã ghi thành chữ để hiện thẳng; lần chạy cũ thiếu khóa thì "Không rõ".
+public record RunInputChange(string Key, string Label, string From, string To);
+
+public record RunComparisonDto(
+    RecommendationRunSummaryDto From, RecommendationRunSummaryDto To, IReadOnlyList<RunSchoolChange> Changes,
+    IReadOnlyList<RunInputChange> InputChanges);
 
 /// <summary>Xem lịch sử gợi ý (UC-87): các lần chạy trước và so sánh hai lần. Chỉ đọc bảng recommendations.
 /// Học sinh xem của mình; phụ huynh có liên kết đang hiệu lực xem của con. Không tìm thấy hoặc không có quyền đều trả null (controller trả 404).</summary>
@@ -73,7 +79,7 @@ public class RecommendationHistoryService(IRecommendationHistoryRepository histo
             .ThenBy(c => Array.IndexOf(Groups, c.ToGroup ?? c.FromGroup))
             .ThenBy(c => c.ToRank ?? c.FromRank)
             .ToList();
-        return new RunComparisonDto(from.Summary, to.Summary, ordered);
+        return new RunComparisonDto(from.Summary, to.Summary, ordered, InputChanges(from.Criteria, to.Criteria));
     }
 
     private async Task<bool> CanViewAsync(Guid viewerId, Guid ownerId, CancellationToken ct) =>
@@ -86,7 +92,8 @@ public class RecommendationHistoryService(IRecommendationHistoryRepository histo
     private record ParsedRun(
         RecommendationRunSummaryDto Summary,
         Dictionary<string, Place> Places,
-        Dictionary<string, string> Names);
+        Dictionary<string, string> Names,
+        JsonObject? Criteria);
 
     // Đọc một dòng. Trả null với dòng khuôn cũ (items là mảng, lưu trước PR #19) hoặc JSON hỏng.
     private static ParsedRun? Parse(Recommendation row)
@@ -134,8 +141,59 @@ public class RecommendationHistoryService(IRecommendationHistoryRepository histo
 
         var summary = new RecommendationRunSummaryDto(
             row.Id, row.CreatedAt, pref, major, new RunGroupCounts(counts[0], counts[1], counts[2], counts[3]));
-        return new ParsedRun(summary, places, names);
+        return new ParsedRun(summary, places, names, criteria);
     }
+
+    // ------------------------------------------------------------ đầu vào đã đổi (UC-76 2h-2)
+
+    private const string Unknown = "Không rõ";
+    private static readonly string[] PrefNames = ["chi phí thấp", "học bổng nhiều", "danh tiếng"];
+    private static readonly string[] PrefLevels = ["Không quan tâm", "Ít quan tâm", "Bình thường", "Quan tâm nhiều", "Quan tâm nhất"];
+    private static readonly Dictionary<string, string> AidNeedLabels = new()
+    {
+        ["mandatory"] = "Bắt buộc", ["preferred"] = "Nên có", ["optional"] = "Không cần",
+    };
+    private static readonly CultureInfo Vi = CultureInfo.GetCultureInfo("vi-VN");
+
+    // So các mục đầu vào mà lần chạy đã lưu, theo thứ tự hồ sơ. Chỉ trả mục khác nhau.
+    // Điểm tiếng Anh không được lưu trong criteria_json nên không so được.
+    private static List<RunInputChange> InputChanges(JsonObject? a, JsonObject? b)
+    {
+        var list = new List<RunInputChange>();
+        void Add(string key, string label, Func<JsonObject, string> read)
+        {
+            var from = a is null ? Unknown : read(a);
+            var to = b is null ? Unknown : read(b);
+            if (from != to)
+                list.Add(new RunInputChange(key, label, from, to));
+        }
+        // Thiếu khóa (lần chạy lưu trước khi có khóa đó) khác với khóa có mà rỗng
+        static Func<JsonObject, string> Field(string key, Func<JsonNode?, string> fmt) =>
+            o => o.ContainsKey(key) ? fmt(o[key]) : Unknown;
+
+        Add("studentGpa", "GPA", Field("studentGpa", n => Number(n) is double g ? g.ToString("0.##", Vi) : "Chưa có"));
+        Add("studentSat", "SAT", Field("studentSat", n => Number(n) is double v ? ((long)v).ToString(CultureInfo.InvariantCulture) : "Chưa có"));
+        Add("tier", "Ngoại khóa", Field("tier", n => Number(n) is double t ? $"Bậc {(int)t}" : "Chưa có"));
+        Add("major", "Ngành", Field("major", n => Text(n) is { Length: > 0 } m ? m : "Chưa chọn"));
+        Add("states", "Bang", Field("states", n =>
+            n is JsonArray arr && arr.Select(Text).OfType<string>().Order(StringComparer.Ordinal).ToList() is { Count: > 0 } st
+                ? string.Join(", ", st) : "Mọi bang"));
+        Add("budget", "Ngân sách", Field("budget", n => Number(n) is double v
+            ? ((long)Math.Round(v)).ToString("N0", CultureInfo.InvariantCulture).Replace(",", ".") + " USD/năm" : "Không đặt"));
+        Add("scholarshipNeed", "Nhu cầu học bổng", Field("scholarshipNeed",
+            n => Text(n) is { } need ? AidNeedLabels.GetValueOrDefault(need, need) : "Chưa chọn"));
+        for (var i = 0; i < PrefNames.Length; i++)
+        {
+            var at = i;
+            Add($"pref.{at}", $"Ưu tiên {PrefNames[at]}", o =>
+                o["pref"] is JsonArray p && p.Count == PrefNames.Length && Number(p[at]) is double lv && lv >= 0 && lv < PrefLevels.Length
+                    ? PrefLevels[(int)lv] : Unknown);
+        }
+        return list;
+    }
+
+    private static double? Number(JsonNode? node) =>
+        node is JsonValue v && v.TryGetValue<double>(out var d) ? d : null;
 
     private static string? Text(JsonNode? node) =>
         node is JsonValue v && v.TryGetValue<string>(out var text) ? text : null;

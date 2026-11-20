@@ -184,7 +184,10 @@ def judge(result, types, extra):
 
 async def main() -> None:
     out_path = sys.argv[sys.argv.index("--json") + 1] if "--json" in sys.argv else None
-    async with httpx.AsyncClient(base_url=base, timeout=120) as http:
+    headers = {}
+    if st.slm_api_key:
+        headers["Authorization"] = f"Bearer {st.slm_api_key}"
+    async with httpx.AsyncClient(base_url=base, timeout=120, headers=headers) as http:
         client = OllamaClient(
             http,
             st.slm_model,

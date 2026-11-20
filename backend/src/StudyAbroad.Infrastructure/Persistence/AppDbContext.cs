@@ -43,6 +43,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
     public DbSet<SlmTrainingSample> SlmTrainingSamples => Set<SlmTrainingSample>();
     public DbSet<SlmSampleHistory> SlmSampleHistory => Set<SlmSampleHistory>();
+    public DbSet<KnowledgeBaseEntry> KnowledgeBaseEntries => Set<KnowledgeBaseEntry>();
+    public DbSet<KnowledgeBaseEntryHistory> KnowledgeBaseEntryHistory => Set<KnowledgeBaseEntryHistory>();
     public DbSet<AiCall> AiCalls => Set<AiCall>();
     public DbSet<EvalCase> EvalCases => Set<EvalCase>();
     public DbSet<EvalRun> EvalRuns => Set<EvalRun>();
@@ -55,7 +57,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Media> Media => Set<Media>();
 
     // 13 thực thể bổ sung chuẩn hóa toàn diện 42 bảng DB First
-    public DbSet<StateLivingCost> StateLivingCosts => Set<StateLivingCost>();
     public DbSet<RecommendationItem> RecommendationItems => Set<RecommendationItem>();
     public DbSet<ExpertRule> ExpertRules => Set<ExpertRule>();
     public DbSet<WhatIfSimulation> WhatIfSimulations => Set<WhatIfSimulation>();
@@ -67,7 +68,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UserDailyUsage> UserDailyUsages => Set<UserDailyUsage>();
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
     public DbSet<PolicyAlert> PolicyAlerts => Set<PolicyAlert>();
-    public DbSet<DataImportBatch> DataImportBatches => Set<DataImportBatch>();
     public DbSet<FieldEvidence> FieldEvidences => Set<FieldEvidence>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

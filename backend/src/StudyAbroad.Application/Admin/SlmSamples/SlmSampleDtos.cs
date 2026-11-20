@@ -19,8 +19,6 @@ public record SlmSampleDto(
     DateTime? ReviewedAt,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    string? Answer = null,
-    string? Topic = null,
     string Source = "manual",
     Guid? CreatedByUserId = null,
     string? CreatedByName = null,
@@ -57,7 +55,7 @@ public class SlmDuplicateSampleException(Guid existingId)
 
 /// <summary>
 /// Nội dung tạo hoặc sửa một dòng. Profile, Intents, Context là chuỗi JSON hợp lệ (Intents là một mảng, bắt buộc).
-/// Split bỏ trống thì mặc định train. Submit = true thì gửi duyệt (pending), cần có câu trả lời hoặc intents.
+/// Split bỏ trống thì mặc định train. Submit = true thì gửi duyệt (pending), cần có intents.
 /// </summary>
 public record SaveSlmSampleRequest(
     string? SampleType,
@@ -68,8 +66,6 @@ public record SaveSlmSampleRequest(
     string? Context,
     string? Split,
     string? SourceReview,
-    string? Answer = null,
-    string? Topic = null,
     string? Source = null,
     bool Submit = false);
 

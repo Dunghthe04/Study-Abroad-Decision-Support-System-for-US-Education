@@ -300,7 +300,7 @@ public class LeadsController(
 
     /// <summary>
     /// [UC-73] Lấy danh sách yêu cầu tư vấn / liên hệ nhận được của trung tâm tư vấn.
-    /// Cho phép lọc theo trạng thái (new | contacted | closed), tìm kiếm từ khóa, và phân trang.
+    /// Cho phép lọc theo trạng thái (new | accepted | rejected | contacted | closed), tìm kiếm từ khóa, và phân trang.
     /// Dành cho Trung tâm tư vấn (chỉ xem được yêu cầu gửi đến trung tâm mình), Moderator và Admin.
     /// </summary>
     [HttpGet("received")]
@@ -356,8 +356,30 @@ public class LeadsController(
                 : Ok(lead);
         });
 
+    /// <summary>[UC-73] Trung tâm chấp nhận yêu cầu liên hệ Mới: sang Đã chấp nhận, mở nhắn tin (UC-74).</summary>
+    [HttpPost("received/{id:guid}/accept")]
+    [Authorize(Roles = UserRoles.Center)]
+    [ProducesResponseType(typeof(CenterReceivedLeadDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> AcceptLead(Guid id, CancellationToken ct) =>
+        ExecuteCenterLeadActionAsync(async (userId, userEmail, userRole) =>
+            Ok(await leadService.AcceptReceivedLeadAsync(userId, userEmail, userRole, id, ct)));
+
+    /// <summary>[UC-73] Trung tâm từ chối yêu cầu liên hệ Mới: sang Bị từ chối, người gửi nhận thông báo.</summary>
+    [HttpPost("received/{id:guid}/reject")]
+    [Authorize(Roles = UserRoles.Center)]
+    [ProducesResponseType(typeof(CenterReceivedLeadDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> RejectLead(Guid id, CancellationToken ct) =>
+        ExecuteCenterLeadActionAsync(async (userId, userEmail, userRole) =>
+            Ok(await leadService.RejectReceivedLeadAsync(userId, userEmail, userRole, id, ct)));
+
     /// <summary>
-    /// [UC-73] Cập nhật trạng thái yêu cầu liên hệ (new | contacted | closed).
+    /// [UC-73] Cập nhật trạng thái yêu cầu liên hệ (new | accepted | contacted | closed). Từ chối dùng POST .../reject.
     /// </summary>
     [HttpPatch("received/{id:guid}/status")]
     [Authorize(Roles = $"{UserRoles.Center},{UserRoles.Moderator},{UserRoles.Admin}")]

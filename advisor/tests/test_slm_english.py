@@ -6,7 +6,7 @@ import re
 import pytest
 
 from app.schemas.slm import INTENTS, TARGET_GROUPS, SlmTinResult
-from scripts.build_slm_jsonl import DEFAULT_OUT
+from slm.prepare.build_slm_jsonl import DEFAULT_OUT
 
 # Mọi khóa được phép trong dữ liệu train (ngoài các khóa hồ sơ, là chữ học sinh gõ nên không đi qua đây)
 RECORD_KEYS = {"id", "type", "split", "input", "output"}

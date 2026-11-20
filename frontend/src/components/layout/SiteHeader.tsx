@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { formatUserRole } from "@/lib/user-role-labels";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsLinkedParent } from "@/hooks/use-is-linked-parent";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -31,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { isAdminRoute } from "@/lib/admin-nav";
 import { isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
@@ -42,7 +44,7 @@ import { cn } from "@/lib/utils";
  * Trang chủ: nền trong suốt nằm trên ảnh trường, cuộn xuống thì thành nền trắng như các trang khác.
  */
 export function SiteHeader() {
-  const { user, isLoading, logout } = useAuth();
+  const { user, isLoading, logout, acting } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -50,13 +52,25 @@ export function SiteHeader() {
   const isModerator = user?.role === "moderator";
   const canOpenAdmin = isAdmin || isModerator;
   const isStudentOrParent = user?.role === "student" || user?.role === "parent";
+  // 1f: phụ huynh đã liên kết không có hồ sơ riêng, các mục hồ sơ riêng nhường chỗ cho "Con của tôi"
+  const { linked: isLinkedParent } = useIsLinkedParent();
+  // Chỉ hiện khi đã biết chắc là không liên kết (=== false), để lúc đang tải phụ huynh không thấy mục hồ sơ riêng nháy lên.
+  // 1.5d, 1.5e: phụ huynh không có hồ sơ riêng; đang làm thay con thì các mục hồ sơ là của con đó
+  // (/me vẫn trả role parent khi làm thay, nên xét acting chứ không xét role)
+  const hasOwnProfile = acting !== null || (user?.role === "student" && isLinkedParent === false);
+  // Trang Tài khoản khi làm thay vẫn là của phụ huynh, nên hồ sơ của con mở ở trang nhập hồ sơ
+  const academicHref = acting ? "/profile/academic" : "/account#academic";
+  // Phụ huynh chưa có con nào, không làm thay: nút "Thêm con" thay cho "Phân tích hồ sơ của tôi"
+  const isParentWithoutChild = user?.role === "parent" && !acting && isLinkedParent === false;
 
   const navLinks = [
     { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
     { href: "/universities", label: "Tìm trường" },
     { href: isModerator ? "/admin/centers" : "/centers", label: "Trung tâm" },
     { href: "/methodology", label: "Phương pháp của chúng tôi" },
-    ...(isStudentOrParent ? [{ href: "/target-schools", label: "Trường mục tiêu" }] : []),
+    ...(hasOwnProfile ? [{ href: "/target-schools", label: "Trường mục tiêu" }] : []),
+    // 2h-1: đang làm thay con thì ẩn "Con của tôi", muốn quay lại thì bấm thoát làm thay trên băng ActingAsBanner
+    ...(user?.role === "parent" && !acting ? [{ href: "/parent/children", label: "Con của tôi" }] : []),
     ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ" }] : []),
   ];
 
@@ -145,7 +159,10 @@ export function SiteHeader() {
             {isLoading ? (
               <Skeleton className="h-9 w-24" />
             ) : user ? (
-              <DropdownMenu>
+              <>
+                {/* [UC-110] Chuông thông báo */}
+                <NotificationBell />
+                <DropdownMenu>
                 <DropdownMenuTrigger
                   aria-label={`Tài khoản của ${user.fullName}`}
                   className="rounded-full outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-white/50 active:scale-95"
@@ -172,7 +189,7 @@ export function SiteHeader() {
                     </DropdownMenuLabel>
                   </DropdownMenuGroup>
 
-                  {isStudentOrParent && (
+                  {hasOwnProfile && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem render={<Link href="/target-schools" />}>
@@ -188,8 +205,8 @@ export function SiteHeader() {
                     <UserIcon />
                     Thông tin cá nhân
                   </DropdownMenuItem>
-                  {isStudentOrParent && (
-                    <DropdownMenuItem render={<Link href="/account#academic" />}>
+                  {hasOwnProfile && (
+                    <DropdownMenuItem render={<Link href={academicHref} />}>
                       <BookOpenIcon />
                       Hồ sơ học thuật
                     </DropdownMenuItem>
@@ -201,7 +218,7 @@ export function SiteHeader() {
                     <KeyRoundIcon />
                     Bảo mật tài khoản
                   </DropdownMenuItem>
-                  {isStudentOrParent && (
+                  {isStudentOrParent && !acting && (
                     <DropdownMenuItem render={<Link href="/account#parent-links" />}>
                       <UsersIcon />
                       {user.role === "student" ? "Liên kết phụ huynh" : "Con đã liên kết"}
@@ -243,7 +260,8 @@ export function SiteHeader() {
                     Đăng xuất
                   </DropdownMenuItem>
                 </DropdownMenuContent>
-              </DropdownMenu>
+                </DropdownMenu>
+              </>
             ) : (
               <>
                 <p className="hidden text-sm text-white/85 lg:block">
@@ -296,7 +314,20 @@ export function SiteHeader() {
               );
             })}
           </ul>
-          {!canOpenAdmin && (
+          {/* Phụ huynh đã liên kết đi qua mục menu "Con của tôi", không có nút riêng; chưa có con thì nút "Thêm con" (1.5e) */}
+          {isParentWithoutChild && (
+            <Link
+              href="/parent/children/add"
+              className={buttonVariants({
+                variant: "ghost",
+                size: "lg",
+                className: "shrink-0 active:translate-y-px !bg-white !text-brand-ink hover:!bg-white/90",
+              })}
+            >
+              Thêm con
+            </Link>
+          )}
+          {!canOpenAdmin && (acting !== null || (user?.role !== "parent" && isLinkedParent === false)) && (
             <Link
               href="/analysis"
               className={buttonVariants({

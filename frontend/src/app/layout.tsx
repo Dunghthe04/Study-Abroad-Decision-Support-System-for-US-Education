@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Source_Serif_4 } from "next/font/google";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppShell } from "@/components/assistant/AppShell";
+import { RealtimeProvider } from "@/components/realtime/RealtimeProvider";
 import { AssistantProvider } from "@/components/assistant/AssistantProvider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="vi" className={cn("h-full antialiased font-sans", inter.variable, sourceSerif.variable)} suppressHydrationWarning>
       <body className="flex min-h-full flex-col bg-background text-foreground" suppressHydrationWarning>
         <AuthProvider>
+          <RealtimeProvider />
           <TooltipProvider>
             <AssistantProvider>
               <AppShell>{children}</AppShell>

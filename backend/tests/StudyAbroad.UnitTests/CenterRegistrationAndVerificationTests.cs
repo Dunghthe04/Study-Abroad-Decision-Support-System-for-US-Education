@@ -551,6 +551,7 @@ public class CenterRegistrationAndVerificationTests
             Email = centerEmail,
             OwnerUserId = Guid.NewGuid(),
             EmailVerifiedAt = DateTime.UtcNow,
+            PhoneVerifiedAt = DateTime.UtcNow,
             VerificationStatus = CenterVerificationStatuses.Unverified,
         };
         centers.AddAsync(center).GetAwaiter().GetResult();
@@ -699,6 +700,20 @@ public class CenterRegistrationAndVerificationTests
 
         Assert.True(result.Success);
     }
+
+    [Fact]
+    public async Task Submit_EmailVerifiedButPhoneNotVerified_IsRejected()
+    {
+        // [UC-91] Phải xác thực cả email và số điện thoại trước khi nộp hồ sơ xác minh
+        var (service, _, _, center) = SubmitSetup();
+        center.PhoneVerifiedAt = null;
+
+        var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(1));
+
+        Assert.False(result.Success);
+        Assert.Contains("xác thực số điện thoại", result.ErrorMessage);
+        Assert.Equal(CenterVerificationStatuses.Unverified, center.VerificationStatus);
+    }
     // ===== [UC-92] Phân loại thay đổi khi trung tâm tự sửa hồ sơ, yêu cầu xóa tài khoản =====
 
     private sealed class FakeProfileChangeRepo : ICenterProfileChangeRepository
@@ -723,6 +738,11 @@ public class CenterRegistrationAndVerificationTests
         public Task<PagedResult<CenterProfileChange>> SearchAsync(string? status, int page, int pageSize, CancellationToken ct = default) =>
             Task.FromResult(new PagedResult<CenterProfileChange>(
                 Items.Where(x => status == null || x.Status == status).ToList(), page, pageSize, Items.Count));
+
+        public Task<IReadOnlyList<CenterChangeCenterInfo>> GetCenterInfosAsync(IReadOnlyCollection<Guid> centerIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<CenterChangeCenterInfo>>([]);
+
+        public Task AddNotificationAsync(Notification notification, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private sealed class FakeDeletionRepo : ICenterDeletionRequestRepository
@@ -779,7 +799,7 @@ public class CenterRegistrationAndVerificationTests
         };
         configure?.Invoke(center);
         await centers.AddAsync(center);
-        var service = new StudyCenterService(centers, audit, verifications, null, changes, deletions);
+        var service = new StudyCenterService(centers, audit, verifications, emailSender: null, notifications: null, profileChanges: changes, deletionRequests: deletions);
         return new ProfileSetup(service, center, audit, verifications, changes, deletions);
     }
 

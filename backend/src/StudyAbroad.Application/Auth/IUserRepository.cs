@@ -23,6 +23,14 @@ namespace StudyAbroad.Application.Auth
         Task RevokeSessionAsync(string tokenHash, CancellationToken cancellationToken = default);
         Task RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken = default);
         Task RevokeOtherSessionsAsync(Guid userId, string keepTokenHash, CancellationToken cancellationToken = default);
+        /// <summary>Phiên có refresh token hiện tại hoặc refresh token vừa bị đổi khớp hash này.</summary>
+        Task<UserSession?> GetSessionByRefreshTokenHashAsync(string refreshTokenHash, CancellationToken cancellationToken = default);
+        /// <summary>Đổi refresh token và access token của phiên, chỉ khi refresh token hiện tại vẫn là oldRefreshHash và phiên chưa bị thu hồi.
+        /// false = request khác đã đổi trước (hai tab gia hạn cùng lúc).</summary>
+        Task<bool> RotateRefreshTokenAsync(Guid sessionId, string oldRefreshHash, string newRefreshHash, string newAccessHash, CancellationToken cancellationToken = default);
+        Task RevokeSessionByIdAsync(Guid sessionId, CancellationToken cancellationToken = default);
+        /// <summary>1.5b: người dùng còn ít nhất một phiên chưa thu hồi và chưa hết hạn (phụ huynh đăng xuất hết thì phiên làm thay mất tác dụng).</summary>
+        Task<bool> HasActiveSessionAsync(Guid userId, CancellationToken cancellationToken = default);
 
         // [USAS-12 / USAS-17] Quản lý mã OTP
         Task SaveOtpAsync(OtpToken token, CancellationToken cancellationToken = default);

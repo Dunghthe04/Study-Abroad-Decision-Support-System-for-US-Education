@@ -1,0 +1,33 @@
+{
+  "_ghi_chu": "Thông tin các model để dựng bảng tiêu chí chọn model trong báo cáo (slm_report --models-info). Khóa là tên model trong file dự đoán (trường 'model'). Giá trị null là chưa đo, báo cáo ghi n/a. Tham số, độ dài ngữ cảnh và giấy phép lấy từ thẻ model (model card) công bố; hãy đối chiếu lại trước khi bảo vệ. Dung lượng file và VRAM đo bằng 'ollama list' và nvidia-smi trên máy chạy đo.",
+  "qwen3:4b-instruct": {
+    "display": "Qwen3-4B-Instruct-2507",
+    "params": "4.0B",
+    "context": "262,144",
+    "license": "Apache-2.0",
+    "size_gb": null,
+    "vram_gb": null,
+    "tokens_per_vi_word": null,
+    "source": "model card"
+  },
+  "gemma3:4b": {
+    "display": "Gemma 3 4B (instruction-tuned)",
+    "params": "4B",
+    "context": "131,072",
+    "license": "Gemma Terms of Use",
+    "size_gb": null,
+    "vram_gb": null,
+    "tokens_per_vi_word": null,
+    "source": "model card"
+  },
+  "phi4-mini": {
+    "display": "Phi-4-mini-instruct",
+    "params": "3.8B",
+    "context": "131,072",
+    "license": "MIT",
+    "size_gb": null,
+    "vram_gb": null,
+    "tokens_per_vi_word": null,
+    "source": "model card"
+  }
+}

@@ -21,6 +21,8 @@ const PAGE_SIZE = 10;
 // Màu giống badge trạng thái trong bảng lead phía trung tâm (UC-73, CenterLeadsListView).
 const STATUS_BADGE_CLASS: Record<string, string> = {
   new: "bg-blue-600 text-white",
+  accepted: "bg-amber-600 text-white", // [UC-73]
+  rejected: "text-muted-foreground border-border bg-muted", // [UC-73]
   contacted: "bg-amber-600 text-white",
   closed: "text-emerald-700 border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40",
   withdrawn: "text-muted-foreground border-border bg-muted", // [UC-80]

@@ -51,7 +51,57 @@ export interface LeadDto {
 }
 
 /** Trạng thái lead (backend: LeadStatuses). */
-export type LeadStatus = "new" | "contacted" | "closed" | "withdrawn" | "pending_parent" | "cancelled" | "expired";
+export type LeadStatus =
+  | "new" | "accepted" | "rejected" | "contacted" | "closed" | "withdrawn" | "pending_parent" | "cancelled" | "expired";
+
+/** [UC-73] Trung tâm đã chấp nhận (gồm contacted cũ): điều kiện để nhắn tin (UC-74). */
+export const isLeadAccepted = (status: string) => status === "accepted" || status === "contacted";
+
+/** [UC-73] Sau 90 ngày kể từ khi gửi, dữ liệu chia sẻ bị ẩn và yêu cầu coi như hết hạn. */
+export const LEAD_DATA_VISIBLE_DAYS = 90;
+
+/** Mã lỗi backend chặn nhắn tin theo trạng thái (UC-74), dùng để khóa khung soạn ngay khi server từ chối. */
+export const LEAD_MESSAGING_BLOCK_CODES = [
+  "lead_not_accepted",
+  "lead_not_open",
+  "lead_rejected",
+  "lead_closed",
+  "lead_withdrawn",
+  "lead_cancelled",
+  "lead_expired",
+] as const;
+
+/**
+ * [UC-74] Lý do không nhắn tin được trong yêu cầu liên hệ; null nghĩa là nhắn được.
+ * Chỉ nhắn khi Đã chấp nhận; chặn khi Mới, Bị từ chối, Đã đóng, Đã thu hồi, Đã hủy, Hết hạn hoặc quá 90 ngày.
+ * Backend kiểm tra lại cùng quy tắc (LeadService.EnsureCanMessage).
+ */
+export function getLeadMessagingBlockReason(status: string, createdAt?: string | null): string | null {
+  switch (status) {
+    case "closed":
+      return "Yêu cầu đã đóng, không gửi thêm tin nhắn được.";
+    case "withdrawn":
+      return "Yêu cầu đã được thu hồi, không gửi thêm tin nhắn được.";
+    case "rejected":
+      return "Yêu cầu đã bị trung tâm từ chối, không nhắn tin được.";
+    case "cancelled":
+      return "Yêu cầu đã bị hủy, không nhắn tin được.";
+    case "expired":
+      return "Yêu cầu đã hết hạn, không nhắn tin được.";
+    case "pending_parent":
+      return "Yêu cầu đang chờ phụ huynh xác nhận nên chưa nhắn tin được.";
+  }
+  if (createdAt) {
+    const ageMs = Date.now() - new Date(createdAt).getTime();
+    if (ageMs > LEAD_DATA_VISIBLE_DAYS * 24 * 60 * 60 * 1000) {
+      return "Yêu cầu đã quá 90 ngày, không nhắn tin được nữa.";
+    }
+  }
+  if (!isLeadAccepted(status)) {
+    return "Trung tâm chưa chấp nhận yêu cầu này nên chưa nhắn tin được.";
+  }
+  return null;
+}
 
 /** [UC-116] Trung tâm chưa nhận yêu cầu (chờ phụ huynh / phụ huynh từ chối / hết hạn): chưa nhắn tin được. */
 export const isLeadAwaitingCenter = (status: string) =>
@@ -63,6 +113,8 @@ export const isLeadAwaitingCenter = (status: string) =>
  */
 export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
   new: "Mới gửi",
+  accepted: "Trung tâm đã chấp nhận", // [UC-73]
+  rejected: "Trung tâm từ chối", // [UC-73]
   contacted: "Đang trao đổi",
   closed: "Đã hoàn tất",
   withdrawn: "Đã thu hồi", // [UC-80] người gửi đã xóa tài khoản

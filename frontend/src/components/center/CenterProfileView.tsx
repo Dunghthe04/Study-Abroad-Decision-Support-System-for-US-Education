@@ -7,7 +7,8 @@ import {
   CheckCircle2Icon,
   AlertCircleIcon,
   DollarSignIcon,
-  LockIcon
+  LockIcon,
+  XIcon
 } from "lucide-react";
 import { centerPortalApi, ApiError } from "@/lib/api";
 import type { StudyCenter } from "@/types/api";
@@ -93,6 +94,15 @@ export function CenterProfileView() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Tự động xóa thông báo thành công sau 5 giây
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => {
+      setSuccess(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [success]);
 
   useEffect(() => {
     let active = true;
@@ -282,9 +292,18 @@ export function CenterProfileView() {
       </div>
 
       {success && (
-        <Alert className="border-emerald-500/30 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200">
+        <Alert className="relative border-emerald-500/30 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200 pr-9 transition-all duration-300">
           <CheckCircle2Icon className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
           <AlertDescription className="ml-2">{success}</AlertDescription>
+          <button
+            type="button"
+            onClick={() => setSuccess(null)}
+            className="absolute top-3 right-3 p-1 rounded hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 transition-colors"
+            title="Đóng thông báo"
+            aria-label="Đóng thông báo"
+          >
+            <XIcon className="h-4 w-4" />
+          </button>
         </Alert>
       )}
 
@@ -306,6 +325,7 @@ export function CenterProfileView() {
         phone={center?.phone}
         email={center?.email}
         emailVerified={Boolean(center?.emailVerifiedAt)}
+        phoneVerified={Boolean(center?.phoneVerifiedAt)}
         onChanged={() => {
           void centerPortalApi.getProfile().then(setCenter).catch(() => undefined);
         }}

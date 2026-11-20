@@ -170,3 +170,83 @@ async def test_placeholder_max_cost_is_dropped():
     assert plan.filters == {}
     assert plan.unresolved == []
     assert plan.sort == "highestTuition"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sort", ["lowest_cost", "highest_cost", "lowest_tuition", "highest_tuition"])
+async def test_max_cost_that_is_a_sort_word_is_dropped_for_every_cost_sort(sort):
+    # Model hay điền chữ "rẻ nhất" vào max_cost khi học sinh chỉ muốn xếp theo tiền; không được hỏi lại, cũng không được lọc
+    plan = await search_filters.normalize({"max_cost": "rẻ nhất"}, sort)
+    assert plan.filters == {}
+    assert plan.unresolved == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message", "sort"),
+    [
+        # Có chữ "học phí": resolve_cost_sort đổi sang lowest_tuition
+        ("Trường nào có học phí rẻ nhất", "lowest_cost"),
+        ("trường nào có học phí đắt nhất", "highest_cost"),
+        ("trường nào rẻ nhất", "lowest_cost"),  # không nói học phí: giữ lowest_cost
+    ],
+)
+async def test_sort_only_question_gets_no_cost_filter_after_resolving_the_sort(message, sort):
+    # Đúng đường đi của KnowledgeBranch: sort qua resolve_cost_sort rồi mới vào normalize
+    resolved = search_filters.resolve_cost_sort(sort, message)
+    plan = await search_filters.normalize({"max_cost": "rẻ nhất"}, resolved)
+    assert plan.filters == {}
+    assert plan.unresolved == []
+
+
+@pytest.mark.asyncio
+async def test_real_cost_limit_is_kept_when_the_student_also_sorts_by_cost():
+    # "học phí dưới 30 nghìn đô, xếp rẻ nhất lên đầu": số tiền thật vẫn là điều kiện lọc
+    plan = await search_filters.normalize({"max_cost": "30 nghìn đô"}, "lowest_tuition")
+    assert plan.filters == {"maxCostUsd": 30000}
+    assert plan.sort == "lowestTuition"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("filters", "sort", "ignored"),
+    [
+        ({"max_rank": "top"}, "ranking", {"key": "max_rank", "text": "top"}),  # "trường nào uy tín nhất"
+        (
+            {"max_cost": "rẻ nhất"},
+            "lowest_tuition",
+            {"key": "max_cost", "text": "rẻ nhất"},
+        ),  # "trường nào rẻ nhất"
+        ({"min_acceptance_rate": "cao"}, "easiest_admission", {"key": "min_acceptance_rate", "text": "cao"}),
+    ],
+)
+async def test_unreadable_number_is_ignored_and_reported_when_the_question_already_has_a_sort(
+    filters, sort, ignored
+):
+    plan = await search_filters.normalize(filters, sort)
+    assert plan.filters == {}
+    assert plan.unresolved == []
+    assert plan.ignored == [ignored]
+
+
+@pytest.mark.asyncio
+async def test_unreadable_number_is_asked_again_when_there_is_no_sort():
+    plan = await search_filters.normalize({"max_rank": "top"})
+    assert plan.filters == {}
+    assert plan.unresolved == ["thứ hạng “top”"]
+    assert plan.ignored == []
+
+
+@pytest.mark.asyncio
+async def test_unreadable_state_is_asked_again_even_when_the_question_has_a_sort():
+    plan = await search_filters.normalize({"state": ["Narnia"]}, "ranking")
+    assert plan.unresolved == ["bang “Narnia”"]
+    assert plan.ignored == []
+
+
+@pytest.mark.asyncio
+async def test_readable_number_is_applied_not_ignored_when_the_question_has_a_sort():
+    plan = await search_filters.normalize({"max_rank": "top 50"}, "ranking")
+    assert plan.filters == {"maxRank": 50}
+    assert plan.ignored == []
+    assert plan.unresolved == []

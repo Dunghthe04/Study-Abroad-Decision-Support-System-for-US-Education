@@ -655,6 +655,18 @@ async def test_booking_and_comparing_are_said_not_to_be_ready_but_the_centers_ar
 
     assert out.answer.startswith(TASK_NOTES[task] + "\n\n")
     assert "Trung tâm B" in out.answer
+    # Việc chưa làm trong chat: có nút dẫn sang trang Trung tâm (không gửi tin nhắn)
+    assert [(b.label, b.href) for b in out.quick_replies] == [("Trang Trung tâm", "/centers")]
+
+
+async def test_a_plain_search_has_no_page_button_and_the_notes_say_where_to_go():
+    out = await handler(FakeLLM(reasons("Có luyện phỏng vấn visa.")), FakeFinder([HN])).run(
+        ChatState(), "q", need()
+    )
+
+    assert out.quick_replies == []
+    assert "Chi tiết" in TASK_NOTES["compare"] and "Liên hệ" in TASK_NOTES["booking"]
+    assert "không chấm hơn thua" in TASK_NOTES["compare"]
 
 
 async def test_booking_without_a_service_still_says_it_is_not_ready_before_asking_the_service():

@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { SuggestToChildrenButton } from "@/components/parent/SuggestToChildrenButton";
 
 export interface AddTargetSchoolButtonProps {
   universityId?: string;
@@ -75,7 +76,15 @@ const APPLICATION_ROUNDS = [
   { value: "Rolling", label: "Rolling Admission" },
 ];
 
-export function AddTargetSchoolButton({
+// Phụ huynh không có danh sách mục tiêu riêng: nút đổi thành "Gợi ý cho con" (hỏi gợi ý cho con nào).
+// 1.5f: đang làm thay con managed thì lưu thẳng vào danh sách của con như học sinh
+export function AddTargetSchoolButton(props: AddTargetSchoolButtonProps) {
+  const { user, acting } = useAuth();
+  if (user?.role === "parent" && !acting) return <SuggestToChildrenButton {...props} />;
+  return <StudentTargetSchoolButton {...props} />;
+}
+
+function StudentTargetSchoolButton({
   universityId,
   universityCode,
   universityName,

@@ -1,6 +1,7 @@
 // [USAS-640] API Client cho Luồng nhập hồ sơ một cửa 6 bước
 
 import { apiFetch, ApiError } from "@/lib/api";
+import { authFetch } from "@/lib/auth-refresh";
 import type {
   ProfileMetadataResponse,
   ProfileFlowState,
@@ -200,7 +201,7 @@ export const profileFlowApi = {
     for (const f of files) {
       formData.append("files", f);
     }
-    const res = await fetch("/api/v1/profile/flow/draft/upload-transcript", {
+    const res = await authFetch("/api/v1/profile/flow/draft/upload-transcript", {
       method: "POST",
       body: formData,
       credentials: "include",

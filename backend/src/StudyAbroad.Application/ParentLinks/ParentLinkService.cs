@@ -56,7 +56,8 @@ public class ParentLinkService(
     IEmailSender emailSender,
     IAuditLogRepository auditLogs,
     // Chuyển hồ sơ phụ huynh đã nhập sang con khi tài khoản phụ huynh được gắn vào liên kết; null trong test cũ
-    IParentProfileShareService? profileShare = null) : IParentLinkService
+    IParentProfileShareService? profileShare = null,
+    StudyAbroad.Application.Notifications.INotificationService? notifications = null) : IParentLinkService
 {
     /// <summary>[UC-117] Action ghi audit khi phụ huynh rút đồng ý qua link trong mail.</summary>
     public const string RevokeByEmailAuditAction = "parent_link.revoke_by_email";
@@ -173,9 +174,12 @@ public class ParentLinkService(
         if (accept)
         {
             await emailSender.SendParentLinkChangedEmailAsync(student.Email, student.FullName, parentLabel, linked: true, ct);
+            // [UC-110 / UC-75] Báo học sinh phụ huynh đã xác nhận liên kết
+            await NotifyAsync(student.Id, StudyAbroad.Application.Notifications.NotificationTypes.ParentLinkLinked, "Phụ huynh đã xác nhận liên kết",
+                $"{parentLabel} đã liên kết với tài khoản của bạn.", ct);
             await emailSender.SendParentConsentConfirmedEmailAsync(link.ParentEmail, student.FullName, revokeToken!, ct);
             if (parentAccount != null && profileShare != null)
-                await profileShare.AutoShareAfterLinkAsync(parentAccount.Id, [link], ct);
+                await profileShare.PrepareMatchAfterLinkAsync(parentAccount.Id, [link], ct);
         }
         else
         {
@@ -315,6 +319,11 @@ public class ParentLinkService(
             var parentLabel = parent?.FullName ?? link.ParentEmail;
             var toEmail = isParentSide ? student.Email : parent?.Email ?? link.ParentEmail;
             await emailSender.SendParentLinkChangedEmailAsync(toEmail, student.FullName, parentLabel, linked: false, ct);
+            // [UC-110 / UC-75] Báo bên còn lại (nếu có tài khoản) liên kết đã bị hủy
+            var otherId = isParentSide ? student.Id : parent?.Id;
+            if (otherId is { } oid)
+                await NotifyAsync(oid, StudyAbroad.Application.Notifications.NotificationTypes.ParentLinkRevoked, "Liên kết phụ huynh đã bị hủy",
+                    $"Liên kết giữa {parentLabel} và {student.FullName} đã bị hủy.", ct);
         }
 
         return ParentLinkResult<ParentLinkDto>.Ok(
@@ -349,7 +358,7 @@ public class ParentLinkService(
         }
 
         if (linked.Count > 0 && profileShare != null)
-            await profileShare.AutoShareAfterLinkAsync(parent.Id, linked, ct);
+            await profileShare.PrepareMatchAfterLinkAsync(parent.Id, linked, ct);
     }
 
     public async Task<List<ParentLinkRevokeNotice>> RevokeAllForAccountDeletionAsync(Guid userId, CancellationToken ct = default)
@@ -440,6 +449,9 @@ public class ParentLinkService(
 
         var parent = parentId is { } pid ? await users.GetUserById(pid, ct) : null;
         await emailSender.SendParentLinkChangedEmailAsync(student.Email, student.FullName, parent?.FullName ?? link.ParentEmail, linked: false, ct);
+        // [UC-110 / UC-75] Phụ huynh rút đồng ý qua email: báo học sinh
+        await NotifyAsync(student.Id, StudyAbroad.Application.Notifications.NotificationTypes.ParentLinkRevoked, "Phụ huynh đã rút lại sự đồng ý",
+            $"{parent?.FullName ?? link.ParentEmail} đã hủy liên kết với tài khoản của bạn.", ct);
 
         return ParentLinkResult<ParentRevokeInfo>.Ok(new ParentRevokeInfo(student.FullName, link.AcceptedAt), "Đã rút lại sự đồng ý.");
     }
@@ -616,4 +628,9 @@ public class ParentLinkService(
 
     private static ParentLinkResult<ParentLinkDto> Fail(ParentLinkError error, string message) =>
         ParentLinkResult<ParentLinkDto>.Fail(error, message);
+
+    private Task NotifyAsync(Guid userId, string type, string title, string body, CancellationToken ct) =>
+        notifications is null
+            ? Task.CompletedTask
+            : notifications.NotifyAsync(userId, type, title, body, "/account#parent-links", ct);
 }

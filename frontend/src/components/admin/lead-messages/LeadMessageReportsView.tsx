@@ -212,7 +212,7 @@ export function LeadMessageReportsView() {
               <TableHead className="min-w-64">Nội dung gốc</TableHead>
               <TableHead>Lý do báo cáo</TableHead>
               <TableHead>Trạng thái</TableHead>
-              <TableHead className="w-56"><span className="sr-only">Thao tác</span></TableHead>
+              <TableHead className="w-72"><span className="sr-only">Thao tác</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -244,28 +244,29 @@ export function LeadMessageReportsView() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="inline-flex flex-wrap justify-end gap-1.5">
-                      <Button type="button" variant="outline" size="sm" onClick={() => void openContext(item)} className="gap-1">
+                    {/* Lưới 2 cột: Xem ngữ cảnh chiếm cả hàng đầu; bốn cách xử lý xếp từ nhẹ tới nặng, Khóa tài khoản nằm cuối */}
+                    <div className="ml-auto grid w-64 grid-cols-2 gap-1.5">
+                      <Button type="button" variant="outline" size="sm" onClick={() => void openContext(item)} className="col-span-2 gap-1 whitespace-nowrap">
                         <EyeIcon className="size-3.5" />
                         Xem ngữ cảnh
                       </Button>
                       {resolved ? null : (
                         <>
-                          <Button type="button" variant="outline" size="sm" disabled={busyId !== null} onClick={() => void dismiss(item)} className="gap-1">
+                          <Button type="button" variant="outline" size="sm" disabled={busyId !== null} onClick={() => void dismiss(item)} className="gap-1 whitespace-nowrap">
                             {busyId === item.id ? <Spinner className="size-3.5" /> : <CheckIcon className="size-3.5" />}
-                            Bỏ qua báo cáo
+                            Bỏ qua
                           </Button>
-                          <Button type="button" variant="outline" size="sm" disabled={busyId !== null} onClick={() => openAction("warn", item)} className="gap-1">
+                          <Button type="button" variant="outline" size="sm" disabled={busyId !== null} onClick={() => openAction("warn", item)} className="gap-1 whitespace-nowrap">
                             <TriangleAlertIcon className="size-3.5" />
                             Cảnh cáo
                           </Button>
-                          <Button type="button" variant="outline" size="sm" disabled={busyId !== null} onClick={() => openAction("remove", item)} className="gap-1 text-risk hover:text-risk">
+                          <Button type="button" variant="outline" size="sm" disabled={busyId !== null} onClick={() => openAction("remove", item)} className="gap-1 whitespace-nowrap text-risk hover:text-risk">
                             <Trash2Icon className="size-3.5" />
                             Gỡ tin nhắn
                           </Button>
-                          <Button type="button" variant="outline" size="sm" disabled={busyId !== null} onClick={() => openAction("lock", item)} className="gap-1 text-risk hover:text-risk">
+                          <Button type="button" variant="outline" size="sm" disabled={busyId !== null} onClick={() => openAction("lock", item)} className="gap-1 whitespace-nowrap text-risk hover:text-risk">
                             <BanIcon className="size-3.5" />
-                            Khóa tài khoản người gửi
+                            Khóa tài khoản
                           </Button>
                         </>
                       )}

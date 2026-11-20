@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Universities.IUniversityDetailRepository, UniversityDetailRepository>();
         services.AddScoped<StudyAbroad.Application.TargetSchools.ITargetSchoolRepository, TargetSchoolRepository>();
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
+        services.AddScoped<StudyAbroad.Application.Notifications.INotificationRepository, NotificationRepository>();
         services.AddScoped<ICenterVerificationRepository, CenterVerificationRepository>();
         services.AddScoped<ICenterProfileChangeRepository, CenterProfileChangeRepository>();
         services.AddScoped<ICenterDeletionRequestRepository, CenterDeletionRequestRepository>();
@@ -49,6 +50,9 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterDeletionWorkRepository, CenterDeletionWorkRepository>();   // [UC-93]   // [UC-80] xóa hẳn tài khoản quá hạn
         services.AddSingleton<StudyAbroad.Application.Admin.SlmSamples.ISlmWorkbookReader, StudyAbroad.Infrastructure.Import.SlmWorkbookReader>();
         services.AddSingleton<StudyAbroad.Application.Admin.SlmSamples.ISlmTemplateWriter, StudyAbroad.Infrastructure.Import.SlmTemplateWriter>();
+        services.AddScoped<StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeBaseRepository, KnowledgeBaseRepository>();   // kho tri thức
+        services.AddSingleton<StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeWorkbookReader, StudyAbroad.Infrastructure.Import.KnowledgeWorkbookReader>();
+        services.AddSingleton<StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeTemplateWriter, StudyAbroad.Infrastructure.Import.KnowledgeTemplateWriter>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<StudyAbroad.Application.Common.IUnitOfWork, EfUnitOfWork>();   // [UC-80] gom nhiều bước ghi vào một transaction
@@ -103,6 +107,11 @@ public static class DependencyInjection
         services.AddSingleton<SmtpEmailSender>();
         services.AddSingleton<EmailQueue>();
         services.AddSingleton<IEmailSender, QueuedEmailSender>();
+        // [UC-91] OTP qua SMS: chưa có nhà cung cấp thật. Ngoài Production chỉ ghi log mã; Production báo kênh chưa sẵn sàng.
+        services.AddSingleton<ISmsSender>(sp =>
+            sp.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>().EnvironmentName == "Production"
+                ? new UnavailableSmsSender()
+                : ActivatorUtilities.CreateInstance<LoggingSmsSender>(sp));
         services.AddHostedService<EmailDispatchBackgroundService>();
 
         // [UC-80] Thời hạn chờ xóa tài khoản và chu kỳ job xóa hẳn (appsettings "AccountDeletion")
@@ -135,6 +144,7 @@ public static class DependencyInjection
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountUnlockBackgroundService>();
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.OtpCleanupBackgroundService>();
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountPurgeBackgroundService>();   // [UC-80]
+        services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.ParentProfileMigrationBackgroundService>();   // [1.5d] chạy 1 lần lúc khởi động
 
         return services;
     }

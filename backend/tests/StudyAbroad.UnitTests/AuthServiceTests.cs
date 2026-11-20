@@ -341,6 +341,28 @@ public class AuthServiceTests
         Assert.Equal(UserRoles.Moderator, login.Response.User.Role);
     }
 
+    // Refresh token: đăng nhập trả kèm refresh token, phiên lưu hash của nó và hết hạn sau 7 ngày (không theo access token)
+    [Fact]
+    public async Task Login_ReturnsRefreshToken_SessionStoresItsHashAndLasts7Days()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = UserStatuses.Active;
+
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+
+        var response = login.Response!;
+        Assert.False(string.IsNullOrEmpty(response.RefreshToken));
+        Assert.NotEqual(response.AccessToken, response.RefreshToken);
+
+        var session = Assert.Single(_repo.Sessions);
+        Assert.Equal(_tokens.HashToken(response.RefreshToken!), session.RefreshTokenHash);
+        Assert.Equal(_tokens.HashToken(response.AccessToken), session.TokenHash);
+        Assert.Null(session.PreviousRefreshTokenHash);
+        Assert.Equal(session.ExpiresAt, response.SessionExpiresAt);
+        Assert.InRange(session.ExpiresAt, DateTime.UtcNow.AddDays(7).AddMinutes(-1), DateTime.UtcNow.AddDays(7).AddMinutes(1));
+    }
+
     [Fact]
     public async Task LockUserAccount_LocksStudent_WritesAuditAndRevokesSessions()
     {
@@ -2007,5 +2029,234 @@ public class AuthServiceTests
         Assert.Equal(AuthError.None, sameName.Error);
         Assert.Equal("0912345678", user.Phone);
         Assert.Equal("Trung tâm ABC", user.FullName);
+    }
+
+    // ---- [UC-113] Admin sửa ngày sinh theo yêu cầu hỗ trợ ----
+
+    private async Task<Guid> RegisterActive(string role, int age, string email = "u@test.com", string? parentEmail = null)
+    {
+        await CreateService().RegisterAsync(Request(email: email, role: role, dateOfBirth: BornYearsAgo(age), parentEmail: parentEmail));
+        var user = _repo.Users.Single(u => u.Email == email);
+        user.Status = UserStatuses.Active;
+        return user.Id;
+    }
+
+    [Fact]
+    public async Task UpdateBirthDate_Student_UpdatesDobRecomputesAgeAndAuditsOldAndNew()
+    {
+        var adminId = Guid.NewGuid();
+        var id = await RegisterActive(UserRoles.Student, 15, parentEmail: "p@test.com");
+        var oldDob = _repo.Users.Single(u => u.Id == id).DateOfBirth;
+        var newDob = BornYearsAgo(19);
+
+        var result = await CreateService().UpdateUserBirthDateAsync(id, new UpdateUserBirthDateRequest(newDob, "  Khai nhầm năm sinh  "), adminId);
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(newDob, _repo.Users.Single(u => u.Id == id).DateOfBirth);
+        Assert.Equal(19, result.User!.Age);
+        Assert.Equal(AgeGroups.Adult, result.User.AgeGroup);
+        Assert.Equal(ParentConsentStatuses.NotRequired, result.User.ParentConsentStatus);
+        var log = Assert.Single(_auditLogs.Entries, e => e.Action == "user.birth_date_update");
+        Assert.Equal(adminId, log.ActorUserId);
+        using var detail = System.Text.Json.JsonDocument.Parse(log.DetailJson!);
+        Assert.Equal(oldDob!.Value.ToString("yyyy-MM-dd"), detail.RootElement.GetProperty("oldBirthDate").GetString());
+        Assert.Equal(newDob.ToString("yyyy-MM-dd"), detail.RootElement.GetProperty("newBirthDate").GetString());
+        Assert.Equal("Khai nhầm năm sinh", detail.RootElement.GetProperty("reason").GetString());
+        Assert.Equal(15, detail.RootElement.GetProperty("oldAge").GetInt32());
+        Assert.Equal(19, detail.RootElement.GetProperty("newAge").GetInt32());
+    }
+
+    [Fact]
+    public async Task UpdateBirthDate_AdultStudentBecomesChild_RequiresParentConsentAgain()
+    {
+        var id = await RegisterActive(UserRoles.Student, 20);
+
+        var result = await CreateService().UpdateUserBirthDateAsync(id, new UpdateUserBirthDateRequest(BornYearsAgo(14), "Khai sai"), Guid.NewGuid());
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(AgeGroups.Child, result.User!.AgeGroup);
+        Assert.Equal(ParentConsentStatuses.None, result.User.ParentConsentStatus);
+        Assert.NotEmpty(result.User.BlockedFeatures!);
+    }
+
+    [Fact]
+    public async Task UpdateBirthDate_ParentMustStayAtLeast18()
+    {
+        var id = await RegisterActive(UserRoles.Parent, 40);
+
+        var tooYoung = await CreateService().UpdateUserBirthDateAsync(id, new UpdateUserBirthDateRequest(BornYearsAgo(17), "x"), Guid.NewGuid());
+        var ok = await CreateService().UpdateUserBirthDateAsync(id, new UpdateUserBirthDateRequest(BornYearsAgo(25), "x"), Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, tooYoung.Error);
+        Assert.Equal(AuthError.None, ok.Error);
+        Assert.Equal(BornYearsAgo(25), _repo.Users.Single(u => u.Id == id).DateOfBirth);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task UpdateBirthDate_EmptyReason_IsRejectedAndNothingChanges(string? reason)
+    {
+        var id = await RegisterActive(UserRoles.Student, 20);
+        var before = _repo.Users.Single(u => u.Id == id).DateOfBirth;
+
+        var result = await CreateService().UpdateUserBirthDateAsync(id, new UpdateUserBirthDateRequest(BornYearsAgo(19), reason), Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal(before, _repo.Users.Single(u => u.Id == id).DateOfBirth);
+        Assert.DoesNotContain(_auditLogs.Entries, e => e.Action == "user.birth_date_update");
+    }
+
+    [Fact]
+    public async Task UpdateBirthDate_InvalidInputs_AreRejected()
+    {
+        var id = await RegisterActive(UserRoles.Student, 20);
+        var current = _repo.Users.Single(u => u.Id == id).DateOfBirth;
+        var today = AgePolicy.TodayInVietnam(DateTime.UtcNow);
+        var service = CreateService();
+        var admin = Guid.NewGuid();
+        var tooLong = new string('a', AuthService.MaxLockReasonLength + 1);
+
+        Assert.Equal(AuthError.Validation, (await service.UpdateUserBirthDateAsync(id, new(today.AddDays(1), "x"), admin)).Error);
+        Assert.Equal(AuthError.Validation, (await service.UpdateUserBirthDateAsync(id, new(BornYearsAgo(AuthService.MaxAge + 1), "x"), admin)).Error);
+        Assert.Equal(AuthError.Validation, (await service.UpdateUserBirthDateAsync(id, new(null, "x"), admin)).Error);
+        Assert.Equal(AuthError.Validation, (await service.UpdateUserBirthDateAsync(id, new(BornYearsAgo(19), tooLong), admin)).Error);
+        Assert.Equal(AuthError.Validation, (await service.UpdateUserBirthDateAsync(id, new(current, "x"), admin)).Error);
+        Assert.Equal(AuthError.Validation, (await service.UpdateUserBirthDateAsync(Guid.NewGuid(), new(BornYearsAgo(19), "x"), admin)).Error);
+        Assert.Equal(current, _repo.Users.Single(u => u.Id == id).DateOfBirth);
+    }
+
+    [Theory]
+    [InlineData(UserRoles.Center)]
+    [InlineData(UserRoles.Moderator)]
+    [InlineData(UserRoles.Admin)]
+    public async Task UpdateBirthDate_OnlyStudentOrParentAccounts(string role)
+    {
+        var id = await RegisterActive(UserRoles.Parent, 30);
+        _repo.Users.Single(u => u.Id == id).Role = role;
+
+        var result = await CreateService().UpdateUserBirthDateAsync(id, new(BornYearsAgo(31), "x"), Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
+    }
+
+    // [1.5c] Con managed: phụ huynh nhập thay, không mật khẩu, không tự đăng nhập hay đặt lại mật khẩu
+    private User AddManagedChild()
+    {
+        var child = new User
+        {
+            Email = "managed-abc@noreply.usas.local",
+            PasswordHash = string.Empty,
+            FullName = "Con Managed",
+            Role = UserRoles.Student,
+            Status = UserStatuses.Managed,
+        };
+        _repo.Users.Add(child);
+        return child;
+    }
+
+    [Fact]
+    public async Task Login_ManagedChild_InvalidCredentials_AndStaysManagedAfterManyTries()
+    {
+        var child = AddManagedChild();
+        var service = CreateService();
+
+        AuthResult result = null!;
+        for (var i = 0; i < 6; i++)
+            result = await service.LoginAsync(new LoginRequest(child.Email, "password123"));
+
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+        Assert.Equal(UserStatuses.Managed, child.Status);
+        Assert.Equal(0, child.FailedLoginAttempts);
+        Assert.Empty(_repo.Sessions);
+        Assert.Empty(_emailSender.SentEmails);
+    }
+
+    [Fact]
+    public async Task ForgotPassword_ManagedChild_SameMessage_NoOtpNoEmail()
+    {
+        var child = AddManagedChild();
+
+        var result = await CreateService().ForgotPasswordAsync(new ForgotPasswordRequest(child.Email));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Empty(_repo.Otps);
+        Assert.Empty(_emailSender.SentEmails);
+    }
+
+    [Fact]
+    public async Task ResendOtp_ManagedChild_SameMessage_NoOtpNoEmail()
+    {
+        var child = AddManagedChild();
+
+        var result = await CreateService().ResendOtpAsync(new ResendOtpRequest(child.Email, OtpPurposes.ResetPassword));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Empty(_repo.Otps);
+        Assert.Empty(_emailSender.SentEmails);
+    }
+
+    [Fact]
+    public async Task ResetPassword_ManagedChild_OtpInvalid_PasswordUnchanged()
+    {
+        var child = AddManagedChild();
+
+        var result = await CreateService().ResetPasswordAsync(new ResetPasswordRequest(child.Email, "123456", "NewPassword1!"));
+
+        Assert.Equal(AuthError.OtpInvalid, result.Error);
+        Assert.Equal(string.Empty, child.PasswordHash);
+    }
+
+    [Fact]
+    public async Task ChangePassword_ManagedChild_Rejected_PasswordUnchanged()
+    {
+        var child = AddManagedChild();
+
+        var result = await CreateService().ChangePasswordAsync(child.Id, "token", new ChangePasswordRequest("x", "NewPassword1!"));
+
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+        Assert.Equal(string.Empty, child.PasswordHash);
+        Assert.Equal(0, child.FailedLoginAttempts);
+    }
+
+    [Fact]
+    public async Task LockUserAccount_ManagedChild_NotFound_StaysManaged()
+    {
+        var child = AddManagedChild();
+
+        var result = await CreateService().LockUserAccountAsync(child.Id, new LockUserAccountRequest("lý do"), Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal("Không tìm thấy tài khoản.", result.Message);
+        Assert.Equal(UserStatuses.Managed, child.Status);
+        Assert.Empty(_auditLogs.Entries);
+        Assert.Empty(_emailSender.SentEmails);
+    }
+
+    [Fact]
+    public async Task UnlockUserAccount_ManagedChild_NotFound_StaysManaged()
+    {
+        var child = AddManagedChild();
+
+        var result = await CreateService().UnlockUserAccountAsync(child.Id, new UnlockUserAccountRequest("lý do"), Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal("Không tìm thấy tài khoản.", result.Message);
+        Assert.Equal(UserStatuses.Managed, child.Status);
+        Assert.Empty(_auditLogs.Entries);
+    }
+
+    [Fact]
+    public async Task UpdateUserBirthDate_ManagedChild_NotFound_BirthDateUnchanged()
+    {
+        var child = AddManagedChild();
+
+        var result = await CreateService().UpdateUserBirthDateAsync(child.Id, new UpdateUserBirthDateRequest(BornYearsAgo(14), "Khai sai"), Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal("Không tìm thấy tài khoản.", result.Message);
+        Assert.Null(child.DateOfBirth);
+        Assert.Empty(_auditLogs.Entries);
     }
 }
