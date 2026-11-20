@@ -2,7 +2,7 @@
 
 import { apiFetch, ApiError } from "@/lib/api";
 import type { PagedResult } from "@/types/api";
-import type { BillingError, OrderDto, PlanDto, SubscriptionSummaryDto } from "@/types/billing";
+import type { BillingError, OrderDto, OrderStatus, PlanDto, SubscriptionSummaryDto } from "@/types/billing";
 
 export const billingApi = {
   /** Không cần đăng nhập. Đã sắp theo displayOrder, chỉ gói đang bán. */
@@ -48,3 +48,22 @@ export const formatVnd = (amount: number) => `${amount.toLocaleString("vi-VN")}�
 /** Ngày theo giờ Việt Nam (server gửi +07:00); không ép múi giờ thì ở nước ngoài resetsAt hiện lùi một ngày. */
 export const formatVnDate = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) : "";
+
+export const formatVnDateTime = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) : "";
+
+export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+  pending: "Chờ thanh toán",
+  paid: "Đã thanh toán",
+  mismatch: "Sai số tiền",
+  expired: "Hết hạn",
+  cancelled: "Đã hủy",
+};
+
+export const ORDER_STATUS_BADGE = {
+  pending: "brand",
+  paid: "ok",
+  mismatch: "warn",
+  expired: "neutral",
+  cancelled: "neutral",
+} as const satisfies Record<OrderStatus, string>;
