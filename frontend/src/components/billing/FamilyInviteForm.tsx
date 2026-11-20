@@ -99,9 +99,10 @@ export function FamilyInviteForm() {
           <AlertTitle>Bạn đã tham gia gói Gia đình của {invite.ownerName}</AlertTitle>
           <AlertDescription>Từ giờ bạn dùng chung lượt hỏi của gói này.</AlertDescription>
         </Alert>
-        <Link href="/account#family" className={buttonVariants({ size: "xl", className: "w-full" })}>
+        {/* Thẻ a thường: tải lại trang để AccountView đọc #family và tải subscription mới */}
+        <a href="/account#family" className={buttonVariants({ size: "xl", className: "w-full" })}>
           Xem gói Gia đình
-        </Link>
+        </a>
       </div>
     );
   }
