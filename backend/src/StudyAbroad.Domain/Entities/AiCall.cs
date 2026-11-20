@@ -16,7 +16,10 @@ public class AiCall : BaseEntity
     public string? SkillVersion { get; set; }
     public string? ModelVersion { get; set; }
     public decimal? CostUsd { get; set; }
+    /// <summary>Mã gói trả cho lượt chat (free khi dùng hạn mức miễn phí). Null với lần gọi ngoài chat (OCR, ngoại khóa) và nhân viên.</summary>
     public string? PlanCode { get; set; }
+    /// <summary>Kỳ (pool) trả cho lượt chat. Null = hạn mức Free hoặc không tính.</summary>
+    public Guid? UserSubscriptionId { get; set; }
     public int? PromptTokens { get; set; }
     public int? CompletionTokens { get; set; }
     /// <summary>Token đọc từ cache của Claude (tính tiền khác token thường). 0 với Ollama.</summary>

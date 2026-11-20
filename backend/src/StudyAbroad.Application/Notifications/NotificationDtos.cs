@@ -25,6 +25,20 @@ public static class NotificationTypes
     public const string ParentLinkRevoked = "parent_link_revoked";  // UC-75: liên kết bị hủy
     public const string VerificationResult = "verification_result"; // UC-59: kết quả duyệt hồ sơ xác minh
     public const string LeadMessageReport = "lead_message_report";  // UC-58: tin nhắn bị báo cáo (gửi Admin)
+    // Gói dịch vụ và gói Gia đình (UC-77, UC-78, UC-126..131)
+    public const string BillingPaymentPaid = "billing_payment_paid";
+    public const string BillingPaymentMismatch = "billing_payment_mismatch";
+    public const string BillingExpiring = "billing_expiring";
+    public const string BillingExpired = "billing_expired";
+    public const string BillingUsage80 = "billing_usage_80";
+    public const string BillingUsage100 = "billing_usage_100";
+    public const string BillingCycleStarted = "billing_cycle_started";
+    public const string FamilyInvite = "family_invite";
+    public const string FamilyInviteAccepted = "family_invite_accepted";
+    public const string FamilyInviteDeclined = "family_invite_declined";
+    public const string FamilyMemberRemoved = "family_member_removed";
+    public const string FamilyMemberLeft = "family_member_left";
+    public const string FamilyEnded = "family_ended";
 }
 
 public static class NotificationMapper
