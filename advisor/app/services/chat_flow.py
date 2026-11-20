@@ -277,6 +277,9 @@ class ChatFlow:
         # Đã lưu hồ sơ chưa: quyết định hỏi đủ hay chỉ hỏi mục bắt buộc còn thiếu; không gửi thì giữ giá trị cũ
         if req.has_committed_profile is not None:
             state.has_committed_profile = req.has_committed_profile
+        # Phụ huynh nhập hộ con managed hay không: F1 hỏi số tiền chính xác (VNĐ) thay cho mức
+        if req.exact_budget is not None:
+            state.exact_budget = req.exact_budget
         # Danh sách trường gợi ý do .NET gửi mỗi lượt (lấy từ lần gợi ý đã lưu); không gửi thì giữ như cũ.
         # Có danh sách nghĩa là học sinh đã có kết quả, dù gợi ý ở trang Gợi ý trường chứ không phải trong chat
         if req.schools is not None:

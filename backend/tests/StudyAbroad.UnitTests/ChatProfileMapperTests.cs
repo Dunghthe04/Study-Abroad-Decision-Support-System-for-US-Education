@@ -41,6 +41,8 @@ public class ChatProfileMapperTests
     [InlineData("english", """{"type":"ielts","value":6.5,"date":"2026-05"}""")]
     [InlineData("english", """{"type":"toefl","value":95,"date":null}""")]
     [InlineData("budget", "\"tier_20k_35k\"")]
+    [InlineData("budget_vnd", "1300000000")]
+    [InlineData("budget_usd", "52000")]
     [InlineData("scholarship", "\"preferred\"")]
     [InlineData("activities", "[" + Activity + "," + Activity + "]")]
     [InlineData("awards", "[" + Award + "]")]

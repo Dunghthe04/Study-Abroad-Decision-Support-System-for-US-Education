@@ -11,7 +11,13 @@ from datetime import date
 from app.schemas.chat import ChatState, ProfileField, QuickReply, Widget
 from app.services.chat_flow import SkillOutput, ask
 from app.services.skills import exchange_rate
-from app.services.skills.validators import ALEVEL_GRADES, CERT_LIMITS, CERT_TYPES
+from app.services.skills.validators import (
+    ALEVEL_GRADES,
+    CERT_LIMITS,
+    CERT_TYPES,
+    MAX_EXACT_BUDGET_VND,
+    MIN_EXACT_BUDGET_VND,
+)
 
 
 def confirmed(value: object) -> ProfileField:
@@ -114,6 +120,53 @@ BUTTONS = {
 
 # Câu hỏi có widget: frontend vẽ ô chọn, chọn xong thì gửi chữ (label) như bấm nút
 WIDGETS = {"F1": ("budget", BUDGET_LABELS), "F2": ("scholarship", SCHOLARSHIP_LABELS)}
+
+# UC-94: F1 khi phụ huynh nhập hộ con managed, giống bước 4 của form. Câu chính là số tiền tối đa/năm chính xác (VNĐ),
+# "Chưa biết chính xác" chuyển sang chọn mức (ước tính), "Nhập số tiền chính xác" quay lại ô nhập số
+BUDGET_UNSURE = "Chưa biết chính xác"
+BUDGET_EXACT = "Nhập số tiền chính xác"
+EXACT_BUDGET_TEXT = (
+    "Gia đình chi trả được tối đa bao nhiêu cho một năm học (học phí và ăn ở, chưa gồm vé máy bay)? "
+    "Bạn nhập số tiền bằng VNĐ, từ 100 triệu đến 10 tỷ. Đây là mức trần chắc chắn: hệ thống chỉ giữ các trường "
+    "có chi phí trong số tiền này."
+)
+UNSURE_BUDGET_TEXT = (
+    "Không sao, bạn chọn mức gần đúng nhất nhé. Chọn theo mức là ước tính: hệ thống lấy trần của mức để lọc trường. "
+    "Khi biết số chính xác, bạn cập nhật lại để kết quả sát hơn."
+)
+
+
+# F1 đang hỏi số tiền chính xác (phụ huynh nhập hộ, chưa bấm "Chưa biết chính xác")
+def exact_budget_mode(state: ChatState) -> bool:
+    return bool(state.exact_budget) and not state.budget_unsure
+
+
+# Ô nhập số tiền chính xác: chỉ VNĐ, frontend gửi "<số> VNĐ" như học sinh tự gõ
+def exact_budget_widget() -> Widget:
+    return Widget(
+        type="budget",
+        data={
+            "exact": True,
+            "rate": round(exchange_rate.vnd_per_usd()),
+            "minVnd": MIN_EXACT_BUDGET_VND,
+            "maxVnd": MAX_EXACT_BUDGET_VND,
+        },
+    )
+
+
+# Câu F1 của phụ huynh nhập hộ: số chính xác (nút "Chưa biết chính xác") hoặc chọn mức (nút "Nhập số tiền chính xác")
+def ask_parent_budget(state: ChatState, text: str | None = None) -> SkillOutput:
+    ask(state, "F1")
+    if exact_budget_mode(state):
+        return SkillOutput(
+            text or EXACT_BUDGET_TEXT,
+            quick_replies=[QuickReply(label=BUDGET_UNSURE, value=BUDGET_UNSURE)],
+            widget=exact_budget_widget(),
+        )
+    return SkillOutput(
+        text or UNSURE_BUDGET_TEXT,
+        quick_replies=[*quick_replies("F1"), QuickReply(label=BUDGET_EXACT, value=BUDGET_EXACT)],
+    )
 
 # Cấp học và lớp: chữ giống EDUCATION_LEVEL_OPTIONS, getGradeOptionsForLevel của form
 CURRENT_LEVEL_LABELS = {
@@ -693,6 +746,8 @@ def press(state: ChatState, button: Button) -> None:
 def ask_with_buttons(
     state: ChatState, question_id: str, text: str | None = None, can_skip: bool = False
 ) -> SkillOutput:
+    if question_id == "F1" and state.exact_budget:
+        return ask_parent_budget(state, text)
     question = ask(state, question_id)
     if question_id == "D2" and text is None and is_middle_school_profile(state.profile):
         text = "Em đặt mục tiêu điểm trung bình (GPA) các năm cấp 3 khoảng bao nhiêu? Em có thể chọn ước lượng hoặc gõ điểm nhé."

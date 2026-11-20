@@ -34,6 +34,9 @@ const ROWS: { key: string; label: string }[] = [
   { key: "english_plan", label: "Kế hoạch tiếng Anh" },
   { key: "standardized_plan", label: "Kế hoạch chuẩn hóa" },
   { key: "budget", label: "Ngân sách / năm" },
+  // UC-94: số tiền tối đa/năm chính xác phụ huynh nhập hộ (chưa lưu thì VNĐ, đã lưu thì USD chốt theo tỷ giá)
+  { key: "budget_vnd", label: "Tối đa / năm" },
+  { key: "budget_usd", label: "Tối đa / năm" },
   { key: "scholarship", label: "Học bổng" },
   { key: "funding_source", label: "Nguồn tài chính" },
   { key: "activities", label: "Hoạt động" },
@@ -155,6 +158,10 @@ function formatValue(key: string, value: unknown): string {
       const parts = [type, score, date && `thi ${date}`].filter(Boolean).join(" · ");
       return parts ? `Dự kiến: ${parts}` : p.planned ? "Có dự định thi" : "";
     }
+    case "budget_vnd":
+      return typeof value === "number" ? `${value.toLocaleString("vi-VN")} VNĐ` : str(value);
+    case "budget_usd":
+      return typeof value === "number" ? `${value.toLocaleString("vi-VN")} USD` : str(value);
     case "budget":
       return DEFAULT_BUDGET_TIERS.find((t) => t.key === value)?.label ?? str(value);
     case "scholarship": {

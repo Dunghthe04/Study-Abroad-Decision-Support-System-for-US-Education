@@ -36,10 +36,12 @@ from app.services.skills.validators import (
     check_activity,
     check_award,
     check_awards,
+    budget_tier,
     check_budget,
     check_budget_tier,
     check_certification,
     check_english,
+    check_exact_budget,
     check_exam_plan,
     check_gpa,
     check_sat,
@@ -875,6 +877,39 @@ def save_budget(state: ChatState, amount: float, currency: str | None) -> SkillO
     return ask_next(state)
 
 
+# UC-94: phụ huynh nhập hộ con managed nhập số tiền tối đa/năm chính xác (VNĐ), giống bước 4 của form.
+# Lưu số VNĐ (BE đổi USD theo tỷ giá lúc lưu và ghi làm mức trần), mức là mức chứa số đó
+def save_exact_budget(state: ChatState, amount: float, currency: str | None) -> SkillOutput:
+    try:
+        vnd = check_exact_budget(amount, currency)
+    except AskAgain as err:
+        return ask_question(state, "F1", err.question)
+    state.profile["budget_vnd"] = buttons.confirmed(vnd)
+    state.profile["budget"] = buttons.confirmed(budget_tier(vnd / exchange_rate.vnd_per_usd()))
+    state.profile.pop("budget_usd", None)
+    return ask_next(state)
+
+
+# F1 khi phụ huynh nhập hộ: nút chuyển chế độ, số tiền chính xác, hoặc chọn mức (ước tính). None: không phải các trường hợp này
+def answer_parent_budget(state: ChatState, message: str) -> SkillOutput | None:
+    if buttons.same_text(message, buttons.BUDGET_UNSURE):
+        state.budget_unsure = True
+        return ask_question(state, "F1")
+    if buttons.same_text(message, buttons.BUDGET_EXACT):
+        state.budget_unsure = False
+        return ask_question(state, "F1")
+    if buttons.exact_budget_mode(state):
+        money = read_money(message)
+        return save_exact_budget(state, *money) if money is not None else None
+    button = buttons.pressed("F1", message)
+    if button is None:
+        return None
+    # Chọn theo mức: bỏ số chính xác cũ, mức chỉ là ước tính
+    state.profile.pop("budget_vnd", None)
+    state.profile.pop("budget_usd", None)
+    return press_button(state, button)
+
+
 # Ghi một dự định thi học sinh chọn ở ô chọn E2 / E3 (bài thi, điểm mục tiêu, tháng), không gọi Qwen.
 # Dự định thành thẻ mục tiêu như form: cùng bài thì sửa thẻ dự định cũ, không thì thêm thẻ. Ghi xong hỏi còn
 # dự định nào nữa không, nút "Không còn dự định" để sang câu sau
@@ -1344,6 +1379,10 @@ class HoSoHandler:
         item_text = read_item_text(question_id, message)
         if item_text is not None:
             return save_item_text(state, *item_text)
+        if question_id == "F1" and state.exact_budget:
+            parent_budget = answer_parent_budget(state, message)
+            if parent_budget is not None:
+                return parent_budget
         button = buttons.pressed(question_id, message, can_skip=question_id in OPTIONAL_QUESTIONS)
         if button is not None:
             return press_button(state, button)
