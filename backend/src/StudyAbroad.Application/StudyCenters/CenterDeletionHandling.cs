@@ -33,7 +33,31 @@ public record AdminCenterDeletionRequestDto(
     string? LegalHoldReason = null,
     DateTime? LegalHoldAt = null,
     /// <summary>Số tin nhắn của trung tâm bị người dùng báo cáo mà Admin chưa xử lý (UC-58): dấu hiệu cần xem trước khi duyệt xóa.</summary>
-    int OpenReportCount = 0);
+    int OpenReportCount = 0,
+    /// <summary>Hạn xử lý (20 ngày kể từ khi nhận, cộng thêm nếu đã gia hạn).</summary>
+    DateTime? DueAt = null,
+    DateTime? ExtendedAt = null,
+    string? ExtensionNote = null);
+
+/// <summary>
+/// [UC-93] Thời hạn xử lý yêu cầu xóa dữ liệu theo Nghị định 356/2025/NĐ-CP Điều 5 khoản 4: thực hiện trong 20 ngày;
+/// được gia hạn tối đa 1 lần, không quá 20 ngày, kèm thông báo lý do cho người yêu cầu.
+/// </summary>
+public static class CenterDeletionDeadlines
+{
+    public const int ProcessingDays = 20;
+    public const int MaxExtensionDays = 20;
+
+    /// <summary>Tối thiểu từ lúc duyệt tới lúc xóa hẳn, để yêu cầu duyệt muộn không bị xóa ngay trong cùng giờ.</summary>
+    public static readonly TimeSpan MinGraceAfterApproval = TimeSpan.FromDays(1);
+
+    /// <summary>Hạn xử lý của một yêu cầu; yêu cầu cũ chưa có hạn thì tính từ ngày gửi.</summary>
+    public static DateTime DueAt(CenterDeletionRequest request) =>
+        request.DueAt ?? request.CreatedAt.AddDays(ProcessingDays);
+}
+
+/// <summary>[UC-93] Gia hạn một lần thời gian xử lý yêu cầu xóa. Lý do bắt buộc và được gửi cho người yêu cầu.</summary>
+public record ExtendCenterDeletionRequest(string? Reason);
 
 /// <summary>[UC-93] Tình trạng giữ pháp lý của một trung tâm.</summary>
 public record CenterLegalHoldDto(
@@ -126,6 +150,8 @@ public interface ICenterDeletionService
     Task<PagedResult<AdminCenterDeletionRequestDto>> SearchAsync(string? status, int page, int pageSize, CancellationToken ct = default);
     Task<CenterDeletionActionResult> ApproveAsync(Guid adminUserId, Guid requestId, string? identityCheckNote, CancellationToken ct = default);
     Task<CenterDeletionActionResult> RejectAsync(Guid adminUserId, Guid requestId, string? reason, CancellationToken ct = default);
+    /// <summary>Gia hạn một lần (tối đa 20 ngày) thời gian xử lý yêu cầu đang chờ hoặc đã duyệt, gửi lý do cho người yêu cầu.</summary>
+    Task<CenterDeletionActionResult> ExtendAsync(Guid adminUserId, Guid requestId, string? reason, CancellationToken ct = default);
     /// <summary>Xóa hẳn các trung tâm đã duyệt xóa và quá thời hạn chờ (cùng thời hạn UC-80). Gọi từ job nền.</summary>
     Task<CenterPurgeSummary> PurgeDueAsync(DateTime now, CancellationToken ct = default);
 
@@ -145,8 +171,9 @@ public interface ICenterDeletionService
 /// <summary>
 /// [UC-93] Administrator xử lý yêu cầu xóa tài khoản và dữ liệu trung tâm (gửi từ UC-92).
 /// Luồng trạng thái: pending → approved (khóa đăng nhập, ẩn trung tâm, đóng lead mở, hẹn ngày xóa)
-/// → completed (job nền xóa dữ liệu sau thời hạn chờ <see cref="AccountDeletionOptions.RetentionPeriod"/>, cùng thời hạn UC-80);
-/// hoặc pending → rejected. Mỗi bước ghi nhật ký và báo kết quả qua email.
+/// → completed (job nền xóa dữ liệu khi tới hạn xử lý của yêu cầu, <see cref="CenterDeletionDeadlines"/>: 20 ngày kể từ khi nhận,
+/// gia hạn một lần tối đa 20 ngày theo Nghị định 356/2025/NĐ-CP Điều 5 khoản 4); hoặc pending → rejected.
+/// Nhận yêu cầu, gia hạn, duyệt, từ chối, không xóa được vì giữ pháp lý và xóa xong đều ghi nhật ký và báo qua email.
 /// Giữ pháp lý (Legal Hold) là ngoại lệ của quyền xóa dữ liệu: khi trung tâm bị nghi lừa đảo, có tranh chấp
 /// hoặc cơ quan có thẩm quyền yêu cầu giữ dữ liệu, yêu cầu xóa không được duyệt và dữ liệu không bị xóa hẳn tới khi gỡ.
 /// Xóa hẳn = xóa hồ sơ, tài liệu và ẩn danh hóa trung tâm cùng tài khoản chủ; nhật ký, tin nhắn và bản ghi yêu cầu
@@ -159,13 +186,10 @@ public class CenterDeletionService(
     IUserRepository users,
     IAuditLogRepository auditLogs,
     IUnitOfWork unitOfWork,
-    IEmailSender emailSender,
-    AccountDeletionOptions? options = null) : ICenterDeletionService
+    IEmailSender emailSender) : ICenterDeletionService
 {
     public const int MaxNoteLength = 1000;
     public const string NotificationType = "lead_closed_center_deleted";
-
-    private readonly AccountDeletionOptions _options = options ?? new AccountDeletionOptions();
 
     private static readonly HashSet<string> Filters = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -211,7 +235,8 @@ public class CenterDeletionService(
 
         var openReports = await work.CountOpenReportsAsync(center.Id, ct);
         var now = DateTime.UtcNow;
-        var purgeAt = now + _options.RetentionPeriod;
+        // Xóa hẳn vào hạn xử lý của yêu cầu (20 ngày kể từ khi nhận, cộng gia hạn nếu có), nhưng sau duyệt ít nhất 1 ngày
+        var purgeAt = Max(CenterDeletionDeadlines.DueAt(request), now + CenterDeletionDeadlines.MinGraceAfterApproval);
         IReadOnlyList<ClosedLeadRecipients> closed = [];
 
         await unitOfWork.ExecuteInTransactionAsync(async txCt =>
@@ -263,6 +288,54 @@ public class CenterDeletionService(
         }, ct);
 
         await SendOutcomeEmailsAsync(request, center.Name, center.Email, "approved", note, purgeAt, ct);
+        return await ResultAsync(request.Id, ct);
+    }
+
+    private static DateTime Max(DateTime a, DateTime b) => a >= b ? a : b;
+
+    public async Task<CenterDeletionActionResult> ExtendAsync(Guid adminUserId, Guid requestId, string? reason, CancellationToken ct = default)
+    {
+        var trimmed = reason?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0)
+            return CenterDeletionActionResult.Fail("Vui lòng nhập lý do gia hạn, lý do được gửi cho người yêu cầu.");
+        if (trimmed.Length > MaxNoteLength)
+            return CenterDeletionActionResult.Fail($"Lý do tối đa {MaxNoteLength} ký tự.");
+
+        var request = await requests.GetByIdAsync(requestId, ct);
+        if (request is null)
+            return CenterDeletionActionResult.Missing();
+        if (request.Status is not (CenterDeletionRequestStatuses.Pending or CenterDeletionRequestStatuses.Approved))
+            return CenterDeletionActionResult.Fail("Chỉ gia hạn được yêu cầu đang chờ xử lý hoặc đã duyệt, chưa xóa hẳn.");
+        if (request.ExtendedAt is not null)
+            return CenterDeletionActionResult.Fail("Yêu cầu này đã được gia hạn một lần, theo quy định không gia hạn thêm.");
+
+        var now = DateTime.UtcNow;
+        var previousDue = CenterDeletionDeadlines.DueAt(request);
+        var newDue = previousDue.AddDays(CenterDeletionDeadlines.MaxExtensionDays);
+        var center = await centers.GetByIdAsync(request.StudyCenterId, ct);
+
+        await unitOfWork.ExecuteInTransactionAsync(async txCt =>
+        {
+            request.DueAt = newDue;
+            request.ExtendedAt = now;
+            request.ExtensionNote = trimmed;
+            // Đã duyệt: ngày xóa hẳn dời theo hạn mới
+            if (request.Status == CenterDeletionRequestStatuses.Approved && request.ScheduledPurgeAt < newDue)
+                request.ScheduledPurgeAt = newDue;
+            await requests.UpdateAsync(request, txCt);
+
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = adminUserId,
+                Action = "center.deletion_extend",
+                EntityType = "center_deletion_request",
+                EntityId = request.Id.ToString(),
+                DetailJson = JsonSerializer.Serialize(new { studyCenterId = request.StudyCenterId, reason = trimmed, previousDueAt = previousDue, newDueAt = newDue }),
+            }, txCt);
+        }, ct);
+
+        foreach (var email in await CollectRecipientsAsync(request, center?.Email, ct))
+            await emailSender.SendCenterDeletionOutcomeEmailAsync(email, center?.Name ?? "Trung tâm", "extended", trimmed, newDue, ct);
         return await ResultAsync(request.Id, ct);
     }
 
@@ -443,6 +516,14 @@ public class CenterDeletionService(
                 }),
             }, txCt);
         }, ct);
+
+        // Luật 91/2025 Điều 14 khoản 5: không xóa được vì lý do chính đáng thì phải thông báo cho người yêu cầu.
+        // Nội dung chung, không nêu việc điều tra hay lý do giữ.
+        if (latest?.Status is CenterDeletionRequestStatuses.Pending or CenterDeletionRequestStatuses.Approved)
+        {
+            foreach (var email in await CollectRecipientsAsync(latest, center.Email, ct))
+                await emailSender.SendCenterDeletionOutcomeEmailAsync(email, center.Name, "held", null, null, ct);
+        }
 
         return CenterLegalHoldResult.Ok(await ToHoldDtoAsync(center, ct));
     }

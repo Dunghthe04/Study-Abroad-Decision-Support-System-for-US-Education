@@ -1203,7 +1203,7 @@ public class StudyCenterService(
     }
 
     private static CenterDeletionRequestDto ToDeletionDto(CenterDeletionRequest r) =>
-        new(r.Id, r.StudyCenterId, r.Reason, r.Status, r.CreatedAt, r.HandledAt);
+        new(r.Id, r.StudyCenterId, r.Reason, r.Status, r.CreatedAt, r.HandledAt, r.DueAt);
 
     /// <summary>[UC-92] Yêu cầu xóa mới nhất của trung tâm (null nếu chưa gửi).</summary>
     public async Task<CenterDeletionRequestDto?> GetDeletionRequestAsync(Guid userId, CancellationToken ct = default)
@@ -1237,12 +1237,16 @@ public class StudyCenterService(
         if (await deletionRequests.GetOpenByCenterIdAsync(center.Id, ct) is not null)
             return CenterDeletionRequestResult.Fail("Trung tâm đã có yêu cầu xóa đang chờ Quản trị viên xử lý.");
 
+        var receivedAt = DateTime.UtcNow;
         var entity = new CenterDeletionRequest
         {
             StudyCenterId = center.Id,
             RequestedByUserId = userId,
             Reason = trimmed,
             Status = CenterDeletionRequestStatuses.Pending,
+            CreatedAt = receivedAt,
+            // Nghị định 356/2025/NĐ-CP Điều 5 khoản 4: thực hiện yêu cầu xóa trong 20 ngày
+            DueAt = receivedAt.AddDays(CenterDeletionDeadlines.ProcessingDays),
         };
         await deletionRequests.AddAsync(entity, ct);
 
@@ -1252,8 +1256,21 @@ public class StudyCenterService(
             Action = "center.deletion_requested",
             EntityType = "StudyCenter",
             EntityId = center.Id.ToString(),
-            DetailJson = JsonSerializer.Serialize(new { centerId = center.Id, requestId = entity.Id })
+            DetailJson = JsonSerializer.Serialize(new { centerId = center.Id, requestId = entity.Id, dueAt = entity.DueAt })
         }, ct);
+
+        // Điều 5 khoản 4: phản hồi trong 02 ngày làm việc. Gửi xác nhận ngay khi nhận; lỗi gửi mail không làm hỏng yêu cầu.
+        if (emailSender is not null && !string.IsNullOrWhiteSpace(center.Email))
+        {
+            try
+            {
+                await emailSender.SendCenterDeletionOutcomeEmailAsync(center.Email.Trim(), center.Name, "received", null, entity.DueAt, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Yêu cầu đã lưu; người dùng vẫn thấy trạng thái trên trang hồ sơ
+            }
+        }
 
         return CenterDeletionRequestResult.Ok(ToDeletionDto(entity));
     }

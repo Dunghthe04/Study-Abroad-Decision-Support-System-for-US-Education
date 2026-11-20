@@ -31,7 +31,9 @@ public record CenterDeletionRequestDto(
     string Reason,
     string Status,
     DateTime CreatedAt,
-    DateTime? HandledAt);
+    DateTime? HandledAt,
+    /// <summary>Hạn xử lý của USAS (20 ngày kể từ khi nhận, có thể gia hạn một lần).</summary>
+    DateTime? DueAt = null);
 
 public record CenterDeletionRequestResult(CenterDeletionRequestDto? Request, string? ErrorMessage = null)
 {

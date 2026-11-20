@@ -310,6 +310,19 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("decision_note");
 
+                    b.Property<DateTime?>("DueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_at");
+
+                    b.Property<DateTime?>("ExtendedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("extended_at");
+
+                    b.Property<string>("ExtensionNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("extension_note");
+
                     b.Property<DateTime?>("HandledAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("handled_at");

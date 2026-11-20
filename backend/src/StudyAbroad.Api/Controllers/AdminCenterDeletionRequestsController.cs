@@ -60,6 +60,21 @@ public class AdminCenterDeletionRequestsController(ICenterDeletionService servic
         return ToResult(await service.RejectAsync(adminId, id, request?.Reason, ct));
     }
 
+    /// <summary>
+    /// Gia hạn một lần, tối đa 20 ngày, thời gian xử lý yêu cầu (Nghị định 356/2025/NĐ-CP Điều 5 khoản 4).
+    /// Lý do bắt buộc và được gửi cho người yêu cầu.
+    /// </summary>
+    [HttpPost("{id:guid}/extend")]
+    [ProducesResponseType(typeof(AdminCenterDeletionRequestDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Extend(Guid id, [FromBody] ExtendCenterDeletionRequest? request, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } adminId)
+            return Unauthorized();
+        return ToResult(await service.ExtendAsync(adminId, id, request?.Reason, ct));
+    }
+
     private IActionResult ToResult(CenterDeletionActionResult result)
     {
         if (result.NotFound)

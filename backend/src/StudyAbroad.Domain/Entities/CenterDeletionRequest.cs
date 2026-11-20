@@ -25,4 +25,16 @@ public class CenterDeletionRequest : BaseEntity
     public DateTime? ScheduledPurgeAt { get; set; }
 
     public DateTime? CompletedAt { get; set; }
+
+    /// <summary>
+    /// [UC-93] Hạn xử lý yêu cầu: 20 ngày kể từ khi nhận (Nghị định 356/2025/NĐ-CP Điều 5 khoản 4).
+    /// Thời hạn này cũng là ngày sớm nhất được xóa hẳn dữ liệu.
+    /// </summary>
+    public DateTime? DueAt { get; set; }
+
+    /// <summary>[UC-93] Lúc gia hạn. Chỉ được gia hạn một lần, tối đa 20 ngày (Điều 5 khoản 4).</summary>
+    public DateTime? ExtendedAt { get; set; }
+
+    /// <summary>[UC-93] Lý do gia hạn, đã gửi cho người yêu cầu.</summary>
+    public string? ExtensionNote { get; set; }
 }

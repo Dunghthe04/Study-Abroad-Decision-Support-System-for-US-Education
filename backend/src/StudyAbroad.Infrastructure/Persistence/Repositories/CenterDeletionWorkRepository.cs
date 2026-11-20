@@ -86,7 +86,10 @@ public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env
             x.Center.IsLegalHold || x.OwnerHold,
             x.Center.LegalHoldReason ?? x.OwnerHoldReason,
             x.Center.LegalHoldAt,
-            x.OpenReports)).ToList();
+            x.OpenReports,
+            CenterDeletionDeadlines.DueAt(x.Request),
+            x.Request.ExtendedAt,
+            x.Request.ExtensionNote)).ToList();
     }
 
     /// <summary>Tin nhắn trong các lead của trung tâm bị học sinh/phụ huynh báo cáo mà Admin chưa xử lý (UC-58).</summary>
