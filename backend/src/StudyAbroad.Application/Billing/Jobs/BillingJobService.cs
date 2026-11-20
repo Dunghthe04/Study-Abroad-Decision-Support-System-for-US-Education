@@ -67,8 +67,11 @@ public sealed class BillingJobService(
                 await notifications.NotifyAsync(owner.Id, NotificationTypes.BillingExpiring, $"Gói {cycle.PlanName} sắp hết hạn",
                     $"Gói {cycle.PlanName} còn khoảng {days} ngày. Gia hạn để không bị gián đoạn.", "/plans", ct);
             }, ct);
-            if (ok)
-                handled++;
+            // Lỗi thì dừng bước: TryAsync đã bỏ theo dõi mọi kỳ còn lại trong danh sách, nên gán dấu thời gian cho chúng sẽ không được lưu
+            // mà thông báo vẫn gửi (lượt sau gửi lại). Lượt sau mở scope mới, nạp lại và làm tiếp phần còn lại.
+            if (!ok)
+                break;
+            handled++;
         }
         return handled;
     }
@@ -106,8 +109,11 @@ public sealed class BillingJobService(
                             $"Gói {cycle.PlanName}: bạn đã dùng hết lượt hỏi của kỳ này.", "/plans", ct);
                 }
             }, ct);
-            if (ok)
-                handled++;
+            // Lỗi thì dừng bước: TryAsync đã bỏ theo dõi mọi kỳ còn lại trong danh sách, nên gán dấu thời gian cho chúng sẽ không được lưu
+            // mà thông báo vẫn gửi (lượt sau gửi lại). Lượt sau mở scope mới, nạp lại và làm tiếp phần còn lại.
+            if (!ok)
+                break;
+            handled++;
         }
         return handled;
     }

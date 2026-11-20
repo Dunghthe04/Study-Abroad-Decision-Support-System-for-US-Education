@@ -596,8 +596,10 @@ public class BillingJobTests
         Assert.Equal(new[] { owner.Id, member.Id }.Order(), j.Sent(NotificationTypes.BillingUsage80).Select(n => n.UserId).Order());
     }
 
+    // Mục lỗi làm bước dừng (danh sách kỳ đã nạp bị bỏ theo dõi nên không thể lưu dấu cho các kỳ sau); lượt sau nạp lại và làm tiếp.
+    // Quan trọng: kỳ sau không được gửi thông báo khi dấu chưa lưu, nếu không lượt sau sẽ gửi lặp.
     [Fact]
-    public async Task Usage_AFailingSendOnOneCycle_DoesNotStopTheNext()
+    public async Task Usage_AFailingItem_StopsTheStep_TheRestIsDoneOnTheNextTick_EachOnce()
     {
         var j = new JobHarness();
         var (a, b) = (j.AddUser(), j.AddUser());
@@ -605,12 +607,39 @@ public class BillingJobTests
         var second = j.Store.AddActive(b.Id, "personal-1m", Now.AddDays(-2), quota: 1_000);
         j.Store.Use(a.Id, first, 900);
         j.Store.Use(b.Id, second, 900);
-        j.Notes.Throw = true;   // dịch vụ thật không bao giờ ném, nhưng một mục lỗi không được chặn mục sau
+        j.Notes.Throw = true;   // dịch vụ thật không bao giờ ném; ở đây thay cho lỗi lưu
 
         Assert.Equal(0, await j.Jobs.SendUsageNotificationsAsync(Now));
 
         Assert.NotNull(first.Warned80At);   // ghi dấu trước khi gửi: mất một lần báo, không bao giờ báo lặp
-        Assert.NotNull(second.Warned80At);
+        Assert.Null(second.Warned80At);     // chưa xét tới: không dấu, không gửi
+        j.Notes.Throw = false;
+        Assert.Equal(1, await j.Jobs.SendUsageNotificationsAsync(Now.AddMinutes(1)));
+        await j.Jobs.SendUsageNotificationsAsync(Now.AddMinutes(2));
+
+        Assert.Equal(b.Id, Assert.Single(j.Sent(NotificationTypes.BillingUsage80)).UserId);
+    }
+
+    [Fact]
+    public async Task R8_AFailingItem_StopsTheStep_TheRestIsRemindedOnTheNextTick_EachOnce()
+    {
+        var j = new JobHarness();
+        var (a, b) = (j.AddUser(), j.AddUser());
+        var first = j.Store.AddActive(a.Id, "personal-1m", Now.AddDays(-25));
+        var second = j.Store.AddActive(b.Id, "personal-1m", Now.AddDays(-25));
+        j.Notes.Throw = true;
+
+        Assert.Equal(0, await j.Jobs.SendRenewalRemindersAsync(Now));
+
+        Assert.NotNull(first.ReminderSentAt);
+        Assert.Null(second.ReminderSentAt);
+        Assert.Single(j.H.Email.SentEmails);   // chỉ kỳ đầu đã gửi email; kỳ sau chưa
+        j.Notes.Throw = false;
+        Assert.Equal(1, await j.Jobs.SendRenewalRemindersAsync(Now.AddMinutes(1)));
+        await j.Jobs.SendRenewalRemindersAsync(Now.AddMinutes(2));
+
+        Assert.Equal(2, j.H.Email.SentEmails.Count);
+        Assert.Equal(b.Id, Assert.Single(j.Notes.Sent).UserId);
     }
 
     // ---- BillingBackgroundService: mỗi bước một scope, lỗi một bước không chặn các bước sau
