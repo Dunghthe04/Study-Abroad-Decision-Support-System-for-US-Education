@@ -1,6 +1,7 @@
 // Mục tiêu học sinh tích ở đầu form: quyết định ô nào bắt buộc và bấm nút cuối thì đi đâu.
 // Mã mục tiêu phải khớp FORM_GOALS trong advisor/app/services/intake.py (chat gửi qua link ?goal=).
-// Riêng "chi_sua" chỉ có ở form (chat không gửi): lưu hồ sơ rồi quay về trang cũ, không làm việc gì khác
+// Riêng "chi_sua": chỉ lưu hồ sơ, không làm việc gì khác. Mở từ link "Sửa hồ sơ" thì lưu xong quay về trang cũ;
+// chat gửi khi học sinh sửa hồ sơ mà không có câu tư vấn nào đang chờ, lưu xong về chat báo đã lưu
 export type FormGoal = "danh_gia" | "lo_trinh" | "goi_y_truong" | "chi_sua";
 
 export const FORM_GOAL_OPTIONS: { value: FormGoal; label: string; description: string }[] = [

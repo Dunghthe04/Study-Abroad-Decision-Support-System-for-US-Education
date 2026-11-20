@@ -105,6 +105,8 @@ export function Step1Goal({
   const goalSectionId = useId();
   // Lộ trình, gợi ý trường lọc theo ngành nên không cho "Chưa chọn ngành"
   const needMajor = goalsNeedMajor(goals);
+  // Chat gửi "Chỉ sửa hồ sơ" (sửa hồ sơ, không có việc chờ): hiện ô đó đã tích và khóa
+  const lockedEdit = goalsLocked && goals.includes(EDIT_ONLY);
   const toggleGoal = (goal: FormGoal) => {
     if (goalsLocked) return;
     onGoalsChange(nextGoals(goals, goal));
@@ -334,14 +336,16 @@ export function Step1Goal({
               Bạn muốn hệ thống làm gì? <RequiredMark />
             </Label>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {goalsLocked
+              {lockedEdit
+                ? "Bạn đang sửa hồ sơ từ chat. Lưu hồ sơ xong chat sẽ báo đã lưu."
+                : goalsLocked
                 ? "Theo câu bạn hỏi trong chat. Lưu hồ sơ xong chat sẽ trả lời tiếp."
                 : "Tích một hoặc nhiều việc. Chỉ muốn cập nhật thông tin thì chọn Chỉ sửa hồ sơ."}
             </p>
           </div>
-          <div className={cn("grid gap-2.5", goalsLocked ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
-            {/* Mở từ chat thì việc theo câu đã hỏi, không có "Chỉ sửa hồ sơ" */}
-            {FORM_GOAL_OPTIONS.filter((opt) => !goalsLocked || opt.value !== EDIT_ONLY).map((opt) => {
+          <div className={cn("grid gap-2.5", goalsLocked && !lockedEdit ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+            {/* Mở từ chat thì việc theo câu đã hỏi; "Chỉ sửa hồ sơ" chỉ hiện khi chat gửi (sửa hồ sơ, không có việc chờ) */}
+            {FORM_GOAL_OPTIONS.filter((opt) => !goalsLocked || lockedEdit || opt.value !== EDIT_ONLY).map((opt) => {
               const isSelected = goals.includes(opt.value);
               return (
                 <button

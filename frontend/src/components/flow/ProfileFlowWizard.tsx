@@ -205,7 +205,10 @@ export function ProfileFlowWizard() {
             // bỏ qua
           }
         }
-        let startGoals = parseGoals(openedFromChat ? params.get("goal") : savedGoals).filter((g) => g !== EDIT_ONLY);
+        // "Chỉ sửa hồ sơ" từ chat (sửa hồ sơ, không có việc chờ) thì giữ; ngoài chat chỉ tích khi đã có hồ sơ (bên dưới)
+        let startGoals = parseGoals(openedFromChat ? params.get("goal") : savedGoals).filter(
+          (g) => openedFromChat || g !== EDIT_ONLY
+        );
         setBackPath(openedFromChat ? null : safeBackPath(params.get("back")));
         // Link "Sửa hồ sơ" (Tổng quan, Tài khoản...) gửi ?goal=chi_sua: tích sẵn "Chỉ sửa hồ sơ" khi đã có hồ sơ
         const wantEditOnly = !openedFromChat && parseGoals(params.get("goal")).includes(EDIT_ONLY);
@@ -549,7 +552,8 @@ export function ProfileFlowWizard() {
         } catch {
           // bỏ qua
         }
-        // Mở từ chat: mở khung chat, advisor thấy hồ sơ đủ thì trả lời luôn câu học sinh đã hỏi.
+        // Mở từ chat: mở khung chat, advisor thấy hồ sơ đủ thì trả lời luôn câu học sinh đã hỏi
+        // (chỉ sửa hồ sơ thì chat báo đã lưu thành công).
         // fromForm: form đã là bước rà soát, advisor bỏ bảng xác nhận đang treo trong chat
         if (fromChat) {
           openAssistant(CONTINUE_CHAT, { fromForm: true });
