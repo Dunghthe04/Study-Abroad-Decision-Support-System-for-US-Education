@@ -967,6 +967,36 @@ public class CenterRegistrationAndVerificationTests
     }
 
     [Fact]
+    public async Task RequestDeletion_SetsTwentyDayDeadlineAndEmailsReceipt()
+    {
+        var centers = new FakeStudyCenterRepo();
+        var deletions = new FakeDeletionRepo();
+        var email = new FakeEmailSender();
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = "info@abc.vn",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.Verified,
+        };
+        await centers.AddAsync(center);
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), new FakeVerificationRepo(), emailSender: email,
+            notifications: null, profileChanges: new FakeProfileChangeRepo(), deletionRequests: deletions);
+
+        var result = await service.RequestDeletionAsync(center.OwnerUserId!.Value, "Ngừng hoạt động");
+
+        Assert.True(result.Success);
+        var saved = Assert.Single(deletions.Items);
+        // Nghị định 356/2025/NĐ-CP Điều 5 khoản 4: xử lý trong 20 ngày kể từ khi nhận
+        Assert.Equal(saved.CreatedAt.AddDays(20), saved.DueAt);
+        Assert.Equal(saved.DueAt, result.Request!.DueAt);
+        // Điều 5 khoản 4: phản hồi trong 02 ngày làm việc, gửi xác nhận ngay khi nhận
+        var mail = Assert.Single(email.CenterDeletionEmails);
+        Assert.Equal(("info@abc.vn", "Trung tâm ABC", "received", (string?)null, saved.DueAt), mail);
+    }
+
+    [Fact]
     public async Task RequestDeletion_UnknownCenterOrTooLongReason_IsRejected()
     {
         var s = await ProfileEditSetup(CenterVerificationStatuses.Unverified);

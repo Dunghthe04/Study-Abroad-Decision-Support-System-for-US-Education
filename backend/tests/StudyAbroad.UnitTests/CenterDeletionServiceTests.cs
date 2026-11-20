@@ -129,8 +129,7 @@ public class CenterDeletionServiceTests
             Centers.Centers.Add(Center);
             Request = new CenterDeletionRequest { StudyCenterId = Center.Id, RequestedByUserId = Owner.Id, Reason = "Ngừng hoạt động" };
             Requests.Items.Add(Request);
-            Service = new CenterDeletionService(Requests, Work, Centers, Users, Audit, UnitOfWork, Email,
-                new AccountDeletionOptions { RetentionPeriod = TimeSpan.FromDays(30) });
+            Service = new CenterDeletionService(Requests, Work, Centers, Users, Audit, UnitOfWork, Email);
         }
     }
 
@@ -159,7 +158,8 @@ public class CenterDeletionServiceTests
         Assert.Equal(adminId, s.Request.HandledByUserId);
         Assert.Equal("Đã gọi điện xác nhận với đại diện pháp luật", s.Request.DecisionNote);
         Assert.NotNull(s.Request.ScheduledPurgeAt);
-        Assert.InRange(s.Request.ScheduledPurgeAt!.Value - s.Request.HandledAt!.Value, TimeSpan.FromDays(30), TimeSpan.FromDays(30));
+        // Xóa hẳn vào hạn xử lý: 20 ngày kể từ khi nhận (Nghị định 356/2025 Điều 5 khoản 4)
+        Assert.Equal(s.Request.CreatedAt.AddDays(CenterDeletionDeadlines.ProcessingDays), s.Request.ScheduledPurgeAt);
         Assert.Equal("center.deletion_approve", Assert.Single(s.Audit.Entries).Action);
         Assert.Equal(1, s.UnitOfWork.Calls);
         // Email tới người gửi và email liên hệ của trung tâm
@@ -213,7 +213,7 @@ public class CenterDeletionServiceTests
         await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
         s.Email.CenterDeletionEmails.Clear();
 
-        var early = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(29));
+        var early = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(19));
         Assert.Equal(0, early.Purged);
         Assert.Empty(s.Work.PurgedCenters);
 
@@ -375,6 +375,102 @@ public class CenterDeletionServiceTests
 
         Assert.False((await s.Service.ReleaseLegalHoldAsync(adminId, s.Center.Id, "lần hai")).Success);
         Assert.Equal(1, (await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(35))).Purged);
+    }
+
+    [Fact]
+    public async Task Approve_OverdueRequest_StillGetsAtLeastOneDayBeforePurge()
+    {
+        var s = new Setup();
+        s.Request.CreatedAt = DateTime.UtcNow.AddDays(-25);   // đã quá hạn 20 ngày
+
+        Assert.True((await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok")).Success);
+
+        Assert.True(s.Request.ScheduledPurgeAt >= DateTime.UtcNow.AddHours(23));
+        Assert.Equal(0, (await s.Service.PurgeDueAsync(DateTime.UtcNow.AddHours(1))).Purged);
+    }
+
+    [Fact]
+    public async Task Extend_OnceOnly_RequiresReason_EmailsRequesterAndMovesPurgeDate()
+    {
+        var s = new Setup();
+        var adminId = Guid.NewGuid();
+        var originalDue = CenterDeletionDeadlines.DueAt(s.Request);
+
+        Assert.False((await s.Service.ExtendAsync(adminId, s.Request.Id, "  ")).Success);
+        Assert.False((await s.Service.ExtendAsync(adminId, s.Request.Id, new string('x', 1001))).Success);
+        Assert.True((await s.Service.ExtendAsync(adminId, Guid.NewGuid(), "x")).NotFound);
+
+        var result = await s.Service.ExtendAsync(adminId, s.Request.Id, "  Cần xác minh thêm người đại diện  ");
+
+        Assert.True(result.Success);
+        Assert.Equal(originalDue.AddDays(CenterDeletionDeadlines.MaxExtensionDays), s.Request.DueAt);
+        Assert.NotNull(s.Request.ExtendedAt);
+        Assert.Equal("Cần xác minh thêm người đại diện", s.Request.ExtensionNote);
+        var audit = Assert.Single(s.Audit.Entries);
+        Assert.Equal(("center.deletion_extend", adminId), (audit.Action, audit.ActorUserId));
+        Assert.Equal("Cần xác minh thêm người đại diện", Detail(audit, "reason"));
+        // Người yêu cầu và email liên hệ đều được báo lý do và hạn mới
+        Assert.Equal(new[] { "info@aau.vn", "owner@center.vn" }, s.Email.CenterDeletionEmails.Select(e => e.To).OrderBy(x => x));
+        Assert.All(s.Email.CenterDeletionEmails, e =>
+        {
+            Assert.Equal("extended", e.Outcome);
+            Assert.Equal("Cần xác minh thêm người đại diện", e.Note);
+            Assert.Equal(s.Request.DueAt, e.PurgeAt);
+        });
+
+        // Chỉ một lần
+        var again = await s.Service.ExtendAsync(adminId, s.Request.Id, "Thêm lần nữa");
+        Assert.False(again.Success);
+        Assert.Equal(originalDue.AddDays(20), s.Request.DueAt);
+    }
+
+    [Fact]
+    public async Task Extend_AfterApproval_PushesScheduledPurge_ButNotAfterCompletionOrRejection()
+    {
+        var s = new Setup();
+        await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
+        var purgeBefore = s.Request.ScheduledPurgeAt!.Value;
+
+        Assert.True((await s.Service.ExtendAsync(Guid.NewGuid(), s.Request.Id, "Chờ cơ quan chức năng phản hồi")).Success);
+        Assert.Equal(purgeBefore.AddDays(20), s.Request.ScheduledPurgeAt);
+        Assert.Equal(0, (await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(30))).Purged);
+
+        var done = new Setup();
+        await done.Service.ApproveAsync(Guid.NewGuid(), done.Request.Id, "ok");
+        await done.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(21));
+        Assert.False((await done.Service.ExtendAsync(Guid.NewGuid(), done.Request.Id, "Muộn")).Success);
+
+        var rejected = new Setup();
+        await rejected.Service.RejectAsync(Guid.NewGuid(), rejected.Request.Id, "Không xác minh được");
+        Assert.False((await rejected.Service.ExtendAsync(Guid.NewGuid(), rejected.Request.Id, "x")).Success);
+    }
+
+    [Fact]
+    public async Task SetLegalHold_WithOpenDeletionRequest_SendsGenericNoticeWithoutInvestigationDetails()
+    {
+        var s = new Setup();
+
+        await s.Service.SetLegalHoldAsync(Guid.NewGuid(), s.Center.Id, "Công văn số 12/CSĐT, nghi lừa đảo");
+
+        // Luật 91/2025 Điều 14 khoản 5: không xóa được vì lý do chính đáng thì phải thông báo cho người yêu cầu
+        Assert.Equal(new[] { "info@aau.vn", "owner@center.vn" }, s.Email.CenterDeletionEmails.Select(e => e.To).OrderBy(x => x));
+        Assert.All(s.Email.CenterDeletionEmails, e =>
+        {
+            Assert.Equal("held", e.Outcome);
+            Assert.Null(e.Note);   // không lộ lý do giữ hay việc điều tra
+        });
+    }
+
+    [Fact]
+    public async Task SetLegalHold_WithoutOpenDeletionRequest_SendsNoNotice()
+    {
+        var s = new Setup();
+        await s.Service.RejectAsync(Guid.NewGuid(), s.Request.Id, "Không xác minh được");
+        s.Email.CenterDeletionEmails.Clear();
+
+        await s.Service.SetLegalHoldAsync(Guid.NewGuid(), s.Center.Id, "Khiếu nại lừa đảo");
+
+        Assert.Empty(s.Email.CenterDeletionEmails);
     }
 
     [Fact]
