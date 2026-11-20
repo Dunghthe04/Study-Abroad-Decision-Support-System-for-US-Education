@@ -125,6 +125,8 @@ export function ProfileFlowWizard() {
   const [draft, setDraft] = useState<ProfileFlowDraft>(INITIAL_DRAFT);
   const [draftTranscript, setDraftTranscript] = useState<DraftTranscriptFile | null>(null);
   const [metadata, setMetadata] = useState<ProfileMetadataResponse | null>(null);
+  // UC-94: ngân sách phụ huynh đã nhập (USD), cố định với học sinh
+  const [budgetLockedUsd, setBudgetLockedUsd] = useState<number | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -220,6 +222,7 @@ export function ProfileFlowWizard() {
           setCurrentStep(startStep(stateData.currentStep || 1));
           setCompletedSteps(stateData.completedSteps ?? []);
           setDraftTranscript(stateData.draftTranscript ?? null);
+          setBudgetLockedUsd(stateData.budgetLockedUsd ?? null);
           const incomingDraft = stateData.draft;
           if (incomingDraft) {
             setDraft((prev) => mergeDraft(prev, incomingDraft));
@@ -660,6 +663,7 @@ export function ProfileFlowWizard() {
               <Step4Financial
                 data={draft.step4}
                 metadata={metadata}
+                lockedUsd={budgetLockedUsd}
                 onUpdate={updateStep4}
                 onPrev={handlePrev}
                 onNext={handleNext}

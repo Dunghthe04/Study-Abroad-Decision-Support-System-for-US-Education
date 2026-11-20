@@ -255,6 +255,8 @@ export interface ProfileFlowState {
   draftTranscript?: DraftTranscriptFile | null;
   lastUpdatedAt?: string | null;
   hasCommittedProfile: boolean;
+  /** UC-94: học sinh nhận hồ sơ có số tiền tối đa/năm phụ huynh nhập (USD). Có số này thì ngân sách cố định, không sửa */
+  budgetLockedUsd?: number | null;
 }
 
 export interface ExtractedSubjectScore {

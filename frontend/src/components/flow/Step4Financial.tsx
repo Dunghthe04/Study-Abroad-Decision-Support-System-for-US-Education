@@ -21,6 +21,8 @@ import type { BudgetTierId, FinancialDraft, FundingSource, ProfileMetadataRespon
 interface Step4FinancialProps {
   data: FinancialDraft;
   metadata: ProfileMetadataResponse | null;
+  /** UC-94: số tiền tối đa/năm phụ huynh đã nhập (USD). Có thì ngân sách cố định, học sinh không sửa */
+  lockedUsd?: number | null;
   onUpdate: (updated: Partial<FinancialDraft>) => void;
   onPrev: () => void;
   onNext: () => void;
@@ -28,7 +30,7 @@ interface Step4FinancialProps {
 
 type Currency = "vnd" | "usd";
 
-export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Step4FinancialProps) {
+export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onPrev, onNext }: Step4FinancialProps) {
   // Lỗi của từng câu, hiện ngay dưới câu đó
   const [budgetError, setBudgetError] = useState<string | null>(null);
   const [aidError, setAidError] = useState<string | null>(null);
@@ -133,7 +135,9 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
     });
 
   const handleNextClick = () => {
-    const budgetMsg = exactAsk
+    const budgetMsg = lockedUsd != null
+      ? null
+      : exactAsk
       ? exactBudgetError()
       : data.annualBudgetTier ? null : "Vui lòng chọn mức ngân sách mỗi năm.";
     const missingBudget = budgetMsg != null;
@@ -169,7 +173,24 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
         </p>
       </div>
 
-      {exactAsk && !unsure ? (
+      {lockedUsd != null ? (
+      // UC-94: phụ huynh đã nhập số tiền chính xác → cố định theo phụ huynh, chỉ xem
+      <section id={budgetSectionId} className="space-y-2">
+        <Label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+          <DollarSignIcon className="size-4 text-brand" />
+          Số tiền tối đa chi trả được mỗi năm
+        </Label>
+        <div className="rounded-xl border border-line bg-ground/50 px-4 py-3.5 text-sm">
+          <p>
+            <strong className="font-semibold text-foreground">{lockedUsd.toLocaleString("vi-VN")} USD/năm</strong>{" "}
+            <span className="text-muted-foreground">(≈ {(lockedUsd * RATE).toLocaleString("vi-VN")} VNĐ theo tỷ giá hôm nay)</span>
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Do phụ huynh nhập, cố định theo phụ huynh nên bạn không sửa được. Cần đổi thì nhờ phụ huynh liên hệ.
+          </p>
+        </div>
+      </section>
+      ) : exactAsk && !unsure ? (
       <section id={budgetSectionId} className="space-y-3">
         <div>
           <Label htmlFor="exactBudgetVnd" className="text-sm font-semibold text-foreground flex items-center gap-1.5">
