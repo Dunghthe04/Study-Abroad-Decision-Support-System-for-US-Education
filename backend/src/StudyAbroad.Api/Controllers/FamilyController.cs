@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using StudyAbroad.Api.Extensions;
-using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application.Billing.Family;
 using StudyAbroad.Domain.Constants;
 
@@ -53,10 +51,9 @@ public class FamilyController(IFamilyService family) : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Trang chấp nhận mở được khi chưa đăng nhập; token là bí mật nên chỉ cần giới hạn tốc độ như link mời phụ huynh.</summary>
+    /// <summary>Trang chấp nhận mở được khi chưa đăng nhập; token 256 bit là bí mật nên không cần giới hạn tốc độ (429 của limiter còn sai dạng { code, message }).</summary>
     [AllowAnonymous]
     [HttpPost("invites/lookup")]
-    [EnableRateLimiting(AuthRateLimit.PolicyName)]
     [ProducesResponseType(typeof(FamilyInviteLookupDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> LookupInvite(FamilyTokenRequest request, CancellationToken ct) =>
         Ok(await family.LookupAsync(request.Token ?? string.Empty, DateTime.UtcNow, ct));
