@@ -533,6 +533,8 @@ def save_read(
         state.profile["cert_pending"] = ProfileField(value=read.pending_cert, status="unknown")
     fields = [(name, value, status) for name, value in read.values.items() if name not in LIST_FIELDS]
     fields += [(name, None, "none") for name in read.none_fields]
+    if buttons.budget_locked(state):  # ngân sách phụ huynh đã nhập: không ghi đè số học sinh nói
+        fields = [field for field in fields if field[0] != "budget"]
     written = []
     for name, value, field_status in fields:
         if keep_existing and name in state.profile:
@@ -641,6 +643,8 @@ def needed(state: ChatState, question_id: str) -> bool:
         return level is not None and level.value == "high_school"
     if question_id == "N1":
         return "preferred_states" not in state.profile
+    if question_id == "F1":
+        return not buttons.budget_locked(state)
     return True
 
 

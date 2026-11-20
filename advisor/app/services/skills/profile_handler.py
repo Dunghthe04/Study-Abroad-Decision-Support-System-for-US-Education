@@ -153,6 +153,11 @@ def wants_edit(slm: SlmTinResult) -> bool:
 # Hỏi câu của mục cần sửa kèm nút, ô chọn như lúc điền hồ sơ trong chat.
 # Đang sửa mà mục đã có giá trị thì thêm nút "Giữ như cũ"
 def ask_edit_question(state: ChatState, question_id: str, text: str | None = None) -> SkillOutput:
+    # Ngân sách phụ huynh đã nhập thì không sửa được: báo rồi sang mục sửa kế tiếp (hết thì về bảng rà soát)
+    if question_id == "F1" and buttons.budget_locked(state):
+        output = next_edit_question(state)
+        output.answer = f"{buttons.locked_budget_text(state)}\n\n{output.answer}"
+        return output
     if question_id in skill_bac_hoc.QUESTION_FIELDS:
         can_skip = question_id in skill_bac_hoc.SKIPPABLE_QUESTIONS
         output = buttons.ask_with_buttons(state, question_id, text, can_skip=can_skip)

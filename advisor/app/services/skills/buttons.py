@@ -141,6 +141,21 @@ def exact_budget_mode(state: ChatState) -> bool:
     return bool(state.exact_budget) and not state.budget_unsure
 
 
+# UC-94: học sinh nhận hồ sơ phụ huynh nhập hộ có số tiền tối đa/năm chính xác (budget_usd, chỉ phụ huynh nhập hộ con managed
+# mới nhập được). Ngân sách cố định theo phụ huynh: chat không hỏi, không ghi đè; .NET cũng bỏ mọi thay đổi ngân sách
+def budget_locked(state: ChatState) -> bool:
+    locked = state.profile.get("budget_usd")
+    return not state.exact_budget and locked is not None and locked.value is not None
+
+
+def locked_budget_text(state: ChatState) -> str:
+    usd = state.profile["budget_usd"].value
+    return (
+        f"Ngân sách tối đa {float(usd):,.0f} USD/năm do phụ huynh đã nhập, cố định theo phụ huynh "
+        "nên bạn không sửa được. Cần đổi thì nhờ phụ huynh liên hệ nhé."
+    ).replace(",", ".")
+
+
 # Ô nhập số tiền chính xác: chỉ VNĐ, frontend gửi "<số> VNĐ" như học sinh tự gõ
 def exact_budget_widget() -> Widget:
     return Widget(
