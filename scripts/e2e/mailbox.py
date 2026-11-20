@@ -52,8 +52,15 @@ def wait_for(address: str, subject_contains: str = "", after_count: int = 0, tim
     raise TimeoutError(f"Không thấy thư '{subject_contains}' gửi tới {address} sau {timeout}s")
 
 
+def plain_text(message: dict) -> str:
+    """Nội dung thư bỏ thẻ HTML và khối style (mã màu như #334155 trong CSS không bị nhầm là OTP)."""
+    text = re.sub(r"(?is)<style.*?</style>", " ", message["text"])
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text)
+
+
 def otp(message: dict) -> str:
-    match = re.search(r"\b(\d{6})\b", message["text"])
+    match = re.search(r"(?<![#\w])(\d{6})(?!\w)", plain_text(message))
     if not match:
         raise ValueError("Thư không có mã OTP 6 chữ số")
     return match.group(1)
