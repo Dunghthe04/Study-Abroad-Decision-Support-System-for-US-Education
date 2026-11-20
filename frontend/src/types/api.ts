@@ -960,5 +960,6 @@ export interface AccessLogSummaryDto {
   centerDocumentViews: number;
   reportedMessageViews: number;
   slmSampleExports: number;
+  totalAllCount?: number;
 }
 

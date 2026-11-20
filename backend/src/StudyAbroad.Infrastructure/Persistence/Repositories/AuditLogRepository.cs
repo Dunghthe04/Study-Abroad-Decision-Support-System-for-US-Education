@@ -176,6 +176,8 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
         if (fromUtc.HasValue) query = query.Where(x => x.CreatedAt >= fromUtc.Value);
         if (toUtc.HasValue) query = query.Where(x => x.CreatedAt < toUtc.Value);
 
+        var totalAll = await query.CountAsync(cancellationToken);
+
         var counts = await query
             .Where(x => AuditLogConstants.SensitiveActions.Contains(x.Action))
             .GroupBy(x => x.Action)
@@ -191,7 +193,8 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
             TotalSensitiveCount: centerDocs + reportedQueue + reportedView + slmExports,
             CenterDocumentViews: centerDocs,
             ReportedMessageViews: reportedQueue + reportedView,
-            SlmSampleExports: slmExports
+            SlmSampleExports: slmExports,
+            TotalAllCount: totalAll
         );
     }
 

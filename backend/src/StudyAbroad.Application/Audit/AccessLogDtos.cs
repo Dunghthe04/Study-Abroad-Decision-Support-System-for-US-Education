@@ -42,6 +42,7 @@ public record AccessLogSummaryDto(
     int TotalSensitiveCount,
     int CenterDocumentViews,
     int ReportedMessageViews,
-    int SlmSampleExports
+    int SlmSampleExports,
+    int TotalAllCount = 0
 );
 

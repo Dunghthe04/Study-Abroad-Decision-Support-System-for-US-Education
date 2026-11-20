@@ -394,54 +394,78 @@ export function AccessLogsView() {
 
       {/* KPI Summary Cards */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Card 1: Tổng lượt nhạy cảm & Toàn hệ thống */}
         <Card size="sm" className="bg-card/80">
           <CardHeader className="pb-1">
-            <CardTitle className="text-xs font-medium text-muted-foreground">
-              Tổng lượt truy cập nhạy cảm
+            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+              <span>Tổng lượt nhạy cảm (UC-97)</span>
+              {summaryData?.totalAllCount !== undefined && summaryData.totalAllCount > 0 && (
+                <span className="text-[10px] text-muted-foreground font-normal">
+                  / {summaryData.totalAllCount} tổng số
+                </span>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <span className="text-2xl font-bold text-foreground">
-                {summaryData?.totalSensitiveCount ?? "—"}
-              </span>
+              <div>
+                <span className="text-2xl font-bold text-foreground">
+                  {summaryData?.totalSensitiveCount ?? 0}
+                </span>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  Toàn hệ thống: {summaryData?.totalAllCount ?? logsData?.totalCount ?? 0} lượt
+                </div>
+              </div>
               <ShieldAlertIcon className="size-6 text-brand" />
             </div>
           </CardContent>
         </Card>
 
+        {/* Card 2: Tài liệu xác minh */}
         <Card size="sm" className="bg-card/80">
           <CardHeader className="pb-1">
             <CardTitle className="text-xs font-medium text-muted-foreground">
-              Xem tài liệu xác minh
+              Xem tài liệu xác minh (UC-59)
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <span className="text-2xl font-bold text-reach">
-                {summaryData?.centerDocumentViews ?? "—"}
-              </span>
+              <div>
+                <span className="text-2xl font-bold text-reach">
+                  {summaryData?.centerDocumentViews ?? 0}
+                </span>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  Giấy phép & Hồ sơ trung tâm
+                </div>
+              </div>
               <FileTextIcon className="size-6 text-reach" />
             </div>
           </CardContent>
         </Card>
 
+        {/* Card 3: Đọc tin nhắn bị báo cáo */}
         <Card size="sm" className="bg-card/80">
           <CardHeader className="pb-1">
             <CardTitle className="text-xs font-medium text-muted-foreground">
-              Đọc tin nhắn bị báo cáo
+              Đọc tin nhắn bị báo cáo (UC-58)
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <span className="text-2xl font-bold text-warn">
-                {summaryData?.reportedMessageViews ?? "—"}
-              </span>
+              <div>
+                <span className="text-2xl font-bold text-warn">
+                  {summaryData?.reportedMessageViews ?? 0}
+                </span>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  Tin nhắn vi phạm & Ngữ cảnh
+                </div>
+              </div>
               <MailWarningIcon className="size-6 text-warn" />
             </div>
           </CardContent>
         </Card>
 
+        {/* Card 4: Xuất mẫu SLM */}
         <Card size="sm" className="bg-card/80">
           <CardHeader className="pb-1">
             <CardTitle className="text-xs font-medium text-muted-foreground">
@@ -450,9 +474,14 @@ export function AccessLogsView() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <span className="text-2xl font-bold text-ok">
-                {summaryData?.slmSampleExports ?? "—"}
-              </span>
+              <div>
+                <span className="text-2xl font-bold text-ok">
+                  {summaryData?.slmSampleExports ?? 0}
+                </span>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  Tập dữ liệu huấn luyện AI
+                </div>
+              </div>
               <DownloadIcon className="size-6 text-ok" />
             </div>
           </CardContent>
