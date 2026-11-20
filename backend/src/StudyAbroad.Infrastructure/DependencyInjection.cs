@@ -80,6 +80,7 @@ public static class DependencyInjection
         services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
         services.AddScoped<StudyAbroad.Application.Billing.IBillingRepository, BillingRepository>();   // gói dịch vụ: kỳ, nhóm gia đình, token đã dùng
         services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
+        services.AddScoped<StudyAbroad.Application.Billing.Orders.IOrderRepository, OrderRepository>();   // đơn hàng thanh toán
 
         // Thanh toán gói qua payOS: khóa từ appsettings "PayOs" hoặc biến môi trường PAYOS_*; "Billing" là các giá trị rút ngắn được ở máy kiểm thử
         services.Configure<StudyAbroad.Application.Billing.Payments.PayOsOptions>(options =>
