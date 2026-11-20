@@ -138,6 +138,33 @@ public class AdminOrderServiceTests
         Assert.Equal(AccountTiers.Premium, (await j.H.Entitlements.GetSummaryAsync(buyer.Id, ActAt)).Tier);
     }
 
+    [Fact]
+    public async Task F6_ActivateCommitted_ThenTheRequestIsCancelled_TheAuditEntryIsStillWritten()
+    {
+        var (j, _, admin, order) = await Mismatched();
+        using var cts = new CancellationTokenSource();
+        j.Notes.OnSent = cts.Cancel;   // admin đóng trang ngay sau khi gói đã kích hoạt (thông báo cho người mua)
+
+        await j.Admin.ActivateAsync(admin.Id, order.OrderCode, "Đã đối chiếu sao kê", ActAt, cts.Token);
+
+        Assert.Equal("order.activate", Assert.Single(j.Audit.Entries).Action);
+        Assert.Single(j.Store.Cycles);
+    }
+
+    [Fact]
+    public async Task F6_RecheckAppliedAPayment_ThenTheRequestIsCancelled_TheAuditEntryIsStillWritten()
+    {
+        var (j, _, admin, order) = await Mismatched();
+        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus(GatewayStatuses.Paid, 79_000);
+        using var cts = new CancellationTokenSource();
+        j.Notes.OnSent = cts.Cancel;
+
+        await j.Admin.RecheckAsync(admin.Id, order.OrderCode, ActAt, cts.Token);
+
+        Assert.Equal("order.recheck", Assert.Single(j.Audit.Entries).Action);
+        Assert.Equal(OrderStatuses.Paid, j.H.Order(order.OrderCode).Status);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

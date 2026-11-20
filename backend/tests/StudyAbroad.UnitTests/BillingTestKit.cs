@@ -192,6 +192,7 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
 
     public Task SaveAsync(CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();   // như EF: token đã hủy thì không lưu
         Flush();
         return Task.CompletedTask;
     }
@@ -285,6 +286,8 @@ internal sealed class TestGateway(string checksumKey) : IPaymentGateway
     public List<(long Code, string Reason)> Cancelled { get; } = [];
     public bool FailCreate { get; set; }
     public bool FailCancel { get; set; }
+    /// <summary>Chạy ngay sau khi link đã tạo ở phía cổng (ví dụ hủy token request để giả lập khách ngắt kết nối).</summary>
+    public Action? OnLinkCreated { get; set; }
     /// <summary>Trạng thái payOS theo mã đơn (job đối soát, admin kiểm lại). Mã không có thì PENDING, 0 đ.</summary>
     public Dictionary<long, GatewayStatus> Statuses { get; } = [];
     /// <summary>Mã đơn mà hỏi trạng thái sẽ ném HttpRequestException.</summary>
@@ -296,6 +299,7 @@ internal sealed class TestGateway(string checksumKey) : IPaymentGateway
         if (FailCreate)
             throw new HttpRequestException("payOS không phản hồi");
         Created.Add((orderCode, amountVnd, description, expiresAtUtc, returnUrl, cancelUrl));
+        OnLinkCreated?.Invoke();
         return Task.FromResult(new GatewayLink($"link-{orderCode}", $"https://pay.test/{orderCode}", $"QR-{orderCode}"));
     }
 
@@ -321,12 +325,15 @@ internal sealed class RecordingNotifications : INotificationService
 {
     public List<(Guid UserId, string Type, string Title, string? Body, string? Link)> Sent { get; } = [];
     public bool Throw { get; set; }
+    /// <summary>Chạy mỗi khi một thông báo được gửi (ví dụ hủy token request ngay sau khi thanh toán đã commit).</summary>
+    public Action? OnSent { get; set; }
 
     public Task NotifyAsync(Guid userId, string type, string title, string? body, string? linkUrl, CancellationToken ct = default)
     {
         if (Throw)
             throw new InvalidOperationException("thông báo lỗi");
         Sent.Add((userId, type, title, body, linkUrl));
+        OnSent?.Invoke();
         return Task.CompletedTask;
     }
 

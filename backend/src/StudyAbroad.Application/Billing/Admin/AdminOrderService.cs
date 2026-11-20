@@ -70,7 +70,8 @@ public sealed class AdminOrderService(
                 throw Rule("buyer_deleted", 409, "Tài khoản người mua đã bị xóa nên không có ai để nhận gói.");
         }
 
-        await AuditAsync(adminUserId, "order.activate", row.Order, new { orderCode, note, result = result.Status.ToString(), cycleId = result.CycleId }, ct);
+        // Gói đã kích hoạt (đã commit): dấu vết kiểm toán không theo token của request, để admin đóng trang không làm mất nó
+        await AuditAsync(adminUserId, "order.activate", row.Order, new { orderCode, note, result = result.Status.ToString(), cycleId = result.CycleId }, CancellationToken.None);
         return await LoadDtoAsync(orderCode, ct);
     }
 
@@ -94,7 +95,7 @@ public sealed class AdminOrderService(
 
         if (buyerId is { } buyer)
             await notifications.NotifyAsync(buyer, NotificationTypes.BillingPaymentMismatch, "Đơn thanh toán bị từ chối",
-                "Quản trị viên đã hủy đơn này sau khi kiểm tra khoản chuyển. Nếu bạn đã bị trừ tiền, hãy liên hệ hỗ trợ.", $"/orders/{orderCode}", ct);
+                "Quản trị viên đã hủy đơn này sau khi kiểm tra khoản chuyển. Nếu bạn đã bị trừ tiền, hãy liên hệ hỗ trợ.", $"/orders/{orderCode}", CancellationToken.None);   // đơn đã hủy (commit): báo người mua dù request đã bị hủy
         return await LoadDtoAsync(orderCode, ct);
     }
 
@@ -115,8 +116,9 @@ public sealed class AdminOrderService(
         }
 
         await reconciler.ApplyStatusAsync(orderCode, status, nowUtc, adminUserId, ct);
+        // Trạng thái payOS đã được áp dụng (đã commit): audit không theo token của request
         await AuditAsync(adminUserId, "order.recheck", row.Order,
-            new { orderCode, before = row.Order.Status, gatewayStatus = status.Status, amountPaid = status.AmountPaid }, ct);
+            new { orderCode, before = row.Order.Status, gatewayStatus = status.Status, amountPaid = status.AmountPaid }, CancellationToken.None);
         return await LoadDtoAsync(orderCode, ct);
     }
 

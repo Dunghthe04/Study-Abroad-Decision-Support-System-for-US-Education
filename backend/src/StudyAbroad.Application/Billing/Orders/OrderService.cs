@@ -96,7 +96,9 @@ public sealed partial class OrderService(
         order.GatewayTransactionId = link.PaymentLinkId;
         order.CheckoutUrl = link.CheckoutUrl;
         order.QrCode = link.QrCode;
-        await orders.SaveAsync(ct);
+        // Link payOS đã tạo ở phía cổng: lưu không theo token của request (như đường lỗi cổng ở trên), để khách ngắt kết nối
+        // không để lại đơn chờ thanh toán mà không có link
+        await orders.SaveAsync(CancellationToken.None);
         return await ToDtoAsync(order, ct);
     }
 
