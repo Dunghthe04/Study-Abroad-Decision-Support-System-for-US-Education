@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircleIcon, ArrowLeftIcon, Loader2Icon, MessageCircleIcon, SparklesIcon } from "lucide-react";
+import { AlertCircleIcon, ArrowLeftIcon, Loader2Icon, MessageCircleIcon, SaveIcon, SparklesIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProfileReviewCards } from "@/components/flow/ProfileReviewCards";
 import type { DraftTranscriptFile, ProfileFlowDraft, ProfileMetadataResponse } from "@/types/profile-flow";
@@ -32,6 +32,8 @@ interface Step6ReviewProps {
   onSubmit: () => void;
   /** Form mở từ chat: nút cuối lưu hồ sơ rồi quay về chat thay vì gợi ý trường */
   backToChat?: boolean;
+  /** Tích "Chỉ sửa hồ sơ": nút chỉ lưu, không gợi ý trường, không về chat */
+  editOnly?: boolean;
   isSubmitting: boolean;
   /** Lỗi BE trả về khi gửi hồ sơ */
   submitError?: string | null;
@@ -45,6 +47,7 @@ export function Step6Review({
   onPrev,
   onSubmit,
   backToChat = false,
+  editOnly = false,
   isSubmitting,
   submitError,
 }: Step6ReviewProps) {
@@ -108,7 +111,12 @@ export function Step6Review({
           {isSubmitting ? (
             <>
               <Loader2Icon className="size-4 animate-spin" />
-              {backToChat ? "Đang lưu hồ sơ..." : "Đang lưu và phân tích gợi ý..."}
+              {backToChat || editOnly ? "Đang lưu hồ sơ..." : "Đang lưu và phân tích gợi ý..."}
+            </>
+          ) : editOnly ? (
+            <>
+              <SaveIcon className="size-4" />
+              Lưu hồ sơ
             </>
           ) : backToChat ? (
             <>

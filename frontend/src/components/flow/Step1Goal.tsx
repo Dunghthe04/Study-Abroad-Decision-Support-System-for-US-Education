@@ -23,7 +23,7 @@ import {
   getGradeOptionsForLevel,
 } from "@/lib/profile-flow-options";
 import type { CurrentEducationLevel, EducationSystem, GoalDraft, ProfileMetadataResponse } from "@/types/profile-flow";
-import { FORM_GOAL_OPTIONS, goalsNeedMajor, type FormGoal } from "@/lib/form-goals";
+import { EDIT_ONLY, FORM_GOAL_OPTIONS, goalsNeedMajor, toggleGoal as nextGoals, type FormGoal } from "@/lib/form-goals";
 
 interface Step1GoalProps {
   data: GoalDraft;
@@ -107,7 +107,7 @@ export function Step1Goal({
   const needMajor = goalsNeedMajor(goals);
   const toggleGoal = (goal: FormGoal) => {
     if (goalsLocked) return;
-    onGoalsChange(goals.includes(goal) ? goals.filter((g) => g !== goal) : [...goals, goal]);
+    onGoalsChange(nextGoals(goals, goal));
     setGoalError(null);
   };
   const [degreeError, setDegreeError] = useState<string | null>(null);
@@ -336,11 +336,12 @@ export function Step1Goal({
             <p className="text-xs text-muted-foreground mt-0.5">
               {goalsLocked
                 ? "Theo câu bạn hỏi trong chat. Lưu hồ sơ xong chat sẽ trả lời tiếp."
-                : "Tích một hoặc nhiều việc."}
+                : "Tích một hoặc nhiều việc. Chỉ muốn cập nhật thông tin thì chọn Chỉ sửa hồ sơ."}
             </p>
           </div>
-          <div className="grid gap-2.5 sm:grid-cols-3">
-            {FORM_GOAL_OPTIONS.map((opt) => {
+          <div className={cn("grid gap-2.5", goalsLocked ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+            {/* Mở từ chat thì việc theo câu đã hỏi, không có "Chỉ sửa hồ sơ" */}
+            {FORM_GOAL_OPTIONS.filter((opt) => !goalsLocked || opt.value !== EDIT_ONLY).map((opt) => {
               const isSelected = goals.includes(opt.value);
               return (
                 <button

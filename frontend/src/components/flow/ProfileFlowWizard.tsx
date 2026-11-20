@@ -22,12 +22,15 @@ import { profileFlowApi } from "@/lib/profile-flow-api";
 import { migrateLegacyStep3 } from "@/lib/certification-utils";
 import { recommendationApi } from "@/lib/recommendation-api";
 import {
+  EDIT_ONLY,
   GOALS_CHANGED_EVENT,
   GOALS_KEY,
   goalsNeedMajor,
   goalsQuestion,
+  onlyEdit,
   onlySchoolList,
   parseGoals,
+  safeBackPath,
   type FormGoal,
 } from "@/lib/form-goals";
 import type {
@@ -137,6 +140,10 @@ export function ProfileFlowWizard() {
   // Mục tiêu ở trang 1. Mở từ chat có ?goal= thì lấy theo câu hỏi trong chat và khóa lại
   const [goals, setGoals] = useState<FormGoal[]>([]);
   const goalsLocked = fromChat && goals.length > 0;
+  // "Chỉ sửa hồ sơ": lưu xong quay về trang đã mở form (?back=), không có thì về Tổng quan
+  const editOnly = onlyEdit(goals);
+  const [backPath, setBackPath] = useState<string | null>(null);
+  const [savedNotice, setSavedNotice] = useState(false);
   const goalsRef = useRef<FormGoal[]>([]);
   useEffect(() => {
     goalsRef.current = goals;
@@ -144,7 +151,8 @@ export function ProfileFlowWizard() {
   const updateGoals = (next: FormGoal[]) => {
     setGoals(next);
     try {
-      sessionStorage.setItem(GOALS_KEY, next.join(","));
+      // "Chỉ sửa hồ sơ" chỉ dùng cho lần mở này, không giữ lại cho lần mở form sau
+      sessionStorage.setItem(GOALS_KEY, next.filter((g) => g !== EDIT_ONLY).join(","));
     } catch {
       // trình duyệt chặn storage → chỉ giữ trong trang
     }
@@ -197,7 +205,10 @@ export function ProfileFlowWizard() {
             // bỏ qua
           }
         }
-        const startGoals = parseGoals(openedFromChat ? params.get("goal") : savedGoals);
+        let startGoals = parseGoals(openedFromChat ? params.get("goal") : savedGoals).filter((g) => g !== EDIT_ONLY);
+        setBackPath(openedFromChat ? null : safeBackPath(params.get("back")));
+        // Link "Sửa hồ sơ" (Tổng quan, Tài khoản...) gửi ?goal=chi_sua: tích sẵn "Chỉ sửa hồ sơ" khi đã có hồ sơ
+        const wantEditOnly = !openedFromChat && parseGoals(params.get("goal")).includes(EDIT_ONLY);
         setGoals(startGoals);
         // Vào form trực tiếp mà chưa tích mục tiêu (nháp cũ đang ở bước sau): mở trang 1 để chọn trước
         const startStep = (saved: number) => (!openedFromChat && startGoals.length === 0 ? 1 : saved);
@@ -219,6 +230,10 @@ export function ProfileFlowWizard() {
         if (metaData) setMetadata(metaData);
 
         if (stateData) {
+          if (wantEditOnly && stateData.hasCommittedProfile) {
+            startGoals = [EDIT_ONLY];
+            setGoals(startGoals);
+          }
           setCurrentStep(startStep(stateData.currentStep || 1));
           setCompletedSteps(stateData.completedSteps ?? []);
           setDraftTranscript(stateData.draftTranscript ?? null);
@@ -482,12 +497,13 @@ export function ProfileFlowWizard() {
 
   // Thoát khỏi luồng
   const handleExit = () => {
-    router.push("/");
+    router.push(backPath ?? "/");
   };
 
   // Xác nhận commit ở bước 6
-  // Chỉ tích "Gợi ý trường" (hoặc chưa tích gì, như form cũ) thì sang trang gợi ý trường; còn lại về chat
-  const backToChat = fromChat || (goals.length > 0 && !onlySchoolList(goals));
+  // Chỉ tích "Gợi ý trường" (hoặc chưa tích gì, như form cũ) thì sang trang gợi ý trường;
+  // "Chỉ sửa hồ sơ" thì lưu rồi quay về trang cũ; còn lại về chat
+  const backToChat = fromChat || (goals.length > 0 && !onlySchoolList(goals) && !editOnly);
   const handleSubmitCommit = async () => {
     setErrorMessage(null);
     // Còn bước thiếu mục bắt buộc (vd. quay lại xoá rồi nhảy thẳng tới đây): đưa về bước đó
@@ -519,7 +535,7 @@ export function ProfileFlowWizard() {
       } catch {
         // trình duyệt chặn storage → coi như hồ sơ mới
       }
-      if (!backToChat && lastCommitted === draftJson && (await recommendationApi.getLatest().catch(() => null))) {
+      if (!backToChat && !editOnly && lastCommitted === draftJson && (await recommendationApi.getLatest().catch(() => null))) {
         router.push("/recommendations");
         return;
       }
@@ -537,6 +553,12 @@ export function ProfileFlowWizard() {
         // fromForm: form đã là bước rà soát, advisor bỏ bảng xác nhận đang treo trong chat
         if (fromChat) {
           openAssistant(CONTINUE_CHAT, { fromForm: true });
+          return;
+        }
+        // Chỉ sửa hồ sơ: báo đã lưu rồi quay về trang cũ, không chạy gợi ý, không mở chat
+        if (editOnly) {
+          setSavedNotice(true);
+          window.setTimeout(() => router.push(backPath ?? "/dashboard"), 1200);
           return;
         }
         // Vào form trực tiếp mà tích cả đánh giá hay lộ trình: gửi một câu gộp các việc đã tích, chat trả lời luôn
@@ -605,6 +627,14 @@ export function ProfileFlowWizard() {
           </button>
         </div>
       </div>
+
+      {savedNotice && (
+        <Alert className="mb-6">
+          <CheckIcon className="size-4" />
+          <AlertTitle>Đã lưu hồ sơ</AlertTitle>
+          <AlertDescription className="text-xs">Đang quay về trang trước...</AlertDescription>
+        </Alert>
+      )}
 
       {/* Lỗi khi gửi hồ sơ hiện ở bước 6, cạnh thẻ của từng bước */}
       {errorMessage && currentStep !== 6 && (
@@ -688,7 +718,8 @@ export function ProfileFlowWizard() {
                 onPrev={handlePrev}
                 onSubmit={handleSubmitCommit}
                 backToChat={backToChat}
-                isSubmitting={isSubmitting}
+                editOnly={editOnly}
+                isSubmitting={isSubmitting || savedNotice}
                 submitError={errorMessage}
               />
             )}
