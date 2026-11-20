@@ -112,6 +112,12 @@ namespace StudyAbroad.Application.Advisor
             // chỉ có lockedIntents thì Action là của ý được phép và vẫn chạy bình thường
             if (gate is null && ReferenceEquals(beforeParentGate, response))
                 locked = ChatPremiumGate.LockOf(charge, response);
+            // Advisor bản cũ có thể bỏ qua allowedIntents và trả hành động Premium cho tài khoản Free: khóa luôn, không chạy nhánh nào và không lưu gì vào nháp hồ sơ
+            if (ChatPremiumGate.BlockPremiumAction(charge, response, state) is { } blocked)
+            {
+                response = blocked.Reply;
+                locked = blocked.Lock;
+            }
             var changed = await SaveProfileToDraftAsync(userId, response, ct);
 
             // C5: học sinh bấm "Đúng rồi" ở X1 thì chat rời bảng rà soát sang B3, lúc đó lưu hồ sơ chính thức.

@@ -504,15 +504,52 @@ public class ChatServiceTests
     [Fact]
     public async Task G3_AdvisorLockedIntents_SetsLocked_AndStillRunsTheReturnedAction()
     {
-        var advisor = new FakeAdvisor("B4") { Action = "recommend", LockedIntents = ["scenario"] };
-        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+        // Free hỏi giá một trường kèm một ý Premium: ý Premium bị bỏ, ý được phép (tra số liệu trường) vẫn chạy
+        var advisor = new FakeAdvisor("B4") { Action = "school_info", ActionData = KnowledgeAction("học phí BU bao nhiêu", school: "Boston University"), LockedIntents = ["scenario"] };
+        var runner = new FakeRunner { Match = Found("bu", "Boston University"), Info = InfoOf("Boston University") };
 
         var t = await GatedChat(FreeCharge(), advisor: advisor, runner: runner);
 
-        Assert.Equal(t.UserId, runner.CalledFor);   // phần được phép vẫn chạy
-        Assert.Contains("Arizona State University", t.Res.Answer);
+        Assert.Equal("bu", runner.InfoCode);   // phần được phép vẫn chạy
+        Assert.Contains("Boston University", t.Res.Answer);
         Assert.Equal(new ChatLock(ChatLockReasons.PremiumRequired, null), t.Res.Locked);
         Assert.Null(t.Res.LockedIntents);   // nội bộ, không tới trình duyệt
+    }
+
+    [Theory]
+    [InlineData("recommend")]
+    [InlineData("explain")]
+    [InlineData("simulate")]
+    [InlineData("goal_seek")]
+    public async Task F2_FreeButAnOlderAdvisorReturnsAPremiumAction_IsLockedAndNothingRuns(string action)
+    {
+        var advisor = new FakeAdvisor("B4") { Action = action, ActionData = IowaCode, Answer = "Tạm" };
+        var runner = new FakeRunner
+        {
+            Result = new Recommendation { ItemsJson = OneSchool }, Explanation = Explanation(), GoalResult = GoalOf(), Info = InfoOf(),
+        };
+
+        var t = await GatedChat(FreeCharge(), advisor: advisor, runner: runner, stateJson: InterviewState);
+
+        Assert.Equal(new ChatLock(ChatLockReasons.PremiumRequired, null), t.Res.Locked);
+        Assert.Equal(ChatPremiumGate.PremiumRequiredAnswer, t.Res.Answer);
+        Assert.Equal("/plans", Assert.Single(t.Res.QuickReplies!).Href);
+        Assert.Null(t.Res.Widget);
+        Assert.Null(t.Res.Action);
+        AssertNoDispatch(runner);
+        Assert.Equal(InterviewState, t.Session!.StateJson);   // state của DB giữ nguyên
+    }
+
+    [Fact]
+    public async Task F2_PremiumWithTokens_StillRunsThePremiumAction()
+    {
+        var advisor = new FakeAdvisor("B4") { Action = "recommend" };
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+
+        var t = await GatedChat(PremiumCharge(), advisor: advisor, runner: runner);
+
+        Assert.Null(t.Res.Locked);
+        Assert.Equal(t.UserId, runner.CalledFor);
     }
 
     [Theory]
