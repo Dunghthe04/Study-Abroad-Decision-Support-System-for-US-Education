@@ -122,10 +122,12 @@ namespace StudyAbroad.Application.Advisor
 
             // C5: học sinh bấm "Đúng rồi" ở X1 thì chat rời bảng rà soát sang B3, lúc đó lưu hồ sơ chính thức.
             // Đánh giá chạy luôn trong lượt này nên chat có thể đã sang B4.
+            // Sửa hồ sơ đã lưu trong chat (chat vẫn ở B3, hiện lại X1) rồi xác nhận cũng lưu lại; còn ở X1 hay đang hỏi mục sửa thì chưa lưu.
             // Lưu lỗi thì giữ nguyên trạng thái cũ (vẫn ở X1) và nháp, báo lỗi để học sinh sửa rồi xác nhận lại
             var nextStep = CurrentStep(response.State);
             var profileSaved = false;
-            if (QuestionOf(state) == ReviewQuestion && IsPastReview(nextStep) && !IsPastReview(session.CurrentStep))
+            if (QuestionOf(state) == ReviewQuestion && IsPastReview(nextStep)
+                && QuestionOf(response.State) != ReviewQuestion && !IsEditing(response.State))
             {
                 var commitError = await CommitProfileAsync(userId, ct);
                 profileSaved = commitError is null;
@@ -873,17 +875,25 @@ namespace StudyAbroad.Application.Advisor
                 ? q.GetString()
                 : null;
 
+        // Đang sửa hồ sơ trong chat: state.editQueue là danh sách (rỗng = đang hỏi mục sửa cuối), null = không sửa
+        private static bool IsEditing(JsonElement? state) =>
+            state is { ValueKind: JsonValueKind.Object } s
+            && s.TryGetProperty("editQueue", out var queue) && queue.ValueKind == JsonValueKind.Array;
+
         private static string? CurrentStep(JsonElement? state) =>
             state is { ValueKind: JsonValueKind.Object } s && s.TryGetProperty("currentStep", out var step)
                 ? step.GetString()
                 : null;
 
-        // Lưu hồ sơ chính thức; trả câu lỗi tiếng Việt nếu hồ sơ chưa đủ điều kiện, null nếu lưu được
+        // Lưu hồ sơ chính thức; trả câu lỗi tiếng Việt nếu hồ sơ chưa đủ điều kiện, null nếu lưu được.
+        // Gửi kèm bản nháp lấy từ GetFlowStateAsync: sửa hồ sơ đã lưu mà giữ nguyên mọi mục thì không có nháp
+        // (lần lưu trước đã xóa), lúc đó hàm dựng nháp từ hồ sơ đã lưu nên vẫn lưu được
         private async Task<string?> CommitProfileAsync(Guid userId, CancellationToken ct)
         {
             try
             {
-                await profileFlow.CommitFlowAsync(userId, null, ct);
+                var flow = await profileFlow.GetFlowStateAsync(userId, ct);
+                await profileFlow.CommitFlowAsync(userId, new CommitProfileFlowRequest(flow.Draft), ct);
                 return null;
             }
             catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)

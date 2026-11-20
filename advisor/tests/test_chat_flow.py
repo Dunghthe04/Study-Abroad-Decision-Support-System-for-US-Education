@@ -26,11 +26,11 @@ from app.services.replies import (
     CHAT_BUTTON,
     CONTINUE_CHAT,
     FORM_BUTTON,
-    FORM_DONE,
     INTAKE_FORM,
     NOT_READY,
 )
 from app.services.skill_rules import REQUIRED_B3
+from app.services.skills.skill_ho_so import FORM_SAVED
 from tests.fakes import flow_with, tin
 
 
@@ -461,7 +461,7 @@ async def test_back_from_a_finished_form_with_nothing_waiting_asks_nothing():
 
     res = await flow.reply(request(CONTINUE_CHAT, current_step="B3", profile=confirmed(*REQUIRED_B3)))
 
-    assert res.answer == FORM_DONE and res.quick_replies == [] and counting.calls == []
+    assert res.answer == FORM_SAVED and res.quick_replies == [] and counting.calls == []
 
 
 async def test_back_from_a_half_filled_form_asks_only_the_missing_required_items():
@@ -518,7 +518,7 @@ async def test_continue_in_chat_after_saving_drops_the_review_table_too():
 
     res = await flow.reply(saved_from_form(CONTINUE_CHAT))
 
-    assert res.answer == FORM_DONE and res.state.question_id is None
+    assert res.answer == FORM_SAVED and res.state.question_id is None
 
 
 async def test_another_message_while_choosing_goes_through_the_slm():

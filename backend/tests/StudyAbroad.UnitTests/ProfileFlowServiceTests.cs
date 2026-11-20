@@ -1791,4 +1791,181 @@ public class ProfileFlowServiceTests
 
         Assert.Null(await service.GetParentChatChildrenAsync(Guid.NewGuid()));
     }
+
+    // ===== UC-94: phụ huynh nhập số tiền tối đa/năm chính xác (VND) =====
+
+    private sealed class FixedRate(decimal rate = 26_000m) : IExchangeRateProvider
+    {
+        public Task<decimal> GetVndPerUsdAsync(CancellationToken ct = default) => Task.FromResult(rate);
+    }
+
+    private static ProfileFlowService ServiceWithRate(InMemoryProfileFlowRepository repo) =>
+        new(repo, new FakeFileStorageService(), rates: new FixedRate());
+
+    private static ProfileFlowDraftDto ExactBudgetDraft(long vnd) =>
+        FullDraft() with { Step4 = new FlowFinancialDraftDto(null, "optional", AnnualBudgetVnd: vnd) };
+
+    [Fact]
+    public async Task CommitFlowAsync_ExactVnd_StoresExactMaxUsd_TierContainingIt()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = ServiceWithRate(repo);
+        var userId = Guid.NewGuid();
+
+        // 1,3 tỷ / 26.000 = 50.000 USD → hạng 50k–70k, trần là đúng 50.000 (không phải 70.000)
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(ExactBudgetDraft(1_300_000_000)));
+
+        var p = repo.Profiles.Values.Single();
+        Assert.Equal("tier_50k_70k", p.BudgetTier);
+        Assert.Equal(50_000m, p.BudgetMinUsd);
+        Assert.Equal(50_000m, p.BudgetMaxUsd);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_ExactVndAbove70k_StoresExactMax_NotUnlimited()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = ServiceWithRate(repo);
+
+        await service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(ExactBudgetDraft(2_600_000_000)));
+
+        Assert.Equal("tier_above_70k", repo.Profiles.Values.Single().BudgetTier);
+        Assert.Equal(100_000m, repo.Profiles.Values.Single().BudgetMaxUsd);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_ReopenAndSaveUnchanged_KeepsExactMax_NotOverwrittenByTier()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = ServiceWithRate(repo);
+        var userId = Guid.NewGuid();
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(ExactBudgetDraft(1_300_000_000)));
+
+        var reopened = (await service.GetFlowStateAsync(userId)).Draft;
+        Assert.Equal(new FlowFinancialDraftDto("tier_50k_70k", "optional", null, null, 50_000m), reopened.Step4);
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(reopened));
+        Assert.Equal(50_000m, repo.Profiles.Values.Single().BudgetMaxUsd);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_SwitchToTierAfterExact_UsesTierMax()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = ServiceWithRate(repo);
+        var userId = Guid.NewGuid();
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(ExactBudgetDraft(1_300_000_000)));
+        var reopened = (await service.GetFlowStateAsync(userId)).Draft;
+
+        // "Chưa biết chính xác" → chọn hạng 20k–35k: số cũ 50.000 không thuộc hạng nên bỏ, lấy trần của hạng
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(
+            reopened with { Step4 = reopened.Step4! with { AnnualBudgetTier = "tier_20k_35k" } }));
+
+        Assert.Equal("tier_20k_35k", repo.Profiles.Values.Single().BudgetTier);
+        Assert.Equal(35_000m, repo.Profiles.Values.Single().BudgetMaxUsd);
+        Assert.Null((await service.GetFlowStateAsync(userId)).Draft.Step4!.AnnualBudgetUsd);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_TierOnly_ReopenHasNoExactAmount()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = ServiceWithRate(repo);
+        var userId = Guid.NewGuid();
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft(tier: "tier_35k_50k")));
+
+        Assert.Equal(50_000m, repo.Profiles.Values.Single().BudgetMaxUsd);
+        Assert.Null((await service.GetFlowStateAsync(userId)).Draft.Step4!.AnnualBudgetUsd);
+    }
+
+    [Theory]
+    [InlineData(99_999_999L)]
+    [InlineData(10_000_000_001L)]
+    public async Task CommitFlowAsync_ExactVndOutOfRange_Throws(long vnd)
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = ServiceWithRate(repo);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CommitFlowAsync(Guid.NewGuid(), new CommitProfileFlowRequest(ExactBudgetDraft(vnd))));
+
+        Assert.Contains("100 triệu đến 10 tỷ", ex.Message);
+        Assert.Equal(0, repo.CommitCount);
+    }
+
+    // ===== UC-94: con nhận hồ sơ phụ huynh nhập số tiền chính xác → ngân sách cố định, con không sửa =====
+
+    /// <summary>Phụ huynh nhập hộ con managed 1,3 tỷ (50.000 USD); trả service + id con + danh bạ người dùng</summary>
+    private static async Task<(ProfileFlowService Service, Guid ChildId, FakeUserRepository Users)> ManagedChildWithExactBudget(
+        InMemoryProfileFlowRepository repo)
+    {
+        var childId = Guid.NewGuid();
+        var users = new FakeUserRepository();
+        users.Users.Add(new User { Id = childId, Email = "c@test.com", Role = UserRoles.Student, Status = UserStatuses.Managed, PasswordHash = "x" });
+        var service = new ProfileFlowService(repo, new FakeFileStorageService(), users: users, rates: new FixedRate());
+        await service.CommitFlowAsync(childId, new CommitProfileFlowRequest(ExactBudgetDraft(1_300_000_000)));
+        return (service, childId, users);
+    }
+
+    [Fact]
+    public async Task ManagedChild_BudgetNotLocked_ParentCanChangeIt()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var (service, childId, _) = await ManagedChildWithExactBudget(repo);
+
+        Assert.Null((await service.GetFlowStateAsync(childId)).BudgetLockedUsd);
+        await service.CommitFlowAsync(childId, new CommitProfileFlowRequest(ExactBudgetDraft(910_000_000)));
+        Assert.Equal(35_000m, repo.Profiles.Values.Single().BudgetMaxUsd);
+    }
+
+    [Fact]
+    public async Task RealStudentWithParentExactBudget_StateSaysLocked_CommitKeepsParentAmount()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var (service, childId, users) = await ManagedChildWithExactBudget(repo);
+        users.Users.Single().Status = UserStatuses.Active; // hồ sơ đã về tài khoản thật của con
+
+        var state = await service.GetFlowStateAsync(childId);
+        Assert.Equal(50_000m, state.BudgetLockedUsd);
+
+        // Đổi hạng hay gửi số VND mới đều bị bỏ, giữ đúng 50.000 USD phụ huynh đã nhập
+        await service.CommitFlowAsync(childId, new CommitProfileFlowRequest(
+            state.Draft with { Step4 = state.Draft.Step4! with { AnnualBudgetTier = "tier_20k_35k", AnnualBudgetUsd = null } }));
+        await service.CommitFlowAsync(childId, new CommitProfileFlowRequest(ExactBudgetDraft(910_000_000)));
+
+        var p = repo.Profiles.Values.Single();
+        Assert.Equal("tier_50k_70k", p.BudgetTier);
+        Assert.Equal(50_000m, p.BudgetMaxUsd);
+    }
+
+    [Fact]
+    public async Task RealStudentWithParentExactBudget_DraftFromFormOrChat_KeepsParentAmount()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var (service, childId, users) = await ManagedChildWithExactBudget(repo);
+        users.Users.Single().Status = UserStatuses.Active;
+
+        var saved = await service.SaveDraftAsync(childId, new SaveProfileDraftRequest(4, [1, 2, 3], ExactBudgetDraft(910_000_000)));
+        Assert.Equal(new FlowFinancialDraftDto("tier_50k_70k", "optional", null, null, 50_000m), saved.Draft.Step4);
+        Assert.Equal(50_000m, saved.BudgetLockedUsd);
+
+        var chat = ChatProfile("""{ "budget": { "value": "tier_20k_35k", "status": "confirmed" } }""");
+        var patched = await service.PatchDraftAsync(childId, chat, ["budget"]);
+        Assert.Equal("tier_50k_70k", patched.Draft.Step4!.AnnualBudgetTier);
+        Assert.Equal(50_000m, patched.Draft.Step4.AnnualBudgetUsd);
+    }
+
+    [Fact]
+    public async Task RealStudentWithTierOnlyBudget_NotLocked()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var users = new FakeUserRepository();
+        var userId = Guid.NewGuid();
+        users.Users.Add(new User { Id = userId, Email = "s@test.com", Role = UserRoles.Student, Status = UserStatuses.Active, PasswordHash = "x" });
+        var service = new ProfileFlowService(repo, new FakeFileStorageService(), users: users, rates: new FixedRate());
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(FullDraft(tier: "tier_35k_50k")));
+
+        Assert.Null((await service.GetFlowStateAsync(userId)).BudgetLockedUsd);
+    }
 }

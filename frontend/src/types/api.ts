@@ -1,4 +1,5 @@
 import type { ProfileFlowDraft } from "@/types/profile-flow";
+export * from "@/types/dashboard";
 
 // Mirrors the DTOs of the ASP.NET Core API (StudyAbroad.Application).
 

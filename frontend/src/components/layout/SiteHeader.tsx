@@ -71,7 +71,12 @@ export function SiteHeader() {
     { href: "/methodology", label: "Phương pháp của chúng tôi" },
     // Bảng giá công khai; nhân viên và trung tâm không mua gói nên không hiện
     ...(!canOpenAdmin && user?.role !== "center" ? [{ href: "/plans", label: "Gói dịch vụ" }] : []),
-    ...(hasOwnProfile ? [{ href: "/target-schools", label: "Trường mục tiêu" }] : []),
+    ...(hasOwnProfile
+      ? [
+          { href: "/dashboard", label: "Tổng quan" },
+          { href: "/target-schools", label: "Trường mục tiêu" },
+        ]
+      : []),
     // 2h-1: đang làm thay con thì ẩn "Con của tôi", muốn quay lại thì bấm thoát làm thay trên băng ActingAsBanner
     ...(user?.role === "parent" && !acting ? [{ href: "/parent/children", label: "Con của tôi" }] : []),
     ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ" }] : []),

@@ -1021,8 +1021,30 @@ public class ChatServiceTests
         Assert.Null(res.ProfileSaved); // chưa lưu được thì không báo trang cập nhật
     }
 
+    // Sửa hồ sơ đã lưu trong chat: chat vẫn ở B3, xác nhận lại ở X1 thì lưu chính thức lần nữa.
+    // Lưu bằng bản nháp GetFlowStateAsync trả (giữ nguyên mọi mục thì không có nháp, hàm dựng từ hồ sơ đã lưu)
     [Fact]
-    public async Task AlreadyPastReview_DoesNotCommitAgain()
+    public async Task EditedAfterSaving_ConfirmAtReview_CommitsAgain()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = AtReview(userId, "B3");
+        store.Rows.Add(session);
+        var flow = new FakeProfileFlow { HasCommittedProfile = true };
+
+        var res = await new ChatService(new FakeAdvisor("B3"), store, flow)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
+        Assert.Equal(1, flow.Commits);
+        Assert.Same(flow.Draft, flow.CommittedDraft);
+        Assert.True(res.ProfileSaved);
+    }
+
+    // Ở B3 mà vẫn ở bảng rà soát (bấm Cần sửa, Sửa trên form) hoặc đang hỏi mục sửa thì chưa lưu
+    [Theory]
+    [InlineData("X1", false)]
+    [InlineData("D2", true)]
+    public async Task AlreadyPastReview_StillReviewingOrEditing_DoesNotCommit(string questionId, bool editing)
     {
         var userId = Guid.NewGuid();
         var store = new FakeSessions();
@@ -1030,7 +1052,7 @@ public class ChatServiceTests
         store.Rows.Add(session);
         var flow = new FakeProfileFlow();
 
-        await new ChatService(new FakeAdvisor("B3"), store, flow)
+        await new ChatService(new FakeAdvisor("B3") { QuestionId = questionId, Editing = editing }, store, flow)
             .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
 
         Assert.Equal(0, flow.Commits);
@@ -3046,6 +3068,7 @@ public class ChatServiceTests
         public JsonElement? Profile { get; init; }
         public IReadOnlyList<string>? Changed { get; init; }
         public string? QuestionId { get; init; }
+        public bool Editing { get; init; }   // state.editQueue = [] (đang hỏi mục sửa)
         public IReadOnlyList<string>? Skills { get; init; }
         public string? Action { get; init; }
         public JsonElement? ActionData { get; init; }
@@ -3062,7 +3085,8 @@ public class ChatServiceTests
             if (ChatError is not null)
                 throw ChatError;
             var question = QuestionId is null ? "" : $",\"questionId\":\"{QuestionId}\"";
-            var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}}}").RootElement;
+            var editing = Editing ? ",\"editQueue\":[]" : "";
+            var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}{editing}}}").RootElement;
             return Task.FromResult(new AdvisorChatResponse(
                 Answer, [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills, Action: Action, ActionData: ActionData,
                 AiUsage: AiUsage, Slm: Slm, FormGoals: FormGoals));
@@ -3216,6 +3240,7 @@ public class ChatServiceTests
         public Exception? PatchError { get; init; }
         public Exception? CommitError { get; init; }
         public int Commits { get; private set; }
+        public ProfileFlowDraftDto? CommittedDraft { get; private set; }
         public JsonObject? PatchedProfile { get; private set; }
         public IReadOnlyCollection<string>? PatchedKeys { get; private set; }
 
@@ -3237,6 +3262,7 @@ public class ChatServiceTests
         {
             if (CommitError is not null) throw CommitError;
             Commits++;
+            CommittedDraft = request?.Draft;
             return Task.FromResult<CommitProfileFlowResponse>(null!);
         }
         public Task ClearDraftAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();

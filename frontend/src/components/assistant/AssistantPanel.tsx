@@ -31,7 +31,7 @@ import { BudgetWidget } from "./BudgetWidget";
 import { CenterCardsWidget } from "./CenterCardsWidget";
 import { ChatText } from "./ChatText";
 import { MajorWidget } from "./MajorWidget";
-import { ReviewWidget } from "./ReviewWidget";
+import { CurrentValues, ReviewWidget } from "./ReviewWidget";
 import { ScholarshipWidget } from "./ScholarshipWidget";
 import { SchoolSearchCard } from "./SchoolSearchCard";
 import { SchoolWidget } from "./SchoolWidget";
@@ -434,6 +434,8 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
         </ol>
       )}
       {turn.disclaimer && <p className="mt-2 text-xs text-muted-foreground italic">{turn.disclaimer}</p>}
+      {/* Đang sửa hồ sơ: giá trị cũ của mục đang hỏi lại */}
+      {turn.widget?.data?.current != null && <CurrentValues current={turn.widget.data.current} />}
       {turn.widget?.type === "review" && <ReviewWidget data={turn.widget.data} />}
       {/* E: chỉ chọn được ở lượt cuối, giống nút trả lời nhanh */}
       {turn.widget?.type === "major" && <MajorWidget onPick={onReply} />}

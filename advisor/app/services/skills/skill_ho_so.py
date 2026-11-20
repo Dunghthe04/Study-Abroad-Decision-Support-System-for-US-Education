@@ -31,6 +31,7 @@ from app.services.skills.validators import (
     MAX_AWARDS,
     SCHOOL_TYPES,
     AskAgain,
+    budget_tier,
     check_act,
     check_activities,
     check_activity,
@@ -40,6 +41,7 @@ from app.services.skills.validators import (
     check_budget_tier,
     check_certification,
     check_english,
+    check_exact_budget,
     check_exam_plan,
     check_gpa,
     check_sat,
@@ -105,7 +107,9 @@ CONFIRM_WORDS = {
 }
 CONFIRM_REPLY = QuickReply(label="Đúng rồi", value="Đúng rồi")
 FIX_REPLY = QuickReply(label="Cần sửa", value="Em cần sửa thông tin")
-SAVED = "Mình đã ghi nhận hồ sơ của bạn."
+SAVED = "Mình đã lưu hồ sơ của bạn thành công."
+# Lưu form mở từ chat xong, không có câu tư vấn nào đang chờ (vd chỉ sửa hồ sơ): báo đã lưu rồi hỏi muốn tư vấn gì
+FORM_SAVED = f"{SAVED} Bạn muốn mình tư vấn gì tiếp?"
 # Bấm "Cần sửa" hoặc nói muốn sửa mà chưa nói sửa gì: hỏi lại mục cần sửa thay vì hiện lại bảng
 
 # Ô chọn "sửa mục nào" khi bấm Cần sửa: tên nhóm → các câu hỏi của nhóm. Câu B1 viết thẳng mã vì skill_bac_hoc
@@ -531,6 +535,8 @@ def save_read(
         state.profile["cert_pending"] = ProfileField(value=read.pending_cert, status="unknown")
     fields = [(name, value, status) for name, value in read.values.items() if name not in LIST_FIELDS]
     fields += [(name, None, "none") for name in read.none_fields]
+    if buttons.budget_locked(state):  # ngân sách phụ huynh đã nhập: không ghi đè số học sinh nói
+        fields = [field for field in fields if field[0] != "budget"]
     written = []
     for name, value, field_status in fields:
         if keep_existing and name in state.profile:
@@ -639,6 +645,8 @@ def needed(state: ChatState, question_id: str) -> bool:
         return level is not None and level.value == "high_school"
     if question_id == "N1":
         return "preferred_states" not in state.profile
+    if question_id == "F1":
+        return not buttons.budget_locked(state)
     return True
 
 
@@ -873,6 +881,39 @@ def save_budget(state: ChatState, amount: float, currency: str | None) -> SkillO
         return ask_question(state, "F1", err.question)
     state.profile["budget"] = ProfileField(value=tier, status="confirmed")
     return ask_next(state)
+
+
+# UC-94: phụ huynh nhập hộ con managed nhập số tiền tối đa/năm chính xác (VNĐ), giống bước 4 của form.
+# Lưu số VNĐ (BE đổi USD theo tỷ giá lúc lưu và ghi làm mức trần), mức là mức chứa số đó
+def save_exact_budget(state: ChatState, amount: float, currency: str | None) -> SkillOutput:
+    try:
+        vnd = check_exact_budget(amount, currency)
+    except AskAgain as err:
+        return buttons.ask_parent_budget(state, err.question)
+    state.profile["budget_vnd"] = buttons.confirmed(vnd)
+    state.profile["budget"] = buttons.confirmed(budget_tier(vnd / exchange_rate.vnd_per_usd()))
+    state.profile.pop("budget_usd", None)
+    return ask_next(state)
+
+
+# F1 khi phụ huynh nhập hộ: nút chuyển chế độ, số tiền chính xác, hoặc chọn mức (ước tính). None: không phải các trường hợp này
+def answer_parent_budget(state: ChatState, message: str) -> SkillOutput | None:
+    if buttons.same_text(message, buttons.BUDGET_UNSURE):
+        state.budget_unsure = True
+        return ask_question(state, "F1")
+    if buttons.same_text(message, buttons.BUDGET_EXACT):
+        state.budget_unsure = False
+        return ask_question(state, "F1")
+    if buttons.exact_budget_mode(state):
+        money = read_money(message)
+        return save_exact_budget(state, *money) if money is not None else None
+    button = buttons.pressed("F1", message)
+    if button is None:
+        return None
+    # Chọn theo mức: bỏ số chính xác cũ, mức chỉ là ước tính
+    state.profile.pop("budget_vnd", None)
+    state.profile.pop("budget_usd", None)
+    return press_button(state, button)
 
 
 # Ghi một dự định thi học sinh chọn ở ô chọn E2 / E3 (bài thi, điểm mục tiêu, tháng), không gọi Qwen.
@@ -1344,6 +1385,10 @@ class HoSoHandler:
         item_text = read_item_text(question_id, message)
         if item_text is not None:
             return save_item_text(state, *item_text)
+        if question_id == "F1" and state.exact_budget:
+            parent_budget = answer_parent_budget(state, message)
+            if parent_budget is not None:
+                return parent_budget
         button = buttons.pressed(question_id, message, can_skip=question_id in OPTIONAL_QUESTIONS)
         if button is not None:
             return press_button(state, button)

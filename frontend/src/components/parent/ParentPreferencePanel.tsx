@@ -65,6 +65,7 @@ export function ParentPreferencePanel({ studentId }: { studentId: string }) {
 
   const dirty =
     saved.data == null ||
+    saved.data.hasPref === false ||   // mới có số tiền từ Tổng quan: lưu ưu tiên lần đầu
     pref.some((v, i) => v !== savedPref[i]) ||
     (budget ?? null) !== (saved.data?.budgetVnd ?? null);
   const canSave = !saved.loading && !budgetError && dirty && !saving;
