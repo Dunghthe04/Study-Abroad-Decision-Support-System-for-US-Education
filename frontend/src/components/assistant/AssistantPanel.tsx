@@ -37,6 +37,9 @@ import { SchoolSearchCard } from "./SchoolSearchCard";
 import { SchoolWidget } from "./SchoolWidget";
 import { SelectWidget } from "./SelectWidget";
 import { GoalCompareTable } from "./GoalCompareTable";
+import { PremiumLockedCard } from "@/components/billing/PremiumLockedCard";
+import { formatVnDate } from "@/lib/billing-api";
+import type { QuickReply } from "@/types/api";
 import type { SchoolGoalResult, SchoolSearchData } from "@/types/recommendation";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
@@ -47,7 +50,7 @@ export function useAssistantVisible() {
 
 /** Khung "Trợ lý USAS" cố định bên phải; màn hẹp thì phủ kín */
 export function AssistantPanel() {
-  const { open, wide, turns, loading, streaming, error, page, closePanel, toggleWide, newChat, send, retry } =
+  const { open, wide, turns, loading, streaming, error, page, closePanel, toggleWide, newChat, send, retry, subscription } =
     useAssistant();
   const visible = useAssistantVisible();
   const pathname = usePathname();
@@ -159,6 +162,19 @@ export function AssistantPanel() {
                 <Undo2Icon className="size-3.5" />
                 Về hồ sơ thật
               </button>
+            </div>
+          )}
+
+          {/* Gói đang trả lượt hỏi đã dùng 80% hoặc còn dưới 7 ngày (chỉ phần trăm, không có số token) */}
+          {subscription && (subscription.lowQuota || subscription.expiringSoon) && (
+            <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-warn-wash px-3 py-2 text-xs text-warn">
+              <TriangleAlertIcon className="size-3.5 shrink-0" />
+              <span className="min-w-0 flex-1">
+                {subscription.lowQuota ? "Bạn đã dùng hơn 80% lượt hỏi của gói." : "Gói của bạn sắp hết hạn."}
+              </span>
+              <Link href="/plans" className="shrink-0 font-semibold underline">
+                Xem gói
+              </Link>
             </div>
           )}
         </div>
@@ -345,9 +361,22 @@ function formLink(data: Record<string, unknown> | null | undefined): string {
   return goals.length > 0 ? `/analysis?from=chat&goal=${goals.join(",")}` : "/analysis?from=chat";
 }
 
+// Nút "Trả lời trong chat" của advisor (CHAT_BUTTON trong replies.py) mở phần phỏng vấn hồ sơ trong chat, chỉ dành cho Premium.
+// Đang dùng lượt miễn phí thì thay bằng link sang form hồ sơ (form không tính lượt), bỏ nút "Điền bằng form" trùng ý.
+const INTERVIEW_REPLY = "Trả lời trong chat";
+const FORM_REPLY = "Điền bằng form";
+function withoutInterview(replies: QuickReply[] | null | undefined): QuickReply[] | null | undefined {
+  if (!replies?.some((r) => r.value === INTERVIEW_REPLY)) return replies;
+  return replies
+    .filter((r) => r.value !== FORM_REPLY)
+    .map((r) => (r.value === INTERVIEW_REPLY ? { label: FORM_REPLY, value: FORM_REPLY, href: "/analysis?from=chat" } : r));
+}
+
 function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string) => void }) {
   const router = useRouter();
-  const { sendAction } = useAssistant();
+  const { sendAction, subscription } = useAssistant();
+  // Xét chargingPool chứ không xét tier: Premium đã dùng hết các gói cũng bị khóa phỏng vấn trong chat (bảng gating)
+  const quickReplies = subscription?.chargingPool === "free" ? withoutInterview(turn.quickReplies) : turn.quickReplies;
   if (turn.role === "user") {
     return (
       <div className="rounded-xl bg-brand-wash px-4 py-3 whitespace-pre-wrap text-ink">{turn.content}</div>
@@ -370,6 +399,22 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       {goalResult && <GoalCompareTable result={goalResult} basisLabel={goalBasisLabel} />}
       {/* Có thẻ trung tâm thì danh sách chữ (các dòng bắt đầu bằng "- ") đã nằm trong thẻ: chỉ hiện phần mở đầu */}
       {content && <ChatText text={turn.widget?.type === "centers" ? content.split("\n- ")[0] : content} />}
+      {/* Lượt bị khóa theo gói: câu hỏi có ý cần Premium (phần được phép vẫn trả lời ở trên), hoặc hết lượt miễn phí tháng này */}
+      {turn.locked && (
+        <PremiumLockedCard
+          className="mt-2.5"
+          title={
+            turn.locked.reason === "quota_exhausted"
+              ? "Bạn đã dùng hết lượt hỏi miễn phí của tháng này"
+              : "Câu hỏi này cần tài khoản USDSS Premium"
+          }
+          note={
+            turn.locked.reason === "quota_exhausted" && turn.locked.resetsAt
+              ? `Lượt hỏi miễn phí được làm mới ngày ${formatVnDate(turn.locked.resetsAt)}.`
+              : null
+          }
+        />
+      )}
       {turn.widget?.type === "centers" && <CenterCardsWidget data={turn.widget.data} onPick={onReply} />}
       {searchData && <SchoolSearchCard data={searchData} />}
       {turn.citations && turn.citations.length > 0 && (
@@ -442,9 +487,9 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
           Xem trên thanh kéo
         </button>
       )}
-      {onReply && turn.quickReplies && turn.quickReplies.length > 0 && (
+      {onReply && quickReplies && quickReplies.length > 0 && (
         <div className="mt-2.5 flex flex-wrap gap-2">
-          {turn.quickReplies.map((r) => (
+          {quickReplies.map((r) => (
             <button
               key={r.value}
               type="button"
