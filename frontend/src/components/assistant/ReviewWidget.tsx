@@ -229,3 +229,35 @@ export function ReviewWidget({ data }: { data?: Record<string, unknown> | null }
     </div>
   );
 }
+
+/**
+ * Sửa hồ sơ trong chat: khung "Hiện tại" ghi giá trị đang lưu của mục đang hỏi lại (widget data.current),
+ * để học sinh biết bấm "Giữ như cũ" là giữ gì
+ */
+export function CurrentValues({ current }: { current?: unknown }) {
+  const fields = obj(current) as Record<string, Field>;
+  const hasCerts = Array.isArray(obj(fields.certifications).value);
+  const rows = ROWS.flatMap(({ key, label }) => {
+    if (!(key in fields)) return [];
+    const field = obj(fields[key]) as Field;
+    if (hasCerts && CERT_ROWS.has(key) && field.value != null) return [];
+    const text = STATUS_TEXT[field.status ?? ""] ?? formatValue(key, field.value);
+    return text ? [{ key, label, text }] : [];
+  });
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="mt-2.5 rounded-xl border border-dashed border-line bg-ground px-3 py-2 text-[13px]">
+      <div className="text-xs font-semibold text-muted-foreground">Hiện tại</div>
+      <dl className="mt-1 space-y-0.5">
+        {rows.map((r) => (
+          <div key={r.key} className="flex gap-3">
+            <dt className="w-32 shrink-0 text-muted-foreground">{r.label}</dt>
+            <dd className="min-w-0 flex-1 break-words text-foreground">{r.text}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}

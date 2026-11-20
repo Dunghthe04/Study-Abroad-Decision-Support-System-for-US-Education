@@ -76,8 +76,14 @@ const GPA_PRESETS_4 = [
 export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> | null; onPick?: (text: string) => void }) {
   const { fields = [], format = "", altFormat, upload } = (data ?? {}) as SelectData;
   const [showGpaEstimator, setShowGpaEstimator] = useState(false);
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [multi, setMulti] = useState<Record<string, string[]>>({});
+  // Đang sửa hồ sơ: advisor gửi data.initial là giá trị cũ để điền sẵn (chuỗi cho ô đơn, mảng cho ô nhiều lựa chọn)
+  const initial = (data?.initial ?? {}) as Record<string, unknown>;
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.entries(initial).filter(([, v]) => typeof v === "string") as [string, string][])
+  );
+  const [multi, setMulti] = useState<Record<string, string[]>>(() =>
+    Object.fromEntries(Object.entries(initial).filter(([, v]) => Array.isArray(v)).map(([k, v]) => [k, (v as unknown[]).map(String)]))
+  );
   const [states, setStates] = useState<UsStateOption[]>([]);
   const needStates = fields.some((f) => f.kind === "states");
 

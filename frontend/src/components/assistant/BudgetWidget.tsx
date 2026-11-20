@@ -26,7 +26,9 @@ function tierForUsd(tiers: Option[], usd: number): Option | undefined {
  * chính xác bằng VNĐ, gửi "<số> VNĐ" để advisor ghi số tiền (không quy ra mức như ô thường)
  */
 function ExactBudgetInput({ data, onPick }: { data: Record<string, unknown>; onPick?: (text: string) => void }) {
-  const [amountText, setAmountText] = useState("");
+  // Đang sửa hồ sơ: điền sẵn số tiền cũ (data.initial.amountVnd)
+  const initialVnd = Number((data.initial as { amountVnd?: number } | undefined)?.amountVnd) || 0;
+  const [amountText, setAmountText] = useState(initialVnd > 0 ? String(initialVnd) : "");
   const rate = Number(data.rate) || BUDGET_RATE;
   const min = Number(data.minVnd) || 100_000_000;
   const max = Number(data.maxVnd) || 10_000_000_000;
