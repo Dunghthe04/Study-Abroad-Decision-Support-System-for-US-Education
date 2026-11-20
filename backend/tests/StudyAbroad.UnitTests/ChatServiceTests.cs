@@ -3427,6 +3427,9 @@ public class ChatServiceTests
 
         public Task<IReadOnlyList<StudyAbroad.Application.Billing.PlanDto>> GetPlansOnSaleAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<StudyAbroad.Application.Billing.LaneState> AdvanceLaneAsync(Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeAiCalls : IAiCallRepository

@@ -23,10 +23,8 @@ public interface IEntitlementService
     /// <summary>
     /// Đưa một làn (chủ, loại) tới nowUtc và trả kỳ active, kỳ queued, token đã dùng của kỳ active (thực thể đang theo dõi, đã lưu các chuyển kỳ).
     /// Làn family không còn kỳ nào thì nhóm active của chủ bị kết thúc (family_lapsed) như khi đọc quyền dùng.
-    /// Mặc định ném lỗi để các bản giả trong test không phải cài; <see cref="EntitlementService"/> là bản thật.
     /// </summary>
-    Task<LaneState> AdvanceLaneAsync(Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default) =>
-        throw new NotSupportedException();
+    Task<LaneState> AdvanceLaneAsync(Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default);
 }
 
 /// <summary>Trạng thái một làn sau khi chuyển kỳ. Active / Queued là thực thể đang theo dõi (sửa được rồi lưu).</summary>

@@ -84,6 +84,8 @@ public static class DependencyInjection
         services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
         services.AddScoped<StudyAbroad.Application.Billing.Orders.IOrderRepository, OrderRepository>();   // đơn hàng thanh toán
         services.AddScoped<StudyAbroad.Application.Billing.IBillingAccountRepository, BillingAccountRepository>();   // UC-80: gói dịch vụ khi xóa tài khoản
+        services.AddScoped<StudyAbroad.Application.Billing.Jobs.IBillingJobRepository, BillingJobRepository>();   // job nền thanh toán: đơn chờ, làn tới hạn, nhắc hạn
+        services.AddScoped<StudyAbroad.Application.Billing.Admin.IAdminOrderRepository, AdminOrderRepository>();   // UC-132: danh sách đơn cho admin
 
         // Thanh toán gói qua payOS: khóa từ appsettings "PayOs" hoặc biến môi trường PAYOS_*; "Billing" là các giá trị rút ngắn được ở máy kiểm thử
         services.Configure<StudyAbroad.Application.Billing.Payments.PayOsOptions>(options =>
@@ -172,6 +174,7 @@ public static class DependencyInjection
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountUnlockBackgroundService>();
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.OtpCleanupBackgroundService>();
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountPurgeBackgroundService>();   // [UC-80]
+        services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.BillingBackgroundService>();   // đối soát đơn, chuyển kỳ, nhắc hạn, thông báo hạn mức
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.ParentProfileMigrationBackgroundService>();   // [1.5d] chạy 1 lần lúc khởi động
 
         return services;
