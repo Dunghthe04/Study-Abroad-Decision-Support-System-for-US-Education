@@ -15,6 +15,9 @@ public static class AuditLogConstants
     // 3. Xuất mẫu huấn luyện SLM (UC-102)
     public const string SlmSampleExport = "slm_sample.export";
 
+    // 4. Xem chi tiết nội dung chat người dùng trong đợt duyệt mẫu
+    public const string ReviewBatchViewItem = "review_batch.view_item";
+
     /// <summary>Danh mục lọc: Tất cả dữ liệu nhạy cảm (mặc định của UC-97).</summary>
     public const string CategoryAllSensitive = "all_sensitive";
 
@@ -42,7 +45,8 @@ public static class AuditLogConstants
         CenterDocumentViewed,
         LeadMessageReportQueueView,
         LeadMessageReportView,
-        SlmSampleExport
+        SlmSampleExport,
+        ReviewBatchViewItem
     };
 
     public static readonly IReadOnlyList<string> ReportedMessageActions = new[]

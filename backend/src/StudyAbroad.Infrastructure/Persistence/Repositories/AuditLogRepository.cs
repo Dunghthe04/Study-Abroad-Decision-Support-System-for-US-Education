@@ -188,13 +188,15 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
         var reportedQueue = counts.FirstOrDefault(c => c.Action == AuditLogConstants.LeadMessageReportQueueView)?.Count ?? 0;
         var reportedView = counts.FirstOrDefault(c => c.Action == AuditLogConstants.LeadMessageReportView)?.Count ?? 0;
         var slmExports = counts.FirstOrDefault(c => c.Action == AuditLogConstants.SlmSampleExport)?.Count ?? 0;
+        var chatViews = counts.FirstOrDefault(c => c.Action == AuditLogConstants.ReviewBatchViewItem)?.Count ?? 0;
 
         return new AccessLogSummaryDto(
-            TotalSensitiveCount: centerDocs + reportedQueue + reportedView + slmExports,
+            TotalSensitiveCount: centerDocs + reportedQueue + reportedView + slmExports + chatViews,
             CenterDocumentViews: centerDocs,
             ReportedMessageViews: reportedQueue + reportedView,
             SlmSampleExports: slmExports,
-            TotalAllCount: totalAll
+            TotalAllCount: totalAll,
+            ChatMessageViews: chatViews
         );
     }
 
@@ -217,6 +219,7 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
         AuditLogConstants.LeadMessageReportQueueView => "Xem danh sách tin nhắn bị báo cáo",
         AuditLogConstants.LeadMessageReportView => "Đọc tin nhắn bị báo cáo và ngữ cảnh",
         AuditLogConstants.SlmSampleExport => "Xuất dữ liệu mẫu huấn luyện SLM (UC-102)",
+        AuditLogConstants.ReviewBatchViewItem => "Xem nội dung tin nhắn chat kiểm thử (đợt duyệt)",
         "parent.acting.start" => "Bắt đầu quyền đại diện con",
         "parent.acting.stop" => "Kết thúc quyền đại diện con",
         "parent.link.create" => "Gửi yêu cầu liên kết phụ huynh",

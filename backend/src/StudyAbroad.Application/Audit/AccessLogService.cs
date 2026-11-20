@@ -22,8 +22,15 @@ public class AccessLogService(IAuditLogRepository auditLogs) : IAccessLogService
         CancellationToken ct = default)
     {
         if (page < 1) page = 1;
+        if (page > 100_000) page = 100_000;
         if (pageSize < 1) pageSize = 20;
         if (pageSize > 100) pageSize = 100;
+
+        // Phòng thủ: hoán đổi nếu ngày bắt đầu lớn hơn ngày kết thúc
+        if (from.HasValue && to.HasValue && from.Value > to.Value)
+        {
+            (from, to) = (to, from);
+        }
 
         var fromUtc = StartOfDayUtc(from);
         var toUtc = StartOfDayUtc(to?.AddDays(1));
@@ -48,6 +55,12 @@ public class AccessLogService(IAuditLogRepository auditLogs) : IAccessLogService
         DateOnly? to = null,
         CancellationToken ct = default)
     {
+        // Phòng thủ: hoán đổi nếu ngày bắt đầu lớn hơn ngày kết thúc
+        if (from.HasValue && to.HasValue && from.Value > to.Value)
+        {
+            (from, to) = (to, from);
+        }
+
         var fromUtc = StartOfDayUtc(from);
         var toUtc = StartOfDayUtc(to?.AddDays(1));
 

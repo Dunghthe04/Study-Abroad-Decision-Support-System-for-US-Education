@@ -55,13 +55,13 @@ import type {
 const PAGE_SIZE = 20;
 
 const CATEGORY_TABS: { id: AccessLogCategory; label: string; icon: React.ElementType }[] = [
-  { id: "all", label: "Tất cả", icon: ShieldCheckIcon },
   { id: "all_sensitive", label: "Dữ liệu nhạy cảm (UC-97)", icon: ShieldAlertIcon },
   { id: "center_document", label: "Tài liệu trung tâm", icon: FileTextIcon },
   { id: "reported_message", label: "Tin nhắn vi phạm", icon: MailWarningIcon },
   { id: "slm_export", label: "Xuất mẫu SLM (UC-102)", icon: DownloadIcon },
   { id: "parent", label: "Đại diện & Phụ huynh", icon: UsersIcon },
   { id: "account", label: "Tài khoản & Phân quyền", icon: UserCheckIcon },
+  { id: "all", label: "Tất cả nhật ký", icon: ShieldCheckIcon },
 ];
 
 /** Ánh xạ tên thao tác sang mô tả tiếng Việt thân thiện */
@@ -71,6 +71,7 @@ const ACTION_FRIENDLY_NAMES: Record<string, string> = {
   "lead_message.report_queue_view": "Xem danh sách tin nhắn bị báo cáo",
   "lead_message.report_view": "Đọc tin nhắn bị báo cáo & ngữ cảnh",
   "slm_sample.export": "Xuất mẫu huấn luyện SLM (UC-102)",
+  "review_batch.view_item": "Xem tin nhắn chat kiểm thử (đợt duyệt)",
 
   // Phụ huynh & Đại diện
   "parent.acting.start": "Bắt đầu quyền đại diện con",
@@ -222,6 +223,9 @@ function summarizeDetail(action: string, detailJson: string | null | undefined):
     if (action === "slm_sample.export") {
       return `Định dạng: ${(data.format ?? "jsonl").toUpperCase()} • Số lượng: ${data.count ?? 0} mẫu`;
     }
+    if (action === "review_batch.view_item") {
+      return `Đợt duyệt: ${data.batchId ? String(data.batchId).slice(0, 8) + "…" : "—"}`;
+    }
     if (action === "parent.acting.stop" || action === "parent.acting.start") {
       const child = data.managedChildId ? `Con: ${String(data.managedChildId).slice(0, 8)}…` : "";
       return child || "Thao tác đại diện học sinh";
@@ -268,8 +272,8 @@ function getRoleLabel(role: string | null | undefined): string {
  * Quy tắc: Nhật ký bất biến, không sửa và không xóa được.
  */
 export function AccessLogsView() {
-  // Mặc định là "all" (Tất cả nhật ký hệ thống) để admin thấy toàn bộ ngay khi mở trang
-  const [category, setCategory] = useState<AccessLogCategory>("all");
+  // Mặc định là "all_sensitive" (Dữ liệu nhạy cảm theo đúng đặc tả UC-97)
+  const [category, setCategory] = useState<AccessLogCategory>("all_sensitive");
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
@@ -286,7 +290,7 @@ export function AccessLogsView() {
   };
 
   const handleResetFilters = () => {
-    setCategory("all");
+    setCategory("all_sensitive");
     setSearchTerm("");
     setDebouncedSearch("");
     setFromDate("");
@@ -631,8 +635,35 @@ export function AccessLogsView() {
             <TableBody>
               {items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center text-sm text-muted-foreground">
-                    {loading ? "Đang tải nhật ký..." : "Không tìm thấy dòng nhật ký nào phù hợp trong danh mục này."}
+                  <TableCell colSpan={6} className="h-44 text-center text-sm text-muted-foreground">
+                    {loading ? (
+                      "Đang tải nhật ký..."
+                    ) : category === "all_sensitive" ? (
+                      <div className="flex flex-col items-center justify-center gap-2 py-4">
+                        <ShieldCheckIcon className="size-8 text-muted-foreground/60" />
+                        <p className="font-medium text-foreground">
+                          Chưa ghi nhận lượt truy cập dữ liệu nhạy cảm nào
+                        </p>
+                        <p className="text-xs text-muted-foreground max-w-md">
+                          Chưa có lượt xem tài liệu xác minh (UC-59), đọc tin nhắn báo cáo (UC-58) hay xuất mẫu SLM (UC-102) trong khoảng thời gian này.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setCategory("all");
+                            setPage(1);
+                          }}
+                          className="mt-2 text-xs gap-1.5"
+                        >
+                          <UsersIcon className="size-3.5" />
+                          <span>Xem tất cả nhật ký hệ thống</span>
+                        </Button>
+                      </div>
+                    ) : (
+                      "Không tìm thấy dòng nhật ký nào phù hợp trong danh mục này."
+                    )}
                   </TableCell>
                 </TableRow>
               ) : (

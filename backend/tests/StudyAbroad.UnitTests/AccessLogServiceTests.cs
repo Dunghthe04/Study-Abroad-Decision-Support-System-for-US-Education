@@ -139,4 +139,32 @@ public class AccessLogServiceTests
         Assert.Contains("users", sql);
         Assert.Contains("action", sql);
     }
+
+    [Fact]
+    public async Task GetAccessLogsAsync_ClampsMaxPageToPreventIntegerOverflow()
+    {
+        var repo = new FakeAuditLogRepository();
+        var service = new AccessLogService(repo);
+
+        await service.GetAccessLogsAsync(page: int.MaxValue, pageSize: 50);
+
+        Assert.NotNull(repo.LastFilter);
+        Assert.Equal(100_000, repo.LastFilter.Page);
+    }
+
+    [Fact]
+    public async Task GetAccessLogsAsync_SwapsReversedDateRange()
+    {
+        var repo = new FakeAuditLogRepository();
+        var service = new AccessLogService(repo);
+
+        var earlierDay = new DateOnly(2026, 11, 1);
+        var laterDay = new DateOnly(2026, 11, 20);
+
+        // Truyền ngược: from = 20/11, to = 01/11
+        await service.GetAccessLogsAsync(from: laterDay, to: earlierDay);
+
+        Assert.NotNull(repo.LastFilter);
+        Assert.True(repo.LastFilter.FromUtc <= repo.LastFilter.ToUtc);
+    }
 }

@@ -43,6 +43,7 @@ public record AccessLogSummaryDto(
     int CenterDocumentViews,
     int ReportedMessageViews,
     int SlmSampleExports,
-    int TotalAllCount = 0
+    int TotalAllCount = 0,
+    int ChatMessageViews = 0
 );
 

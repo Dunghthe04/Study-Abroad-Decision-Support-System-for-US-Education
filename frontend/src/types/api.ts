@@ -961,5 +961,6 @@ export interface AccessLogSummaryDto {
   reportedMessageViews: number;
   slmSampleExports: number;
   totalAllCount?: number;
+  chatMessageViews?: number;
 }
 
