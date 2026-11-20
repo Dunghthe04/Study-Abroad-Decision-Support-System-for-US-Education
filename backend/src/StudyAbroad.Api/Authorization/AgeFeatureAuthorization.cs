@@ -46,6 +46,7 @@ public sealed class AgeFeatureHandler(IUserRepository users, IParentLinkReposito
 }
 
 /// <summary>Bị chặn theo tuổi → 403 problem+json { code: "age_restricted", feature, needParentConsent }.
+/// Cần Premium (PremiumFeatureHandler) → 403 problem+json { code: "premium_required", feature }; chặn theo tuổi đi trước nếu cả hai cùng chặn.
 /// Sai vai trò → 403 kèm câu nói rõ chức năng dành cho loại tài khoản nào.
 /// Các trường hợp khác giữ nguyên hành vi mặc định.</summary>
 public sealed class AgeRestrictionResultHandler : IAuthorizationMiddlewareResultHandler
@@ -56,11 +57,22 @@ public sealed class AgeRestrictionResultHandler : IAuthorizationMiddlewareResult
 
     public async Task HandleAsync(RequestDelegate next, HttpContext context, AuthorizationPolicy policy, PolicyAuthorizationResult authorizeResult)
     {
-        var reason = authorizeResult.Forbidden
-            ? authorizeResult.AuthorizationFailure?.FailureReasons.OfType<AgeRestrictedFailureReason>().FirstOrDefault()
-            : null;
+        var failure = authorizeResult.Forbidden ? authorizeResult.AuthorizationFailure : null;
+        var reason = failure?.FailureReasons.OfType<AgeRestrictedFailureReason>().FirstOrDefault();
         if (reason is null)
         {
+            // Tuổi đã xét trước (reason null nghĩa là không bị chặn theo tuổi); chỉ còn thiếu gói Premium thì báo mã premium_required
+            if (failure?.FailureReasons.OfType<PremiumRequiredFailureReason>().FirstOrDefault() is { } premium)
+            {
+                await WriteForbiddenAsync(context, "Cần tài khoản USDSS Premium", premium.Message, new Dictionary<string, object?>
+                {
+                    ["code"] = PremiumRequiredFailureReason.ErrorCode,
+                    ["feature"] = premium.Feature,
+                });
+                return;
+            }
+
+
             // Sai vai trò (vd. tài khoản trung tâm mở form hồ sơ học sinh): nói rõ chức năng dành cho ai.
             // Mặc định ASP.NET chỉ trả 403 "Forbidden", người dùng không hiểu vì sao bị chặn.
             var wrongRole = authorizeResult.Forbidden

@@ -141,8 +141,11 @@ builder.Services.AddAuthorization(options =>
 {
     foreach (var feature in AgeFeatures.Rules.Keys)
         options.AddPolicy(feature, policy => policy.RequireAuthenticatedUser().AddRequirements(new AgeFeatureRequirement(feature)));
+    // Gợi ý trường và mô phỏng là tính năng Premium: Free nhận 403 premium_required (đọc lịch sử, kịch bản đã lưu thì không chặn)
+    options.AddPolicy(PremiumPolicies.Recommendations, p => p.RequireAuthenticatedUser().AddRequirements(new PremiumFeatureRequirement("recommendations")));
 });
 builder.Services.AddScoped<IAuthorizationHandler, AgeFeatureHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, PremiumFeatureHandler>();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AgeRestrictionResultHandler>();
 builder.Services.AddTranscriptUploadRateLimiter();
 builder.Services.AddAuthRateLimiter();
