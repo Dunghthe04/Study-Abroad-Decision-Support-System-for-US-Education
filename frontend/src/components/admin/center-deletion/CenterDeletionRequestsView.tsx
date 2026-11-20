@@ -238,6 +238,8 @@ export function CenterDeletionRequestsView() {
                         Hạn xử lý: {formatDateTime(item.dueAt)}
                         {(() => {
                           const left = daysUntil(item.dueAt, now);
+                          // Đang giữ pháp lý thì tạm dừng đếm hạn, không báo "quá hạn" gây hiểu nhầm
+                          if (item.isLegalHold) return <span className="ml-1">tạm dừng (đang giữ pháp lý)</span>;
                           if (left < 0) return <span className="ml-1 font-medium text-risk">quá hạn {-left} ngày</span>;
                           return <span className="ml-1">còn {left} ngày</span>;
                         })()}
