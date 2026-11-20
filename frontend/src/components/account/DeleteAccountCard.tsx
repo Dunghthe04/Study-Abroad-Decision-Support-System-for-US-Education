@@ -115,7 +115,10 @@ export function DeleteAccountCard() {
               Liên kết với phụ huynh và các chia sẻ hồ sơ cho trung tâm bị hủy ngay; trung tâm thôi xem được dữ liệu của bạn. Nếu khôi phục, các liên
               kết và chia sẻ này không tự nối lại.
             </li>
-            <li>Gói đăng ký bị hủy; lịch sử giao dịch được giữ ẩn danh theo quy định kế toán.</li>
+            <li>
+              Gói của bạn dừng khi tài khoản bị xóa hẳn sau 30 ngày. Nếu bạn là chủ gói Gia đình, các thành viên vẫn dùng được tới lúc đó hoặc tới khi gói hết
+              hạn. Lịch sử giao dịch được giữ ẩn danh.
+            </li>
             <li>
               Nhật ký trò chuyện với trợ lý tư vấn đã được che thông tin cá nhân và tự xóa sau {CHAT_LOG_KEEP_DAYS} ngày.
             </li>

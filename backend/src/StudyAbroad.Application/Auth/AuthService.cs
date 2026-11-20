@@ -75,7 +75,8 @@ namespace StudyAbroad.Application.Auth
         StudyAbroad.Application.Leads.ILeadWithdrawalRepository leadWithdrawals,
         IStudyCenterRepository? studyCenters = null,
         AccountDeletionOptions? accountDeletion = null,
-        ISmsSender? smsSender = null) : IAuthService
+        ISmsSender? smsSender = null,
+        StudyAbroad.Application.Billing.IBillingAccountHooks? billingHooks = null) : IAuthService
     {
         private readonly AccountDeletionOptions _accountDeletion = accountDeletion ?? new AccountDeletionOptions();
 
@@ -1216,6 +1217,7 @@ namespace StudyAbroad.Application.Auth
 
             var now = DateTime.UtcNow;
             List<ParentLinkRevokeNotice> notices = [];
+            Func<CancellationToken, Task>? billingAfterCommit = null;
 
             await unitOfWork.ExecuteInTransactionAsync(async txCt =>
             {
@@ -1238,6 +1240,10 @@ namespace StudyAbroad.Application.Auth
 
                 // 5. Thu hồi yêu cầu liên hệ còn mở (new/contacted); lead đã hoàn tất giữ nguyên
                 var withdrawnLeads = await leadWithdrawals.WithdrawOpenLeadsAsync(user.Id, now, txCt);
+
+                // 5b. Gói dịch vụ: thành viên Gia đình rời nhóm, đơn chờ thanh toán bị hủy (nhóm và kỳ của chủ gói chạy tiếp, O1)
+                if (billingHooks is not null)
+                    billingAfterCommit = await billingHooks.OnAccountSoftDeletedAsync(user.Id, now, txCt);
 
                 // 6. Ghi vết kiểm toán, không lưu email hay tên
                 var detailJson = JsonSerializer.Serialize(new
@@ -1264,6 +1270,10 @@ namespace StudyAbroad.Application.Auth
             // Sau commit mới báo bên còn lại, để lỗi giữa chừng không gửi mail sai
             foreach (var notice in notices)
                 await emailSender.SendParentLinkChangedEmailAsync(notice.ToEmail, notice.StudentName, notice.ParentName, linked: false, ct);
+
+            // Thông báo chủ nhóm và hủy link thanh toán ở cổng: cũng chỉ sau commit
+            if (billingAfterCommit is not null)
+                await billingAfterCommit(ct);
 
             return AuthResult.Ok("Tài khoản đã chuyển sang chờ xóa. Trong 30 ngày bạn có thể đăng nhập để khôi phục.");
         }
