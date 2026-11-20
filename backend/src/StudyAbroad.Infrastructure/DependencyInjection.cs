@@ -81,6 +81,28 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Billing.IBillingRepository, BillingRepository>();   // gói dịch vụ: kỳ, nhóm gia đình, token đã dùng
         services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
 
+        // Thanh toán gói qua payOS: khóa từ appsettings "PayOs" hoặc biến môi trường PAYOS_*; "Billing" là các giá trị rút ngắn được ở máy kiểm thử
+        services.Configure<StudyAbroad.Application.Billing.Payments.PayOsOptions>(options =>
+        {
+            configuration.GetSection(StudyAbroad.Application.Billing.Payments.PayOsOptions.SectionName).Bind(options);
+            options.ClientId = NonEmpty(configuration["PAYOS_CLIENT_ID"]) ?? options.ClientId;
+            options.ApiKey = NonEmpty(configuration["PAYOS_API_KEY"]) ?? options.ApiKey;
+            options.ChecksumKey = NonEmpty(configuration["PAYOS_CHECKSUM_KEY"]) ?? options.ChecksumKey;
+            options.ReturnUrlBase = NonEmpty(configuration["PAYOS_RETURN_URL_BASE"]) ?? options.ReturnUrlBase;
+            if (bool.TryParse(configuration["PAYOS_USE_FAKE"], out var useFake)) options.UseFake = useFake;
+        });
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<StudyAbroad.Application.Billing.Payments.PayOsOptions>>().Value);
+        services.Configure<StudyAbroad.Application.Billing.BillingOptions>(configuration.GetSection(StudyAbroad.Application.Billing.BillingOptions.SectionName));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<StudyAbroad.Application.Billing.BillingOptions>>().Value);
+        services.AddSingleton<StudyAbroad.Infrastructure.Payments.FakeGatewayState>();
+        services.AddSingleton<StudyAbroad.Application.Billing.Payments.IPaymentGateway>(sp =>
+        {
+            var options = sp.GetRequiredService<StudyAbroad.Application.Billing.Payments.PayOsOptions>();
+            return options.UseFake
+                ? new StudyAbroad.Infrastructure.Payments.FakePaymentGateway(options, sp.GetRequiredService<StudyAbroad.Infrastructure.Payments.FakeGatewayState>())
+                : new StudyAbroad.Infrastructure.Payments.PayOsGateway(options, sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<StudyAbroad.Infrastructure.Payments.PayOsGateway>>());
+        });
+
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY).
         // Không có khóa mặc định ở đây: Program.cs kiểm tra độ dài khóa, chỉ dùng khóa dev khi môi trường Development.
