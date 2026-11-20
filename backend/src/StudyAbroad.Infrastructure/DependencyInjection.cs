@@ -79,6 +79,7 @@ public static class DependencyInjection
         services.AddScoped<IAiCallRepository, AiCallRepository>();
         services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
         services.AddScoped<StudyAbroad.Application.Billing.IBillingRepository, BillingRepository>();   // gói dịch vụ: kỳ, nhóm gia đình, token đã dùng
+        services.AddScoped<StudyAbroad.Application.Billing.Admin.IPlanAdminRepository, PlanAdminRepository>();   // UC-79: admin quản lý gói
         services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
 
 
