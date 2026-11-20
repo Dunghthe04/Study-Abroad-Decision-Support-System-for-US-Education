@@ -180,6 +180,34 @@ public class FamilyServiceTests
     }
 
     [Fact]
+    public async Task F4_InviteCommitted_ThenTheMailThrows_StillSucceeds_KeepsTheInvite_AndStillNotifiesTheInvitee()
+    {
+        var env = new Env();
+        env.Mail.FamilyInviteError = new InvalidOperationException("SMTP không kết nối được");
+
+        await env.Service.InviteAsync(env.Owner.Id, "hoc.sinh.a@x.vn", FamilySeats.Student, Now);   // không ném
+
+        var row = Assert.Single(env.Store.Members);
+        Assert.Equal(("hoc.sinh.a@x.vn", FamilyMemberStatuses.Pending), (row.InvitedEmail, row.Status));
+        Assert.Empty(env.Mail.SentEmails);
+        Assert.Equal(env.Student.Id, Assert.Single(env.Notes.Sent).UserId);
+    }
+
+    [Fact]
+    public async Task F4_ResendCommitted_ThenTheMailThrows_StillSucceeds_WithTheNewTokenSaved()
+    {
+        var env = new Env();
+        var (invite, oldToken) = env.AddPending("s1@x.vn", FamilySeats.Student, sentAt: Now.AddMinutes(-5), expiresAt: Now.AddDays(2));
+        env.Mail.FamilyInviteError = new InvalidOperationException("SMTP không kết nối được");
+
+        await env.Service.ResendInviteAsync(env.Owner.Id, invite.Id, Now);   // không ném
+
+        Assert.NotEqual(FamilyInviteToken.Hash(oldToken), invite.TokenHash);   // lượt gửi lại đã commit (token mới, link cũ hết tác dụng)
+        Assert.Equal((Now.AddDays(7), 2), (invite.ExpiresAt!.Value, invite.InviteSentCount));
+        Assert.Empty(env.Mail.SentEmails);
+    }
+
+    [Fact]
     public async Task F4_InviteOwnEmail_InvalidEmail_AnyCase()
     {
         var env = new Env();
