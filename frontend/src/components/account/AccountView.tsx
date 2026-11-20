@@ -19,6 +19,10 @@ import { ParentAcademicSection, StudentParentOffers } from "@/components/account
 import { PersonalInfoCard } from "@/components/account/PersonalInfoCard";
 import { SentLeadsCard } from "@/components/account/SentLeadsCard";
 import { SubscriptionCard } from "@/components/account/SubscriptionCard";
+import { FamilyCard } from "@/components/account/FamilyCard";
+import { billingApi } from "@/lib/billing-api";
+import { useFetched } from "@/lib/use-fetched";
+import type { SubscriptionSummaryDto } from "@/types/billing";
 import {
   ArrowRightIcon,
   BookmarkCheckIcon,
@@ -26,6 +30,7 @@ import {
   Building2Icon,
   CrownIcon,
   GraduationCapIcon,
+  HeartHandshakeIcon,
   KeyRoundIcon,
   LogOutIcon,
   SendIcon,
@@ -37,7 +42,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-type SectionId = "personal" | "subscription" | "academic" | "parent-links" | "sent-leads" | "password";
+type SectionId = "personal" | "subscription" | "family" | "academic" | "parent-links" | "sent-leads" | "password";
 
 interface SectionItem {
   id: SectionId;
@@ -45,10 +50,10 @@ interface SectionItem {
   icon: LucideIcon;
 }
 
-// Mục đang mở lưu trên hash (#password...) để tải lại trang hoặc gửi link vẫn mở đúng mục
-function readSectionFromHash(available: SectionItem[]): SectionId {
-  const hash = typeof window === "undefined" ? "" : window.location.hash.slice(1);
-  return available.find((s) => s.id === hash)?.id ?? "personal";
+// Mục đang mở lưu trên hash (#password...) để tải lại trang hoặc gửi link vẫn mở đúng mục.
+// Giữ nguyên hash được yêu cầu: mục "family" chỉ có sau khi tải GET subscription, nên mục đang mở được suy ra khi render.
+function readHash(): string {
+  return typeof window === "undefined" ? "" : window.location.hash.slice(1);
 }
 
 export function AccountView() {
@@ -58,11 +63,22 @@ export function AccountView() {
 
   const isStudentOrParent = Boolean(user && (user.role === "student" || user.role === "parent"));
 
+  // Mục Gói Gia đình chỉ hiện khi GET subscription có family (chủ hoặc thành viên của gói còn kỳ).
+  // Đổi gì trong gói Gia đình thì tăng billingVersion để tải lại cả subscription lẫn family.
+  const [billingVersion, setBillingVersion] = useState(0);
+  const reloadBilling = useCallback(() => setBillingVersion((v) => v + 1), []);
+  const sub = useFetched<SubscriptionSummaryDto | null>(
+    isStudentOrParent ? `sub:${user?.id}:${billingVersion}` : "none",
+    () => (isStudentOrParent ? billingApi.subscription() : Promise.resolve(null)),
+  );
+  const hasFamily = Boolean(sub.data?.family);
+
   const sections: SectionItem[] = [
     { id: "personal", label: "Thông tin cá nhân", icon: UserIcon },
     ...(isStudentOrParent
       ? [
           { id: "subscription" as const, label: "Gói dịch vụ", icon: CrownIcon },
+          ...(hasFamily ? [{ id: "family" as const, label: "Gói Gia đình", icon: HeartHandshakeIcon }] : []),
           { id: "academic" as const, label: "Hồ sơ học thuật", icon: BookOpenIcon },
           {
             id: "parent-links" as const,
@@ -76,18 +92,15 @@ export function AccountView() {
     { id: "password", label: "Bảo mật tài khoản", icon: KeyRoundIcon },
   ];
 
-  const [activeSection, setActiveSection] = useState<SectionId>(() => readSectionFromHash(sections));
+  const [requestedSection, setActiveSection] = useState<string>(readHash);
+  const activeSection: SectionId = sections.find((s) => s.id === requestedSection)?.id ?? "personal";
 
   // Menu tài khoản ở thanh đầu trang trỏ tới /account#academic, #password...: đang ở trang này thì chỉ đổi hash, không tải lại
-  const sectionIds = sections.map((s) => s.id).join(",");
   useEffect(() => {
-    const onHash = () => {
-      const id = window.location.hash.slice(1);
-      if (sectionIds.split(",").includes(id)) setActiveSection(id as SectionId);
-    };
+    const onHash = () => setActiveSection(readHash());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
-  }, [sectionIds]);
+  }, []);
 
   // Trạng thái Hồ sơ học thuật
   const [profile, setProfile] = useState<AcademicProfileResponse | null>(null);
@@ -274,6 +287,7 @@ export function AccountView() {
           <section className="min-w-0">
             {activeSection === "personal" && <PersonalInfoCard />}
             {activeSection === "subscription" && <SubscriptionCard />}
+            {activeSection === "family" && <FamilyCard version={billingVersion} onChanged={reloadBilling} />}
             {activeSection === "academic" &&
               (parentOverview ? (
                 <ParentAcademicSection overview={parentOverview} onChanged={reloadProfile} />
