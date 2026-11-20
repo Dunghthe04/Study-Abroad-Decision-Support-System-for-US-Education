@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -77,6 +77,7 @@ public static class DependencyInjection
         // Nhật ký các lần gọi AI (token, thời gian, lỗi): chỉ số đo, không có nội dung chat nên luôn bật, không theo Chat:StoreMessages
         services.AddScoped<IAiCallRepository, AiCallRepository>();
         services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
+        services.AddScoped<StudyAbroad.Application.Billing.IBillingRepository, BillingRepository>();   // gói dịch vụ: kỳ, nhóm gia đình, token đã dùng
         services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
 
 
