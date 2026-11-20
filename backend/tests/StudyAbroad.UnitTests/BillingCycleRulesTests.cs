@@ -136,7 +136,7 @@ public class BillingCycleRulesTests
         ApplyAll(CycleRules.Advance(active, queued, 500_000, now));
 
         Assert.Equal((CycleStatuses.Ended, CycleEndReasons.ExhaustedRollover, now), (active.Status, active.EndedReason, active.EndedAt));
-        Assert.Equal(Utc(2026, 12, 1), active.EndsAt);   // ngày còn lại bị bỏ (D10), không sửa end date cũ
+        Assert.Equal(now, active.EndsAt);   // ngày còn lại bị bỏ (D10): kỳ cũ hết hạn đúng lúc đổi kỳ, như đường thanh toán (EndsAt = EndedAt)
         Assert.Equal((CycleStatuses.Active, now, now.AddDays(30)), (queued.Status, queued.StartsAt, queued.EndsAt));
     }
 

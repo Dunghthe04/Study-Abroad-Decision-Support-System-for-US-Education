@@ -150,7 +150,7 @@ public class EntitlementServiceTests
 
         var summary = await Service(repo).GetSummaryAsync(Me, Now);
 
-        Assert.Equal(CycleEndReasons.ExhaustedRollover, old.EndedReason);
+        Assert.Equal((CycleEndReasons.ExhaustedRollover, (DateTime?)Now, (DateTime?)Now), (old.EndedReason, old.EndedAt, old.EndsAt));   // kỳ cũ hết hạn đúng lúc đổi kỳ (như đường thanh toán)
         Assert.Equal((Now, Now.AddDays(30)), (renewal.StartsAt!.Value, renewal.EndsAt!.Value));
         Assert.Equal((0, false, (QueuedCycleDto?)null), (summary.Personal!.UsedPercent, summary.Personal.Exhausted, summary.Personal.Queued));
     }
