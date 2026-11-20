@@ -41,7 +41,7 @@ export function AdminUserMenu() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
+      <DropdownMenuTrigger className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
         <span
           aria-hidden="true"
           className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-muted-foreground"

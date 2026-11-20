@@ -32,16 +32,19 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           href="/admin"
           aria-label={brandLabel}
           title={brandLabel}
-          className="flex w-fit items-center px-4 py-3 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none sm:pl-6 md:py-3"
+          className="flex w-fit items-center gap-1 px-4 py-3 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none sm:pl-6 md:py-2.5"
         >
           <Image
             src="/icons/USDSS.png"
-            alt={brandLabel}
-            width={48}
-            height={48}
+            alt="USDSS"
+            width={44}
+            height={44}
             priority
-            className="-ml-2 size-12 shrink-0 object-contain"
+            className="-ml-1.5 size-11 shrink-0 object-contain"
           />
+          <span className="font-heading text-xl font-semibold tracking-tight text-brand-ink">
+            Console
+          </span>
         </Link>
 
         <nav
@@ -50,13 +53,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         >
           <div className="flex gap-1 pr-3 pb-2 md:flex-col md:gap-0 md:pr-0 md:pb-0">
             {sections.map((section) => (
-              <div key={section.id} className="flex shrink-0 gap-1 md:flex-col md:gap-0.5">
+              <div key={section.id} className="flex shrink-0 gap-1 md:flex-col md:gap-1">
                 {section.title && (
-                  <div className="hidden px-4 pt-3 pb-0.5 text-[13px] leading-4 font-medium text-muted-foreground sm:pl-6 md:block">
+                  <div className="hidden px-4 pt-3 pb-0.5 text-[13px] leading-4 font-medium text-muted-foreground/60 sm:pl-6 md:block">
                     {section.title}
                   </div>
                 )}
-                <ul className="flex gap-1 md:flex-col md:gap-0.5">
+                <ul className="flex gap-1 md:flex-col md:gap-1">
                   {section.items.map((item) => {
                     const active = isActive(item.href);
                     const Icon = active ? item.filledIcon : item.icon;
@@ -69,7 +72,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                             "flex items-center gap-2.5 whitespace-nowrap rounded-l-none rounded-r-full py-1.5 pr-4 pl-4 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none sm:pl-6",
                             active
                               ? "bg-brand-wash font-semibold text-brand"
-                              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                              : "text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground",
                           )}
                         >
                           <Icon className="size-[18px] shrink-0" />
