@@ -21,7 +21,6 @@ export default async function AdminParametersPage() {
   return (
     <AdminSection href="/admin/parameters">
       <div className="flex flex-col gap-6">
-        <h1 className="text-h2">Tham số hệ thống</h1>
         <GradeScaleSettings />
         <section className="rounded-xl border border-line bg-surface p-5 sm:p-6">
           <h2 className="font-sans text-lg font-semibold text-foreground">Tham số thuật toán gợi ý trường</h2>

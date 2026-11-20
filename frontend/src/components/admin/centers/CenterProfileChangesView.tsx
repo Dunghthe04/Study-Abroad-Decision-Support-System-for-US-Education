@@ -158,15 +158,6 @@ export function CenterProfileChangesView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-h2">Kiểm tra thay đổi trung tâm</h1>
-        <p className="text-sm text-ink-2">
-          Website và fanpage do trung tâm tự sửa được lưu ngay nhưng cần kiểm tra. Đối chiếu giá trị cũ và mới rồi chọn Đạt hoặc Không đạt
-          (bắt buộc nêu lý do, trung tâm nhận thông báo để sửa lại). Nếu vi phạm, ẩn trung tâm hoặc mở trang trung tâm để thu hồi dấu xác minh.
-          Thay đổi tên pháp lý, mã số doanh nghiệp và tài liệu đi qua hàng đợi duyệt hồ sơ xác minh.
-        </p>
-      </header>
-
       <Segmented label="Lọc thay đổi" value={filter} options={FILTER_OPTIONS} onChange={changeFilter} />
 
       {queue.error ? (

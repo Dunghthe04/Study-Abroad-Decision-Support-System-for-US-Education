@@ -528,13 +528,6 @@ export function AdminCenterListView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <header className="shrink-0">
-        <h1 className="text-h2">Trung tâm tư vấn</h1>
-        <p className="text-sm text-ink-2 mt-1">
-          Danh sách đơn vị tư vấn du học, hồ sơ pháp lý và kiểm duyệt
-        </p>
-      </header>
-
       <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <DataTable
