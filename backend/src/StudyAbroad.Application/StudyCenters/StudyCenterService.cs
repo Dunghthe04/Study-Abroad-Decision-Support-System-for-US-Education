@@ -996,11 +996,7 @@ public class StudyCenterService(
         var verified = center.VerificationStatus == CenterVerificationStatuses.Verified;
         var touchesLegal = TouchesLegalFields(center, request);
 
-        // Thông tin pháp lý chỉ sửa được khi chưa xác minh hoặc bị Moderator từ chối (UC-59).
-        // Đã xác minh: khóa. Đang chờ duyệt: khóa tới khi có kết quả.
-        if (verified && touchesLegal)
-            return UpdateStudyCenterResult.Fail(
-                "Trung tâm đã được xác minh nên không thể sửa thông tin pháp lý (tên, mã số thuế, giấy phép...). Vui lòng nộp lại hồ sơ xác minh nếu cần thay đổi.");
+        // Đang chờ duyệt: chưa cho đổi thông tin pháp lý tới khi có kết quả (UC-59).
         if (pendingReview && touchesLegal)
             return UpdateStudyCenterResult.Fail(
                 "Hồ sơ xác minh đang chờ duyệt nên chưa thể sửa thông tin pháp lý (tên, mã số thuế, giấy phép...). Vui lòng chờ kết quả xét duyệt.");
@@ -1022,8 +1018,8 @@ public class StudyCenterService(
 
         var before = SnapshotProfile(center);
 
-        // Thông tin pháp lý: chỉ trung tâm chưa xác minh / bị từ chối tới được đây (đã xác minh, chờ duyệt bị chặn ở trên).
-        if (!verified && !pendingReview)
+        // Thông tin pháp lý: trung tâm chưa xác minh sửa tự do; đã xác minh chỉ kiểm tra khi thực sự đổi.
+        if (!pendingReview && (!verified || touchesLegal))
         {
             var taxCodeInput = request.TaxCode is null ? null : request.TaxCode.Trim().Replace(" ", "").ToUpperInvariant();
             if (!string.IsNullOrEmpty(taxCodeInput) && !Regex.IsMatch(taxCodeInput, @"^\d{10}(-\d{3})?$"))
