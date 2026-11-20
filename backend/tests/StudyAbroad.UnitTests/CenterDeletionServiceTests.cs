@@ -89,16 +89,20 @@ public class CenterDeletionServiceTests
             DeletedFileFolders.Add(studyCenterId);
             return Task.CompletedTask;
         }
-    }
 
-    private sealed class FakeAccountPurge : IAccountPurgeRepository
-    {
-        public List<Guid> DeletedUsers { get; } = [];
-        public Task<List<Guid>> GetDueUserIdsAsync(DateTime deletedBefore, IReadOnlyCollection<string> roles, CancellationToken ct = default) => Task.FromResult(new List<Guid>());
-        public Task<bool> LockIfStillDueAsync(Guid userId, DateTime deletedBefore, IReadOnlyCollection<string> roles, CancellationToken ct = default) => Task.FromResult(false);
-        public Task<int> ClearPaymentPayloadsAsync(Guid userId, CancellationToken ct = default) => Task.FromResult(0);
-        public Task<ForumPurgeResult> PurgeForumPostsAsync(Guid userId, DateTime now, CancellationToken ct = default) => Task.FromResult(new ForumPurgeResult(0, 0));
-        public Task DeleteUserAsync(Guid userId, CancellationToken ct = default) { DeletedUsers.Add(userId); return Task.CompletedTask; }
+        public int OpenReports { get; set; }
+        public Task<int> CountOpenReportsAsync(Guid studyCenterId, CancellationToken ct = default) => Task.FromResult(OpenReports);
+
+        /// <summary>Mô phỏng Admin bật giữ pháp lý giữa lần đọc và lúc khóa dòng trong transaction.</summary>
+        public bool HeldAtLock { get; set; }
+        public Task<bool> LockCenterIfPurgeableAsync(Guid studyCenterId, CancellationToken ct = default) => Task.FromResult(!HeldAtLock);
+
+        public List<Guid> AnonymizedUsers { get; } = [];
+        public Task AnonymizeOwnerAccountAsync(Guid userId, DateTime now, CancellationToken ct = default)
+        {
+            AnonymizedUsers.Add(userId);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class Setup
@@ -107,7 +111,6 @@ public class CenterDeletionServiceTests
         public FakeRequestRepo Requests { get; } = new();
         public FakeWorkRepo Work { get; }
         public FakeUserRepository Users { get; } = new();
-        public FakeAccountPurge Purge { get; } = new();
         public FakeAuditLogRepository Audit { get; } = new();
         public FakeUnitOfWork UnitOfWork { get; } = new();
         public FakeEmailSender Email { get; } = new();
@@ -126,7 +129,7 @@ public class CenterDeletionServiceTests
             Centers.Centers.Add(Center);
             Request = new CenterDeletionRequest { StudyCenterId = Center.Id, RequestedByUserId = Owner.Id, Reason = "Ngừng hoạt động" };
             Requests.Items.Add(Request);
-            Service = new CenterDeletionService(Requests, Work, Centers, Users, Purge, Audit, UnitOfWork, Email,
+            Service = new CenterDeletionService(Requests, Work, Centers, Users, Audit, UnitOfWork, Email,
                 new AccountDeletionOptions { RetentionPeriod = TimeSpan.FromDays(30) });
         }
     }
@@ -204,7 +207,7 @@ public class CenterDeletionServiceTests
     }
 
     [Fact]
-    public async Task PurgeDue_OnlyAfterDeadline_DeletesDataAndOwnerThenCompletes()
+    public async Task PurgeDue_OnlyAfterDeadline_DeletesDataAnonymizesOwnerThenCompletes()
     {
         var s = new Setup();
         await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
@@ -219,7 +222,8 @@ public class CenterDeletionServiceTests
         Assert.Equal(1, due.Purged);
         Assert.Empty(due.Failures);
         Assert.Equal([s.Center.Id], s.Work.PurgedCenters);
-        Assert.Equal([s.Owner.Id], s.Purge.DeletedUsers);
+        // Tài khoản chủ được ẩn danh hóa, không xóa dòng, để tin nhắn trung tâm đã gửi còn làm bằng chứng
+        Assert.Equal([s.Owner.Id], s.Work.AnonymizedUsers);
         Assert.Equal([s.Center.Id], s.Work.DeletedFileFolders);
         Assert.Equal(CenterDeletionRequestStatuses.Completed, s.Request.Status);
         Assert.NotNull(s.Request.CompletedAt);
@@ -229,7 +233,7 @@ public class CenterDeletionServiceTests
         // Chạy lại không xóa lần hai
         var rerun = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(40));
         Assert.Equal(0, rerun.Purged);
-        Assert.Single(s.Purge.DeletedUsers);
+        Assert.Single(s.Work.AnonymizedUsers);
     }
 
     [Fact]
@@ -244,8 +248,146 @@ public class CenterDeletionServiceTests
 
         Assert.Equal(0, result.Purged);
         Assert.Empty(s.Work.PurgedCenters);
-        Assert.Empty(s.Purge.DeletedUsers);
+        Assert.Empty(s.Work.AnonymizedUsers);
         Assert.Equal(CenterDeletionRequestStatuses.Approved, s.Request.Status);
+    }
+
+    [Fact]
+    public async Task PurgeDue_SkipsWhenOnlyOwnerAccountIsHeld()
+    {
+        var s = new Setup();
+        await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
+        s.Owner.IsLegalHold = true;
+
+        var result = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(35));
+
+        Assert.Equal(0, result.Purged);
+        Assert.Empty(s.Work.PurgedCenters);
+        Assert.Equal(CenterDeletionRequestStatuses.Approved, s.Request.Status);
+    }
+
+    [Fact]
+    public async Task PurgeDue_HoldSetDuringRun_IsRecheckedInsideTransaction()
+    {
+        var s = new Setup();
+        await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
+        s.Email.CenterDeletionEmails.Clear();
+        s.Work.HeldAtLock = true;
+
+        var result = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(35));
+
+        Assert.Equal(0, result.Purged);
+        Assert.Empty(s.Work.PurgedCenters);
+        Assert.Empty(s.Work.AnonymizedUsers);
+        Assert.Empty(s.Work.DeletedFileFolders);
+        Assert.Empty(s.Email.CenterDeletionEmails);
+        Assert.Equal(CenterDeletionRequestStatuses.Approved, s.Request.Status);
+        Assert.DoesNotContain(s.Audit.Entries, e => e.Action == "center.purge");
+    }
+
+    [Fact]
+    public async Task Approve_IsBlockedWhileCenterOrOwnerIsUnderLegalHold()
+    {
+        var s = new Setup();
+        s.Center.IsLegalHold = true;
+
+        var blocked = await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
+        Assert.False(blocked.Success);
+        Assert.Contains("giữ pháp lý", blocked.Error);
+        Assert.Equal(CenterDeletionRequestStatuses.Pending, s.Request.Status);
+        Assert.Equal(UserStatuses.Active, s.Owner.Status);
+        Assert.True(s.Center.IsActive);
+        Assert.Empty(s.Audit.Entries);
+
+        s.Center.IsLegalHold = false;
+        s.Owner.IsLegalHold = true;
+        Assert.False((await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok")).Success);
+
+        // Vẫn được từ chối yêu cầu khi đang giữ
+        Assert.True((await s.Service.RejectAsync(Guid.NewGuid(), s.Request.Id, "Đang có khiếu nại cần xác minh")).Success);
+    }
+
+    [Fact]
+    public async Task Approve_RecordsOpenReportCountInAudit()
+    {
+        var s = new Setup();
+        s.Work.OpenReports = 3;
+
+        Assert.True((await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok")).Success);
+
+        Assert.Contains("\"openReports\":3", Assert.Single(s.Audit.Entries).DetailJson);
+    }
+
+    private static string? Detail(AuditLog audit, string property) =>
+        System.Text.Json.JsonDocument.Parse(audit.DetailJson!).RootElement.GetProperty(property).GetString();
+
+    [Fact]
+    public async Task SetLegalHold_HoldsCenterAndOwner_AuditsReason_AndBlocksDeletion()
+    {
+        var s = new Setup();
+        var adminId = Guid.NewGuid();
+
+        Assert.False((await s.Service.SetLegalHoldAsync(adminId, s.Center.Id, "  ")).Success);
+        Assert.False((await s.Service.SetLegalHoldAsync(adminId, s.Center.Id, new string('x', 501))).Success);
+        Assert.True((await s.Service.SetLegalHoldAsync(adminId, Guid.NewGuid(), "x")).NotFound);
+
+        var result = await s.Service.SetLegalHoldAsync(adminId, s.Center.Id, "  Công văn số 12/CSĐT về khiếu nại lừa đảo  ");
+
+        Assert.True(result.Success);
+        Assert.True(result.Hold!.IsLegalHold);
+        Assert.Equal("Công văn số 12/CSĐT về khiếu nại lừa đảo", result.Hold.Reason);
+        Assert.Equal(s.Request.Id, result.Hold.OpenDeletionRequestId);
+        Assert.True(s.Center.IsLegalHold);
+        Assert.Equal(adminId, s.Center.LegalHoldByUserId);
+        Assert.NotNull(s.Center.LegalHoldAt);
+        Assert.True(s.Owner.IsLegalHold);
+        Assert.Equal("Công văn số 12/CSĐT về khiếu nại lừa đảo", s.Owner.LegalHoldReason);
+        var audit = Assert.Single(s.Audit.Entries);
+        Assert.Equal(("center.legal_hold_set", adminId, s.Center.Id.ToString()), (audit.Action, audit.ActorUserId, audit.EntityId));
+        Assert.Equal("Công văn số 12/CSĐT về khiếu nại lừa đảo", Detail(audit, "reason"));
+
+        Assert.False((await s.Service.SetLegalHoldAsync(adminId, s.Center.Id, "lần hai")).Success);
+        Assert.False((await s.Service.ApproveAsync(adminId, s.Request.Id, "ok")).Success);
+    }
+
+    [Fact]
+    public async Task ReleaseLegalHold_RequiresReason_ClearsBoth_AuditsAndAllowsPurgeAgain()
+    {
+        var s = new Setup();
+        var adminId = Guid.NewGuid();
+        await s.Service.ApproveAsync(adminId, s.Request.Id, "ok");
+        await s.Service.SetLegalHoldAsync(adminId, s.Center.Id, "Đang điều tra");
+        Assert.Equal(0, (await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(35))).Purged);
+
+        Assert.False((await s.Service.ReleaseLegalHoldAsync(adminId, s.Center.Id, "")).Success);
+        var released = await s.Service.ReleaseLegalHoldAsync(adminId, s.Center.Id, "Cơ quan điều tra kết luận không có vi phạm");
+
+        Assert.True(released.Success);
+        Assert.False(released.Hold!.IsLegalHold);
+        Assert.False(s.Center.IsLegalHold);
+        Assert.Null(s.Center.LegalHoldReason);
+        Assert.Null(s.Center.LegalHoldAt);
+        Assert.False(s.Owner.IsLegalHold);
+        var audit = s.Audit.Entries.Last();
+        Assert.Equal("center.legal_hold_release", audit.Action);
+        Assert.Equal("Đang điều tra", Detail(audit, "previousReason"));   // giữ lại lý do cũ để truy vết
+        Assert.Equal("Cơ quan điều tra kết luận không có vi phạm", Detail(audit, "reason"));
+
+        Assert.False((await s.Service.ReleaseLegalHoldAsync(adminId, s.Center.Id, "lần hai")).Success);
+        Assert.Equal(1, (await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(35))).Purged);
+    }
+
+    [Fact]
+    public async Task SetLegalHold_RefusedAfterDataWasPurged()
+    {
+        var s = new Setup();
+        await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
+        await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(35));
+
+        var result = await s.Service.SetLegalHoldAsync(Guid.NewGuid(), s.Center.Id, "Muộn");
+
+        Assert.False(result.Success);
+        Assert.False(s.Center.IsLegalHold);
     }
 
     [Fact]
@@ -261,11 +403,14 @@ public class CenterDeletionServiceTests
     }
 
     [Fact]
-    public void Controller_IsAdminOnly()
+    public void Controllers_AreAdminOnly()
     {
-        var attr = typeof(AdminCenterDeletionRequestsController)
-            .GetCustomAttributes(typeof(AuthorizeAttribute), false)
-            .Cast<AuthorizeAttribute>().Single();
-        Assert.Equal(UserRoles.Admin, attr.Roles);
+        foreach (var controller in new[] { typeof(AdminCenterDeletionRequestsController), typeof(AdminCenterLegalHoldController) })
+        {
+            var attr = controller
+                .GetCustomAttributes(typeof(AuthorizeAttribute), false)
+                .Cast<AuthorizeAttribute>().Single();
+            Assert.Equal(UserRoles.Admin, attr.Roles);
+        }
     }
 }
