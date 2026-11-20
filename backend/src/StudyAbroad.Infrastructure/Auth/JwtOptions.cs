@@ -7,5 +7,6 @@ public class JwtOptions
     public string SecretKey { get; set; } = string.Empty;
     public string Issuer { get; set; } = "USAS";
     public string Audience { get; set; } = "USAS-Clients";
-    public int ExpiryDays { get; set; } = 7;
+    /// <summary>Access token sống ngắn, hết thì frontend gọi /auth/refresh để lấy token mới.</summary>
+    public int AccessTokenMinutes { get; set; } = 15;
 }

@@ -34,6 +34,9 @@ const ROWS: { key: string; label: string }[] = [
   { key: "english_plan", label: "Kế hoạch tiếng Anh" },
   { key: "standardized_plan", label: "Kế hoạch chuẩn hóa" },
   { key: "budget", label: "Ngân sách / năm" },
+  // UC-94: số tiền tối đa/năm chính xác phụ huynh nhập hộ (chưa lưu thì VNĐ, đã lưu thì USD chốt theo tỷ giá)
+  { key: "budget_vnd", label: "Tối đa / năm" },
+  { key: "budget_usd", label: "Tối đa / năm" },
   { key: "scholarship", label: "Học bổng" },
   { key: "funding_source", label: "Nguồn tài chính" },
   { key: "activities", label: "Hoạt động" },
@@ -155,6 +158,10 @@ function formatValue(key: string, value: unknown): string {
       const parts = [type, score, date && `thi ${date}`].filter(Boolean).join(" · ");
       return parts ? `Dự kiến: ${parts}` : p.planned ? "Có dự định thi" : "";
     }
+    case "budget_vnd":
+      return typeof value === "number" ? `${value.toLocaleString("vi-VN")} VNĐ` : str(value);
+    case "budget_usd":
+      return typeof value === "number" ? `${value.toLocaleString("vi-VN")} USD` : str(value);
     case "budget":
       return DEFAULT_BUDGET_TIERS.find((t) => t.key === value)?.label ?? str(value);
     case "scholarship": {
@@ -216,6 +223,38 @@ export function ReviewWidget({ data }: { data?: Record<string, unknown> | null }
             >
               {r.text}
             </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+/**
+ * Sửa hồ sơ trong chat: khung "Hiện tại" ghi giá trị đang lưu của mục đang hỏi lại (widget data.current),
+ * để học sinh biết bấm "Giữ như cũ" là giữ gì
+ */
+export function CurrentValues({ current }: { current?: unknown }) {
+  const fields = obj(current) as Record<string, Field>;
+  const hasCerts = Array.isArray(obj(fields.certifications).value);
+  const rows = ROWS.flatMap(({ key, label }) => {
+    if (!(key in fields)) return [];
+    const field = obj(fields[key]) as Field;
+    if (hasCerts && CERT_ROWS.has(key) && field.value != null) return [];
+    const text = STATUS_TEXT[field.status ?? ""] ?? formatValue(key, field.value);
+    return text ? [{ key, label, text }] : [];
+  });
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="mt-2.5 rounded-xl border border-dashed border-line bg-ground px-3 py-2 text-[13px]">
+      <div className="text-xs font-semibold text-muted-foreground">Hiện tại</div>
+      <dl className="mt-1 space-y-0.5">
+        {rows.map((r) => (
+          <div key={r.key} className="flex gap-3">
+            <dt className="w-32 shrink-0 text-muted-foreground">{r.label}</dt>
+            <dd className="min-w-0 flex-1 break-words text-foreground">{r.text}</dd>
           </div>
         ))}
       </dl>

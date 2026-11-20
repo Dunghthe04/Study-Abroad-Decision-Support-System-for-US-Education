@@ -214,6 +214,10 @@ export interface FinancialDraft {
   annualBudgetTier?: BudgetTierId | null;
   needFinancialAid?: ScholarshipNeed | null;
   fundingSource?: FundingSource | null;
+  /** UC-94: phụ huynh nhập hộ con managed – số tiền tối đa/năm chính xác (VND); BE đổi USD theo tỷ giá lúc lưu */
+  annualBudgetVnd?: number | null;
+  /** Số USD chính xác đã lưu lần trước (BE trả khi mở lại); lưu lại không đổi thì BE giữ số này */
+  annualBudgetUsd?: number | null;
 }
 
 export interface ActivityDraft {
@@ -251,6 +255,8 @@ export interface ProfileFlowState {
   draftTranscript?: DraftTranscriptFile | null;
   lastUpdatedAt?: string | null;
   hasCommittedProfile: boolean;
+  /** UC-94: học sinh nhận hồ sơ có số tiền tối đa/năm phụ huynh nhập (USD). Có số này thì ngân sách cố định, không sửa */
+  budgetLockedUsd?: number | null;
 }
 
 export interface ExtractedSubjectScore {

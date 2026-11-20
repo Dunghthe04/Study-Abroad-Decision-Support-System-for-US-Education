@@ -7,14 +7,14 @@ using StudyAbroad.Domain.Constants;
 namespace StudyAbroad.Api.Controllers;
 
 /// <summary>
-/// Hồ sơ học thuật giữa phụ huynh và con: phụ huynh xem hồ sơ con (chỉ đọc) và chọn con nhận hồ sơ mình đã nhập;
-/// học sinh chọn dùng bản của phụ huynh hay giữ bản của mình. UserId lấy từ JWT, không nhận từ client.
+/// Hồ sơ học thuật giữa phụ huynh và con: phụ huynh xem hồ sơ con (chỉ đọc) và chọn con managed nào là con thật vừa liên kết;
+/// học sinh chọn dùng bản phụ huynh nhập thay hay giữ bản của mình. UserId lấy từ JWT, không nhận từ client.
 /// </summary>
 [ApiController]
 [Route("api/v1/profile/academic")]
 public class ParentProfileShareController(IParentProfileShareService shareService) : ControllerBase
 {
-    /// <summary>Phụ huynh: hồ sơ các con đã liên kết và hồ sơ của mình còn chờ chọn con nhận hay không.</summary>
+    /// <summary>Phụ huynh: hồ sơ các con đã liên kết và các con thật đang chờ ghép với con managed.</summary>
     [HttpGet("children")]
     [Authorize(Roles = UserRoles.Parent)]
     public async Task<IActionResult> GetChildren(CancellationToken ct)
@@ -24,14 +24,14 @@ public class ParentProfileShareController(IParentProfileShareService shareServic
         return ToResult(await shareService.GetParentOverviewAsync(userId, ct));
     }
 
-    /// <summary>Phụ huynh chuyển hồ sơ đã nhập cho một con (linkId), hoặc linkId null là không chuyển cho con nào.</summary>
-    [HttpPost("share")]
+    /// <summary>[1.5d] Phụ huynh ghép con thật (linkId) với con managed đã nhập, hoặc managedChildId null là không phải ai.</summary>
+    [HttpPost("match")]
     [Authorize(Roles = UserRoles.Parent)]
-    public async Task<IActionResult> Share([FromBody] ShareParentProfileRequest request, CancellationToken ct)
+    public async Task<IActionResult> Match([FromBody] MatchManagedChildRequest request, CancellationToken ct)
     {
         if (User.GetUserId() is not { } userId)
             return Unauthorized();
-        return ToResult(await shareService.ShareAsync(userId, request.LinkId, ct));
+        return ToResult(await shareService.MatchAsync(userId, request, ct));
     }
 
     /// <summary>Học sinh: các đề nghị dùng hồ sơ phụ huynh đang chờ chọn.</summary>

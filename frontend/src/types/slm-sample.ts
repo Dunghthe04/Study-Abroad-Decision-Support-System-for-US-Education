@@ -30,8 +30,6 @@ export interface SlmSample {
   reviewedAt: string | null;
   createdAt: string;
   updatedAt: string | null;
-  answer: string | null;
-  topic: string | null;
   source: string;
   createdByUserId: string | null;
   createdByName: string | null;
@@ -70,8 +68,6 @@ export interface SaveSlmSampleRequest {
   context: string | null;
   split: SlmSplit;
   sourceReview: string | null;
-  answer: string | null;
-  topic: string | null;
   source: string | null;
   submit?: boolean;
 }

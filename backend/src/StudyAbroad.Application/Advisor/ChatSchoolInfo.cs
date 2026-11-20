@@ -131,7 +131,10 @@ public static class ChatSchoolInfo
     /// <summary>Dữ liệu tìm trường: Question là câu hỏi, Filters là bộ lọc advisor đã chuẩn hóa, Sort là cách xếp, Unresolved là điều chưa đọc được, KbAnswer là câu tạm.</summary>
     public record SearchQuery(
         string Question, SchoolSearchFilters Filters, SchoolSort Sort, IReadOnlyList<string> Unresolved, string? KbAnswer,
-        bool SortGiven = false);
+        bool SortGiven = false, IReadOnlyList<IgnoredFilter>? Ignored = null);
+
+    /// <summary>Điều kiện số advisor đã bỏ vì không đọc ra (câu đã có cách xếp): Key là khóa của SLM, Label tên tiếng Việt, Text chữ gốc.</summary>
+    public record IgnoredFilter(string Key, string Label, string Text);
 
     public static SearchQuery? ParseSearch(System.Text.Json.JsonElement? data)
     {
@@ -166,7 +169,26 @@ public static class ChatSchoolInfo
         };
         // model_sort có mặt = học sinh nói rõ muốn xếp theo gì ("trường nào rẻ nhất"): tìm được dù không có điều kiện lọc
         var sortGiven = d.TryGetProperty("model_sort", out var ms) && ms.ValueKind == System.Text.Json.JsonValueKind.String;
-        return new SearchQuery(Str("question") ?? "", filters, sort, unresolved, Str("kb_answer"), sortGiven);
+        var ignored = d.TryGetProperty("ignored", out var ig) && ig.ValueKind == System.Text.Json.JsonValueKind.Array
+            ? ig.EnumerateArray()
+                .Where(e => e.ValueKind == System.Text.Json.JsonValueKind.Object)
+                .Select(e => new IgnoredFilter(Field(e, "key"), Field(e, "label"), Field(e, "text")))
+                .Where(i => i.Label.Length > 0 && i.Text.Length > 0)
+                .ToList()
+            : [];
+        return new SearchQuery(Str("question") ?? "", filters, sort, unresolved, Str("kb_answer"), sortGiven, ignored);
+    }
+
+    private static string Field(System.Text.Json.JsonElement e, string name) =>
+        e.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString()!.Trim() : "";
+
+    /// <summary>Câu nói rõ điều kiện đã bỏ ("Mình bỏ qua điều kiện thứ hạng “top” vì chưa rõ mức cụ thể."); không bỏ gì thì null.</summary>
+    public static string? IgnoredNote(IReadOnlyList<IgnoredFilter>? ignored)
+    {
+        if (ignored is not { Count: > 0 })
+            return null;
+        var parts = ignored.Select(i => $"{i.Label} “{i.Text}”").Distinct().ToList();
+        return $"Mình bỏ qua điều kiện {string.Join(", ", parts)} vì chưa rõ mức cụ thể.";
     }
 
     /// <summary>Có ít nhất một điều kiện lọc không (nếu không thì không có gì để tìm).</summary>
@@ -174,7 +196,7 @@ public static class ChatSchoolInfo
         f.States is { Count: > 0 } || !string.IsNullOrWhiteSpace(f.City) || !string.IsNullOrWhiteSpace(f.Major)
         || !string.IsNullOrWhiteSpace(f.Control) || !string.IsNullOrWhiteSpace(f.Aid) || !string.IsNullOrWhiteSpace(f.TestPolicy)
         || f.MaxCostUsd is not null || f.MaxIelts is not null || f.MaxToefl is not null || f.MaxDuolingo is not null
-        || f.MinAcceptRate is not null || f.MaxAcceptRate is not null || f.MaxRank is not null || f.MinGradRate is not null || f.Ivy;
+        || f.MinAcceptRate is not null || f.MaxAcceptRate is not null || f.MaxRank is not null || f.MinGradRate is not null || f.Ivy || f.LowTestWeight;
 
     /// <summary>Nói lại các điều kiện đang lọc bằng lời, để học sinh kiểm tra hệ thống hiểu đúng.</summary>
     public static string FilterSummary(SchoolSearchFilters f)
@@ -199,6 +221,7 @@ public static class ChatSchoolInfo
         if (f.MaxRank is { } rank) parts.Add($"top {rank} bảng xếp hạng");
         if (f.MinGradRate is { } grad) parts.Add($"tỷ lệ tốt nghiệp từ {Pct(grad)} trở lên");
         if (f.Ivy) parts.Add("thuộc Ivy League");
+        if (f.LowTestWeight) parts.Add("điểm thi không phải yếu tố quan trọng");
         return string.Join(", ", parts);
     }
 
@@ -206,7 +229,8 @@ public static class ChatSchoolInfo
     /// Thẻ danh sách tìm trường: toàn bộ kết quả (tối đa 100) để giao diện hiện 5 trường đầu và mở phần còn lại bằng "Xem thêm", không gửi thêm tin.
     /// coveredText là đoạn chữ trả lời mà thẻ đã nói đủ.
     /// </summary>
-    public static Widget WidgetOfSearch(SchoolSearchResult result, SchoolSearchFilters filters, SchoolSort sort, string coveredText)
+    public static Widget WidgetOfSearch(
+        SchoolSearchResult result, SchoolSearchFilters filters, SchoolSort sort, string coveredText, string? note = null)
     {
         var data = new System.Text.Json.Nodes.JsonObject
         {
@@ -219,37 +243,10 @@ public static class ChatSchoolInfo
             ["filters"] = System.Text.Json.JsonSerializer.SerializeToNode(filters, WebJson),
             ["sort"] = char.ToLowerInvariant(sort.ToString()[0]) + sort.ToString()[1..],
             ["coveredText"] = coveredText,
+            // Điều kiện đã bỏ vì không đọc ra: thẻ hiện để học sinh biết danh sách không lọc theo điều đó
+            ["note"] = note,
         };
         return new Widget(SearchWidgetType, System.Text.Json.JsonSerializer.SerializeToElement(data));
-    }
-
-    /// <summary>
-    /// Nút bước tiếp theo sau danh sách: so sánh hai trường đầu (chạy theo mã, không qua model), rồi gợi ý trường theo hồ sơ riêng.
-    /// Danh sách ngắn hơn hai trường thì không có nút so sánh.
-    /// </summary>
-    public static IReadOnlyList<QuickReply> SearchNextSteps(SchoolSearchResult result, SchoolSort sort = SchoolSort.Quality)
-    {
-        var steps = new List<QuickReply>();
-        // Đang xếp theo tiền: cho học sinh đổi cách tính giữa "chỉ học phí" và "tổng chi phí cả ăn ở, sinh hoạt" (cùng chiều cao/thấp)
-        if (sort is SchoolSort.LowestTuition or SchoolSort.HighestTuition)
-        {
-            var dir = sort == SchoolSort.HighestTuition ? "cao đến thấp" : "thấp đến cao";
-            steps.Add(new QuickReply("Tính cả ăn ở, sinh hoạt", $"Xếp theo tổng chi phí cả ăn ở, sinh hoạt {dir}"));
-        }
-        else if (sort is SchoolSort.LowestCost or SchoolSort.HighestCost)
-        {
-            var dir = sort == SchoolSort.HighestCost ? "cao đến thấp" : "thấp đến cao";
-            steps.Add(new QuickReply("Chỉ tính học phí", $"Xếp theo học phí {dir}"));
-        }
-        if (result.Items.Count >= 2)
-        {
-            var (a, b) = (result.Items[0], result.Items[1]);
-            steps.Add(new QuickReply(
-                "So sánh hai trường đầu", $"So sánh {a.Name} và {b.Name}",
-                new ChatAction(CompareAction, SchoolCodes: [a.Code, b.Code], Question: $"So sánh {a.Name} và {b.Name}")));
-        }
-        steps.Add(new QuickReply("Gợi ý trường theo hồ sơ của em", "Gợi ý trường phù hợp với hồ sơ của em"));
-        return steps;
     }
 
     private static string SortLabel(SchoolSort sort) => sort switch
@@ -265,7 +262,7 @@ public static class ChatSchoolInfo
     };
 
     // Tên điều kiện nói với học sinh khi gợi ý nới (khóa của hợp đồng với model)
-    private static string FilterName(string key) => key switch
+    internal static string FilterName(string key) => key switch
     {
         "bang" => "bang",
         "thanh_pho" => "thành phố",
@@ -281,6 +278,7 @@ public static class ChatSchoolInfo
         "xep_hang_toi_da" => "thứ hạng",
         "ty_le_tot_nghiep_toi_thieu" => "tỷ lệ tốt nghiệp",
         "ivy" => "Ivy League",
+        "it_coi_trong_diem_thi" => "mức coi trọng điểm thi",
         _ => key,
     };
 
@@ -309,13 +307,28 @@ public static class ChatSchoolInfo
         var lines = new List<string> { $"Có {what}. Xếp theo {SortLabel(sort)}." };
         var shown = result.Items.Take(SearchTextItems).ToList();
         for (var i = 0; i < shown.Count; i++)
-            lines.Add($"{i + 1}. {SearchLine(shown[i], sort)}");
+            lines.Add($"{i + 1}. {SearchLine(shown[i], sort, filters)}");
         if (result.Total > shown.Count)
             lines.Add($"Và {result.Total - shown.Count} trường khác.");
         return string.Join("\n", lines);
     }
 
-    private static string SearchLine(SchoolSearchItem s, SchoolSort sort = SchoolSort.Quality)
+    /// <summary>
+    /// Học sinh lọc "không bắt buộc SAT, ACT" mà trường coi điểm thi quan trọng: nói rõ để khỏi hiểu là trường không cần điểm thi.
+    /// Hai thông tin đến từ hai mục khác nhau của dữ liệu trường (chính sách nộp, mức coi trọng ở CDS C7) nên chỉ nêu cả hai đúng như dữ liệu,
+    /// không suy ra nghĩa (vd "nếu nộp"). Không nhắc khi trường ít coi trọng điểm thi.
+    /// </summary>
+    public static string? TestCaution(SchoolSearchItem s, SchoolSearchFilters? filters) =>
+        filters?.TestPolicy == "optional"
+            ? s.TestImportance switch
+            {
+                "very_important" => "không bắt buộc SAT, ACT nhưng trường ghi điểm thi là yếu tố rất quan trọng",
+                "important" => "không bắt buộc SAT, ACT nhưng trường ghi điểm thi là yếu tố quan trọng",
+                _ => null,
+            }
+            : null;
+
+    private static string SearchLine(SchoolSearchItem s, SchoolSort sort = SchoolSort.Quality, SchoolSearchFilters? filters = null)
     {
         var place = string.Join(", ", new[] { s.City, s.State }.Where(x => !string.IsNullOrWhiteSpace(x)));
         var control = ControlText(s.Control);
@@ -333,6 +346,7 @@ public static class ChatSchoolInfo
         if (s.BestRank is { } rank) facts.Add($"hạng #{rank}");
         if (sort == SchoolSort.MostAid)
             facts.Add(s.AidAvgUsd is { } aid ? $"học bổng trung bình {Money(aid)} USD" : "chưa có số liệu học bổng");
+        if (TestCaution(s, filters) is { } caution) facts.Add(caution);
         return $"{s.Name}" + (head.Length > 0 ? $" ({head})" : "") + $": {string.Join(" · ", facts)}";
     }
 
@@ -823,17 +837,6 @@ public static class ChatSchoolInfo
             data["coveredText"] = coveredText;
         return new Widget(WidgetType, System.Text.Json.JsonSerializer.SerializeToElement(data));
     }
-
-    /// <summary>Nút hỏi tiếp sau bản tóm tắt: mỗi nút gửi một câu hỏi đầy đủ về đúng trường đó.</summary>
-    public static IReadOnlyList<QuickReply> FieldButtons(string schoolName) =>
-    [
-        new("Học phí", $"Học phí {schoolName} bao nhiêu?"),
-        new("Học bổng", $"{schoolName} có học bổng cho du học sinh không?"),
-        new("Tiếng Anh cần", $"{schoolName} cần IELTS bao nhiêu?"),
-        new("Hạn nộp", $"Hạn nộp hồ sơ của {schoolName} là khi nào?"),
-        new("GPA", $"GPA của sinh viên trúng tuyển {schoolName} là bao nhiêu?"),
-        new("Xếp hạng", $"{schoolName} xếp hạng bao nhiêu?"),
-    ];
 
     /// <summary>Câu mở khi đã biết trường nhưng không rõ học sinh muốn biết mục nào: tóm tắt rồi để học sinh chọn mục.</summary>
     public static string NoTopicLead(string schoolName) =>

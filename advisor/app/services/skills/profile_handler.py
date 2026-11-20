@@ -11,10 +11,10 @@ from app.services.chat_flow import (
     limit_to_required,
     start_intake,
 )
-from app.services.intake import form_goals
+from app.services.intake import EDIT_ONLY_GOAL, form_goals
 from app.services.replies import PROFILE_DONE
 from app.services.skill_rules import REQUIRED_B3, missing_fields
-from app.services.skills import buttons, skill_bac_hoc, skill_ho_so
+from app.services.skills import buttons, edit_prefill, skill_bac_hoc, skill_ho_so
 
 # Giá trị hồ sơ nào do skill nào đọc
 BAC_HOC_FIELDS = set(skill_bac_hoc.READ_FIELDS)
@@ -153,6 +153,11 @@ def wants_edit(slm: SlmTinResult) -> bool:
 # Hỏi câu của mục cần sửa kèm nút, ô chọn như lúc điền hồ sơ trong chat.
 # Đang sửa mà mục đã có giá trị thì thêm nút "Giữ như cũ"
 def ask_edit_question(state: ChatState, question_id: str, text: str | None = None) -> SkillOutput:
+    # Ngân sách phụ huynh đã nhập thì không sửa được: báo rồi sang mục sửa kế tiếp (hết thì về bảng rà soát)
+    if question_id == "F1" and buttons.budget_locked(state):
+        output = next_edit_question(state)
+        output.answer = f"{buttons.locked_budget_text(state)}\n\n{output.answer}"
+        return output
     if question_id in skill_bac_hoc.QUESTION_FIELDS:
         can_skip = question_id in skill_bac_hoc.SKIPPABLE_QUESTIONS
         output = buttons.ask_with_buttons(state, question_id, text, can_skip=can_skip)
@@ -162,6 +167,8 @@ def ask_edit_question(state: ChatState, question_id: str, text: str | None = Non
         name in state.profile for name in ALL_QUESTION_FIELDS[question_id]
     ):
         output.quick_replies = [*output.quick_replies, skill_ho_so.KEEP_REPLY]
+        # Kèm giá trị cũ: khung "Hiện tại" + điền sẵn ô chọn, câu chỉ có nút thì ghi trong câu hỏi
+        output = edit_prefill.add_current(state, question_id, ALL_QUESTION_FIELDS[question_id], output)
     return output
 
 
@@ -183,8 +190,9 @@ def edit_choice(state: ChatState, message: str) -> SkillOutput | None:
         return skill_ho_so.edit_menu(state)
     if buttons.same_text(message, skill_ho_so.FORM_REPLY.value):
         state.edit_queue = None
-        # Gửi kèm việc học sinh đã hỏi (vd gợi ý trường) để form tích sẵn ô nhiệm vụ, như khi chọn điền bằng form
-        goals = form_goals(state.pending_advice)
+        # Gửi kèm việc học sinh đã hỏi (vd gợi ý trường) để form tích sẵn ô nhiệm vụ, như khi chọn điền bằng form.
+        # Không có việc nào đang chờ (chỉ muốn sửa hồ sơ) thì form tích "Chỉ sửa hồ sơ"
+        goals = form_goals(state.pending_advice) if state.pending_advice is not None else [EDIT_ONLY_GOAL]
         return SkillOutput(skill_ho_so.EDIT_ON_FORM, widget=Widget(type="form", data={"goals": goals}))
     if buttons.same_text(message, skill_ho_so.RESTART_REPLY.value):
         state.edit_queue = list(skill_ho_so.EDIT_ORDER)

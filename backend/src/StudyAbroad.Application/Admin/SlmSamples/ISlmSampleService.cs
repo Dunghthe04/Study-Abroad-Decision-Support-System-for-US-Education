@@ -44,12 +44,6 @@ public interface ISlmSampleService
 
     Task<SlmImportPreviewDto> PreviewAsync(Stream workbook, CancellationToken ct = default);
 
-    /// <summary>
-    /// UC-53: lưu câu chat chưa trả lời được thành mẫu draft, chỉ có câu hỏi (không người dùng, không phiên).
-    /// Bỏ qua nếu trống, có thông tin liên hệ hoặc link, hoặc trùng câu đã có (kể cả đã xóa). Trả true nếu đã thêm.
-    /// </summary>
-    Task<bool> CaptureUnansweredAsync(string? question, CancellationToken ct = default);
-
     /// <summary>UC-102: xuất mẫu approved chưa xóa ra jsonl hoặc xlsx, ghi nhật ký và đánh dấu đã xuất. Định dạng lạ thì ném ArgumentException.</summary>
     Task<SlmExportFile> ExportAsync(
         string? format, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default);

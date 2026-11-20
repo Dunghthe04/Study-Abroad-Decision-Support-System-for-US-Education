@@ -18,9 +18,7 @@ public class SlmSampleService(
     public const int MaxReviewIds = 500;
     public const int MaxNoteLength = 1000;
     public const int MaxPreviewRows = 100;
-    public const int MaxTopicLength = 128;
     public const int MaxSourceLength = 256;
-    public const int MaxCapturedQuestionLength = 500;
     public const string ExportAction = "slm_sample.export";
     private const string XlsxContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     private const string PersonalDataMessage = "Nội dung có số điện thoại hoặc e-mail. Hãy bỏ thông tin cá nhân trước khi lưu.";
@@ -97,7 +95,7 @@ public class SlmSampleService(
         var status = SlmReviewStatuses.Draft;
         if (request.Submit)
         {
-            EnsureReady(valid.Answer, valid.Intents);
+            EnsureReady(valid.Intents);
             status = SlmReviewStatuses.Pending;
         }
 
@@ -129,12 +127,10 @@ public class SlmSampleService(
             if (changed.Count == 0 && to == from)
                 return null;
             if (to == SlmReviewStatuses.Pending)
-                EnsureReady(valid.Answer, valid.Intents);
+                EnsureReady(valid.Intents);
 
             sample.SampleType = valid.SampleType;
             sample.Question = valid.Question;
-            sample.Answer = valid.Answer;
-            sample.Topic = valid.Topic;
             sample.Source = valid.Source ?? sample.Source;
             sample.Profile = valid.Profile;
             sample.PendingQuestion = valid.PendingQuestion;
@@ -210,7 +206,7 @@ public class SlmSampleService(
                 skippedNotPending++;
                 return null;
             }
-            if (status == SlmReviewStatuses.Approved && !IsReady(sample.Answer, sample.Intents))
+            if (status == SlmReviewStatuses.Approved && !IsReady(sample.Intents))
             {
                 skippedNotReady++;
                 return null;
@@ -301,28 +297,6 @@ public class SlmSampleService(
         return Task.FromResult(new SlmImportPreviewDto(rows.Count, firstRows, errors));
     }
 
-    public async Task<bool> CaptureUnansweredAsync(string? question, CancellationToken ct = default)
-    {
-        var text = Clean(question) is { } q ? Regex.Replace(q, @"\s+", " ") : null;
-        if (text is null || text.Length > MaxCapturedQuestionLength || SlmPersonalDataCheck.HasContactOrLink(text))
-            return false;
-        // ponytail: check-then-insert, two identical questions at the same instant can both land; add a unique index if that shows up
-        if ((await repository.SameQuestionAsync(text, includeDeleted: true, ct)).Count > 0)
-            return false;
-
-        var sample = new SlmTrainingSample
-        {
-            SampleType = SlmSampleTypes.Knowledge,
-            Question = text,
-            Intents = "[]",
-            Source = SlmSampleSources.ChatUnanswered,
-            ReviewStatus = SlmReviewStatuses.Draft,
-        };
-        await repository.AddAsync(
-            sample, History(SlmSampleHistoryActions.Capture, null, null, SlmReviewStatuses.Draft, sample.Id), ct);
-        return true;
-    }
-
     public async Task<SlmExportFile> ExportAsync(
         string? format, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default)
     {
@@ -369,13 +343,11 @@ public class SlmSampleService(
                 ["id"] = s.Id.ToString(),
                 ["type"] = s.SampleType,
                 ["split"] = s.Split,
-                ["topic"] = s.Topic,
                 ["source"] = s.Source,
                 ["input"] = input,
                 ["output"] = new JsonObject
                 {
                     ["intents"] = ParseNode(s.Intents) ?? new JsonArray(),
-                    ["answer"] = s.Answer,
                 },
             };
             text.Append(record.ToJsonString(ExportJson)).Append('\n');
@@ -435,23 +407,19 @@ public class SlmSampleService(
     private static void CheckPersonalData(ValidSample valid)
     {
         if (SlmPersonalDataCheck.HasContact(valid.Question)
-            || SlmPersonalDataCheck.HasContact(valid.Answer)
             || SlmPersonalDataCheck.HasContact(valid.PendingQuestion)
-            || SlmPersonalDataCheck.HasContact(valid.Topic)
             || SlmPersonalDataCheck.HasContact(valid.Source))
             throw new ArgumentException(PersonalDataMessage);
     }
 
-    private static void EnsureReady(string? answer, string intents)
+    private static void EnsureReady(string intents)
     {
-        if (!IsReady(answer, intents))
-            throw new ArgumentException("Cần nhập câu trả lời (hoặc intents) trước khi gửi duyệt.");
+        if (!IsReady(intents))
+            throw new ArgumentException("Cần nhập intents trước khi gửi duyệt.");
     }
 
-    public static bool IsReady(string? answer, string? intents)
+    public static bool IsReady(string? intents)
     {
-        if (!string.IsNullOrWhiteSpace(answer))
-            return true;
         try
         {
             return JsonNode.Parse(intents ?? "[]") is JsonArray { Count: > 0 };
@@ -472,8 +440,6 @@ public class SlmSampleService(
         }
         Check("sampleType", sample.SampleType != valid.SampleType);
         Check("question", sample.Question != valid.Question);
-        Check("answer", (sample.Answer ?? "") != (valid.Answer ?? ""));
-        Check("topic", (sample.Topic ?? "") != (valid.Topic ?? ""));
         Check("source", valid.Source is not null && sample.Source != valid.Source);
         Check("profile", Canonical(sample.Profile) != Canonical(valid.Profile));
         Check("pendingQuestion", (sample.PendingQuestion ?? "") != (valid.PendingQuestion ?? ""));
@@ -488,8 +454,6 @@ public class SlmSampleService(
     {
         SampleType = valid.SampleType,
         Question = valid.Question,
-        Answer = valid.Answer,
-        Topic = valid.Topic,
         Profile = valid.Profile,
         PendingQuestion = valid.PendingQuestion,
         Intents = valid.Intents,
@@ -539,7 +503,7 @@ public class SlmSampleService(
     private record ValidSample(
         string SampleType, string Question, string? Profile, string? PendingQuestion,
         string Intents, string? Context, string Split, string? SourceReview,
-        string? Answer, string? Topic, string? Source);
+        string? Source);
 
     private static ValidSample Validate(SaveSlmSampleRequest? request)
     {
@@ -574,16 +538,13 @@ public class SlmSampleService(
         if (context is not null)
             ParseJson(context, "Context");
 
-        var topic = Clean(request.Topic);
-        if (topic is not null && topic.Length > MaxTopicLength)
-            throw new ArgumentException($"Chủ đề tối đa {MaxTopicLength} ký tự.");
         var source = Clean(request.Source);
         if (source is not null && source.Length > MaxSourceLength)
             throw new ArgumentException($"Nguồn tối đa {MaxSourceLength} ký tự.");
 
         return new ValidSample(
             sampleType, question, profile, Clean(request.PendingQuestion), intents, context, split, sourceReview,
-            Clean(request.Answer), topic, source);
+            source);
     }
 
     private static JsonElement ParseJson(string json, string fieldName)
@@ -656,5 +617,5 @@ public class SlmSampleService(
         sample.Id, sample.SampleType, sample.Question, sample.Profile, sample.PendingQuestion, sample.Intents,
         sample.Context, sample.Split, sample.SourceReview, sample.ReviewStatus, sample.ReviewNote,
         sample.ReviewedByUserId, sample.ReviewedAt, sample.CreatedAt, sample.UpdatedAt,
-        sample.Answer, sample.Topic, sample.Source, sample.CreatedByUserId, creatorName, sample.ExportedAt);
+        sample.Source, sample.CreatedByUserId, creatorName, sample.ExportedAt);
 }

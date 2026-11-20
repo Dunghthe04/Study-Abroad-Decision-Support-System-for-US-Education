@@ -29,8 +29,8 @@ public class DbContextSchemaTests
             "User", "UserSession", "OtpToken", "Consent", "ParentStudentLink",
             // Phân hệ 2: Hồ sơ & Học bạ (4)
             "StudentProfile", "TranscriptScore", "ProfileActivity", "RoadmapStep",
-            // Phân hệ 3: Trường, Tuyển sinh & Chi phí (5)
-            "University", "UniversityOffering", "Scholarship", "TargetSchool", "StateLivingCost",
+            // Phân hệ 3: Trường, Tuyển sinh & Chi phí (4)
+            "University", "UniversityOffering", "Scholarship", "TargetSchool",
             // Phân hệ 4: Mô hình DSS & Mô phỏng (6)
             "AppSetting", "AnalysisResult", "Recommendation", "RecommendationItem", "ExpertRule", "WhatIfSimulation",
             // Phân hệ 5: Trung tâm tư vấn (4)
@@ -41,8 +41,8 @@ public class DbContextSchemaTests
             "SubscriptionPlan", "UserSubscription", "UserDailyUsage", "PaymentTransaction",
             // Phân hệ 8: Diễn đàn, Thông báo & Kiểm toán (5)
             "ForumPost", "ForumReport", "PolicyAlert", "Notification", "AuditLog",
-            // Phân hệ 9: ETL & Xác minh dữ liệu (2)
-            "DataImportBatch", "FieldEvidence"
+            // Phân hệ 9: Xác minh dữ liệu (1)
+            "FieldEvidence"
         };
 
         foreach (var entity in expectedEntities)
@@ -60,7 +60,6 @@ public class DbContextSchemaTests
             .Options;
         using var db = new AppDbContext(options);
 
-        Assert.Equal("state_living_costs", TableName<StateLivingCost>(db));
         Assert.Equal("recommendation_items", TableName<RecommendationItem>(db));
         Assert.Equal("expert_rules", TableName<ExpertRule>(db));
         Assert.Equal("what_if_simulations", TableName<WhatIfSimulation>(db));
@@ -71,7 +70,6 @@ public class DbContextSchemaTests
         Assert.Equal("user_daily_usages", TableName<UserDailyUsage>(db));
         Assert.Equal("payment_transactions", TableName<PaymentTransaction>(db));
         Assert.Equal("policy_alerts", TableName<PolicyAlert>(db));
-        Assert.Equal("data_import_batches", TableName<DataImportBatch>(db));
         Assert.Equal("field_evidence", TableName<FieldEvidence>(db));
 
         AssertForeignKey<RecommendationItem>(db, nameof(RecommendationItem.RecommendationId), "recommendations", DeleteBehavior.Cascade);
@@ -106,9 +104,7 @@ public class DbContextSchemaTests
         Assert.Equal("jsonb", ColumnType<WhatIfSimulation>(db, nameof(WhatIfSimulation.SimulatedRecommendationsJson)));
         Assert.True(HasUniqueIndex<ExpertRule>(db, nameof(ExpertRule.RuleCode)));
         Assert.True(HasUniqueIndex<SubscriptionPlan>(db, nameof(SubscriptionPlan.Code)));
-        Assert.True(HasUniqueIndex<DataImportBatch>(db, nameof(DataImportBatch.BatchCode)));
         Assert.True(HasUniqueIndex<UserDailyUsage>(db, nameof(UserDailyUsage.UserId), nameof(UserDailyUsage.UsageDate)));
-        Assert.Equal("state_code", db.Model.FindEntityType(typeof(StateLivingCost))!.FindPrimaryKey()!.Properties.Single().GetColumnName());
 
         var studyCenterEntity = db.Model.FindEntityType(typeof(StudyCenter))!;
         Assert.Equal(32, studyCenterEntity.FindProperty(nameof(StudyCenter.TaxCode))!.GetMaxLength());

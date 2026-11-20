@@ -478,30 +478,30 @@ public class SlmSampleServiceTests
 
     private static readonly Guid Other = Guid.NewGuid();
 
-    private static SaveSlmSampleRequest QA(string question = "Visa F-1 cần gì?", string? answer = "Cần I-20 và hộ chiếu.", bool submit = false) =>
-        new(SlmSampleTypes.Knowledge, question, null, null, null, null, null, null, answer, "visa", "Website ĐSQ", submit);
+    private static SaveSlmSampleRequest QA(string question = "Visa F-1 cần gì?", string intents = "[{\"type\":\"knowledge\"}]", bool submit = false) =>
+        new(SlmSampleTypes.Knowledge, question, null, null, intents, null, null, null, "Website ĐSQ", submit);
 
     [Fact]
-    public async Task CreateAsync_QuestionAndAnswerDraft_StoresFieldsAndHistory()
+    public async Task CreateAsync_QuestionAndIntentsDraft_StoresFieldsAndHistory()
     {
         var repo = new FakeSlmRepository();
 
         var created = await Svc(repo, new FakeReader()).CreateAsync(QA(), Actor);
 
-        Assert.Equal((SlmReviewStatuses.Draft, "Cần I-20 và hộ chiếu.", "visa", "Website ĐSQ", "[]"),
-            (created.ReviewStatus, created.Answer, created.Topic, created.Source, created.Intents));
+        Assert.Equal((SlmReviewStatuses.Draft, "Website ĐSQ", "[{\"type\":\"knowledge\"}]"),
+            (created.ReviewStatus, created.Source, created.Intents));
         var history = Assert.Single(repo.History);
         Assert.Equal((SlmSampleHistoryActions.Create, Actor, SlmReviewStatuses.Draft), (history.Action, history.ActorUserId, history.ToStatus));
     }
 
     [Fact]
-    public async Task CreateAsync_Submit_NeedsAnAnswerOrIntents()
+    public async Task CreateAsync_Submit_NeedsIntents()
     {
         var repo = new FakeSlmRepository();
         var service = Svc(repo, new FakeReader());
 
-        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAsync(QA(answer: null, submit: true), Actor));
-        var draft = await service.CreateAsync(QA(answer: null), Actor);
+        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAsync(QA(intents: "[]", submit: true), Actor));
+        var draft = await service.CreateAsync(QA(intents: "[]"), Actor);
         var pending = await service.CreateAsync(QA(question: "OPT là gì?", submit: true), Actor);
 
         Assert.Equal(SlmReviewStatuses.Draft, draft.ReviewStatus);
@@ -555,12 +555,12 @@ public class SlmSampleServiceTests
         var service = Svc(repo, new FakeReader());
         var draft = await service.CreateAsync(QA(), Actor);
 
-        await service.UpdateAsync(draft.Id, QA(answer: "Cần I-20, DS-160 và hộ chiếu."), Actor);
+        await service.UpdateAsync(draft.Id, QA(intents: "[{\"type\":\"knowledge\",\"span\":\"visa\"}]"), Actor);
 
         var detail = await service.GetDetailAsync(draft.Id);
         var edit = detail!.History.Last();
         Assert.Equal(SlmSampleHistoryActions.Edit, edit.Action);
-        Assert.Equal(["answer"], edit.ChangedFields);
+        Assert.Equal(["intents"], edit.ChangedFields);
     }
 
     [Fact]
@@ -580,13 +580,13 @@ public class SlmSampleServiceTests
     }
 
     [Theory]
-    [InlineData("gọi 0987654321", "Website ĐSQ")]
-    [InlineData("visa", "hs.lop12@yahoo.com")]
-    public async Task SaveAsync_PersonalDataInTopicOrSource_IsRejected(string topic, string source)
+    [InlineData("gọi 0987654321")]
+    [InlineData("hs.lop12@yahoo.com")]
+    public async Task SaveAsync_PersonalDataInSource_IsRejected(string source)
     {
         var repo = new FakeSlmRepository();
         var service = Svc(repo, new FakeReader());
-        var request = QA() with { Topic = topic, Source = source };
+        var request = QA() with { Source = source };
         var existing = await service.CreateAsync(QA(question: "câu khác"), Actor);
 
         await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAsync(request, Actor));
@@ -608,7 +608,7 @@ public class SlmSampleServiceTests
         var created = await service.CreateAsync(QA(), Actor);
         await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync(created.Id, QA() with { Source = reserved }, Actor));
         repo.Items.Single().Source = reserved;
-        Assert.NotNull(await service.UpdateAsync(created.Id, QA(answer: "đổi") with { Source = reserved }, Actor));
+        Assert.NotNull(await service.UpdateAsync(created.Id, QA(question: "đổi") with { Source = reserved }, Actor));
         Assert.Equal(reserved, repo.Items.Single().Source);
     }
 
@@ -683,7 +683,7 @@ public class SlmSampleServiceTests
     }
 
     [Fact]
-    public async Task ReviewAsync_ApproveSkipsRowsWithoutAnswerOrIntents()
+    public async Task ReviewAsync_ApproveSkipsRowsWithoutIntents()
     {
         var repo = new FakeSlmRepository();
         var service = Svc(repo, new FakeReader());
@@ -700,68 +700,11 @@ public class SlmSampleServiceTests
     }
 
     [Fact]
-    public async Task CaptureUnansweredAsync_StoresOnlyTheQuestionAsAnonymousDraft()
-    {
-        var repo = new FakeSlmRepository();
-
-        Assert.True(await Svc(repo, new FakeReader()).CaptureUnansweredAsync("  em muốn học   ngành hải dương học ở Hawaii  "));
-
-        var sample = Assert.Single(repo.Items);
-        Assert.Equal("em muốn học ngành hải dương học ở Hawaii", sample.Question);
-        Assert.Equal((SlmReviewStatuses.Draft, SlmSampleSources.ChatUnanswered, "[]"), (sample.ReviewStatus, sample.Source, sample.Intents));
-        Assert.Null(sample.CreatedByUserId);
-        Assert.Null(sample.Answer);
-        Assert.Null(sample.Profile);
-        Assert.Null(sample.Context);
-        var history = Assert.Single(repo.History);
-        Assert.Equal((SlmSampleHistoryActions.Capture, (Guid?)null), (history.Action, history.ActorUserId));
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData("gọi em số 0987654321 nha")]
-    [InlineData("mail em: hs.lop12@yahoo.com")]
-    [InlineData("xem giúp em https://example.org/ho-so")]
-    [InlineData("facebook.com/nguyenvana của em")]
-    [InlineData("CCCD em 001 203 004 567 có cần không")]
-    public async Task CaptureUnansweredAsync_SkipsEmptyAndPersonalData(string question)
-    {
-        var repo = new FakeSlmRepository();
-
-        Assert.False(await Svc(repo, new FakeReader()).CaptureUnansweredAsync(question));
-        Assert.Empty(repo.Items);
-    }
-
-    [Fact]
-    public async Task CaptureUnansweredAsync_SkipsQuestionsOverTheLengthCap()
-    {
-        var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
-
-        Assert.False(await service.CaptureUnansweredAsync(new string('a', SlmSampleService.MaxCapturedQuestionLength + 1)));
-        Assert.True(await service.CaptureUnansweredAsync(new string('a', SlmSampleService.MaxCapturedQuestionLength)));
-    }
-
-    [Fact]
-    public async Task CaptureUnansweredAsync_DedupesAgainstAllRowsIncludingDeleted()
-    {
-        var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
-        await service.CaptureUnansweredAsync("Ngành nào dễ xin học bổng?");
-        await service.DeleteAsync(repo.Items.Single().Id, Actor);
-
-        Assert.False(await service.CaptureUnansweredAsync("ngành nào  dễ xin học bổng?"));
-        Assert.Single(repo.Items);
-    }
-
-    [Fact]
     public async Task ExportAsync_Jsonl_HasOnlyApprovedLiveRows_AsParsedJson_AndIsLogged()
     {
         var repo = new FakeSlmRepository();
         var audit = new FakeAuditLogs();
         var approved = repo.AddApproved();
-        approved.Answer = "OPT là giấy phép làm việc";
         var deleted = repo.AddApproved();
         deleted.Question = "đã xóa";
         deleted.DeletedAt = DateTime.UtcNow;
@@ -776,7 +719,6 @@ public class SlmSampleServiceTests
         Assert.Equal(approved.Id.ToString(), root.GetProperty("id").GetString());
         Assert.Equal("OPT là gì", root.GetProperty("input").GetProperty("question").GetString());
         Assert.Equal(System.Text.Json.JsonValueKind.Array, root.GetProperty("output").GetProperty("intents").ValueKind);
-        Assert.Equal("OPT là giấy phép làm việc", root.GetProperty("output").GetProperty("answer").GetString());
         Assert.EndsWith(".jsonl", file.FileName);
         Assert.NotNull(approved.ExportedAt);
         Assert.Null(deleted.ExportedAt);

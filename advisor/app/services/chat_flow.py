@@ -39,9 +39,9 @@ from app.services.replies import (
     CHAT_BUTTON,
     CONTINUE_CHAT,
     FORM_BUTTON,
-    FORM_DONE,
     INTAKE_FORM,
     INTAKE_MORE,
+    MENU,
     NEED_MAJOR,
     NOT_READY,
 )
@@ -276,6 +276,9 @@ class ChatFlow:
         # Đã lưu hồ sơ chưa: quyết định hỏi đủ hay chỉ hỏi mục bắt buộc còn thiếu; không gửi thì giữ giá trị cũ
         if req.has_committed_profile is not None:
             state.has_committed_profile = req.has_committed_profile
+        # Phụ huynh nhập hộ con managed hay không: F1 hỏi số tiền chính xác (VNĐ) thay cho mức
+        if req.exact_budget is not None:
+            state.exact_budget = req.exact_budget
         # Danh sách trường gợi ý do .NET gửi mỗi lượt (lấy từ lần gợi ý đã lưu); không gửi thì giữ như cũ.
         # Có danh sách nghĩa là học sinh đã có kết quả, dù gợi ý ở trang Gợi ý trường chứ không phải trong chat
         if req.schools is not None:
@@ -310,7 +313,7 @@ class ChatFlow:
 
                 state.intake_mode = "chat"
                 # Còn dự định thi quá hạn thì hỏi dự định đó trước khi báo hồ sơ đã đủ
-                output = skill_ho_so.ask_overdue_first(state) or SkillOutput(FORM_DONE)
+                output = skill_ho_so.ask_overdue_first(state) or SkillOutput(skill_ho_so.FORM_SAVED)
                 log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
                 return self._response(state, output, [], profile_before)
             if continue_chat and state.pending_advice is not None and profile_ready(state):
@@ -333,6 +336,14 @@ class ChatFlow:
                 output = begin_intake(state, choice)
                 log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
                 return self._response(state, output, [], profile_before)
+
+        # Nút menu "Thử thay đổi hồ sơ": câu chung chung này model chưa đọc được, code trả lời luôn (hỏi thử gì, kèm nút thử nhanh)
+        if is_try_menu(message):
+            output = self._branches["scenario"].ask_what(state)
+            log_turn(
+                state, message, None, ["scenario"], (time.perf_counter() - started) * 1000, req.session_id
+            )
+            return self._response(state, output, ["scenario"], profile_before)
 
         # Câu hồ sơ đang chờ, chụp trước khi chạy nhánh để cuối lượt biết đã được trả lời chưa
         pending = (state.question_id, state.last_question)
@@ -482,6 +493,11 @@ def is_edit_menu(state: ChatState, message: str) -> bool:
     return state.question_id is None and skill_ho_so.read_edit_menu(message) is not None
 
 
+# Tin là chữ của nút menu "Thử thay đổi hồ sơ" (replies.MENU): câu chung chung này model chưa đọc được nên code nhận thẳng
+def is_try_menu(message: str) -> bool:
+    return message.strip() == MENU["scenario"].value
+
+
 # Hồ sơ đủ mục bắt buộc và không còn giá trị nào chờ xác nhận (said_in_B0)
 def profile_ready(state: ChatState) -> bool:
     if missing_fields(state.profile, REQUIRED_B3):
@@ -580,7 +596,10 @@ def ask_next_missing(state: ChatState, prefix: str = "") -> SkillOutput:
 
 # Khóa ghi cả giá trị: mã cố định của hợp đồng (nhiệm vụ, chế độ, loại con, dịch vụ, mục, cách xếp, tiếp nối), tên
 # trường, trung tâm (tên công khai, có trong danh sách của hệ thống) và thành phố (chữ học sinh gõ, đã nằm trong tin nhắn ở cùng dòng
-# log nên không thêm thông tin cá nhân; ghi riêng để thấy model trả thành phố nào)
+# log nên không thêm thông tin cá nhân; ghi riêng để thấy model trả thành phố nào) và điều kiện lọc trường (filters: bang, ngành, mức
+# chi phí, tỷ lệ nhận...; là điều kiện tìm trường chứ không phải hồ sơ, cần thấy giá trị để biết model có bịa điều kiện không)
+# và các thay đổi của kịch bản what-if (changes: yếu tố, số đã chuẩn hóa, đơn vị; số học sinh gõ giả định đã nằm trong tin nhắn ở cùng
+# dòng log, ghi lại để thấy model chuẩn hóa đúng chưa, vd "25k" thành 25000 USD)
 LOGGED_VALUE_KEYS = (
     "tasks",
     "mode",
@@ -593,13 +612,31 @@ LOGGED_VALUE_KEYS = (
     "school",
     "schools",
     "centers",
+    "filters",
+    "changes",
 )
+# Điều kiện lọc là chữ model trả về: cắt ngắn để một giá trị dài bất thường không làm phình dòng log
+MAX_LOGGED_TEXT = 80
+
+
+def short_filter(value: Any) -> Any:
+    if isinstance(value, str):
+        return value[:MAX_LOGGED_TEXT]
+    if isinstance(value, list):
+        return [short_filter(item) for item in value[:10]]
+    if isinstance(value, dict):
+        return {key: short_filter(item) for key, item in value.items()}
+    return value
 
 
 # Từng ý SLM đọc ra: loại, các giá trị ở trên, và tên các khóa còn lại. Giá trị còn lại là chữ học sinh viết
-# (số điểm, điều kiện lọc) nên chỉ ghi tên khóa
+# (số điểm, hồ sơ) nên chỉ ghi tên khóa
 def log_item(y: Any) -> dict[str, Any]:
     values = {key: y.entities[key] for key in LOGGED_VALUE_KEYS if key in y.entities}
+    if isinstance(values.get("filters"), dict):
+        values["filters"] = {key: short_filter(value) for key, value in values["filters"].items()}
+    if isinstance(values.get("changes"), list):
+        values["changes"] = short_filter(values["changes"])
     return {"type": y.type, **values, "other_keys": sorted(key for key in y.entities if key not in values)}
 
 

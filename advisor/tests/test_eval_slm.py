@@ -1,6 +1,6 @@
-"""Chấm điểm của scripts.eval_slm trên danh sách ý: không cần Ollama."""
+"""Chấm điểm của slm.eval.eval_slm trên danh sách ý: không cần Ollama."""
 
-from scripts.eval_slm import score, types_of, word_f1
+from slm.eval.eval_slm import score, types_of, word_f1
 
 
 def y(kind, span="x", **entities):

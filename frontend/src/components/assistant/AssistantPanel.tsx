@@ -31,12 +31,13 @@ import { BudgetWidget } from "./BudgetWidget";
 import { CenterCardsWidget } from "./CenterCardsWidget";
 import { ChatText } from "./ChatText";
 import { MajorWidget } from "./MajorWidget";
-import { ReviewWidget } from "./ReviewWidget";
+import { CurrentValues, ReviewWidget } from "./ReviewWidget";
 import { ScholarshipWidget } from "./ScholarshipWidget";
 import { SchoolSearchCard } from "./SchoolSearchCard";
 import { SchoolWidget } from "./SchoolWidget";
 import { SelectWidget } from "./SelectWidget";
-import type { SchoolSearchData } from "@/types/recommendation";
+import { GoalCompareTable } from "./GoalCompareTable";
+import type { SchoolGoalResult, SchoolSearchData } from "@/types/recommendation";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
 export function useAssistantVisible() {
@@ -360,8 +361,13 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
   // Thẻ trường đã nói đủ đoạn chữ này (tổng số, cách xếp, danh sách): bỏ đoạn đó, các đoạn khác của lượt vẫn hiện
   const content =
     searchData?.coveredText && turn.content ? turn.content.replace(searchData.coveredText, "").trim() : turn.content;
+  const goalData = turn.widget?.type === "goal_seek" ? turn.widget.data : null;
+  const goalResult = (goalData?.result as SchoolGoalResult | undefined) ?? null;
+  const goalBasisLabel = typeof goalData?.basisLabel === "string" ? goalData.basisLabel : null;
   return (
     <div className="w-full px-1 text-foreground">
+      {/* Cần gì để vào trường X: bảng "bạn so với trường" đứng trước, lời giải thích nằm bên dưới */}
+      {goalResult && <GoalCompareTable result={goalResult} basisLabel={goalBasisLabel} />}
       {/* Có thẻ trung tâm thì danh sách chữ (các dòng bắt đầu bằng "- ") đã nằm trong thẻ: chỉ hiện phần mở đầu */}
       {content && <ChatText text={turn.widget?.type === "centers" ? content.split("\n- ")[0] : content} />}
       {turn.widget?.type === "centers" && <CenterCardsWidget data={turn.widget.data} onPick={onReply} />}
@@ -383,6 +389,8 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
         </ol>
       )}
       {turn.disclaimer && <p className="mt-2 text-xs text-muted-foreground italic">{turn.disclaimer}</p>}
+      {/* Đang sửa hồ sơ: giá trị cũ của mục đang hỏi lại */}
+      {turn.widget?.data?.current != null && <CurrentValues current={turn.widget.data.current} />}
       {turn.widget?.type === "review" && <ReviewWidget data={turn.widget.data} />}
       {/* E: chỉ chọn được ở lượt cuối, giống nút trả lời nhanh */}
       {turn.widget?.type === "major" && <MajorWidget onPick={onReply} />}

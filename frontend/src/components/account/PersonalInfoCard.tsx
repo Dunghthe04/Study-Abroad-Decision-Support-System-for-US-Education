@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { CheckIcon, HourglassIcon, LockIcon, MailIcon, TriangleAlertIcon, UserIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authApi, ApiError } from "@/lib/api";
+import { formatUserRole } from "@/lib/user-role-labels";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -100,6 +101,12 @@ export function PersonalInfoCard() {
               <FieldLabel htmlFor="account-email">Email đăng nhập</FieldLabel>
               <Input id="account-email" type="email" value={user.email} disabled readOnly />
               <FieldDescription>Email đăng nhập không thể thay đổi.</FieldDescription>
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="account-role">Vai trò</FieldLabel>
+              <Input id="account-role" value={formatUserRole(user.role)} disabled readOnly />
+              <FieldDescription>Vai trò không thể thay đổi.</FieldDescription>
             </Field>
 
             <Field>

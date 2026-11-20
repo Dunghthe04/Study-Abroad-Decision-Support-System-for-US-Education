@@ -23,6 +23,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
+import { CenterContactCard } from "@/components/center/CenterContactCard";
 
 export function CenterVerificationView() {
   const [center, setCenter] = useState<StudyCenter | null>(null);
@@ -43,6 +44,25 @@ export function CenterVerificationView() {
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dismissedVerified, setDismissedVerified] = useState(false);
+
+  // Tự động xóa thông báo nộp hồ sơ thành công sau 5 giây
+  useEffect(() => {
+    if (!formSuccess) return;
+    const t = setTimeout(() => setFormSuccess(null), 5000);
+    return () => clearTimeout(t);
+  }, [formSuccess]);
+
+  useEffect(() => {
+    // Đọc sau một tick (không setState đồng bộ trong effect); sessionStorage có thể không khả dụng
+    void Promise.resolve().then(() => {
+      try {
+        if (sessionStorage.getItem("center_verified_banner_dismissed") === "true") {
+          setDismissedVerified(true);
+        }
+      } catch {}
+    });
+  }, []);
 
   const fetchStatus = async () => {
     try {
@@ -86,6 +106,19 @@ export function CenterVerificationView() {
     };
   }, []);
 
+  // Tự động ẩn banner "đã xác minh" sau 8 giây
+  useEffect(() => {
+    if (status?.verificationStatus === "verified" && !dismissedVerified) {
+      const timer = setTimeout(() => {
+        setDismissedVerified(true);
+        try {
+          sessionStorage.setItem("center_verified_banner_dismissed", "true");
+        } catch {}
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [status, dismissedVerified]);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, docType: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -125,8 +158,9 @@ export function CenterVerificationView() {
     setFormError(null);
     setFormSuccess(null);
 
-    if (!status?.isEmailVerified) {
-      setFormError("Bạn phải xác thực email bằng mã OTP trước khi nộp hồ sơ.");
+    // [UC-91] Phải xác thực cả email và số điện thoại trước khi nộp hồ sơ
+    if (!status?.isEmailVerified || !status?.isPhoneVerified) {
+      setFormError("Bạn phải xác thực email và số điện thoại bằng mã OTP trước khi nộp hồ sơ.");
       return;
     }
 
@@ -191,12 +225,26 @@ export function CenterVerificationView() {
       </div>
 
       {/* Banner Current Request Status */}
-      {isVerified && (
-        <Alert className="border-emerald-500/30 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200">
+      {isVerified && !dismissedVerified && (
+        <Alert className="relative border-emerald-500/30 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200 pr-9 transition-all duration-300">
           <CheckCircle2Icon className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
           <AlertDescription className="ml-2">
             <strong>Đã xác minh:</strong> Trung tâm của bạn đã hoàn thành đối chiếu pháp lý và được cấp dấu xác minh thông tin đăng ký doanh nghiệp.
           </AlertDescription>
+          <button
+            type="button"
+            onClick={() => {
+              setDismissedVerified(true);
+              try {
+                sessionStorage.setItem("center_verified_banner_dismissed", "true");
+              } catch {}
+            }}
+            className="absolute top-3 right-3 p-1 rounded hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 transition-colors"
+            title="Đóng thông báo"
+            aria-label="Đóng thông báo"
+          >
+            <XIcon className="h-4 w-4" />
+          </button>
         </Alert>
       )}
 
@@ -241,9 +289,18 @@ export function CenterVerificationView() {
         </div>
 
         {formSuccess && (
-          <Alert className="border-emerald-500/30 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200">
+          <Alert className="relative border-emerald-500/30 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200 pr-9 transition-all duration-300">
             <CheckCircle2Icon className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             <AlertDescription className="ml-2">{formSuccess}</AlertDescription>
+            <button
+              type="button"
+              onClick={() => setFormSuccess(null)}
+              className="absolute top-3 right-3 p-1 rounded hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 transition-colors"
+              title="Đóng thông báo"
+              aria-label="Đóng thông báo"
+            >
+              <XIcon className="h-4 w-4" />
+            </button>
           </Alert>
         )}
 
@@ -252,6 +309,27 @@ export function CenterVerificationView() {
             <AlertCircleIcon className="h-5 w-5" />
             <AlertDescription className="ml-2">{formError}</AlertDescription>
           </Alert>
+        )}
+
+        {/* [UC-91] Chưa xác thực đủ email và số điện thoại thì xác thực ngay tại đây trước khi nộp */}
+        {status && (!status.isEmailVerified || !status.isPhoneVerified) && (
+          <div className="space-y-3">
+            <Alert>
+              <InfoIcon className="h-5 w-5" />
+              <AlertDescription className="ml-2">
+                Cần xác thực cả email và số điện thoại bằng mã OTP trước khi nộp hồ sơ. Việc xác thực không tự cấp dấu xác minh.
+              </AlertDescription>
+            </Alert>
+            <CenterContactCard
+              phone={center?.phone}
+              email={center?.email}
+              emailVerified={status.isEmailVerified}
+              phoneVerified={status.isPhoneVerified}
+              onChanged={() => {
+                void fetchStatus();
+              }}
+            />
+          </div>
         )}
 
         <form onSubmit={handleSubmitVerification} className="space-y-6">
@@ -542,7 +620,7 @@ export function CenterVerificationView() {
               <Button
                 type="submit"
                 size="lg"
-                disabled={isSubmitting || !status?.isEmailVerified}
+                disabled={isSubmitting || !status?.isEmailVerified || !status?.isPhoneVerified}
                 className="w-full sm:w-auto"
               >
                 {isSubmitting && <Spinner data-icon="inline-start" />}

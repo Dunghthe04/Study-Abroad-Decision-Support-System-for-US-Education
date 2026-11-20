@@ -84,6 +84,30 @@ internal sealed class FakeUserRepository : IUserRepository
         return Task.CompletedTask;
     }
 
+    public Task<UserSession?> GetSessionByRefreshTokenHashAsync(string refreshTokenHash, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Sessions.FirstOrDefault(s => s.RefreshTokenHash == refreshTokenHash || s.PreviousRefreshTokenHash == refreshTokenHash));
+
+    public Task<bool> RotateRefreshTokenAsync(Guid sessionId, string oldRefreshHash, string newRefreshHash, string newAccessHash, CancellationToken cancellationToken = default)
+    {
+        var s = Sessions.FirstOrDefault(x => x.Id == sessionId && !x.IsRevoked && x.RefreshTokenHash == oldRefreshHash);
+        if (s is null) return Task.FromResult(false);
+        s.PreviousRefreshTokenHash = oldRefreshHash;
+        s.RefreshTokenHash = newRefreshHash;
+        s.TokenHash = newAccessHash;
+        s.UpdatedAt = DateTime.UtcNow;
+        return Task.FromResult(true);
+    }
+
+    public Task RevokeSessionByIdAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        var s = Sessions.FirstOrDefault(x => x.Id == sessionId);
+        if (s != null) s.IsRevoked = true;
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> HasActiveSessionAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Sessions.Any(s => s.UserId == userId && !s.IsRevoked && s.ExpiresAt > DateTime.UtcNow));
+
     public Task SaveOtpAsync(OtpToken token, CancellationToken cancellationToken = default)
     {
         var idx = Otps.FindIndex(o => o.Id == token.Id);
@@ -307,6 +331,15 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
+    /// <summary>[UC-93] Email kết quả xử lý yêu cầu xóa trung tâm.</summary>
+    public List<(string To, string CenterName, string Outcome, string? Note, DateTime? PurgeAt)> CenterDeletionEmails { get; } = [];
+
+    public Task SendCenterDeletionOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? note, DateTime? purgeAt, CancellationToken ct = default)
+    {
+        CenterDeletionEmails.Add((toEmail, centerName, outcome, note, purgeAt));
+        return Task.CompletedTask;
+    }
+
     /// <summary>[UC-59] Email kết quả xét duyệt hồ sơ xác minh gửi cho trung tâm.</summary>
     public List<(string To, string CenterName, string Outcome, string? Reason, IReadOnlyList<string>? Unmet)> CenterVerificationEmails { get; } = [];
 
@@ -413,6 +446,7 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
         InviteSentCount = l.InviteSentCount, LastInviteSentAt = l.LastInviteSentAt, AcceptedAt = l.AcceptedAt,
         ConsentId = l.ConsentId, RevokedAt = l.RevokedAt, RevokedByUserId = l.RevokedByUserId, RevokeTokenHash = l.RevokeTokenHash,
         Version = l.Version, ProfileTransferStatus = l.ProfileTransferStatus, ProfileTransferAt = l.ProfileTransferAt,
+        SourceManagedUserId = l.SourceManagedUserId, ParentPreferenceJson = l.ParentPreferenceJson,
     };
 }
 

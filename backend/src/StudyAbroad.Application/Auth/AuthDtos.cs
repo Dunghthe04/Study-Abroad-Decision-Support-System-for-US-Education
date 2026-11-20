@@ -30,6 +30,9 @@ namespace StudyAbroad.Application.Auth
     /// <summary>[UC-62] Admin mở khóa tài khoản kèm lý do.</summary>
     public record UnlockUserAccountRequest(string Reason);
 
+    /// <summary>[UC-113] Admin sửa ngày sinh theo yêu cầu hỗ trợ. Lý do bắt buộc (tối đa 500 ký tự).</summary>
+    public record UpdateUserBirthDateRequest(DateOnly? BirthDate, string? Reason);
+
     // [USAS-362] Thông tin người dùng trả về cho client (không chứa password_hash)
     // [Q11] AgeGroup (child/minor/adult, null nếu không áp), ParentConsentStatus (granted/pending/none/not_required),
     // BlockedFeatures: các chức năng trong AgeFeatures.Rules đang bị chặn (server tính, frontend chỉ dùng để ẩn nút).
@@ -37,10 +40,13 @@ namespace StudyAbroad.Application.Auth
         string? AgeGroup = null, string? ParentConsentStatus = null, List<string>? BlockedFeatures = null,
         string? LockReason = null, DateTime? LockoutEnd = null,
         // [UC-111] Ngày sinh chỉ trả cho chính chủ (xem tài khoản của mình); người dùng không tự sửa được, chỉ Admin sửa (UC-113)
-        DateOnly? DateOfBirth = null);
+        DateOnly? DateOfBirth = null,
+        // [UC-113] Tuổi tròn tính từ ngày sinh (giờ VN), trả kèm khi Admin xem / sửa ngày sinh
+        int? Age = null);
 
     // [USAS-362] Kết quả đăng nhập thành công. AccessToken chỉ dùng để đặt HttpOnly cookie, controller không trả nó trong body
-    public record AuthResponse(string AccessToken, DateTime ExpiresAt, UserDto User);
+    // RefreshToken và SessionExpiresAt cũng chỉ để controller đặt cookie refresh (HttpOnly, chỉ gửi tới /api/v1/auth)
+    public record AuthResponse(string AccessToken, DateTime ExpiresAt, UserDto User, string? RefreshToken = null, DateTime? SessionExpiresAt = null);
 
     public record LoginRequest(string Email, string Password);
 

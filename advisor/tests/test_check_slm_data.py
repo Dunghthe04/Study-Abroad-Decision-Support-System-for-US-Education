@@ -1,7 +1,7 @@
-"""Test cho scripts/check_slm_data.py: mỗi kiểm tra bắt đúng lỗi trên dữ liệu giả nhỏ, và không báo oan dòng đúng."""
+"""Test cho slm/prepare/check_slm_data.py: mỗi kiểm tra bắt đúng lỗi trên dữ liệu giả nhỏ, và không báo oan dòng đúng."""
 
 from app.schemas.slm import INFO_FIELDS
-from scripts.check_slm_data import (
+from slm.prepare.check_slm_data import (
     Item,
     check_every_info_field_has_enough_test,
     check_every_profile_key_has_test_and_val,

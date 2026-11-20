@@ -1,12 +1,17 @@
 // Mục tiêu học sinh tích ở đầu form: quyết định ô nào bắt buộc và bấm nút cuối thì đi đâu.
-// Mã mục tiêu phải khớp FORM_GOALS trong advisor/app/services/intake.py (chat gửi qua link ?goal=)
-export type FormGoal = "danh_gia" | "lo_trinh" | "goi_y_truong";
+// Mã mục tiêu phải khớp FORM_GOALS trong advisor/app/services/intake.py (chat gửi qua link ?goal=).
+// Riêng "chi_sua": chỉ lưu hồ sơ, không làm việc gì khác. Mở từ link "Sửa hồ sơ" thì lưu xong quay về trang cũ;
+// chat gửi khi học sinh sửa hồ sơ mà không có câu tư vấn nào đang chờ, lưu xong về chat báo đã lưu
+export type FormGoal = "danh_gia" | "lo_trinh" | "goi_y_truong" | "chi_sua";
 
 export const FORM_GOAL_OPTIONS: { value: FormGoal; label: string; description: string }[] = [
   { value: "danh_gia", label: "Đánh giá hồ sơ", description: "Hồ sơ đang mạnh, yếu ở đâu" },
   { value: "lo_trinh", label: "Lên lộ trình", description: "Cần làm gì, khi nào" },
   { value: "goi_y_truong", label: "Gợi ý trường", description: "Danh sách trường hợp với bạn" },
+  { value: "chi_sua", label: "Chỉ sửa hồ sơ", description: "Lưu hồ sơ, không làm việc gì khác" },
 ];
+
+export const EDIT_ONLY: FormGoal = "chi_sua";
 
 // Mục tiêu cần ngành thật (không được "Chưa chọn ngành"): lộ trình và gợi ý trường lọc theo ngành
 const NEEDS_MAJOR: FormGoal[] = ["lo_trinh", "goi_y_truong"];
@@ -29,6 +34,27 @@ export function goalsNeedMajor(goals: FormGoal[]): boolean {
   return goals.some((g) => NEEDS_MAJOR.includes(g));
 }
 
+// "Chỉ sửa hồ sơ" không đi cùng việc khác: tích nó thì bỏ các việc kia, tích việc khác thì bỏ nó
+export function toggleGoal(goals: FormGoal[], goal: FormGoal): FormGoal[] {
+  if (goals.includes(goal)) return goals.filter((g) => g !== goal);
+  if (goal === EDIT_ONLY) return [EDIT_ONLY];
+  return parseGoals([...goals.filter((g) => g !== EDIT_ONLY), goal].join(","));
+}
+
+export function onlyEdit(goals: FormGoal[]): boolean {
+  return goals.includes(EDIT_ONLY);
+}
+
+// Link mở form để sửa hồ sơ, tích sẵn "Chỉ sửa hồ sơ" (chỉ khi đã có hồ sơ). Lưu xong quay về trang `back`
+export function editProfileHref(back: string): string {
+  return `/analysis?edit=1&goal=${EDIT_ONLY}&back=${encodeURIComponent(back)}`;
+}
+
+// Trang quay về sau khi lưu: chỉ nhận đường dẫn trong trang web (bắt đầu bằng một dấu /)
+export function safeBackPath(back: string | null): string | null {
+  return back && back.startsWith("/") && !back.startsWith("//") && !back.startsWith("/\\") ? back : null;
+}
+
 export function onlySchoolList(goals: FormGoal[]): boolean {
   return goals.length === 1 && goals[0] === "goi_y_truong";
 }
@@ -46,7 +72,7 @@ export function goalsQuestion(goals: FormGoal[]): string {
 export function rememberChatGoals(codes: string[]): void {
   try {
     const saved = parseGoals(sessionStorage.getItem(GOALS_KEY));
-    const next = parseGoals([...saved, ...codes].join(","));
+    const next = parseGoals([...saved.filter((g) => g !== EDIT_ONLY), ...codes].join(","));
     if (next.length === saved.length) return; // không có mục mới
     sessionStorage.setItem(GOALS_KEY, next.join(","));
   } catch {

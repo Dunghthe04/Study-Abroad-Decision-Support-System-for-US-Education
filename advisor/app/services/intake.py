@@ -60,6 +60,8 @@ def next_question(profile: dict[str, ProfileField]) -> tuple[str, str] | None:
 # Mục tiêu tích sẵn trên form khi mở từ chat (link /analysis?from=chat&goal=...).
 # Mã phải khớp FormGoal trong frontend/src/lib/form-goals.ts
 FORM_GOALS = {"assessment": "danh_gia", "roadmap": "lo_trinh", "school_list": "goi_y_truong"}
+# Sửa hồ sơ trong chat mà không có câu tư vấn nào đang chờ: form tích "Chỉ sửa hồ sơ", lưu xong về chat báo đã lưu
+EDIT_ONLY_GOAL = "chi_sua"
 
 
 # Câu tư vấn đang chờ hồ sơ cần những việc nào, giống cách GeneratedAdviceBranch chọn việc:

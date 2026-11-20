@@ -1,3 +1,6 @@
+import type { ProfileFlowDraft } from "@/types/profile-flow";
+export * from "@/types/dashboard";
+
 // Mirrors the DTOs of the ASP.NET Core API (StudyAbroad.Application).
 
 export interface PagedResult<T> {
@@ -207,7 +210,32 @@ export interface CenterProfileUpdateResponse {
   outcome: CenterProfileUpdateOutcome;
 }
 
-/** [UC-92 / UC-93] Yêu cầu xóa tài khoản trung tâm. status: pending | completed | rejected. */
+/** [UC-93] Trạng thái yêu cầu xóa trung tâm: chờ xử lý, đã duyệt (chờ tới hạn xóa hẳn), đã xóa, bị từ chối. */
+export type CenterDeletionRequestStatus = "pending" | "approved" | "completed" | "rejected";
+
+/** [UC-93] Yêu cầu xóa trong danh sách của Administrator, kèm thông tin kiểm tra danh tính người gửi. */
+export interface AdminCenterDeletionRequestDto {
+  id: string;
+  studyCenterId: string;
+  centerName: string;
+  centerEmail: string | null;
+  centerPhone: string | null;
+  centerVerificationStatus: string;
+  requestedByUserId: string | null;
+  requesterName: string | null;
+  requesterEmail: string | null;
+  requesterIsOwner: boolean;
+  reason: string;
+  status: CenterDeletionRequestStatus;
+  createdAt: string;
+  handledByUserId: string | null;
+  handledAt: string | null;
+  decisionNote: string | null;
+  scheduledPurgeAt: string | null;
+  completedAt: string | null;
+}
+
+/** [UC-92 / UC-93] Yêu cầu xóa tài khoản trung tâm. status: pending | approved | completed | rejected. */
 export interface CenterDeletionRequestDto {
   id: string;
   studyCenterId: string;
@@ -327,7 +355,7 @@ export interface ChatWidget {
  * không qua SLM hiểu câu nên nhanh và không nhầm tên trường. target chỉ dùng cho goal_seek (bỏ trống thì hệ thống chọn nhóm cao hơn một bậc).
  */
 export interface AssistantAction {
-  type: "goal_seek" | "explain" | "school_info" | "school_compare";
+  type: "goal_seek" | "explain" | "school_info" | "school_compare" | "school_search";
   schoolCodes?: string[] | null; // school_compare: mã từ hai đến bốn trường (hoặc tên chưa được chọn)
   fields?: string[] | null; // school_compare: mã mục so sánh, giữ nguyên khi chọn lại trường mơ hồ
   schoolCode?: string | null; // goal_seek không kèm trường: hỏi lại bằng ô chọn trường
@@ -336,6 +364,8 @@ export interface AssistantAction {
   suggested?: string[] | null; // ô chọn trường: các trường nên hiện sẵn dạng nút (backend điền, giao diện gửi lại nguyên)
   /** "real": giải thích theo hồ sơ thật dù trang đang xem giả định (nút "Xem theo hồ sơ thật"); bỏ trống: theo cái đang xem */
   basis?: "real" | null;
+  /** school_search: bộ điều kiện tìm dựng sẵn (nút "Chỉ top 20", "Bỏ điều kiện bang"...), backend điền, giao diện gửi lại nguyên */
+  search?: Record<string, unknown> | null;
 }
 
 export interface AdvisorChatResponse {
@@ -393,6 +423,12 @@ export interface LockUserAccountRequest {
 }
 
 /** [UC-62] Admin mở khóa tài khoản kèm lý do. */
+/** [UC-113] Admin sửa ngày sinh Học sinh / Phụ huynh theo yêu cầu hỗ trợ. birthDate dạng yyyy-MM-dd, lý do bắt buộc. */
+export interface UpdateUserBirthDateRequest {
+  birthDate: string;
+  reason: string;
+}
+
 export interface UnlockUserAccountRequest {
   reason: string;
 }
@@ -412,6 +448,8 @@ export interface UserDto {
   lockoutEnd?: string | null;
   /** [UC-111] Ngày sinh (yyyy-MM-dd), chỉ trả về cho chính chủ hoặc Admin */
   dateOfBirth?: string | null;
+  /** [UC-113] Tuổi tròn theo giờ VN, tính từ ngày sinh (có khi xem chi tiết hoặc sau khi Admin sửa ngày sinh) */
+  age?: number | null;
 }
 
 // Token chỉ nằm trong HttpOnly cookie, body không chứa token
@@ -522,6 +560,8 @@ export interface AcademicProfileResponse {
   updatedAt?: string | null;
   // Đã gửi hồ sơ 6 bước (hoặc có dữ liệu cũ)
   isComplete: boolean;
+  // Đủ 5 bước của hồ sơ đã gửi (giống bước 6), null khi chưa gửi
+  details?: ProfileFlowDraft | null;
 }
 
 export interface TargetSchoolSummaryDto {
@@ -657,11 +697,14 @@ export interface CenterReceivedLeadDto {
   contactPhone?: string | null;
   message?: string | null;
   sharedProfile: boolean;
-  status: "new" | "contacted" | "closed" | string;
+  /** [UC-73] new | accepted | rejected | contacted (cũ, coi như accepted) | closed | withdrawn */
+  status: "new" | "accepted" | "rejected" | "contacted" | "closed" | string;
   createdAt: string;
   studentName?: string | null;
   studentEmail?: string | null;
   profileSummary?: SharedProfileSummaryDto | null;
+  /** [UC-73] Đã thu hồi hoặc quá 90 ngày: trung tâm không còn xem được dữ liệu đã chia sẻ. */
+  dataHidden?: boolean;
 }
 
 export interface CenterLeadsSummaryDto {
@@ -670,8 +713,11 @@ export interface CenterLeadsSummaryDto {
   page: number;
   pageSize: number;
   newCount: number;
+  /** [UC-73] Đã chấp nhận (gồm contacted cũ). */
   contactedCount: number;
   closedCount: number;
+  /** [UC-73] Bị từ chối. */
+  rejectedCount?: number;
 }
 
 export interface UpdateLeadStatusRequest {
@@ -691,6 +737,8 @@ export interface LeadMessageDto {
   attachmentUrl?: string | null;
   status: "visible" | "removed" | string;
   createdAt: string;
+  /** [Chat realtime] Lúc phía đối diện đã xem tin này, null nếu chưa xem. */
+  readAt?: string | null;
 }
 
 export interface LeadMessagesThreadDto {
@@ -797,18 +845,30 @@ export interface ParentChildProfileDto {
   studentName: string;
   profileTransferStatus: ProfileTransferStatus | null;
   profile: AcademicProfileResponse;
+  /** 1.5: con chưa có tài khoản do phụ huynh tạo; phụ huynh nhập hồ sơ thay con này */
+  isManaged: boolean;
+  /** 1.5d: "YYYY-MM-DD", null = chưa nhập (con giữ hồ sơ cũ của phụ huynh) */
+  dateOfBirth: string | null;
 }
 
+/** 1.5d: con thật vừa liên kết, chờ phụ huynh chọn con managed tương ứng */
+export interface PendingMatchDto {
+  linkId: string;
+  studentUserId: string;
+  studentName: string;
+  /** Ngày sinh con tự khai, "YYYY-MM-DD" */
+  dateOfBirth: string | null;
+}
+
+/** 1.5d: phụ huynh không có hồ sơ riêng, chỉ xem hồ sơ các con và ghép con thật với con managed */
 export interface ParentProfileOverviewDto {
-  hasOwnProfile: boolean;
-  /** Phụ huynh có hồ sơ tự nhập, có từ 2 con và chưa chọn con nào nhận */
-  hasPendingOwnProfile: boolean;
   children: ParentChildProfileDto[];
+  pendingMatches: PendingMatchDto[];
 }
 
-export interface ShareParentProfileResult {
+export interface MatchManagedChildResult {
   status: ProfileTransferStatus;
-  studentName: string | null;
+  studentName: string;
 }
 
 export interface ParentProfileOfferDto {
@@ -816,6 +876,22 @@ export interface ParentProfileOfferDto {
   parentName: string;
   offeredAt: string;
   parentProfile: AcademicProfileResponse;
+}
+
+// [UC-110] Thông báo trong hệ thống (chỉ của người đăng nhập)
+export interface NotificationDto {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  linkUrl: string | null;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface UnreadCountDto {
+  count: number;
 }
 
 /** [UC-114] Bộ lọc danh sách thay đổi trung tâm chờ Moderator kiểm tra. */
@@ -837,3 +913,55 @@ export interface CenterProfileChangeDto {
   reviewedAt?: string | null;
   reviewReason?: string | null;
 }
+
+/** [UC-97] Danh mục lọc nhật ký truy cập dữ liệu nhạy cảm. */
+export type AccessLogCategory =
+  | "all"
+  | "all_sensitive"
+  | "center_document"
+  | "reported_message"
+  | "slm_export"
+  | "parent"
+  | "account";
+
+/** [UC-97] Một dòng nhật ký truy cập hoặc xuất dữ liệu nhạy cảm (Administrator only). */
+export interface AccessLogDto {
+  id: string;
+  createdAt: string;
+  actorUserId?: string | null;
+  actorFullName?: string | null;
+  actorEmail?: string | null;
+  actorRole?: UserRole | string | null;
+  action: string;
+  actionCategory: string;
+  actionDescription: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  detailJson?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+}
+
+/** [UC-97] Tham số truy vấn bộ lọc nhật ký truy cập. */
+export interface AccessLogFilterQuery {
+  category?: AccessLogCategory | string;
+  action?: string;
+  search?: string;
+  actorUserId?: string;
+  actorRole?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** [UC-97] Thống kê tổng quan số lượt truy cập nhạy cảm theo nhóm thao tác. */
+export interface AccessLogSummaryDto {
+  totalSensitiveCount: number;
+  centerDocumentViews: number;
+  reportedMessageViews: number;
+  slmSampleExports: number;
+  totalAllCount?: number;
+  chatMessageViews?: number;
+}
+

@@ -34,7 +34,7 @@ namespace StudyAbroad.Application.Advisor
         IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null,
         IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null,
         IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null, AiPricing? pricing = null,
-        StudyAbroad.Application.Admin.SlmSamples.ISlmSampleService? slmSamples = null)
+        StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeBaseService? knowledgeBase = null)
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
@@ -108,14 +108,19 @@ namespace StudyAbroad.Application.Advisor
             // Chụp ngay các tín hiệu của advisor (nhãn model gán, số đo AI, hành động) trước khi các bước sau thay response.
             // Dùng để đánh giá lượt (ChatTurn) và ghi chat_messages ở cuối
             var advisorSignals = new TurnSignals(askedAt, response.Slm, response.AiUsage, response.Action, response.Skills);
+            // 1f: phụ huynh đã liên kết không có hồ sơ riêng, lượt về hồ sơ được thay trước khi lưu nháp (ParentChatGate)
+            if (!await profileFlow.CanEditOwnProfileAsync(userId, ct))
+                response = ParentChatGate.Apply(response, state, await profileFlow.GetParentChatChildrenAsync(userId, ct));
             var changed = await SaveProfileToDraftAsync(userId, response, ct);
 
             // C5: học sinh bấm "Đúng rồi" ở X1 thì chat rời bảng rà soát sang B3, lúc đó lưu hồ sơ chính thức.
             // Đánh giá chạy luôn trong lượt này nên chat có thể đã sang B4.
+            // Sửa hồ sơ đã lưu trong chat (chat vẫn ở B3, hiện lại X1) rồi xác nhận cũng lưu lại; còn ở X1 hay đang hỏi mục sửa thì chưa lưu.
             // Lưu lỗi thì giữ nguyên trạng thái cũ (vẫn ở X1) và nháp, báo lỗi để học sinh sửa rồi xác nhận lại
             var nextStep = CurrentStep(response.State);
             var profileSaved = false;
-            if (QuestionOf(state) == ReviewQuestion && IsPastReview(nextStep) && !IsPastReview(session.CurrentStep))
+            if (QuestionOf(state) == ReviewQuestion && IsPastReview(nextStep)
+                && QuestionOf(response.State) != ReviewQuestion && !IsEditing(response.State))
             {
                 var commitError = await CommitProfileAsync(userId, ct);
                 profileSaved = commitError is null;
@@ -125,7 +130,7 @@ namespace StudyAbroad.Application.Advisor
                     {
                         Answer = $"Hồ sơ chưa lưu được: {commitError} Bạn sửa lại giúp mình rồi xác nhận lại nhé.",
                         State = state,
-                        QuickReplies = null,
+                        QuickReplies = [ChatNextSteps.EditProfile],
                         Widget = null,
                     };
                     nextStep = session.CurrentStep;
@@ -158,7 +163,7 @@ namespace StudyAbroad.Application.Advisor
 
             // Học sinh hỏi "cần gì để vào trường X": khớp tên trường, rồi hỏi lại hoặc chạy goal-seeking có sẵn
             if (response.Action == ChatGoalSeek.Action && recommender is not null)
-                response = await GoalSeekAsync(userId, response, ct, onEvent);
+                response = await GoalSeekAsync(userId, response, ct, onEvent, ExplainBasis(request), ViewingSimulation(request));
 
             // Học sinh hỏi tìm trường theo điều kiện ("trường nào ở California có học bổng"): lọc bằng số liệu thật, sắp theo xếp hạng hoặc theo ý học sinh
             if (response.Action == ChatSchoolInfo.SearchAction && recommender is not null)
@@ -213,21 +218,21 @@ namespace StudyAbroad.Application.Advisor
 
         private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(1);
 
-        // UC-53: câu chưa trả lời được vào danh sách mẫu SLM ở dạng nháp, chỉ có câu hỏi. Theo công tắc Chat:StoreMessages
+        // UC-53: câu chưa trả lời được vào kho tri thức ở dạng nháp, chỉ có câu hỏi. Theo công tắc Chat:StoreMessages
         // (messages null khi tắt). Lỗi không làm hỏng lượt chat
         private async Task CaptureUnansweredAsync(AdvisorChatRequest request, CancellationToken ct)
         {
-            if (slmSamples is null || messages is null || request.Messages.LastOrDefault(m => m.Role == "user")?.Content is not { Length: > 0 } asked)
+            if (knowledgeBase is null || messages is null || request.Messages.LastOrDefault(m => m.Role == "user")?.Content is not { Length: > 0 } asked)
                 return;
             try
             {
                 using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 bounded.CancelAfter(CaptureTimeout);
-                await slmSamples.CaptureUnansweredAsync(asked, bounded.Token);
+                await knowledgeBase.CaptureUnansweredAsync(asked, bounded.Token);
             }
             catch (Exception ex)
             {
-                logger?.LogWarning(ex, "Không lưu được câu chưa trả lời vào mẫu SLM");
+                logger?.LogWarning(ex, "Không lưu được câu chưa trả lời vào kho tri thức");
             }
         }
 
@@ -407,6 +412,11 @@ namespace StudyAbroad.Application.Advisor
         private static SimulationOverrides? ExplainBasis(AdvisorChatRequest request) =>
             request.Action?.Basis == "real" || !RecommendationService.HasValues(request.Simulation) ? null : request.Simulation;
 
+        // Giá trị giả định mà trang đang xem (null nếu không có), kể cả khi học sinh chọn xem theo hồ sơ thật: để câu trả lời nói rõ
+        // đã dùng cơ sở nào và có nút chuyển sang cơ sở còn lại
+        private static SimulationOverrides? ViewingSimulation(AdvisorChatRequest request) =>
+            RecommendationService.HasValues(request.Simulation) ? request.Simulation : null;
+
         // Viết lời tư vấn một trường (advisor đã chọn trường, mã ở ActionData.code). Lỗi thì báo, không làm hỏng cả lượt chat
         private async Task<AdvisorChatResponse> ExplainAsync(
             Guid userId, AdvisorChatResponse response, CancellationToken ct, Func<AdvisorStreamEvent, Task>? onEvent = null,
@@ -423,13 +433,12 @@ namespace StudyAbroad.Application.Advisor
                 if (onEvent is not null)
                     await onEvent(new AdvisorStreamEvent("card", Widget: widget));
                 var result = await recommender.ExplainAsync(userId, code, ct, overrides, basis);
+                var suggested = Suggested((await LatestSchoolsAsync(userId, ct)).Shown, code);
                 return response with
                 {
                     Answer = result.Status == "OK" ? ChatExplanation.Format(result) : ChatExplanation.Failed,
                     Widget = widget,
-                    QuickReplies = result.Status == "OK"
-                        ? ChatNextSteps.AfterExplain(code, Suggested((await LatestSchoolsAsync(userId, ct)).Shown, code))
-                        : null,
+                    QuickReplies = result.Status == "OK" ? ChatNextSteps.AfterExplain(code, suggested) : ChatNextSteps.AfterExplainFailed(suggested),
                 };
             }
             catch (InvalidOperationException ex)
@@ -438,7 +447,7 @@ namespace StudyAbroad.Application.Advisor
                 if (ex.Message.StartsWith("Chưa"))
                 {
                     var data = JsonSerializer.SerializeToElement(new { code });
-                    var why = await GoalSeekAsync(userId, response with { ActionData = data }, ct, onEvent);
+                    var why = await GoalSeekAsync(userId, response with { ActionData = data }, ct, onEvent, overrides, overrides);
                     if (why.Widget is not null)
                         return why;
                 }
@@ -485,12 +494,11 @@ namespace StudyAbroad.Application.Advisor
                     parts.Add(ChatSimulation.PriorityNote(basePref, newPref, priorities, before.ItemsJson, result.ItemsJson));
                 }
                 // Bước tiếp theo của quy trình: hiểu vì sao đổi, rồi xem cần gì để vào trường khó
-                var steps = ChatSimulation.NextSteps(result, beforeItems);
                 return response with
                 {
                     Answer = string.Join("\n\n", parts),
                     Widget = ChatSimulation.WidgetOf(scenario, newPref),
-                    QuickReplies = steps.Count == 0 ? null : ChatNextSteps.WithCenter(steps),   // không có bước nào thì không có nút nào
+                    QuickReplies = ChatNextSteps.AfterSimulate(result, beforeItems),
                 };
             }
             catch (ArgumentException ex)
@@ -545,7 +553,7 @@ namespace StudyAbroad.Application.Advisor
                 // Model đã trả trường và mục (không chạy kho kiến thức) mà không khớp được trường nào trong hệ thống: nói rõ, không để câu tạm
                 if (code is null && query.KbSkipped && query.School is { } unknown
                     && (await recommender!.FindMentionedSchoolsAsync(userId, query.Question, ct)).Count != 1)
-                    return MergeSchoolInfo(response, query, ChatSchoolInfo.SchoolNotFound(unknown), clearKb: true);
+                    return MergeSchoolInfo(response, query, ChatSchoolInfo.SchoolNotFound(unknown), clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
                 if (code is null)
                 {
                     // SLM không trích được tên: quét câu, chỉ nhận khi đúng một trường chắc chắn (nhiều trường là so sánh, làm sau)
@@ -563,19 +571,26 @@ namespace StudyAbroad.Application.Advisor
                 if (!answer.Complete)
                 {
                     // Chỉ hỏi điều cơ sở dữ liệu không có: kho kiến thức có nguồn thật thì giữ, không thì nói chưa có và chỉ website
-                    return query.KbFound ? response : MergeSchoolInfo(response, query, answer.Text, clearKb: true);
+                    return query.KbFound
+                        ? response
+                        : MergeSchoolInfo(response, query, answer.Text, clearKb: true) with { QuickReplies = ChatNextSteps.AfterSchoolInfo(info.Code, info.Name, fields) };
                 }
                 // Thẻ nói đủ số liệu nên giao diện bỏ đoạn chữ này cho gọn; còn lời về điều hệ thống không lưu thì thẻ không nói, giữ chữ
                 var merged = MergeSchoolInfo(response, query, answer.Text, clearKb: true)
                     with { Widget = ChatSchoolInfo.WidgetOf(info, fields, unstored ? null : answer.Text) };
-                return fields.Count == 0 && !unstored
-                    ? merged with { QuickReplies = ChatSchoolInfo.FieldButtons(info.Name) }
-                    : merged;
+                return merged with
+                {
+                    QuickReplies = fields.Count == 0 && !unstored
+                        ? ChatNextSteps.AfterSchoolOverview(info.Name)
+                        : ChatNextSteps.AfterSchoolInfo(info.Code, info.Name, fields),
+                };
             }
             catch (InvalidOperationException)
             {
                 // Có kho kiến thức làm dự phòng thì giữ câu của kho; model đã bỏ qua kho thì báo chưa tra được thay vì để câu tạm
-                return query.KbSkipped ? MergeSchoolInfo(response, query, ChatSchoolInfo.Unavailable, clearKb: true) : response;
+                return query.KbSkipped
+                    ? MergeSchoolInfo(response, query, ChatSchoolInfo.Unavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() }
+                    : response;
             }
         }
 
@@ -604,26 +619,29 @@ namespace StudyAbroad.Application.Advisor
                 return response;
             var asQuery = new ChatSchoolInfo.Query(query.Question, null, null, query.KbAnswer, false, [], true);
             if (query.Unresolved.Count > 0)
-                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.SearchUnresolved(query.Unresolved), clearKb: true);
+                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.SearchUnresolved(query.Unresolved), clearKb: true) with { QuickReplies = ChatNextSteps.SearchHelp() };
             if (!ChatSchoolInfo.HasAnyFilter(query.Filters) && !query.SortGiven)
-                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.SearchNoFilter, clearKb: true);
+                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.SearchNoFilter, clearKb: true) with { QuickReplies = ChatNextSteps.SearchHelp() };
             try
             {
                 var result = await recommender!.SearchSchoolsAsync(userId, query.Filters, query.Sort, ct);
+                var note = ChatSchoolInfo.IgnoredNote(query.Ignored);
                 var text = ChatSchoolInfo.SearchText(result, query.Filters, query.Sort);
+                if (note is not null)
+                    text = $"{note}\n{text}";
                 var merged = MergeSchoolInfo(response, asQuery, text, clearKb: true);
                 if (result.Total == 0)
-                    return merged;
+                    return merged with { QuickReplies = ChatNextSteps.AfterNoResult(result, query.Sort, query.Filters) };
                 // Thẻ nói đủ (5 trường đầu và "Xem thêm"), nên giao diện bỏ đoạn chữ này; kèm nút bước tiếp theo
                 return merged with
                 {
-                    Widget = ChatSchoolInfo.WidgetOfSearch(result, query.Filters, query.Sort, text),
-                    QuickReplies = ChatSchoolInfo.SearchNextSteps(result, query.Sort),
+                    Widget = ChatSchoolInfo.WidgetOfSearch(result, query.Filters, query.Sort, text, note),
+                    QuickReplies = ChatNextSteps.AfterSearch(result, query.Sort, query.Filters, query.Ignored),
                 };
             }
             catch (InvalidOperationException)
             {
-                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.Unavailable, clearKb: true);
+                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.Unavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
             }
         }
 
@@ -664,7 +682,7 @@ namespace StudyAbroad.Application.Advisor
                 var codes = matches.Select(m => m.Schools[0].Code).ToList();
                 codes = codes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 if (codes.Count < 2)
-                    return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.CompareNeedsTwo, clearKb: true);
+                    return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.CompareNeedsTwo, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
 
                 var infos = new List<SchoolInfoDto>();
                 foreach (var code in codes)
@@ -678,11 +696,12 @@ namespace StudyAbroad.Application.Advisor
                 // Có lời AI thì chỉ hiện lời AI (đã nêu đủ số liệu); bảng code dựng chỉ làm câu thay thế khi AI lỗi
                 var text = note is null ? table : ChatSchoolInfo.CompareAnswerFromNote(infos, fields, note);
                 // Thẻ so sánh nói đủ bảng lẫn nhận xét (tách riêng khối "AI nhận xét"), nên giao diện bỏ đoạn chữ này, chỉ hiện thẻ
-                return MergeSchoolInfo(response, asQuery, text, clearKb: true) with { Widget = ChatSchoolInfo.WidgetOfCompare(infos, fields, note, text) };
+                return MergeSchoolInfo(response, asQuery, text, clearKb: true)
+                    with { Widget = ChatSchoolInfo.WidgetOfCompare(infos, fields, note, text), QuickReplies = ChatNextSteps.AfterCompare(infos.Select(i => (i.Code, i.Name))) };
             }
             catch (InvalidOperationException)
             {
-                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.Unavailable, clearKb: true);
+                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.Unavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
             }
         }
 
@@ -704,8 +723,10 @@ namespace StudyAbroad.Application.Advisor
 
         // Khớp tên trường (chữ thô của SLM). Chắc chắn: chạy goal-seeking. Mơ hồ: hỏi "Ý bạn là...?" kèm nút. Không thấy: báo.
         // Lỗi thì báo, không làm hỏng cả lượt chat
+        // overrides: giá trị giả định dùng để tính (null là hồ sơ thật); viewing: giá trị giả định trang đang xem, để nói rõ cơ sở
         private async Task<AdvisorChatResponse> GoalSeekAsync(
-            Guid userId, AdvisorChatResponse response, CancellationToken ct, Func<AdvisorStreamEvent, Task>? onEvent = null)
+            Guid userId, AdvisorChatResponse response, CancellationToken ct, Func<AdvisorStreamEvent, Task>? onEvent = null,
+            SimulationOverrides? overrides = null, SimulationOverrides? viewing = null)
         {
             var query = ChatGoalSeek.Parse(response.ActionData);
             if (query is null)
@@ -736,17 +757,21 @@ namespace StudyAbroad.Application.Advisor
                     code = match.Schools[0].Code;
                 }
 
-                var result = await recommender!.GoalSeekAsync(userId, code, query.Target, ct);
+                var result = await recommender!.GoalSeekAsync(userId, code, query.Target, ct, overrides);
                 var names = (await recommender.ListSchoolOptionsAsync(userId, ct)).Select(o => o.Name).ToList();
                 // Thẻ kết quả do code dựng: gửi ngay để học sinh thấy đáp án, rồi mới chờ Gemini viết lời (chậm hơn nhiều)
                 if (onEvent is not null)
-                    await onEvent(new AdvisorStreamEvent("card", Widget: ChatGoalSeek.WidgetOf(result)));
+                    await onEvent(new AdvisorStreamEvent("card", Widget: ChatGoalSeek.WidgetOf(result, ChatSimulation.Describe(overrides))));
                 var answer = await WriteGoalNoteAsync(ChatGoalSeek.Note(result, names), result, ct);
-                var steps = ChatGoalSeek.NextSteps(result);
-                // Trường đang trong danh sách thì có thể giải thích vì sao xếp nhóm này; trường bị loại đã có nút riêng theo lý do loại
-                if (steps.Count == 0)
-                    steps = [new QuickReply("Giải thích trường này", "Giải thích trường này", new ChatAction(ChatExplanation.Action, result.Code))];
-                return response with { Answer = answer, Widget = ChatGoalSeek.WidgetOf(result), QuickReplies = ChatNextSteps.WithCenter(steps) };
+                // Trang đang xem giả định: câu đầu nói rõ đã tính theo cơ sở nào (thẻ có nhãn riêng, lời văn không tự nói)
+                if (ChatGoalSeek.BasisLine(result.Basis, ChatSimulation.Describe(viewing)) is { } basisLine)
+                    answer = $"{basisLine}\n{answer}";
+                return response with
+                {
+                    Answer = answer,
+                    Widget = ChatGoalSeek.WidgetOf(result, ChatSimulation.Describe(overrides)),
+                    QuickReplies = ChatNextSteps.AfterGoalSeek(result, viewing is not null),
+                };
             }
             catch (ArgumentException ex)
             {
@@ -840,17 +865,25 @@ namespace StudyAbroad.Application.Advisor
                 ? q.GetString()
                 : null;
 
+        // Đang sửa hồ sơ trong chat: state.editQueue là danh sách (rỗng = đang hỏi mục sửa cuối), null = không sửa
+        private static bool IsEditing(JsonElement? state) =>
+            state is { ValueKind: JsonValueKind.Object } s
+            && s.TryGetProperty("editQueue", out var queue) && queue.ValueKind == JsonValueKind.Array;
+
         private static string? CurrentStep(JsonElement? state) =>
             state is { ValueKind: JsonValueKind.Object } s && s.TryGetProperty("currentStep", out var step)
                 ? step.GetString()
                 : null;
 
-        // Lưu hồ sơ chính thức; trả câu lỗi tiếng Việt nếu hồ sơ chưa đủ điều kiện, null nếu lưu được
+        // Lưu hồ sơ chính thức; trả câu lỗi tiếng Việt nếu hồ sơ chưa đủ điều kiện, null nếu lưu được.
+        // Gửi kèm bản nháp lấy từ GetFlowStateAsync: sửa hồ sơ đã lưu mà giữ nguyên mọi mục thì không có nháp
+        // (lần lưu trước đã xóa), lúc đó hàm dựng nháp từ hồ sơ đã lưu nên vẫn lưu được
         private async Task<string?> CommitProfileAsync(Guid userId, CancellationToken ct)
         {
             try
             {
-                await profileFlow.CommitFlowAsync(userId, null, ct);
+                var flow = await profileFlow.GetFlowStateAsync(userId, ct);
+                await profileFlow.CommitFlowAsync(userId, new CommitProfileFlowRequest(flow.Draft), ct);
                 return null;
             }
             catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)

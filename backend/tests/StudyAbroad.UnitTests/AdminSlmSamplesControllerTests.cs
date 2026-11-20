@@ -442,7 +442,6 @@ public class AdminSlmSamplesControllerTests
         public Task<IReadOnlyList<SlmSampleCreatorDto>> GetCreatorsAsync(CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<SlmSampleCreatorDto>>([]);
 
-        public Task<bool> CaptureUnansweredAsync(string? question, CancellationToken ct = default) => Task.FromResult(false);
 
         public Task<SlmExportFile> ExportAsync(
             string? format, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default)
