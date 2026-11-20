@@ -14,7 +14,7 @@ from app.services.chat_flow import (
 from app.services.intake import form_goals
 from app.services.replies import PROFILE_DONE
 from app.services.skill_rules import REQUIRED_B3, missing_fields
-from app.services.skills import buttons, skill_bac_hoc, skill_ho_so
+from app.services.skills import buttons, edit_prefill, skill_bac_hoc, skill_ho_so
 
 # Giá trị hồ sơ nào do skill nào đọc
 BAC_HOC_FIELDS = set(skill_bac_hoc.READ_FIELDS)
@@ -167,6 +167,8 @@ def ask_edit_question(state: ChatState, question_id: str, text: str | None = Non
         name in state.profile for name in ALL_QUESTION_FIELDS[question_id]
     ):
         output.quick_replies = [*output.quick_replies, skill_ho_so.KEEP_REPLY]
+        # Kèm giá trị cũ: khung "Hiện tại" + điền sẵn ô chọn, câu chỉ có nút thì ghi trong câu hỏi
+        output = edit_prefill.add_current(state, question_id, ALL_QUESTION_FIELDS[question_id], output)
     return output
 
 
