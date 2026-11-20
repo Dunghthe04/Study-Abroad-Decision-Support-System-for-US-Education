@@ -6,6 +6,7 @@ using Serilog;
 using Microsoft.AspNetCore.Authorization;
 using StudyAbroad.Api.Authorization;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Api.Filters;
 using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application;
 using StudyAbroad.Application.Auth;
@@ -148,7 +149,8 @@ builder.Services.AddAuthRateLimiter();
 builder.Services.AddMediaUploadRateLimiter();
 builder.Services.AddChatConcurrencyRateLimiter();   // một câu hỏi chat mỗi người cùng lúc (429 chat_busy)
 
-builder.Services.AddControllers();
+// Lỗi thanh toán / gói (BillingRuleException) trả { code, message, ... } với mã HTTP của lỗi, dùng chung mọi controller
+builder.Services.AddControllers(o => o.Filters.Add<BillingRuleExceptionFilter>());
 // Lỗi trả về không kèm lý do (Forbid(), NotFound() trần, lỗi 500...) được điền câu tiếng Việt theo mã lỗi
 builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = DefaultErrorMessages.FillMissingDetail);
 builder.Services.AddEndpointsApiExplorer();
