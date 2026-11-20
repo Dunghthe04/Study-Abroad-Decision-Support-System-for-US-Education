@@ -232,6 +232,26 @@ export interface AdminCenterDeletionRequestDto {
   decisionNote: string | null;
   scheduledPurgeAt: string | null;
   completedAt: string | null;
+  /** Trung tâm hoặc tài khoản chủ đang bị giữ pháp lý: không duyệt xóa được, job không xóa hẳn. */
+  isLegalHold: boolean;
+  legalHoldReason: string | null;
+  legalHoldAt: string | null;
+  /** Số tin nhắn của trung tâm bị báo cáo mà Admin chưa xử lý (UC-58). */
+  openReportCount: number;
+}
+
+/** [UC-93] Tình trạng giữ pháp lý (Legal Hold) dữ liệu của một trung tâm. */
+export interface CenterLegalHoldDto {
+  studyCenterId: string;
+  centerName: string;
+  isLegalHold: boolean;
+  reason: string | null;
+  since: string | null;
+  byUserId: string | null;
+  byName: string | null;
+  openDeletionRequestId: string | null;
+  openDeletionRequestStatus: CenterDeletionRequestStatus | null;
+  scheduledPurgeAt: string | null;
 }
 
 /** [UC-92 / UC-93] Yêu cầu xóa tài khoản trung tâm. status: pending | approved | completed | rejected. */

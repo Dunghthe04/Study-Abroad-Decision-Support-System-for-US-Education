@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { CheckIcon, XIcon } from "lucide-react";
+import { CheckIcon, ScaleIcon, XIcon } from "lucide-react";
+import Link from "next/link";
+import { CenterLegalHoldDialog, type LegalHoldAction } from "./CenterLegalHoldDialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -73,6 +75,7 @@ export function CenterDeletionRequestsView() {
   const [target, setTarget] = useState<{ decision: Decision; item: AdminCenterDeletionRequestDto } | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [holdTarget, setHoldTarget] = useState<{ action: LegalHoldAction; centerId: string; centerName: string } | null>(null);
 
   const query = useFetched(`center-deletion-requests|${filter}|${page}|${version}`, () =>
     centerDeletionRequestsApi.list({ status: filter, page, pageSize: PAGE_SIZE }),
@@ -128,6 +131,8 @@ export function CenterDeletionRequestsView() {
         <p className="text-sm text-ink-2">
           Trung tâm gửi yêu cầu xóa tài khoản và dữ liệu từ trang hồ sơ. Kiểm tra danh tính người gửi (đúng tài khoản chủ trung tâm, liên hệ
           lại qua email hoặc số điện thoại đã xác thực) trước khi duyệt. Sau khi duyệt, dữ liệu được xóa hẳn khi hết thời hạn chờ.
+          Nếu trung tâm bị nghi lừa đảo, có khiếu nại hoặc cơ quan có thẩm quyền yêu cầu giữ dữ liệu, bật giữ pháp lý: yêu cầu xóa không
+          thể duyệt và dữ liệu không bị xóa hẳn tới khi gỡ. Khi xóa hẳn, nhật ký và tin nhắn được giữ lại ở dạng ẩn danh để truy vết.
         </p>
       </header>
 
@@ -158,8 +163,32 @@ export function CenterDeletionRequestsView() {
                 <TableRow key={item.id}>
                   <TableCell className="tabular whitespace-nowrap">{formatDateTime(item.createdAt)}</TableCell>
                   <TableCell>
-                    <div className="font-medium">{item.centerName}</div>
+                    <div className="font-medium">
+                      {item.status === "completed" ? (
+                        item.centerName
+                      ) : (
+                        <Link href={`/admin/centers/${item.studyCenterId}`} className="hover:underline">
+                          {item.centerName}
+                        </Link>
+                      )}
+                    </div>
                     <div className="text-xs text-ink-2">{[item.centerEmail, item.centerPhone].filter(Boolean).join(" · ") || "—"}</div>
+                    {item.isLegalHold ? (
+                      <div className="mt-1 flex flex-col gap-0.5">
+                        <Badge variant="risk" className="w-fit gap-1">
+                          <ScaleIcon className="size-3" />
+                          Đang giữ pháp lý
+                        </Badge>
+                        {item.legalHoldReason ? (
+                          <span className="whitespace-pre-wrap break-words text-xs text-ink-2">{item.legalHoldReason}</span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {item.openReportCount > 0 && item.status !== "completed" ? (
+                      <Badge variant="warn" className="mt-1">
+                        {item.openReportCount} tin nhắn bị báo cáo chưa xử lý
+                      </Badge>
+                    ) : null}
                   </TableCell>
                   <TableCell>
                     <div>{item.requesterName ?? "Tài khoản đã xóa"}</div>
@@ -181,25 +210,56 @@ export function CenterDeletionRequestsView() {
                   <TableCell>
                     <Badge variant={badge.variant}>{badge.label}</Badge>
                     {item.status === "approved" && item.scheduledPurgeAt ? (
-                      <div className="mt-1 text-xs text-ink-2">Xóa hẳn: {formatDateTime(item.scheduledPurgeAt)}</div>
+                      <div className="mt-1 text-xs text-ink-2">
+                        {item.isLegalHold ? "Tạm dừng xóa (đang giữ). Hạn cũ: " : "Xóa hẳn: "}
+                        {formatDateTime(item.scheduledPurgeAt)}
+                      </div>
                     ) : null}
                     {item.status === "completed" && item.completedAt ? (
                       <div className="mt-1 text-xs text-ink-2">Đã xóa: {formatDateTime(item.completedAt)}</div>
                     ) : null}
                   </TableCell>
                   <TableCell>
-                    {item.status === "pending" ? (
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" size="sm" variant="destructive" className="gap-1.5" onClick={() => open("approve", item)}>
-                          <CheckIcon className="size-3.5" />
-                          Duyệt
+                    <div className="flex flex-wrap gap-2">
+                      {item.status === "pending" ? (
+                        <>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            className="gap-1.5"
+                            disabled={item.isLegalHold}
+                            title={item.isLegalHold ? "Đang giữ pháp lý: chỉ có thể từ chối hoặc gỡ giữ trước" : undefined}
+                            onClick={() => open("approve", item)}
+                          >
+                            <CheckIcon className="size-3.5" />
+                            Duyệt
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={() => open("reject", item)}>
+                            <XIcon className="size-3.5" />
+                            Từ chối
+                          </Button>
+                        </>
+                      ) : null}
+                      {item.status === "pending" || item.status === "approved" ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="gap-1.5"
+                          onClick={() =>
+                            setHoldTarget({
+                              action: item.isLegalHold ? "release" : "set",
+                              centerId: item.studyCenterId,
+                              centerName: item.centerName,
+                            })
+                          }
+                        >
+                          <ScaleIcon className="size-3.5" />
+                          {item.isLegalHold ? "Gỡ giữ pháp lý" : "Giữ pháp lý"}
                         </Button>
-                        <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={() => open("reject", item)}>
-                          <XIcon className="size-3.5" />
-                          Từ chối
-                        </Button>
-                      </div>
-                    ) : null}
+                      ) : null}
+                    </div>
                   </TableCell>
                 </TableRow>
               );
@@ -238,6 +298,14 @@ export function CenterDeletionRequestsView() {
               {target.item.requesterIsOwner ? "" : " · người gửi không phải tài khoản chủ trung tâm"}
             </p>
           ) : null}
+          {target?.decision === "approve" && target.item.openReportCount > 0 ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                Trung tâm có {target.item.openReportCount} tin nhắn bị người dùng báo cáo chưa xử lý. Nếu có dấu hiệu lừa đảo, hãy bật giữ pháp lý
+                thay vì duyệt xóa để không mất bằng chứng.
+              </AlertDescription>
+            </Alert>
+          ) : null}
           <Textarea
             value={note}
             onChange={(event) => setNote(event.target.value)}
@@ -264,6 +332,15 @@ export function CenterDeletionRequestsView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <CenterLegalHoldDialog
+        target={holdTarget}
+        onClose={() => setHoldTarget(null)}
+        onDone={() => {
+          setHoldTarget(null);
+          setVersion((v) => v + 1);
+        }}
+      />
     </div>
   );
 }

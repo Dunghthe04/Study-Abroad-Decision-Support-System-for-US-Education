@@ -35,6 +35,7 @@ import {
 } from "@/components/admin/centers/CenterActionConfirmDialog";
 import { CenterStatusBadge } from "@/components/centers/CenterBadges";
 import { CenterLegalInfoCard } from "@/components/centers/CenterLegalInfoCard";
+import { CenterLegalHoldCard } from "@/components/admin/center-deletion/CenterLegalHoldCard";
 
 interface AdminCenterDetailViewProps {
   center: StudyCenter;
@@ -336,6 +337,9 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
         )}
       </div>
       )}
+
+      {/* [UC-93] Giữ pháp lý dữ liệu khi trung tâm bị nghi lừa đảo, tranh chấp hoặc có yêu cầu của cơ quan có thẩm quyền */}
+      <CenterLegalHoldCard centerId={center.id} centerName={center.name} />
 
       {/* Main Tabs Navigation */}
       <Tabs defaultValue="tong-quan" className="space-y-4">
