@@ -23,6 +23,10 @@ public class AdvisorController(ChatService chat, ILogger<AdvisorController> logg
     private AdvisorChatRequest WithExactBudget(AdvisorChatRequest request) =>
         request with { ExactBudget = ActingSessionGuard.ReadActingParentId(User) is not null };
 
+    // Nhập hộ con: gói và token tính theo phụ huynh (id + vai trò parent), phiên chat vẫn của con
+    private (Guid? ChargeUserId, string? ChargeRole) Payer() =>
+        ActingSessionGuard.ReadActingParentId(User) is { } parentId ? (parentId, UserRoles.Parent) : (null, null);
+
     [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
     [EnableRateLimiting(ChatConcurrencyRateLimit.PolicyName)]   // một câu hỏi đang chạy mỗi người
     [HttpPost("chat")]
@@ -38,7 +42,8 @@ public class AdvisorController(ChatService chat, ILogger<AdvisorController> logg
 
         try
         {
-            return Ok(await chat.ChatAsync(userId.Value, WithExactBudget(request), ct, role: User.GetRole()));
+            var (chargeUserId, chargeRole) = Payer();
+            return Ok(await chat.ChatAsync(userId.Value, WithExactBudget(request), ct, role: User.GetRole(), chargeUserId: chargeUserId, chargeRole: chargeRole));
         }
         catch (HttpRequestException ex)
         {
@@ -79,7 +84,8 @@ public class AdvisorController(ChatService chat, ILogger<AdvisorController> logg
 
         try
         {
-            var result = await chat.ChatAsync(userId.Value, WithExactBudget(request), ct, e => Write(e), role: User.GetRole());
+            var (chargeUserId, chargeRole) = Payer();
+            var result = await chat.ChatAsync(userId.Value, WithExactBudget(request), ct, e => Write(e), role: User.GetRole(), chargeUserId: chargeUserId, chargeRole: chargeRole);
             await Write(new { type = "final", response = result });
         }
         catch (HttpRequestException ex)

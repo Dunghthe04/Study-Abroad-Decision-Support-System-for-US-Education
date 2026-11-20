@@ -355,6 +355,79 @@ public class ChatServiceTests
         Assert.All(staff.Rows, c => Assert.Equal(((Guid?)null, (string?)null), (c.UserSubscriptionId, c.PlanCode)));
     }
 
+    // ---- Phụ huynh nhập hộ con: phiên chat của con, nhưng gói và token tính theo phụ huynh
+
+    [Fact]
+    public async Task ActingParent_ChargeUsesTheParentPool_AiCallsAreRecordedAgainstTheParent_ChatStaysTheChilds()
+    {
+        var calls = new FakeAiCalls();
+        var sessions = new FakeSessions();
+        var advisor = new FakeAdvisor("B0") { AiUsage = TwoCalls };
+        var cycleId = Guid.NewGuid();
+        var entitlements = new FakeEntitlements(advisor, new StudyAbroad.Application.Billing.ChatCharge(
+            false, true, cycleId, "personal-1m", PlanKinds.Personal, null, false, DateTime.UtcNow));
+        var parentId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
+
+        var res = await new ChatService(advisor, sessions, new FakeProfileFlow(), aiCalls: calls, entitlements: entitlements)
+            .ChatAsync(childId, new AdvisorChatRequest(Hello), role: UserRoles.Student, chargeUserId: parentId, chargeRole: UserRoles.Parent);
+
+        Assert.Equal((parentId, UserRoles.Parent), (entitlements.UserId, entitlements.Role));
+        Assert.Equal(2, calls.Rows.Count);
+        Assert.All(calls.Rows, c => Assert.Equal((parentId, cycleId, "personal-1m"), (c.UserId!.Value, c.UserSubscriptionId!.Value, c.PlanCode)));
+        Assert.Equal(childId, Assert.Single(sessions.Rows).UserId);   // phiên chat vẫn là của con
+        Assert.Equal(sessions.Rows[0].Id.ToString(), res.SessionId);
+    }
+
+    [Fact]
+    public async Task NotActing_ChargeAndAiCallsStayWithTheAsker()
+    {
+        var calls = new FakeAiCalls();
+        var advisor = new FakeAdvisor("B0") { AiUsage = TwoCalls };
+        var entitlements = new FakeEntitlements(advisor, FreeCharge());
+        var userId = Guid.NewGuid();
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), aiCalls: calls, entitlements: entitlements)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello), role: UserRoles.Student);
+
+        Assert.Equal((userId, UserRoles.Student), (entitlements.UserId, entitlements.Role));
+        Assert.All(calls.Rows, c => Assert.Equal(userId, c.UserId));
+    }
+
+    [Theory]
+    [InlineData(true)]    // token của con mang claim act: phụ huynh trả
+    [InlineData(false)]   // token thường: chính người hỏi trả
+    public async Task Controller_PassesTheActingParentAsThePayer_OnlyWhenTheTokenCarriesTheActClaim(bool acting)
+    {
+        var childId = Guid.NewGuid();
+        var parentId = Guid.NewGuid();
+        List<System.Security.Claims.Claim> claims =
+        [
+            new(System.Security.Claims.ClaimTypes.NameIdentifier, childId.ToString()),
+            new(System.Security.Claims.ClaimTypes.Role, UserRoles.Student),
+        ];
+        if (acting)
+            claims.Add(new("act", $$"""{"sub":"{{parentId}}"}"""));
+        var advisor = new FakeAdvisor("B0");
+        var entitlements = new FakeEntitlements(advisor, FreeCharge());
+        var controller = new StudyAbroad.Api.Controllers.AdvisorController(
+            new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), entitlements: entitlements),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<StudyAbroad.Api.Controllers.AdvisorController>.Instance)
+        {
+            ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
+            {
+                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+                {
+                    User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(claims, "test")),
+                },
+            },
+        };
+
+        await controller.Chat(new AdvisorChatRequest(Hello), CancellationToken.None);
+
+        Assert.Equal(acting ? (parentId, UserRoles.Parent) : (childId, UserRoles.Student), (entitlements.UserId!.Value, entitlements.Role));
+    }
+
     // ---- Cổng Premium của chat (billing-plan-v2: G2 đến G13). Pure helper nằm ở ChatPremiumGateTests ----
 
     private const string InterviewState = """{"currentStep":"B1","questionId":"D2"}""";
@@ -3409,12 +3482,14 @@ public class ChatServiceTests
         : StudyAbroad.Application.Billing.IEntitlementService
     {
         public int Calls { get; private set; }
+        public Guid? UserId { get; private set; }
         public string? Role { get; private set; }
         public bool AdvisorCalledFirst { get; private set; }
 
         public Task<StudyAbroad.Application.Billing.ChatCharge> ResolveChatChargeAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default)
         {
             Calls++;
+            UserId = userId;
             Role = role;
             AdvisorCalledFirst = advisor.LastRequest is not null;
             return Task.FromResult(charge);

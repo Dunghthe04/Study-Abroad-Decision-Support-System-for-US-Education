@@ -43,17 +43,21 @@ namespace StudyAbroad.Application.Advisor
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
         // Mọi bước còn lại (lưu state, nháp, gợi ý trường...) chạy như cũ sau khi advisor trả xong, kết quả cuối giống hệt
+        // chargeUserId, chargeRole: ai trả cho lượt này. Phụ huynh đang nhập hộ con thì phiên chat là của con nhưng gói, hạn mức và token tính theo
+        // phụ huynh (con managed không mua được gói). Để trống thì người hỏi tự trả (userId, role)
         public async Task<AdvisorChatResponse> ChatAsync(
             Guid userId, AdvisorChatRequest request, CancellationToken ct = default,
-            Func<AdvisorStreamEvent, Task>? onEvent = null, string? role = null)
+            Func<AdvisorStreamEvent, Task>? onEvent = null, string? role = null,
+            Guid? chargeUserId = null, string? chargeRole = null)
         {
             var askedAt = DateTime.UtcNow;   // lúc học sinh hỏi, để ghi thời điểm tin của học sinh
             var turnClock = Stopwatch.StartNew();
             usageCollector?.Clear();         // giỏ số đo của lượt này bắt đầu rỗng
             // Pool trả cho cả lượt, chọn một lần trước mọi lần gọi advisor (kể cả nút bấm gọi advisor viết ghi chú)
+            var payerId = chargeUserId ?? userId;
             var charge = entitlements is null
                 ? null
-                : await entitlements.ResolveChatChargeAsync(userId, role ?? UserRoles.Student, askedAt, ct);
+                : await entitlements.ResolveChatChargeAsync(payerId, chargeRole ?? role ?? UserRoles.Student, askedAt, ct);
             // SessionId do trình duyệt gửi chỉ dùng để tìm phiên; State của trình duyệt bị bỏ, luôn lấy từ DB
             var isNew = false;
             ChatSession? session = null;
@@ -191,7 +195,8 @@ namespace StudyAbroad.Application.Advisor
             var turnSignals = advisorSignals with { Usage = TurnUsage(advisorSignals.Usage) };
             var replyId = await RecordTurnAsync(session, request, response, turnSignals, turnClock.ElapsedMilliseconds, ct);
             // Token ghi sau tin trả lời để nối được (chat_message_id). Tin không lưu (tắt công tắc hoặc lỗi) thì vẫn ghi token, chỉ không có liên kết
-            await RecordAiCallsAsync(userId, replyId, turnSignals.Usage, charge, ct);
+            // ai_calls.user_id là người trả (hạn mức Free đếm theo user_id), không phải chủ phiên chat
+            await RecordAiCallsAsync(payerId, replyId, turnSignals.Usage, charge, ct);
             if (ChatTurn.Outcome(turnSignals.Slm, turnSignals.Usage) == ChatOutcomes.NoAnswer)
                 await CaptureUnansweredAsync(request, ct);
 
