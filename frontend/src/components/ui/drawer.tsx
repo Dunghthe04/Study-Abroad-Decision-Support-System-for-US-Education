@@ -51,8 +51,14 @@ function Drawer({
   )
 }
 
-function DrawerTrigger({ ...props }: DrawerPrimitive.Trigger.Props) {
-  return <DrawerPrimitive.Trigger data-slot="drawer-trigger" {...props} />
+function DrawerTrigger({ className, ...props }: DrawerPrimitive.Trigger.Props) {
+  return (
+    <DrawerPrimitive.Trigger
+      data-slot="drawer-trigger"
+      className={cn("cursor-pointer disabled:cursor-default", className)}
+      {...props}
+    />
+  )
 }
 
 function DrawerPortal({ ...props }: DrawerPrimitive.Portal.Props) {
