@@ -5,11 +5,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using StudyAbroad.Api.Controllers;
 using StudyAbroad.Application.Billing;
 using StudyAbroad.Application.Billing.Admin;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
+using StudyAbroad.Infrastructure.Persistence.Repositories;
 
 namespace StudyAbroad.UnitTests;
 
@@ -27,6 +30,9 @@ public class PlanAdminServiceTests
         public List<PaymentTransaction> Orders { get; } = [];
         /// <summary>Mọi lần ghi (add, save, remove). Kỳ và đơn không có đường ghi nào qua repository này, nên chỉ có dòng gói bị đổi.</summary>
         public List<string> Writes { get; } = [];
+        /// <summary>Lỗi ràng buộc DB mà repository thật ném khi hai request đua nhau (đơn hoặc kỳ hoặc gói trùng xuất hiện giữa lúc kiểm tra và lúc ghi).</summary>
+        public PlanConflictException? ThrowOnAdd { get; set; }
+        public PlanConflictException? ThrowOnRemove { get; set; }
 
         private PlanWithUsage WithUsage(SubscriptionPlan p) => new(p, new PlanUsage(
             Cycles.Count(c => c.SubscriptionPlanId == p.Id && c.Status is CycleStatuses.Active or CycleStatuses.Queued),
@@ -44,6 +50,8 @@ public class PlanAdminServiceTests
 
         public Task AddAsync(SubscriptionPlan plan, CancellationToken ct = default)
         {
+            if (ThrowOnAdd is not null)
+                throw ThrowOnAdd;
             Writes.Add("add");
             Plans.Add(plan);
             return Task.CompletedTask;
@@ -57,6 +65,8 @@ public class PlanAdminServiceTests
 
         public Task RemoveAsync(SubscriptionPlan plan, CancellationToken ct = default)
         {
+            if (ThrowOnRemove is not null)
+                throw ThrowOnRemove;
             Writes.Add("remove");
             Plans.Remove(plan);
             return Task.CompletedTask;
@@ -200,6 +210,30 @@ public class PlanAdminServiceTests
         AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(code: "personal-1m"))), "code_taken", 409);
 
         Assert.Equal(3, f.Repo.Plans.Count);
+        Assert.Empty(f.Audit.Entries);
+    }
+
+    // Hai admin tạo cùng một mã gần như cùng lúc: cả hai qua bước kiểm tra, index duy nhất chặn bên chậm hơn → 409 chứ không phải 500
+    [Fact]
+    public async Task A1_CreateLosesTheRaceOnTheCodeIndex_ReturnsCodeTaken_AndWritesNothing()
+    {
+        var f = new Fixture();
+        f.Repo.ThrowOnAdd = new PlanConflictException(PlanConflict.CodeTaken);
+
+        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create())), "code_taken", 409);
+
+        Assert.Equal(3, f.Repo.Plans.Count);
+        Assert.Empty(f.Audit.Entries);   // lỗi ném trong transaction nên audit không được ghi
+    }
+
+    [Fact]
+    public async Task A2_CreateLosesTheRaceOnTheSingleFreeIndex_ReturnsFreePlanExists()
+    {
+        var f = new Fixture();
+        f.Repo.ThrowOnAdd = new PlanConflictException(PlanConflict.FreePlanExists);
+
+        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(code: "free-2", kind: PlanKinds.Free, price: 0, days: null))), "free_plan_exists", 409);
+
         Assert.Empty(f.Audit.Entries);
     }
 
@@ -574,6 +608,39 @@ public class PlanAdminServiceTests
         AssertRule(await Fails(f.Service.DeleteAsync(Admin, f.Family.Id)), "plan_in_use", 409);
 
         Assert.Contains(f.Family, f.Repo.Plans);
+    }
+
+    // Một đơn hoặc kỳ được tạo giữa lúc đếm và lúc xóa: khóa ngoại Restrict chặn → 409 plan_in_use chứ không phải 500
+    [Fact]
+    public async Task A4_DeleteHitsAForeignKeyViolation_ReturnsPlanInUse_AndWritesNoAudit()
+    {
+        var f = new Fixture();
+        f.Repo.ThrowOnRemove = new PlanConflictException(PlanConflict.InUse);
+
+        AssertRule(await Fails(f.Service.DeleteAsync(Admin, f.Personal.Id)), "plan_in_use", 409);
+
+        Assert.Contains(f.Personal, f.Repo.Plans);
+        Assert.Empty(f.Audit.Entries);
+    }
+
+    // Repository thật nhận ra lỗi Postgres theo cách OrderRepository.IsConflict nhận ra vi phạm index: theo SqlState trong DbUpdateException
+    private static DbUpdateException Pg(string sqlState, string? constraint = null) =>
+        new("save", new PostgresException("lỗi", "ERROR", "ERROR", sqlState, constraintName: constraint));
+
+    [Theory]
+    [InlineData(PostgresErrorCodes.UniqueViolation, "ix_subscription_plans_code", PlanConflict.CodeTaken)]
+    [InlineData(PostgresErrorCodes.UniqueViolation, PlanAdminRepository.SingleFreeIndex, PlanConflict.FreePlanExists)]
+    [InlineData(PostgresErrorCodes.ForeignKeyViolation, "fk_user_subscriptions_subscription_plans_subscription_plan_id", PlanConflict.InUse)]
+    [InlineData(PostgresErrorCodes.ForeignKeyViolation, "fk_payment_transactions_subscription_plans_subscription_plan_id", PlanConflict.InUse)]
+    public void Repository_ClassifiesPostgresConstraintViolations(string sqlState, string constraint, PlanConflict expected) =>
+        Assert.Equal(expected, PlanAdminRepository.Classify(Pg(sqlState, constraint)));
+
+    [Fact]
+    public void Repository_LeavesOtherFailuresAlone()
+    {
+        Assert.Null(PlanAdminRepository.Classify(Pg(PostgresErrorCodes.CheckViolation, "ck_subscription_plans_duration")));
+        Assert.Null(PlanAdminRepository.Classify(new DbUpdateException("save", new InvalidOperationException())));
+        Assert.Null(PlanAdminRepository.Classify(new InvalidOperationException("khác")));
     }
 
     [Fact]
