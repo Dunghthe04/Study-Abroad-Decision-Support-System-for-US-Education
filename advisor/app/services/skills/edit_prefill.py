@@ -36,7 +36,11 @@ def _plan_initial(plan: Any) -> dict[str, str]:
         return {}
     initial = {"type": spec.name}
     if plan.get("target_score") is not None:
-        initial["score"] = f"{plan['target_score']:g}" if isinstance(plan["target_score"], float) else str(plan["target_score"])
+        initial["score"] = (
+            f"{plan['target_score']:g}"
+            if isinstance(plan["target_score"], float)
+            else str(plan["target_score"])
+        )
     date = str(plan.get("date") or "")
     if len(date) >= 7 and date[4] == "-":
         initial["year"], initial["month"] = date[:4], str(int(date[5:7]))

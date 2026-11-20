@@ -31,7 +31,9 @@ def test_f1_not_asked_when_locked():
 
 
 def test_edit_budget_says_locked_and_moves_on():
-    state = ChatState(current_step="B2", question_id="X1", asked=ASKED, profile=locked_profile(), edit_queue=[])
+    state = ChatState(
+        current_step="B2", question_id="X1", asked=ASKED, profile=locked_profile(), edit_queue=[]
+    )
     out = profile_handler.ask_edit_question(state, "F1")
 
     assert "do phụ huynh đã nhập" in out.answer
@@ -41,7 +43,14 @@ def test_edit_budget_says_locked_and_moves_on():
 
 async def test_student_saying_budget_does_not_overwrite():
     llm = FakeLLM({"values": {"budget": "tier_20k_35k"}}, {"values": {}})
-    res = await turn(llm, "nhà mình chi được 800 triệu", current_step="B2", question_id="F2", asked=ASKED, profile=locked_profile())
+    res = await turn(
+        llm,
+        "nhà mình chi được 800 triệu",
+        current_step="B2",
+        question_id="F2",
+        asked=ASKED,
+        profile=locked_profile(),
+    )
 
     assert llm.calls  # Qwen có đọc ra mức ngân sách, nhưng không được ghi
     assert res.state.profile["budget"] == field("tier_50k_70k")

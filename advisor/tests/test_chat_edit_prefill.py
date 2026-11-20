@@ -30,10 +30,19 @@ def test_intake_gpa_and_plan_prefill():
         english_plan=field({"planned": True, "test_type": "ielts", "target_score": 7.0, "date": "2026-09"}),
     )
 
-    assert profile_handler.ask_edit_question(state, "B1.4").widget.data["initial"] == {"term": "Fall", "year": "2027"}
-    assert profile_handler.ask_edit_question(state, "D2").widget.data["initial"] == {"gpa": "8.5", "scale": "10"}
+    assert profile_handler.ask_edit_question(state, "B1.4").widget.data["initial"] == {
+        "term": "Fall",
+        "year": "2027",
+    }
+    assert profile_handler.ask_edit_question(state, "D2").widget.data["initial"] == {
+        "gpa": "8.5",
+        "scale": "10",
+    }
     assert profile_handler.ask_edit_question(state, "E2").widget.data["initial"] == {
-        "type": "IELTS Academic", "score": "7", "year": "2026", "month": "9"
+        "type": "IELTS Academic",
+        "score": "7",
+        "year": "2026",
+        "month": "9",
     }
 
 
@@ -69,5 +78,7 @@ def test_form_button_ticks_waiting_task_or_edit_only():
     assert out.widget.data == {"goals": ["goi_y_truong"]}
     assert state.pending_advice is waiting  # lưu form xong chat vẫn chạy gợi ý trường
 
-    out = profile_handler.edit_choice(ChatState(current_step="B3", question_id="X1"), skill_ho_so.FORM_REPLY.value)
+    out = profile_handler.edit_choice(
+        ChatState(current_step="B3", question_id="X1"), skill_ho_so.FORM_REPLY.value
+    )
     assert out.widget.data == {"goals": ["chi_sua"]}

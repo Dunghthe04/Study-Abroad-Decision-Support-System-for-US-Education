@@ -67,7 +67,9 @@ async def test_exact_button_returns_to_amount_input():
 
 
 async def test_student_keeps_tier_question():
-    res = await turn(FakeLLM(), "800 triệu", current_step="B2", question_id="F1", asked=ASKED, profile=dict(PROFILE))
+    res = await turn(
+        FakeLLM(), "800 triệu", current_step="B2", question_id="F1", asked=ASKED, profile=dict(PROFILE)
+    )
 
     assert res.state.profile["budget"] == field("tier_20k_35k")
     assert "budget_vnd" not in res.state.profile
@@ -78,7 +80,9 @@ def test_generic_budget_question_is_replaced_by_vnd_question():
     from app.schemas.chat import ChatState
 
     state = ChatState(**parent())
-    out = buttons.ask_with_buttons(state, "F1", "Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm? Bạn cho mình một con số nhé.")
+    out = buttons.ask_with_buttons(
+        state, "F1", "Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm? Bạn cho mình một con số nhé."
+    )
 
     assert out.answer == buttons.EXACT_BUDGET_TEXT
     assert out.widget is not None and out.widget.data["exact"] is True

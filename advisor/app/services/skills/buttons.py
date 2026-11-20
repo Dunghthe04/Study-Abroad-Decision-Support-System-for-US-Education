@@ -183,6 +183,7 @@ def ask_parent_budget(state: ChatState, text: str | None = None) -> SkillOutput:
         quick_replies=[*quick_replies("F1"), QuickReply(label=BUDGET_EXACT, value=BUDGET_EXACT)],
     )
 
+
 # Cấp học và lớp: chữ giống EDUCATION_LEVEL_OPTIONS, getGradeOptionsForLevel của form
 CURRENT_LEVEL_LABELS = {
     "middle_school": "Trung học cơ sở",
