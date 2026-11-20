@@ -5,10 +5,8 @@ import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Building2Icon,
-  ExternalLinkIcon,
   RotateCcwIcon,
   SearchIcon,
-  ShieldCheckIcon,
   SlidersHorizontalIcon,
   StarIcon,
   XIcon,
@@ -590,29 +588,6 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
 
   return (
     <div className="space-y-6">
-      {isAdmin && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand/20 bg-brand-wash/70 p-3.5 text-sm">
-          <div className="flex items-center gap-2 text-brand-ink">
-            <ShieldCheckIcon className="size-4 shrink-0 text-brand" />
-            <span>
-              Bạn đang đăng nhập với quyền{" "}
-              <strong>{user?.role === "admin" ? "Quản trị viên" : "Moderator"}</strong>. Vào khu vực kiểm duyệt để thêm mới hoặc duyệt hồ sơ cơ sở.
-            </span>
-          </div>
-          <Link href="/admin/centers" className={cn(buttonVariants({ size: "sm" }), "gap-1.5 text-xs")}>
-            <span>Vào Quản lý trung tâm</span>
-            <ExternalLinkIcon className="size-3.5" />
-          </Link>
-        </div>
-      )}
-
-      <div className="space-y-1 border-b border-line pb-5">
-        <h1 className="text-h1 text-ink">Danh bạ Trung tâm Tư vấn Du học &amp; Đào tạo</h1>
-        <p className="text-body-s text-ink-2">
-          Tìm hiểu và so sánh các trung tâm tư vấn du học Hoa Kỳ, luyện thi chứng chỉ uy tín và thông tin pháp lý được xác minh trên USDSS.
-        </p>
-      </div>
-
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-4">
         <aside className="hidden lg:sticky lg:top-[calc(var(--header-h)+1.5rem)] lg:col-span-1 lg:block">
           <CenterFiltersPanel {...filterPanelProps} />
