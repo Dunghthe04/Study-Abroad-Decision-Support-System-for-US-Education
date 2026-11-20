@@ -371,7 +371,7 @@ internal sealed class OrderHarness
         return user;
     }
 
-    public Task<OrderDto> CreateOrder(User user, string planCode, DateTime? now = null) =>
+    public Task<OrderDto> CreateOrder(User user, string? planCode, DateTime? now = null) =>
         Orders.CreateAsync(user.Id, user.Role, planCode, now ?? Now);
 
     public PaymentTransaction Order(long code) => Store.Orders.Single(o => o.OrderCode == code);

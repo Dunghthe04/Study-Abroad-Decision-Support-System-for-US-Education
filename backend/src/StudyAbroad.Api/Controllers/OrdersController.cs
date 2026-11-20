@@ -13,7 +13,8 @@ namespace StudyAbroad.Api.Controllers;
 [Route("api/v1/orders")]
 public class OrdersController(IOrderService orders) : ControllerBase
 {
-    public sealed record CreateOrderRequest(string PlanCode);
+    /// <summary>PlanCode thiếu hoặc null vẫn vào được dịch vụ để trả 400 plan_not_for_sale (thay vì lỗi kiểm tra model chung).</summary>
+    public sealed record CreateOrderRequest(string? PlanCode);
 
     [HttpPost]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status201Created)]

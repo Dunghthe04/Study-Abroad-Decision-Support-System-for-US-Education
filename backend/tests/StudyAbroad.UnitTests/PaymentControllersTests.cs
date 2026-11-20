@@ -56,6 +56,23 @@ public class PaymentControllersTests
     }
 
     [Fact]
+    public async Task F5_CreateWithoutAPlanCode_ReachesTheService_WhichAnswers400PlanNotForSale()
+    {
+        // Thân yêu cầu {} hoặc planCode null: không bị MVC chặn bằng lỗi kiểm tra model chung (cần PlanCode khai báo string?)
+        var nullable = new System.Reflection.NullabilityInfoContext().Create(typeof(OrdersController.CreateOrderRequest).GetProperty(nameof(OrdersController.CreateOrderRequest.PlanCode))!);
+        Assert.Equal(System.Reflection.NullabilityState.Nullable, nullable.WriteState);
+
+        var request = JsonSerializer.Deserialize<OrdersController.CreateOrderRequest>("{}", new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        Assert.Null(request.PlanCode);
+        var service = new RecordingOrderService();
+        var controller = new OrdersController(service) { ControllerContext = Context(Guid.NewGuid(), UserRoles.Student) };
+
+        await controller.Create(request, default);
+
+        Assert.Null(service.LastPlan);
+    }
+
+    [Fact]
     public async Task GetListCancel_PassTheTokenUserAsOwner_AndWithoutOneAreUnauthorized()
     {
         var service = new RecordingOrderService();
@@ -252,7 +269,7 @@ public class PaymentControllersTests
 
         private static OrderDto Dto(long code) => new(code, "p", "P", "personal", 1, "USAS00001", "pending", Now, Now, null, "u", "q", null);
 
-        public Task<OrderDto> CreateAsync(Guid userId, string role, string planCode, DateTime nowUtc, CancellationToken ct = default)
+        public Task<OrderDto> CreateAsync(Guid userId, string role, string? planCode, DateTime nowUtc, CancellationToken ct = default)
         {
             (LastUser, LastRole, LastPlan) = (userId, role, planCode);
             return Task.FromResult(Dto(55));

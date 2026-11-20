@@ -20,13 +20,14 @@ public sealed record PlanSeatsDto(int Students, int Parents);
 /// <summary>Kỳ đã mua đang xếp hàng: bắt đầu khi kỳ hiện tại hết hạn hoặc dùng hết, tùy cái nào tới trước.</summary>
 public sealed record QueuedCycleDto(string PlanName, DateTime? ExpectedStartsAt);
 
+/// <param name="PlanCode">Luôn là chuỗi (frontend không nhận null); "" khi dòng gói của kỳ không còn.</param>
 public sealed record PoolDto(
-    string? PlanCode, string PlanName, DateTime? StartsAt, DateTime? EndsAt,
+    string PlanCode, string PlanName, DateTime? StartsAt, DateTime? EndsAt,
     int UsedPercent, bool Exhausted, bool LowQuota, bool ExpiringSoon, QueuedCycleDto? Queued);
 
 /// <summary>PoolDto kèm vai trò trong gói Gia đình (owner | member) và tên chủ gói.</summary>
 public sealed record FamilyPoolDto(
-    string? PlanCode, string PlanName, DateTime? StartsAt, DateTime? EndsAt,
+    string PlanCode, string PlanName, DateTime? StartsAt, DateTime? EndsAt,
     int UsedPercent, bool Exhausted, bool LowQuota, bool ExpiringSoon, QueuedCycleDto? Queued,
     string Role, string OwnerName);
 

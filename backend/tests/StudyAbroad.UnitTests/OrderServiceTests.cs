@@ -136,11 +136,13 @@ public class OrderServiceTests
     }
 
     [Theory]
+    [InlineData(null)]
     [InlineData("free")]
     [InlineData("nope")]
     [InlineData("")]
+    [InlineData("   ")]
     [InlineData("PERSONAL-1M")]
-    public async Task UnknownOrFreePlan_IsNotForSale(string code)
+    public async Task UnknownOrFreePlan_IsNotForSale(string? code)
     {
         var h = new OrderHarness();
 

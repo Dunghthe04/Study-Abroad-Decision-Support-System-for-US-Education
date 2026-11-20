@@ -29,7 +29,7 @@ public sealed partial class OrderService(
     private const int MaxInsertTries = 3;
     public const int MaxPageSize = 50;
 
-    public async Task<OrderDto> CreateAsync(Guid userId, string role, string planCode, DateTime nowUtc, CancellationToken ct = default)
+    public async Task<OrderDto> CreateAsync(Guid userId, string role, string? planCode, DateTime nowUtc, CancellationToken ct = default)
     {
         // 1. Chỉ học sinh và phụ huynh mua gói (C10)
         if (role is not (UserRoles.Student or UserRoles.Parent))
@@ -41,7 +41,7 @@ public sealed partial class OrderService(
             throw Rule("age_restricted", 403, "Tài khoản dưới 16 tuổi chưa thể mua gói.");
 
         // 3. Gói đang bán (không phải gói Free)
-        var plan = (await billing.GetPlansAsync(ct)).FirstOrDefault(p => p.Code == planCode);
+        var plan = string.IsNullOrWhiteSpace(planCode) ? null : (await billing.GetPlansAsync(ct)).FirstOrDefault(p => p.Code == planCode);
         if (plan is null || !plan.IsActive || plan.Kind == PlanKinds.Free || plan.DurationDays is not { } durationDays)
             throw Rule("plan_not_for_sale", 400, "Gói này hiện không bán.");
 
