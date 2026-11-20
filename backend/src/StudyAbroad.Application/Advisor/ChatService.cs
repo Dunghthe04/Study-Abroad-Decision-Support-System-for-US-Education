@@ -29,7 +29,8 @@ namespace StudyAbroad.Application.Advisor
     // usageCollector: "giỏ chung" gom số đo của MỌI lần gọi advisor trong lượt (chat, giải thích, what-if, goal-seek, so sánh), do lớp bọc
     //   IAdvisorClient bỏ vào. Có số liệu thì dùng cả giỏ; không có (test cũ, advisor chưa bọc) thì dùng số đo của lần gọi chat
     // entitlements: chọn pool trả cho lượt (Personal → Family → Free) trước mọi lần gọi advisor, đóng dấu kỳ và mã gói lên ai_calls
-    //   (null thì không đóng dấu, dùng trong test cũ). Bước này chỉ đóng dấu, chưa chặn lượt nào
+    //   (null thì không đóng dấu, không chặn, dùng trong test cũ). Cũng là đầu vào của cổng Premium (ChatPremiumGate): hết hạn mức Free hoặc nút Premium
+    //   của tài khoản Free thì .NET tự trả thẻ khóa; tin gõ thì gửi advisor kèm AllowedIntents để advisor bỏ ý bị khóa
     public class ChatService(
         IAdvisorClient advisor, IChatSessionRepository sessions, IProfileFlowService profileFlow,
         IChatAnalysisRepository? analyses = null, IRecommendationRunner? recommender = null,
@@ -70,54 +71,43 @@ namespace StudyAbroad.Application.Advisor
             if (!string.IsNullOrEmpty(session.StateJson))
                 state = JsonDocument.Parse(session.StateJson).RootElement.Clone();
 
-            // Hồ sơ lấy từ nháp (form sửa thì chat thấy), không tin Profile trình duyệt gửi.
-            // Truyền hồ sơ lượt trước để giữ các ô học sinh nói "không có" / "chưa rõ" mà nháp không lưu được
-            var flow = await profileFlow.GetFlowStateAsync(userId, ct);
-            var profile = ChatProfileMapper.ToChatProfile(flow.Draft, PreviousProfile(state));
-
-            // Đã có danh sách trường thì gửi kèm (lấy lần gợi ý mới nhất, kể cả khi học sinh vừa gợi ý lại ở trang khác)
-            var (schools, otherSchools) = await LatestSchoolsAsync(userId, ct);
-
-            // Học bạ theo năm gửi riêng, không nằm trong hồ sơ chat (chat chỉ đọc, chỉ form nhập được)
-            var transcript = ChatTranscript.From(flow.Draft.Step2) is { } years ? JsonSerializer.SerializeToElement(years) : (JsonElement?)null;
-
-            // Mốc so sánh GPA / tiếng Anh từ dữ liệu trường, cùng bậc học với gợi ý trường
-            var marks = await BenchmarksAsync(flow.Draft.Step1?.TargetDegreeLevel, ct);
-
-            // Bảng quy đổi điểm thang 10 sang GPA thang 4 trong DB (moderator sửa) để advisor đổi GPA giống .NET và form.
-            // Luôn lấy từ server, không tin bảng trình duyệt gửi; không có provider thì null, advisor dùng bảng mặc định
-            var scaleRules = gradeScale is null ? null : (await gradeScale.GetAsync(ct)).Rules;
-
-            //Gửi request sang Advisor
-            var toAdvisor = request with
-            {
-                State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools, Transcript = transcript,
-                Benchmarks = marks, OtherSchools = otherSchools, Simulation = null,   // giá trị giả định chỉ .NET dùng, không gửi advisor
-                GradeScale = scaleRules,
-                // Hồ sơ trống lúc đầu (nháp mặc định vẫn có loại trường "all") thì advisor hỏi đủ như form; luôn lấy từ server
-                HasCommittedProfile = flow.HasCommittedProfile,
-            };
-            // Nút trên giao diện gửi hành động có cấu trúc (mã trường): bỏ qua advisor, dựng sẵn lượt như thể advisor đã hiểu
+            // Cổng Premium (sau cổng tuổi, trước advisor): hết hạn mức Free, hoặc nút Premium của tài khoản Free, thì .NET tự trả thẻ khóa.
+            // Không gọi advisor, không đọc dữ liệu gợi ý, không tính token; state của DB đi nguyên qua nên lượt khóa không làm mất câu hỏi đang dở
+            var gate = ChatPremiumGate.Check(charge, request.Action, state);
+            var locked = gate?.Lock;
             AdvisorChatResponse response;
-            try
+            if (gate is not null)
+                response = gate.Reply;
+            else
             {
-                response = (recommender is not null ? ChatActions.ToResponse(request.Action, state) : null)
-                    ?? (onEvent is null
-                        ? await advisor.ChatAsync(toAdvisor, ct)
-                        : await advisor.ChatStreamAsync(toAdvisor, onEvent, ct));
-            }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            {
-                // Advisor sập hẳn (503, hết thời gian...): học sinh nhận lỗi như cũ, nhưng câu hỏi không được mất vì đây là lỗi admin cần biết nhất
-                await RecordAdvisorFailureAsync(session, isNew, request, askedAt, ex, turnClock.ElapsedMilliseconds, ct);
-                throw;
+                var toAdvisor = await BuildAdvisorRequestAsync(userId, request, state, charge, ct);
+                // Nút trên giao diện gửi hành động có cấu trúc (mã trường): bỏ qua advisor, dựng sẵn lượt như thể advisor đã hiểu
+                try
+                {
+                    response = (recommender is not null ? ChatActions.ToResponse(request.Action, state) : null)
+                        ?? (onEvent is null
+                            ? await advisor.ChatAsync(toAdvisor, ct)
+                            : await advisor.ChatStreamAsync(toAdvisor, onEvent, ct));
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    // Advisor sập hẳn (503, hết thời gian...): học sinh nhận lỗi như cũ, nhưng câu hỏi không được mất vì đây là lỗi admin cần biết nhất
+                    await RecordAdvisorFailureAsync(session, isNew, request, askedAt, ex, turnClock.ElapsedMilliseconds, ct);
+                    throw;
+                }
             }
             // Chụp ngay các tín hiệu của advisor (nhãn model gán, số đo AI, hành động) trước khi các bước sau thay response.
             // Dùng để đánh giá lượt (ChatTurn) và ghi chat_messages ở cuối
             var advisorSignals = new TurnSignals(askedAt, response.Slm, response.AiUsage, response.Action, response.Skills);
             // 1f: phụ huynh đã liên kết không có hồ sơ riêng, lượt về hồ sơ được thay trước khi lưu nháp (ParentChatGate)
+            var beforeParentGate = response;
             if (!await profileFlow.CanEditOwnProfileAsync(userId, ct))
                 response = ParentChatGate.Apply(response, state, await profileFlow.GetParentChatChildrenAsync(userId, ct));
+            // Advisor tự khóa (premium_required) hoặc bỏ một phần ý (lockedIntents) thì kèm thẻ khóa. ParentChatGate đi trước: lượt đã bị nó thay thì không có thẻ.
+            // Action premium_required không khớp nhánh nào bên dưới nên không chạy gợi ý, giải thích, mô phỏng, goal-seeking hay tra trường;
+            // chỉ có lockedIntents thì Action là của ý được phép và vẫn chạy bình thường
+            if (gate is null && ReferenceEquals(beforeParentGate, response))
+                locked = ChatPremiumGate.LockOf(charge, response);
             var changed = await SaveProfileToDraftAsync(userId, response, ct);
 
             // C5: học sinh bấm "Đúng rồi" ở X1 thì chat rời bảng rà soát sang B3, lúc đó lưu hồ sơ chính thức.
@@ -220,6 +210,43 @@ namespace StudyAbroad.Application.Advisor
                 ActionData = null,
                 AiUsage = null,   // số token là việc nội bộ, học sinh không thấy
                 Slm = null,       // nhãn model gán chứa chữ của học sinh, chỉ lưu cho admin
+                LockedIntents = null,   // đã đổi thành Locked ở trên; Locked là phần duy nhất của cổng Premium trình duyệt thấy
+                Locked = locked,
+            };
+        }
+
+        // Request gửi advisor: hồ sơ, trường, học bạ, mốc, bảng quy đổi đều đọc từ server, không tin giá trị trình duyệt gửi
+        private async Task<AdvisorChatRequest> BuildAdvisorRequestAsync(
+            Guid userId, AdvisorChatRequest request, JsonElement? state, StudyAbroad.Application.Billing.ChatCharge? charge, CancellationToken ct)
+        {
+            // Hồ sơ lấy từ nháp (form sửa thì chat thấy), không tin Profile trình duyệt gửi.
+            // Truyền hồ sơ lượt trước để giữ các ô học sinh nói "không có" / "chưa rõ" mà nháp không lưu được
+            var flow = await profileFlow.GetFlowStateAsync(userId, ct);
+            var profile = ChatProfileMapper.ToChatProfile(flow.Draft, PreviousProfile(state));
+
+            // Đã có danh sách trường thì gửi kèm (lấy lần gợi ý mới nhất, kể cả khi học sinh vừa gợi ý lại ở trang khác)
+            var (schools, otherSchools) = await LatestSchoolsAsync(userId, ct);
+
+            // Học bạ theo năm gửi riêng, không nằm trong hồ sơ chat (chat chỉ đọc, chỉ form nhập được)
+            var transcript = ChatTranscript.From(flow.Draft.Step2) is { } years ? JsonSerializer.SerializeToElement(years) : (JsonElement?)null;
+
+            // Mốc so sánh GPA / tiếng Anh từ dữ liệu trường, cùng bậc học với gợi ý trường
+            var marks = await BenchmarksAsync(flow.Draft.Step1?.TargetDegreeLevel, ct);
+
+            // Bảng quy đổi điểm thang 10 sang GPA thang 4 trong DB (moderator sửa) để advisor đổi GPA giống .NET và form.
+            // Luôn lấy từ server, không tin bảng trình duyệt gửi; không có provider thì null, advisor dùng bảng mặc định
+            var scaleRules = gradeScale is null ? null : (await gradeScale.GetAsync(ct)).Rules;
+
+            //Gửi request sang Advisor
+            return request with
+            {
+                State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools, Transcript = transcript,
+                Benchmarks = marks, OtherSchools = otherSchools, Simulation = null,   // giá trị giả định chỉ .NET dùng, không gửi advisor
+                GradeScale = scaleRules,
+                // Hồ sơ trống lúc đầu (nháp mặc định vẫn có loại trường "all") thì advisor hỏi đủ như form; luôn lấy từ server
+                HasCommittedProfile = flow.HasCommittedProfile,
+                // Ý định gói cho phép: luôn ghi đè bằng giá trị server, kể cả null (Premium còn token, nhân viên); không bao giờ chuyển giá trị trình duyệt gửi
+                AllowedIntents = ChatPremiumGate.AllowedIntentsFor(charge),
             };
         }
 
