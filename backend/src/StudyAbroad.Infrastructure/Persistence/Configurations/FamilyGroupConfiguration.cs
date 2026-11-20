@@ -14,6 +14,7 @@ public class FamilyGroupConfiguration : IEntityTypeConfiguration<FamilyGroup>
         b.Property(x => x.Status).HasMaxLength(16).IsRequired();
         b.Property(x => x.EndedReason).HasMaxLength(32);
         // Mỗi chủ tối đa 1 nhóm đang hoạt động
-        b.HasIndex(x => x.OwnerUserId, "ux_family_groups_one_active_per_owner").IsUnique().HasFilter("status = 'active'");
+        b.HasIndex(x => x.OwnerUserId, "ux_family_groups_one_active_per_owner").IsUnique().HasFilter("status = 'active'")
+            .HasDatabaseName("ux_family_groups_one_active_per_owner");
     }
 }

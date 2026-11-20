@@ -22,6 +22,7 @@ public class SubscriptionPlanConfiguration : IEntityTypeConfiguration<Subscripti
         b.Property(x => x.Kind).HasMaxLength(16).IsRequired();
         b.HasIndex(x => x.Code).IsUnique();
         // Đúng một gói free
-        b.HasIndex(x => x.Kind, "ux_subscription_plans_single_free").IsUnique().HasFilter("kind = 'free'");
+        b.HasIndex(x => x.Kind, "ux_subscription_plans_single_free").IsUnique().HasFilter("kind = 'free'")
+            .HasDatabaseName("ux_subscription_plans_single_free");
     }
 }

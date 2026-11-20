@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Infrastructure.Persistence;
 
 namespace StudyAbroad.Api.Extensions;
@@ -13,6 +13,7 @@ public static class MigrationExtensions
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.Database.MigrateAsync();
+        await DbSeeder.SeedSubscriptionPlansAsync(db);   // gói dịch vụ cần ở mọi môi trường, chỉ thêm gói còn thiếu
 
         if (app.Environment.IsDevelopment())
             await DbSeeder.SeedAsync(db, app.Configuration["SEED_ADMIN_PASSWORD"]);

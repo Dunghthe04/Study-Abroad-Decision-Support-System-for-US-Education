@@ -29,6 +29,7 @@ public class PaymentTransactionConfiguration : IEntityTypeConfiguration<PaymentT
         b.HasIndex(x => x.OrderCode).IsUnique();
         b.HasIndex(x => x.UserId);
         // Mỗi người tối đa 1 đơn đang chờ thanh toán
-        b.HasIndex(x => x.UserId, "ux_payment_transactions_one_pending_per_user").IsUnique().HasFilter("status = 'pending'");
+        b.HasIndex(x => x.UserId, "ux_payment_transactions_one_pending_per_user").IsUnique().HasFilter("status = 'pending'")
+            .HasDatabaseName("ux_payment_transactions_one_pending_per_user");
     }
 }
