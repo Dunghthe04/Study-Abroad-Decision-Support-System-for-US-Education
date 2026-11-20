@@ -59,7 +59,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           {children}
         </main>
-        {pathname === "/" && <SiteFooter />}
+        {(pathname === "/" || pathname === "/methodology") && <SiteFooter />}
       </div>
       {showAssistant && <AssistantPanel />}
       {showAssistant && <AssistantLauncher />}

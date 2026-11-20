@@ -81,8 +81,8 @@ export function SiteHeader() {
     return pathname.startsWith(href);
   };
 
-  // Trang có ảnh lớn ở đầu (trang chủ, chi tiết trường): thanh đầu trong suốt nằm trên ảnh cho tới khi cuộn
-  const overHero = pathname === "/" || pathname.startsWith("/university/");
+  // Trang có ảnh lớn ở đầu (trang chủ, phương pháp, chi tiết trường): thanh đầu trong suốt nằm trên ảnh cho tới khi cuộn
+  const overHero = pathname === "/" || pathname === "/methodology" || pathname.startsWith("/university/");
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     if (!overHero) return;
