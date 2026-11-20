@@ -14,7 +14,9 @@ public record ProfileFlowStateDto(
     [property: JsonPropertyName("draftTranscript")] DraftTranscriptFileDto? DraftTranscript,
     [property: JsonPropertyName("lastUpdatedAt")] DateTime? LastUpdatedAt,
     [property: JsonPropertyName("hasCommittedProfile")] bool HasCommittedProfile = false,
-    [property: JsonPropertyName("lastCompletedStep")] int LastCompletedStep = 0
+    [property: JsonPropertyName("lastCompletedStep")] int LastCompletedStep = 0,
+    // UC-94: học sinh nhận hồ sơ phụ huynh nhập hộ có số tiền tối đa/năm chính xác → số USD đó, cố định, không sửa được; null = sửa bình thường
+    [property: JsonPropertyName("budgetLockedUsd")] decimal? BudgetLockedUsd = null
 );
 
 /// <summary>Draft 5 bước nhập liệu (bước 6 là xem lại). Mirror `frontend/src/types/profile-flow.ts`.</summary>

@@ -104,11 +104,12 @@ public class ProfileFlowService(
             return EmptyState(hasCommittedProfile: false);
 
         var committed = HasCommittedProfile(profile);
+        var locked = await LockedBudgetAsync(userId, profile, ct);
 
-        // 1. Có nháp đang làm dở → trả nguyên nháp
+        // 1. Có nháp đang làm dở → trả nguyên nháp (ngân sách khóa thì luôn là số phụ huynh đã nhập)
         var stored = ReadStoredState(profile.DraftFlowStateJson);
         if (stored?.Draft is not null)
-            return ToStateDto(stored, committed);
+            return ToStateDto(stored with { Draft = KeepLockedBudget(stored.Draft, locked) }, committed) with { BudgetLockedUsd = locked?.Usd };
 
         // 2. Đã gửi hồ sơ (hoặc có dữ liệu cũ) → dựng draft từ DB
         if (committed)
@@ -124,7 +125,8 @@ public class ProfileFlowService(
                 DraftTranscript: DraftTranscriptFileDto.FromOrNull(stored?.DraftTranscript),
                 LastUpdatedAt: profile.UpdatedAt ?? profile.CreatedAt,
                 HasCommittedProfile: true,
-                LastCompletedStep: 5);
+                LastCompletedStep: 5,
+                BudgetLockedUsd: locked?.Usd);
         }
 
         // 3. Người dùng mới: draft rỗng, không chọn sẵn ngân sách / nhu cầu học bổng
@@ -155,16 +157,17 @@ public class ProfileFlowService(
 
         var profile = await repository.EnsureProfileExistsAsync(userId, CancellationToken.None);
         var previous = ReadStoredState(profile.DraftFlowStateJson);
+        var locked = await LockedBudgetAsync(userId, profile, ct);
 
         var stored = new StoredFlowState(
             CurrentStep: request.CurrentStep,
             CompletedSteps: NormalizeCompletedSteps(request.CompletedSteps),
-            Draft: NormalizeDraft(request.Draft ?? previous?.Draft ?? new ProfileFlowDraftDto()),
+            Draft: KeepLockedBudget(NormalizeDraft(request.Draft ?? previous?.Draft ?? new ProfileFlowDraftDto()), locked),
             DraftTranscript: previous?.DraftTranscript,
             LastUpdatedAt: DateTime.UtcNow);
 
         await WriteStoredStateAsync(profile, stored);
-        return ToStateDto(stored, HasCommittedProfile(profile));
+        return ToStateDto(stored, HasCommittedProfile(profile)) with { BudgetLockedUsd = locked?.Usd };
     }
 
     /// <summary>
@@ -180,15 +183,17 @@ public class ProfileFlowService(
         if (changedKeys.Count == 0) return current;
 
         var profile = await repository.EnsureProfileExistsAsync(userId, CancellationToken.None);
+        var locked = await LockedBudgetAsync(userId, profile, ct);
+        var draft = NormalizeDraft(ChatProfileMapper.ApplyChatProfile(current.Draft, chatProfile, changedKeys, await GetGradeScaleAsync(ct)));
         var stored = new StoredFlowState(
             CurrentStep: current.CurrentStep,
             CompletedSteps: current.CompletedSteps.ToList(),
-            Draft: NormalizeDraft(ChatProfileMapper.ApplyChatProfile(current.Draft, chatProfile, changedKeys, await GetGradeScaleAsync(ct))),
+            Draft: KeepLockedBudget(draft, locked),
             DraftTranscript: ReadStoredState(profile.DraftFlowStateJson)?.DraftTranscript,
             LastUpdatedAt: DateTime.UtcNow);
 
         await WriteStoredStateAsync(profile, stored);
-        return ToStateDto(stored, HasCommittedProfile(profile));
+        return ToStateDto(stored, HasCommittedProfile(profile)) with { BudgetLockedUsd = locked?.Usd };
     }
 
     public async Task<UploadDraftTranscriptResultDto> UploadDraftTranscriptAsync(
@@ -264,7 +269,7 @@ public class ProfileFlowService(
 
         var draft = request?.Draft ?? stored?.Draft
             ?? throw new InvalidOperationException("Không tìm thấy dữ liệu hồ sơ để xác nhận lưu chính thức.");
-        draft = NormalizeDraft(draft);
+        draft = KeepLockedBudget(NormalizeDraft(draft), await LockedBudgetAsync(userId, profile, ct));
 
         var budgetTiers = await LoadBudgetTiersAsync(ct);
         var certificationTypes = await LoadCertificationTypesAsync(ct);
@@ -565,6 +570,23 @@ public class ProfileFlowService(
         var tiers = await LoadBudgetTiersAsync(ct);
         return tiers.TryGetValue(tierId, out var tier) && tier.MaxUsd != max && InTier(tier, max) ? max : null;
     }
+
+    /// <summary>
+    /// UC-94: chỉ phụ huynh nhập hộ con managed mới nhập được số tiền chính xác, nên học sinh thật (không phải con managed) có số
+    /// chính xác nghĩa là hồ sơ nhận từ phụ huynh: ngân sách cố định theo phụ huynh, học sinh không sửa. Trả hạng + số USD đó, không khóa thì null
+    /// </summary>
+    private async Task<(string Tier, decimal Usd)?> LockedBudgetAsync(Guid userId, StudentProfile profile, CancellationToken ct)
+    {
+        if (users is null || await ExactBudgetUsdAsync(profile, ct) is not { } usd) return null;
+        var user = await users.GetUserById(userId, ct);
+        return user is null || user.Status == UserStatuses.Managed ? null : (profile.BudgetTier!, usd);
+    }
+
+    /// <summary>Ngân sách khóa: bỏ mọi thay đổi hạng / số tiền từ form hay chat, giữ đúng số phụ huynh đã nhập</summary>
+    private static ProfileFlowDraftDto KeepLockedBudget(ProfileFlowDraftDto draft, (string Tier, decimal Usd)? locked) =>
+        locked is not { } l
+            ? draft
+            : draft with { Step4 = (draft.Step4 ?? new FlowFinancialDraftDto()) with { AnnualBudgetTier = l.Tier, AnnualBudgetUsd = l.Usd, AnnualBudgetVnd = null } };
 
     private async Task<Dictionary<string, BudgetTier>> LoadBudgetTiersAsync(CancellationToken ct)
     {
