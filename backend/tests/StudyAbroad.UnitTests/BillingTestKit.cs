@@ -17,7 +17,7 @@ internal sealed class UniqueViolationException(string message) : Exception(messa
 /// Giữ các luật của DB mà tiền phụ thuộc vào: một active và một queued mỗi làn, một nhóm active mỗi chủ, một đơn chờ mỗi người,
 /// mã đơn duy nhất, FOR UPDATE chỉ dùng trong transaction, và transaction lỗi thì quay về trạng thái trước (thực thể đã trả ra thành cũ).
 /// </summary>
-internal sealed class BillingStore : IBillingRepository, IOrderRepository, IUnitOfWork
+internal sealed partial class BillingStore : IBillingRepository, IOrderRepository, IUnitOfWork
 {
     public static readonly DateTime Now = new(2026, 11, 20, 3, 0, 0, DateTimeKind.Utc);
 
@@ -285,6 +285,11 @@ internal sealed class TestGateway(string checksumKey) : IPaymentGateway
     public List<(long Code, string Reason)> Cancelled { get; } = [];
     public bool FailCreate { get; set; }
     public bool FailCancel { get; set; }
+    /// <summary>Trạng thái payOS theo mã đơn (job đối soát, admin kiểm lại). Mã không có thì PENDING, 0 đ.</summary>
+    public Dictionary<long, GatewayStatus> Statuses { get; } = [];
+    /// <summary>Mã đơn mà hỏi trạng thái sẽ ném HttpRequestException.</summary>
+    public HashSet<long> FailStatusFor { get; } = [];
+    public List<long> StatusRequests { get; } = [];
 
     public Task<GatewayLink> CreateLinkAsync(long orderCode, long amountVnd, string description, DateTime expiresAtUtc, string returnUrl, string cancelUrl, CancellationToken ct)
     {
@@ -294,7 +299,13 @@ internal sealed class TestGateway(string checksumKey) : IPaymentGateway
         return Task.FromResult(new GatewayLink($"link-{orderCode}", $"https://pay.test/{orderCode}", $"QR-{orderCode}"));
     }
 
-    public Task<GatewayStatus> GetStatusAsync(long orderCode, CancellationToken ct) => Task.FromResult(new GatewayStatus("PENDING", 0));
+    public Task<GatewayStatus> GetStatusAsync(long orderCode, CancellationToken ct)
+    {
+        StatusRequests.Add(orderCode);
+        if (FailStatusFor.Contains(orderCode))
+            throw new HttpRequestException("payOS không phản hồi");
+        return Task.FromResult(Statuses.TryGetValue(orderCode, out var status) ? status : new GatewayStatus("PENDING", 0));
+    }
 
     public Task CancelAsync(long orderCode, string reason, CancellationToken ct)
     {
@@ -343,7 +354,7 @@ internal sealed class OrderHarness
 
     public OrderHarness()
     {
-        Entitlements = new EntitlementService(Store);
+        Entitlements = new EntitlementService(Store, Notes);
         Orders = new OrderService(Store, Store, Entitlements, Users, Gateway, Store, Email, Notes, Billing, PayOs);
     }
 

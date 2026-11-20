@@ -51,7 +51,7 @@ public class BillingBackgroundService(
             using var scope = scopeFactory.CreateScope();
             var handled = await step(scope.ServiceProvider.GetRequiredService<IBillingJobService>(), ct);
             if (handled > 0)
-                logger.LogInformation("[Billing job] {Step}: {Handled} mục.", name, handled);
+                logger.LogDebug("[Billing job] {Step}: {Handled} mục.", name, handled);   // số mục đã xét, không phải đã đổi: kỳ chờ nào còn thì lượt nào cũng đếm
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
