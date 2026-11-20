@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -146,6 +146,7 @@ builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AgeRestrict
 builder.Services.AddTranscriptUploadRateLimiter();
 builder.Services.AddAuthRateLimiter();
 builder.Services.AddMediaUploadRateLimiter();
+builder.Services.AddChatConcurrencyRateLimiter();   // một câu hỏi chat mỗi người cùng lúc (429 chat_busy)
 
 builder.Services.AddControllers();
 // Lỗi trả về không kèm lý do (Forbid(), NotFound() trần, lỗi 500...) được điền câu tiếng Việt theo mã lỗi

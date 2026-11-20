@@ -1,4 +1,4 @@
-using StudyAbroad.Application.Profile.Academic;
+﻿using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Constants;
@@ -28,24 +28,31 @@ namespace StudyAbroad.Application.Advisor
     // aiCalls: ghi nhật ký token, thời gian, lỗi của từng lần gọi AI vào ai_calls (null thì không ghi, dùng trong test cũ). Độc lập với messages
     // usageCollector: "giỏ chung" gom số đo của MỌI lần gọi advisor trong lượt (chat, giải thích, what-if, goal-seek, so sánh), do lớp bọc
     //   IAdvisorClient bỏ vào. Có số liệu thì dùng cả giỏ; không có (test cũ, advisor chưa bọc) thì dùng số đo của lần gọi chat
+    // entitlements: chọn pool trả cho lượt (Personal → Family → Free) trước mọi lần gọi advisor, đóng dấu kỳ và mã gói lên ai_calls
+    //   (null thì không đóng dấu, dùng trong test cũ). Bước này chỉ đóng dấu, chưa chặn lượt nào
     public class ChatService(
         IAdvisorClient advisor, IChatSessionRepository sessions, IProfileFlowService profileFlow,
         IChatAnalysisRepository? analyses = null, IRecommendationRunner? recommender = null,
         IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null,
         IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null,
         IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null, AiPricing? pricing = null,
-        StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeBaseService? knowledgeBase = null)
+        StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeBaseService? knowledgeBase = null,
+        StudyAbroad.Application.Billing.IEntitlementService? entitlements = null)
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
         // Mọi bước còn lại (lưu state, nháp, gợi ý trường...) chạy như cũ sau khi advisor trả xong, kết quả cuối giống hệt
         public async Task<AdvisorChatResponse> ChatAsync(
             Guid userId, AdvisorChatRequest request, CancellationToken ct = default,
-            Func<AdvisorStreamEvent, Task>? onEvent = null)
+            Func<AdvisorStreamEvent, Task>? onEvent = null, string? role = null)
         {
             var askedAt = DateTime.UtcNow;   // lúc học sinh hỏi, để ghi thời điểm tin của học sinh
             var turnClock = Stopwatch.StartNew();
             usageCollector?.Clear();         // giỏ số đo của lượt này bắt đầu rỗng
+            // Pool trả cho cả lượt, chọn một lần trước mọi lần gọi advisor (kể cả nút bấm gọi advisor viết ghi chú)
+            var charge = entitlements is null
+                ? null
+                : await entitlements.ResolveChatChargeAsync(userId, role ?? UserRoles.Student, askedAt, ct);
             // SessionId do trình duyệt gửi chỉ dùng để tìm phiên; State của trình duyệt bị bỏ, luôn lấy từ DB
             var isNew = false;
             ChatSession? session = null;
@@ -192,7 +199,7 @@ namespace StudyAbroad.Application.Advisor
             var turnSignals = advisorSignals with { Usage = TurnUsage(advisorSignals.Usage) };
             var replyId = await RecordTurnAsync(session, request, response, turnSignals, turnClock.ElapsedMilliseconds, ct);
             // Token ghi sau tin trả lời để nối được (chat_message_id). Tin không lưu (tắt công tắc hoặc lỗi) thì vẫn ghi token, chỉ không có liên kết
-            await RecordAiCallsAsync(userId, replyId, turnSignals.Usage, ct);
+            await RecordAiCallsAsync(userId, replyId, turnSignals.Usage, charge, ct);
             if (ChatTurn.Outcome(turnSignals.Slm, turnSignals.Usage) == ChatOutcomes.NoAnswer)
                 await CaptureUnansweredAsync(request, ct);
 
@@ -294,8 +301,11 @@ namespace StudyAbroad.Application.Advisor
 
         // Ghi mỗi lần gọi AI một dòng ai_calls (nguồn, skill, token, thời gian, lỗi), nối với tin trả lời nếu có.
         // Lỗi khi ghi chỉ cảnh báo, không bao giờ làm hỏng lượt chat. Không có số đo thì không làm gì
-        private Task RecordAiCallsAsync(Guid userId, Guid? replyId, IReadOnlyList<AiUsageDto>? usage, CancellationToken ct) =>
-            aiCalls is null ? Task.CompletedTask : new AiCallRecorder(aiCalls, pricing, logger).RecordAsync(userId, replyId, usage, ct);
+        private Task RecordAiCallsAsync(
+            Guid userId, Guid? replyId, IReadOnlyList<AiUsageDto>? usage, StudyAbroad.Application.Billing.ChatCharge? charge, CancellationToken ct) =>
+            aiCalls is null
+                ? Task.CompletedTask
+                : new AiCallRecorder(aiCalls, pricing, logger).RecordAsync(userId, replyId, usage, ct, charge?.CycleId, charge?.PlanCode);
 
         // Advisor lỗi hẳn nên không có câu trả lời. Lưu câu hỏi và một dòng vai trò system ghi lỗi (outcome failed, review_status open)
         // để câu không biến mất khỏi hàng đợi của admin. Không dùng vai trò assistant vì trợ lý chưa hề trả lời.

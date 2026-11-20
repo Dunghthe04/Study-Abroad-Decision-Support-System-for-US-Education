@@ -1,4 +1,4 @@
-using StudyAbroad.Domain.Entities;
+﻿using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.Advisor;
 
@@ -13,10 +13,14 @@ public static class AiCallMapper
     private const int ModelMax = 64;      // khớp cột model
     private const int ErrorMax = 1000;    // khớp cột error
 
-    public static AiCall ToEntity(AiUsageDto usage, Guid? userId, Guid? chatMessageId, AiPricing pricing) => new()
+    // cycleId, planCode: pool trả cho lượt chat (ChatCharge). Ngoài chat (OCR, ngoại khóa) để null nên không bị tính vào hạn mức
+    public static AiCall ToEntity(
+        AiUsageDto usage, Guid? userId, Guid? chatMessageId, AiPricing pricing, Guid? cycleId = null, string? planCode = null) => new()
     {
         UserId = userId,
         ChatMessageId = chatMessageId,
+        UserSubscriptionId = cycleId,
+        PlanCode = planCode,
         Kind = Cut(usage.Source, KindMax) ?? string.Empty,
         Purpose = Cut(usage.Purpose, PurposeMax),
         SkillVersion = Blank(usage.SkillVersion),

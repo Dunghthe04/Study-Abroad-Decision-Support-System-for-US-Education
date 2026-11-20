@@ -1,7 +1,9 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Domain.Constants;
 using System;
@@ -16,6 +18,7 @@ namespace StudyAbroad.Api.Controllers;
 public class AdvisorController(ChatService chat, ILogger<AdvisorController> logger) : ControllerBase
 {
     [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
+    [EnableRateLimiting(ChatConcurrencyRateLimit.PolicyName)]   // một câu hỏi đang chạy mỗi người
     [HttpPost("chat")]
     public async Task<ActionResult<AdvisorChatResponse>> Chat(AdvisorChatRequest request, CancellationToken ct)
     {
@@ -29,7 +32,7 @@ public class AdvisorController(ChatService chat, ILogger<AdvisorController> logg
 
         try
         {
-            return Ok(await chat.ChatAsync(userId.Value, request, ct));
+            return Ok(await chat.ChatAsync(userId.Value, request, ct, role: User.GetRole()));
         }
         catch (HttpRequestException ex)
         {
@@ -44,6 +47,7 @@ public class AdvisorController(ChatService chat, ILogger<AdvisorController> logg
     /// Câu hiện cuối cùng lấy từ dòng final, vì gợi ý trường và giải thích trường có thể thay câu trả lời ở bước cuối.
     /// </summary>
     [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
+    [EnableRateLimiting(ChatConcurrencyRateLimit.PolicyName)]   // dùng chung giới hạn với chat
     [HttpPost("chat/stream")]
     public async Task<IActionResult> ChatStream(
         AdvisorChatRequest request, [FromServices] IOptions<Microsoft.AspNetCore.Mvc.JsonOptions> json, CancellationToken ct)
@@ -69,7 +73,7 @@ public class AdvisorController(ChatService chat, ILogger<AdvisorController> logg
 
         try
         {
-            var result = await chat.ChatAsync(userId.Value, request, ct, e => Write(e));
+            var result = await chat.ChatAsync(userId.Value, request, ct, e => Write(e), role: User.GetRole());
             await Write(new { type = "final", response = result });
         }
         catch (HttpRequestException ex)
