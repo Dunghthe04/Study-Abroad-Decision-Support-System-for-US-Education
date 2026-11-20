@@ -96,7 +96,7 @@ export function CertificationCard({ cert, type, onEdit, onRemove, onTaken, onCha
                   type="button"
                   onClick={b.onClick}
                   disabled={disabled}
-                  className="cursor-pointer rounded-lg border border-line px-3 py-1 text-xs font-medium text-foreground hover:border-brand/50 hover:bg-brand-wash/40 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="cursor-pointer rounded-lg border border-line px-3 py-1 text-xs font-medium text-foreground hover:border-brand/50 hover:bg-brand-wash/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default disabled:opacity-50"
                 >
                   {b.label}
                 </button>
@@ -116,7 +116,7 @@ export function CertificationCard({ cert, type, onEdit, onRemove, onTaken, onCha
           type="button"
           onClick={onEdit}
           disabled={disabled}
-          className="cursor-pointer text-brand hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+          className="cursor-pointer rounded text-brand hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default disabled:opacity-50"
         >
           Sửa
         </button>
@@ -124,7 +124,7 @@ export function CertificationCard({ cert, type, onEdit, onRemove, onTaken, onCha
           type="button"
           onClick={onRemove}
           disabled={disabled}
-          className="cursor-pointer text-brand hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+          className="cursor-pointer rounded text-brand hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default disabled:opacity-50"
         >
           Xóa
         </button>

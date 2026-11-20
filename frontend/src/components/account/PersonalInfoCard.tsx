@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 
 const MAX_FULL_NAME_LENGTH = 100;
 const MAX_PHONE_LENGTH = 20;
@@ -150,8 +149,7 @@ export function PersonalInfoCard() {
               </FieldDescription>
             </Field>
 
-            <Button type="submit" disabled={isSubmitting || !isDirty} className="w-full sm:w-auto">
-              {isSubmitting && <Spinner data-icon="inline-start" />}
+            <Button type="submit" disabled={isSubmitting || !isDirty} className="w-full sm:w-auto" loading={isSubmitting}>
               {isSubmitting ? "Đang lưu..." : "Lưu thay đổi"}
             </Button>
           </FieldGroup>

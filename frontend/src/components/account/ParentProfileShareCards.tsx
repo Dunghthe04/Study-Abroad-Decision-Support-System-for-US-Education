@@ -8,7 +8,6 @@ import { AcademicSummaryCard } from "@/components/account/AcademicSummaryCard";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
 
 function errorMessage(err: unknown, fallback: string) {
   if (err instanceof ApiError) return err.message || fallback;
@@ -118,13 +117,12 @@ export function ParentAcademicSection({ overview, onChanged }: ParentAcademicSec
                   key={managed.studentUserId}
                   disabled={submitting !== null}
                   onClick={() => match(pending.linkId, managed.studentUserId)}
+                  loading={submitting === `${pending.linkId}:${managed.studentUserId}`}
                 >
-                  {submitting === `${pending.linkId}:${managed.studentUserId}` && <Spinner />}
                   Là {nameWithDob(managed.studentName, managed.dateOfBirth)}
                 </Button>
               ))}
-              <Button variant="outline" disabled={submitting !== null} onClick={() => match(pending.linkId, null)}>
-                {submitting === `${pending.linkId}:none` && <Spinner />}
+              <Button variant="outline" disabled={submitting !== null} onClick={() => match(pending.linkId, null)} loading={submitting === `${pending.linkId}:none`}>
                 Không phải ai trong số này
               </Button>
             </div>
@@ -212,12 +210,10 @@ export function StudentParentOffers({ onChanged }: StudentParentOffersProps) {
               title={`Bản của ${offer.parentName}`}
             />
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button disabled={submitting !== null} onClick={() => decide(offer.linkId, true)}>
-                {submitting === `${offer.linkId}:true` && <Spinner />}
+              <Button disabled={submitting !== null} onClick={() => decide(offer.linkId, true)} loading={submitting === `${offer.linkId}:true`}>
                 Dùng bản của phụ huynh
               </Button>
-              <Button variant="outline" disabled={submitting !== null} onClick={() => decide(offer.linkId, false)}>
-                {submitting === `${offer.linkId}:false` && <Spinner />}
+              <Button variant="outline" disabled={submitting !== null} onClick={() => decide(offer.linkId, false)} loading={submitting === `${offer.linkId}:false`}>
                 Giữ bản của mình
               </Button>
             </div>

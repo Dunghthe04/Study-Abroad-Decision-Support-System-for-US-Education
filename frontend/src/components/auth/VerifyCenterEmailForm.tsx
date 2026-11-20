@@ -9,7 +9,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { clearPendingEmail, usePendingEmail } from "@/lib/pending-email";
 
 export function VerifyCenterEmailForm() {
@@ -149,8 +148,7 @@ export function VerifyCenterEmailForm() {
             <FieldDescription>Mã có hiệu lực trong vòng 5 phút</FieldDescription>
           </Field>
 
-          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full">
-            {isSubmitting && <Spinner data-icon="inline-start" />}
+          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full" loading={isSubmitting}>
             {isSubmitting ? "Đang xác thực..." : "Kích hoạt tài khoản"}
           </Button>
         </FieldGroup>
@@ -162,18 +160,11 @@ export function VerifyCenterEmailForm() {
           variant="ghost"
           size="sm"
           disabled={cooldown > 0 || isResending}
+          loading={isResending}
           onClick={handleResend}
           className="text-brand hover:text-brand-hover p-0 h-auto"
         >
-          {isResending ? (
-            <span className="flex items-center gap-1.5">
-              <Spinner /> Đang gửi...
-            </span>
-          ) : cooldown > 0 ? (
-            `Gửi lại mã sau ${cooldown}s`
-          ) : (
-            "Gửi lại mã OTP"
-          )}
+          {cooldown > 0 ? `Gửi lại mã sau ${cooldown}s` : "Gửi lại mã OTP"}
         </Button>
 
         <Link href="/login" className="text-ink-3 hover:text-ink hover:underline">

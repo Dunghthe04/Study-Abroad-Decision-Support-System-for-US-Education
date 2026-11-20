@@ -121,7 +121,7 @@ export function Segmented<T extends string>({
           aria-pressed={option.id === value}
           onClick={() => onChange(option.id)}
           className={cn(
-            "rounded-md px-3 py-1 text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "cursor-pointer rounded-md px-3 py-1 text-xs font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
             option.id === value ? "bg-surface text-ink shadow-xs" : "text-ink-2 hover:text-ink",
           )}
         >

@@ -21,7 +21,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useIsLinkedParent } from "@/hooks/use-is-linked-parent";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -130,7 +130,7 @@ export function SiteHeader() {
             href={canOpenAdmin ? "/admin" : "/"}
             className="shrink-0 font-heading text-xl font-bold tracking-tight text-white transition-opacity hover:opacity-90"
           >
-            USAS
+            USDSS
           </Link>
 
           <form role="search" onSubmit={submitSearch} className="relative hidden max-w-2xl flex-1 md:block">
@@ -146,13 +146,15 @@ export function SiteHeader() {
               // Ô tìm kiếm luôn nền trắng trên nền xanh của thanh đầu
               className="h-10 w-full rounded-lg border border-transparent bg-surface pr-11 pl-3.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus-visible:ring-3 focus-visible:ring-white/40"
             />
-            <button
+            <Button
               type="submit"
+              variant="ghost"
+              size="icon"
               aria-label="Tìm"
-              className="absolute top-1/2 right-1 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-muted hover:text-ink"
+              className="absolute top-1/2 right-1 -translate-y-1/2 text-ink-2 hover:bg-muted hover:text-ink dark:hover:bg-muted"
             >
               <SearchIcon className="size-4" />
-            </button>
+            </Button>
           </form>
 
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
@@ -165,7 +167,7 @@ export function SiteHeader() {
                 <DropdownMenu>
                 <DropdownMenuTrigger
                   aria-label={`Tài khoản của ${user.fullName}`}
-                  className="rounded-full outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-white/50 active:scale-95"
+                  className="cursor-pointer rounded-full outline-none focus-visible:ring-3 focus-visible:ring-white/50"
                 >
                   <Avatar className="size-9">
                     <AvatarFallback className="bg-white font-semibold text-brand-ink">
@@ -281,7 +283,7 @@ export function SiteHeader() {
                   className={buttonVariants({
                     variant: "outline",
                     size: "lg",
-                    className: "active:translate-y-px !border-white/60 !bg-transparent !text-white hover:!bg-white/10",
+                    className: "!border-white/60 !bg-transparent !text-white hover:!bg-white/10",
                   })}
                 >
                   Đăng ký ngay
@@ -321,7 +323,7 @@ export function SiteHeader() {
               className={buttonVariants({
                 variant: "ghost",
                 size: "lg",
-                className: "shrink-0 active:translate-y-px !bg-white !text-brand-ink hover:!bg-white/90",
+                className: "shrink-0 !bg-white !text-brand-ink hover:!bg-white/90",
               })}
             >
               Thêm con
@@ -333,7 +335,7 @@ export function SiteHeader() {
               className={buttonVariants({
                 variant: "ghost",
                 size: "lg",
-                className: "shrink-0 active:translate-y-px !bg-white !text-brand-ink hover:!bg-white/90",
+                className: "shrink-0 !bg-white !text-brand-ink hover:!bg-white/90",
               })}
             >
               Phân tích hồ sơ của tôi

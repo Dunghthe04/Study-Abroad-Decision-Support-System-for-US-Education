@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
@@ -252,8 +251,8 @@ export function LeadMessageReportsView() {
                       </Button>
                       {resolved ? null : (
                         <>
-                          <Button type="button" variant="outline" size="sm" disabled={busyId !== null} onClick={() => void dismiss(item)} className="gap-1 whitespace-nowrap">
-                            {busyId === item.id ? <Spinner className="size-3.5" /> : <CheckIcon className="size-3.5" />}
+                          <Button type="button" variant="outline" size="sm" loading={busyId === item.id} disabled={busyId !== null} onClick={() => void dismiss(item)} className="gap-1 whitespace-nowrap">
+                            <CheckIcon className="size-3.5" />
                             Bỏ qua
                           </Button>
                           <Button type="button" variant="outline" size="sm" disabled={busyId !== null} onClick={() => openAction("warn", item)} className="gap-1 whitespace-nowrap">
@@ -329,8 +328,7 @@ export function LeadMessageReportsView() {
           />
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busyId !== null}>Hủy</AlertDialogCancel>
-            <Button type="button" variant="destructive" onClick={() => void confirmAction()} disabled={busyId !== null || !actionReason.trim()} className="gap-1.5">
-              {busyId !== null ? <Spinner className="size-3.5" /> : null}
+            <Button type="button" variant="destructive" onClick={() => void confirmAction()} loading={busyId !== null} disabled={!actionReason.trim()} className="gap-1.5">
               {actionText?.confirm}
             </Button>
           </AlertDialogFooter>

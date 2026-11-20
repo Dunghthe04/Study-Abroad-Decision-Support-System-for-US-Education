@@ -168,8 +168,9 @@ export function ParentLinksCard() {
                           size="sm"
                           disabled={busy !== null}
                           onClick={() => run("resend", () => parentLinksApi.resend(), "Không thể gửi lại lời mời.")}
+                          loading={busy === "resend"}
                         >
-                          {busy === "resend" ? <Spinner data-icon="inline-start" /> : <MailIcon aria-hidden />}
+                          <MailIcon aria-hidden />
                           Gửi lại
                         </Button>
                       )}
@@ -219,8 +220,7 @@ export function ParentLinksCard() {
                     onChange={(e) => setNewParentEmail(e.target.value)}
                     placeholder="phuhuynh@gmail.com"
                   />
-                  <Button type="submit" disabled={busy !== null}>
-                    {busy === "change" && <Spinner data-icon="inline-start" />}
+                  <Button type="submit" disabled={busy !== null} loading={busy === "change"}>
                     Gửi lời mời
                   </Button>
                 </div>

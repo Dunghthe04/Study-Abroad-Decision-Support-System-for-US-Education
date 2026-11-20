@@ -80,7 +80,7 @@ export function ReviewGradingView({ batchId }: { batchId: string }) {
                     aria-current={item.itemId === selectedId ? "true" : undefined}
                     onClick={() => setSelectedId(item.itemId)}
                     className={cn(
-                      "flex w-full items-center justify-between gap-2 rounded px-2.5 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      "flex w-full cursor-pointer items-center justify-between gap-2 rounded px-2.5 py-2 text-left text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                       item.itemId === selectedId ? "bg-brand-wash text-brand-ink" : "text-ink hover:bg-ground",
                     )}
                   >

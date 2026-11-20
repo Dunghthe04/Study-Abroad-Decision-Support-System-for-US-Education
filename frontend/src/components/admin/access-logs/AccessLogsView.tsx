@@ -509,7 +509,7 @@ export function AccessLogsView() {
                     setPage(1);
                   }}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                    "flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                     active
                       ? "bg-brand font-semibold text-white shadow-sm"
                       : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -577,7 +577,7 @@ export function AccessLogsView() {
                 size="sm"
                 variant="ghost"
                 onClick={() => setPresetRange("today")}
-                className="h-7 px-2 text-xs"
+                className="px-2 text-xs"
               >
                 Hôm nay
               </Button>
@@ -586,17 +586,18 @@ export function AccessLogsView() {
                 size="sm"
                 variant="ghost"
                 onClick={() => setPresetRange("7d")}
-                className="h-7 px-2 text-xs"
+                className="px-2 text-xs"
               >
                 7 ngày
               </Button>
               <Button
                 type="button"
-                size="sm"
+                size="icon-sm"
                 variant="ghost"
                 onClick={handleResetFilters}
                 title="Đặt lại bộ lọc về mặc định"
-                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                aria-label="Đặt lại bộ lọc về mặc định"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <RotateCcwIcon className="size-3.5" />
               </Button>
@@ -765,7 +766,7 @@ export function AccessLogsView() {
                             setShowRawJson(false);
                             setCopiedId(false);
                           }}
-                          className="h-8 px-2 text-xs gap-1 hover:text-brand"
+                          className="px-2 text-xs gap-1 hover:text-brand"
                           title="Xem chi tiết đầy đủ"
                         >
                           <EyeIcon className="size-3.5" />
@@ -809,14 +810,17 @@ export function AccessLogsView() {
                 {detailItem?.id}
               </code>
               {detailItem?.id && (
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon-xs"
                   onClick={() => copyToClipboard(detailItem.id)}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  className="text-muted-foreground hover:text-foreground"
                   title="Sao chép mã bản ghi"
+                  aria-label="Sao chép mã bản ghi"
                 >
                   {copiedId ? <CheckIcon className="size-3 text-ok" /> : <CopyIcon className="size-3" />}
-                </button>
+                </Button>
               )}
             </DialogDescription>
           </DialogHeader>
@@ -921,7 +925,7 @@ export function AccessLogsView() {
                     <button
                       type="button"
                       onClick={() => setShowRawJson((prev) => !prev)}
-                      className="text-[11px] text-brand hover:underline font-medium flex items-center gap-1"
+                      className="text-[11px] text-brand hover:underline font-medium flex items-center gap-1 cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                     >
                       {showRawJson ? "Ẩn JSON gốc" : "Xem JSON kỹ thuật"}
                       {showRawJson ? <ChevronDownIcon className="size-3" /> : <ChevronRightIcon className="size-3" />}

@@ -228,8 +228,8 @@ export function AccountView() {
                   onClick={() => selectSection(id)}
                   aria-current={activeSection === id ? "page" : undefined}
                   className={cn(
-                    "flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-left text-sm whitespace-nowrap transition-colors",
-                    "hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                    "flex shrink-0 cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm whitespace-nowrap transition-colors disabled:cursor-default",
+                    "hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                     activeSection === id ? "bg-muted font-semibold text-foreground" : "text-muted-foreground"
                   )}
                 >
@@ -256,8 +256,8 @@ export function AccountView() {
                 onClick={handleLogout}
                 disabled={isLoggingOut}
                 className={cn(
-                  "flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-left text-sm whitespace-nowrap text-destructive transition-colors",
-                  "hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50",
+                  "flex shrink-0 cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm whitespace-nowrap text-destructive transition-colors disabled:cursor-default",
+                  "hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
                   "md:mt-2 md:border-t md:pt-3"
                 )}
               >

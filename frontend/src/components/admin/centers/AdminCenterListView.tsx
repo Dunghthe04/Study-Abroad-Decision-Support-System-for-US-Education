@@ -272,7 +272,7 @@ export function AdminCenterListView() {
                   e.stopPropagation();
                   setSelectedCenter((prev) => (prev?.id === c.id ? null : c));
                 }}
-                className="font-medium text-brand underline-offset-2 hover:underline text-left block"
+                className="font-medium text-brand underline-offset-2 hover:underline text-left block cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
               >
                 {c.name}
               </button>

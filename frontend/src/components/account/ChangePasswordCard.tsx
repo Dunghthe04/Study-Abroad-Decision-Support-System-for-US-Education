@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { PasswordInput } from "@/components/auth/PasswordInput";
-import { Spinner } from "@/components/ui/spinner";
 
 // [UC-06] Đổi mật khẩu khi đã đăng nhập: bắt buộc nhập mật khẩu hiện tại.
 // Thành công thì phiên này giữ nguyên, các thiết bị khác bị đăng xuất.
@@ -141,8 +140,7 @@ export function ChangePasswordCard() {
               />
             </Field>
 
-            <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
-              {isSubmitting && <Spinner data-icon="inline-start" />}
+            <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto" loading={isSubmitting}>
               {isSubmitting ? "Đang xử lý..." : "Đổi mật khẩu"}
             </Button>
           </FieldGroup>

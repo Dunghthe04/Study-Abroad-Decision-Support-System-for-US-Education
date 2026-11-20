@@ -3,7 +3,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FlagIcon, ImageIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { LEAD_IMAGE_ACCEPT, validateLeadImage } from "@/lib/lead-message";
 import { cn } from "@/lib/utils";
@@ -85,7 +84,7 @@ export function ImageAttachPicker({
               onError(null);
             }}
             aria-label="Bỏ ảnh đính kèm"
-            className="absolute -right-1.5 -top-1.5 rounded-full border bg-background p-0.5 text-muted-foreground hover:text-destructive"
+            className="absolute -right-1.5 -top-1.5 cursor-pointer rounded-full border bg-background p-0.5 text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
           >
             <XIcon className="size-3" />
           </button>
@@ -116,7 +115,7 @@ export function ReportMessageControl({
       <button
         type="button"
         onClick={() => setIsReporting(true)}
-        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive"
+        className="inline-flex cursor-pointer items-center gap-1 rounded text-[11px] text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
       >
         <FlagIcon className="size-3" aria-hidden />
         Báo cáo tin nhắn
@@ -153,8 +152,7 @@ export function ReportMessageControl({
         <Button type="button" variant="ghost" size="xs" disabled={isSubmitting} onClick={() => setIsReporting(false)}>
           Hủy
         </Button>
-        <Button type="button" size="xs" disabled={isSubmitting} onClick={() => void submit()}>
-          {isSubmitting ? <Spinner className="size-3" /> : null}
+        <Button type="button" size="xs" disabled={isSubmitting} onClick={() => void submit()} loading={isSubmitting}>
           Gửi báo cáo
         </Button>
       </div>

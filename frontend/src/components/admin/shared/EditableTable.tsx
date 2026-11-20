@@ -3,7 +3,6 @@
 import { CheckIcon, PencilIcon, XIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 
 export interface TableRow {
   label: string;
@@ -59,8 +58,8 @@ function HeaderActions({ edit }: { edit: TableEditState }) {
         <XIcon />
         Hủy
       </Button>
-      <Button type="submit" size="xs" disabled={edit.isSaving || !edit.hasChanges}>
-        {edit.isSaving ? <Spinner /> : <CheckIcon />}
+      <Button type="submit" size="xs" disabled={!edit.hasChanges} loading={edit.isSaving}>
+        <CheckIcon />
         Lưu
       </Button>
     </span>

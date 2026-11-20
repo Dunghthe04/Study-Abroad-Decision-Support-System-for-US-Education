@@ -35,7 +35,7 @@ export function SiteFooter() {
       <div className="mx-auto grid max-w-[1560px] gap-10 px-4 py-14 sm:px-8 lg:grid-cols-12 lg:px-12">
         <div className="space-y-4 lg:col-span-5">
           <div className="flex items-center gap-2.5">
-            <span className="font-heading text-xl font-semibold">USAS</span>
+            <span className="font-heading text-xl font-semibold">USDSS</span>
           </div>
           <p className="max-w-sm text-sm leading-relaxed text-ink-2">
             Hệ thống hỗ trợ ra quyết định du học Mỹ: phân tích hồ sơ, gợi ý trường, giải đáp bằng tiếng Việt và kết nối trung tâm tư vấn.
@@ -62,7 +62,7 @@ export function SiteFooter() {
 
       <div className="border-t border-line">
         <div className="mx-auto flex max-w-[1560px] flex-col gap-2 px-4 py-6 text-xs text-ink-3 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-12">
-          <span>© 2026 USAS · Study Abroad Decision Support System for US Education</span>
+          <span>© 2026 USDSS · Study Abroad Decision Support System for US Education</span>
           <span className="max-w-xl sm:text-right">
             Thông tin chỉ mang tính tham khảo, không cam kết kết quả trúng tuyển hay học bổng. Hãy kiểm tra trang chính thức của trường trước khi quyết định.
           </span>

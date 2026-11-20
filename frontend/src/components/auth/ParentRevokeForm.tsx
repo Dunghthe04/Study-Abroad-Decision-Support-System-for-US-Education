@@ -121,8 +121,7 @@ export function ParentRevokeForm() {
             </Alert>
           )}
 
-          <Button type="button" variant="destructive" size="xl" className="w-full" onClick={handleRevoke} disabled={isSubmitting}>
-            {isSubmitting && <Spinner data-icon="inline-start" />}
+          <Button type="button" variant="destructive" size="xl" className="w-full" onClick={handleRevoke} disabled={isSubmitting} loading={isSubmitting}>
             {isSubmitting ? "Đang rút đồng ý..." : "Rút đồng ý"}
           </Button>
         </>

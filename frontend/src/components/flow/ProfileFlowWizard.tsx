@@ -586,7 +586,7 @@ export function ProfileFlowWizard() {
             <button
               type="button"
               onClick={() => openAssistant(CONTINUE_CHAT)}
-              className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 font-medium text-brand hover:bg-brand-wash"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 font-medium text-brand hover:bg-brand-wash focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
             >
               <MessageCircleIcon className="size-3.5" />
               {CONTINUE_CHAT}
@@ -595,7 +595,7 @@ export function ProfileFlowWizard() {
           <button
             type="button"
             onClick={handleExit}
-            className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
           >
             <XIcon className="size-3.5" />
             Thoát

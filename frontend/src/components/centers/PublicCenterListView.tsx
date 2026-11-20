@@ -609,7 +609,7 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
       <div className="space-y-1 border-b border-line pb-5">
         <h1 className="text-h1 text-ink">Danh bạ Trung tâm Tư vấn Du học &amp; Đào tạo</h1>
         <p className="text-body-s text-ink-2">
-          Tìm hiểu và so sánh các trung tâm tư vấn du học Hoa Kỳ, luyện thi chứng chỉ uy tín và thông tin pháp lý được xác minh trên USAS.
+          Tìm hiểu và so sánh các trung tâm tư vấn du học Hoa Kỳ, luyện thi chứng chỉ uy tín và thông tin pháp lý được xác minh trên USDSS.
         </p>
       </div>
 
@@ -624,7 +624,7 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
               <div className="lg:hidden">
                 <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
                   <SheetTrigger
-                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "cursor-pointer gap-2")}
+                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-2")}
                   >
                     <SlidersHorizontalIcon className="size-4 text-brand" />
                     <span>Bộ lọc ({activeChips.length})</span>
@@ -675,17 +675,19 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
                   className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:border-brand/40"
                 >
                   <span>{chip.label}</span>
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon-xs"
                     onClick={chip.onRemove}
-                    className="rounded-full p-0.5 text-ink-3 hover:bg-ground hover:text-ink"
+                    className="rounded-full text-ink-3 hover:bg-ground hover:text-ink"
                     aria-label={`Xóa bộ lọc ${chip.label}`}
                   >
                     <XIcon className="size-3.5" />
-                  </button>
+                  </Button>
                 </span>
               ))}
-              <Button variant="ghost" size="sm" onClick={handleResetFilters} className="h-8 px-2.5 text-sm text-ink-2">
+              <Button variant="ghost" onClick={handleResetFilters} className="px-2.5 text-ink-2">
                 Xóa tất cả
               </Button>
             </div>
@@ -752,14 +754,16 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
                   className="inline-flex max-w-52 items-center gap-1.5 rounded-lg border border-line bg-ground px-2.5 py-1 text-sm font-medium text-ink"
                 >
                   <span className="truncate">{c.name}</span>
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon-xs"
                     onClick={() => toggleCompare(c.id)}
-                    className="rounded-full p-0.5 text-ink-3 hover:bg-surface hover:text-ink"
+                    className="rounded-full text-ink-3 hover:bg-surface hover:text-ink"
                     aria-label={`Bỏ ${c.name} khỏi so sánh`}
                   >
                     <XIcon className="size-3.5" />
-                  </button>
+                  </Button>
                 </span>
               ))}
             </div>

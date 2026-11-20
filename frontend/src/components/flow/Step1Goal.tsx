@@ -351,9 +351,9 @@ export function Step1Goal({
                   disabled={goalsLocked}
                   onClick={() => toggleGoal(opt.value)}
                   className={cn(
-                    "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-all",
+                    "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                     isSelected ? "border-foreground bg-foreground/5" : "border-line bg-surface",
-                    goalsLocked ? "cursor-not-allowed opacity-80" : "cursor-pointer hover:border-foreground/40"
+                    goalsLocked ? "opacity-80" : "cursor-pointer hover:border-foreground/40"
                   )}
                 >
                   <span
@@ -398,7 +398,7 @@ export function Step1Goal({
                 onClick={() => handleSelectEducationLevel(opt.value)}
                 aria-pressed={isSelected}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all cursor-pointer",
+                  "flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                   isSelected
                     ? "border-foreground bg-foreground text-background"
                     : "border-line bg-surface text-foreground hover:border-foreground/40"
@@ -533,7 +533,7 @@ export function Step1Goal({
                   setDegreeError(null);
                 }}
                 className={cn(
-                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full",
+                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                   isSelected
                     ? "border-brand bg-brand-wash/40 ring-2 ring-brand text-brand-ink"
                     : "border-line bg-surface hover:border-brand/40 hover:bg-muted/30"
@@ -647,7 +647,7 @@ export function Step1Goal({
                 size="sm"
                 variant="outline"
                 onClick={handleMajorUnknown}
-                className="text-xs h-7 cursor-pointer"
+                className="text-xs"
               >
                 Chưa chọn ngành
               </Button>
@@ -681,7 +681,7 @@ export function Step1Goal({
                     onUpdate({ targetMajor: null });
                     setShowMajorDropdown(true);
                   }}
-                  className="p-0.5 text-muted-foreground hover:text-foreground cursor-pointer rounded"
+                  className="p-0.5 text-muted-foreground hover:text-foreground cursor-pointer rounded focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
                   title="Xóa lựa chọn"
                 >
                   <XIcon className="size-4" />
@@ -690,7 +690,7 @@ export function Step1Goal({
               <button
                 type="button"
                 onClick={() => setShowMajorDropdown(!showMajorDropdown)}
-                className="p-0.5 text-muted-foreground hover:text-foreground cursor-pointer rounded"
+                className="p-0.5 text-muted-foreground hover:text-foreground cursor-pointer rounded focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
                 title="Mở danh sách ngành"
               >
                 <ChevronDownIcon
@@ -721,7 +721,7 @@ export function Step1Goal({
                     type="button"
                     onClick={() => handleSelectMajor(m.value)}
                     className={cn(
-                      "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                      "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                       isSelected
                         ? "border-brand bg-brand text-white "
                         : "border-line bg-surface text-muted-foreground hover:border-brand/40 hover:text-foreground"
@@ -756,7 +756,7 @@ export function Step1Goal({
                       type="button"
                       onClick={() => handleSelectMajor(m.value)}
                       className={cn(
-                        "w-full text-left rounded-lg px-3 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer",
+                        "w-full text-left rounded-lg px-3 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                         isSelected
                           ? "bg-brand text-white font-medium"
                           : "text-foreground hover:bg-brand-wash hover:text-brand"
@@ -779,7 +779,7 @@ export function Step1Goal({
           type="button"
           onClick={() => setShowNarrow(!showNarrow)}
           aria-expanded={showNarrow}
-          className="flex w-full items-center gap-2 text-left cursor-pointer"
+          className="flex w-full items-center gap-2 rounded-lg text-left cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
         >
           <span className="text-sm font-semibold text-foreground">Thu hẹp gợi ý</span>
           <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-muted-foreground">
@@ -818,7 +818,7 @@ export function Step1Goal({
                     <button
                       type="button"
                       onClick={() => removeState(code)}
-                      className="hover:text-destructive cursor-pointer ml-0.5"
+                      className="rounded hover:text-destructive cursor-pointer ml-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
                       title="Bỏ chọn"
                     >
                       <XIcon className="size-3" />
@@ -839,7 +839,7 @@ export function Step1Goal({
                   type="button"
                   onClick={() => toggleState(s.code)}
                   className={cn(
-                    "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                    "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                     isSelected
                       ? "border-brand bg-brand text-white "
                       : "border-line bg-surface text-muted-foreground hover:border-brand/40 hover:text-foreground"
@@ -854,7 +854,7 @@ export function Step1Goal({
               type="button"
               onClick={() => setShowStateDropdown(!showStateDropdown)}
               className={cn(
-                "rounded-md border border-line bg-surface px-3 py-1 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer",
+                "rounded-md border border-line bg-surface px-3 py-1 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                 showStateDropdown
                   ? "border-brand text-brand ring-1 ring-brand"
                   : "text-brand hover:border-brand/60"
@@ -907,7 +907,7 @@ export function Step1Goal({
                             type="button"
                             onClick={() => toggleState(s.code)}
                             className={cn(
-                              "flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-left cursor-pointer transition-colors",
+                              "flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-left cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                               isSelected
                                 ? "bg-brand text-white font-medium"
                                 : "hover:bg-muted text-foreground"
@@ -942,7 +942,7 @@ export function Step1Goal({
                   type="button"
                   onClick={() => onUpdate({ targetSchoolType: opt.value })}
                   className={cn(
-                    "flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
+                    "flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                     isSelected
                       ? "border-brand bg-brand-wash/60 text-brand ring-1 ring-brand font-semibold"
                       : "border-line bg-surface text-muted-foreground hover:border-brand/40 hover:text-foreground"
@@ -970,7 +970,7 @@ export function Step1Goal({
 
       {/* Bottom Actions */}
       <div className="flex justify-end pt-4 border-t border-line">
-        <Button onClick={handleNextClick} size="lg" className="gap-1.5 cursor-pointer">
+        <Button onClick={handleNextClick} size="lg" className="gap-1.5">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>

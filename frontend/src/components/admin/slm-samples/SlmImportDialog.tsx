@@ -330,13 +330,12 @@ export function SlmImportDialog({ open, onOpenChange, onImported }: Props) {
               <FolderOpenIcon />
               Chọn file
             </Button>
-            <Button type="button" variant="link" disabled={downloading} onClick={() => void handleDownload()}>
-              {downloading ? <Spinner /> : <FileDownIcon />}
+            <Button type="button" variant="link" loading={downloading} onClick={() => void handleDownload()}>
+              <FileDownIcon />
               Tải file mẫu
             </Button>
           </div>
-          <Button type="button" disabled={!canImport} onClick={() => void handleImport()}>
-            {importing && <Spinner />}
+          <Button type="button" disabled={!canImport} loading={importing} onClick={() => void handleImport()}>
             Nhập dữ liệu
           </Button>
         </DialogFooter>

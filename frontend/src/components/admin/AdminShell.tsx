@@ -30,7 +30,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           className="flex items-center gap-2.5 px-4 py-3 font-heading text-lg font-bold tracking-tight text-brand-ink sm:pl-6 md:py-5"
         >
           <span className="whitespace-nowrap">
-            {user?.role === "moderator" ? "USAS Moderator System" : "USAS Admin System"}
+            {user?.role === "moderator" ? "USDSS Moderator System" : "USDSS Admin System"}
           </span>
         </Link>
 

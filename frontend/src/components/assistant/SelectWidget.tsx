@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ChevronDownIcon, SendIcon, XIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import type { UsStateOption } from "@/types/profile-flow";
@@ -214,10 +215,11 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
           {err && <p className="text-xs font-medium text-destructive mt-0.5">⚠️ {err}</p>}
           <div className="pt-0.5">
             <button
+              key="toggle-gpa"
               type="button"
               disabled={!onPick}
               onClick={() => setShowGpaEstimator((prev) => !prev)}
-              className="text-xs font-medium text-brand hover:underline inline-flex items-center gap-1 cursor-pointer"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-sm text-xs font-medium text-brand hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
             >
               {showGpaEstimator ? "Ẩn bảng ước lượng" : "💡 Chưa rõ GPA? Bấm chọn khoảng ước tính"}
             </button>
@@ -236,7 +238,7 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
                         }
                         setValue("gpa", preset.value);
                       }}
-                      className={`px-2 py-0.5 text-xs rounded-full border transition-all cursor-pointer ${
+                      className={`px-2 py-0.5 text-xs rounded-full border transition-[color,background-color,border-color,transform,scale] duration-[var(--cds-dur-fast)] cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:not-disabled:scale-[0.975] disabled:cursor-default ${
                         isSelected
                           ? "bg-brand text-white border-brand font-semibold "
                           : "bg-surface text-foreground border-line hover:border-brand/50 hover:bg-brand-wash"
@@ -310,7 +312,7 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
                     aria-label={`Bỏ ${v}`}
                     disabled={!onPick}
                     onClick={() => setMulti((prev) => ({ ...prev, [f.name]: (prev[f.name] ?? []).filter((x) => x !== v) }))}
-                    className="cursor-pointer disabled:cursor-not-allowed"
+                    className="cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
                   >
                     <XIcon className="size-3" />
                   </button>
@@ -386,16 +388,16 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
         ) : (
           <p className="text-xs text-muted-foreground">Chọn cho nhanh, hoặc gõ trả lời vào ô chat.</p>
         )}
-        <button
+        <Button
           type="button"
           disabled={!onPick || !ready}
           title={firstError ?? undefined}
           onClick={submit}
-          className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-full bg-brand px-3.5 text-xs font-semibold text-white transition-colors hover:bg-brand-ink disabled:cursor-not-allowed disabled:opacity-50"
+          className="shrink-0 rounded-full bg-brand px-3.5 text-xs font-semibold text-white hover:bg-brand-ink"
         >
           <SendIcon className="size-3.5" />
           Gửi
-        </button>
+        </Button>
       </div>
     </div>
   );

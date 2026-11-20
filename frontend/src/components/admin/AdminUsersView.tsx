@@ -624,7 +624,7 @@ export function AdminUsersView() {
               e.stopPropagation();
               toggleDetailTarget(u);
             }}
-            className="text-left font-medium text-brand underline-offset-2 hover:underline"
+            className="cursor-pointer rounded-sm text-left font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
             {u.email}
           </button>
@@ -1148,8 +1148,8 @@ export function AdminUsersView() {
                 >
                   Hủy
                 </Button>
-                <Button type="submit" disabled={isSubmitting} className="gap-2 bg-brand text-white hover:bg-brand/90">
-                  {isSubmitting ? <Spinner className="size-4" /> : <ShieldCheckIcon className="size-4" />}
+                <Button type="submit" loading={isSubmitting} className="gap-2 bg-brand text-white hover:bg-brand/90">
+                  <ShieldCheckIcon className="size-4" />
                   Tạo tài khoản
                 </Button>
               </DialogFooter>
@@ -1199,10 +1199,10 @@ export function AdminUsersView() {
               type="button"
               variant="destructive"
               onClick={() => void handleConfirmLock()}
-              disabled={lockSubmitting}
+              loading={lockSubmitting}
               className="gap-1.5"
             >
-              {lockSubmitting ? <Spinner className="size-4" /> : <BanIcon className="size-4" />}
+              <BanIcon className="size-4" />
               Xác nhận khóa
             </Button>
           </DialogFooter>
@@ -1278,10 +1278,11 @@ export function AdminUsersView() {
             <Button
               type="button"
               onClick={() => void handleConfirmBirthDate()}
-              disabled={birthSubmitting || birthDetailLoading}
+              disabled={birthDetailLoading}
+              loading={birthSubmitting}
               className="gap-1.5 bg-brand text-white hover:bg-brand/90"
             >
-              {birthSubmitting ? <Spinner className="size-4" /> : <CakeIcon className="size-4" />}
+              <CakeIcon className="size-4" />
               Lưu ngày sinh
             </Button>
           </DialogFooter>
@@ -1329,9 +1330,9 @@ export function AdminUsersView() {
               type="button"
               className="bg-ok text-white hover:bg-ok/90 gap-1.5"
               onClick={() => void handleConfirmUnlock()}
-              disabled={unlockSubmitting}
+              loading={unlockSubmitting}
             >
-              {unlockSubmitting ? <Spinner className="size-4" /> : <KeyRoundIcon className="size-4" />}
+              <KeyRoundIcon className="size-4" />
               Xác nhận mở khóa
             </Button>
           </DialogFooter>

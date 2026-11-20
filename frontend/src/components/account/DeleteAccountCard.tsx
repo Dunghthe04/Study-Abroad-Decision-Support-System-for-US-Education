@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 
 /** Chữ người dùng phải gõ đúng để xác nhận xóa */
 export const DELETE_CONFIRM_WORD = "XÓA";
@@ -144,8 +143,7 @@ export function DeleteAccountCard() {
             <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isSubmitting}>
               Hủy
             </Button>
-            <Button type="button" variant="destructive" onClick={handleDelete} disabled={!canConfirm || isSubmitting}>
-              {isSubmitting && <Spinner data-icon="inline-start" />}
+            <Button type="button" variant="destructive" onClick={handleDelete} disabled={!canConfirm || isSubmitting} loading={isSubmitting}>
               {isSubmitting ? "Đang xóa..." : "Xóa tài khoản"}
             </Button>
           </DialogFooter>

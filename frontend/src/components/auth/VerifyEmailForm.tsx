@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { clearPendingEmail, usePendingEmail } from "@/lib/pending-email";
 
 export function VerifyEmailForm() {
@@ -170,8 +169,7 @@ export function VerifyEmailForm() {
             </FieldDescription>
           </Field>
 
-          <Button type="submit" size="xl" disabled={isSubmitting || otpCode.length !== 6} className="w-full">
-            {isSubmitting && <Spinner data-icon="inline-start" />}
+          <Button type="submit" size="xl" disabled={isSubmitting || otpCode.length !== 6} className="w-full" loading={isSubmitting}>
             {isSubmitting ? "Đang xác thực..." : "Kích hoạt tài khoản"}
           </Button>
         </FieldGroup>
@@ -185,7 +183,7 @@ export function VerifyEmailForm() {
             type="button"
             onClick={handleResendOtp}
             disabled={cooldown > 0 || isResending}
-            className="font-semibold text-brand hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+            className="cursor-pointer rounded-sm font-semibold text-brand outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default disabled:opacity-50 disabled:no-underline"
           >
             {cooldown > 0 ? `Gửi lại sau (${cooldown}s)` : isResending ? "Đang gửi..." : "Gửi lại mã"}
           </button>

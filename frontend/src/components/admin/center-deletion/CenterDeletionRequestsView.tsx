@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
@@ -255,10 +254,10 @@ export function CenterDeletionRequestsView() {
               type="button"
               variant={target?.decision === "approve" ? "destructive" : "default"}
               onClick={() => void confirm()}
-              disabled={busy || !note.trim()}
+              disabled={!note.trim()}
+              loading={busy}
               className="gap-1.5"
             >
-              {busy ? <Spinner className="size-3.5" /> : null}
               {decisionText?.confirm}
             </Button>
           </AlertDialogFooter>
