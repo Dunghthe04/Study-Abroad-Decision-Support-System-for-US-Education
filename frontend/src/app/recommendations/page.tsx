@@ -5,7 +5,7 @@ import { RecommendationView } from "@/components/recommendation/RecommendationVi
 import { overridesFromParams } from "@/lib/simulation-link";
 
 export const metadata: Metadata = {
-  title: "Trường gợi ý – USAS",
+  title: "Trường gợi ý – USDSS",
   description: "Danh sách trường Khó vào, Vừa sức, An toàn hơn và khối cần học bổng lớn theo hồ sơ của bạn.",
 };
 

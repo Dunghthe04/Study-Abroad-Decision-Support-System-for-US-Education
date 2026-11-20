@@ -3,7 +3,7 @@ import { AdminSection } from "@/components/admin/AdminSection";
 import { CenterDeletionRequestsView } from "@/components/admin/center-deletion/CenterDeletionRequestsView";
 
 export const metadata: Metadata = {
-  title: "Yêu cầu xóa trung tâm – Quản trị USAS",
+  title: "Yêu cầu xóa trung tâm – Quản trị USDSS",
 };
 
 /** [UC-93] Administrator xử lý yêu cầu xóa tài khoản và dữ liệu trung tâm. */

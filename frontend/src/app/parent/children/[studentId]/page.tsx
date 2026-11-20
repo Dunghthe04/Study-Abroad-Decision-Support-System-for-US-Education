@@ -5,7 +5,7 @@ import { toChildTab } from "@/lib/child-tabs";
 
 // Chức năng 1 "Con của tôi": hồ sơ, gợi ý, trường mục tiêu, lịch sử và kịch bản của một con. Chỉ xem.
 export const metadata: Metadata = {
-  title: "Con của tôi – USAS",
+  title: "Con của tôi – USDSS",
 };
 
 interface Props {

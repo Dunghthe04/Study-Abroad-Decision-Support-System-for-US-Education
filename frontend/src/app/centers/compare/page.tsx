@@ -5,7 +5,7 @@ import { ErrorFallback } from "@/components/ui/error-fallback";
 import { CenterCompareView } from "@/components/centers/CenterCompareView";
 import { parseCompareIds } from "@/lib/center-compare";
 
-export const metadata = { title: "So sánh trung tâm – USAS" };
+export const metadata = { title: "So sánh trung tâm – USDSS" };
 
 interface ComparePageProps {
   searchParams: Promise<{ ids?: string | string[] }>;

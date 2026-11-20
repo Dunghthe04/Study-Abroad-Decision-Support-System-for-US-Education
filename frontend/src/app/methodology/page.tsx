@@ -27,7 +27,7 @@ import type { GradeScaleConfig } from "@/types/academic";
 import type { MethodologyParameters } from "@/types/methodology";
 
 export const metadata: Metadata = {
-  title: "Cách hệ thống xếp trường – USAS",
+  title: "Cách hệ thống xếp trường – USDSS",
   description:
     "Hệ thống so hồ sơ của bạn với sinh viên từng trường đã nhận rồi xếp vào nhóm Khó vào, Vừa sức, An toàn hơn. Có hình minh họa và ví dụ có số.",
 };
@@ -385,11 +385,11 @@ export default async function MethodologyPage() {
       </details>
 
       <div className="flex flex-wrap gap-3">
-        <Link href="/analysis" className={buttonVariants({ size: "lg", className: "h-11 px-5" })}>
+        <Link href="/analysis" className={buttonVariants({ size: "xl" })}>
           Bắt đầu phân tích
           <ArrowRightIcon className="ml-1.5 size-4" />
         </Link>
-        <OpenAssistantButton className="h-11 px-5" question="Vì sao chia trường thành 3 nhóm?" />
+        <OpenAssistantButton size="xl" question="Vì sao chia trường thành 3 nhóm?" />
       </div>
     </div>
   );

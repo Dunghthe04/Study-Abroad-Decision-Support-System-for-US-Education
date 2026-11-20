@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { AdminSection } from "@/components/admin/AdminSection";
 
 export const metadata: Metadata = {
-  title: "Gói và giao dịch – Quản trị USAS",
+  title: "Gói và giao dịch – Quản trị USDSS",
 };
 
 export default function AdminPlansPage() {

@@ -7,7 +7,7 @@ import type { UniversityFilterOptions, UniversityListItem, UniversitySearchParam
 import type { PagedResult } from "@/types/api";
 
 export const metadata: Metadata = {
-  title: "Tìm kiếm trường Đại học Mỹ – USAS",
+  title: "Tìm kiếm trường Đại học Mỹ – USDSS",
   description:
     "Tra cứu và khám phá hơn 240 trường đại học tại Mỹ với bộ lọc chi tiết theo bang, học phí, ngành đào tạo, thứ hạng và yêu cầu tiếng Anh.",
 };

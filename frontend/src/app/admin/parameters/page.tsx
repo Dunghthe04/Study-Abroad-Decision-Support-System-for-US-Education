@@ -6,7 +6,7 @@ import { ParameterList } from "@/components/methodology/ParameterList";
 import { getMethodologyParameters } from "@/lib/methodology-api";
 
 export const metadata: Metadata = {
-  title: "Tham số hệ thống – Quản trị USAS",
+  title: "Tham số hệ thống – Quản trị USDSS",
 };
 
 /**

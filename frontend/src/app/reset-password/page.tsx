@@ -5,7 +5,7 @@ import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
 import { ResetPasswordForm } from "@/components/auth/ResetPasswordForm";
 
 export const metadata: Metadata = {
-  title: "Đặt lại mật khẩu – USAS",
+  title: "Đặt lại mật khẩu – USDSS",
   description: "Thiết lập mật khẩu mới bằng mã OTP xác thực",
 };
 
