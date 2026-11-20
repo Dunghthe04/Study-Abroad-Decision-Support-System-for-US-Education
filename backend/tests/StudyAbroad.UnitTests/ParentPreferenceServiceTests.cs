@@ -426,6 +426,88 @@ public class ParentPreferenceServiceTests
         Assert.Equal(calls + 1, _runner.SimulateCalls);   // đã đúng luật: không tính lại nữa
     }
 
+    // 27: UC-94 popup — chỉ lưu tiền: chưa có ưu tiên, không báo con, UC-76 tự hiện số tiền
+    [Fact]
+    public async Task SaveBudget_NoPref_SavesBudgetOnly_NoNotify()
+    {
+        Setup();
+        var r = await CreateService().SaveBudgetAsync(_parent, _child, 1_300_000_000, CancellationToken.None);
+
+        Assert.Equal(ParentLinkError.None, r.Error);
+        var s = StoredRow();
+        Assert.Null(s.Pref);
+        Assert.Equal(1_300_000_000, s.BudgetVnd);
+        Assert.Equal(50_000m, s.BudgetUsd);
+        Assert.Null(s.Result);
+        Assert.Empty(_notifications.Sent);
+
+        var got = (await CreateService().GetAsync(_parent, _child, CancellationToken.None)).Value!;
+        Assert.False(got.HasPref);
+        Assert.Equal([2, 2, 2], got.Pref);
+        Assert.Equal(1_300_000_000, got.BudgetVnd);
+    }
+
+    // 28: đã có ưu tiên → giữ ưu tiên, đổi tiền, đánh dấu cần tính lại
+    [Fact]
+    public async Task SaveBudget_KeepsExistingPref_MarksStale()
+    {
+        Setup();
+        ChildRun();
+        await CreateService().SaveAsync(_parent, _child, Pref, 1_300_000_000, CancellationToken.None);
+        _notifications.Sent.Clear();
+
+        await CreateService().SaveBudgetAsync(_parent, _child, 2_600_000_000, CancellationToken.None);
+
+        var s = StoredRow();
+        Assert.Equal(Pref, s.Pref);
+        Assert.Equal(2_600_000_000, s.BudgetVnd);
+        Assert.Equal(100_000m, s.BudgetUsd);
+        Assert.True(s.Stale);
+        Assert.Empty(_notifications.Sent);
+    }
+
+    // 29
+    [Theory]
+    [InlineData(null)]
+    [InlineData(99_999_999L)]
+    [InlineData(10_000_000_001L)]
+    public async Task SaveBudget_NullOrOutOfRange_Validation(long? vnd)
+    {
+        Setup();
+        var r = await CreateService().SaveBudgetAsync(_parent, _child, vnd, CancellationToken.None);
+
+        Assert.Equal(ParentLinkError.Validation, r.Error);
+        Assert.Null(Assert.Single(_links.Links).ParentPreferenceJson);
+    }
+
+    // 30
+    [Fact]
+    public async Task SaveBudget_Managed_NotFound()
+    {
+        Setup(childStatus: UserStatuses.Managed);
+        Assert.Equal(ParentLinkError.NotFound, (await CreateService().SaveBudgetAsync(_parent, _child, 1_300_000_000, CancellationToken.None)).Error);
+    }
+
+    // 31: chỉ có tiền → so sánh xem trước với ưu tiên cân bằng và số tiền đã lưu; con thấy "chưa chọn ưu tiên"
+    [Fact]
+    public async Task OnlyBudget_ComparePreviewsWithSavedBudget_ChildSeesNoPref()
+    {
+        Setup();
+        ChildRun();
+        await CreateService().SaveBudgetAsync(_parent, _child, 1_300_000_000, CancellationToken.None);
+
+        var d = (await CreateService().CompareForParentAsync(_parent, _child, null, null, CancellationToken.None)).Value!;
+        Assert.True(d.IsPreview);
+        Assert.False(d.ParentHasPref);
+        Assert.Equal(50_000m, d.ParentBudgetUsd);
+        Assert.Equal([2, 2, 2], _runner.LastPref);
+
+        var v = (await CreateService().GetForChildAsync(_child, null, CancellationToken.None)).Value!;
+        Assert.Contains(v.Parents, p => p.Id == _parent && !p.HasPref);
+        Assert.False(v.Compare!.ParentHasPref);
+        Assert.Null(v.Compare.Comparison);
+    }
+
     internal sealed class FakeProfiles : IAcademicProfileRepository
     {
         public StudentProfile? Profile { get; set; }
