@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { ChevronDownIcon } from "lucide-react";
+import { PremiumLockedCard } from "@/components/billing/PremiumLockedCard";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Spinner } from "@/components/ui/spinner";
@@ -61,11 +62,16 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
         <p className="text-xs text-muted-foreground">
           Kéo để xem danh sách trường đổi thế nào. Đây chỉ là giả định, hồ sơ thật của bạn không thay đổi.
         </p>
-        {sim.error && <p className="text-xs text-risk">{sim.error}</p>}
+        {/* Tài khoản Miễn phí: server trả 403 premium_required, hiện thẻ khóa thay cho lỗi chung */}
+        {sim.locked ? (
+          <PremiumLockedCard className="mt-2" title="Mô phỏng hồ sơ cần tài khoản USDSS Premium" />
+        ) : (
+          sim.error && <p className="text-xs text-risk">{sim.error}</p>
+        )}
       </div>
 
       {!profile ? (
-        <p className="px-4 pb-6 text-xs text-muted-foreground">
+        !sim.locked && <p className="px-4 pb-6 text-xs text-muted-foreground">
           {sim.error ? "Chưa tải được hồ sơ để mô phỏng." : "Đang tải hồ sơ..."}
         </p>
       ) : (
