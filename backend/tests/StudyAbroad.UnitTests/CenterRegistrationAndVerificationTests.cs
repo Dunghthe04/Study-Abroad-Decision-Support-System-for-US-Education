@@ -1025,6 +1025,35 @@ public class CenterRegistrationAndVerificationTests
     }
 
     [Fact]
+    public async Task RequestDeletion_WhenOnlyOwnerAccountUnderLegalHold_AlsoSendsHeldNotice()
+    {
+        var centers = new FakeStudyCenterRepo();
+        var deletions = new FakeDeletionRepo();
+        var email = new FakeEmailSender();
+        var users = new FakeUserRepository();
+        var owner = new User { Id = Guid.NewGuid(), Email = "owner@abc.vn", FullName = "Chủ", IsLegalHold = true };
+        users.Users.Add(owner);
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = "info@abc.vn",
+            OwnerUserId = owner.Id,
+            VerificationStatus = CenterVerificationStatuses.Verified,
+        };
+        await centers.AddAsync(center);
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), new FakeVerificationRepo(), emailSender: email,
+            notifications: null, profileChanges: new FakeProfileChangeRepo(), deletionRequests: deletions, users: users);
+
+        var result = await service.RequestDeletionAsync(owner.Id, "Ngừng hoạt động");
+
+        Assert.True(result.Success);
+        Assert.Null(result.Request!.DueAt);
+        var mail = Assert.Single(email.CenterDeletionEmails);
+        Assert.Equal("held", mail.Outcome);
+    }
+
+    [Fact]
     public async Task GetDeletionRequest_HidesDeadlineWhileCenterUnderLegalHold()
     {
         var centers = new FakeStudyCenterRepo();

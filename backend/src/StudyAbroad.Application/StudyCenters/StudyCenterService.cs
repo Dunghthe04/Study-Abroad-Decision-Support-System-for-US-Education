@@ -56,7 +56,8 @@ public class StudyCenterService(
     IEmailSender? emailSender = null,
     StudyAbroad.Application.Notifications.INotificationService? notifications = null,
     ICenterProfileChangeRepository? profileChanges = null,
-    ICenterDeletionRequestRepository? deletionRequests = null) : IStudyCenterService
+    ICenterDeletionRequestRepository? deletionRequests = null,
+    StudyAbroad.Application.Auth.IUserRepository? users = null) : IStudyCenterService
 {
     private const int MaxPageSize = 100;
     public const int MaxNameLength = 200;
@@ -1213,7 +1214,10 @@ public class StudyCenterService(
         var center = await repository.GetByOwnerOrEmailAsync(userId, null, ct);
         if (center is null) return null;
         var latest = await deletionRequests.GetLatestByCenterIdAsync(center.Id, ct);
-        return latest is null ? null : ToDeletionDto(latest, center.IsLegalHold);
+        if (latest is null) return null;
+        var underHold = center.IsLegalHold
+            || (users is not null && center.OwnerUserId is { } ownerId && (await users.GetUserById(ownerId, ct))?.IsLegalHold == true);
+        return ToDeletionDto(latest, underHold);
     }
 
     /// <summary>
@@ -1263,12 +1267,15 @@ public class StudyCenterService(
         // Điều 5 khoản 4: phản hồi trong 02 ngày làm việc. Gửi xác nhận ngay khi nhận; lỗi gửi mail không làm hỏng yêu cầu.
         // Nếu trung tâm đã bị giữ pháp lý từ trước, yêu cầu không thể thực hiện: báo ngay "chưa thể thực hiện"
         // (Luật 91/2025 Điều 14 khoản 5) thay vì "đã nhận" kèm hạn 20 ngày mà hệ thống không thể giữ.
+        // Giữ pháp lý đặt trên cả trung tâm lẫn tài khoản chủ; chỉ cần một bên bị giữ là không xóa được.
+        var underHold = center.IsLegalHold
+            || (users is not null && center.OwnerUserId is { } ownerId && (await users.GetUserById(ownerId, ct))?.IsLegalHold == true);
         if (emailSender is not null && !string.IsNullOrWhiteSpace(center.Email))
         {
             try
             {
-                var outcome = center.IsLegalHold ? "held" : "received";
-                await emailSender.SendCenterDeletionOutcomeEmailAsync(center.Email.Trim(), center.Name, outcome, null, center.IsLegalHold ? null : entity.DueAt, ct);
+                var outcome = underHold ? "held" : "received";
+                await emailSender.SendCenterDeletionOutcomeEmailAsync(center.Email.Trim(), center.Name, outcome, null, underHold ? null : entity.DueAt, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -1276,7 +1283,7 @@ public class StudyCenterService(
             }
         }
 
-        return CenterDeletionRequestResult.Ok(ToDeletionDto(entity, center.IsLegalHold));
+        return CenterDeletionRequestResult.Ok(ToDeletionDto(entity, underHold));
     }
 
     private static CenterVerificationDto ToVerificationDto(CenterVerificationRequest req, StudyCenter? center) =>
