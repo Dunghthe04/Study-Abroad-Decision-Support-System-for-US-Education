@@ -39,7 +39,6 @@ from app.services.replies import (
     CHAT_BUTTON,
     CONTINUE_CHAT,
     FORM_BUTTON,
-    FORM_DONE,
     INTAKE_FORM,
     INTAKE_MORE,
     MENU,
@@ -314,7 +313,7 @@ class ChatFlow:
 
                 state.intake_mode = "chat"
                 # Còn dự định thi quá hạn thì hỏi dự định đó trước khi báo hồ sơ đã đủ
-                output = skill_ho_so.ask_overdue_first(state) or SkillOutput(FORM_DONE)
+                output = skill_ho_so.ask_overdue_first(state) or SkillOutput(skill_ho_so.FORM_SAVED)
                 log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
                 return self._response(state, output, [], profile_before)
             if continue_chat and state.pending_advice is not None and profile_ready(state):

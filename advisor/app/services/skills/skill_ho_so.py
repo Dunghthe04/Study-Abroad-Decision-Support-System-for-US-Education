@@ -107,7 +107,9 @@ CONFIRM_WORDS = {
 }
 CONFIRM_REPLY = QuickReply(label="Đúng rồi", value="Đúng rồi")
 FIX_REPLY = QuickReply(label="Cần sửa", value="Em cần sửa thông tin")
-SAVED = "Mình đã ghi nhận hồ sơ của bạn."
+SAVED = "Mình đã lưu hồ sơ của bạn thành công."
+# Lưu form mở từ chat xong, không có câu tư vấn nào đang chờ (vd chỉ sửa hồ sơ): báo đã lưu rồi hỏi muốn tư vấn gì
+FORM_SAVED = f"{SAVED} Bạn muốn mình tư vấn gì tiếp?"
 # Bấm "Cần sửa" hoặc nói muốn sửa mà chưa nói sửa gì: hỏi lại mục cần sửa thay vì hiện lại bảng
 
 # Ô chọn "sửa mục nào" khi bấm Cần sửa: tên nhóm → các câu hỏi của nhóm. Câu B1 viết thẳng mã vì skill_bac_hoc
