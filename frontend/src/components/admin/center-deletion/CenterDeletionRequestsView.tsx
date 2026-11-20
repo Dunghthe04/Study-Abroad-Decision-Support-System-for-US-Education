@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckIcon, ScaleIcon, XIcon } from "lucide-react";
+import { CheckIcon, ClockIcon, ScaleIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import { CenterLegalHoldDialog, type LegalHoldAction } from "./CenterLegalHoldDialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -47,7 +47,14 @@ const STATUS_BADGE: Record<CenterDeletionRequestStatus, { label: string; variant
   rejected: { label: "Đã từ chối", variant: "neutral" },
 };
 
-type Decision = "approve" | "reject";
+type Decision = "approve" | "reject" | "extend";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Số ngày còn lại tới hạn (âm là đã quá hạn). */
+function daysUntil(iso: string, now: number): number {
+  return Math.ceil((new Date(iso).getTime() - now) / DAY_MS);
+}
 
 const DECISION_TEXT: Record<Decision, { title: string; description: string; placeholder: string; confirm: string; done: string }> = {
   approve: {
@@ -57,6 +64,14 @@ const DECISION_TEXT: Record<Decision, { title: string; description: string; plac
     placeholder: "Kết quả kiểm tra danh tính người gửi (bắt buộc), ví dụ: đã gọi điện xác nhận với người đại diện",
     confirm: "Duyệt và khóa tài khoản",
     done: "Đã duyệt yêu cầu xóa",
+  },
+  extend: {
+    title: "Gia hạn thời gian xử lý?",
+    description:
+      "Theo Nghị định 356/2025/NĐ-CP Điều 5 khoản 4, yêu cầu xóa phải xử lý trong 20 ngày và chỉ được gia hạn một lần, tối đa 20 ngày. Lý do gia hạn được gửi cho người yêu cầu qua email. Nếu yêu cầu đã duyệt, ngày xóa hẳn dời theo hạn mới.",
+    placeholder: "Lý do gia hạn (bắt buộc), ví dụ: cần xác minh thêm danh tính người đại diện",
+    confirm: "Gia hạn thêm 20 ngày",
+    done: "Đã gia hạn thời gian xử lý",
   },
   reject: {
     title: "Từ chối yêu cầu xóa?",
@@ -75,6 +90,8 @@ export function CenterDeletionRequestsView() {
   const [target, setTarget] = useState<{ decision: Decision; item: AdminCenterDeletionRequestDto } | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  // Mốc thời gian chốt một lần khi mở trang, để tính "còn X ngày" mà không gọi Date.now() lúc render
+  const [now] = useState(() => Date.now());
   const [holdTarget, setHoldTarget] = useState<{ action: LegalHoldAction; centerId: string; centerName: string } | null>(null);
 
   const query = useFetched(`center-deletion-requests|${filter}|${page}|${version}`, () =>
@@ -105,6 +122,7 @@ export function CenterDeletionRequestsView() {
     setBusy(true);
     try {
       if (target.decision === "approve") await centerDeletionRequestsApi.approve(target.item.id, text);
+      else if (target.decision === "extend") await centerDeletionRequestsApi.extend(target.item.id, text);
       else await centerDeletionRequestsApi.reject(target.item.id, text);
       toast.add({ type: "success", title: DECISION_TEXT[target.decision].done, description: "Người gửi đã được báo kết quả qua email." });
       setTarget(null);
@@ -215,6 +233,19 @@ export function CenterDeletionRequestsView() {
                         {formatDateTime(item.scheduledPurgeAt)}
                       </div>
                     ) : null}
+                    {(item.status === "pending" || item.status === "approved") && item.dueAt ? (
+                      <div className="mt-1 text-xs text-ink-2">
+                        Hạn xử lý: {formatDateTime(item.dueAt)}
+                        {(() => {
+                          const left = daysUntil(item.dueAt, now);
+                          if (left < 0) return <span className="ml-1 font-medium text-risk">quá hạn {-left} ngày</span>;
+                          return <span className="ml-1">còn {left} ngày</span>;
+                        })()}
+                        {item.extendedAt ? (
+                          <div title={item.extensionNote ?? undefined}>Đã gia hạn một lần{item.extensionNote ? `: ${item.extensionNote}` : ""}</div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {item.status === "completed" && item.completedAt ? (
                       <div className="mt-1 text-xs text-ink-2">Đã xóa: {formatDateTime(item.completedAt)}</div>
                     ) : null}
@@ -240,6 +271,12 @@ export function CenterDeletionRequestsView() {
                             Từ chối
                           </Button>
                         </>
+                      ) : null}
+                      {(item.status === "pending" || item.status === "approved") && !item.extendedAt ? (
+                        <Button type="button" size="sm" variant="ghost" className="gap-1.5" onClick={() => open("extend", item)}>
+                          <ClockIcon className="size-3.5" />
+                          Gia hạn
+                        </Button>
                       ) : null}
                       {item.status === "pending" || item.status === "approved" ? (
                         <Button
@@ -313,7 +350,9 @@ export function CenterDeletionRequestsView() {
             rows={3}
             disabled={busy}
             placeholder={decisionText?.placeholder}
-            aria-label={target?.decision === "approve" ? "Kết quả kiểm tra danh tính" : "Lý do từ chối"}
+            aria-label={
+              target?.decision === "approve" ? "Kết quả kiểm tra danh tính" : target?.decision === "extend" ? "Lý do gia hạn" : "Lý do từ chối"
+            }
             aria-required
             className="resize-y text-sm"
           />

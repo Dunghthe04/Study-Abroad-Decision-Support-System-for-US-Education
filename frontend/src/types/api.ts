@@ -238,6 +238,10 @@ export interface AdminCenterDeletionRequestDto {
   legalHoldAt: string | null;
   /** Số tin nhắn của trung tâm bị báo cáo mà Admin chưa xử lý (UC-58). */
   openReportCount: number;
+  /** Hạn xử lý: 20 ngày kể từ khi nhận, cộng 20 ngày nếu đã gia hạn (NĐ 356/2025 Điều 5 khoản 4). */
+  dueAt: string | null;
+  extendedAt: string | null;
+  extensionNote: string | null;
 }
 
 /** [UC-93] Tình trạng giữ pháp lý (Legal Hold) dữ liệu của một trung tâm. */

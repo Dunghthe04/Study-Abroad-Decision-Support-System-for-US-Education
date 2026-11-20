@@ -25,7 +25,7 @@ const TEXT: Record<LegalHoldAction, { title: string; description: string; placeh
   set: {
     title: "Giữ pháp lý dữ liệu trung tâm?",
     description:
-      "Dùng khi trung tâm bị nghi lừa đảo, có khiếu nại hoặc tranh chấp, hay cơ quan có thẩm quyền yêu cầu giữ dữ liệu. Trong thời gian giữ, yêu cầu xóa của trung tâm không thể duyệt và dữ liệu không bị xóa hẳn, kể cả khi đã tới hạn. Trung tâm không được báo về việc này.",
+      "Dùng khi trung tâm bị nghi lừa đảo, có khiếu nại hoặc tranh chấp, hay cơ quan có thẩm quyền yêu cầu giữ dữ liệu. Trong thời gian giữ, yêu cầu xóa của trung tâm không thể duyệt và dữ liệu không bị xóa hẳn, kể cả khi đã tới hạn. Nếu trung tâm đang có yêu cầu xóa, hệ thống gửi thông báo chung rằng yêu cầu chưa thể thực hiện vì lý do chính đáng (Luật 91/2025 Điều 14 khoản 5), không nêu lý do giữ hay việc điều tra.",
     placeholder: "Lý do giữ (bắt buộc), ví dụ: số công văn, mã khiếu nại, cơ quan yêu cầu",
     confirm: "Bật giữ pháp lý",
     done: "Đã bật giữ pháp lý",
