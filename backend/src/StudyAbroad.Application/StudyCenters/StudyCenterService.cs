@@ -1260,11 +1260,14 @@ public class StudyCenterService(
         }, ct);
 
         // Điều 5 khoản 4: phản hồi trong 02 ngày làm việc. Gửi xác nhận ngay khi nhận; lỗi gửi mail không làm hỏng yêu cầu.
+        // Nếu trung tâm đã bị giữ pháp lý từ trước, yêu cầu không thể thực hiện: báo ngay "chưa thể thực hiện"
+        // (Luật 91/2025 Điều 14 khoản 5) thay vì "đã nhận" kèm hạn 20 ngày mà hệ thống không thể giữ.
         if (emailSender is not null && !string.IsNullOrWhiteSpace(center.Email))
         {
             try
             {
-                await emailSender.SendCenterDeletionOutcomeEmailAsync(center.Email.Trim(), center.Name, "received", null, entity.DueAt, ct);
+                var outcome = center.IsLegalHold ? "held" : "received";
+                await emailSender.SendCenterDeletionOutcomeEmailAsync(center.Email.Trim(), center.Name, outcome, null, center.IsLegalHold ? null : entity.DueAt, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
