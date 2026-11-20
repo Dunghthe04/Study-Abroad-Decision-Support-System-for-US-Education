@@ -108,12 +108,16 @@ public record FlowOtherTestDraftDto(
 
 /// <summary>
 /// Bước 4 – annualBudgetTier: id tier_* trong metadata; needFinancialAid: mandatory | preferred | optional;
-/// fundingSource: mã ProfileConstants.FundingSources (ai chi trả chính)
+/// fundingSource: mã ProfileConstants.FundingSources (ai chi trả chính);
+/// annualBudgetVnd: số tiền tối đa/năm phụ huynh nhập chính xác (VND), có thì đổi sang USD theo tỷ giá lúc lưu và ghi vào budget_max_usd;
+/// annualBudgetUsd: số USD chính xác đã lưu lần trước (server trả về khi mở lại), lưu lại không đổi thì giữ số này, không để hạng ghi đè
 /// </summary>
 public record FlowFinancialDraftDto(
     [property: JsonPropertyName("annualBudgetTier")] string? AnnualBudgetTier = null,
     [property: JsonPropertyName("needFinancialAid")] string? NeedFinancialAid = null,
-    [property: JsonPropertyName("fundingSource")] string? FundingSource = null
+    [property: JsonPropertyName("fundingSource")] string? FundingSource = null,
+    [property: JsonPropertyName("annualBudgetVnd")] long? AnnualBudgetVnd = null,
+    [property: JsonPropertyName("annualBudgetUsd")] decimal? AnnualBudgetUsd = null
 );
 
 public record FlowActivitiesDraftDto(
