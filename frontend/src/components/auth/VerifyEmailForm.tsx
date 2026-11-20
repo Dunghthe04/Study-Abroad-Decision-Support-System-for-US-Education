@@ -12,6 +12,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { clearPendingEmail, usePendingEmail } from "@/lib/pending-email";
+import { AUTH_RETURN_TO_KEY } from "@/components/billing/FamilyInviteForm";
 
 export function VerifyEmailForm() {
   const router = useRouter();
@@ -63,8 +64,17 @@ export function VerifyEmailForm() {
         setSuccessMessage("Xác thực email thành công! Tài khoản đại diện trung tâm của bạn đang chờ Quản trị viên duyệt hồ sơ.");
       } else {
         setSuccessMessage("Kích hoạt tài khoản thành công! Đang chuyển hướng...");
+        // Mở từ trang lời mời gói Gia đình: quay lại đúng trang đó (chỉ nhận đường dẫn nội bộ, như LoginForm)
+        let returnTo = "/";
+        try {
+          const saved = sessionStorage.getItem(AUTH_RETURN_TO_KEY);
+          sessionStorage.removeItem(AUTH_RETURN_TO_KEY);
+          if (saved && /^\/(?![\/\\])/.test(saved)) returnTo = saved;
+        } catch {
+          // Trình duyệt chặn lưu trữ: về trang chủ
+        }
         setTimeout(() => {
-          router.push("/");
+          router.push(returnTo);
         }, 1500);
       }
     } catch (err) {
