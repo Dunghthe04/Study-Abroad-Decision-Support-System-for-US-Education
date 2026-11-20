@@ -322,6 +322,40 @@ public class ChatServiceTests
     }
 
     [Fact]
+    public async Task EveryAiCallOfTheTurn_IsStampedWithThePoolChosenBeforeTheAdvisorCall()
+    {
+        var calls = new FakeAiCalls();
+        var advisor = new FakeAdvisor("B0") { AiUsage = TwoCalls };
+        var cycleId = Guid.NewGuid();
+        var entitlements = new FakeEntitlements(advisor, new StudyAbroad.Application.Billing.ChatCharge(
+            false, true, cycleId, "personal-1m", PlanKinds.Personal, null, false, DateTime.UtcNow));
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), aiCalls: calls, entitlements: entitlements)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello), role: UserRoles.Parent);
+
+        Assert.Equal((1, UserRoles.Parent, false), (entitlements.Calls, entitlements.Role, entitlements.AdvisorCalledFirst));
+        Assert.Equal(2, calls.Rows.Count);
+        Assert.All(calls.Rows, c => Assert.Equal((cycleId, "personal-1m"), (c.UserSubscriptionId!.Value, c.PlanCode)));
+    }
+
+    [Fact]
+    public async Task FreeAllowanceTurn_IsStampedFreeWithoutACycle_StaffTurnIsNotStamped()
+    {
+        var free = new FakeAiCalls();
+        var advisor = new FakeAdvisor("B0") { AiUsage = TwoCalls };
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), aiCalls: free, entitlements: new FakeEntitlements(advisor,
+                new StudyAbroad.Application.Billing.ChatCharge(false, false, null, "free", PlanKinds.Free, PremiumIntents.FreeAllowed, false, DateTime.UtcNow)))
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+        var staff = new FakeAiCalls();
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), aiCalls: staff, entitlements: new FakeEntitlements(advisor,
+                new StudyAbroad.Application.Billing.ChatCharge(true, true, null, null, PlanKinds.Free, null, false, DateTime.UtcNow)))
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello), role: UserRoles.Admin);
+
+        Assert.All(free.Rows, c => Assert.Equal(((Guid?)null, "free"), (c.UserSubscriptionId, c.PlanCode)));
+        Assert.All(staff.Rows, c => Assert.Equal(((Guid?)null, (string?)null), (c.UserSubscriptionId, c.PlanCode)));
+    }
+
+    [Fact]
     public async Task TokensAreStillLogged_WhenStoringMessagesIsSwitchedOff()
     {
         // Tắt lưu nội dung chat vì riêng tư thì vẫn theo dõi được token (chỉ là số đo), chỉ không có liên kết tới tin nhắn
@@ -3091,6 +3125,31 @@ public class ChatServiceTests
                 throw NoteError;
             return Task.FromResult(Note!);
         }
+    }
+
+    // Ghi lại vai trò được hỏi và advisor đã bị gọi trước lúc chọn pool chưa
+    private sealed class FakeEntitlements(FakeAdvisor advisor, StudyAbroad.Application.Billing.ChatCharge charge)
+        : StudyAbroad.Application.Billing.IEntitlementService
+    {
+        public int Calls { get; private set; }
+        public string? Role { get; private set; }
+        public bool AdvisorCalledFirst { get; private set; }
+
+        public Task<StudyAbroad.Application.Billing.ChatCharge> ResolveChatChargeAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default)
+        {
+            Calls++;
+            Role = role;
+            AdvisorCalledFirst = advisor.LastRequest is not null;
+            return Task.FromResult(charge);
+        }
+
+        public Task<StudyAbroad.Application.Billing.SubscriptionSummaryDto> GetSummaryAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> IsPremiumAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<StudyAbroad.Application.Billing.PlanDto>> GetPlansOnSaleAsync(CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeAiCalls : IAiCallRepository
