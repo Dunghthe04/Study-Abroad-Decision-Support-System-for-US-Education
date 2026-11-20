@@ -140,6 +140,21 @@ public class ParentPreferenceRefresherTests
         Assert.Null(ex);
     }
 
+    // 8: UC-94 chỉ lưu tiền (chưa có ưu tiên) → không tính lại
+    [Fact]
+    public async Task BudgetOnly_NoPref_Skipped()
+    {
+        AddChild();
+        var json = JsonSerializer.Serialize(new ParentPreferenceService.Stored(
+            null, 1_300_000_000, 26_000m, 50_000m, DateTime.UtcNow, null, null, null, false), WebJson);
+        var link = AddLink(json);
+
+        await CreateRefresher().OnChildRunAsync(_runner, _child, _recId, CancellationToken.None);
+
+        Assert.Empty(_runner.Calls);
+        Assert.Null(Row(link.Id).Pref);
+    }
+
     // 7: RecommendationService gọi refresher đúng con và đúng id lượt vừa lưu; lỗi của refresher không chặn lượt của con
     [Fact]
     public async Task RecommendationService_CallsRefresherAfterSave()

@@ -12,6 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { ArrowRightIcon, BookOpenIcon, CheckIcon, PencilIcon, RocketIcon, TriangleAlertIcon } from "lucide-react";
 import { ProfileReviewCards, normalizeProfileDetails } from "@/components/flow/ProfileReviewCards";
 import { profileFlowApi } from "@/lib/profile-flow-api";
+import { editProfileHref } from "@/lib/form-goals";
 import { useFetched } from "@/lib/use-fetched";
 
 // Nhãn bậc học
@@ -123,7 +124,7 @@ export function AcademicSummaryCard({ profile, isLoading, readOnly = false, titl
         </CardDescription>
         {!readOnly && (
         <div className="flex flex-wrap items-center gap-2">
-          <Link href="/analysis" className={buttonVariants({ variant: "outline" })}>
+          <Link href={editProfileHref("/account#academic")} className={buttonVariants({ variant: "outline" })}>
             <PencilIcon aria-hidden />
             Sửa hồ sơ
           </Link>

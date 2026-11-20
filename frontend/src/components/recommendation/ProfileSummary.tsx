@@ -26,12 +26,15 @@ interface StudentProfile {
   duolingo: number | null;
   budgetMinUsd: number | null;
   budgetMaxUsd: number | null;
+  /** UC-94: số tiền tối đa/năm chính xác phụ huynh nhập (có thì hiện số này thay cho khoảng) */
+  budgetExactUsd?: number | null;
 }
 
 const usd = formatUsd; // "20.000 USD", cùng định dạng vi-VN với thẻ trường và mô phỏng
 
 // Mức ngân sách: khoảng min–max, "Dưới max" hoặc "Trên min" (mức cao nhất không có trần)
 function budgetLabel(s: StudentProfile): string | null {
+  if (s.budgetExactUsd != null) return `Tối đa ${usd(s.budgetExactUsd)}`;
   const min = s.budgetMinUsd && s.budgetMinUsd > 0 ? s.budgetMinUsd : null;
   const max = s.budgetMaxUsd ?? null;
   if (min && max) return `${usd(min).replace(" USD", "")} – ${usd(max)}`;
@@ -100,6 +103,7 @@ function profileFromDraft(draft: ProfileFlowDraft, meta: ProfileMetadataResponse
       duolingo: scores.duolingo ?? null,
       budgetMinUsd: tier?.minUsd ?? null,
       budgetMaxUsd: tier?.maxUsd ?? null,
+      budgetExactUsd: draft.step4?.annualBudgetUsd ?? null,
     },
     gpa10,
     states: (draft.step1?.targetStates ?? []).map((c) => stateName.get(c) ?? c),

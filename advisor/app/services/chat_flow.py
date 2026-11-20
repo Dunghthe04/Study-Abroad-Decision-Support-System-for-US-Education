@@ -39,7 +39,6 @@ from app.services.replies import (
     CHAT_BUTTON,
     CONTINUE_CHAT,
     FORM_BUTTON,
-    FORM_DONE,
     INTAKE_FORM,
     INTAKE_MORE,
     MENU,
@@ -277,6 +276,9 @@ class ChatFlow:
         # Đã lưu hồ sơ chưa: quyết định hỏi đủ hay chỉ hỏi mục bắt buộc còn thiếu; không gửi thì giữ giá trị cũ
         if req.has_committed_profile is not None:
             state.has_committed_profile = req.has_committed_profile
+        # Phụ huynh nhập hộ con managed hay không: F1 hỏi số tiền chính xác (VNĐ) thay cho mức
+        if req.exact_budget is not None:
+            state.exact_budget = req.exact_budget
         # Danh sách trường gợi ý do .NET gửi mỗi lượt (lấy từ lần gợi ý đã lưu); không gửi thì giữ như cũ.
         # Có danh sách nghĩa là học sinh đã có kết quả, dù gợi ý ở trang Gợi ý trường chứ không phải trong chat
         if req.schools is not None:
@@ -311,7 +313,7 @@ class ChatFlow:
 
                 state.intake_mode = "chat"
                 # Còn dự định thi quá hạn thì hỏi dự định đó trước khi báo hồ sơ đã đủ
-                output = skill_ho_so.ask_overdue_first(state) or SkillOutput(FORM_DONE)
+                output = skill_ho_so.ask_overdue_first(state) or SkillOutput(skill_ho_so.FORM_SAVED)
                 log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
                 return self._response(state, output, [], profile_before)
             if continue_chat and state.pending_advice is not None and profile_ready(state):

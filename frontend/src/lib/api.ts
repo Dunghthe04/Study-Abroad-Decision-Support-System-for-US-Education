@@ -800,3 +800,6 @@ export const accessLogsApi = {
   },
 };
 
+// [UC-94] Dashboard KPI học sinh và phụ huynh
+export { dashboardApi } from "@/lib/dashboard-api";
+

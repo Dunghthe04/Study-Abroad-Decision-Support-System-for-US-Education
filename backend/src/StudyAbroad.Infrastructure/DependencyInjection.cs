@@ -57,6 +57,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<StudyAbroad.Application.Common.IUnitOfWork, EfUnitOfWork>();   // [UC-80] gom nhiều bước ghi vào một transaction
         services.AddScoped<StudyAbroad.Application.ParentLinks.IParentLinkRepository, ParentLinkRepository>();
+        services.AddScoped<StudyAbroad.Application.Dashboard.IDashboardRepository, DashboardRepository>(); // [UC-94] Dashboard KPI
         services.AddScoped<IScenarioRepository, ScenarioRepository>();   // [UC-86] kịch bản what-if đã lưu
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
         services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();

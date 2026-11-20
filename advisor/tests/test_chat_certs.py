@@ -4,9 +4,10 @@ import pytest
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
 from app.services.chat_flow import SkillOutput
-from app.services.replies import CONTINUE_CHAT, FORM_DONE
+from app.services.replies import CONTINUE_CHAT
 from app.services.skills import build_handlers, buttons
 from app.services.skills.skill_ho_so import (
+    FORM_SAVED,
     NO_MORE_CERT,
     NO_MORE_PLAN,
     OVERDUE_DROP,
@@ -588,7 +589,7 @@ async def test_back_from_form_with_overdue_plan_asks_it_instead_of_done():
 
     res = await say(flow, CONTINUE_CHAT, state, from_form=True)
 
-    assert res.answer != FORM_DONE and "IELTS" in res.answer
+    assert res.answer != FORM_SAVED and "IELTS" in res.answer
     assert [r.label for r in res.quick_replies] == [OVERDUE_TAKEN, OVERDUE_MOVE, OVERDUE_DROP]
     assert res.state.question_id == "E2" and res.state.intake_mode == "chat"
     assert advice.questions == []
@@ -649,4 +650,4 @@ async def test_back_from_form_without_overdue_plan_still_says_done():
 
     res = await say(flow, CONTINUE_CHAT, state, from_form=True)
 
-    assert res.answer == FORM_DONE
+    assert res.answer == FORM_SAVED
