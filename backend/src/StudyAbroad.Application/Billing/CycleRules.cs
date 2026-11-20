@@ -59,6 +59,7 @@ public static class CycleRules
     public static IReadOnlyList<CycleChange> Advance(UserSubscription? active, UserSubscription? queued, long activeUsed, DateTime nowUtc)
     {
         var changes = new List<CycleChange>();
+        var activeStartsAt = active?.StartsAt;   // theo dõi riêng: kỳ vừa bắt đầu trong vòng này chưa được ghi vào thực thể
         var activeEndsAt = active?.EndsAt;
         var activeQuota = active?.TokenQuota ?? 0;
         while (true)
@@ -68,25 +69,25 @@ public static class CycleRules
                 if (queued is null)
                     break;
                 // Không có kỳ active mà còn kỳ queued (lần lưu trước bị dở): bắt đầu ngay
-                (active, activeEndsAt, activeQuota, activeUsed) = Start(changes, queued, nowUtc);
+                (active, activeStartsAt, activeEndsAt, activeQuota, activeUsed) = Start(changes, queued, nowUtc);
                 queued = null;
                 continue;
             }
             if (activeEndsAt is not { } end || nowUtc >= end)
             {
                 var endedAt = activeEndsAt ?? nowUtc;
-                changes.Add(new CycleChange(active, CycleStatuses.Ended, active.StartsAt, activeEndsAt, CycleEndReasons.Expired, endedAt));
+                changes.Add(new CycleChange(active, CycleStatuses.Ended, activeStartsAt, activeEndsAt, CycleEndReasons.Expired, endedAt));
                 active = null;
                 if (queued is null)
                     break;
-                (active, activeEndsAt, activeQuota, activeUsed) = Start(changes, queued, endedAt);
+                (active, activeStartsAt, activeEndsAt, activeQuota, activeUsed) = Start(changes, queued, endedAt);
                 queued = null;
                 continue;
             }
             if (queued is not null && IsExhausted(activeUsed, activeQuota))
             {
-                changes.Add(new CycleChange(active, CycleStatuses.Ended, active.StartsAt, activeEndsAt, CycleEndReasons.ExhaustedRollover, nowUtc));
-                (active, activeEndsAt, activeQuota, activeUsed) = Start(changes, queued, nowUtc);
+                changes.Add(new CycleChange(active, CycleStatuses.Ended, activeStartsAt, activeEndsAt, CycleEndReasons.ExhaustedRollover, nowUtc));
+                (active, activeStartsAt, activeEndsAt, activeQuota, activeUsed) = Start(changes, queued, nowUtc);
                 queued = null;
                 continue;
             }
@@ -95,10 +96,10 @@ public static class CycleRules
         return changes;
     }
 
-    private static (UserSubscription, DateTime?, long, long) Start(List<CycleChange> changes, UserSubscription cycle, DateTime startsAt)
+    private static (UserSubscription, DateTime?, DateTime?, long, long) Start(List<CycleChange> changes, UserSubscription cycle, DateTime startsAt)
     {
         var endsAt = startsAt.AddDays(cycle.DurationDays);
         changes.Add(new CycleChange(cycle, CycleStatuses.Active, startsAt, endsAt, null, null));
-        return (cycle, endsAt, cycle.TokenQuota, 0);   // kỳ vừa bắt đầu chưa dùng token nào
+        return (cycle, startsAt, endsAt, cycle.TokenQuota, 0);   // kỳ vừa bắt đầu chưa dùng token nào
     }
 }
