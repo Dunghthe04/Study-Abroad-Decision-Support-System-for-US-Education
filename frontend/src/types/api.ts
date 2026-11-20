@@ -266,6 +266,10 @@ export interface CenterDeletionRequestDto {
   status: string;
   createdAt: string;
   handledAt: string | null;
+  /** Hạn xử lý của USAS; null khi chưa có hoặc đang tạm dừng. */
+  dueAt?: string | null;
+  /** Thời điểm gia hạn một lần (null nếu chưa gia hạn). */
+  extendedAt?: string | null;
 }
 
 export interface VerifyStudyCenterRequest {
