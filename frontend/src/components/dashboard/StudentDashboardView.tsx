@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import type { StudentDashboard } from "@/types/dashboard";
+import { editProfileHref } from "@/lib/form-goals";
 import { KpiCard } from "./KpiCard";
 
 export interface DashboardLinks {
@@ -15,7 +16,8 @@ export interface DashboardLinks {
 }
 
 const STUDENT_LINKS: DashboardLinks = {
-  profile: "/profile/academic",
+  // Mở form để sửa (không chuyển sang trang gợi ý), lưu xong quay về Tổng quan
+  profile: editProfileHref("/dashboard"),
   recommendations: "/recommendations",
   targetSchools: "/target-schools",
 };

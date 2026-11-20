@@ -5,6 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRightIcon, Loader2Icon, SparklesIcon } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { editProfileHref } from "@/lib/form-goals";
+
+// Các nút "Chỉnh sửa bảng điểm", "Hồ sơ học thuật" (khi làm thay con) mở trang cũ này: chuyển vào form để sửa,
+// không sang trang gợi ý. Lưu xong về Tổng quan
+const EDIT_HREF = editProfileHref("/dashboard");
 
 interface RedirectToAnalysisProps {
   sourceTitle: string;
@@ -22,7 +27,7 @@ export function RedirectToAnalysis({ sourceTitle }: RedirectToAnalysisProps) {
 
   // Hết giờ thì chuyển trang trong effect riêng
   useEffect(() => {
-    if (seconds === 0) router.replace("/analysis");
+    if (seconds === 0) router.replace(EDIT_HREF);
   }, [seconds, router]);
 
   return (
@@ -49,7 +54,7 @@ export function RedirectToAnalysis({ sourceTitle }: RedirectToAnalysisProps) {
 
       <div className="pt-2">
         <Link
-          href="/analysis"
+          href={EDIT_HREF}
           className={buttonVariants({ variant: "default", size: "lg", className: "gap-2" })}
         >
           Chuyển tới Luồng phân tích ngay
