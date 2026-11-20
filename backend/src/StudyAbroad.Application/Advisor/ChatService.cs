@@ -875,12 +875,15 @@ namespace StudyAbroad.Application.Advisor
                 ? step.GetString()
                 : null;
 
-        // Lưu hồ sơ chính thức; trả câu lỗi tiếng Việt nếu hồ sơ chưa đủ điều kiện, null nếu lưu được
+        // Lưu hồ sơ chính thức; trả câu lỗi tiếng Việt nếu hồ sơ chưa đủ điều kiện, null nếu lưu được.
+        // Gửi kèm bản nháp lấy từ GetFlowStateAsync: sửa hồ sơ đã lưu mà giữ nguyên mọi mục thì không có nháp
+        // (lần lưu trước đã xóa), lúc đó hàm dựng nháp từ hồ sơ đã lưu nên vẫn lưu được
         private async Task<string?> CommitProfileAsync(Guid userId, CancellationToken ct)
         {
             try
             {
-                await profileFlow.CommitFlowAsync(userId, null, ct);
+                var flow = await profileFlow.GetFlowStateAsync(userId, ct);
+                await profileFlow.CommitFlowAsync(userId, new CommitProfileFlowRequest(flow.Draft), ct);
                 return null;
             }
             catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
