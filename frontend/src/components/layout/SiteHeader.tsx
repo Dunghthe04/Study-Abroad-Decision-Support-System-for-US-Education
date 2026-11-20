@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -128,9 +129,19 @@ export function SiteHeader() {
         <div className="flex h-14 items-center gap-4 lg:gap-8">
           <Link
             href={canOpenAdmin ? "/admin" : "/"}
-            className="shrink-0 font-heading text-xl font-bold tracking-tight text-white transition-opacity hover:opacity-90"
+            className="flex shrink-0 items-center gap-2.5 font-heading text-xl font-bold tracking-tight text-white transition-opacity hover:opacity-90"
           >
-            USDSS
+            <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-0.5">
+              <Image
+                src="/icons/USDSS.png"
+                alt=""
+                width={32}
+                height={32}
+                priority
+                className="size-8 object-contain"
+              />
+            </span>
+            <span>USDSS</span>
           </Link>
 
           <form role="search" onSubmit={submitSearch} className="relative hidden max-w-2xl flex-1 md:block">
