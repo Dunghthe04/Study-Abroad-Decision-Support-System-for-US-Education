@@ -15,4 +15,34 @@ public interface IOrderService
 
     /// <summary>Hủy đơn đang chờ (409 not_pending nếu không còn chờ); hủy link payOS làm hết sức.</summary>
     Task<OrderDto> CancelAsync(Guid userId, long orderCode, DateTime nowUtc, CancellationToken ct = default);
+
+    /// <summary>
+    /// Áp dụng một khoản thanh toán cho đơn (webhook, job đối soát, admin kích hoạt): một transaction, khóa dòng đơn,
+    /// thử lại một lần khi vướng index duy nhất. Gọi lại với đơn đã trả thì trả AlreadyPaid, không đổi gì.
+    /// </summary>
+    Task<PaymentApplyResult> ApplyPaymentAsync(long orderCode, long amountPaid, string? payloadJson, DateTime nowUtc, CancellationToken ct = default, PaymentApplyOptions? options = null);
+
+    /// <summary>Webhook payOS. False = chữ ký sai hoặc body hỏng (controller trả 400); true cho mọi trường hợp còn lại, kể cả đơn không biết.</summary>
+    Task<bool> HandleWebhookAsync(string rawBody, DateTime nowUtc, CancellationToken ct = default);
 }
+
+/// <param name="SkipAmountCheck">Admin kích hoạt tay một đơn lệch tiền: bỏ qua so khớp số tiền.</param>
+public sealed record PaymentApplyOptions(bool SkipAmountCheck = false, Guid? AdminUserId = null, string? AdminNote = null);
+
+public enum PaymentApplyStatus
+{
+    /// <summary>Kỳ mới chạy ngay.</summary>
+    Activated,
+    /// <summary>Kỳ mới xếp hàng sau kỳ đang chạy.</summary>
+    Queued,
+    /// <summary>Đơn đã trả từ trước, không đổi gì.</summary>
+    AlreadyPaid,
+    /// <summary>Số tiền không khớp (hoặc người mua không còn): đơn chuyển mismatch chờ admin.</summary>
+    Mismatch,
+    /// <summary>Tiền đã nhận nhưng làn đã có kỳ đang chạy và kỳ chờ (P22): đơn mismatch chờ admin.</summary>
+    LaneFull,
+    UnknownOrder,
+}
+
+/// <param name="CycleId">Kỳ được tạo (Activated, Queued) hoặc đã tạo từ trước (AlreadyPaid).</param>
+public sealed record PaymentApplyResult(PaymentApplyStatus Status, Guid? CycleId = null);

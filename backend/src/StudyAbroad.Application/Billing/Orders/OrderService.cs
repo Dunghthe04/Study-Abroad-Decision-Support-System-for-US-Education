@@ -12,7 +12,7 @@ namespace StudyAbroad.Application.Billing.Orders;
 /// Đơn hàng gói dịch vụ (UC-78, UC-112): tạo đơn và link payOS, xem, hủy. Phần áp dụng thanh toán nằm ở OrderService.Payment.cs.
 /// Gói, giá, hạn mức được chụp vào đơn lúc đặt nên admin sửa gói sau đó không ảnh hưởng đơn đang chờ (P7, P8).
 /// </summary>
-public sealed class OrderService(
+public sealed partial class OrderService(
     IOrderRepository orders,
     IBillingRepository billing,
     IEntitlementService entitlements,
