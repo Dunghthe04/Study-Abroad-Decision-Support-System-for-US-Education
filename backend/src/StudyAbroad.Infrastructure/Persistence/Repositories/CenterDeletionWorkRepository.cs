@@ -11,6 +11,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env = null) : ICenterDeletionWorkRepository
 {
     public const string PurgedCenterName = "Trung tâm đã xóa";
+    public const string DeletedAccountName = "Tài khoản đã xóa";
 
     /// <summary>Lead còn mở phía trung tâm: chưa đóng, chưa thu hồi. "accepted" là trạng thái của UC-73.</summary>
     private static readonly string[] OpenStatuses = [LeadStatuses.New, LeadStatuses.Contacted, "accepted"];
@@ -48,7 +49,19 @@ public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env
                           join c in db.StudyCenters.AsNoTracking() on r.StudyCenterId equals c.Id
                           join u in db.Users.AsNoTracking() on r.RequestedByUserId equals u.Id into requesters
                           from u in requesters.DefaultIfEmpty()
-                          select new { Request = r, Center = c, RequesterName = u != null ? u.FullName : null, RequesterEmail = u != null ? u.Email : null })
+                          join o in db.Users.AsNoTracking() on c.OwnerUserId equals o.Id into owners
+                          from o in owners.DefaultIfEmpty()
+                          select new
+                          {
+                              Request = r,
+                              Center = c,
+                              RequesterName = u != null ? u.FullName : null,
+                              RequesterEmail = u != null ? u.Email : null,
+                              OwnerHold = o != null && o.IsLegalHold,
+                              OwnerHoldReason = o != null ? o.LegalHoldReason : null,
+                              OpenReports = db.LeadMessages.Count(m => m.ReportedAt != null && m.ReportResolution == null
+                                  && db.Leads.Any(l => l.Id == m.LeadId && l.StudyCenterId == c.Id)),
+                          })
             .ToListAsync(ct);
 
         return rows.Select(x => new AdminCenterDeletionRequestDto(
@@ -69,7 +82,55 @@ public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env
             x.Request.HandledAt,
             x.Request.DecisionNote,
             x.Request.ScheduledPurgeAt,
-            x.Request.CompletedAt)).ToList();
+            x.Request.CompletedAt,
+            x.Center.IsLegalHold || x.OwnerHold,
+            x.Center.LegalHoldReason ?? x.OwnerHoldReason,
+            x.Center.LegalHoldAt,
+            x.OpenReports)).ToList();
+    }
+
+    /// <summary>Tin nhắn trong các lead của trung tâm bị học sinh/phụ huynh báo cáo mà Admin chưa xử lý (UC-58).</summary>
+    public Task<int> CountOpenReportsAsync(Guid studyCenterId, CancellationToken ct = default) =>
+        db.LeadMessages.CountAsync(m => m.ReportedAt != null && m.ReportResolution == null
+            && db.Leads.Any(l => l.Id == m.LeadId && l.StudyCenterId == studyCenterId), ct);
+
+    public async Task<bool> LockCenterIfPurgeableAsync(Guid studyCenterId, CancellationToken ct = default)
+    {
+        var ids = await db.Database.SqlQuery<Guid>($"""
+            SELECT c.id AS "Value" FROM app.study_centers c
+            LEFT JOIN app.users o ON o.id = c.owner_user_id
+            WHERE c.id = {studyCenterId}
+              AND c.is_legal_hold = FALSE
+              AND COALESCE(o.is_legal_hold, FALSE) = FALSE
+            FOR UPDATE OF c
+            """).ToListAsync(ct);
+        return ids.Count > 0;
+    }
+
+    public async Task AnonymizeOwnerAccountAsync(Guid userId, DateTime now, CancellationToken ct = default)
+    {
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null) return;
+
+        // Không xóa dòng: lead_messages.sender_user_id cascade theo user nên xóa sẽ mất tin nhắn trung tâm đã gửi,
+        // gồm cả tin bị báo cáo. Giữ dòng nhưng bỏ hết thông tin nhận diện và không thể đăng nhập lại.
+        user.Email = $"deleted-{user.Id:N}@deleted.invalid";
+        user.PasswordHash = string.Empty;
+        user.FullName = DeletedAccountName;
+        user.Phone = null;
+        user.DateOfBirth = null;
+        user.Status = UserStatuses.Deleted;
+        user.DeletedAt ??= now;
+        user.FailedLoginAttempts = 0;
+        user.LockoutEnd = null;
+        user.IsLegalHold = false;
+        user.LegalHoldReason = null;
+        user.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+
+        await db.UserSessions.Where(s => s.UserId == userId).ExecuteDeleteAsync(ct);
+        await db.OtpTokens.Where(t => t.UserId == userId).ExecuteDeleteAsync(ct);
+        await db.Notifications.Where(n => n.UserId == userId).ExecuteDeleteAsync(ct);
     }
 
     public async Task<IReadOnlyList<ClosedLeadRecipients>> CloseOpenLeadsAsync(Guid studyCenterId, DateTime now, CancellationToken ct = default)
@@ -102,6 +163,7 @@ public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env
          where r.Status == CenterDeletionRequestStatuses.Approved
             && r.ScheduledPurgeAt != null && r.ScheduledPurgeAt <= now
             && !c.IsLegalHold
+            && !db.Users.Any(o => o.Id == c.OwnerUserId && o.IsLegalHold)
          orderby r.ScheduledPurgeAt
          select r.Id).ToListAsync(ct);
 

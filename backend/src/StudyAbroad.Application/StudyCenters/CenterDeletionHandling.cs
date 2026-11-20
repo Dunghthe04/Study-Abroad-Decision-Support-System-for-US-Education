@@ -27,7 +27,38 @@ public record AdminCenterDeletionRequestDto(
     DateTime? HandledAt,
     string? DecisionNote,
     DateTime? ScheduledPurgeAt,
-    DateTime? CompletedAt);
+    DateTime? CompletedAt,
+    /// <summary>Trung tâm (hoặc tài khoản chủ) đang bị giữ pháp lý: không được duyệt xóa, job không xóa hẳn.</summary>
+    bool IsLegalHold = false,
+    string? LegalHoldReason = null,
+    DateTime? LegalHoldAt = null,
+    /// <summary>Số tin nhắn của trung tâm bị người dùng báo cáo mà Admin chưa xử lý (UC-58): dấu hiệu cần xem trước khi duyệt xóa.</summary>
+    int OpenReportCount = 0);
+
+/// <summary>[UC-93] Tình trạng giữ pháp lý của một trung tâm.</summary>
+public record CenterLegalHoldDto(
+    Guid StudyCenterId,
+    string CenterName,
+    bool IsLegalHold,
+    string? Reason,
+    DateTime? Since,
+    Guid? ByUserId,
+    string? ByName,
+    /// <summary>Yêu cầu xóa đang chờ hoặc đã duyệt của trung tâm, nếu có.</summary>
+    Guid? OpenDeletionRequestId,
+    string? OpenDeletionRequestStatus,
+    DateTime? ScheduledPurgeAt);
+
+/// <summary>[UC-93] Bật hoặc gỡ giữ pháp lý: lý do bắt buộc, ghi vào audit_logs.</summary>
+public record SetCenterLegalHoldRequest(string? Reason);
+
+public record CenterLegalHoldResult(CenterLegalHoldDto? Hold, string? Error = null, bool NotFound = false)
+{
+    public bool Success => Error is null && Hold is not null;
+    public static CenterLegalHoldResult Ok(CenterLegalHoldDto hold) => new(hold);
+    public static CenterLegalHoldResult Fail(string error) => new(null, error);
+    public static CenterLegalHoldResult Missing() => new(null, "Không tìm thấy trung tâm.", true);
+}
 
 /// <summary>[UC-93] Duyệt yêu cầu xóa: ghi chú kiểm tra danh tính là bắt buộc.</summary>
 public record ApproveCenterDeletionRequest(string? IdentityCheckNote);
@@ -61,8 +92,24 @@ public interface ICenterDeletionWorkRepository
 
     Task AddNotificationsAsync(IReadOnlyCollection<Notification> notifications, CancellationToken ct = default);
 
-    /// <summary>Id các yêu cầu đã duyệt và đã tới hạn xóa hẳn.</summary>
+    /// <summary>Id các yêu cầu đã duyệt, đã tới hạn xóa hẳn, trung tâm và tài khoản chủ đều không bị giữ pháp lý.</summary>
     Task<List<Guid>> GetDuePurgeRequestIdsAsync(DateTime now, CancellationToken ct = default);
+
+    /// <summary>Số tin nhắn của trung tâm bị báo cáo mà Admin chưa xử lý (UC-58).</summary>
+    Task<int> CountOpenReportsAsync(Guid studyCenterId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Kiểm tra lại trong transaction rằng trung tâm và tài khoản chủ chưa bị giữ pháp lý, rồi khóa dòng trung tâm
+    /// (SELECT ... FOR UPDATE) tới hết transaction: Admin bật giữ pháp lý cùng lúc phải chờ, không lọt qua bước xóa.
+    /// </summary>
+    Task<bool> LockCenterIfPurgeableAsync(Guid studyCenterId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Ẩn danh hóa tài khoản chủ trung tâm thay vì xóa dòng: tin nhắn trung tâm đã gửi trong các yêu cầu liên hệ
+    /// (khóa ngoại cascade theo người gửi) và nhật ký vẫn còn để truy vết, nhưng không còn thông tin nhận diện.
+    /// Xóa phiên đăng nhập, mã OTP và thông báo của tài khoản.
+    /// </summary>
+    Task AnonymizeOwnerAccountAsync(Guid userId, DateTime now, CancellationToken ct = default);
 
     /// <summary>
     /// Xóa dữ liệu của trung tâm: hồ sơ xác minh và tài liệu, lịch sử thay đổi hồ sơ, rồi ẩn danh hóa dòng trung tâm
@@ -81,6 +128,18 @@ public interface ICenterDeletionService
     Task<CenterDeletionActionResult> RejectAsync(Guid adminUserId, Guid requestId, string? reason, CancellationToken ct = default);
     /// <summary>Xóa hẳn các trung tâm đã duyệt xóa và quá thời hạn chờ (cùng thời hạn UC-80). Gọi từ job nền.</summary>
     Task<CenterPurgeSummary> PurgeDueAsync(DateTime now, CancellationToken ct = default);
+
+    /// <summary>Tình trạng giữ pháp lý của trung tâm.</summary>
+    Task<CenterLegalHoldResult> GetLegalHoldAsync(Guid studyCenterId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bật giữ pháp lý khi trung tâm bị nghi lừa đảo, có tranh chấp hoặc cơ quan có thẩm quyền yêu cầu giữ dữ liệu:
+    /// áp cho cả trung tâm và tài khoản chủ, chặn duyệt xóa và chặn job xóa hẳn tới khi gỡ.
+    /// </summary>
+    Task<CenterLegalHoldResult> SetLegalHoldAsync(Guid adminUserId, Guid studyCenterId, string? reason, CancellationToken ct = default);
+
+    /// <summary>Gỡ giữ pháp lý khi việc điều tra kết thúc. Lý do bắt buộc.</summary>
+    Task<CenterLegalHoldResult> ReleaseLegalHoldAsync(Guid adminUserId, Guid studyCenterId, string? reason, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -88,13 +147,16 @@ public interface ICenterDeletionService
 /// Luồng trạng thái: pending → approved (khóa đăng nhập, ẩn trung tâm, đóng lead mở, hẹn ngày xóa)
 /// → completed (job nền xóa dữ liệu sau thời hạn chờ <see cref="AccountDeletionOptions.RetentionPeriod"/>, cùng thời hạn UC-80);
 /// hoặc pending → rejected. Mỗi bước ghi nhật ký và báo kết quả qua email.
+/// Giữ pháp lý (Legal Hold) là ngoại lệ của quyền xóa dữ liệu: khi trung tâm bị nghi lừa đảo, có tranh chấp
+/// hoặc cơ quan có thẩm quyền yêu cầu giữ dữ liệu, yêu cầu xóa không được duyệt và dữ liệu không bị xóa hẳn tới khi gỡ.
+/// Xóa hẳn = xóa hồ sơ, tài liệu và ẩn danh hóa trung tâm cùng tài khoản chủ; nhật ký, tin nhắn và bản ghi yêu cầu
+/// được giữ (không còn thông tin nhận diện) để truy vết về sau.
 /// </summary>
 public class CenterDeletionService(
     ICenterDeletionRequestRepository requests,
     ICenterDeletionWorkRepository work,
     IStudyCenterRepository centers,
     IUserRepository users,
-    IAccountPurgeRepository accountPurge,
     IAuditLogRepository auditLogs,
     IUnitOfWork unitOfWork,
     IEmailSender emailSender,
@@ -141,6 +203,13 @@ public class CenterDeletionService(
         if (center is null)
             return CenterDeletionActionResult.Fail("Không tìm thấy trung tâm của yêu cầu này.");
 
+        // Dữ liệu đang được giữ cho điều tra hoặc tranh chấp thì không chấp nhận xóa: chỉ được từ chối hoặc chờ gỡ giữ
+        var owner = center.OwnerUserId is { } ownerUserId ? await users.GetUserById(ownerUserId, ct) : null;
+        if (center.IsLegalHold || owner?.IsLegalHold == true)
+            return CenterDeletionActionResult.Fail(
+                "Trung tâm đang bị giữ pháp lý nên chưa thể duyệt xóa. Hãy từ chối yêu cầu hoặc gỡ giữ pháp lý khi việc điều tra kết thúc.");
+
+        var openReports = await work.CountOpenReportsAsync(center.Id, ct);
         var now = DateTime.UtcNow;
         var purgeAt = now + _options.RetentionPeriod;
         IReadOnlyList<ClosedLeadRecipients> closed = [];
@@ -148,7 +217,7 @@ public class CenterDeletionService(
         await unitOfWork.ExecuteInTransactionAsync(async txCt =>
         {
             // 1. Khóa đăng nhập tài khoản chủ trung tâm và thu hồi mọi phiên
-            if (center.OwnerUserId is { } ownerId && await users.GetUserById(ownerId, txCt) is { } owner)
+            if (owner is not null)
             {
                 owner.Status = UserStatuses.Locked;
                 owner.LockoutEnd = null;
@@ -187,6 +256,7 @@ public class CenterDeletionService(
                     ownerUserId = center.OwnerUserId,
                     identityCheckNote = note,
                     closedLeads = closed.Count,
+                    openReports,
                     scheduledPurgeAt = purgeAt,
                 }),
             }, txCt);
@@ -252,16 +322,26 @@ public class CenterDeletionService(
                     continue;
 
                 var centerName = center.Name;
-                var ownerId = center?.OwnerUserId;
+                var ownerId = center.OwnerUserId;
+                if (ownerId is { } heldOwnerId && await users.GetUserById(heldOwnerId, ct) is { IsLegalHold: true })
+                    continue;
 
-                // Lấy email trước khi xóa tài khoản để còn báo kết quả
-                var recipients = await CollectRecipientsAsync(request, center?.Email, ct);
+                // Lấy email trước khi ẩn danh tài khoản để còn báo kết quả
+                var recipients = await CollectRecipientsAsync(request, center.Email, ct);
 
+                var held = false;
                 await unitOfWork.ExecuteInTransactionAsync(async txCt =>
                 {
+                    // Admin có thể vừa bật giữ pháp lý sau lần đọc ở trên: kiểm tra lại và khóa dòng trong transaction
+                    if (!await work.LockCenterIfPurgeableAsync(request.StudyCenterId, txCt))
+                    {
+                        held = true;
+                        return;
+                    }
+
                     await work.PurgeCenterDataAsync(request.StudyCenterId, now, txCt);
                     if (ownerId is { } id)
-                        await accountPurge.DeleteUserAsync(id, txCt);
+                        await work.AnonymizeOwnerAccountAsync(id, now, txCt);
 
                     request.Status = CenterDeletionRequestStatuses.Completed;
                     request.CompletedAt = now;
@@ -278,6 +358,8 @@ public class CenterDeletionService(
                     }, txCt);
                 }, ct);
 
+                if (held)
+                    continue;
                 purged++;
 
                 try
@@ -303,6 +385,139 @@ public class CenterDeletionService(
         }
 
         return new CenterPurgeSummary(purged, failures);
+    }
+
+    public const int MaxLegalHoldReasonLength = 500;
+
+    public async Task<CenterLegalHoldResult> GetLegalHoldAsync(Guid studyCenterId, CancellationToken ct = default)
+    {
+        var center = await centers.GetByIdAsync(studyCenterId, ct);
+        return center is null ? CenterLegalHoldResult.Missing() : CenterLegalHoldResult.Ok(await ToHoldDtoAsync(center, ct));
+    }
+
+    public async Task<CenterLegalHoldResult> SetLegalHoldAsync(Guid adminUserId, Guid studyCenterId, string? reason, CancellationToken ct = default)
+    {
+        var (trimmed, error) = ValidateHoldReason(reason, "Vui lòng nhập lý do giữ pháp lý (ví dụ: số công văn, khiếu nại liên quan).");
+        if (error is not null)
+            return CenterLegalHoldResult.Fail(error);
+
+        var center = await centers.GetByIdForUpdateAsync(studyCenterId, ct);
+        if (center is null)
+            return CenterLegalHoldResult.Missing();
+        if (center.IsLegalHold)
+            return CenterLegalHoldResult.Fail("Trung tâm đang được giữ pháp lý.");
+
+        var latest = await requests.GetLatestByCenterIdAsync(center.Id, ct);
+        if (latest?.Status == CenterDeletionRequestStatuses.Completed)
+            return CenterLegalHoldResult.Fail("Dữ liệu trung tâm này đã bị xóa hẳn, không còn gì để giữ.");
+
+        var now = DateTime.UtcNow;
+        await unitOfWork.ExecuteInTransactionAsync(async txCt =>
+        {
+            center.IsLegalHold = true;
+            center.LegalHoldReason = trimmed;
+            center.LegalHoldAt = now;
+            center.LegalHoldByUserId = adminUserId;
+            await centers.UpdateAsync(center, txCt);
+
+            // Giữ cả tài khoản chủ để job xóa tài khoản (UC-80) cũng không xóa
+            if (center.OwnerUserId is { } ownerId && await users.GetUserById(ownerId, txCt) is { } owner)
+            {
+                owner.IsLegalHold = true;
+                owner.LegalHoldReason = trimmed;
+                await users.UpdateUserAsync(owner, txCt);
+            }
+
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = adminUserId,
+                Action = "center.legal_hold_set",
+                EntityType = "study_center",
+                EntityId = center.Id.ToString(),
+                DetailJson = JsonSerializer.Serialize(new
+                {
+                    reason = trimmed,
+                    ownerUserId = center.OwnerUserId,
+                    deletionRequestId = latest?.Id,
+                    deletionRequestStatus = latest?.Status,
+                }),
+            }, txCt);
+        }, ct);
+
+        return CenterLegalHoldResult.Ok(await ToHoldDtoAsync(center, ct));
+    }
+
+    public async Task<CenterLegalHoldResult> ReleaseLegalHoldAsync(Guid adminUserId, Guid studyCenterId, string? reason, CancellationToken ct = default)
+    {
+        var (trimmed, error) = ValidateHoldReason(reason, "Vui lòng nhập lý do gỡ giữ pháp lý (ví dụ: kết luận điều tra).");
+        if (error is not null)
+            return CenterLegalHoldResult.Fail(error);
+
+        var center = await centers.GetByIdForUpdateAsync(studyCenterId, ct);
+        if (center is null)
+            return CenterLegalHoldResult.Missing();
+        var owner = center.OwnerUserId is { } ownerId ? await users.GetUserById(ownerId, ct) : null;
+        if (!center.IsLegalHold && owner?.IsLegalHold != true)
+            return CenterLegalHoldResult.Fail("Trung tâm không bị giữ pháp lý.");
+
+        var previousReason = center.LegalHoldReason ?? owner?.LegalHoldReason;
+        var previousSince = center.LegalHoldAt;
+        await unitOfWork.ExecuteInTransactionAsync(async txCt =>
+        {
+            center.IsLegalHold = false;
+            center.LegalHoldReason = null;
+            center.LegalHoldAt = null;
+            center.LegalHoldByUserId = null;
+            await centers.UpdateAsync(center, txCt);
+
+            if (owner is not null && owner.IsLegalHold)
+            {
+                owner.IsLegalHold = false;
+                owner.LegalHoldReason = null;
+                await users.UpdateUserAsync(owner, txCt);
+            }
+
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = adminUserId,
+                Action = "center.legal_hold_release",
+                EntityType = "study_center",
+                EntityId = center.Id.ToString(),
+                DetailJson = JsonSerializer.Serialize(new { reason = trimmed, previousReason, heldSince = previousSince }),
+            }, txCt);
+        }, ct);
+
+        return CenterLegalHoldResult.Ok(await ToHoldDtoAsync(center, ct));
+    }
+
+    private static (string Value, string? Error) ValidateHoldReason(string? reason, string emptyMessage)
+    {
+        var trimmed = reason?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0)
+            return (trimmed, emptyMessage);
+        if (trimmed.Length > MaxLegalHoldReasonLength)
+            return (trimmed, $"Lý do tối đa {MaxLegalHoldReasonLength} ký tự.");
+        return (trimmed, null);
+    }
+
+    private async Task<CenterLegalHoldDto> ToHoldDtoAsync(StudyCenter center, CancellationToken ct)
+    {
+        var owner = center.OwnerUserId is { } ownerId ? await users.GetUserById(ownerId, ct) : null;
+        var isHeld = center.IsLegalHold || owner?.IsLegalHold == true;
+        var by = center.LegalHoldByUserId is { } byId ? await users.GetUserById(byId, ct) : null;
+        var latest = await requests.GetLatestByCenterIdAsync(center.Id, ct);
+        var open = latest?.Status is CenterDeletionRequestStatuses.Pending or CenterDeletionRequestStatuses.Approved ? latest : null;
+        return new CenterLegalHoldDto(
+            center.Id,
+            center.Name,
+            isHeld,
+            isHeld ? center.LegalHoldReason ?? owner?.LegalHoldReason : null,
+            isHeld ? center.LegalHoldAt : null,
+            isHeld ? center.LegalHoldByUserId : null,
+            isHeld ? by?.FullName : null,
+            open?.Id,
+            open?.Status,
+            open?.ScheduledPurgeAt);
     }
 
     private static List<Notification> BuildLeadClosedNotifications(IReadOnlyList<ClosedLeadRecipients> closed, string centerName)

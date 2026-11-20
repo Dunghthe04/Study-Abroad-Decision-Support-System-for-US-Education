@@ -114,4 +114,10 @@ public class StudyCenter : BaseEntity
 
     /// <summary>Lý do áp dụng Legal Hold.</summary>
     public string? LegalHoldReason { get; set; }
+
+    /// <summary>[UC-93] Thời điểm Administrator bật Legal Hold (UTC). Null khi không giữ.</summary>
+    public DateTime? LegalHoldAt { get; set; }
+
+    /// <summary>[UC-93] Administrator bật Legal Hold. Lịch sử bật/gỡ đầy đủ nằm trong audit_logs.</summary>
+    public Guid? LegalHoldByUserId { get; set; }
 }
