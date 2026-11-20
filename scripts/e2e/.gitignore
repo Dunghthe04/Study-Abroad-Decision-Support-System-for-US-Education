@@ -1,0 +1,3 @@
+.mail/
+.api-*.pid
+__pycache__/

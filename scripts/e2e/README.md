@@ -1,0 +1,12 @@
+# Kiểm thử đầu cuối gói dịch vụ
+
+Các script ở đây chạy API tách biệt khỏi môi trường dev: CSDL riêng `usas_e2e`, thư đi vào máy chủ SMTP giả, cổng thanh toán giả.
+
+1. Postgres local đang chạy (container `usas-local-db-1`) và đã có CSDL `usas_e2e`
+   (`docker exec usas-local-db-1 psql -U studyabroad -d studyabroad -c "CREATE DATABASE usas_e2e OWNER studyabroad"`).
+2. `python scripts/e2e/smtp_sink.py` (cửa sổ riêng).
+3. `scripts/e2e/run-api.sh 5095` (cửa sổ riêng). API tự áp migration và seed 5 gói.
+4. Chạy script kiểm thử (`python scripts/e2e/billing_e2e.py`).
+
+Dừng API: `scripts/e2e/stop-api.sh 5095` (chỉ dừng tiến trình do run-api.sh chạy ở cổng đó).
+Thư mục `scripts/e2e/.mail` và file `.api-*.pid` không đưa vào git.
