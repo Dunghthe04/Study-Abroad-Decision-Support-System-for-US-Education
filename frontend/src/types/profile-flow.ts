@@ -214,6 +214,10 @@ export interface FinancialDraft {
   annualBudgetTier?: BudgetTierId | null;
   needFinancialAid?: ScholarshipNeed | null;
   fundingSource?: FundingSource | null;
+  /** UC-94: phụ huynh nhập hộ con managed – số tiền tối đa/năm chính xác (VND); BE đổi USD theo tỷ giá lúc lưu */
+  annualBudgetVnd?: number | null;
+  /** Số USD chính xác đã lưu lần trước (BE trả khi mở lại); lưu lại không đổi thì BE giữ số này */
+  annualBudgetUsd?: number | null;
 }
 
 export interface ActivityDraft {
