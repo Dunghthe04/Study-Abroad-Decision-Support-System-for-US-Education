@@ -69,7 +69,7 @@ public class EntitlementService(IBillingRepository repository) : IEntitlementSer
         // Không còn pool trả phí có token: hạn mức Free tháng này, chỉ hỏi kiến thức
         var freePlan = e.FreePlan;
         var freeUsed = await repository.SumFreeTokensAsync(userId, CycleRules.FreeMonthStartUtc(nowUtc), ct);
-        return new ChatCharge(false, e.IsPremium, null, freePlan?.Code ?? PlanKinds.Free, PlanKinds.Free, PremiumIntents.FreeAllowed,
+        return new ChatCharge(false, e.IsPremium, null, PlanKinds.Free, PlanKinds.Free, PremiumIntents.FreeAllowed,
             CycleRules.IsExhausted(freeUsed, freePlan?.TokenQuota ?? 0), resetsAt);
     }
 

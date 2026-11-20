@@ -245,6 +245,7 @@ public class EntitlementServiceTests
         repo.Calls.Add(Call(Me, 300_000, "ollama", personal.Id, "personal-1m"));        // SLM tự host: miễn phí
         repo.Calls.Add(Call(Me, 300_000, "embedding", null, "free"));                     // embedding: miễn phí
         repo.Calls.Add(Call(Me, 300_000, "claude", null, null));                          // OCR, ngoại khóa: không đóng dấu gói
+        repo.Calls.Add(Call(Me, 300_000, "claude", null, "family-1m"));                   // kỳ đã bị xóa (FK set null): không sang Free
 
         var summary = await Service(repo).GetSummaryAsync(Me, Now);
 
