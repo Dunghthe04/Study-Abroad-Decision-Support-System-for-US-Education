@@ -12,6 +12,8 @@ public static class CenterProfileChangeStatuses
     public const string Pending = "pending";
     public const string Passed = "passed";
     public const string Failed = "failed";
+    /// <summary>Trung tâm tự đổi lại đúng giá trị cũ khi mục còn chờ: không còn gì để kiểm tra, không do Moderator duyệt.</summary>
+    public const string Withdrawn = "withdrawn";
 }
 
 public static class CenterDeletionRequestStatuses

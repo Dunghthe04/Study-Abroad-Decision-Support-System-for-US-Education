@@ -1134,7 +1134,8 @@ public class StudyCenterService(
             if (string.Equals(pending.OldValue, newValue, StringComparison.Ordinal))
             {
                 // Sửa lại đúng giá trị đã được chấp nhận trước đó: không còn gì để kiểm tra.
-                pending.Status = CenterProfileChangeStatuses.Passed;
+                // Trạng thái riêng (không dùng passed) để không lẫn với mục do Moderator duyệt
+                pending.Status = CenterProfileChangeStatuses.Withdrawn;
                 pending.ReviewReason = "Trung tâm đã đổi lại giá trị cũ.";
                 pending.ReviewedAt = DateTime.UtcNow;
             }
