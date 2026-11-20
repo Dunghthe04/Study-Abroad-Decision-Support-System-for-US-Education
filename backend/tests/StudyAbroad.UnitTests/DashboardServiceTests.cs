@@ -199,7 +199,7 @@ public class DashboardServiceTests
             ParentUserId = _parentId,
             ParentEmail = "parent@test.com",
             Status = ParentLinkStatuses.Active,
-            ParentPreferenceJson = "{\"BudgetUsd\": 45000}"
+            ParentPreferenceJson = "{\"budgetUsd\": 45000}"
         });
 
         _profileRepo.Profiles[_studentId] = new StudentProfile
@@ -235,7 +235,7 @@ public class DashboardServiceTests
             ParentUserId = _parentId,
             ParentEmail = "parent@test.com",
             Status = ParentLinkStatuses.Active,
-            ParentPreferenceJson = "{\"BudgetUsd\": 60000}" // Dù có preference cũng bỏ qua đối với managed
+            ParentPreferenceJson = "{\"budgetUsd\": 60000}" // Dù có preference cũng bỏ qua đối với managed
         });
 
         _profileRepo.Profiles[managedStudentId] = new StudentProfile
@@ -261,7 +261,7 @@ public class DashboardServiceTests
             ParentUserId = _parentId,
             ParentEmail = "parent@test.com",
             Status = ParentLinkStatuses.Active,
-            ParentPreferenceJson = "{\"BudgetUsd\": 40000}" // 4 năm = 160,000
+            ParentPreferenceJson = "{\"budgetUsd\": 40000}" // 4 năm = 160,000
         });
 
         var uniExpensive = Guid.NewGuid();

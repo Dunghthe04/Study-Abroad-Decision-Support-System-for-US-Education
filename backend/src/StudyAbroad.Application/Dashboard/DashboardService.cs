@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using StudyAbroad.Application.AcademicProfiles;
@@ -95,7 +94,7 @@ public class DashboardService(
         if (latest is not null)
         {
             var total = latest.Counts.Reach + latest.Counts.Match + latest.Counts.Safety + latest.Counts.Aid;
-            var explanation = $"Đếm số trường trong từng nhóm của lần gợi ý lúc {latest.CreatedAt:HH:mm dd/MM/yyyy}.";
+            var explanation = $"Đếm số trường trong từng nhóm của lần gợi ý lúc {latest.CreatedAt.AddHours(7):HH:mm dd/MM/yyyy} (giờ Việt Nam).";
 
             return new RecommendationKpiDto(
                 latest.Counts.Reach,
@@ -382,22 +381,20 @@ public class DashboardService(
         );
     }
 
+
+    // UC-76 lưu bằng ParentPreferenceService.Stored theo kiểu Web (khóa camelCase "budgetUsd"):
+    // đọc lại đúng record đó thay vì tự dò tên khóa.
     private static decimal? ReadParentPreferenceBudget(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
         try
         {
-            var node = JsonNode.Parse(json);
-            if (node is JsonObject obj && obj.TryGetPropertyValue("BudgetUsd", out var val) && val is JsonValue jv)
-            {
-                if (jv.TryGetValue<decimal>(out var d) && d > 0)
-                    return d;
-            }
+            var stored = JsonSerializer.Deserialize<ParentPreferenceService.Stored>(json, WebJson);
+            return stored?.BudgetUsd is > 0 ? stored.BudgetUsd : null;
         }
-        catch
+        catch (JsonException)
         {
-            // Bỏ qua lỗi parse
+            return null;   // JSON hỏng: coi như phụ huynh chưa nhập ngân sách
         }
-        return null;
     }
 }
