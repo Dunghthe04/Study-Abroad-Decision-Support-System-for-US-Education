@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using StudyAbroad.Application.Billing.Admin;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -31,10 +32,24 @@ public class PlanAdminRepository(AppDbContext db) : IPlanAdminRepository
     public Task<bool> KindExistsAsync(string kind, CancellationToken ct = default) =>
         db.SubscriptionPlans.AnyAsync(p => p.Kind == kind, ct);
 
+    /// <summary>Tên index duy nhất một gói free (SubscriptionPlanConfiguration).</summary>
+    public const string SingleFreeIndex = "ux_subscription_plans_single_free";
+
+    /// <summary>
+    /// Nhận ra lỗi ghi do ràng buộc (cách OrderRepository.IsConflict nhận ra vi phạm index): trùng mã hoặc gói free thứ hai (23505),
+    /// gói đang được đơn hoặc kỳ tham chiếu (23503). Null = lỗi khác, để nổi lên như cũ.
+    /// </summary>
+    public static PlanConflict? Classify(Exception ex) => ex is DbUpdateException { InnerException: PostgresException pg } ? pg.SqlState switch
+    {
+        PostgresErrorCodes.UniqueViolation => pg.ConstraintName == SingleFreeIndex ? PlanConflict.FreePlanExists : PlanConflict.CodeTaken,
+        PostgresErrorCodes.ForeignKeyViolation => PlanConflict.InUse,
+        _ => null,
+    } : null;
+
     public async Task AddAsync(SubscriptionPlan plan, CancellationToken ct = default)
     {
         db.SubscriptionPlans.Add(plan);
-        await db.SaveChangesAsync(ct);
+        await SaveOrConflictAsync(ct);
     }
 
     public Task SaveAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
@@ -42,6 +57,18 @@ public class PlanAdminRepository(AppDbContext db) : IPlanAdminRepository
     public async Task RemoveAsync(SubscriptionPlan plan, CancellationToken ct = default)
     {
         db.SubscriptionPlans.Remove(plan);
-        await db.SaveChangesAsync(ct);
+        await SaveOrConflictAsync(ct);
+    }
+
+    private async Task SaveOrConflictAsync(CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (Classify(ex) is { } conflict)
+        {
+            throw new PlanConflictException(conflict, ex);
+        }
     }
 }

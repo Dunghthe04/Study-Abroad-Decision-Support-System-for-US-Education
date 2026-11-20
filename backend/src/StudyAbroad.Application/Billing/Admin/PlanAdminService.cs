@@ -34,11 +34,11 @@ public sealed partial class PlanAdminService(IPlanAdminRepository plans, IAuditL
         var kind = request.Kind?.Trim() ?? "";
         if (!PlanKinds.All.Contains(kind))
             throw Rule("invalid_kind", 400, "Loại gói phải là free, personal hoặc family.");
-        // ponytail: kiểm tra trùng trước khi ghi, không khóa; hai admin tạo trùng mã cùng lúc sẽ vấp index duy nhất (500), hiếm tới mức bỏ qua.
+        // Kiểm tra trước để báo lỗi sớm; hai admin tạo cùng lúc thì index duy nhất chặn và repository ném PlanConflictException (map bên dưới)
         if (await plans.CodeExistsAsync(code, ct))
-            throw Rule("code_taken", 409, "Mã gói này đã tồn tại.");
+            throw CodeTaken();
         if (kind == PlanKinds.Free && await plans.KindExistsAsync(PlanKinds.Free, ct))
-            throw Rule("free_plan_exists", 409, "Đã có gói Miễn phí, không tạo thêm được.");
+            throw FreePlanExists();
         var fields = ValidateFields(request, kind);
 
         AdminPlanDto? result = null;
@@ -46,7 +46,14 @@ public sealed partial class PlanAdminService(IPlanAdminRepository plans, IAuditL
         {
             var plan = new SubscriptionPlan { Code = code, Kind = kind };
             fields.ApplyTo(plan);
-            await plans.AddAsync(plan, txCt);
+            try
+            {
+                await plans.AddAsync(plan, txCt);
+            }
+            catch (PlanConflictException ex)
+            {
+                throw ToRule(ex);
+            }
             await AuditAsync(adminUserId, "plan.create", plan, before: null, after: Snapshot(plan), txCt);
             result = AdminPlanDto.From(plan, new PlanUsage(0, 0, 0));
         }, ct);
@@ -83,10 +90,18 @@ public sealed partial class PlanAdminService(IPlanAdminRepository plans, IAuditL
             if (plan.Kind == PlanKinds.Free)
                 throw FreePlanLocked();
             if (found.Usage.Cycles > 0 || found.Usage.Orders > 0)
-                throw Rule("plan_in_use", 409, "Gói đã có đơn hàng hoặc chu kỳ sử dụng, không xóa được. Hãy tắt mở bán thay vì xóa.");
+                throw PlanInUse();
 
             var before = Snapshot(plan);
-            await plans.RemoveAsync(plan, txCt);
+            try
+            {
+                await plans.RemoveAsync(plan, txCt);
+            }
+            catch (PlanConflictException ex)
+            {
+                // Đơn hoặc kỳ mới tạo sau lúc đếm: khóa ngoại Restrict chặn xóa
+                throw ToRule(ex);
+            }
             await AuditAsync(adminUserId, "plan.delete", plan, before, after: null, txCt);
         }, ct);
     }
@@ -151,6 +166,18 @@ public sealed partial class PlanAdminService(IPlanAdminRepository plans, IAuditL
         }, ct);
 
     private static BillingRuleException Rule(string code, int status, string message) => new(code, status, message);
+    private static BillingRuleException CodeTaken() => Rule("code_taken", 409, "Mã gói này đã tồn tại.");
+    private static BillingRuleException FreePlanExists() => Rule("free_plan_exists", 409, "Đã có gói Miễn phí, không tạo thêm được.");
+    private static BillingRuleException PlanInUse() =>
+        Rule("plan_in_use", 409, "Gói đã có đơn hàng hoặc chu kỳ sử dụng, không xóa được. Hãy tắt mở bán thay vì xóa.");
+
+    private static BillingRuleException ToRule(PlanConflictException ex) => ex.Conflict switch
+    {
+        PlanConflict.CodeTaken => CodeTaken(),
+        PlanConflict.FreePlanExists => FreePlanExists(),
+        _ => PlanInUse(),
+    };
+
     private static BillingRuleException NotFound() => Rule("plan_not_found", 404, "Không tìm thấy gói.");
     private static BillingRuleException FreePlanLocked() =>
         Rule("free_plan_locked", 409, "Gói Miễn phí luôn giá 0đ, luôn mở bán và không xóa được.");
