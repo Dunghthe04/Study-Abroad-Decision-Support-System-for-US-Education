@@ -141,8 +141,9 @@ export function ChildDashboard({ studentId, initialTab = "overview" }: { student
         </div>
       </div>
 
-      {/* key: đổi con thì về lại tab đầu, không giữ dữ liệu của con trước */}
-      <Tabs key={studentId} defaultValue={initialTab} className="space-y-4">
+      {/* key: đổi con thì về lại tab đầu, không giữ dữ liệu của con trước;
+          link ?tab=... trong cùng trang (vd. thẻ Tổng quan UC-94) cũng phải mở đúng tab */}
+      <Tabs key={`${studentId}:${initialTab}`} defaultValue={initialTab} className="space-y-4">
         <TabsList className="h-auto flex-wrap">
           <TabsTrigger value="overview">Tổng quan</TabsTrigger>
           <TabsTrigger value="recommend">Trường gợi ý</TabsTrigger>
