@@ -79,6 +79,7 @@ public static class DependencyInjection
         services.AddScoped<IAiCallRepository, AiCallRepository>();
         services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
         services.AddScoped<StudyAbroad.Application.Billing.IBillingRepository, BillingRepository>();   // gói dịch vụ: kỳ, nhóm gia đình, token đã dùng
+        services.AddScoped<StudyAbroad.Application.Billing.Family.IFamilyRepository, FamilyRepository>();   // gói Gia đình: lời mời, thành viên, khóa nhóm
         services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
 
 
