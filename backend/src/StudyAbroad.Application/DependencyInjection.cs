@@ -61,6 +61,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Dashboard.IDashboardService, StudyAbroad.Application.Dashboard.DashboardService>(); // [UC-94] Dashboard KPI
         services.AddScoped<StudyAbroad.Application.Audit.IAccessLogService, StudyAbroad.Application.Audit.AccessLogService>();   // [UC-97] nhật ký truy cập dữ liệu nhạy cảm
         services.AddScoped<StudyAbroad.Application.Billing.IEntitlementService, StudyAbroad.Application.Billing.EntitlementService>();   // gói dịch vụ: tier, pool trả cho lượt chat
+        services.AddScoped<StudyAbroad.Application.Billing.Admin.IPlanAdminService, StudyAbroad.Application.Billing.Admin.PlanAdminService>();   // UC-79: admin quản lý gói
         return services;
     }
 }
