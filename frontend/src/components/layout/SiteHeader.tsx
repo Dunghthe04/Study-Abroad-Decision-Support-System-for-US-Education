@@ -11,6 +11,7 @@ import {
   KeyRoundIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  ReceiptTextIcon,
   SearchIcon,
   ShieldIcon,
   UserIcon,
@@ -224,6 +225,12 @@ export function SiteHeader() {
                     <DropdownMenuItem render={<Link href="/account#parent-links" />}>
                       <UsersIcon />
                       {user.role === "student" ? "Liên kết phụ huynh" : "Con đã liên kết"}
+                    </DropdownMenuItem>
+                  )}
+                  {isStudentOrParent && !acting && (
+                    <DropdownMenuItem render={<Link href="/orders" />}>
+                      <ReceiptTextIcon />
+                      Lịch sử giao dịch
                     </DropdownMenuItem>
                   )}
 
