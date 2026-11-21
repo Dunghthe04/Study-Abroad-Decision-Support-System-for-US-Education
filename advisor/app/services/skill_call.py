@@ -1,6 +1,8 @@
 """Phần dùng chung của các lượt AI: đọc skill, ghép message, gọi AI, kiểm tra, sai thì gọi lại 1 lần (nói rõ lỗi)."""
 
+import asyncio
 import json
+import logging
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -8,9 +10,11 @@ from typing import Any, TypeVar
 
 from pydantic import ValidationError
 
+from app.core.config import get_settings
 from app.services import usage_meter
 from app.services.ollama import OllamaError
 
+logger = logging.getLogger("advisor.skill_call")
 SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills"
 MAX_ATTEMPTS = 2  # sai thì gọi lại đúng 1 lần
 
@@ -26,6 +30,11 @@ MAX_DEFECT_CHARS = 400
 MAX_PREVIOUS_CHARS = 1500
 
 T = TypeVar("T")  # kiểu kết quả sau khi kiểm tra: list[ScoreItem], EcResult, PickResult...
+
+
+# Ngân sách thời gian cho một lượt viết lời (config.writer_budget_seconds); hàm riêng để test đổi được
+def writer_budget() -> float:
+    return get_settings().writer_budget_seconds
 
 
 def load_skill(path: Path) -> tuple[str, str]:
@@ -63,10 +72,21 @@ class SkillCall:
     async def run(
         self, user: dict[str, Any], schema: dict[str, Any], check: Callable[[dict[str, Any]], T]
     ) -> T | None:
-        """Gọi AI tối đa MAX_ATTEMPTS lần. Trả kết quả đã kiểm tra, hoặc None nếu lần nào cũng sai.
+        """Gọi AI tối đa MAX_ATTEMPTS lần. Trả kết quả đã kiểm tra, hoặc None nếu lần nào cũng sai hoặc hết ngân sách thời gian.
 
         check: hàm kiểm tra riêng của từng lượt, nhận JSON AI trả về, sai thì ném ValueError.
         """
+        budget = writer_budget()
+        try:
+            async with asyncio.timeout(budget):
+                return await self._attempts(user, schema, check)
+        except TimeoutError:
+            logger.warning("%s: hết ngân sách %.0f giây, dùng lời dự phòng", self.name, budget)
+            return None
+
+    async def _attempts(
+        self, user: dict[str, Any], schema: dict[str, Any], check: Callable[[dict[str, Any]], T]
+    ) -> T | None:
         messages = [
             {"role": "system", "content": self.skill},
             # viết liền không khoảng trắng để tiết kiệm token
@@ -81,9 +101,8 @@ class SkillCall:
                         messages + ([retry_note] if retry_note else []), schema, temperature=0.0
                     )
                     return check(raw)
-                except (
-                    OllamaError
-                ):  # lỗi đường truyền hoặc model quá tải: không có lỗi nào để nêu, gọi lại như cũ
+                except OllamaError:
+                    # lỗi đường truyền hoặc model quá tải: không có lỗi nào để nêu, gọi lại như cũ
                     continue
                 except ValueError as error:  # ValidationError của pydantic cũng là ValueError
                     retry_note = retry_note_for(error, raw)

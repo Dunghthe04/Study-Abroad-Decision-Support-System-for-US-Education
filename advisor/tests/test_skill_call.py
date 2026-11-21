@@ -1,7 +1,12 @@
 """Phần dùng chung khi gọi AI: đọc skill, ghép message, gọi lại 1 lần khi sai."""
 
+import asyncio
+import time
+
 from pydantic import BaseModel
 
+from app.core.config import Settings
+from app.services import skill_call
 from app.services.ollama import OllamaError
 from app.services.skill_call import SkillCall, load_skill
 from tests.fakes import FakeLLM
@@ -118,6 +123,69 @@ async def test_an_error_without_a_message_still_gets_a_reason(tmp_path):
     await SkillCall(llm, "m", skill_file(tmp_path)).run({}, {}, check)
 
     assert "kết quả không hợp lệ" in llm.calls[1]["messages"][-1]["content"]
+
+
+class SlowLLM:
+    """Model giả trả lời đúng nhưng chậm: để thử ngân sách thời gian."""
+
+    def __init__(self, delay: float) -> None:
+        self.delay = delay
+        self.calls = 0
+
+    async def chat_json(self, messages, schema, temperature=0.0):
+        self.calls += 1
+        await asyncio.sleep(self.delay)
+        return {"ok": True}
+
+
+async def test_a_call_that_runs_out_of_budget_gives_up_so_the_caller_can_use_its_fallback(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(skill_call, "writer_budget", lambda: 0.05)
+    llm = SlowLLM(delay=5)
+
+    started = time.perf_counter()
+    result = await SkillCall(llm, "m", skill_file(tmp_path)).run({}, {}, check_ok)
+
+    assert result is None and llm.calls == 1
+    assert time.perf_counter() - started < 1.0  # không chờ hết 5 giây của model
+
+
+async def test_a_call_that_finishes_inside_the_budget_is_not_affected(tmp_path, monkeypatch):
+    monkeypatch.setattr(skill_call, "writer_budget", lambda: 5)
+
+    result = await SkillCall(SlowLLM(delay=0), "m", skill_file(tmp_path)).run({}, {}, check_ok)
+
+    assert result == "đã kiểm tra"
+
+
+async def test_the_budget_covers_the_retry_too(tmp_path, monkeypatch):
+    # Lần một sai ngay, lần hai chậm hơn ngân sách: tổng thời gian mới là thứ bị giới hạn
+    monkeypatch.setattr(skill_call, "writer_budget", lambda: 0.2)
+
+    class WrongThenSlow:
+        def __init__(self):
+            self.calls = 0
+
+        async def chat_json(self, messages, schema, temperature=0.0):
+            self.calls += 1
+            if self.calls == 1:
+                return {"ok": False}
+            await asyncio.sleep(5)
+            return {"ok": True}
+
+    llm = WrongThenSlow()
+
+    assert await SkillCall(llm, "m", skill_file(tmp_path)).run({}, {}, check_ok) is None
+    assert llm.calls == 2
+
+
+def test_the_default_budget_leaves_room_for_the_fallback_inside_the_300_second_wait():
+    default = Settings.model_fields["writer_budget_seconds"].default
+
+    # .NET (appsettings Advisor:TimeoutSeconds) và Nginx chờ 300 giây: hai lượt viết lời nối tiếp trong một lượt chat
+    # (advisor viết, rồi backend nhờ viết lời cho hành động) cộng SLM vẫn phải nằm trong đó
+    assert default == 90 and 2 * default + 60 < 300
 
 
 def test_load_skill_reads_version(tmp_path):
