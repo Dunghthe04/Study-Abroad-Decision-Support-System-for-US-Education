@@ -229,7 +229,7 @@ export function SiteHeader() {
                 >
                   <span
                     aria-hidden="true"
-                    className="flex size-7 shrink-0 items-center justify-center rounded-md border border-white/40 bg-white/15"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-md bg-white text-brand-ink"
                   >
                     <UserRoleIcon role={user.role} className="size-3.5" />
                   </span>
@@ -244,7 +244,7 @@ export function SiteHeader() {
                     <div className="flex items-center gap-4">
                       <span
                         aria-hidden="true"
-                        className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-brand/20 bg-surface text-brand"
+                        className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand text-white"
                       >
                         <UserRoleIcon role={user.role} className="size-6" />
                       </span>
