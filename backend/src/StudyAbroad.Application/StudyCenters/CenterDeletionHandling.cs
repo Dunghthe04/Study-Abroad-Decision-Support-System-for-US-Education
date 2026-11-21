@@ -459,7 +459,10 @@ public class CenterDeletionService(
                     }
 
                     // Đọc URL ảnh trước khi purge xóa trắng các cột này, để còn xóa được tệp trên CDN sau khi DB đã lưu
-                    var centerMedia = await work.GetCenterMediaUrlsAsync(request.StudyCenterId, txCt);
+                    // Chỉ xóa ảnh do chính tài khoản chủ tải lên: URL trong hồ sơ có thể do trung tâm tự nhập, trỏ tới ảnh của người khác
+                    var centerMedia = (await work.GetCenterMediaUrlsAsync(request.StudyCenterId, txCt))
+                        .Where(url => ownerId is { } owner && CenterMediaFolders.IsOwnedBy(owner, url))
+                        .ToList();
                     var chat = await work.ErasePrivateLeadMessagesAsync(request.StudyCenterId, ownerId, now, txCt);
                     keptMessages = chat.KeptCount;
                     mediaUrls = centerMedia.Concat(chat.AttachmentUrls).Distinct(StringComparer.Ordinal).ToList();

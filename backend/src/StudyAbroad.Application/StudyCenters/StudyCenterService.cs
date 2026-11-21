@@ -57,7 +57,8 @@ public class StudyCenterService(
     StudyAbroad.Application.Notifications.INotificationService? notifications = null,
     ICenterProfileChangeRepository? profileChanges = null,
     ICenterDeletionRequestRepository? deletionRequests = null,
-    StudyAbroad.Application.Auth.IUserRepository? users = null) : IStudyCenterService
+    StudyAbroad.Application.Auth.IUserRepository? users = null,
+    ICenterMediaCleaner? mediaCleaner = null) : IStudyCenterService
 {
     private const int MaxPageSize = 100;
     public const int MaxNameLength = 200;
@@ -957,6 +958,41 @@ public class StudyCenterService(
         };
     }
 
+    private static List<string> CenterMediaUrls(StudyCenter center)
+    {
+        var urls = new List<string>();
+        if (!string.IsNullOrWhiteSpace(center.LogoUrl)) urls.Add(center.LogoUrl.Trim());
+        if (!string.IsNullOrWhiteSpace(center.CoverImageUrl)) urls.Add(center.CoverImageUrl.Trim());
+        urls.AddRange(center.GalleryImages.Where(u => !string.IsNullOrWhiteSpace(u)).Select(u => u.Trim()));
+        return urls;
+    }
+
+    /// <summary>
+    /// Ảnh vừa bị thay hoặc xóa khỏi hồ sơ thì xóa luôn trên CDN để không còn ảnh mồ côi (Luật 91/2025 Điều 3 khoản 3).
+    /// Chỉ xóa ảnh do chính tài khoản này tải lên (<see cref="CenterMediaFolders"/>). Lỗi CDN không làm hỏng việc lưu hồ sơ:
+    /// hồ sơ đã lưu, ảnh cũ chỉ còn sót trên CDN.
+    /// </summary>
+    private async Task RemoveReplacedMediaAsync(Guid ownerUserId, IReadOnlyCollection<string> before, StudyCenter center, CancellationToken ct)
+    {
+        if (mediaCleaner is null) return;
+
+        var stillUsed = CenterMediaUrls(center).ToHashSet(StringComparer.Ordinal);
+        var removed = before
+            .Where(url => !stillUsed.Contains(url) && CenterMediaFolders.IsOwnedBy(ownerUserId, url))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (removed.Count == 0) return;
+
+        try
+        {
+            await mediaCleaner.DeleteAsync(removed, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Best effort: không để lỗi CDN làm thất bại việc lưu hồ sơ
+        }
+    }
+
     private static string? ValidateProfileUrl(string? value, string label)
     {
         var trimmed = TrimOrNull(value);
@@ -1031,6 +1067,7 @@ public class StudyCenterService(
             return UpdateStudyCenterResult.Fail($"Tên trung tâm tối đa {MaxNameLength} ký tự.");
 
         var before = SnapshotProfile(center);
+        var mediaBefore = CenterMediaUrls(center);
 
         // Thông tin pháp lý: trung tâm chưa xác minh sửa tự do; đã xác minh chỉ kiểm tra khi thực sự đổi.
         if (!pendingReview && (!verified || touchesLegal))
@@ -1100,6 +1137,7 @@ public class StudyCenterService(
             center.VerificationStatus = CenterVerificationStatuses.PendingReview;
 
         await repository.UpdateAsync(center, ct);
+        await RemoveReplacedMediaAsync(userId, mediaBefore, center, ct);
 
         if (verificationReset)
             await CreateReverificationRequestAsync(center, userId, legalChanged, ct);
