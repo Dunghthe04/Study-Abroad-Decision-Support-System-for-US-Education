@@ -89,8 +89,6 @@ export function sampleToRequest(sample: SlmSample): SaveSlmSampleRequest {
     context: sample.context,
     split: sample.split,
     sourceReview: sample.sourceReview,
-    answer: sample.answer,
-    topic: sample.topic,
     source: sample.source,
   };
 }
@@ -101,9 +99,8 @@ export const isFromChat = (sample: SlmSample) => sample.source === CHAT_UNANSWER
 
 export const canSubmit = (status: SlmReviewStatus) => status === "draft" || status === "rejected" || status === "needs_fix";
 
-/** Giống quy tắc backend: có câu trả lời hoặc intents không rỗng. */
-export function isReady(answer: string | null | undefined, intents: string | null | undefined): boolean {
-  if (answer && answer.trim() !== "") return true;
+/** Giống quy tắc backend: intents là mảng không rỗng. */
+export function isReady(intents: string | null | undefined): boolean {
   try {
     const parsed: unknown = JSON.parse(intents ?? "[]");
     return Array.isArray(parsed) && parsed.length > 0;
@@ -126,8 +123,6 @@ export const historyActionLabel = (action: string) => HISTORY_ACTIONS[action] ??
 const FIELD_LABELS: Record<string, string> = {
   sampleType: "loại mẫu",
   question: "câu hỏi",
-  answer: "câu trả lời",
-  topic: "chủ đề",
   source: "nguồn",
   profile: "hồ sơ",
   pendingQuestion: "câu hệ thống đã hỏi",

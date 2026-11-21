@@ -30,6 +30,14 @@ public interface IProfileFlowRepository
     Task<IReadOnlyList<TranscriptScore>> GetTranscriptScoresAsync(Guid profileId, CancellationToken ct = default);
     Task<IReadOnlyList<ProfileActivity>> GetProfileActivitiesAsync(Guid profileId, CancellationToken ct = default);
     Task<IReadOnlyList<ProfileCertification>> GetProfileCertificationsAsync(Guid profileId, CancellationToken ct = default);
+
+    /// <summary>[1.5d] Phụ huynh còn hồ sơ riêng từ trước 1.5d (job chuyển sang con managed đọc).
+    /// Mặc định rỗng để các bản giả trong test không phải sửa.</summary>
+    Task<IReadOnlyList<Guid>> GetParentUserIdsWithProfileAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Guid>>([]);
+
+    /// <summary>[1.5d] Xóa hẳn hồ sơ của một user cùng bảng điểm, hoạt động, chứng chỉ (cascade).</summary>
+    Task DeleteProfileAsync(Guid userId, CancellationToken ct = default) => Task.CompletedTask;
 }
 
 /// <summary>Một ngành để chọn: Name (tiếng Anh) là giá trị lưu vào hồ sơ, NameVi để hiện</summary>

@@ -26,11 +26,18 @@ from app.services.explainer import Explainer
 from app.services.goal_writer import GoalWriter
 from app.services.knowledge import KnowledgeRetriever
 from app.services.ollama import OllamaClient
+from app.services.recommend_writer import RecommendWriter
 from app.services.scenario_writer import ScenarioWriter
 from app.services.skills import build_handlers
 from app.services.slm_classifier import OllamaSlm, output_format
 from app.services.transcript_reader import TranscriptReader
 from app.services.what_if_writer import WhatIfWriter
+
+
+def bearer_headers(api_key: str) -> dict[str, str]:
+    if not api_key:
+        return {}
+    return {"Authorization": f"Bearer {api_key}"}
 
 
 # Khai báo vòng đơi fastapi
@@ -41,10 +48,16 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     slm_url = settings.slm_base_url or settings.ollama_base_url
     vision_url = settings.vision_base_url or settings.ollama_base_url
+    slm_headers = bearer_headers(settings.slm_api_key)
+    vision_headers = bearer_headers(settings.vision_api_key)
     async with (
         httpx.AsyncClient(base_url=settings.ollama_base_url, timeout=settings.llm_timeout_seconds) as http,
-        httpx.AsyncClient(base_url=slm_url, timeout=settings.llm_timeout_seconds) as slm_http,
-        httpx.AsyncClient(base_url=vision_url, timeout=settings.vision_timeout_seconds) as vision_http,
+        httpx.AsyncClient(
+            base_url=slm_url, timeout=settings.llm_timeout_seconds, headers=slm_headers
+        ) as slm_http,
+        httpx.AsyncClient(
+            base_url=vision_url, timeout=settings.vision_timeout_seconds, headers=vision_headers
+        ) as vision_http,
         httpx.AsyncClient(
             base_url=settings.anthropic_base_url, timeout=settings.anthropic_timeout_seconds
         ) as claude_http,
@@ -80,6 +93,7 @@ async def lifespan(app: FastAPI):
         app.state.explainer = Explainer(claude, settings.anthropic_model)
         app.state.scenario_writer = ScenarioWriter(claude, settings.anthropic_model)
         app.state.goal_writer = GoalWriter(claude, settings.anthropic_model)
+        app.state.recommend_writer = RecommendWriter(claude, settings.anthropic_model)
         app.state.compare_writer = CompareWriter(claude, settings.anthropic_model)
         # Kho kiến thức: không có DB thì None, chat vẫn chạy nhưng chưa trả lời được câu hỏi kiến thức
         app.state.db_pool = await asyncio.to_thread(open_pool, settings.database_url)

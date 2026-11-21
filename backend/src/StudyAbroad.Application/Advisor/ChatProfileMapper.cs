@@ -20,7 +20,7 @@ public static class ChatProfileMapper
     public static readonly IReadOnlyList<string> DraftKeys =
     [
         "current_level", "current_grade", "graduation_year", "target_level", "major", "gpa", "sat", "act", "english",
-        "english_plan", "standardized_plan", "certifications", "budget", "scholarship", "activities", "awards", "preferred_states", "school_type",
+        "english_plan", "standardized_plan", "certifications", "budget", "budget_vnd", "budget_usd", "scholarship", "activities", "awards", "preferred_states", "school_type",
         "education_system", "funding_source", "intake",
     ];
 
@@ -60,6 +60,9 @@ public static class ChatProfileMapper
             // Cả danh sách thẻ chứng chỉ như form, để chat thêm được nhiều chứng chỉ
             ["certifications"] = ListOrNull(certs.Select(c => JsonSerializer.SerializeToNode(c)!)),
             ["budget"] = Text(draft.Step4?.AnnualBudgetTier),
+            // UC-94: số tiền tối đa/năm chính xác phụ huynh nhập (VNĐ chưa lưu, hoặc USD đã chốt lúc lưu)
+            ["budget_vnd"] = draft.Step4?.AnnualBudgetVnd is { } budgetVnd ? JsonValue.Create(budgetVnd) : null,
+            ["budget_usd"] = draft.Step4?.AnnualBudgetUsd is { } budgetUsd ? JsonValue.Create(budgetUsd) : null,
             ["scholarship"] = Text(draft.Step4?.NeedFinancialAid),
             ["activities"] = ListOrNull(items.Where(i => !IsAward(i)).Select(ActivityToChat)),
             ["awards"] = ListOrNull(items.Where(IsAward).Select(AwardToChat)),
@@ -137,6 +140,8 @@ public static class ChatProfileMapper
                 "english_plan" => draft with { Step3 = ApplyPlan(step3, english: true, value) },
                 "standardized_plan" => draft with { Step3 = ApplyPlan(step3, english: false, value) },
                 "budget" => draft with { Step4 = step4 with { AnnualBudgetTier = Str(value) } },
+                "budget_vnd" => draft with { Step4 = step4 with { AnnualBudgetVnd = value?.GetValue<long>() } },
+                "budget_usd" => draft with { Step4 = step4 with { AnnualBudgetUsd = value?.GetValue<decimal>() } },
                 "scholarship" => draft with { Step4 = step4 with { NeedFinancialAid = Str(value) } },
                 "activities" => draft with { Step5 = new FlowActivitiesDraftDto(PutItems(draft.Step5?.Activities, award: false, value)) },
                 "awards" => draft with { Step5 = new FlowActivitiesDraftDto(PutItems(draft.Step5?.Activities, award: true, value)) },

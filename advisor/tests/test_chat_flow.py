@@ -7,8 +7,9 @@ import json
 import logging
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField, QuickReply, Widget
-from app.schemas.slm import INTENTS, SlmTinResult
+from app.schemas.slm import INTENTS, SlmTinResult, SlmY
 from app.services.chat_flow import (
+    MAX_LOGGED_TEXT,
     PARALLEL_LIMIT,
     QUESTIONS,
     ChatFlow,
@@ -17,6 +18,7 @@ from app.services.chat_flow import (
     combine,
     go_to,
     last_user_message,
+    log_item,
 )
 from app.services.intake import INTAKE_ID
 from app.services.replies import (
@@ -24,12 +26,12 @@ from app.services.replies import (
     CHAT_BUTTON,
     CONTINUE_CHAT,
     FORM_BUTTON,
-    FORM_DONE,
     INTAKE_FORM,
     NOT_READY,
 )
 from app.services.skill_rules import REQUIRED_B3
-from tests.fakes import tin
+from app.services.skills.skill_ho_so import FORM_SAVED
+from tests.fakes import flow_with, tin
 
 
 class CountingSlm:
@@ -459,7 +461,7 @@ async def test_back_from_a_finished_form_with_nothing_waiting_asks_nothing():
 
     res = await flow.reply(request(CONTINUE_CHAT, current_step="B3", profile=confirmed(*REQUIRED_B3)))
 
-    assert res.answer == FORM_DONE and res.quick_replies == [] and counting.calls == []
+    assert res.answer == FORM_SAVED and res.quick_replies == [] and counting.calls == []
 
 
 async def test_back_from_a_half_filled_form_asks_only_the_missing_required_items():
@@ -516,7 +518,7 @@ async def test_continue_in_chat_after_saving_drops_the_review_table_too():
 
     res = await flow.reply(saved_from_form(CONTINUE_CHAT))
 
-    assert res.answer == FORM_DONE and res.state.question_id is None
+    assert res.answer == FORM_SAVED and res.state.question_id is None
 
 
 async def test_another_message_while_choosing_goes_through_the_slm():
@@ -812,3 +814,84 @@ async def test_log_item_shows_the_city_the_model_returned_but_still_hides_other_
             "other_keys": [],
         }
     ]
+
+
+def test_log_item_shows_the_filters_the_model_returned_so_a_made_up_condition_can_be_seen():
+    item = SlmY(
+        type="knowledge",
+        span="Trường nào có học phí rẻ nhất",
+        entities={
+            "tasks": ["search"],
+            "sort": "lowest_cost",
+            "filters": {"max_cost": "1000000000", "state": ["texas"]},
+        },
+    )
+
+    assert log_item(item) == {
+        "type": "knowledge",
+        "tasks": ["search"],
+        "sort": "lowest_cost",
+        "filters": {"max_cost": "1000000000", "state": ["texas"]},
+        "other_keys": [],
+    }
+
+
+def test_log_item_cuts_a_very_long_filter_value():
+    item = SlmY(
+        type="knowledge",
+        span="trường ngành nào đó",
+        entities={
+            "tasks": ["search"],
+            "filters": {"major": "x" * (MAX_LOGGED_TEXT + 50), "state": ["a" * 200]},
+        },
+    )
+
+    logged = log_item(item)
+
+    assert logged["filters"] == {"major": "x" * MAX_LOGGED_TEXT, "state": ["a" * MAX_LOGGED_TEXT]}
+
+
+# Nút menu "Thử thay đổi hồ sơ": code nhận thẳng, không hỏi SLM (SLM giả ở đây đọc ra kiến thức, nhánh đó không được chạy)
+async def test_try_menu_button_goes_to_the_scenario_branch_without_the_slm():
+    from app.services.replies import MENU
+
+    flow = flow_with({}, tin("knowledge"))
+
+    res = await flow.reply(request(MENU["scenario"].value, has_results=True))
+
+    assert res.answer.startswith("Bạn muốn thử thay đổi gì?")
+    assert [q.label for q in res.quick_replies][:1] == ["Thử SAT 1400"]
+
+
+def test_log_item_shows_the_what_if_changes_so_the_normalized_value_can_be_checked():
+    item = SlmY(
+        type="scenario",
+        span="giả sử ngân sách nhà em giảm còn 25k mỗi năm",
+        entities={
+            "mode": "what_if",
+            "changes": [
+                {"factor": "budget", "value": "25000", "unit": "USD"},
+                {"factor": "sat", "value": "1450"},
+            ],
+        },
+    )
+
+    assert log_item(item) == {
+        "type": "scenario",
+        "mode": "what_if",
+        "changes": [
+            {"factor": "budget", "value": "25000", "unit": "USD"},
+            {"factor": "sat", "value": "1450"},
+        ],
+        "other_keys": [],
+    }
+
+
+def test_log_item_cuts_a_very_long_change_value():
+    item = SlmY(
+        type="scenario",
+        span="x",
+        entities={"mode": "what_if", "changes": [{"factor": "major", "value": "x" * (MAX_LOGGED_TEXT + 40)}]},
+    )
+
+    assert log_item(item)["changes"] == [{"factor": "major", "value": "x" * MAX_LOGGED_TEXT}]

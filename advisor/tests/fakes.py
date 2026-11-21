@@ -25,8 +25,22 @@ def tin(*intents: Any, confidence: float = 1.0) -> SlmTinResult:
 
 # ChatFlow với SLM giả: tin nào cũng đọc ra cùng một kết quả (mặc định: trả lời câu hồ sơ đang chờ).
 # handlers là các skill cũ, được bọc thành nhánh như lúc chạy thật
-def flow_with(handlers: dict[str, Any], slm: SlmTinResult | None = None) -> ChatFlow:
-    return ChatFlow(FixedSlm(slm or tin("collect_profile")), build_branches(handlers))
+def flow_with(handlers: dict[str, Any], slm: SlmTinResult | None = None, writer: Any = None) -> ChatFlow:
+    return ChatFlow(
+        FixedSlm(slm or tin("collect_profile")), build_branches(handlers, writer or FakeAdviceWriter())
+    )
+
+
+class FakeAdviceWriter:
+    """Claude giả viết lời tư vấn hồ sơ: luôn trả "lời tư vấn", ghi lại câu hỏi đã nhận."""
+
+    def __init__(self, answer: str | None = "lời tư vấn") -> None:
+        self.answer = answer
+        self.questions: list[str] = []
+
+    async def write(self, skill, req, schools, tasks=None):
+        self.questions.append(req.cau_hoi)
+        return self.answer
 
 
 class FakeLLM:

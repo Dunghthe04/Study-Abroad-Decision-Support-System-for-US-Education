@@ -11,8 +11,6 @@ public static class ChatExplanation
 {
     public const string Action = "explain";
 
-    public const string Busy = "Phần tư vấn trường đang bận, bạn thử lại sau ít phút nhé.";
-    public const string Failed = "Mình chưa viết được lời tư vấn cho trường này, bạn thử lại sau ít phút nhé.";
 
     /// <summary>Mã trường advisor chọn (ActionData.code), null nếu không có.</summary>
     public static string? CodeOf(JsonElement? data) =>

@@ -7,6 +7,7 @@ import {
   ClockIcon,
   ShieldAlertIcon,
   XCircleIcon,
+  XIcon,
   type LucideIcon,
 } from "lucide-react";
 import { centerPortalApi } from "@/lib/api";
@@ -77,8 +78,21 @@ function toneFor(status: CenterVerificationStatusDto): BannerTone {
  */
 export function CenterStatusBanner() {
   const [status, setStatus] = useState<CenterVerificationStatusDto | null>(null);
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    // Kiểm tra xem user đã đóng banner "đã xác minh" trước đó chưa
+    // Đọc sau một tick (không setState đồng bộ trong effect); sessionStorage có thể không khả dụng
+    void Promise.resolve().then(() => {
+      try {
+        if (sessionStorage.getItem("center_verified_banner_dismissed") === "true") {
+          setDismissed(true);
+        }
+      } catch {
+        // sessionStorage không khả dụng
+      }
+    });
+
     let active = true;
     void (async () => {
       try {
@@ -93,16 +107,52 @@ export function CenterStatusBanner() {
     };
   }, []);
 
+  // Tự động ẩn banner sau 8 giây nếu là trạng thái đã xác minh thành công (verified)
+  useEffect(() => {
+    if (status?.verificationStatus?.toLowerCase() === "verified" && !dismissed) {
+      const timer = setTimeout(() => {
+        setDismissed(true);
+        try {
+          sessionStorage.setItem("center_verified_banner_dismissed", "true");
+        } catch {}
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [status, dismissed]);
+
   if (!status) return null;
+
+  const isVerified = status.verificationStatus?.toLowerCase() === "verified";
+  if (isVerified && dismissed) return null;
 
   const { icon: Icon, title, detail, className, iconClassName } = toneFor(status);
 
+  const handleDismiss = () => {
+    setDismissed(true);
+    try {
+      sessionStorage.setItem("center_verified_banner_dismissed", "true");
+    } catch {}
+  };
+
   return (
-    <div className={cn("border-b px-4 py-2.5 text-sm", className)} role="status">
-      <div className="container mx-auto flex items-center gap-2">
-        <Icon className={cn("h-4 w-4 shrink-0", iconClassName)} />
-        <span className="font-medium">{title}</span>
-        {detail && <span className="hidden sm:inline text-xs opacity-90">— {detail}</span>}
+    <div className={cn("border-b px-4 py-2.5 text-sm transition-all duration-300", className)} role="status">
+      <div className="container mx-auto flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon className={cn("h-4 w-4 shrink-0", iconClassName)} />
+          <span className="font-medium truncate">{title}</span>
+          {detail && <span className="hidden sm:inline text-xs opacity-90 truncate">— {detail}</span>}
+        </div>
+        {isVerified && (
+          <button
+            type="button"
+            onClick={handleDismiss}
+            className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 text-ok transition-colors ml-auto shrink-0"
+            title="Đóng thông báo"
+            aria-label="Đóng thông báo"
+          >
+            <XIcon className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );

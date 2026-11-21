@@ -1,5 +1,12 @@
 """Phần dùng chung khi gọi AI: đọc skill, ghép message, gọi lại 1 lần khi sai."""
 
+import asyncio
+import time
+
+from pydantic import BaseModel
+
+from app.core.config import Settings
+from app.services import skill_call
 from app.services.ollama import OllamaError
 from app.services.skill_call import SkillCall, load_skill
 from tests.fakes import FakeLLM
@@ -47,6 +54,138 @@ async def test_returns_none_after_two_failures_and_stops(tmp_path):
     llm = FakeLLM({"ok": False}, OllamaError("x"), {"ok": True})
     assert await SkillCall(llm, "m", skill_file(tmp_path)).run({}, {}, check_ok) is None
     assert len(llm.calls) == 2  # không gọi lần thứ 3
+
+
+def check_with_reason(raw):
+    raise ValueError("thiếu tên trường")
+
+
+async def test_the_retry_names_the_defect_and_shows_the_previous_result(tmp_path):
+    llm = FakeLLM({"ok": False, "x": 1}, {"ok": True})
+
+    def check(raw):
+        if raw.get("ok") is not True:
+            raise ValueError("thiếu tên trường")
+        return "đã kiểm tra"
+
+    assert await SkillCall(llm, "m", skill_file(tmp_path)).run({"a": 1}, {}, check) == "đã kiểm tra"
+
+    first, second = llm.calls[0]["messages"], llm.calls[1]["messages"]
+    assert second[:2] == first and len(second) == 3  # yêu cầu cũ giữ nguyên, thêm một tin nêu lỗi
+    note = second[2]
+    assert note["role"] == "user"  # Claude chỉ đọc tin system và user
+    assert "thiếu tên trường" in note["content"]
+    assert '{"ok":false,"x":1}' in note["content"]  # kết quả trước, để model biết sửa chỗ nào
+    assert len(first) == 2  # lần đầu không bị thêm gì
+
+
+async def test_after_a_connection_error_the_retry_is_sent_unchanged(tmp_path):
+    llm = FakeLLM(OllamaError("timeout"), {"ok": True})
+
+    await SkillCall(llm, "m", skill_file(tmp_path)).run({}, {}, check_ok)
+
+    assert llm.calls[1]["messages"] == llm.calls[0]["messages"]  # không có lỗi nội dung nào để nêu
+
+
+async def test_a_schema_error_is_summarised_without_the_pydantic_link(tmp_path):
+    class Out(BaseModel):
+        n: int
+
+    llm = FakeLLM({"n": "abc"}, {"n": 1})
+
+    result = await SkillCall(llm, "m", skill_file(tmp_path)).run({}, {}, Out.model_validate)
+
+    assert result == Out(n=1)
+    note = llm.calls[1]["messages"][-1]["content"]
+    assert "n:" in note and "errors.pydantic.dev" not in note
+
+
+async def test_a_long_defect_and_previous_result_are_cut(tmp_path):
+    llm = FakeLLM({"a": "x" * 5000}, {"a": "x" * 5000})
+
+    def check(raw):
+        raise ValueError("@" * 1000)
+
+    assert await SkillCall(llm, "m", skill_file(tmp_path)).run({}, {}, check) is None
+
+    note = llm.calls[1]["messages"][-1]["content"]
+    assert len(note) < 2500 and note.count("@") == 400  # lý do cắt ở 400 chữ, kết quả trước ở 1500
+
+
+async def test_an_error_without_a_message_still_gets_a_reason(tmp_path):
+    llm = FakeLLM({"ok": False}, {"ok": True})
+
+    def check(raw):
+        if raw.get("ok") is not True:
+            raise ValueError()
+        return "đã kiểm tra"
+
+    await SkillCall(llm, "m", skill_file(tmp_path)).run({}, {}, check)
+
+    assert "kết quả không hợp lệ" in llm.calls[1]["messages"][-1]["content"]
+
+
+class SlowLLM:
+    """Model giả trả lời đúng nhưng chậm: để thử ngân sách thời gian."""
+
+    def __init__(self, delay: float) -> None:
+        self.delay = delay
+        self.calls = 0
+
+    async def chat_json(self, messages, schema, temperature=0.0):
+        self.calls += 1
+        await asyncio.sleep(self.delay)
+        return {"ok": True}
+
+
+async def test_a_call_that_runs_out_of_budget_gives_up_so_the_caller_can_use_its_fallback(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(skill_call, "writer_budget", lambda: 0.05)
+    llm = SlowLLM(delay=5)
+
+    started = time.perf_counter()
+    result = await SkillCall(llm, "m", skill_file(tmp_path)).run({}, {}, check_ok)
+
+    assert result is None and llm.calls == 1
+    assert time.perf_counter() - started < 1.0  # không chờ hết 5 giây của model
+
+
+async def test_a_call_that_finishes_inside_the_budget_is_not_affected(tmp_path, monkeypatch):
+    monkeypatch.setattr(skill_call, "writer_budget", lambda: 5)
+
+    result = await SkillCall(SlowLLM(delay=0), "m", skill_file(tmp_path)).run({}, {}, check_ok)
+
+    assert result == "đã kiểm tra"
+
+
+async def test_the_budget_covers_the_retry_too(tmp_path, monkeypatch):
+    # Lần một sai ngay, lần hai chậm hơn ngân sách: tổng thời gian mới là thứ bị giới hạn
+    monkeypatch.setattr(skill_call, "writer_budget", lambda: 0.2)
+
+    class WrongThenSlow:
+        def __init__(self):
+            self.calls = 0
+
+        async def chat_json(self, messages, schema, temperature=0.0):
+            self.calls += 1
+            if self.calls == 1:
+                return {"ok": False}
+            await asyncio.sleep(5)
+            return {"ok": True}
+
+    llm = WrongThenSlow()
+
+    assert await SkillCall(llm, "m", skill_file(tmp_path)).run({}, {}, check_ok) is None
+    assert llm.calls == 2
+
+
+def test_the_default_budget_leaves_room_for_the_fallback_inside_the_300_second_wait():
+    default = Settings.model_fields["writer_budget_seconds"].default
+
+    # .NET (appsettings Advisor:TimeoutSeconds) và Nginx chờ 300 giây: hai lượt viết lời nối tiếp trong một lượt chat
+    # (advisor viết, rồi backend nhờ viết lời cho hành động) cộng SLM vẫn phải nằm trong đó
+    assert default == 90 and 2 * default + 60 < 300
 
 
 def test_load_skill_reads_version(tmp_path):

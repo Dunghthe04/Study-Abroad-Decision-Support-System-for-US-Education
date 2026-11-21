@@ -113,13 +113,13 @@ public class SlmTemplateWriterTests
     }
 
     [Fact]
-    public void BuildExport_OneSheetPerTypeWithAnswerColumns_AndReadableByTheImporter()
+    public void BuildExport_OneSheetPerType_AndReadableByTheImporter()
     {
         var samples = new[]
         {
             new StudyAbroad.Domain.Entities.SlmTrainingSample
             {
-                SampleType = SlmSampleTypes.Knowledge, Question = "visa F-1 cần gì", Answer = "Cần I-20", Topic = "visa",
+                SampleType = SlmSampleTypes.Knowledge, Question = "visa F-1 cần gì",
                 Intents = "[]", Split = SlmSampleSplits.Val,
             },
         };
@@ -131,6 +131,6 @@ public class SlmTemplateWriterTests
         using var archive = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
         Assert.Equal(SlmSampleTypes.All.Count, archive.Entries.Count(e => e.FullName.StartsWith("xl/worksheets/sheet")));
         using var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet4.xml")!.Open(), Encoding.UTF8);
-        Assert.Contains("Cần I-20", reader.ReadToEnd());
+        Assert.Contains("visa F-1 cần gì", reader.ReadToEnd());
     }
 }

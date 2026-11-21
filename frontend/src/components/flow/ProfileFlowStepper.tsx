@@ -96,6 +96,9 @@ function stepSummary(step: number, draft: ProfileFlowDraft, metadata: ProfileMet
     case 4: {
       const tier = draft.step4.annualBudgetTier;
       if (!tier) return null;
+      // UC-94: có số tiền tối đa/năm chính xác (phụ huynh nhập) thì ghi đúng số đó
+      const exactUsd = draft.step4.annualBudgetUsd;
+      if (exactUsd != null) return `Tối đa ${exactUsd.toLocaleString("vi-VN")} USD/năm`;
       return (
         metadata?.budgetTiers.find((t) => t.key === tier)?.label ??
         DEFAULT_BUDGET_TIERS.find((t) => t.key === tier)?.label ??

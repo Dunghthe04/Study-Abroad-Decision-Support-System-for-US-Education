@@ -19,6 +19,8 @@ namespace StudyAbroad.Domain.Constants
         public const string Locked = "locked";
         /// <summary>[UC-80] Account deleted and PII anonymized per PDPA 2025.</summary>
         public const string Deleted = "deleted";
+        /// <summary>Con do phụ huynh thêm (chưa có tài khoản): không đăng nhập được, chỉ phụ huynh liên kết mới nhập hồ sơ thay.</summary>
+        public const string Managed = "managed";
 
     }
 }

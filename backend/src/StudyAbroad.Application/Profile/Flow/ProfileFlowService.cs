@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -37,7 +39,10 @@ public class ProfileFlowService(
     IAiCallRepository? aiCalls = null,
     IAiUsageCollector? usageCollector = null,
     ILogger<ProfileFlowService>? logger = null,
-    AiPricing? pricing = null) : IProfileFlowService
+    AiPricing? pricing = null,
+    IUserRepository? users = null,
+    IParentLinkRepository? parentLinks = null,
+    IExchangeRateProvider? rates = null) : IProfileFlowService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -99,11 +104,12 @@ public class ProfileFlowService(
             return EmptyState(hasCommittedProfile: false);
 
         var committed = HasCommittedProfile(profile);
+        var locked = await LockedBudgetAsync(userId, profile, ct);
 
-        // 1. Có nháp đang làm dở → trả nguyên nháp
+        // 1. Có nháp đang làm dở → trả nguyên nháp (ngân sách khóa thì luôn là số phụ huynh đã nhập)
         var stored = ReadStoredState(profile.DraftFlowStateJson);
         if (stored?.Draft is not null)
-            return ToStateDto(stored, committed);
+            return ToStateDto(stored with { Draft = KeepLockedBudget(stored.Draft, locked) }, committed) with { BudgetLockedUsd = locked?.Usd };
 
         // 2. Đã gửi hồ sơ (hoặc có dữ liệu cũ) → dựng draft từ DB
         if (committed)
@@ -115,19 +121,35 @@ public class ProfileFlowService(
             return new ProfileFlowStateDto(
                 CurrentStep: 6,
                 CompletedSteps: [1, 2, 3, 4, 5],
-                Draft: BuildDraftFromProfile(profile, scores, activities, certifications, scale),
+                Draft: BuildDraftFromProfile(profile, scores, activities, certifications, scale, await ExactBudgetUsdAsync(profile, ct)),
                 DraftTranscript: DraftTranscriptFileDto.FromOrNull(stored?.DraftTranscript),
                 LastUpdatedAt: profile.UpdatedAt ?? profile.CreatedAt,
                 HasCommittedProfile: true,
-                LastCompletedStep: 5);
+                LastCompletedStep: 5,
+                BudgetLockedUsd: locked?.Usd);
         }
 
         // 3. Người dùng mới: draft rỗng, không chọn sẵn ngân sách / nhu cầu học bổng
         return EmptyState(hasCommittedProfile: false) with { DraftTranscript = DraftTranscriptFileDto.FromOrNull(stored?.DraftTranscript) };
     }
 
+    public async Task<ProfileFlowDraftDto?> GetCommittedDetailsAsync(Guid userId, CancellationToken ct = default)
+    {
+        var profile = await repository.GetProfileByUserIdAsync(userId, ct);
+        if (profile is null || !HasCommittedProfile(profile))
+            return null;
+
+        // Cùng cách dựng với nhánh 2 của GetFlowStateAsync, nhưng không đọc nháp: thẻ hồ sơ chỉ hiện bản đã gửi
+        var scores = await repository.GetTranscriptScoresAsync(profile.Id, ct);
+        var activities = await repository.GetProfileActivitiesAsync(profile.Id, ct);
+        var certifications = await repository.GetProfileCertificationsAsync(profile.Id, ct);
+        var scale = await GetGradeScaleAsync(ct);
+        return BuildDraftFromProfile(profile, scores, activities, certifications, scale, await ExactBudgetUsdAsync(profile, ct));
+    }
+
     public async Task<ProfileFlowStateDto> SaveDraftAsync(Guid userId, SaveProfileDraftRequest request, CancellationToken ct = default)
     {
+        await EnsureCanEditAsync(userId, ct);
         if (request.CurrentStep < 1 || request.CurrentStep > 6)
         {
             throw new ArgumentOutOfRangeException(nameof(request.CurrentStep), "Bước hiện tại phải nằm trong khoảng từ 1 đến 6.");
@@ -135,16 +157,17 @@ public class ProfileFlowService(
 
         var profile = await repository.EnsureProfileExistsAsync(userId, CancellationToken.None);
         var previous = ReadStoredState(profile.DraftFlowStateJson);
+        var locked = await LockedBudgetAsync(userId, profile, ct);
 
         var stored = new StoredFlowState(
             CurrentStep: request.CurrentStep,
             CompletedSteps: NormalizeCompletedSteps(request.CompletedSteps),
-            Draft: NormalizeDraft(request.Draft ?? previous?.Draft ?? new ProfileFlowDraftDto()),
+            Draft: KeepLockedBudget(NormalizeDraft(request.Draft ?? previous?.Draft ?? new ProfileFlowDraftDto()), locked),
             DraftTranscript: previous?.DraftTranscript,
             LastUpdatedAt: DateTime.UtcNow);
 
         await WriteStoredStateAsync(profile, stored);
-        return ToStateDto(stored, HasCommittedProfile(profile));
+        return ToStateDto(stored, HasCommittedProfile(profile)) with { BudgetLockedUsd = locked?.Usd };
     }
 
     /// <summary>
@@ -155,24 +178,28 @@ public class ProfileFlowService(
     public async Task<ProfileFlowStateDto> PatchDraftAsync(
         Guid userId, JsonObject chatProfile, IReadOnlyCollection<string> changedKeys, CancellationToken ct = default)
     {
+        await EnsureCanEditAsync(userId, ct);
         var current = await GetFlowStateAsync(userId, ct);
         if (changedKeys.Count == 0) return current;
 
         var profile = await repository.EnsureProfileExistsAsync(userId, CancellationToken.None);
+        var locked = await LockedBudgetAsync(userId, profile, ct);
+        var draft = NormalizeDraft(ChatProfileMapper.ApplyChatProfile(current.Draft, chatProfile, changedKeys, await GetGradeScaleAsync(ct)));
         var stored = new StoredFlowState(
             CurrentStep: current.CurrentStep,
             CompletedSteps: current.CompletedSteps.ToList(),
-            Draft: NormalizeDraft(ChatProfileMapper.ApplyChatProfile(current.Draft, chatProfile, changedKeys, await GetGradeScaleAsync(ct))),
+            Draft: KeepLockedBudget(draft, locked),
             DraftTranscript: ReadStoredState(profile.DraftFlowStateJson)?.DraftTranscript,
             LastUpdatedAt: DateTime.UtcNow);
 
         await WriteStoredStateAsync(profile, stored);
-        return ToStateDto(stored, HasCommittedProfile(profile));
+        return ToStateDto(stored, HasCommittedProfile(profile)) with { BudgetLockedUsd = locked?.Usd };
     }
 
     public async Task<UploadDraftTranscriptResultDto> UploadDraftTranscriptAsync(
         Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default)
     {
+        await EnsureCanEditAsync(userId, ct);
         var profile = await repository.EnsureProfileExistsAsync(userId, ct);
 
         // Đọc toàn bộ nội dung file ra bộ nhớ để vừa lưu nháp vừa gửi sang OCR
@@ -236,18 +263,20 @@ public class ProfileFlowService(
     public async Task<CommitProfileFlowResponse> CommitFlowAsync(
         Guid userId, CommitProfileFlowRequest? request, CancellationToken ct = default)
     {
+        await EnsureCanEditAsync(userId, ct);
         var profile = await repository.EnsureProfileExistsAsync(userId, ct);
         var stored = ReadStoredState(profile.DraftFlowStateJson);
 
         var draft = request?.Draft ?? stored?.Draft
             ?? throw new InvalidOperationException("Không tìm thấy dữ liệu hồ sơ để xác nhận lưu chính thức.");
-        draft = NormalizeDraft(draft);
+        draft = KeepLockedBudget(NormalizeDraft(draft), await LockedBudgetAsync(userId, profile, ct));
 
         var budgetTiers = await LoadBudgetTiersAsync(ct);
         var certificationTypes = await LoadCertificationTypesAsync(ct);
         var majorNames = (await repository.GetMajorOptionsAsync(ct)).Select(m => m.Name).ToList();
         var now = DateTime.UtcNow;
         ValidateForCommit(draft, budgetTiers, certificationTypes, majorNames, now);
+        draft = await ResolveExactBudgetAsync(draft, budgetTiers, ct);
 
         var scale = await GetGradeScaleAsync(ct);
         var (scores, activities, certifications) = ApplyDraftToProfile(profile, draft, budgetTiers, certificationTypes, scale, now);
@@ -295,6 +324,37 @@ public class ProfileFlowService(
             Message: "Hồ sơ du học đã được lưu chính thức thành công vào hệ thống.",
             Success: true
         );
+    }
+
+    /// <summary>Người này có được nhập / lưu hồ sơ của chính mình không.
+    /// 1.5d: tài khoản phụ huynh không bao giờ có hồ sơ riêng, kể cả khi chưa liên kết con nào; hồ sơ nhập trước khi con có
+    /// tài khoản nằm ở con managed. Phụ huynh làm thay thì userId là id con (Role student) nên vẫn được.</summary>
+    public async Task<bool> CanEditOwnProfileAsync(Guid userId, CancellationToken ct = default) =>
+        users is null || (await users.GetUserById(userId, ct))?.Role != UserRoles.Parent;
+
+    /// <summary>1.5e: con đang liên kết active của phụ huynh (con managed và con thật) cho nút chat.
+    /// Thiếu repository (test cũ) thì null để chat giữ nút cũ.</summary>
+    public async Task<IReadOnlyList<ParentChatChild>?> GetParentChatChildrenAsync(Guid userId, CancellationToken ct = default)
+    {
+        if (users is null || parentLinks is null)
+            return null;
+
+        var result = new List<ParentChatChild>();
+        foreach (var link in await parentLinks.GetActiveByParentAsync(userId, ct))
+        {
+            var child = await users.GetUserById(link.StudentUserId, ct);
+            if (child is null || child.Status == UserStatuses.Deleted)
+                continue;
+            result.Add(new ParentChatChild(child.Id, child.FullName, AgeAccess.IsOperatedByParent(child)));
+        }
+        return result;
+    }
+
+    // Gọi trước EnsureProfileExistsAsync: chặn sau thì phụ huynh vẫn bị tạo một dòng hồ sơ rỗng
+    private async Task EnsureCanEditAsync(Guid userId, CancellationToken ct)
+    {
+        if (!await CanEditOwnProfileAsync(userId, ct))
+            throw new ProfileLockedForParentException();
     }
 
     public async Task ClearDraftAsync(Guid userId, CancellationToken ct = default)
@@ -476,6 +536,58 @@ public class ProfileFlowService(
     private async Task<decimal?> OcrGpa4Async(TranscriptOcrResponse? ocr, CancellationToken ct) =>
         ocr?.AverageScoreScale10 is { } average10 ? TranscriptGpa.To4(average10, await GetGradeScaleAsync(ct)) : ocr?.CalculatedGpa4;
 
+    /// <summary>Usd nằm trong hạng: min ≤ usd &lt; max (max null = không trần). Giống tierForUsd ở form.</summary>
+    private static bool InTier(BudgetTier tier, decimal usd) =>
+        (tier.MinUsd ?? 0) <= usd && (tier.MaxUsd is not { } max || usd < max);
+
+    /// <summary>
+    /// UC-94: phụ huynh nhập số tiền tối đa/năm bằng VND → đổi USD theo tỷ giá lúc lưu, hạng = hạng chứa số đó.
+    /// Không nhập lại VND mà draft mang số USD đã lưu (mở lại hồ sơ, không đổi) thì giữ số đó nếu vẫn thuộc hạng đang chọn;
+    /// đổi sang hạng khác (chọn "Chưa biết chính xác") thì bỏ số cũ, lấy theo hạng.
+    /// </summary>
+    private async Task<ProfileFlowDraftDto> ResolveExactBudgetAsync(
+        ProfileFlowDraftDto draft, IReadOnlyDictionary<string, BudgetTier> budgetTiers, CancellationToken ct)
+    {
+        var step4 = draft.Step4!;
+        if (step4.AnnualBudgetVnd is { } vnd)
+        {
+            if (rates is null) throw new InvalidOperationException("Chưa lấy được tỷ giá để đổi số tiền sang USD, thử lại sau.");
+            var rate = await rates.GetVndPerUsdAsync(ct);
+            var usd = Math.Round(vnd / rate, 0);
+            var tier = budgetTiers.Values.FirstOrDefault(t => InTier(t, usd))
+                ?? throw new InvalidOperationException("Bước 4: không tìm thấy mức ngân sách phù hợp với số tiền đã nhập.");
+            return draft with { Step4 = step4 with { AnnualBudgetTier = tier.Id, AnnualBudgetUsd = usd, AnnualBudgetVnd = null } };
+        }
+
+        var keep = step4.AnnualBudgetUsd is { } saved && InTier(budgetTiers[step4.AnnualBudgetTier!], saved);
+        return keep ? draft : draft with { Step4 = step4 with { AnnualBudgetUsd = null } };
+    }
+
+    /// <summary>Trần đã lưu là số chính xác phụ huynh nhập (khác trần của hạng, vẫn thuộc hạng) thì trả số đó, không thì null</summary>
+    private async Task<decimal?> ExactBudgetUsdAsync(StudentProfile profile, CancellationToken ct)
+    {
+        if (profile.BudgetMaxUsd is not { } max || profile.BudgetTier is not { } tierId) return null;
+        var tiers = await LoadBudgetTiersAsync(ct);
+        return tiers.TryGetValue(tierId, out var tier) && tier.MaxUsd != max && InTier(tier, max) ? max : null;
+    }
+
+    /// <summary>
+    /// UC-94: chỉ phụ huynh nhập hộ con managed mới nhập được số tiền chính xác, nên học sinh thật (không phải con managed) có số
+    /// chính xác nghĩa là hồ sơ nhận từ phụ huynh: ngân sách cố định theo phụ huynh, học sinh không sửa. Trả hạng + số USD đó, không khóa thì null
+    /// </summary>
+    private async Task<(string Tier, decimal Usd)?> LockedBudgetAsync(Guid userId, StudentProfile profile, CancellationToken ct)
+    {
+        if (users is null || await ExactBudgetUsdAsync(profile, ct) is not { } usd) return null;
+        var user = await users.GetUserById(userId, ct);
+        return user is null || user.Status == UserStatuses.Managed ? null : (profile.BudgetTier!, usd);
+    }
+
+    /// <summary>Ngân sách khóa: bỏ mọi thay đổi hạng / số tiền từ form hay chat, giữ đúng số phụ huynh đã nhập</summary>
+    private static ProfileFlowDraftDto KeepLockedBudget(ProfileFlowDraftDto draft, (string Tier, decimal Usd)? locked) =>
+        locked is not { } l
+            ? draft
+            : draft with { Step4 = (draft.Step4 ?? new FlowFinancialDraftDto()) with { AnnualBudgetTier = l.Tier, AnnualBudgetUsd = l.Usd, AnnualBudgetVnd = null } };
+
     private async Task<Dictionary<string, BudgetTier>> LoadBudgetTiersAsync(CancellationToken ct)
     {
         var tiers = new Dictionary<string, BudgetTier>(StringComparer.Ordinal);
@@ -596,9 +708,14 @@ public class ProfileFlowService(
         // Bước 3
         ValidateCertifications(draft.Step3, certificationTypes, now, errors);
 
-        // Bước 4
+        // Bước 4: có số tiền VND chính xác (phụ huynh nhập) thì không bắt chọn hạng, hạng tự suy từ số tiền
         var tierId = draft.Step4?.AnnualBudgetTier;
-        if (string.IsNullOrWhiteSpace(tierId))
+        if (draft.Step4?.AnnualBudgetVnd is { } vnd)
+        {
+            if (vnd < ParentPreferenceService.MinBudgetVnd || vnd > ParentPreferenceService.MaxBudgetVnd)
+                errors.Add("Bước 4: số tiền tối đa mỗi năm phải từ 100 triệu đến 10 tỷ đồng.");
+        }
+        else if (string.IsNullOrWhiteSpace(tierId))
             errors.Add("Bước 4: chưa chọn mức ngân sách.");
         else if (!budgetTiers.ContainsKey(tierId))
             errors.Add($"Bước 4: mức ngân sách '{tierId}' không tồn tại.");
@@ -946,7 +1063,9 @@ public class ProfileFlowService(
         var tier = budgetTiers[draft.Step4!.AnnualBudgetTier!];
         profile.BudgetTier = tier.Id;
         profile.BudgetMinUsd = tier.MinUsd;
-        profile.BudgetMaxUsd = tier.MaxUsd; // null với mức trên 70k = không giới hạn trần
+        // Số chính xác phụ huynh nhập (đã đổi USD, nằm trong hạng) là trần chắc chắn; không có thì lấy trần của hạng
+        // (null với mức trên 70k = không giới hạn trần)
+        profile.BudgetMaxUsd = draft.Step4.AnnualBudgetUsd is { } exactUsd && InTier(tier, exactUsd) ? exactUsd : tier.MaxUsd;
         profile.ScholarshipNeed = draft.Step4.NeedFinancialAid;
         profile.NeedsScholarship = ProfileConstants.ScholarshipNeeds.NeedsScholarship(profile.ScholarshipNeed);
         profile.FundingSource = NullIfBlank(draft.Step4.FundingSource);
@@ -1043,7 +1162,8 @@ public class ProfileFlowService(
         IReadOnlyList<TranscriptScore> scores,
         IReadOnlyList<ProfileActivity> activities,
         IReadOnlyList<ProfileCertification> certifications,
-        GradeScaleConfigDto? scale)
+        GradeScaleConfigDto? scale,
+        decimal? exactBudgetUsd = null)
     {
         var step1 = new FlowGoalDraftDto(
             CurrentEducationLevel: profile.CurrentEducationLevel ?? NormalizeEducationLevel(profile.EducationSystem) switch
@@ -1091,7 +1211,9 @@ public class ProfileFlowService(
 
         // Hồ sơ cũ có thể lưu mã nguồn tài chính khác (family, loan) thì để trống cho học sinh chọn lại
         var funding = profile.FundingSource is { } f && ProfileConstants.FundingSources.All.Contains(f) ? f : null;
-        var step4 = new FlowFinancialDraftDto(profile.BudgetTier, profile.ScholarshipNeed, funding);
+        // Trần đã lưu khác trần của hạng = số chính xác phụ huynh nhập: trả lại để form hiện và lưu lại không bị hạng ghi đè
+        var step4 = new FlowFinancialDraftDto(profile.BudgetTier, profile.ScholarshipNeed, funding,
+            AnnualBudgetUsd: exactBudgetUsd);
 
         var step5 = new FlowActivitiesDraftDto(activities.Select(a => string.Equals(a.Kind, "award", StringComparison.OrdinalIgnoreCase)
             ? new FlowActivityDraftDto(

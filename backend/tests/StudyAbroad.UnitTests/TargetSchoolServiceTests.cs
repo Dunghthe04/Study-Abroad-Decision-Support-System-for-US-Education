@@ -385,6 +385,53 @@ public class TargetSchoolServiceTests
         Assert.Contains("Vui lòng chọn vòng nộp hồ sơ", updateResult.ErrorMessage);
     }
 
+    // Phụ huynh gợi ý (Status parent_suggested): chưa là trường của con cho tới khi con thêm.
+    private TargetSchool AddParentSuggestion(string? note = "Bố mẹ thấy trường này hợp")
+    {
+        var row = new TargetSchool { UserId = _userId, UniversityId = _uniId, Status = "parent_suggested", Notes = note };
+        _repo.TargetSchools.Add(row);
+        return row;
+    }
+
+    [Fact]
+    public async Task GetTargetSchools_ParentSuggestion_NotCountedButReturnedWhenAskedByStatus()
+    {
+        AddParentSuggestion();
+
+        var main = await _service.GetTargetSchoolsAsync(_userId);
+        Assert.Empty(main.Items);
+        Assert.Equal(0, main.TotalCount);
+        Assert.Equal(0, main.UndecidedCategoryCount);
+
+        var suggestions = await _service.GetTargetSchoolsAsync(_userId, status: "parent_suggested");
+        Assert.Equal("MIT", Assert.Single(suggestions.Items).UniversityCode);
+    }
+
+    [Fact]
+    public async Task AddTargetSchool_WhenParentSuggested_AcceptsSameRowKeepingNote()
+    {
+        var row = AddParentSuggestion();
+
+        var result = await _service.AddTargetSchoolAsync(_userId, new AddTargetSchoolRequest(UniversityId: _uniId, Category: "reach"));
+
+        Assert.True(result.Success);
+        Assert.Equal(row.Id, result.TargetSchool!.Id);                 // dùng lại dòng gợi ý, không thêm dòng mới
+        Assert.Single(_repo.TargetSchools);
+        Assert.Equal("considering", result.TargetSchool.Status);
+        Assert.Equal("reach", result.TargetSchool.Category);
+        Assert.Equal("Bố mẹ thấy trường này hợp", result.TargetSchool.Notes);
+        Assert.Equal(1, (await _service.GetTargetSchoolsAsync(_userId)).TotalCount);
+    }
+
+    [Fact]
+    public async Task CheckTargetSchool_WhenOnlyParentSuggested_ReturnsNull()
+    {
+        AddParentSuggestion();
+
+        Assert.Null(await _service.CheckTargetSchoolAsync(_userId, "MIT", null));
+        Assert.Null(await _service.CheckTargetSchoolAsync(_userId, null, _uniId));
+    }
+
     private sealed class FakeTargetSchoolRepository : ITargetSchoolRepository
     {
         public List<TargetSchool> TargetSchools { get; } = [];

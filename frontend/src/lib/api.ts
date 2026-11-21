@@ -1,5 +1,11 @@
+import { authFetch } from "@/lib/auth-refresh";
 import type {
+  AccessLogDto,
+  AccessLogFilterQuery,
+  AccessLogSummaryDto,
   CenterReviewsDto,
+  NotificationDto,
+  UnreadCountDto,
   CenterReviewDto,
   CenterReviewEligibilityDto,
   CreateCenterReviewRequest,
@@ -19,6 +25,7 @@ import type {
   CreateCenterAccountRequest,
   LockUserAccountRequest,
   UnlockUserAccountRequest,
+  UpdateUserBirthDateRequest,
   VerifyEmailRequest,
   AcademicProfileResponse,
   ParentInviteInfo,
@@ -26,7 +33,7 @@ import type {
   ParentLinkDto,
   ParentLinkResponse,
   ParentProfileOverviewDto,
-  ShareParentProfileResult,
+  MatchManagedChildResult,
   ParentProfileOfferDto,
   StudyCenter,
   CreateStudyCenterRequest,
@@ -41,6 +48,8 @@ import type {
   AdminLeadMessageReportContextDto,
   AdminLeadMessageReportDto,
   LeadMessageReportFilter,
+  CenterProfileChangeDto,
+  CenterProfileChangeFilter,
   SendLeadMessageRequest,
   SendLeadMessageResultDto,
   RegisterCenterRequest,
@@ -51,6 +60,10 @@ import type {
   CenterVerificationStatusDto,
   ReviewCenterVerificationRequest,
   UpdateCenterProfileRequest,
+  CenterProfileUpdateResponse,
+  AdminCenterDeletionRequestDto,
+  CenterDeletionRequestDto,
+  CenterDeletionRequestStatus,
 } from "@/types/api";
 
 // Browser code calls same-origin /api (Nginx in prod, Next rewrite in dev).
@@ -86,7 +99,7 @@ export function buildImageForm(file: File, content?: string): FormData {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${baseUrl}${path}`, {
+  const res = await authFetch(`${baseUrl}${path}`, {
     ...init,
     // [Bảo mật HttpOnly Cookie]: credentials: "include" tự động gửi và nhận cookie an toàn
     credentials: "include",
@@ -233,17 +246,17 @@ export const profileApi = {
       method: "GET",
     }),
 
-  // Phụ huynh: hồ sơ các con đã liên kết (chỉ đọc) + hồ sơ mình nhập còn chờ chọn con nhận
+  // Phụ huynh: hồ sơ các con đã liên kết (chỉ đọc) + con thật chờ ghép với con managed (1.5d)
   getChildrenProfiles: () =>
     apiFetch<ParentLinkResponse<ParentProfileOverviewDto>>("/api/v1/profile/academic/children", {
       method: "GET",
     }),
 
-  // linkId null = không chuyển cho con nào
-  shareToChild: (linkId: string | null) =>
-    apiFetch<ParentLinkResponse<ShareParentProfileResult>>("/api/v1/profile/academic/share", {
+  // 1.5d: ghép con thật vừa liên kết với con managed đã nhập; managedChildId null = không phải ai trong số này
+  matchManagedChild: (linkId: string, managedChildId: string | null) =>
+    apiFetch<ParentLinkResponse<MatchManagedChildResult>>("/api/v1/profile/academic/match", {
       method: "POST",
-      body: JSON.stringify({ linkId }),
+      body: JSON.stringify({ linkId, managedChildId }),
     }),
 
   // Học sinh: đề nghị dùng hồ sơ phụ huynh khi mình đã có hồ sơ
@@ -253,7 +266,7 @@ export const profileApi = {
     }),
 
   decideParentOffer: (linkId: string, accept: boolean) =>
-    apiFetch<ParentLinkResponse<ShareParentProfileResult>>(
+    apiFetch<ParentLinkResponse<ParentProfileOfferDto>>(
       `/api/v1/profile/academic/parent-offers/${encodeURIComponent(linkId)}/${accept ? "accept" : "decline"}`,
       { method: "POST" },
     ),
@@ -362,6 +375,13 @@ export const adminUsersApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  /** [UC-113] Sửa ngày sinh Học sinh / Phụ huynh theo yêu cầu hỗ trợ (admin, bắt buộc lý do). */
+  updateBirthDate: (id: string, data: UpdateUserBirthDateRequest) =>
+    apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/birth-date`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
 };
 
 // [UC-71] API Quản trị danh bạ trung tâm tư vấn (Moderator / Admin)
@@ -448,7 +468,56 @@ export const studyCentersApi = {
   },
 };
 
+/** [UC-114] Moderator kiểm tra thay đổi website / fanpage do trung tâm tự sửa: Đạt hoặc Không đạt (lý do bắt buộc). */
+export const centerProfileChangesApi = {
+  list: (params?: { status?: CenterProfileChangeFilter; page?: number; pageSize?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set("status", params.status);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<CenterProfileChangeDto>>(`/api/v1/moderator/center-profile-changes${qs ? `?${qs}` : ""}`);
+  },
+
+  /** `newValue` là giá trị mới Moderator đang xem; trung tâm sửa tiếp sau đó thì máy chủ từ chối. */
+  pass: (id: string, newValue: string | null) =>
+    apiFetch<CenterProfileChangeDto>(`/api/v1/moderator/center-profile-changes/${encodeURIComponent(id)}/pass`, {
+      method: "POST",
+      body: JSON.stringify({ newValue }),
+    }),
+
+  fail: (id: string, reason: string, newValue: string | null) =>
+    apiFetch<CenterProfileChangeDto>(`/api/v1/moderator/center-profile-changes/${encodeURIComponent(id)}/fail`, {
+      method: "POST",
+      body: JSON.stringify({ reason, newValue }),
+    }),
+};
+
 /** [UC-58] Admin xử lý tin nhắn bị báo cáo: bỏ qua báo cáo hoặc khóa tài khoản người gửi (gỡ luôn tin của họ). */
+/** [UC-93] Administrator xử lý yêu cầu xóa tài khoản và dữ liệu trung tâm. */
+export const centerDeletionRequestsApi = {
+  list: (params?: { status?: CenterDeletionRequestStatus | "all"; page?: number; pageSize?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set("status", params.status);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<AdminCenterDeletionRequestDto>>(`/api/v1/admin/center-deletion-requests${qs ? `?${qs}` : ""}`);
+  },
+
+  approve: (id: string, identityCheckNote: string) =>
+    apiFetch<AdminCenterDeletionRequestDto>(`/api/v1/admin/center-deletion-requests/${encodeURIComponent(id)}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ identityCheckNote }),
+    }),
+
+  reject: (id: string, reason: string) =>
+    apiFetch<AdminCenterDeletionRequestDto>(`/api/v1/admin/center-deletion-requests/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+};
+
 export const leadMessageReportsApi = {
   list: (params?: { status?: LeadMessageReportFilter; page?: number; pageSize?: number }) => {
     const sp = new URLSearchParams();
@@ -513,6 +582,14 @@ export const centerLeadsApi = {
 
   getById: (id: string) =>
     apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}`),
+
+  /** [UC-73] Chấp nhận yêu cầu Mới: sang Đã chấp nhận, mở nhắn tin. */
+  accept: (id: string) =>
+    apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/accept`, { method: "POST" }),
+
+  /** [UC-73] Từ chối yêu cầu Mới: sang Bị từ chối, người gửi nhận thông báo. */
+  reject: (id: string) =>
+    apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/reject`, { method: "POST" }),
 
   updateStatus: (id: string, status: string) =>
     apiFetch<CenterReceivedLeadDto>(`/api/v1/leads/received/${encodeURIComponent(id)}/status`, {
@@ -595,10 +672,19 @@ export const targetSchoolsApi = {
 // [UC-71, UC-91, UC-92] Cổng Trung tâm tư vấn
 export const centerPortalApi = {
   getProfile: () => apiFetch<StudyCenter>("/api/v1/center/profile"),
+  /** [UC-92] Lưu hồ sơ; kết quả cho biết trường nào lưu ngay, trường nào chờ Moderator kiểm tra, có về Chờ duyệt không. */
   updateProfile: (data: UpdateCenterProfileRequest) =>
-    apiFetch<StudyCenter>("/api/v1/center/profile", {
+    apiFetch<CenterProfileUpdateResponse>("/api/v1/center/profile", {
       method: "PUT",
       body: JSON.stringify(data),
+    }),
+  /** [UC-92] Yêu cầu xóa tài khoản gần nhất (null nếu chưa gửi). */
+  getDeletionRequest: () => apiFetch<CenterDeletionRequestDto | null>("/api/v1/center/deletion-request"),
+  /** [UC-92] Gửi yêu cầu xóa tài khoản và dữ liệu trung tâm (Administrator xử lý ở UC-93). */
+  requestDeletion: (reason: string) =>
+    apiFetch<CenterDeletionRequestDto>("/api/v1/center/deletion-request", {
+      method: "POST",
+      body: JSON.stringify({ reason }),
     }),
   getVerificationStatus: () =>
     apiFetch<CenterVerificationStatusDto>("/api/v1/center/verification/status"),
@@ -638,7 +724,7 @@ export const centerPortalApi = {
     formData.append("file", file);
     formData.append("documentType", documentType);
 
-    const res = await fetch(`${baseUrl}/api/v1/center/verification/upload-document`, {
+    const res = await authFetch(`${baseUrl}/api/v1/center/verification/upload-document`, {
       method: "POST",
       credentials: "include",
       body: formData,
@@ -675,3 +761,49 @@ export const adminCenterVerificationsApi = {
       body: JSON.stringify(data),
     }),
 };
+
+// [UC-110] Thông báo của người đăng nhập
+export const notificationsApi = {
+  list: (params?: { page?: number; pageSize?: number; unreadOnly?: boolean }) => {
+    const sp = new URLSearchParams();
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    if (params?.unreadOnly) sp.set("unreadOnly", "true");
+    const qs = sp.toString();
+    return apiFetch<PagedResult<NotificationDto>>(`/api/v1/notifications${qs ? `?${qs}` : ""}`);
+  },
+  unreadCount: () => apiFetch<UnreadCountDto>("/api/v1/notifications/unread-count"),
+  markRead: (id: string) =>
+    apiFetch<null>(`/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
+  markAllRead: () => apiFetch<{ updated: number }>("/api/v1/notifications/read-all", { method: "POST" }),
+};
+
+// [UC-97] Admin xem và lọc nhật ký truy cập dữ liệu nhạy cảm
+export const accessLogsApi = {
+  list: (params?: AccessLogFilterQuery) => {
+    const sp = new URLSearchParams();
+    if (params?.category) sp.set("category", params.category);
+    if (params?.action) sp.set("action", params.action);
+    if (params?.search?.trim()) sp.set("search", params.search.trim());
+    if (params?.actorUserId) sp.set("actorUserId", params.actorUserId);
+    if (params?.actorRole) sp.set("actorRole", params.actorRole);
+    if (params?.from) sp.set("from", params.from);
+    if (params?.to) sp.set("to", params.to);
+    if (params?.page != null) sp.set("page", String(params.page));
+    if (params?.pageSize != null) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<AccessLogDto>>(`/api/v1/admin/access-logs${qs ? `?${qs}` : ""}`);
+  },
+
+  summary: (params?: { from?: string; to?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.from) sp.set("from", params.from);
+    if (params?.to) sp.set("to", params.to);
+    const qs = sp.toString();
+    return apiFetch<AccessLogSummaryDto>(`/api/v1/admin/access-logs/summary${qs ? `?${qs}` : ""}`);
+  },
+};
+
+// [UC-94] Dashboard KPI học sinh và phụ huynh
+export { dashboardApi } from "@/lib/dashboard-api";
+

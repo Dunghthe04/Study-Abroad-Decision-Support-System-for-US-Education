@@ -120,37 +120,37 @@ public class ChatServiceTests
         Assert.Equal(1, JsonDocument.Parse(reply.MetaJson!).RootElement.GetProperty("v").GetInt32());
     }
 
-    // ---- UC-53: câu chưa trả lời được thành mẫu SLM nháp
+    // ---- UC-53: câu chưa trả lời được thành tri thức nháp
 
     private static FakeAdvisor Ambiguous() => new("B0")
     {
         Slm = new AdvisorSlmDto([new AdvisorSlmIntentDto("out_of_scope", "asdfgh")], ["out_of_scope"], "ambiguous", 0.2, false),
     };
 
-    private static StudyAbroad.Application.Admin.SlmSamples.SlmSampleService Samples(FakeSlmRepository repo) =>
-        new(repo, new FakeReader(), new StudyAbroad.Infrastructure.Import.SlmTemplateWriter(), new FakeAuditLogs());
+    private static StudyAbroad.Application.Admin.KnowledgeBase.KnowledgeBaseService Knowledge(FakeKnowledgeRepository repo) =>
+        new(repo, new FakeKnowledgeReader());
 
     [Fact]
-    public async Task NoAnswerTurn_IsCapturedAsAnonymousSlmDraft()
+    public async Task NoAnswerTurn_IsCapturedAsAnonymousKnowledgeDraft()
     {
-        var repo = new FakeSlmRepository();
+        var repo = new FakeKnowledgeRepository();
 
-        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), knowledgeBase: Knowledge(repo))
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
 
-        var sample = Assert.Single(repo.Items);
-        Assert.Equal(("asdfgh", SlmSampleSources.ChatUnanswered, SlmReviewStatuses.Draft), (sample.Question, sample.Source, sample.ReviewStatus));
-        Assert.Null(sample.CreatedByUserId);
+        var entry = Assert.Single(repo.Items);
+        Assert.Equal(("asdfgh", KnowledgeOrigins.ChatUnanswered, KnowledgeReviewStatuses.Draft), (entry.Question, entry.Origin, entry.ReviewStatus));
+        Assert.Null(entry.CreatedByUserId);
     }
 
     [Fact]
     public async Task AnsweredTurn_OrStoreMessagesOff_CapturesNothing()
     {
-        var repo = new FakeSlmRepository();
+        var repo = new FakeKnowledgeRepository();
 
-        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+        await new ChatService(new FakeAdvisor("B0"), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), knowledgeBase: Knowledge(repo))
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
-        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), slmSamples: Samples(repo))
+        await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), knowledgeBase: Knowledge(repo))
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
 
         Assert.Empty(repo.Items);
@@ -159,9 +159,9 @@ public class ChatServiceTests
     [Fact]
     public async Task CaptureFailure_DoesNotBreakTheChatReply()
     {
-        var repo = new FakeSlmRepository { Fail = true };
+        var repo = new FakeKnowledgeRepository { Fail = true };
 
-        var res = await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), slmSamples: Samples(repo))
+        var res = await new ChatService(Ambiguous(), new FakeSessions(), new FakeProfileFlow(), messages: new FakeMessages(), knowledgeBase: Knowledge(repo))
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "asdfgh")]));
 
         Assert.NotNull(res.SessionId);
@@ -783,6 +783,63 @@ public class ChatServiceTests
         Assert.Null(res.Profile);
     }
 
+    // 1f: phụ huynh đã liên kết không có hồ sơ riêng (ParentChatGate)
+    private static AdvisorSlmDto Intent(string type) => new(Intents: [type]);
+
+    [Fact]
+    public async Task LinkedParent_AsksKnowledge_GetsNormalAnswer()
+    {
+        var flow = new FakeProfileFlow { CanEdit = false };
+        var advisor = new FakeAdvisor("B0") { Answer = "IELTS là bài thi tiếng Anh", Slm = Intent("knowledge") };
+
+        var res = await new ChatService(advisor, new FakeSessions(), flow).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("IELTS là bài thi tiếng Anh", res.Answer);
+    }
+
+    [Fact]
+    public async Task LinkedParent_CollectProfile_GetsGateAnswer_AndNoDraftIsSaved()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = new ChatSession { UserId = userId, StateJson = "{\"currentStep\":\"B0\"}", CurrentStep = "B0" };
+        store.Rows.Add(session);
+        var flow = new FakeProfileFlow { CanEdit = false };
+        var advisor = new FakeAdvisor("B1") { Profile = Json(BudgetChanged), Changed = ["budget"], Slm = Intent("collect_profile") };
+
+        var res = await new ChatService(advisor, store, flow).ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
+        Assert.Equal(ParentChatGate.Answer, res.Answer);
+        Assert.Equal(ParentChatGate.ChildrenHref, Assert.Single(res.QuickReplies!).Href);
+        Assert.Null(flow.PatchedKeys);           // không ghi gì vào nháp
+        Assert.Empty(res.ProfileChanged ?? []);   // form không phải nạp lại nháp
+        Assert.Equal("B0", session.CurrentStep); // chat giữ trạng thái cũ, không sang câu hỏi hồ sơ
+    }
+
+    [Fact]
+    public async Task LinkedParent_RecommendButton_IsBlocked()
+    {
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+
+        var res = await new ChatService(new FakeAdvisor("B4") { Action = "recommend" }, new FakeSessions(), new FakeProfileFlow { CanEdit = false }, null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Null(runner.CalledFor);           // không chạy gợi ý trường
+        Assert.Equal(ParentChatGate.Answer, res.Answer);
+    }
+
+    [Fact]
+    public async Task Student_CollectProfile_IsNotAffected()
+    {
+        var flow = new FakeProfileFlow();
+        var advisor = new FakeAdvisor("B1") { Profile = Json(BudgetChanged), Changed = ["budget"], Slm = Intent("collect_profile") };
+
+        var res = await new ChatService(advisor, new FakeSessions(), flow).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("ok", res.Answer);
+        Assert.Equal(["budget"], flow.PatchedKeys);
+    }
+
     [Fact]
     public async Task NothingChanged_DoesNotTouchDraft()
     {
@@ -920,7 +977,9 @@ public class ChatServiceTests
 
         Assert.Contains("Hồ sơ chưa lưu được", res.Answer);
         Assert.Contains("Vui lòng nhập GPA hợp lệ.", res.Answer);
-        Assert.Null(res.QuickReplies);           // không mời sang bước sau khi chưa lưu được
+        // Không mời sang bước sau khi chưa lưu được, chỉ có nút mở form sửa hồ sơ
+        Assert.Equal(["Sửa hồ sơ"], res.QuickReplies!.Select(q => q.Label));
+        Assert.Equal(ChatGoalSeek.EditProfileHref, res.QuickReplies![0].Href);
         Assert.Equal(oldState, session.StateJson); // vẫn ở bảng rà soát, xác nhận lại được
         Assert.Equal("B2", session.CurrentStep);
         Assert.Equal(["budget"], flow.PatchedKeys); // nháp vẫn giữ những gì vừa nói
@@ -928,8 +987,30 @@ public class ChatServiceTests
         Assert.Null(res.ProfileSaved); // chưa lưu được thì không báo trang cập nhật
     }
 
+    // Sửa hồ sơ đã lưu trong chat: chat vẫn ở B3, xác nhận lại ở X1 thì lưu chính thức lần nữa.
+    // Lưu bằng bản nháp GetFlowStateAsync trả (giữ nguyên mọi mục thì không có nháp, hàm dựng từ hồ sơ đã lưu)
     [Fact]
-    public async Task AlreadyPastReview_DoesNotCommitAgain()
+    public async Task EditedAfterSaving_ConfirmAtReview_CommitsAgain()
+    {
+        var userId = Guid.NewGuid();
+        var store = new FakeSessions();
+        var session = AtReview(userId, "B3");
+        store.Rows.Add(session);
+        var flow = new FakeProfileFlow { HasCommittedProfile = true };
+
+        var res = await new ChatService(new FakeAdvisor("B3"), store, flow)
+            .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
+
+        Assert.Equal(1, flow.Commits);
+        Assert.Same(flow.Draft, flow.CommittedDraft);
+        Assert.True(res.ProfileSaved);
+    }
+
+    // Ở B3 mà vẫn ở bảng rà soát (bấm Cần sửa, Sửa trên form) hoặc đang hỏi mục sửa thì chưa lưu
+    [Theory]
+    [InlineData("X1", false)]
+    [InlineData("D2", true)]
+    public async Task AlreadyPastReview_StillReviewingOrEditing_DoesNotCommit(string questionId, bool editing)
     {
         var userId = Guid.NewGuid();
         var store = new FakeSessions();
@@ -937,7 +1018,7 @@ public class ChatServiceTests
         store.Rows.Add(session);
         var flow = new FakeProfileFlow();
 
-        await new ChatService(new FakeAdvisor("B3"), store, flow)
+        await new ChatService(new FakeAdvisor("B3") { QuestionId = questionId, Editing = editing }, store, flow)
             .ChatAsync(userId, new AdvisorChatRequest(Hello, session.Id.ToString()));
 
         Assert.Equal(0, flow.Commits);
@@ -1024,6 +1105,81 @@ public class ChatServiceTests
         Assert.Contains("\"hasResults\":true", Assert.Single(store.Rows).StateJson); // lượt sau skill_explain chạy được
     }
 
+    // Chỉ xin danh sách (advisor đặt action_data.note = true): Claude viết lời cho danh sách thay câu tạm của advisor
+    private static readonly JsonElement NoteFlag = JsonDocument.Parse("""{"note":true}""").RootElement;
+
+    [Fact]
+    public async Task RecommendAction_WithNoteFlag_ClaudeWritesTheListMessage()
+    {
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+        var advisor = new FakeAdvisor("B4") { Action = "recommend", ActionData = NoteFlag, RecommendNote = new("1.0", "claude", "OK", "Mình tìm được 1 trường cho bạn.") };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("Mình tìm được 1 trường cho bạn.", res.Answer); // lời của Claude thay câu tạm "ok", không nối thêm danh sách
+        Assert.Equal(1, advisor.RecommendNoteCalls);
+        Assert.Equal(["Arizona State University"], advisor.LastRecommendNote!.Schools);
+        Assert.Equal(["Tổng cộng 1 trường phù hợp với hồ sơ của bạn.", "Vừa sức: Arizona State University"], advisor.LastRecommendNote.Facts);
+        Assert.Equal(new Widget(ChatRecommendation.WidgetType), res.Widget);
+        Assert.Null(res.Action);
+    }
+
+    [Fact]
+    public async Task RecommendAction_WithNoteFlag_ClaudeFailing_FallsBackToTheCodeList()
+    {
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+        var advisor = new FakeAdvisor("B4") { Action = "recommend", ActionData = NoteFlag }; // mặc định Claude trả FAILED
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.StartsWith("Mình đã tìm được các trường phù hợp", res.Answer);
+        Assert.Contains("- Vừa sức: Arizona State University", res.Answer);
+        Assert.Equal(1, advisor.RecommendNoteCalls);
+        Assert.Equal(new Widget(ChatRecommendation.WidgetType), res.Widget);
+    }
+
+    [Fact]
+    public async Task RecommendAction_WithNoteFlag_ClaudeUnreachable_FallsBackToTheCodeList()
+    {
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+        var advisor = new FakeAdvisor("B4") { Action = "recommend", ActionData = NoteFlag, RecommendNoteError = new HttpRequestException("advisor sập") };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Contains("- Vừa sức: Arizona State University", res.Answer);
+        Assert.Equal(new Widget(ChatRecommendation.WidgetType), res.Widget);
+    }
+
+    [Fact]
+    public async Task RecommendAction_WithoutNoteFlag_NeverCallsClaudeForTheList()
+    {
+        // Có cả đánh giá hồ sơ: lời đã do Claude viết ở advisor, danh sách chỉ nối thêm
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+        var advisor = new FakeAdvisor("B4") { Action = "recommend", Skills = ["skill_lo_trinh"] };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(0, advisor.RecommendNoteCalls);
+        Assert.StartsWith("ok\n\nMình đã tìm được các trường phù hợp", res.Answer);
+    }
+
+    [Fact]
+    public async Task RecommendAction_WithNoteFlag_ButNoSchools_DoesNotAskClaude()
+    {
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = "{}" } };
+        var advisor = new FakeAdvisor("B4") { Action = "recommend", ActionData = NoteFlag };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(0, advisor.RecommendNoteCalls); // không có trường nào thì không có gì để viết
+        Assert.Equal($"ok\n\n{AdvisorMessages.RecommendationEmpty}", res.Answer);
+    }
+
     [Fact]
     public async Task NoAction_DoesNotRunTheRecommendation()
     {
@@ -1051,7 +1207,7 @@ public class ChatServiceTests
 
     [Theory]
     [InlineData("Hồ sơ chưa chọn ngành, cần chọn ngành trước khi gợi ý trường.", "Mình chưa tạo được danh sách trường: Hồ sơ chưa chọn ngành")]
-    [InlineData("Gemini trả code lạ", ChatRecommendation.Invalid)]
+    [InlineData("Gemini trả code lạ", AdvisorMessages.RecommendationInvalid)]
     public async Task RecommendationFails_KeepsTheRoadmap_AndExplains(string error, string expected)
     {
         var runner = new FakeRunner { Error = new InvalidOperationException(error) };
@@ -1074,7 +1230,7 @@ public class ChatServiceTests
         var res = await new ChatService(new FakeAdvisor("B4") { Action = "recommend" }, new FakeSessions(), new FakeProfileFlow(), null, runner)
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
 
-        Assert.Equal($"ok\n\n{ChatRecommendation.Busy}", res.Answer);
+        Assert.Equal($"ok\n\n{AdvisorMessages.RecommendationBusy}", res.Answer);
     }
 
     // Gemini treo: advisor thử lại nhiều lần, HttpClient của .NET hết giờ (TaskCanceledException). Không được làm lỗi 500 cả lượt chat
@@ -1086,7 +1242,7 @@ public class ChatServiceTests
         var res = await new ChatService(new FakeAdvisor("B4") { Action = "recommend" }, new FakeSessions(), new FakeProfileFlow(), null, runner)
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
 
-        Assert.Equal($"ok\n\n{ChatRecommendation.Busy}", res.Answer);
+        Assert.Equal($"ok\n\n{AdvisorMessages.RecommendationBusy}", res.Answer);
     }
 
     // Trả lời theo từng ý (stream): các tin của advisor đi thẳng ra ngoài, còn lại chạy y như lượt chat thường
@@ -1315,7 +1471,7 @@ public class ChatServiceTests
         var res = await new ChatService(new FakeAdvisor("B4") { Action = "explain" }, new FakeSessions(), new FakeProfileFlow(), null, runner)
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
 
-        Assert.Equal(ChatExplanation.Failed, res.Answer);
+        Assert.Equal(AdvisorMessages.ExplanationFailed, res.Answer);
         Assert.Null(runner.ExplainedCode);
     }
 
@@ -1327,12 +1483,12 @@ public class ChatServiceTests
         var res = await new ChatService(new FakeAdvisor("B4") { Action = "explain", ActionData = IowaCode }, new FakeSessions(), new FakeProfileFlow(), null, runner)
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
 
-        Assert.Equal(ChatExplanation.Failed, res.Answer);
+        Assert.Equal(AdvisorMessages.ExplanationFailed, res.Answer);
     }
 
     [Theory]
     [InlineData("Chưa có trường iowa trong lần gợi ý gần nhất.", "Mình chưa giải thích được trường này: Chưa có trường iowa")]
-    [InlineData("Dữ liệu lưu bị hỏng", ChatRecommendation.Invalid)]
+    [InlineData("Dữ liệu lưu bị hỏng", AdvisorMessages.RecommendationInvalid)]
     public async Task ExplainAction_WhenTheServiceRejects_ExplainsWhy(string error, string expected)
     {
         var runner = new FakeRunner { ExplainError = new InvalidOperationException(error) };
@@ -1372,7 +1528,7 @@ public class ChatServiceTests
             var res = await new ChatService(new FakeAdvisor("B4") { Action = "explain", ActionData = IowaCode }, new FakeSessions(), new FakeProfileFlow(), null, runner)
                 .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
 
-            Assert.Equal(ChatExplanation.Busy, res.Answer);
+            Assert.Equal(AdvisorMessages.ExplanationBusy, res.Answer);
         }
     }
 
@@ -1494,14 +1650,14 @@ public class ChatServiceTests
     }
 
     [Fact]
-    public async Task SimulateAction_WhenNothingChanged_OffersNoButtons()
+    public async Task SimulateAction_WhenNothingChanged_StillOffersTheGoalPickerAndTheCenter()
     {
         var advisor = new FakeAdvisor("B4") { Action = "simulate", ActionData = Sat1500, Note = Written() };
         var runner = new FakeRunner { Simulation = OrderedSimulation("bu", "ne") };   // không đổi nhóm, không có trường Khó vào
 
         var res = await SimulateChat(advisor, runner);
 
-        Assert.Null(res.QuickReplies);
+        Assert.Equal([ChatNextSteps.GoalPickLabel, ChatNextSteps.CenterLabel], res.QuickReplies!.Select(q => q.Label));
     }
 
     [Fact]
@@ -1586,7 +1742,7 @@ public class ChatServiceTests
 
         var res = await SimulateChat(new FakeAdvisor("B4") { Action = "simulate" }, runner);
 
-        Assert.Equal(ChatSimulation.Failed, res.Answer);
+        Assert.Equal(AdvisorMessages.SimulationFailed, res.Answer);
         Assert.Null(runner.SimulatedWith);
         Assert.Null(res.Widget);
     }
@@ -1595,7 +1751,7 @@ public class ChatServiceTests
     [InlineData(typeof(ArgumentException), "SAT giả định phải từ 400 đến 1600.", "Mình chưa thử được kịch bản này: SAT giả định phải từ 400 đến 1600.")]
     [InlineData(typeof(InvalidOperationException), "Chưa có hồ sơ.", "Mình chưa thử được kịch bản này: Chưa có hồ sơ.")]
     [InlineData(typeof(InvalidOperationException), "Hồ sơ chưa có bậc học muốn theo.", "Mình chưa thử được kịch bản này: Hồ sơ chưa có bậc học")]
-    [InlineData(typeof(InvalidOperationException), "Dữ liệu lưu bị hỏng", ChatSimulation.Failed)]
+    [InlineData(typeof(InvalidOperationException), "Dữ liệu lưu bị hỏng", AdvisorMessages.SimulationFailed)]
     public async Task SimulateAction_WhenTheSimulationIsRejected_ExplainsWhy(Type type, string message, string expected)
     {
         var runner = new FakeRunner { SimulateError = (Exception)Activator.CreateInstance(type, message)! };
@@ -1630,12 +1786,68 @@ public class ChatServiceTests
 
         Assert.Equal("BU", runner.SearchedFor);
         Assert.Equal(("188429", "match"), runner.GoalCalledWith);
-        Assert.StartsWith("Mình hiểu bạn hỏi về Boston University, nhóm muốn đạt: Vừa sức.", res.Answer);
+        Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
         Assert.Equal("goal_seek", res.Widget!.Type);
         // trường đang trong danh sách: giải thích trường này, rồi gặp tư vấn viên
         Assert.Equal(new ChatAction("explain", "188429"), res.QuickReplies![0].Action);
         Assert.Equal(ChatNextSteps.CenterLabel, res.QuickReplies[1].Label);
         Assert.Null(res.Action);     // việc nội bộ, không trả cho trình duyệt
+    }
+
+    // ---- goal-seeking theo giả định đang xem: mặc định theo giả định, nút chuyển sang hồ sơ thật và ngược lại
+
+    private static readonly SimulationOverrides Budget25k = new(null, null, null, null, 25_000m, null, null);
+
+    private static async Task<AdvisorChatResponse> GoalChatWith(ChatAction? action, SimulationOverrides? simulation, FakeRunner runner) =>
+        await new ChatService(new FakeAdvisor("B4") { Action = "goal_seek", ActionData = BuAction }, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, Action: action, Simulation: simulation));
+
+    [Fact]
+    public async Task GoalSeek_WhileASimulationIsShown_UsesIt_SaysSo_AndOffersTheRealProfile()
+    {
+        var runner = new FakeRunner { Match = Found(), GoalResult = GoalOf() };
+
+        var res = await GoalChatWith(null, Budget25k, runner);
+
+        Assert.Equal(Budget25k, runner.GoalOverrides);   // tính theo giả định
+        Assert.StartsWith("Mình tính theo giả định bạn đang xem (ngân sách 25.000 USD mỗi năm), không phải hồ sơ thật.", res.Answer);
+        var data = res.Widget!.Data!.Value;
+        Assert.Equal("simulated", data.GetProperty("result").GetProperty("basis").GetString());
+        Assert.Equal("ngân sách 25.000 USD mỗi năm", data.GetProperty("basisLabel").GetString());
+        var real = Assert.Single(res.QuickReplies!, q => q.Label == "Xem theo hồ sơ thật");
+        Assert.Equal("real", real.Action!.Basis);
+        Assert.Equal("goal_seek", real.Action.Type);
+        Assert.Equal("188429", real.Action.SchoolCode);
+        Assert.DoesNotContain(res.QuickReplies!, q => q.Label == "Tính theo giả định");
+    }
+
+    [Fact]
+    public async Task GoalSeek_AskedForTheRealProfileWhileASimulationIsShown_UsesTheRealProfile_SaysSo_AndOffersTheSimulation()
+    {
+        var runner = new FakeRunner { Match = Found(), GoalResult = GoalOf() };
+
+        var res = await GoalChatWith(new ChatAction("goal_seek", "188429", Basis: "real"), Budget25k, runner);
+
+        Assert.Null(runner.GoalOverrides);   // hồ sơ thật
+        Assert.StartsWith("Mình tính theo hồ sơ thật của bạn, không phải giả định đang xem (ngân sách 25.000 USD mỗi năm).", res.Answer);
+        Assert.Equal("real", res.Widget!.Data!.Value.GetProperty("result").GetProperty("basis").GetString());
+        Assert.Equal(JsonValueKind.Null, res.Widget!.Data!.Value.GetProperty("basisLabel").ValueKind);
+        var sim = Assert.Single(res.QuickReplies!, q => q.Label == "Tính theo giả định");
+        Assert.Null(sim.Action!.Basis);
+        Assert.DoesNotContain(res.QuickReplies!, q => q.Label == "Xem theo hồ sơ thật");
+    }
+
+    [Fact]
+    public async Task GoalSeek_WithoutASimulation_IsUnchanged_NoBasisSentenceAndNoSwitchButton()
+    {
+        var runner = new FakeRunner { Match = Found(), GoalResult = GoalOf() };
+
+        var res = await GoalChatWith(null, null, runner);
+
+        Assert.Null(runner.GoalOverrides);
+        Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
+        Assert.DoesNotContain("Mình tính theo", res.Answer);
+        Assert.DoesNotContain(res.QuickReplies!, q => q.Label is "Xem theo hồ sơ thật" or "Tính theo giả định");
     }
 
     // ---- hành động có cấu trúc từ nút trên thẻ trường: không qua advisor, không khớp tên
@@ -1658,7 +1870,7 @@ public class ChatServiceTests
         Assert.Null(advisor.LastRequest);                 // không gọi SLM
         Assert.Null(runner.SearchedFor);                  // không khớp tên
         Assert.Equal(("188429", "safety"), runner.GoalCalledWith);
-        Assert.StartsWith("Mình hiểu bạn hỏi về Boston University", res.Answer);
+        Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
         Assert.Equal("goal_seek", res.Widget!.Type);
         Assert.Null(res.Action);
     }
@@ -1763,7 +1975,7 @@ public class ChatServiceTests
 
         var res = await KnowledgeChat(ModelAction("học phí Harvard", "Harvard", ["cost"]), runner);
 
-        Assert.Equal(ChatSchoolInfo.Unavailable, res.Answer);
+        Assert.Equal(AdvisorMessages.SchoolInfoUnavailable, res.Answer);
     }
 
     [Fact]
@@ -1825,6 +2037,41 @@ public class ChatServiceTests
         Assert.Equal(SchoolSort.LowestCost, sort);
     }
 
+    // Lọc "không bắt buộc SAT" mà dữ liệu trường ghi điểm thi quan trọng: nêu cả hai thông tin ngay trên dòng trường, trong chữ và trên thẻ
+    [Fact]
+    public async Task SchoolSearch_ForTestOptional_WarnsWhenTheSchoolStillWeighsTestScoresHeavily()
+    {
+        var items = new[]
+        {
+            SearchItem("Heavy") with { TestImportance = "very_important" },
+            SearchItem("Medium") with { TestImportance = "important" },
+            SearchItem("Light") with { TestImportance = "considered" },
+            SearchItem("Unknown"),
+        };
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(4, items, []) };
+
+        var (res, _) = await SearchChat(SearchAction(new { testPolicy = "optional" }), runner);
+
+        Assert.Contains("1. Heavy (Los Angeles, CA, công lập): chi phí 40.000 USD · tỷ lệ nhận 30% · hạng #20 · không bắt buộc SAT, ACT nhưng trường ghi điểm thi là yếu tố rất quan trọng", res.Answer);
+        Assert.Contains("2. Medium (Los Angeles, CA, công lập): chi phí 40.000 USD · tỷ lệ nhận 30% · hạng #20 · không bắt buộc SAT, ACT nhưng trường ghi điểm thi là yếu tố quan trọng", res.Answer);
+        Assert.Contains("3. Light (Los Angeles, CA, công lập): chi phí 40.000 USD · tỷ lệ nhận 30% · hạng #20\n", res.Answer);
+        Assert.Contains("4. Unknown (Los Angeles, CA, công lập): chi phí 40.000 USD · tỷ lệ nhận 30% · hạng #20", res.Answer);
+        var cardItems = res.Widget!.Data!.Value.GetProperty("items");
+        Assert.Equal("very_important", cardItems[0].GetProperty("testImportance").GetString());
+        Assert.Equal("optional", res.Widget!.Data!.Value.GetProperty("filters").GetProperty("testPolicy").GetString());
+    }
+
+    [Fact]
+    public async Task SchoolSearch_WithoutTheTestOptionalFilter_DoesNotWarnAboutTestScores()
+    {
+        var items = new[] { SearchItem("Heavy") with { TestImportance = "very_important" } };
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(1, items, []) };
+
+        var (res, _) = await SearchChat(SearchAction(new { states = new[] { "CA" } }), runner);
+
+        Assert.DoesNotContain("điểm thi", res.Answer);
+    }
+
     [Fact]
     public async Task SchoolSearch_SaysHowManyAndListsTheFirstFiveInOrder()
     {
@@ -1873,12 +2120,12 @@ public class ChatServiceTests
     }
 
     [Fact]
-    public async Task SchoolSearch_NoResult_HasNoCardAndNoButtons()
+    public async Task SchoolSearch_NoResult_HasNoCard_AndOffersSampleSearches()
     {
         var (res, _) = await SearchChat(SearchAction(new { states = new[] { "CA" } }), new FakeRunner());
 
         Assert.Null(res.Widget);
-        Assert.Null(res.QuickReplies);
+        Assert.Equal(ChatNextSteps.SearchHelp().Select(q => q.Label), res.QuickReplies!.Select(q => q.Label));
     }
 
     // Nút "So sánh hai trường đầu": chạy thẳng theo mã trường, không qua advisor, ra bảng so sánh
@@ -1894,6 +2141,88 @@ public class ChatServiceTests
         Assert.Null(advisor.LastRequest);
         Assert.StartsWith("So sánh Boston University và New York University:", res.Answer);
         Assert.Equal("school_compare", res.Widget!.Type);
+    }
+
+    // Nút lọc lại sau tìm trường ("Chỉ top 20"): bộ điều kiện dựng sẵn trên nút, tìm thẳng không qua advisor
+    [Fact]
+    public async Task ChatAction_SearchAgain_RunsTheSearchWithTheButtonFiltersWithoutTheAdvisor()
+    {
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(1, [SearchItem("UCLA")], []) };
+        var button = ChatNextSteps.SearchAgain("Chỉ top 20", "Các trường trong top 20", new SchoolSearchFilters(MaxRank: 20), SchoolSort.Quality);
+
+        var (res, advisor) = await ActionChat(button.Action, runner);
+
+        Assert.Null(advisor.LastRequest);
+        Assert.Equal(20, runner.SearchedWith!.Value.Filters.MaxRank);
+        Assert.Equal(SchoolSort.Quality, runner.SearchedWith!.Value.Sort);
+        Assert.Equal("school_search", res.Widget!.Type);
+    }
+
+    // Nút "Chỉ trường ít coi trọng điểm thi": bấm thì tìm lại với điều kiện mới (không qua advisor), giữ "không bắt buộc SAT" và cách xếp
+    [Fact]
+    public async Task ChatAction_SearchAgain_LowTestWeight_RunsTheSearchWithTheNewConditionAndSaysSo()
+    {
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(1, [SearchItem("UCLA")], []) };
+        var button = ChatNextSteps.SearchAgain(
+            "Chỉ trường ít coi trọng điểm thi", "Chỉ các trường mà điểm thi không phải yếu tố quan trọng",
+            new SchoolSearchFilters(TestPolicy: "optional", LowTestWeight: true), SchoolSort.LowestCost);
+
+        var (res, advisor) = await ActionChat(button.Action, runner);
+
+        Assert.Null(advisor.LastRequest);
+        var (filters, sort) = runner.SearchedWith!.Value;
+        Assert.True(filters.LowTestWeight);
+        Assert.Equal("optional", filters.TestPolicy);
+        Assert.Equal(SchoolSort.LowestCost, sort);
+        Assert.Contains("điểm thi không phải yếu tố quan trọng", res.Answer);
+    }
+
+    [Fact]
+    public async Task ChatAction_SearchAgain_WithBrokenData_GoesThroughTheAdvisor()
+    {
+        var broken = JsonDocument.Parse("""{"filters": {"maxRank": "nhiều"}}""").RootElement;
+
+        var (_, advisor) = await ActionChat(new ChatAction("school_search", Search: broken), new FakeRunner { Explanation = Explanation() });
+
+        Assert.NotNull(advisor.LastRequest);
+    }
+
+    // Advisor bỏ điều kiện số không đọc ra ("uy tín nhất" kèm max_rank "top"): thẻ và câu trả lời nói rõ đã bỏ gì
+    [Fact]
+    public async Task SchoolSearch_WithAnIgnoredCondition_SaysWhatWasIgnored_OnTheCardAndInTheText()
+    {
+        var items = Enumerable.Range(1, 8).Select(i => SearchItem($"S{i}")).ToList();
+        var runner = new FakeRunner { SearchResult = new SchoolSearchResult(60, items, []) };
+        var data = JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["question"] = "trường nào uy tín nhất", ["filters"] = new { }, ["sort"] = "quality", ["model_sort"] = "ranking",
+            ["ignored"] = new[] { new { key = "max_rank", label = "thứ hạng", text = "top" } },
+        })).RootElement;
+
+        var (res, _) = await SearchChat(data, runner);
+
+        const string note = "Mình bỏ qua điều kiện thứ hạng “top” vì chưa rõ mức cụ thể.";
+        Assert.Contains(note, res.Answer);
+        Assert.Equal(note, res.Widget!.Data!.Value.GetProperty("note").GetString());
+        Assert.Equal(["Chỉ top 20", "Chỉ top 50"], res.QuickReplies!.Take(2).Select(q => q.Label));
+    }
+
+    [Fact]
+    public async Task SchoolSearch_NoResult_OffersToDropEachConditionThatWouldGiveSchools()
+    {
+        var runner = new FakeRunner
+        {
+            SearchResult = new SchoolSearchResult(0, [], [new RelaxedFilter("loai_truong", 12), new RelaxedFilter("hoc_bong", 3), new RelaxedFilter("bang", 0)]),
+        };
+
+        var (res, _) = await SearchChat(SearchAction(new { states = new[] { "AK" }, control = "public", aid = "any" }), runner);
+
+        Assert.Equal(
+            ["Bỏ điều kiện loại trường (có 12 trường)", "Bỏ điều kiện học bổng (có 3 trường)", ChatNextSteps.Recommend.Label],
+            res.QuickReplies!.Select(q => q.Label));
+        var filters = res.QuickReplies![0].Action!.Search!.Value.GetProperty("filters");
+        Assert.Equal(JsonValueKind.Null, filters.GetProperty("control").ValueKind);   // bỏ đúng điều kiện loại trường
+        Assert.Equal("any", filters.GetProperty("aid").GetString());                  // các điều kiện khác giữ nguyên
     }
 
     [Theory]
@@ -2137,7 +2466,7 @@ public class ChatServiceTests
 
         var res = await CompareChat(CompareAction(["BU", "NYU"], ["cost"]), runner);
 
-        Assert.Equal(ChatSchoolInfo.Unavailable, res.Answer);
+        Assert.Equal(AdvisorMessages.SchoolInfoUnavailable, res.Answer);
     }
 
     [Fact]
@@ -2508,7 +2837,7 @@ public class ChatServiceTests
         // Dữ liệu gửi Gemini: trường đã hiểu, nhóm đích, dữ kiện đã tính, và tên các trường khác (không gồm trường đang hỏi)
         var note = advisor.LastGoalNote!;
         Assert.Equal(("Boston University", "Vừa sức", "reachable"), (note.School, note.Target, note.Outcome));
-        Assert.StartsWith("Tài chính:", note.Facts[0]);
+        Assert.StartsWith("Hiện tại Boston University đang ở nhóm", note.Facts[0]);
         Assert.Equal(["Baylor University", "Harvard University"], note.Others);
     }
 
@@ -2521,7 +2850,7 @@ public class ChatServiceTests
 
         var res = await GoalChatWith(advisor, new FakeRunner { Match = Found(), GoalResult = GoalOf() });
 
-        Assert.StartsWith("Mình hiểu bạn hỏi về Boston University, nhóm muốn đạt: Vừa sức.", res.Answer);
+        Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
         Assert.Equal("goal_seek", res.Widget!.Type);
     }
 
@@ -2534,7 +2863,7 @@ public class ChatServiceTests
 
             var res = await GoalChatWith(advisor, new FakeRunner { Match = Found(), GoalResult = GoalOf() });
 
-            Assert.StartsWith("Mình hiểu bạn hỏi về Boston University", res.Answer);
+            Assert.StartsWith("**Hiện tại Boston University đang ở nhóm", res.Answer);
         }
     }
 
@@ -2576,14 +2905,14 @@ public class ChatServiceTests
 
         var res = await GoalChat(null, runner);
 
-        Assert.Equal(ChatGoalSeek.Failed, res.Answer);
+        Assert.Equal(AdvisorMessages.GoalSeekFailed, res.Answer);
         Assert.Null(runner.SearchedFor);
     }
 
     [Theory]
     [InlineData(typeof(ArgumentException), "Nhóm đích phải là reach, match hoặc safety.", "Mình chưa tính được: Nhóm đích phải là reach, match hoặc safety.")]
     [InlineData(typeof(InvalidOperationException), "Hồ sơ chưa có bậc học muốn theo.", "Mình chưa tính được: Hồ sơ chưa có bậc học muốn theo.")]
-    [InlineData(typeof(InvalidOperationException), "Dữ liệu lưu bị hỏng", ChatGoalSeek.Failed)]
+    [InlineData(typeof(InvalidOperationException), "Dữ liệu lưu bị hỏng", AdvisorMessages.GoalSeekFailed)]
     public async Task GoalSeekAction_WhenGoalSeekingIsRejected_ExplainsWhy(Type type, string message, string expected)
     {
         var runner = new FakeRunner { Match = Found(), GoalError = (Exception)Activator.CreateInstance(type, message)! };
@@ -2693,6 +3022,7 @@ public class ChatServiceTests
         public Exception? GoalError { get; init; }
         public string? SearchedFor { get; private set; }
         public (string Code, string? Target)? GoalCalledWith { get; private set; }
+        public SimulationOverrides? GoalOverrides { get; private set; }
 
         public Task<NameMatch> FindSchoolsAsync(Guid userId, string text, CancellationToken ct)
         {
@@ -2702,14 +3032,16 @@ public class ChatServiceTests
             return Task.FromResult(Match!);
         }
 
-        public Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct)
+        public Task<SchoolGoalResult> GoalSeekAsync(Guid userId, string code, string? target, CancellationToken ct, SimulationOverrides? overrides = null)
         {
             GoalCalledWith = (code, target);
+            GoalOverrides = overrides;
             if (GoalError is not null)
                 throw GoalError;
             if (GoalResult is null)
                 throw new InvalidOperationException($"Chưa có trường {code} trong dữ liệu.");
-            return Task.FromResult(GoalResult);
+            // như runner thật: có giá trị giả định thì kết quả ghi cơ sở simulated
+            return Task.FromResult(RecommendationService.HasValues(overrides) ? GoalResult with { Basis = "simulated" } : GoalResult);
         }
 
         public SchoolInfoDto? Info { get; init; }
@@ -2777,6 +3109,7 @@ public class ChatServiceTests
         public JsonElement? Profile { get; init; }
         public IReadOnlyList<string>? Changed { get; init; }
         public string? QuestionId { get; init; }
+        public bool Editing { get; init; }   // state.editQueue = [] (đang hỏi mục sửa)
         public IReadOnlyList<string>? Skills { get; init; }
         public string? Action { get; init; }
         public JsonElement? ActionData { get; init; }
@@ -2793,7 +3126,8 @@ public class ChatServiceTests
             if (ChatError is not null)
                 throw ChatError;
             var question = QuestionId is null ? "" : $",\"questionId\":\"{QuestionId}\"";
-            var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}}}").RootElement;
+            var editing = Editing ? ",\"editQueue\":[]" : "";
+            var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}{editing}}}").RootElement;
             return Task.FromResult(new AdvisorChatResponse(
                 Answer, [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills, Action: Action, ActionData: ActionData,
                 AiUsage: AiUsage, Slm: Slm, FormGoals: FormGoals));
@@ -2843,6 +3177,21 @@ public class ChatServiceTests
             if (CompareNoteError is not null)
                 throw CompareNoteError;
             return Task.FromResult(CompareNote);
+        }
+
+        // Mặc định Claude lỗi: danh sách trường dùng câu liệt kê ghép bằng code. Test cần lời của Claude thì đặt RecommendNote
+        public RecommendNoteResponseDto RecommendNote { get; init; } = new("1.0", "claude", "FAILED", "");
+        public Exception? RecommendNoteError { get; init; }
+        public RecommendNoteRequestDto? LastRecommendNote { get; private set; }
+        public int RecommendNoteCalls { get; private set; }
+
+        public Task<RecommendNoteResponseDto> WriteRecommendNoteAsync(RecommendNoteRequestDto request, CancellationToken ct = default)
+        {
+            RecommendNoteCalls++;
+            LastRecommendNote = request;
+            if (RecommendNoteError is not null)
+                throw RecommendNoteError;
+            return Task.FromResult(RecommendNote);
         }
 
         public ScenarioNoteResponseDto? Note { get; init; }
@@ -2922,6 +3271,7 @@ public class ChatServiceTests
         public Exception? PatchError { get; init; }
         public Exception? CommitError { get; init; }
         public int Commits { get; private set; }
+        public ProfileFlowDraftDto? CommittedDraft { get; private set; }
         public JsonObject? PatchedProfile { get; private set; }
         public IReadOnlyCollection<string>? PatchedKeys { get; private set; }
 
@@ -2943,8 +3293,13 @@ public class ChatServiceTests
         {
             if (CommitError is not null) throw CommitError;
             Commits++;
+            CommittedDraft = request?.Draft;
             return Task.FromResult<CommitProfileFlowResponse>(null!);
         }
         public Task ClearDraftAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
+
+        // false = phụ huynh đã liên kết, không có hồ sơ riêng (1f)
+        public bool CanEdit { get; init; } = true;
+        public Task<bool> CanEditOwnProfileAsync(Guid userId, CancellationToken ct = default) => Task.FromResult(CanEdit);
     }
 }

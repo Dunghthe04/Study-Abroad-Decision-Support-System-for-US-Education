@@ -13,7 +13,6 @@ public class RankingListConfiguration : IEntityTypeConfiguration<RankingList>
         b.Property(x => x.Publisher).HasMaxLength(64).IsRequired();
         b.Property(x => x.Name).HasMaxLength(256).IsRequired();
         b.Property(x => x.ListGroup).HasMaxLength(32);
-        b.Property(x => x.RankType).HasMaxLength(32);
         b.Property(x => x.Edition).HasMaxLength(64);
         b.Property(x => x.Url).HasMaxLength(512);
     }

@@ -733,6 +733,28 @@ public class RecommendationServiceTests
         Assert.Equal(expected.OrderBy(c => c), result.Items.Select(i => i.Code).OrderBy(c => c));
     }
 
+    // "Chỉ trường ít coi trọng điểm thi": chỉ giữ trường mà C7 ghi điểm thi là "xét" hoặc "không xét"; chưa có dữ liệu thì loại (không xác nhận được)
+    [Fact]
+    public async Task Search_LowTestWeight_KeepsOnlySchoolsThatDoNotRateTestScoresImportant()
+    {
+        static RecommendSchoolInput WithTest(RecommendSchoolInput s, string? importance)
+        {
+            s.Offering.C7TestImportance = importance;
+            return s;
+        }
+
+        var result = await SearchWith(
+            new SchoolSearchFilters(TestPolicy: "optional", LowTestWeight: true), SchoolSort.Quality,
+            WithTest(SearchSchool("light", "TX", "public", 10_000m, sat: "optional"), "considered"),
+            WithTest(SearchSchool("none", "TX", "public", 10_000m, sat: "optional"), "not_considered"),
+            WithTest(SearchSchool("heavy", "TX", "public", 10_000m, sat: "optional"), "very_important"),
+            WithTest(SearchSchool("mid", "TX", "public", 10_000m, sat: "optional"), "important"),
+            WithTest(SearchSchool("unknown", "TX", "public", 10_000m, sat: "optional"), null));
+
+        Assert.Equal(["light", "none"], result.Items.Select(i => i.Code).OrderBy(c => c));
+        Assert.All(result.Items, i => Assert.Contains(i.TestImportance, new[] { "considered", "not_considered" }));
+    }
+
     [Theory]
     [InlineData("need", new[] { "n", "nm" })]
     [InlineData("merit", new[] { "m", "nm" })]
@@ -1310,6 +1332,65 @@ public class RecommendationServiceTests
         Assert.Empty(result.Alternatives);
     }
 
+    // ---- goal-seeking theo hồ sơ giả định (giá trị học sinh đang kéo thử), không đổi hồ sơ thật
+
+    private static SimulationOverrides Only(decimal? sat = null, decimal? budget = null, decimal? gpa = null) =>
+        new(gpa, sat, null, null, budget, null, null);
+
+    [Fact]
+    public async Task GoalSeek_WithoutOverrides_IsTheRealProfile()
+    {
+        var (service, profile) = GoalSetup();
+
+        var plain = await service.GoalSeekAsync(profile.UserId, "S", null, default);
+        var empty = await service.GoalSeekAsync(profile.UserId, "S", null, default, Only());   // không giá trị nào = hồ sơ thật
+
+        Assert.Equal("real", plain.Basis);
+        Assert.Equal("real", empty.Basis);
+        Assert.Equal(plain.Current, empty.Current);
+    }
+
+    [Fact]
+    public async Task GoalSeek_WithOverrides_UsesTheSimulatedProfile_AndMarksTheBasis()
+    {
+        var (service, profile) = GoalSetup();   // thật: GPA 3,0, SAT 1000, trường S đang Khó vào
+
+        var real = await service.GoalSeekAsync(profile.UserId, "S", null, default);
+        var simulated = await service.GoalSeekAsync(profile.UserId, "S", null, default, Only(sat: 1500m, gpa: 3.9m));
+
+        Assert.Equal("R", real.Current);
+        Assert.NotEqual("R", simulated.Current);      // SAT 1500, GPA 3,9 vượt khoảng điểm của trường
+        Assert.Equal("simulated", simulated.Basis);
+        Assert.Equal("real", real.Basis);
+    }
+
+    [Fact]
+    public async Task GoalSeek_WithABudgetOverride_ComparesTheCostWithTheSimulatedBudget()
+    {
+        var pricey = School("P", 62_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, profile) = GoalSetup(pricey);
+
+        var real = (await service.GoalSeekAsync(profile.UserId, "P", "match", default)).Budget;
+        var low = (await service.GoalSeekAsync(profile.UserId, "P", "match", default, Only(budget: 25_000m))).Budget;
+        var high = (await service.GoalSeekAsync(profile.UserId, "P", "match", default, Only(budget: 80_000m))).Budget;
+
+        Assert.Equal((50_000m, 7_000m), (real.BudgetUsd, real.ShortfallUsd));      // thật: trần 55.000
+        Assert.Equal((25_000m, 34_500m), (low.BudgetUsd, low.ShortfallUsd));       // giả định 25.000: trần 27.500, thiếu 62.000 - 27.500
+        Assert.Equal("over_budget", (await service.GoalSeekAsync(profile.UserId, "P", "match", default, Only(budget: 25_000m))).Budget.Status);
+        Assert.Equal("ok", high.Status);
+    }
+
+    [Fact]
+    public async Task GoalSeek_WithAnOutOfRangeOverride_Throws_AndLeavesTheRealProfileAlone()
+    {
+        var (service, profile) = GoalSetup();
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => service.GoalSeekAsync(profile.UserId, "S", null, default, Only(sat: 2000m)));
+
+        Assert.Equal("SAT giả định phải từ 400 đến 1600.", ex.Message);
+        Assert.Equal("real", (await service.GoalSeekAsync(profile.UserId, "S", null, default)).Basis);
+    }
+
     [Fact]
     public async Task GoalSeek_AnExplicitTargetWins()
     {
@@ -1655,6 +1736,9 @@ public class RecommendationServiceTests
             throw new NotSupportedException();
 
         public Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<RecommendNoteResponseDto> WriteRecommendNoteAsync(RecommendNoteRequestDto request, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 

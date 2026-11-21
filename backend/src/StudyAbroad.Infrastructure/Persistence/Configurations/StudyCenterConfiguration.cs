@@ -13,6 +13,9 @@ public class StudyCenterConfiguration : IEntityTypeConfiguration<StudyCenter>
         builder.HasIndex(x => x.Code).IsUnique();
         builder.Property(x => x.Name).HasMaxLength(256).IsRequired();
         builder.Property(x => x.Website).HasMaxLength(512);
+        builder.Property(x => x.Fanpage).HasMaxLength(512);
+        builder.Property(x => x.ServiceAreas).HasColumnType("text[]").HasDefaultValueSql("'{}'");
+        builder.Property(x => x.Branches).HasColumnType("text[]").HasDefaultValueSql("'{}'");
         builder.Property(x => x.Address).HasMaxLength(512);
         builder.Property(x => x.City).HasMaxLength(128);
         builder.Property(x => x.Phone).HasMaxLength(32);
@@ -45,5 +48,7 @@ public class StudyCenterConfiguration : IEntityTypeConfiguration<StudyCenter>
         builder.Property(x => x.Accreditations).HasColumnType("text[]").HasDefaultValueSql("'{}'");
         builder.Property(x => x.AverageRating).HasPrecision(3, 2).HasDefaultValue(5.0m);
         builder.Property(x => x.ReviewCount).HasDefaultValue(0);
+        builder.Property(x => x.IsLegalHold).HasDefaultValue(false).IsRequired();
+        builder.Property(x => x.LegalHoldReason).HasMaxLength(500);
     }
 }

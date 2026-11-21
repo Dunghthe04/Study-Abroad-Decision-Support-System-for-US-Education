@@ -1,10 +1,20 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { MessageSquareIcon, RefreshCwIcon, SendIcon } from "lucide-react";
+import { AlertTriangleIcon, MessageSquareIcon, RefreshCwIcon, SendIcon } from "lucide-react";
 import { ApiError, centerLeadsApi } from "@/lib/api";
 import { MAX_LEAD_MESSAGE_LENGTH, formatLeadMessageRoleLabel } from "@/lib/lead-message";
-import { ImageAttachPicker, LeadMessageAttachment, ReportMessageControl } from "@/components/lead/LeadMessageParts";
+import { getLeadRuleError } from "@/lib/lead-api";
+import { LEAD_MESSAGING_BLOCK_CODES, getLeadMessagingBlockReason } from "@/types/lead";
+import {
+  ImageAttachPicker,
+  LeadMessageAttachment,
+  MessageReceipt,
+  PeerPresenceBadge,
+  ReportMessageControl,
+  TypingIndicator,
+} from "@/components/lead/LeadMessageParts";
+import { useLeadChat } from "@/hooks/use-lead-chat";
 import type { LeadMessageDto, LeadMessagesThreadDto } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -15,6 +25,8 @@ import { cn } from "@/lib/utils";
 interface LeadConversationPanelProps {
   leadId: string;
   leadStatus: string;
+  /** [UC-74] Ngày gửi yêu cầu, để chặn nhắn khi quá 90 ngày. */
+  leadCreatedAt?: string | null;
   onLeadStatusChange?: (newStatus: string) => void;
 }
 
@@ -31,8 +43,12 @@ function getLoadThreadErrorMessage(err: unknown): string {
 export function LeadConversationPanel({
   leadId,
   leadStatus,
+  leadCreatedAt,
   onLeadStatusChange,
 }: LeadConversationPanelProps) {
+  // [UC-74] Chỉ nhắn khi yêu cầu Đã chấp nhận; server chặn thêm thì giữ lý do server trả về
+  const [serverBlockReason, setServerBlockReason] = useState<string | null>(null);
+  const blockReason = serverBlockReason ?? getLeadMessagingBlockReason(leadStatus, leadCreatedAt);
   const [messages, setMessages] = useState<LeadMessageDto[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -88,9 +104,29 @@ export function LeadConversationPanel({
     };
   }, [leadId, applyThreadResult]);
 
+  // [Chat realtime] Tải lại im lặng (không bật spinner) khi nối lại mạng, quay lại tab hoặc chưa có realtime
+  const resync = useCallback(() => {
+    centerLeadsApi
+      .getMessages(leadId)
+      .then(applyThreadResult)
+      .catch(() => undefined);
+  }, [leadId, applyThreadResult]);
+
+  const chat = useLeadChat({
+    leadId,
+    onNewMessage: (message) =>
+      setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message])),
+    onMessagesRead: (ids, readAt) =>
+      setMessages((prev) => prev.map((m) => (ids.includes(m.id) ? { ...m, readAt } : m))),
+    onResync: resync,
+  });
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [messages.length]);
+  }, [messages.length, chat.peerTyping]);
+
+  // Tin cuối cùng của trung tâm (chưa gỡ) mang dấu "Đã gửi / Đã xem"
+  const lastOwnId = [...messages].reverse().find((m) => m.isFromCenter && m.status !== "removed")?.id;
 
   const trimmedDraft = draft.trim();
 
@@ -98,7 +134,7 @@ export function LeadConversationPanel({
    * [USAS-2053 / UC-74] Kiểm tra hợp lệ phía client trước khi gọi API gửi phản hồi.
    */
   const submitMessage = async () => {
-    if (isSending) return;
+    if (isSending || blockReason) return;
 
     if (!trimmedDraft && !imageFile) {
       setFormError("Vui lòng nhập nội dung tin nhắn hoặc chọn ảnh trước khi gửi.");
@@ -116,10 +152,12 @@ export function LeadConversationPanel({
       const result = imageFile
         ? await centerLeadsApi.sendImageMessage(leadId, imageFile, trimmedDraft)
         : await centerLeadsApi.sendMessage(leadId, trimmedDraft);
-      setMessages((prev) => [...prev, result.message]);
+      // Bản tin có thể đã về qua realtime trước khi REST trả lời: bỏ tin trùng
+      setMessages((prev) => (prev.some((m) => m.id === result.message.id) ? prev : [...prev, result.message]));
       setLastSyncedAt(new Date());
       setDraft("");
       setImageFile(null);
+      chat.notifyTyping(false);
 
       if (result.leadStatus && result.leadStatus !== leadStatus) {
         onLeadStatusChange?.(result.leadStatus);
@@ -131,10 +169,15 @@ export function LeadConversationPanel({
         description: "Tin nhắn đã được lưu và gửi tới học sinh / phụ huynh.",
       });
     } catch (err: unknown) {
+      const rule = getLeadRuleError(err);
+      if (rule && (LEAD_MESSAGING_BLOCK_CODES as readonly string[]).includes(rule.code)) {
+        setServerBlockReason(rule.message);
+      }
       const msg =
-        err instanceof ApiError
+        rule?.message ??
+        (err instanceof ApiError
           ? err.message
-          : "Không thể gửi tin nhắn. Vui lòng thử lại.";
+          : "Không thể gửi tin nhắn. Vui lòng thử lại.");
       setFormError(msg);
       toast.add({
         type: "error",
@@ -188,6 +231,7 @@ export function LeadConversationPanel({
         </div>
 
         <div className="flex items-center gap-2">
+          <PeerPresenceBadge connected={chat.connected} online={chat.peerOnline} peerLabel="Học sinh / phụ huynh" />
           {lastSyncedAt && !isLoading && (
             <span className="text-[11px] text-muted-foreground hidden sm:inline">
               Cập nhật{" "}
@@ -209,6 +253,14 @@ export function LeadConversationPanel({
             Tải lại
           </Button>
         </div>
+      </div>
+
+      {/* Security Warning Banner */}
+      <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
+        <AlertTriangleIcon className="size-4 text-amber-600 shrink-0 mt-0.5" />
+        <span>
+          <strong>Lưu ý bảo mật:</strong> USAS không thu phí dịch vụ qua tin nhắn. Tuyệt đối không yêu cầu hoặc thực hiện chuyển khoản tiền cọc qua tài khoản cá nhân.
+        </span>
       </div>
 
       {/* Message List */}
@@ -244,7 +296,7 @@ export function LeadConversationPanel({
                 className={cn(
                   "flex flex-col max-w-[85%] rounded-lg px-3 py-2 text-xs border",
                   isRemoved
-                    ? "mx-auto max-w-full bg-muted/50 border-dashed text-muted-foreground italic"
+                    ? cn("bg-muted/50 border-dashed text-muted-foreground italic", msg.isFromCenter ? "ml-auto" : "mr-auto")
                     : msg.isFromCenter
                       ? "ml-auto bg-brand-wash/75 border-brand/25"
                       : "mr-auto bg-surface border-line"
@@ -267,11 +319,18 @@ export function LeadConversationPanel({
                 )}
 
                 {msg.content && (
-                  <p className="text-sm text-foreground whitespace-pre-wrap break-words leading-relaxed">
+                  <p
+                    className={cn(
+                      "whitespace-pre-wrap break-words leading-relaxed",
+                      isRemoved ? "text-xs italic text-muted-foreground" : "text-sm text-foreground"
+                    )}
+                  >
                     {msg.content}
                   </p>
                 )}
                 {!isRemoved && <LeadMessageAttachment url={msg.attachmentUrl} />}
+
+                {!isRemoved && msg.isFromCenter && msg.id === lastOwnId && <MessageReceipt readAt={msg.readAt} />}
 
                 {/* [UC-58] Trung tâm báo cáo tin của học sinh / phụ huynh */}
                 {!isRemoved && !msg.isFromCenter && (
@@ -286,73 +345,72 @@ export function LeadConversationPanel({
             );
           })
         )}
+        {chat.peerTyping && <TypingIndicator peerLabel="Học sinh / phụ huynh" />}
         <div ref={bottomRef} />
       </div>
 
-      {/* Reply Composer */}
-      <form onSubmit={handleFormSubmit} className="space-y-2">
-        {leadStatus === "new" && (
-          <p className="text-[11px] text-muted-foreground">
-            Gửi phản hồi đầu tiên sẽ tự động chuyển trạng thái yêu cầu từ{" "}
-            <span className="font-medium text-ink">Mới nhận</span> sang{" "}
-            <span className="font-medium text-warn">Đang trao đổi</span>.
-          </p>
-        )}
+      {/* Reply Composer: [UC-74] khóa và nêu lý do khi không nhắn được */}
+      {blockReason ? (
+        <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">{blockReason}</p>
+      ) : (
+        <form onSubmit={handleFormSubmit} className="space-y-2">
 
-        <Textarea
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            if (formError) setFormError(null);
-          }}
-          onKeyDown={handleKeyDown}
-          maxLength={MAX_LEAD_MESSAGE_LENGTH}
-          rows={3}
-          disabled={isSending}
-          placeholder="Nhập nội dung phản hồi tới học sinh / phụ huynh (Ctrl+Enter để gửi)..."
-          aria-label="Nội dung tin nhắn phản hồi"
-          aria-invalid={Boolean(formError)}
-          className="text-sm resize-y"
-        />
+          <Textarea
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              chat.notifyTyping(e.target.value.trim().length > 0);
+              if (formError) setFormError(null);
+            }}
+            onKeyDown={handleKeyDown}
+            maxLength={MAX_LEAD_MESSAGE_LENGTH}
+            rows={3}
+            disabled={isSending}
+            placeholder="Nhập nội dung phản hồi tới học sinh / phụ huynh (Ctrl+Enter để gửi)..."
+            aria-label="Nội dung tin nhắn phản hồi"
+            aria-invalid={Boolean(formError)}
+            className="text-sm resize-y"
+          />
 
-        <ImageAttachPicker file={imageFile} onChange={setImageFile} onError={setFormError} disabled={isSending} />
+          <ImageAttachPicker file={imageFile} onChange={setImageFile} onError={setFormError} disabled={isSending} />
 
-        {formError && (
-          <p className="text-xs text-destructive font-medium">{formError}</p>
-        )}
+          {formError && (
+            <p className="text-xs text-destructive font-medium">{formError}</p>
+          )}
 
-        <div className="flex items-center justify-between gap-2">
-          <span
-            className={cn(
-              "text-xs",
-              trimmedDraft.length > MAX_LEAD_MESSAGE_LENGTH
-                ? "text-destructive font-medium"
-                : "text-muted-foreground"
-            )}
-          >
-            {trimmedDraft.length} / {MAX_LEAD_MESSAGE_LENGTH} ký tự
-          </span>
+          <div className="flex items-center justify-between gap-2">
+            <span
+              className={cn(
+                "text-xs",
+                trimmedDraft.length > MAX_LEAD_MESSAGE_LENGTH
+                  ? "text-destructive font-medium"
+                  : "text-muted-foreground"
+              )}
+            >
+              {trimmedDraft.length} / {MAX_LEAD_MESSAGE_LENGTH} ký tự
+            </span>
 
-          <Button
-            type="submit"
-            size="sm"
-            disabled={isSending || (!trimmedDraft && !imageFile) || trimmedDraft.length > MAX_LEAD_MESSAGE_LENGTH}
-            className="gap-1.5 text-xs"
-          >
-            {isSending ? (
-              <>
-                <Spinner className="size-3.5" />
-                Đang gửi...
-              </>
-            ) : (
-              <>
-                <SendIcon className="size-3.5" />
-                Gửi phản hồi
-              </>
-            )}
-          </Button>
-        </div>
-      </form>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={isSending || (!trimmedDraft && !imageFile) || trimmedDraft.length > MAX_LEAD_MESSAGE_LENGTH}
+              className="gap-1.5 text-xs"
+            >
+              {isSending ? (
+                <>
+                  <Spinner className="size-3.5" />
+                  Đang gửi...
+                </>
+              ) : (
+                <>
+                  <SendIcon className="size-3.5" />
+                  Gửi phản hồi
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

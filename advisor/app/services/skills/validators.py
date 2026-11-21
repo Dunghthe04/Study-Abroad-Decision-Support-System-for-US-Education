@@ -440,6 +440,26 @@ def read_money(text: str) -> tuple[float, str | None] | None:
     return amount, currency
 
 
+# UC-94: phụ huynh nhập hộ con managed nhập số tiền tối đa/năm chính xác bằng VNĐ, cùng khoảng với form
+# (ParentPreferenceService.MinBudgetVnd / MaxBudgetVnd). .NET đổi sang USD theo tỷ giá lúc lưu hồ sơ
+MIN_EXACT_BUDGET_VND = 100_000_000
+MAX_EXACT_BUDGET_VND = 10_000_000_000
+
+
+def check_exact_budget(amount: float, currency: str | None = None) -> int:
+    if currency is None or not currency.strip():
+        currency = "VND" if amount >= VND_GUESS_FROM else "USD"
+    currency = CURRENCY_ALIASES.get(currency.strip().upper(), currency.strip().upper())
+    if currency != "VND":
+        raise AskAgain("Bạn nhập số tiền tối đa mỗi năm bằng VNĐ giúp mình nhé, ví dụ 1,3 tỷ hoặc 800 triệu.")
+    if not MIN_EXACT_BUDGET_VND <= amount <= MAX_EXACT_BUDGET_VND:
+        raise AskAgain(
+            "Số tiền tối đa mỗi năm phải từ 100 triệu đến 10 tỷ đồng. Bạn nhập lại giúp mình nhé, "
+            'hoặc bấm "Chưa biết chính xác" để chọn theo mức.'
+        )
+    return round(amount)
+
+
 # A4. Học sinh bấm nút chọn mức ngân sách: mã phải là một trong 5 mức của form
 def check_budget_tier(tier: str) -> str:
     tier = tier.strip().lower()

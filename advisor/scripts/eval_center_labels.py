@@ -104,7 +104,10 @@ def judge(result, kinds, service, city):
 
 
 async def main():
-    async with httpx.AsyncClient(base_url=base, timeout=120) as http:
+    headers = {}
+    if st.slm_api_key:
+        headers["Authorization"] = f"Bearer {st.slm_api_key}"
+    async with httpx.AsyncClient(base_url=base, timeout=120, headers=headers) as http:
         client = OllamaClient(
             http,
             st.slm_model,

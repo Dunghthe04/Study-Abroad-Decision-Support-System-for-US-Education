@@ -31,7 +31,10 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Universities.IUniversityDetailRepository, UniversityDetailRepository>();
         services.AddScoped<StudyAbroad.Application.TargetSchools.ITargetSchoolRepository, TargetSchoolRepository>();
         services.AddScoped<IStudyCenterRepository, StudyCenterRepository>();
+        services.AddScoped<StudyAbroad.Application.Notifications.INotificationRepository, NotificationRepository>();
         services.AddScoped<ICenterVerificationRepository, CenterVerificationRepository>();
+        services.AddScoped<ICenterProfileChangeRepository, CenterProfileChangeRepository>();
+        services.AddScoped<ICenterDeletionRequestRepository, CenterDeletionRequestRepository>();
         services.AddScoped<ICenterReviewRepository, CenterReviewRepository>();
         services.AddScoped<ICenterReviewSubmissionRepository, CenterReviewSubmissionRepository>();
         services.AddScoped<ICenterReviewModerationRepository, CenterReviewModerationRepository>();
@@ -43,13 +46,18 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Admin.ReviewBatches.IReviewBatchRepository, ReviewBatchRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadWithdrawalRepository, LeadWithdrawalRepository>();   // [UC-80] thu hồi lead khi xóa tài khoản
-        services.AddScoped<StudyAbroad.Application.Auth.IAccountPurgeRepository, AccountPurgeRepository>();   // [UC-80] xóa hẳn tài khoản quá hạn
+        services.AddScoped<StudyAbroad.Application.Auth.IAccountPurgeRepository, AccountPurgeRepository>();
+        services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterDeletionWorkRepository, CenterDeletionWorkRepository>();   // [UC-93]   // [UC-80] xóa hẳn tài khoản quá hạn
         services.AddSingleton<StudyAbroad.Application.Admin.SlmSamples.ISlmWorkbookReader, StudyAbroad.Infrastructure.Import.SlmWorkbookReader>();
         services.AddSingleton<StudyAbroad.Application.Admin.SlmSamples.ISlmTemplateWriter, StudyAbroad.Infrastructure.Import.SlmTemplateWriter>();
+        services.AddScoped<StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeBaseRepository, KnowledgeBaseRepository>();   // kho tri thức
+        services.AddSingleton<StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeWorkbookReader, StudyAbroad.Infrastructure.Import.KnowledgeWorkbookReader>();
+        services.AddSingleton<StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeTemplateWriter, StudyAbroad.Infrastructure.Import.KnowledgeTemplateWriter>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<StudyAbroad.Application.Common.IUnitOfWork, EfUnitOfWork>();   // [UC-80] gom nhiều bước ghi vào một transaction
         services.AddScoped<StudyAbroad.Application.ParentLinks.IParentLinkRepository, ParentLinkRepository>();
+        services.AddScoped<StudyAbroad.Application.Dashboard.IDashboardRepository, DashboardRepository>(); // [UC-94] Dashboard KPI
         services.AddScoped<IScenarioRepository, ScenarioRepository>();   // [UC-86] kịch bản what-if đã lưu
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
         services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();
@@ -137,6 +145,7 @@ public static class DependencyInjection
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountUnlockBackgroundService>();
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.OtpCleanupBackgroundService>();
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountPurgeBackgroundService>();   // [UC-80]
+        services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.ParentProfileMigrationBackgroundService>();   // [1.5d] chạy 1 lần lúc khởi động
 
         return services;
     }

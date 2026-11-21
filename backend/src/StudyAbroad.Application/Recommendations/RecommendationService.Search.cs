@@ -23,13 +23,19 @@ public record SchoolSearchFilters(
     decimal? MaxAcceptRate = null,
     int? MaxRank = null,
     decimal? MinGradRate = null,
-    bool Ivy = false);
+    bool Ivy = false,
+    // Chỉ trường mà điểm thi chuẩn hóa KHÔNG phải yếu tố quan trọng (CDS C7: xét hoặc không xét). Trường chưa có dữ liệu thì loại,
+    // vì không xác nhận được. Do nút "Chỉ trường ít coi trọng điểm thi" đặt, advisor không tạo điều kiện này
+    bool LowTestWeight = false);
 
 // Quality: điểm chất lượng 0..1 từ hạng trong các bảng chung (null nếu chưa có hạng); BestRank: hạng tốt nhất trong các bảng chung
 public record SchoolSearchItem(
     string Code, string Name, string? City, string? State, string? Control,
     decimal? CostUsd, decimal? AcceptRate, string? AidPolicy, decimal? AidAvgUsd, double? Quality, int? BestRank,
-    decimal? TuitionUsd = null);
+    decimal? TuitionUsd = null,
+    // Mức trường coi trọng điểm thi chuẩn hóa (CDS C7): very_important | important | considered | not_considered.
+    // Khác chính sách nộp (SatPolicy): trường "không bắt buộc" vẫn có thể coi điểm thi rất quan trọng nếu học sinh nộp
+    string? TestImportance = null);
 
 public enum SchoolSort
 {
@@ -106,6 +112,8 @@ public partial class RecommendationService
             tests.Add(("ty_le_tot_nghiep_toi_thieu", s => s.Offering.GradRate6Yr is { } grad && grad >= minGrad));
         if (f.Ivy)
             tests.Add(("ivy", s => s.University.IsIvy));
+        if (f.LowTestWeight)
+            tests.Add(("it_coi_trong_diem_thi", s => s.Offering.C7TestImportance is "considered" or "not_considered"));
         return tests;
     }
 
@@ -148,5 +156,6 @@ public partial class RecommendationService
         TotalCost(s.Offering), AcceptRate(s), s.Offering.IntlAidPolicy, s.Offering.IntlAidAvgUsd,
         SchoolRanker.QualityFromRanks(s.Rankings),
         s.Rankings is { Count: > 0 } ranks ? ranks.Min(r => r.Rank) : null,
-        s.Offering.TuitionUsd);
+        s.Offering.TuitionUsd,
+        s.Offering.C7TestImportance);
 }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Domain.Constants;
 using System;
 using System.Text.Json;
@@ -15,6 +16,11 @@ namespace StudyAbroad.Api.Controllers;
 [Route("api/v1/advisor")]
 public class AdvisorController(ChatService chat, ILogger<AdvisorController> logger) : ControllerBase
 {
+    // UC-94: phụ huynh đang nhập hộ con managed (cờ acting trong token) thì chat hỏi số tiền tối đa/năm chính xác như form.
+    // Luôn ghi đè giá trị frontend gửi lên
+    private AdvisorChatRequest WithExactBudget(AdvisorChatRequest request) =>
+        request with { ExactBudget = ActingSessionGuard.ReadActingParentId(User) is not null };
+
     [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
     [HttpPost("chat")]
     public async Task<ActionResult<AdvisorChatResponse>> Chat(AdvisorChatRequest request, CancellationToken ct)
@@ -29,7 +35,7 @@ public class AdvisorController(ChatService chat, ILogger<AdvisorController> logg
 
         try
         {
-            return Ok(await chat.ChatAsync(userId.Value, request, ct));
+            return Ok(await chat.ChatAsync(userId.Value, WithExactBudget(request), ct));
         }
         catch (HttpRequestException ex)
         {
@@ -69,7 +75,7 @@ public class AdvisorController(ChatService chat, ILogger<AdvisorController> logg
 
         try
         {
-            var result = await chat.ChatAsync(userId.Value, request, ct, e => Write(e));
+            var result = await chat.ChatAsync(userId.Value, WithExactBudget(request), ct, e => Write(e));
             await Write(new { type = "final", response = result });
         }
         catch (HttpRequestException ex)

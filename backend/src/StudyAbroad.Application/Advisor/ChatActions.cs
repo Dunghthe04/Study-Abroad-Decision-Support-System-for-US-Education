@@ -17,6 +17,8 @@ public static class ChatActions
     public const int MaxSuggested = 6;
     // So sánh nhận mã trường hoặc tên học sinh gõ (khi một trong các trường chưa được chọn), nên cho dài hơn mã
     public const int MaxCompareNameLength = 64;
+    // Dữ liệu tìm lại dựng sẵn trên nút: vài điều kiện, không cần dài
+    public const int MaxSearchLength = 2000;
     private static readonly string[] Targets = ["match", "safety"];   // nhóm đích hợp lệ; Khó vào là mức thấp nhất nên không là đích
 
     /// <summary>
@@ -64,6 +66,15 @@ public static class ChatActions
             };
             return new AdvisorChatResponse(
                 "", [], null, state, Action: ChatSchoolInfo.CompareAction, ActionData: JsonSerializer.SerializeToElement(compare));
+        }
+        // Lọc lại sau tìm trường (nút "Chỉ top 20", "Bỏ điều kiện bang"...): bộ điều kiện dựng sẵn, chạy tìm thẳng không qua SLM.
+        // Dữ liệu từ trình duyệt: phải đọc được bằng đúng hàm đọc của advisor (ParseSearch), không thì chạy như thường qua advisor
+        if (action is { Type: ChatSchoolInfo.SearchAction })
+        {
+            if (action.Search is not { ValueKind: JsonValueKind.Object } search || search.GetRawText().Length > MaxSearchLength
+                || ChatSchoolInfo.ParseSearch(search) is null)
+                return null;
+            return new AdvisorChatResponse("", [], null, state, Action: ChatSchoolInfo.SearchAction, ActionData: search);
         }
         if (action is null || string.IsNullOrWhiteSpace(action.SchoolCode) || action.SchoolCode.Length > MaxCodeLength)
             return null;

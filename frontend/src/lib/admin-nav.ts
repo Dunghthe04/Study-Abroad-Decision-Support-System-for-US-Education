@@ -1,4 +1,5 @@
 import {
+  ArchiveXIcon,
   BarChart3Icon,
   BookOpenIcon,
   BuildingIcon,
@@ -6,9 +7,11 @@ import {
   CreditCardIcon,
   GraduationCapIcon,
   LayoutDashboardIcon,
+  LibraryBigIcon,
   MailWarningIcon,
   MessagesSquareIcon,
   SchoolIcon,
+  ShieldAlertIcon,
   SlidersHorizontalIcon,
   UsersIcon,
   type LucideIcon,
@@ -63,12 +66,20 @@ export const ADMIN_NAV: AdminNavItem[] = [
     useCases: ["UC-109"],
   },
   {
-    href: "/admin/knowledge",
-    label: "Tri thức",
-    description: "Quản lý dữ liệu huấn luyện SLM: duyệt, sửa và nhập từ Excel có xem trước",
+    href: "/admin/slm-samples",
+    label: "Mẫu huấn luyện SLM",
+    description: "Duyệt, sửa và nhập mẫu huấn luyện SLM từ Excel",
     icon: BookOpenIcon,
     roles: ["admin", "moderator"],
-    useCases: ["UC-51", "UC-52", "UC-53"],
+    useCases: ["UC-51", "UC-52"],
+  },
+  {
+    href: "/admin/knowledge-base",
+    label: "Kho tri thức",
+    description: "Quản lý câu hỏi – câu trả lời đã kiểm chứng: thêm, sửa, duyệt và nhập từ Excel",
+    icon: LibraryBigIcon,
+    roles: ["admin", "moderator"],
+    useCases: ["UC-118", "UC-119", "UC-120", "UC-121", "UC-122", "UC-123", "UC-124", "UC-125", "UC-53"],
   },
   {
     href: "/admin/centers",
@@ -78,6 +89,15 @@ export const ADMIN_NAV: AdminNavItem[] = [
     // Chỉ moderator quản lý trung tâm; admin chỉ cấp tài khoản moderator
     roles: ["moderator"],
     useCases: ["UC-59", "UC-64", "UC-71", "UC-72"],
+  },
+  {
+    href: "/admin/center-profile-changes",
+    label: "Kiểm tra thay đổi trung tâm",
+    description: "Đối chiếu website, fanpage trung tâm tự sửa và đánh giá Đạt hoặc Không đạt",
+    icon: ClipboardCheckIcon,
+    // [UC-114] Chỉ Moderator kiểm tra thay đổi trung tâm
+    roles: ["moderator"],
+    useCases: ["UC-114"],
   },
   {
     href: "/admin/plans",
@@ -105,6 +125,14 @@ export const ADMIN_NAV: AdminNavItem[] = [
     useCases: ["UC-54", "UC-55", "UC-56", "UC-57"],
   },
   {
+    href: "/admin/center-deletion-requests",
+    label: "Yêu cầu xóa trung tâm",
+    description: "Trung tâm xin xóa tài khoản và dữ liệu: Admin kiểm tra danh tính người gửi rồi duyệt hoặc từ chối",
+    icon: ArchiveXIcon,
+    roles: ["admin"],
+    useCases: ["UC-93"],
+  },
+  {
     href: "/admin/lead-message-reports",
     label: "Tin nhắn bị báo cáo",
     description: "Tin nhắn liên hệ bị báo cáo: Admin xem, bỏ qua báo cáo hoặc khóa tài khoản vi phạm (gỡ luôn tin nhắn)",
@@ -127,6 +155,14 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: ClipboardCheckIcon,
     roles: ["admin"],
     useCases: [],
+  },
+  {
+    href: "/admin/access-logs",
+    label: "Nhật ký truy cập",
+    description: "Xem và lọc nhật ký ai đã xem hoặc xuất dữ liệu nhạy cảm (tài liệu xác minh, tin nhắn báo cáo, xuất mẫu)",
+    icon: ShieldAlertIcon,
+    roles: ["admin"],
+    useCases: ["UC-97"],
   },
 ];
 

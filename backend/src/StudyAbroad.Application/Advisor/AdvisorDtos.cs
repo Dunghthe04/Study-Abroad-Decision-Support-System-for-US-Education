@@ -22,6 +22,8 @@ public record AdvisorStreamEvent(string Type, int? Answers = null, string? Text 
 /// mục bắt buộc còn thiếu; false thì hỏi đủ như form; null = advisor tự đoán theo các ô hồ sơ như cũ.</param>
 /// <param name="FromForm">Tin do form gửi ngay sau khi lưu hồ sơ chính thức (frontend đặt, .NET chuyển nguyên sang advisor):
 /// form đã là bước rà soát nên advisor bỏ bảng xác nhận X1 đang treo và trả lời luôn câu học sinh hỏi.</param>
+/// <param name="ExactBudget">UC-94: phụ huynh đang nhập hộ con managed (controller đặt theo token, không lấy từ frontend):
+/// câu ngân sách F1 hỏi số tiền tối đa/năm chính xác bằng VNĐ như bước 4 của form; null/false = hỏi chọn mức như cũ.</param>
 public record AdvisorChatRequest(
     IReadOnlyList<ChatMessage> Messages,
     string? SessionId = null,
@@ -36,7 +38,8 @@ public record AdvisorChatRequest(
     SimulationOverrides? Simulation = null,
     IReadOnlyList<GradeScaleRuleDto>? GradeScale = null,
     bool? HasCommittedProfile = null,
-    bool FromForm = false);
+    bool FromForm = false,
+    bool? ExactBudget = null);
 
 /// <summary>
 /// Hành động có cấu trúc từ một nút trên giao diện (không qua SLM hiểu câu): Type là goal_seek hoặc explain,
@@ -47,7 +50,10 @@ public record ChatAction(
     string Type, string? SchoolCode = null, string? Target = null, string? Basis = null, string? Question = null,
     IReadOnlyList<string>? SchoolCodes = null, IReadOnlyList<string>? Fields = null,
     // Chỉ cho ô chọn trường: các trường nên hiện sẵn dạng nút bấm (vd các trường đầu danh sách gợi ý)
-    IReadOnlyList<string>? Suggested = null);
+    IReadOnlyList<string>? Suggested = null,
+    // Chỉ cho school_search (nút lọc lại sau tìm trường): dữ liệu tìm dựng sẵn {question, filters, sort, model_sort},
+    // cùng dạng advisor gửi, để tìm lại thẳng không qua SLM
+    JsonElement? Search = null);
 
 /// <summary>Một trường trong danh sách gợi ý. Group là mã nhóm đã chấm (R, RF, M, S, NA, O), advisor đổi sang chữ.</summary>
 public record ChatSchool(string Code, string Name, string? Group);

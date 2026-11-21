@@ -30,4 +30,10 @@ public class ParentStudentLink : BaseEntity
     /// (ProfileTransferStatuses). Null là chưa xử lý.</summary>
     public string? ProfileTransferStatus { get; set; }
     public DateTime? ProfileTransferAt { get; set; }
+    /// <summary>[1.5d] Con managed (phụ huynh nhập thay) là nguồn của bản hồ sơ đang chờ con thật chọn (ProfileTransferStatus = offered).
+    /// Về null khi con chọn xong. Phụ huynh có thể có nhiều con managed nên không suy ra được nguồn, phải ghi ở đây.</summary>
+    public Guid? SourceManagedUserId { get; set; }
+    /// <summary>[UC-76] Ưu tiên của phụ huynh cho con này (jsonb), null là chưa lưu. Gồm pref [chi phí, học bổng, danh tiếng] 0–4,
+    /// ngân sách VND kèm tỷ giá chốt lúc Lưu, và danh sách theo cha mẹ đã tính sẵn (result, cùng khuôn ItemsJson của lần gợi ý của con).</summary>
+    public string? ParentPreferenceJson { get; set; }
 }

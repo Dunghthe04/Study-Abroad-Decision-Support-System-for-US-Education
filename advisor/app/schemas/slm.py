@@ -1,7 +1,7 @@
 """Hợp đồng đầu ra của SLM (Qwen3 4B): tách tin thành danh sách ý, kèm đầu vào dựng skill hồ sơ (SkillRequest).
 
 Đây là chỗ nối giữa hai phần: bộ phân loại (Dũng) tạo ra SlmTinResult; handler hồ sơ (Việt) và các nhánh còn lại đọc nó.
-Tên loại, khóa và mã ở đây trùng từng chữ với dữ liệu huấn luyện (data/slm/du_lieu_slm.jsonl) và prompt app/skills/slm_intents.md:
+Tên loại, khóa và mã ở đây trùng từng chữ với dữ liệu huấn luyện (slm/data/du_lieu_slm.jsonl) và prompt app/skills/slm_intents.md:
 một ý là {"type", "span", "entities"}, cả tin là {"intents": [...]}. Hệ thống đọc đúng thứ model trả, không đổi tên.
 Sửa file này thì báo người kia trước, và sửa dữ liệu, prompt cho khớp (rồi huấn luyện lại).
 """
@@ -16,8 +16,7 @@ Intent = Literal[
     "collect_profile", "profile_review", "scenario", "knowledge", "center_referral", "out_of_scope"
 ]
 
-# Khóa hồ sơ, phải giống info_to_field.PROFILE_KEYS (có test kiểm).
-# Không import vì sẽ kéo cả gói skills và chat_flow theo, chat_flow lại cần file này nên dễ nhập vòng
+# Khóa chuẩn của hồ sơ chat. Mọi khóa skill_rules.REQUIRED_B4 hỏi phải nằm trong đây (có test kiểm)
 PROFILE_KEYS = (
     "current_level",
     "current_grade",
@@ -67,7 +66,8 @@ REVIEW_TASKS = ("assessment", "school_list", "roadmap", "compare", "explain_scho
 #     điều kiện không nói thì bỏ trống) và sort nếu học sinh nói muốn xếp theo gì ("rẻ nhất", "dễ vào nhất").
 #     Không dùng hồ sơ học sinh: ai hỏi cùng câu cũng nhận cùng danh sách (khác "gợi ý trường cho em")
 KNOWLEDGE_TASKS = ("school_info", "compare_facts", "search")
-# center_referral: vắng = tìm trung tâm. compare cần centers (từ hai tên trở lên)
+# center_referral: vắng = tìm trung tâm. compare kèm centers (từ hai tên trở lên) khi học sinh nêu tên; câu chỉ nói theo thứ tự
+# ("so sánh hai trung tâm đầu tiên") thì không có tên để trích nên vắng centers. Hệ thống không so sánh trung tâm nên không cần tên
 CENTER_TASKS = ("booking", "compare")
 TASKS_BY_INTENT = {
     "collect_profile": PROFILE_TASKS,
@@ -273,8 +273,6 @@ def _check_task_entities(intent: str, entities: dict[str, Any], tasks: list[str]
         centers = entities.get("centers")
         if centers is not None and not _is_text_list(centers, 2):
             raise ValueError("centers phải là danh sách từ hai tên trung tâm trở lên")
-        if "compare" in tasks and centers is None:
-            raise ValueError("compare cần centers")
         if centers is not None and "compare" not in tasks:
             raise ValueError("centers chỉ đi với tasks = compare")
 

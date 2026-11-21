@@ -282,6 +282,19 @@ public class LeadServiceTests
 
         public Task SaveLeadMessageAsync(LeadMessage message, CancellationToken ct = default) => Task.CompletedTask;
 
+        public Task<IReadOnlyList<Guid>> MarkMessagesReadAsync(
+            Guid leadId, bool readerIsCenterSide, DateTime readAt, CancellationToken ct = default)
+        {
+            // Trung tâm đọc thì đánh dấu tin của học sinh / phụ huynh, và ngược lại
+            var marked = Messages
+                .Where(m => m.LeadId == leadId && m.ReadAt == null && m.Status == "visible"
+                            && (Users.TryGetValue(m.SenderUserId, out var u) && LeadMessageMapper.IsStaffOrCenterRole(u.Item2)) != readerIsCenterSide)
+                .ToList();
+            foreach (var m in marked) m.ReadAt = readAt;
+            return Task.FromResult<IReadOnlyList<Guid>>(marked.Select(m => m.Id).ToList());
+        }
+
+
         public List<Guid> AdminIds { get; } = [];
         public List<Notification> Notifications { get; } = [];
 
@@ -555,6 +568,7 @@ public class LeadServiceTests
         var (s, audit, service) = MessageSetup();
         var student = s.AddStudent(18);
         var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = LeadStatuses.Accepted; // [UC-74] chỉ nhắn khi đã chấp nhận
 
         var result = await service.SendSentLeadMessageAsync(student.Id, lead.Id, "Gọi em số 0912345678, xem https://example.com nhé");
 
@@ -569,6 +583,7 @@ public class LeadServiceTests
         var (s, audit, service) = MessageSetup();
         var student = s.AddStudent(18);
         var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = LeadStatuses.Accepted; // [UC-74] chỉ nhắn khi đã chấp nhận
 
         var result = await service.SendSentLeadMessageAsync(
             student.Id, lead.Id, "  ",
@@ -598,6 +613,52 @@ public class LeadServiceTests
 
         Assert.Equal(0, uploads); // quyền và trạng thái được kiểm tra trước khi tải ảnh lên nhà cung cấp
         Assert.Empty(s.LeadRepo.Messages);
+    }
+
+    // [UC-74] Chỉ nhắn được khi yêu cầu Đã chấp nhận; các trạng thái khác bị chặn ở cả hai phía, trước khi tải ảnh lên
+    [Theory]
+    [InlineData(LeadStatuses.New, "lead_not_accepted")]
+    [InlineData(LeadStatuses.Rejected, "lead_rejected")]
+    [InlineData(LeadStatuses.Closed, "lead_closed")]
+    [InlineData(LeadStatuses.Withdrawn, "lead_withdrawn")]
+    [InlineData(LeadStatuses.Cancelled, "lead_cancelled")]
+    [InlineData(LeadStatuses.Expired, "lead_expired")]
+    public async Task SendMessage_LeadNotAccepted_IsBlockedOnBothSidesWithoutUploading(string status, string expectedCode)
+    {
+        var (s, _, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = status;
+        var centerUser = AddCenterUser(s);
+        s.CenterRepo.Centers.First(c => c.Id == s.CenterId).OwnerUserId = centerUser.Id;
+        var uploads = 0;
+        Task<LeadMessageAttachment> Upload(CancellationToken _) { uploads++; return Task.FromResult(new LeadMessageAttachment("https://x/y.png", "y")); }
+
+        var studentEx = await Assert.ThrowsAsync<LeadRuleException>(() =>
+            service.SendSentLeadMessageAsync(student.Id, lead.Id, "Xin chào", Upload));
+        Assert.Equal(expectedCode, studentEx.Code);
+
+        Task Center() => service.SendLeadMessageForCenterUserAsync(centerUser.Id, null, UserRoles.Center, lead.Id, "Chào em", Upload);
+        if (LeadStatuses.IsHiddenFromCenter(status))
+            await Assert.ThrowsAsync<KeyNotFoundException>(Center); // [UC-116] trung tâm không thấy lead đã hủy / hết hạn chờ phụ huynh
+        else
+            Assert.Equal(expectedCode, (await Assert.ThrowsAsync<LeadRuleException>(Center)).Code);
+        Assert.Equal(0, uploads);
+        Assert.Empty(s.LeadRepo.Messages);
+        Assert.Equal(status, lead.Status);
+    }
+
+    [Fact]
+    public async Task SendMessage_AcceptedLeadOlderThan90Days_IsExpired()
+    {
+        var (s, _, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id, daysAgo: 91);
+        lead.Status = LeadStatuses.Accepted;
+
+        var ex = await Assert.ThrowsAsync<LeadRuleException>(() => service.SendSentLeadMessageAsync(student.Id, lead.Id, "Xin chào"));
+
+        Assert.Equal("lead_expired", ex.Code);
     }
 
     [Fact]
@@ -647,6 +708,158 @@ public class LeadServiceTests
                 null,
                 1,
                 10));
+    }
+
+    private static (LeadService Service, FakeLeadRepo Repo, FakeAuditRepo Audit, Guid OwnerId, Guid CenterId) DecisionSetup()
+    {
+        var ownerId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var centerRepo = new FakeStudyCenterRepo();
+        centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm Quyết Định", OwnerUserId = ownerId });
+        var repo = new FakeLeadRepo();
+        var audit = new FakeAuditRepo();
+        return (new LeadService(repo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository(), audit), repo, audit, ownerId, centerId);
+    }
+
+    [Fact]
+    public async Task AcceptReceivedLead_NewLead_BecomesAcceptedAndLogsAudit()
+    {
+        var (service, repo, audit, ownerId, centerId) = DecisionSetup();
+        var lead = new Lead { Id = Guid.NewGuid(), UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = "new" };
+        repo.Leads.Add(lead);
+
+        await service.AcceptReceivedLeadAsync(ownerId, null, UserRoles.Center, lead.Id);
+
+        Assert.Equal(LeadStatuses.Accepted, lead.Status);
+        Assert.True(LeadStatuses.IsAccepted(lead.Status));
+        Assert.Equal("lead.accept", Assert.Single(audit.Logs).Action);
+        Assert.Empty(repo.Notifications);
+    }
+
+    [Fact]
+    public async Task RejectReceivedLead_ParentSubmitted_NotifiesParentAndStudent()
+    {
+        var (service, repo, _, ownerId, centerId) = DecisionSetup();
+        var studentId = Guid.NewGuid();
+        var parentId = Guid.NewGuid();
+        var lead = new Lead { Id = Guid.NewGuid(), UserId = studentId, SubmittedByUserId = parentId, StudyCenterId = centerId, Status = "new" };
+        repo.Leads.Add(lead);
+
+        await service.RejectReceivedLeadAsync(ownerId, null, UserRoles.Center, lead.Id);
+
+        Assert.Equal(LeadStatuses.Rejected, lead.Status);
+        Assert.Equal(new[] { parentId, studentId }.OrderBy(x => x), repo.Notifications.Select(n => n.UserId).OrderBy(x => x));
+        Assert.All(repo.Notifications, n =>
+        {
+            Assert.Equal("lead_rejected", n.Type);
+            Assert.Contains("Trung Tâm Quyết Định", n.Body);
+        });
+    }
+
+    [Fact]
+    public async Task AcceptOrRejectReceivedLead_NotNewOtherCenterOrExpired_IsRejected()
+    {
+        var (service, repo, _, ownerId, centerId) = DecisionSetup();
+        var accepted = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = "accepted" };
+        var other = new Lead { Id = Guid.NewGuid(), StudyCenterId = Guid.NewGuid(), Status = "new" };
+        var old = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = "new", CreatedAt = DateTime.UtcNow.AddDays(-91) };
+        var withdrawn = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.Withdrawn };
+        var pendingParent = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.PendingParent };
+        repo.Leads.AddRange([accepted, other, old, withdrawn, pendingParent]);
+
+        var notNew = await Assert.ThrowsAsync<LeadRuleException>(() => service.RejectReceivedLeadAsync(ownerId, null, UserRoles.Center, accepted.Id));
+        Assert.Equal("lead_not_new", notNew.Code);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.AcceptReceivedLeadAsync(ownerId, null, UserRoles.Center, other.Id));
+        Assert.Equal("lead_expired", (await Assert.ThrowsAsync<LeadRuleException>(() =>
+            service.AcceptReceivedLeadAsync(ownerId, null, UserRoles.Center, old.Id))).Code);
+        Assert.Equal("lead_withdrawn", (await Assert.ThrowsAsync<LeadRuleException>(() =>
+            service.AcceptReceivedLeadAsync(ownerId, null, UserRoles.Center, withdrawn.Id))).Code);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.AcceptReceivedLeadAsync(ownerId, null, UserRoles.Center, pendingParent.Id));
+        Assert.Equal("new", other.Status);
+        Assert.Empty(repo.Notifications);
+    }
+
+    [Fact]
+    public async Task UpdateReceivedLeadStatus_RejectedLeadOrRejectedTarget_IsRefused()
+    {
+        var (service, repo, _, ownerId, centerId) = DecisionSetup();
+        var rejected = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = "rejected" };
+        var fresh = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = "new" };
+        repo.Leads.AddRange([rejected, fresh]);
+
+        await Assert.ThrowsAsync<LeadRuleException>(() => service.UpdateReceivedLeadStatusAsync(ownerId, null, UserRoles.Center, rejected.Id, "new"));
+        // từ chối phải qua thao tác riêng để người gửi nhận thông báo
+        await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateReceivedLeadStatusAsync(ownerId, null, UserRoles.Center, fresh.Id, "rejected"));
+        Assert.Equal("rejected", rejected.Status);
+        Assert.Equal("new", fresh.Status);
+    }
+
+    [Fact]
+    public async Task CreateLead_NotifiesCenterOwner_UC110()
+    {
+        var s = new CreateLeadSetup();
+        var ownerId = Guid.NewGuid();
+        s.CenterRepo.Centers[0].OwnerUserId = ownerId;
+        var notiRepo = new NotificationTests.FakeNotificationRepo();
+        var service = new LeadService(s.LeadRepo, s.CenterRepo, s.UserRepo, s.LinkRepo,
+            notifications: new StudyAbroad.Application.Notifications.NotificationService(notiRepo));
+        var student = s.AddStudent(18);
+
+        await service.CreateLeadAsync(student.Id, s.Request(ack: true));
+
+        var n = Assert.Single(notiRepo.Items);
+        Assert.Equal(ownerId, n.UserId);
+        Assert.Equal("lead_new", n.Type);
+        Assert.Equal("/center/leads", n.LinkUrl);
+    }
+
+    [Fact]
+    public async Task UpdateReceivedLeadStatus_NotifiesSubmitterAndStudentOnlyWhenChanged_UC110()
+    {
+        var centerOwnerId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var studentId = Guid.NewGuid();
+        var parentId = Guid.NewGuid();
+        var centerRepo = new FakeStudyCenterRepo();
+        centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm B", OwnerUserId = centerOwnerId });
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, StudyCenterId = centerId, Status = "new", UserId = studentId, SubmittedByUserId = parentId });
+        var notiRepo = new NotificationTests.FakeNotificationRepo();
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository(),
+            notifications: new StudyAbroad.Application.Notifications.NotificationService(notiRepo));
+
+        await service.UpdateReceivedLeadStatusAsync(centerOwnerId, null, UserRoles.Center, leadId, "contacted");
+        await service.UpdateReceivedLeadStatusAsync(centerOwnerId, null, UserRoles.Center, leadId, "contacted"); // không đổi: không báo
+
+        Assert.Equal(2, notiRepo.Items.Count);
+        Assert.Equal(new[] { parentId, studentId }.OrderBy(x => x), notiRepo.Items.Select(n => n.UserId).OrderBy(x => x));
+        Assert.All(notiRepo.Items, n => Assert.Equal("lead_status_changed", n.Type));
+    }
+
+    [Fact]
+    public async Task UpdateReceivedLeadStatus_Wording_ReopenAfterCloseIsNotShownAsAccepted()
+    {
+        var centerOwnerId = Guid.NewGuid();
+        var centerId = Guid.NewGuid();
+        var leadId = Guid.NewGuid();
+        var centerRepo = new FakeStudyCenterRepo();
+        centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm C", OwnerUserId = centerOwnerId });
+        var leadRepo = new FakeLeadRepo();
+        leadRepo.Leads.Add(new Lead { Id = leadId, StudyCenterId = centerId, Status = "closed", UserId = Guid.NewGuid() });
+        var notiRepo = new NotificationTests.FakeNotificationRepo();
+        var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository(),
+            notifications: new StudyAbroad.Application.Notifications.NotificationService(notiRepo));
+
+        await service.UpdateReceivedLeadStatusAsync(centerOwnerId, null, UserRoles.Center, leadId, "accepted");   // mở lại sau khi đóng
+        await service.UpdateReceivedLeadStatusAsync(centerOwnerId, null, UserRoles.Center, leadId, "closed");
+        await service.UpdateReceivedLeadStatusAsync(centerOwnerId, null, UserRoles.Center, leadId, "new");
+
+        Assert.Equal(
+            ["Yêu cầu liên hệ của bạn chuyển sang: Trung tâm đã mở lại trao đổi.",
+             "Yêu cầu liên hệ của bạn chuyển sang: Đã hoàn tất.",
+             "Yêu cầu liên hệ của bạn chuyển sang: Chờ trung tâm phản hồi."],
+            notiRepo.Items.OrderBy(n => n.CreatedAt).Select(n => n.Body));
     }
 
     [Fact]
@@ -724,7 +937,7 @@ public class LeadServiceTests
     }
 
     [Fact]
-    public async Task SendLeadMessage_ValidCleanReply_SavesMessageUpdatesNewLeadToContactedAndLogsAudit()
+    public async Task SendLeadMessage_ValidCleanReply_OnAcceptedLead_SavesMessageKeepsStatusAndLogsAudit()
     {
         var centerOwnerId = Guid.NewGuid();
         var centerId = Guid.NewGuid();
@@ -735,7 +948,7 @@ public class LeadServiceTests
         centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm Minh bạch", OwnerUserId = centerOwnerId });
 
         var leadRepo = new FakeLeadRepo();
-        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = studentId, StudyCenterId = centerId, Status = "new" });
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = studentId, StudyCenterId = centerId, Status = LeadStatuses.Accepted });
 
         var auditRepo = new FakeAuditRepo();
         var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository(), auditRepo);
@@ -747,8 +960,8 @@ public class LeadServiceTests
             leadId,
             "  Chào em, trung tâm đã nhận hồ sơ và sẽ tư vấn lộ trình phù hợp.  ");
 
-        Assert.Equal("contacted", res.LeadStatus);
-        Assert.Equal("contacted", leadRepo.Leads[0].Status);
+        Assert.Equal(LeadStatuses.Accepted, res.LeadStatus);
+        Assert.Equal(LeadStatuses.Accepted, leadRepo.Leads[0].Status); // [UC-74] không còn tự chuyển trạng thái
         Assert.Equal("visible", res.Message.Status);
         Assert.Equal("Trung Tâm Minh bạch", res.Message.SenderName);
         Assert.Equal("Chào em, trung tâm đã nhận hồ sơ và sẽ tư vấn lộ trình phù hợp.", res.Message.Content);
@@ -945,8 +1158,8 @@ public class LeadServiceTests
 
     [Theory]
     [InlineData("contacted")]
-    [InlineData("closed")]
-    public async Task SendLeadMessage_OnContactedOrClosedLead_PreservesExistingStatus(string initialStatus)
+    [InlineData("accepted")]
+    public async Task SendLeadMessage_OnAcceptedOrLegacyContactedLead_PreservesExistingStatus(string initialStatus)
     {
         var centerOwnerId = Guid.NewGuid();
         var centerId = Guid.NewGuid();
@@ -984,7 +1197,7 @@ public class LeadServiceTests
         centerRepo.Centers.Add(new StudyCenter { Id = centerId, Name = "Trung Tâm Quốc Tế", OwnerUserId = Guid.NewGuid() });
 
         var leadRepo = new FakeLeadRepo();
-        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = "new" });
+        leadRepo.Leads.Add(new Lead { Id = leadId, UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.Accepted });
 
         var service = new LeadService(leadRepo, centerRepo, new FakeUserRepository(), new FakeParentLinkRepository());
 
@@ -998,7 +1211,7 @@ public class LeadServiceTests
         Assert.Equal(expectedName, result.Message.SenderName);
         Assert.Equal(role, result.Message.SenderRole);
         Assert.True(result.Message.IsFromCenter);
-        Assert.Equal("contacted", result.LeadStatus);
+        Assert.Equal(LeadStatuses.Accepted, result.LeadStatus);
     }
 
     [Fact]
@@ -1620,6 +1833,7 @@ public class LeadServiceTests
         var (s, audit, service) = MessageSetup();
         var student = s.AddStudent(18);
         var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = LeadStatuses.Accepted; // [UC-74] chỉ nhắn khi đã chấp nhận
         var centerUser = Guid.NewGuid();
         s.LeadRepo.Users[centerUser] = ("Tư vấn viên", UserRoles.Center);
         s.LeadRepo.Messages.Add(new LeadMessage
@@ -1632,8 +1846,8 @@ public class LeadServiceTests
         Assert.Equal("Em cảm ơn trung tâm", result.Message.Content);
         Assert.Equal(student.Id, result.Message.SenderUserId);
         Assert.False(result.Message.IsFromCenter);
-        Assert.Equal("new", result.LeadStatus); // người gửi nhắn không đổi trạng thái
-        Assert.Equal("new", lead.Status);
+        Assert.Equal(LeadStatuses.Accepted, result.LeadStatus); // người gửi nhắn không đổi trạng thái
+        Assert.Equal(LeadStatuses.Accepted, lead.Status);
         Assert.Equal("lead_message.send", Assert.Single(audit.Logs).Action);
 
         var thread = await service.GetSentLeadMessagesAsync(student.Id, lead.Id);
@@ -1663,7 +1877,9 @@ public class LeadServiceTests
         var child17 = s.AddStudent(17);
         var parent = s.AddParent(child14, child17);
         var forChild14 = AddLead(s, child14.Id, parent.Id);
+        forChild14.Status = LeadStatuses.Accepted; // [UC-74] chỉ nhắn khi đã chấp nhận
         var child17Self = AddLead(s, child17.Id, child17.Id);
+        child17Self.Status = LeadStatuses.Accepted; // [UC-74] chỉ nhắn khi đã chấp nhận
 
         await service.SendSentLeadMessageAsync(parent.Id, forChild14.Id, "Phụ huynh hỏi lịch tư vấn");
         await service.SendSentLeadMessageAsync(parent.Id, child17Self.Id, "Phụ huynh hỏi thêm");
@@ -2094,5 +2310,208 @@ public class LeadServiceTests
         await Assert.ThrowsAsync<KeyNotFoundException>(() =>
             service.SendLeadMessageForCenterUserAsync(ownerId, "o@c.com", UserRoles.Center, hidden.Id, "Chào em"));
         Assert.Equal(status, hidden.Status);
+    }
+
+    [Theory]
+    [InlineData("Em chuyển cọc qua stk 1903657891234 Techcombank nhé", true)]
+    [InlineData("So tai khoan VCB: 0011004567891 Nguyen Van A", true)]
+    [InlineData("Ngan hang MB bank stk: 098765432100", true)]
+    [InlineData("Chào em, trung tâm tư vấn chương trình du học Mỹ", false)]
+    [InlineData("Học phí dự kiến khoảng 500.000.000 VND / năm", false)]
+    public void LeadMessageContentFilter_FlagsBankAccountInformation(string content, bool expectedFlagged)
+    {
+        var result = LeadMessageContentFilter.Inspect(content);
+        Assert.Equal(expectedFlagged, result.IsFlagged);
+        if (expectedFlagged)
+        {
+            Assert.Contains("tài khoản ngân hàng", result.FlagReason);
+        }
+    }
+
+    // ===== [Chat realtime] =====
+
+    private sealed class FakeChatNotifier : ILeadChatNotifier
+    {
+        public List<(Guid LeadId, LeadMessageDto Student, LeadMessageDto Center)> NewMessages { get; } = [];
+        public List<(Guid LeadId, string SenderSide, IReadOnlyList<Guid> Ids, DateTime ReadAt)> Reads { get; } = [];
+        public bool FailOnNewMessage { get; set; }
+
+        public Task NewMessageAsync(Guid leadId, LeadMessageDto studentView, LeadMessageDto centerView, CancellationToken ct = default)
+        {
+            if (FailOnNewMessage) throw new InvalidOperationException("hub down");
+            NewMessages.Add((leadId, studentView, centerView));
+            return Task.CompletedTask;
+        }
+
+        public Task MessagesReadAsync(Guid leadId, string senderSide, IReadOnlyList<Guid> messageIds, DateTime readAt, CancellationToken ct = default)
+        {
+            Reads.Add((leadId, senderSide, messageIds, readAt));
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakePusher : StudyAbroad.Application.Notifications.INotificationPusher
+    {
+        public List<(Guid UserId, string Title, string? Body, string? Link)> Pushes { get; } = [];
+
+        public Task PushAsync(Guid userId, string title, string? body, string? linkUrl, CancellationToken ct = default)
+        {
+            Pushes.Add((userId, title, body, linkUrl));
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeChatPresence : ILeadChatPresence
+    {
+        public HashSet<(Guid UserId, Guid LeadId)> Viewing { get; } = [];
+        public bool IsViewing(Guid userId, Guid leadId) => Viewing.Contains((userId, leadId));
+    }
+
+    /// <summary>Lead đã chấp nhận của một học sinh với trung tâm có chủ sở hữu, kèm notifier / presence giả.</summary>
+    private sealed class ChatSetup
+    {
+        public CreateLeadSetup S { get; } = new();
+        public FakeChatNotifier Chat { get; } = new();
+        public FakeChatPresence Presence { get; } = new();
+        public FakePusher Pusher { get; } = new();
+        public NotificationTests.FakeNotificationRepo NotiRepo { get; } = new();
+        public LeadService Service { get; }
+        public User Student { get; }
+        public Lead Lead { get; }
+        public Guid CenterOwnerId { get; } = Guid.NewGuid();
+
+        public ChatSetup()
+        {
+            S.CenterRepo.Centers[0].OwnerUserId = CenterOwnerId;
+            S.LeadRepo.Users[CenterOwnerId] = ("Tư vấn viên", UserRoles.Center);
+            Student = S.AddStudent(18);
+            Student.FullName = "Nguyễn Văn A";
+            S.LeadRepo.Users[Student.Id] = ("Nguyễn Văn A", UserRoles.Student);
+            Lead = AddLead(S, Student.Id, Student.Id);
+            Lead.Status = LeadStatuses.Accepted;
+            Service = new LeadService(S.LeadRepo, S.CenterRepo, S.UserRepo, S.LinkRepo,
+                notifications: new StudyAbroad.Application.Notifications.NotificationService(NotiRepo, pusher: Pusher),
+                chat: Chat, presence: Presence);
+        }
+    }
+
+    [Fact]
+    public async Task ChatRealtime_StudentMessage_PushesBothViewsAndNotifiesCenterOwner()
+    {
+        var c = new ChatSetup();
+
+        var result = await c.Service.SendSentLeadMessageAsync(c.Student.Id, c.Lead.Id, "Em muốn hỏi học phí");
+
+        var pushed = Assert.Single(c.Chat.NewMessages);
+        Assert.Equal(c.Lead.Id, pushed.LeadId);
+        Assert.Equal(result.Message.Id, pushed.Student.Id);
+        Assert.Equal("Nguyễn Văn A", pushed.Student.SenderName); // học sinh luôn thấy tên thật của mình
+        Assert.Equal(LeadMessageMapper.AnonymousStudentName, pushed.Center.SenderName); // lead chưa chia sẻ liên hệ: trung tâm thấy ẩn danh
+
+        var noti = Assert.Single(c.NotiRepo.Items);
+        Assert.Equal(c.CenterOwnerId, noti.UserId);
+        Assert.Equal("lead_message_new", noti.Type);
+        Assert.Equal("/center/leads", noti.LinkUrl);
+        Assert.Equal("Em muốn hỏi học phí", noti.Body);
+        var push = Assert.Single(c.Pusher.Pushes);
+        Assert.Equal(c.CenterOwnerId, push.UserId);
+    }
+
+    [Fact]
+    public async Task ChatRealtime_CenterMessage_NotifiesStudentAndSubmittingParent()
+    {
+        var c = new ChatSetup();
+        var parent = c.S.AddParent(c.Student);
+        c.Lead.SubmittedByUserId = parent.Id;
+
+        await c.Service.SendLeadMessageForCenterUserAsync(c.CenterOwnerId, null, UserRoles.Center, c.Lead.Id, "Chào em");
+
+        Assert.Equal(2, c.NotiRepo.Items.Count);
+        Assert.Equal(new[] { c.Student.Id, parent.Id }.OrderBy(x => x), c.NotiRepo.Items.Select(n => n.UserId).OrderBy(x => x));
+        Assert.All(c.NotiRepo.Items, n => Assert.Equal("/account#sent-leads", n.LinkUrl));
+        Assert.Equal(2, c.Pusher.Pushes.Count);
+        var pushed = Assert.Single(c.Chat.NewMessages);
+        Assert.Equal("Trung Tâm Xác Minh", pushed.Student.SenderName);
+        Assert.Equal(pushed.Student, pushed.Center); // tin của trung tâm hiện giống nhau ở hai phía
+    }
+
+    [Fact]
+    public async Task ChatRealtime_RecipientAlreadyViewingThread_GetsNoNotification_ButStillGetsTheMessage()
+    {
+        var c = new ChatSetup();
+        c.Presence.Viewing.Add((c.CenterOwnerId, c.Lead.Id));
+
+        await c.Service.SendSentLeadMessageAsync(c.Student.Id, c.Lead.Id, "Xin chào");
+
+        Assert.Single(c.Chat.NewMessages); // tin vẫn được đẩy vào khung đang mở
+        Assert.Empty(c.NotiRepo.Items);
+        Assert.Empty(c.Pusher.Pushes);
+    }
+
+    [Fact]
+    public async Task ChatRealtime_PushFailure_DoesNotFailSendingTheMessage()
+    {
+        var c = new ChatSetup();
+        c.Chat.FailOnNewMessage = true;
+
+        var result = await c.Service.SendSentLeadMessageAsync(c.Student.Id, c.Lead.Id, "Xin chào");
+
+        Assert.Equal("Xin chào", result.Message.Content);
+        Assert.Single(c.S.LeadRepo.Messages); // tin vẫn được lưu
+    }
+
+    [Fact]
+    public async Task ChatRealtime_CenterReadsThread_MarksStudentMessagesAndTellsStudentSide()
+    {
+        var c = new ChatSetup();
+        var fromStudent = new LeadMessage { LeadId = c.Lead.Id, SenderUserId = c.Student.Id, Content = "Chào", Status = "visible" };
+        var fromCenter = new LeadMessage { LeadId = c.Lead.Id, SenderUserId = c.CenterOwnerId, Content = "Chào em", Status = "visible" };
+        c.S.LeadRepo.Messages.AddRange([fromStudent, fromCenter]);
+
+        await c.Service.MarkThreadReadAsync(c.CenterOwnerId, null, UserRoles.Center, c.Lead.Id);
+
+        Assert.NotNull(fromStudent.ReadAt);
+        Assert.Null(fromCenter.ReadAt); // tin của chính mình không tự đánh dấu
+        var read = Assert.Single(c.Chat.Reads);
+        Assert.Equal(LeadChatSides.Student, read.SenderSide); // báo cho phía đã gửi tin vừa được xem
+        Assert.Equal([fromStudent.Id], read.Ids);
+
+        // Đọc lần nữa khi không còn tin mới: không phát thêm sự kiện
+        await c.Service.MarkThreadReadAsync(c.CenterOwnerId, null, UserRoles.Center, c.Lead.Id);
+        Assert.Single(c.Chat.Reads);
+    }
+
+    [Fact]
+    public async Task ChatRealtime_StudentReadsThread_MarksCenterMessages()
+    {
+        var c = new ChatSetup();
+        var fromCenter = new LeadMessage { LeadId = c.Lead.Id, SenderUserId = c.CenterOwnerId, Content = "Chào em", Status = "visible" };
+        var removed = new LeadMessage { LeadId = c.Lead.Id, SenderUserId = c.CenterOwnerId, Content = "x", Status = "removed" };
+        c.S.LeadRepo.Messages.AddRange([fromCenter, removed]);
+
+        await c.Service.MarkThreadReadAsync(c.Student.Id, null, UserRoles.Student, c.Lead.Id);
+
+        Assert.NotNull(fromCenter.ReadAt);
+        Assert.Null(removed.ReadAt); // tin đã gỡ không tính
+        Assert.Equal(LeadChatSides.Center, Assert.Single(c.Chat.Reads).SenderSide);
+    }
+
+    [Fact]
+    public async Task ChatRealtime_GetChatAccess_ReturnsSideAndPeers_AndBlocksOutsiders()
+    {
+        var c = new ChatSetup();
+
+        var asStudent = await c.Service.GetChatAccessAsync(c.Student.Id, null, UserRoles.Student, c.Lead.Id);
+        Assert.Equal(LeadChatSides.Student, asStudent.Side);
+        Assert.Equal([c.CenterOwnerId], asStudent.PeerUserIds);
+
+        var asCenter = await c.Service.GetChatAccessAsync(c.CenterOwnerId, null, UserRoles.Center, c.Lead.Id);
+        Assert.Equal(LeadChatSides.Center, asCenter.Side);
+        Assert.Equal([c.Student.Id], asCenter.PeerUserIds);
+
+        var other = c.S.AddStudent(18);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => c.Service.GetChatAccessAsync(other.Id, null, UserRoles.Student, c.Lead.Id));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => c.Service.GetChatAccessAsync(Guid.NewGuid(), null, UserRoles.Center, c.Lead.Id));
+        await Assert.ThrowsAsync<LeadRuleException>(() => c.Service.GetChatAccessAsync(Guid.NewGuid(), null, UserRoles.Admin, c.Lead.Id));
     }
 }

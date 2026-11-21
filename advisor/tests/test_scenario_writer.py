@@ -186,6 +186,15 @@ BAD = {
         GOOD, intro="Với SAT 1500, có 12 trường dễ vào hơn, bạn gần như chắc chắn đậu."
     ),
     "stranger-name": changed(GOOD, closing="Bạn cũng có thể nhắm tới Harvard University nhé."),
+    "promise-in-the-closing": changed(GOOD, closing="Nộp theo danh sách này thì bạn chắc chắn đậu."),
+    "promise-in-a-group-note": changed(
+        GOOD,
+        groups=[
+            GOOD["groups"][0],
+            {**GOOD["groups"][1], "note": "Hai trường này bạn sẽ đỗ."},
+            GOOD["groups"][2],
+        ],
+    ),
 }
 
 

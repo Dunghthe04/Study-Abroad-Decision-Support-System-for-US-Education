@@ -17,6 +17,7 @@ import type { StudyCenter } from "@/types/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { getEnrichedCenterProfile } from "@/lib/center-details";
 import { centerServiceLabel } from "@/lib/center-services";
+import { COMPARE_MAX, COMPARE_MIN, compareHref } from "@/lib/center-compare";
 import { cn } from "@/lib/utils";
 import { buttonVariants, Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -262,7 +263,19 @@ function CenterFiltersPanel({
   );
 }
 
-function CenterCard({ center, isAdmin }: { center: StudyCenter; isAdmin: boolean }) {
+function CenterCard({
+  center,
+  isAdmin,
+  comparing,
+  compareFull,
+  onToggleCompare,
+}: {
+  center: StudyCenter;
+  isAdmin: boolean;
+  comparing: boolean;
+  compareFull: boolean;
+  onToggleCompare: () => void;
+}) {
   const profile = getEnrichedCenterProfile(center);
   const isVerified = center.verificationStatus === "verified";
   const detailHref = `/centers/${center.id}`;
@@ -339,7 +352,21 @@ function CenterCard({ center, isAdmin }: { center: StudyCenter; isAdmin: boolean
         </dl>
       </CardContent>
 
-      <CardFooter className="bg-transparent py-3">
+      <CardFooter className="flex-col items-stretch gap-3 bg-transparent py-3">
+        <label
+          className={cn(
+            "flex w-fit items-center gap-2 text-sm text-ink-2",
+            !comparing && compareFull ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+          )}
+          title={!comparing && compareFull ? `Chỉ so sánh tối đa ${COMPARE_MAX} trung tâm` : undefined}
+        >
+          <Checkbox
+            checked={comparing}
+            disabled={!comparing && compareFull}
+            onCheckedChange={onToggleCompare}
+          />
+          So sánh
+        </label>
         <Link href={detailHref} className={cn(buttonVariants({ variant: "default" }), "w-full")}>
           Xem chi tiết
         </Link>
@@ -361,6 +388,15 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
   const [sortBy, setSortBy] = useState<SortKey>("default");
   const [page, setPage] = useState(1);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  // Trung tâm đang chọn để so sánh (theo id, giữ nguyên khi đổi trang hoặc bộ lọc)
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const toggleCompare = (id: string) =>
+    setCompareIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= COMPARE_MAX ? prev : [...prev, id],
+    );
+  const comparedCenters = compareIds
+    .map((id) => initialCenters.find((c) => c.id === id))
+    .filter((c): c is StudyCenter => !!c);
   const pageSize = 9;
 
   const filteredAndSorted = useMemo(() => {
@@ -676,7 +712,14 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
           ) : (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
               {paginatedCenters.map((center) => (
-                <CenterCard key={center.id} center={center} isAdmin={isAdmin} />
+                <CenterCard
+                  key={center.id}
+                  center={center}
+                  isAdmin={isAdmin}
+                  comparing={compareIds.includes(center.id)}
+                  compareFull={compareIds.length >= COMPARE_MAX}
+                  onToggleCompare={() => toggleCompare(center.id)}
+                />
               ))}
             </div>
           )}
@@ -694,6 +737,48 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
           )}
         </div>
       </div>
+
+      {comparedCenters.length > 0 && <div className="h-20" aria-hidden />}
+      {comparedCenters.length > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-ink-2">
+                Đã chọn {comparedCenters.length}/{COMPARE_MAX}:
+              </span>
+              {comparedCenters.map((c) => (
+                <span
+                  key={c.id}
+                  className="inline-flex max-w-52 items-center gap-1.5 rounded-lg border border-line bg-ground px-2.5 py-1 text-sm font-medium text-ink"
+                >
+                  <span className="truncate">{c.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleCompare(c.id)}
+                    className="rounded-full p-0.5 text-ink-3 hover:bg-surface hover:text-ink"
+                    aria-label={`Bỏ ${c.name} khỏi so sánh`}
+                  >
+                    <XIcon className="size-3.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setCompareIds([])}>
+              Bỏ chọn
+            </Button>
+            {comparedCenters.length >= COMPARE_MIN ? (
+              <Link
+                href={compareHref(compareIds)}
+                className={cn(buttonVariants({ variant: "default" }))}
+              >
+                So sánh ({comparedCenters.length})
+              </Link>
+            ) : (
+              <span className="text-sm text-ink-3">Chọn thêm ít nhất 1 trung tâm nữa</span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

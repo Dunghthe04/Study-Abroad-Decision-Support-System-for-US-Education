@@ -16,7 +16,8 @@ from app.schemas.chat import QuickReply
 MENU = {
     "schools": QuickReply(label="Gợi ý trường từ hồ sơ", value="Gợi ý trường phù hợp với hồ sơ của em"),
     "assess": QuickReply(label="Đánh giá hồ sơ", value="Đánh giá hồ sơ của em"),
-    "scenario": QuickReply(label="Thử thay đổi hồ sơ", value="Nếu điểm SAT của em tăng thì sao?"),
+    # Bấm nút này thì code trả lời luôn (chat_flow.is_try_menu), không qua SLM: câu chung chung "thử thay đổi" model chưa đọc được
+    "scenario": QuickReply(label="Thử thay đổi hồ sơ", value="Em muốn thử thay đổi hồ sơ"),
     "knowledge": QuickReply(label="Hỏi về visa, học phí", value="Visa F-1 cần chuẩn bị gì?"),
     "centers": QuickReply(label="Tìm trung tâm tư vấn", value="Em muốn tìm trung tâm tư vấn"),
 }
@@ -89,6 +90,9 @@ GROUP_TOO_SMALL = "Nhóm {group} trong danh sách của bạn có {count} trư�
 NEED_RESULTS = "Bạn cần có danh sách trường gợi ý trước thì mình mới thử kịch bản được. Bạn muốn mình gợi ý trường trước không?"
 NOTHING_TO_TRY = "Mình chưa thử được thay đổi này. Hiện mình thử được: {supported}."
 TRY_INSTEAD = "Bạn thử đổi được: {supported}."
+TRY_WHAT = (
+    "Bạn muốn thử thay đổi gì? Mình thử được: {supported}. Bạn chọn nhanh bên dưới hoặc gõ mức bạn muốn thử."
+)
 ASK_SCHOOL = "Bạn muốn vào trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé."
 # Mục lọc trường: không thử tạm được, sửa hồ sơ rồi gợi ý lại (.NET không tự chạy lại gợi ý khi hồ sơ đổi)
 FILTER_TEXT = (
@@ -157,9 +161,13 @@ CENTER_ELSEWHERE = "Hiện chưa có trung tâm đã xác minh ở {city}, các 
 CENTER_MORE = "Còn {count} trung tâm khác, bạn bấm Xem thêm để xem hết."
 # Việc model tách ra (tasks) mà hệ thống chưa làm được: nói rõ rồi vẫn gợi ý trung tâm theo dịch vụ
 CENTER_TASK_NOTES = {
-    "booking": "Mình chưa đặt lịch hẹn thay bạn được, nhưng mình gợi ý các trung tâm để bạn tự tìm hiểu nhé.",
-    "compare": "Mình chưa so sánh các trung tâm với nhau được, nhưng mình gợi ý các trung tâm phù hợp để bạn tự tìm hiểu nhé.",
+    "booking": "Lịch hẹn bạn trao đổi trực tiếp với trung tâm nhé. Bạn bấm Liên hệ trên thẻ trung tâm để gửi yêu cầu tư vấn, trung tâm sẽ phản hồi lại cho bạn. Mình gợi ý sẵn các trung tâm đã xác minh bên dưới.",
+    "compare": "Mỗi trung tâm mạnh một mảng riêng nên mình không chấm hơn thua giữa các nơi. Bạn bấm Chi tiết để xem dịch vụ và địa điểm của từng trung tâm, rồi chọn nơi hợp với mình nhé. Đây là các trung tâm đã xác minh.",
 }
+# Nút kèm câu "so sánh" và "đặt lịch": mở trang Trung tâm (bộ lọc, danh sách đầy đủ). value chỉ dùng khi nút không chuyển trang
+CENTER_PAGE_BUTTON = QuickReply(
+    label="Trang Trung tâm", value="Em muốn xem trang trung tâm tư vấn", href="/centers"
+)
 # Học sinh xin điều hệ thống không cung cấp (số điện thoại, giá, xếp hạng, đánh giá trung tâm)
 CENTER_NOT_PROVIDED = (
     "Mình không cung cấp số điện thoại, mức giá hay xếp hạng, đánh giá của trung tâm. "

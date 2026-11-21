@@ -20,6 +20,7 @@ import {
   ShieldCheckIcon,
 } from "lucide-react";
 import { targetSchoolsApi } from "@/lib/api";
+import { ParentSuggestions } from "@/components/target-schools/ParentSuggestions";
 import type { TargetSchoolDto, TargetSchoolSummaryDto } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { ErrorFallback } from "@/components/ui/error-fallback";
@@ -217,6 +218,9 @@ export function TargetSchoolListView() {
           </Link>
         </div>
       </div>
+
+      {/* Trường phụ huynh gợi ý: con thêm vào danh sách hoặc bỏ qua */}
+      <ParentSuggestions onAccepted={fetchData} />
 
       {/* Thẻ Thống Kê Tổng Quan (Summary Cards) */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">

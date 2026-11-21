@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { LEAD_IMAGE_ACCEPT, validateLeadImage } from "@/lib/lead-message";
+import { cn } from "@/lib/utils";
 
 /** Ảnh đính kèm trong bong bóng tin nhắn; bấm để mở ảnh gốc ở tab mới. */
 export function LeadMessageAttachment({ url }: { url?: string | null }) {
@@ -158,5 +159,51 @@ export function ReportMessageControl({
         </Button>
       </div>
     </div>
+  );
+}
+
+
+/**
+ * [Chat realtime] Trạng thái của phía đối diện: chấm xanh khi đang online, xám khi ngoại tuyến.
+ * Chưa kết nối realtime thì không khẳng định gì, chỉ báo khung đang cập nhật định kỳ.
+ */
+export function PeerPresenceBadge({ connected, online, peerLabel }: { connected: boolean; online: boolean; peerLabel: string }) {
+  if (!connected) {
+    return <span className="text-[11px] text-muted-foreground">Đang cập nhật định kỳ</span>;
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground" role="status">
+      <span className={cn("size-2 rounded-full", online ? "bg-emerald-500" : "bg-muted-foreground/40")} aria-hidden />
+      {online ? `${peerLabel} đang online` : `${peerLabel} ngoại tuyến`}
+    </span>
+  );
+}
+
+/** [Chat realtime] "... đang nhập" với ba chấm nhấp nháy, đặt dưới danh sách tin. */
+export function TypingIndicator({ peerLabel }: { peerLabel: string }) {
+  return (
+    <div className="mr-auto flex items-center gap-1.5 text-[11px] text-muted-foreground" role="status" aria-live="polite">
+      <span className="inline-flex gap-0.5" aria-hidden>
+        {[0, 150, 300].map((delay) => (
+          <span
+            key={delay}
+            className="size-1 animate-bounce rounded-full bg-muted-foreground/60"
+            style={{ animationDelay: `${delay}ms` }}
+          />
+        ))}
+      </span>
+      {peerLabel} đang nhập...
+    </div>
+  );
+}
+
+/** [Chat realtime] "Đã xem" hoặc "Đã gửi" dưới tin cuối cùng của chính mình (giống Messenger). */
+export function MessageReceipt({ readAt }: { readAt?: string | null }) {
+  return (
+    <span className="mt-1 self-end text-[10px] text-muted-foreground">
+      {readAt
+        ? `Đã xem ${new Date(readAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`
+        : "Đã gửi"}
+    </span>
   );
 }

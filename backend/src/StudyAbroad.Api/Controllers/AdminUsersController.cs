@@ -34,7 +34,8 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
     public async Task<ActionResult<UserDto>> GetUserById(Guid id, CancellationToken ct)
     {
         var user = await auth.GetMeAsync(id, ct);
-        return user is not null ? Ok(user) : NotFound();
+        // [1.5c] Con managed không phải tài khoản thật: admin xem theo id cũng nhận 404. Chặn ở đây, không sửa GetMeAsync vì /me còn dùng khi phụ huynh làm thay
+        return user is not null && user.Status != UserStatuses.Managed ? Ok(user) : NotFound();
     }
 
     /// <summary>[UC-63] Tạo tài khoản moderator (chỉ Admin mới được tạo).</summary>
@@ -74,6 +75,21 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
             return Unauthorized();
 
         var result = await auth.UnlockUserAccountAsync(id, request, actorId, ct);
+        if (result.Error != AuthError.None || result.User is null)
+            return ValidationProblem(result.Message);
+
+        return Ok(result.User);
+    }
+
+    /// <summary>[UC-113] Sửa ngày sinh Học sinh / Phụ huynh theo yêu cầu hỗ trợ, bắt buộc lý do, ghi audit giá trị cũ và mới (chỉ Admin).</summary>
+    [HttpPut("{id:guid}/birth-date")]
+    [Authorize(Roles = UserRoles.Admin)]
+    public async Task<ActionResult<UserDto>> UpdateBirthDate(Guid id, UpdateUserBirthDateRequest request, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId)
+            return Unauthorized();
+
+        var result = await auth.UpdateUserBirthDateAsync(id, request, actorId, ct);
         if (result.Error != AuthError.None || result.User is null)
             return ValidationProblem(result.Message);
 

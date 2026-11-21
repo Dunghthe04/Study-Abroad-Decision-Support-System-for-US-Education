@@ -5,7 +5,6 @@ import pytest
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
 from app.services.knowledge import KnowledgeHit
 from app.services.ollama import OllamaError
-from app.services.skill_rules import ORDER
 from app.services.skills import build_handlers
 from app.services.skills.skill_tra_loi import (
     DISCLAIMER,
@@ -304,7 +303,7 @@ def test_skill_tra_loi_is_registered_only_when_the_knowledge_store_exists():
 
     handlers = build_handlers(llm=object(), model="m", knowledge=FakeRetriever())
 
-    assert "skill_tra_loi" in handlers and "skill_tra_loi" in ORDER
+    assert "skill_tra_loi" in handlers
 
 
 # SLM đọc là câu hỏi kiến thức: nhánh kiến thức gọi skill_tra_loi
@@ -358,4 +357,36 @@ async def test_a_refusal_does_not_vouch_for_any_center_and_offers_the_center_but
 async def test_a_real_answer_has_no_center_button():
     out = await handler_with(FakeLLMWithEmbed(good()), FakeRetriever([hit()])).run(ChatState(), "q")
 
-    assert out.quick_replies == []
+    assert "Tìm trung tâm tư vấn" not in [r.label for r in out.quick_replies]
+
+
+# Câu trả lời kiến thức có nút đi tiếp: câu hỏi liên quan trong kho (gần câu hỏi, khác dòng vừa dùng), rồi gợi ý trường
+async def test_answer_offers_related_questions_then_schools():
+    def h(code, question, score):
+        return KnowledgeHit(code, question, SEVIS, None, None, "Nguồn", None, score)
+
+    hits = [
+        h("KB-1", "Phí SEVIS là gì?", 0.9),
+        h("KB-2", "Phí SEVIS nộp khi nào?", 0.8),
+        h("KB-1", "Phí SEVIS là gì?", 0.85),  # cùng dòng vừa dùng: bỏ
+        h("KB-3", "Đóng phí SEVIS bằng thẻ nào?", 0.6),
+        h("KB-4", "Visa F-1 là gì?", 0.4),  # quá xa: bỏ
+    ]
+    out = await handler_with(FakeLLMWithEmbed(good()), FakeRetriever(hits)).run(
+        ChatState(), "Phí SEVIS bao nhiêu?"
+    )
+
+    assert [r.label for r in out.quick_replies] == [
+        "Phí SEVIS nộp khi nào?",
+        "Đóng phí SEVIS bằng thẻ nào?",
+        "Gợi ý trường từ hồ sơ",
+    ]
+    assert out.quick_replies[0].value == "Phí SEVIS nộp khi nào?"
+
+
+async def test_answer_without_related_questions_still_has_buttons():
+    out = await handler_with(FakeLLMWithEmbed(good()), FakeRetriever([hit()])).run(
+        ChatState(), "Phí SEVIS bao nhiêu?"
+    )
+
+    assert [r.label for r in out.quick_replies] == ["Gợi ý trường từ hồ sơ"]
