@@ -229,7 +229,7 @@ export function SiteHeader() {
                 >
                   <span
                     aria-hidden="true"
-                    className="flex size-7 shrink-0 items-center justify-center rounded-md bg-brand text-brand-wash"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[color-mix(in_oklab,var(--brand),white_38%)] text-white"
                   >
                     <UserRoleIcon role={user.role} className="size-[18px]" />
                   </span>
