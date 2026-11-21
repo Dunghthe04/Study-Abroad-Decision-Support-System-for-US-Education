@@ -3664,7 +3664,7 @@ public class ChatServiceTests
         public Task<IReadOnlyList<StudyAbroad.Application.Billing.PlanDto>> GetPlansOnSaleAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<StudyAbroad.Application.Billing.LaneState> AdvanceLaneAsync(
+        public Task<IReadOnlyList<StudyAbroad.Application.Billing.ActiveCycle>> EndExpiredCyclesAsync(
             Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default, ICollection<Func<CancellationToken, Task>>? deferredNotifications = null) =>
             throw new NotSupportedException();
     }

@@ -278,53 +278,26 @@ public class OrderServiceTests
         Assert.Equal(500_000L, h.Order(order.OrderCode).PlanTokenQuota);
     }
 
-    // ---- R6, F29: luật làn
+    // ---- gói cộng dồn, F29
 
     [Fact]
-    public async Task R1_ActiveWithTokensLeft_CanBuyTheRenewal()
+    public async Task A_BuyingASecondPersonalPlanWhileOneIsActive_IsAllowed_AndPaymentCreatesASecondActiveCycle()
     {
         var h = new OrderHarness();
         var buyer = h.AddUser();
-        h.Store.AddActive(buyer.Id, "personal-1m");
+        var first = h.Store.AddActive(buyer.Id, "personal-1m");
 
-        Assert.Equal("pending", (await h.CreateOrder(buyer, "personal-1m")).Status);
-    }
+        var order = await h.CreateOrder(buyer, "personal-3m");
+        var paid = await h.Orders.ApplyPaymentAsync(order.OrderCode, order.AmountVnd, null, Now.AddMinutes(1));
 
-    [Fact]
-    public async Task R6_SecondRenewalWhileOneIsQueued_AlreadyRenewed()
-    {
-        var h = new OrderHarness();
-        var buyer = h.AddUser();
-        h.Store.AddActive(buyer.Id, "personal-1m");
-        h.Store.AddQueued(buyer.Id, "personal-3m");
-
-        var ex = await Fails(h.CreateOrder(buyer, "personal-1m"));
-
-        Assert.Equal(("already_renewed", 409), (ex.Code, ex.StatusCode));
-        Assert.Empty(h.Store.Orders);
-    }
-
-    [Fact]
-    public async Task R6_TheQueueIsPerLane_PersonalQueuedDoesNotBlockFamily()
-    {
-        var h = new OrderHarness();
-        var buyer = h.AddUser(UserRoles.Parent, age: 40);
-        h.Store.AddActive(buyer.Id, "personal-1m");
-        h.Store.AddQueued(buyer.Id, "personal-3m");
-
-        Assert.Equal("pending", (await h.CreateOrder(buyer, "family-1m")).Status);
-    }
-
-    [Fact]
-    public async Task R6_TheQueuedCycleStartsFirstWhenTheActiveOneHasExpired_SoRenewingIsAllowedAgain()
-    {
-        var h = new OrderHarness();
-        var buyer = h.AddUser();
-        h.Store.AddActive(buyer.Id, "personal-1m", startsAt: Now.AddDays(-31));
-        h.Store.AddQueued(buyer.Id, "personal-1m");
-
-        // AdvanceLane thấy kỳ cũ hết hạn: kỳ chờ chạy, làn không còn kỳ chờ nên mua gia hạn được
-        Assert.Equal("pending", (await h.CreateOrder(buyer, "personal-3m")).Status);
+        Assert.Equal("pending", order.Status);
+        Assert.Equal(PaymentApplyStatus.Activated, paid.Status);
+        var cycles = h.Store.Cycles.Where(c => c.UserId == buyer.Id).ToList();
+        Assert.Equal(2, cycles.Count);
+        Assert.All(cycles, c => Assert.Equal(CycleStatuses.Active, c.Status));
+        var second = cycles.Single(c => c.Id != first.Id);
+        Assert.Equal((Now.AddMinutes(1), Now.AddMinutes(1).AddDays(90)), (second.StartsAt!.Value, second.EndsAt!.Value));
+        Assert.Equal(CycleStatuses.Active, first.Status);   // kỳ cũ không bị đụng tới
     }
 
     [Fact]
@@ -393,7 +366,7 @@ public class OrderServiceTests
     }
 
     [Fact]
-    public async Task Get_PaidOrder_ShowsItsCycle_AndQueuedFlag()
+    public async Task Get_PaidOrder_ShowsItsCycleDates_EvenWhenAnotherCycleWasAlreadyRunning()
     {
         var h = new OrderHarness();
         var buyer = h.AddUser();
@@ -402,12 +375,12 @@ public class OrderServiceTests
         var renewal = await h.CreateOrder(buyer, "personal-3m", Now.AddMinutes(5));
         await h.Orders.ApplyPaymentAsync(renewal.OrderCode, 199_000, null, Now.AddMinutes(6));
 
-        var active = await h.Orders.GetMineAsync(buyer.Id, first.OrderCode);
-        var queued = await h.Orders.GetMineAsync(buyer.Id, renewal.OrderCode);
+        var firstDto = await h.Orders.GetMineAsync(buyer.Id, first.OrderCode);
+        var secondDto = await h.Orders.GetMineAsync(buyer.Id, renewal.OrderCode);
 
-        Assert.Equal(("paid", new OrderCycleDto(Now, Now.AddDays(30), false)), (active.Status, active.Cycle));
-        Assert.Equal(("paid", new OrderCycleDto(null, null, true)), (queued.Status, queued.Cycle));
-        Assert.Equal(Now, active.PaidAt);
+        Assert.Equal(("paid", new OrderCycleDto(Now, Now.AddDays(30))), (firstDto.Status, firstDto.Cycle));
+        Assert.Equal(("paid", new OrderCycleDto(Now.AddMinutes(6), Now.AddMinutes(6).AddDays(90))), (secondDto.Status, secondDto.Cycle));
+        Assert.Equal(Now, firstDto.PaidAt);
     }
 
     [Fact]

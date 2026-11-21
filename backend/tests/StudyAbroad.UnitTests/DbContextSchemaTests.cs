@@ -153,10 +153,9 @@ public class DbContextSchemaTests
         Assert.True(HasUniqueIndex<PaymentTransaction>(db, nameof(PaymentTransaction.OrderCode)));
         Assert.True(db.Model.FindEntityType(typeof(FamilyMember))!.FindProperty(nameof(FamilyMember.Version))!.IsConcurrencyToken);
 
-        // Một active và một queued mỗi làn, một nhóm active mỗi chủ, một thành viên active mỗi người, một lời mời chờ mỗi email,
+        // Kỳ cộng dồn nên không có index duy nhất theo (người, loại); một nhóm active mỗi chủ, một thành viên active mỗi người, một lời mời chờ mỗi email,
         // một đơn chờ mỗi người, một gói free
-        Assert.Equal("status = 'active'", PartialUniqueFilter<UserSubscription>(db, "ux_user_subscriptions_one_active_per_lane", "UserId", "Kind"));
-        Assert.Equal("status = 'queued'", PartialUniqueFilter<UserSubscription>(db, "ux_user_subscriptions_one_queued_per_lane", "UserId", "Kind"));
+        Assert.DoesNotContain(cycle.GetIndexes(), i => i.IsUnique);
         Assert.Equal("status = 'active'", PartialUniqueFilter<FamilyGroup>(db, "ux_family_groups_one_active_per_owner", "OwnerUserId"));
         Assert.Equal("status = 'active'", PartialUniqueFilter<FamilyMember>(db, "ux_family_members_one_active_per_user", "UserId"));
         Assert.Equal("status = 'pending'", PartialUniqueFilter<FamilyMember>(db, "ux_family_members_one_pending_per_email", "FamilyGroupId", "InvitedEmail"));

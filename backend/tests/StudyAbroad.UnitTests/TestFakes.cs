@@ -331,7 +331,7 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
-    public Task SendPaymentReceiptEmailAsync(string toEmail, string fullName, long orderCode, string planName, decimal amountVnd, DateTime paidAtUtc, DateTime? startsAtUtc, DateTime? endsAtUtc, bool queued, CancellationToken ct = default)
+    public Task SendPaymentReceiptEmailAsync(string toEmail, string fullName, long orderCode, string planName, decimal amountVnd, DateTime paidAtUtc, DateTime? startsAtUtc, DateTime? endsAtUtc, CancellationToken ct = default)
     {
         SentEmails.Add((toEmail, "payment_receipt", orderCode.ToString()));
         return Task.CompletedTask;

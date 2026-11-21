@@ -13,11 +13,11 @@ namespace StudyAbroad.UnitTests;
 internal sealed class UniqueViolationException(string message) : Exception(message);
 
 /// <summary>Ném thay cho DbUpdateConcurrencyException (xmin của dòng thành viên đã bị request khác đổi).</summary>
-internal sealed class LaneXminConflictException : Exception;
+internal sealed class XminConflictException : Exception;
 
 /// <summary>
 /// Cơ sở dữ liệu trong bộ nhớ cho test đơn hàng: cùng một đối tượng là IBillingRepository, IOrderRepository và IUnitOfWork như DbContext dùng chung.
-/// Giữ các luật của DB mà tiền phụ thuộc vào: một active và một queued mỗi làn, một nhóm active mỗi chủ, một đơn chờ mỗi người,
+/// Giữ các luật của DB mà tiền phụ thuộc vào: một nhóm active mỗi chủ, một đơn chờ mỗi người,
 /// mã đơn duy nhất, FOR UPDATE chỉ dùng trong transaction, và transaction lỗi thì quay về trạng thái trước (thực thể đã trả ra thành cũ).
 /// </summary>
 internal sealed partial class BillingStore : IBillingRepository, IOrderRepository, IUnitOfWork
@@ -52,12 +52,12 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
     public bool AlwaysConflictOnCycleInsert { get; set; }
     /// <summary>Ném lỗi này ở lần lưu kỳ mới đầu tiên (lỗi không phải xung đột thì không được thử lại).</summary>
     public Exception? FailOnCycleInsert { get; set; }
-    /// <summary>Một request khác chuyển làn xong ngay sau lượt đọc không khóa của request này, trước khi nó khóa dòng làn (chạy một lần).</summary>
-    public Action<BillingStore>? RaceBeforeLaneLock { get; set; }
-    /// <summary>Lần lưu chuyển kỳ / kết thúc nhóm có khóa tiếp theo vướng xung đột xmin sau khi đã sửa (chạy một lần).</summary>
+    /// <summary>Một request khác kết thúc kỳ hết hạn xong ngay sau lượt đọc không khóa của request này, trước khi nó khóa các dòng kỳ (chạy một lần).</summary>
+    public Action<BillingStore>? RaceBeforeCycleLock { get; set; }
+    /// <summary>Lần lưu kết thúc kỳ / nhóm có khóa tiếp theo vướng xung đột xmin sau khi đã sửa (chạy một lần).</summary>
     public bool ConcurrencyConflictOnLockedSave { get; set; }
     /// <summary>Số lần lưu có khóa đã chạy tới bước kế hoạch (chạm tới khóa dòng), kể cả khi kế hoạch rỗng.</summary>
-    public int LaneLocks { get; private set; }
+    public int CycleLocks { get; private set; }
 
     private readonly List<UserSubscription> stagedCycles = [];
     private readonly List<FamilyGroup> stagedGroups = [];
@@ -84,20 +84,6 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
         return cycle;
     }
 
-    public UserSubscription AddQueued(Guid owner, string planCode)
-    {
-        var plan = Plan(planCode);
-        var cycle = new UserSubscription
-        {
-            UserId = owner, SubscriptionPlanId = plan.Id, Kind = plan.Kind, Status = CycleStatuses.Queued,
-            DurationDays = plan.DurationDays!.Value, QuotaPeriodDays = plan.QuotaPeriodDays,
-            TokenQuota = plan.TokenQuota, PlanName = plan.Name, PriceVnd = plan.PriceVnd,
-            FamilyGroupId = plan.Kind == PlanKinds.Family ? Groups.First(g => g.OwnerUserId == owner && g.Status == FamilyGroupStatuses.Active).Id : null,
-        };
-        Cycles.Add(cycle);
-        return cycle;
-    }
-
     /// <summary>Nhóm gia đình của owner với một kỳ family-1m active; member (nếu có) là thành viên active.</summary>
     public UserSubscription AddFamily(Guid owner, Guid? member = null, DateTime? startsAt = null)
     {
@@ -113,6 +99,14 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
         return cycle;
     }
 
+    /// <summary>Thêm một kỳ Gia đình nữa vào nhóm active có sẵn của owner (gói cộng dồn).</summary>
+    public UserSubscription AddFamilyCycle(Guid owner, string planCode = "family-1m", DateTime? startsAt = null)
+    {
+        var cycle = AddActive(owner, planCode, startsAt);
+        cycle.FamilyGroupId = Groups.First(g => g.OwnerUserId == owner && g.Status == FamilyGroupStatuses.Active).Id;
+        return cycle;
+    }
+
     public void Use(Guid userId, UserSubscription cycle, int tokens, DateTime? at = null) => Calls.Add(new AiCall
     {
         UserId = userId, Kind = BillingRules.MeteredAiKind, TotalTokens = tokens, UserSubscriptionId = cycle.Id, PlanCode = Plans.Single(p => p.Id == cycle.SubscriptionPlanId).Code,
@@ -123,9 +117,9 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
 
     public Task<IReadOnlyList<SubscriptionPlan>> GetPlansAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SubscriptionPlan>>(Plans.ToList());
 
-    public Task<List<UserSubscription>> GetOpenCyclesAsync(Guid ownerUserId, string kind, CancellationToken ct = default) =>
+    public Task<List<UserSubscription>> GetActiveCyclesAsync(Guid ownerUserId, string kind, CancellationToken ct = default) =>
         Task.FromResult(Cycles.Where(c => c.UserId == ownerUserId && c.Kind == kind
-            && (c.Status == CycleStatuses.Active || c.Status == CycleStatuses.Queued)).ToList());
+            && c.Status == CycleStatuses.Active).ToList());
 
     public Task<FamilyGroup?> FindActiveOwnedGroupAsync(Guid ownerUserId, CancellationToken ct = default) =>
         Task.FromResult(Groups.FirstOrDefault(g => g.OwnerUserId == ownerUserId && g.Status == FamilyGroupStatuses.Active));
@@ -170,7 +164,7 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
         {
             await ExecuteInTransactionAsync(async _ => saved = await RunLockedAsync(plan), ct);
         }
-        catch (LaneXminConflictException)
+        catch (XminConflictException)
         {
             return false;
         }
@@ -179,10 +173,10 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
 
     private async Task<bool> RunLockedAsync(Func<Task<IReadOnlyList<Action>>> plan)
     {
-        LaneLocks++;
-        if (RaceBeforeLaneLock is { } race)
+        CycleLocks++;
+        if (RaceBeforeCycleLock is { } race)
         {
-            RaceBeforeLaneLock = null;
+            RaceBeforeCycleLock = null;
             race(this);
             externalWrites.Add(race);   // request kia đã commit độc lập: còn nguyên khi transaction này quay lui
         }
@@ -195,7 +189,7 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
         if (steps.Count > 0 && ConcurrencyConflictOnLockedSave)
         {
             ConcurrencyConflictOnLockedSave = false;
-            throw new LaneXminConflictException();
+            throw new XminConflictException();
         }
         return steps.Count > 0;
     }
@@ -304,7 +298,7 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
                 throw failure;
             }
             if (AlwaysConflictOnCycleInsert)
-                throw new UniqueViolationException("ux_user_subscriptions_one_active_per_lane");
+                throw new UniqueViolationException("xung đột khi lưu kỳ");
         }
         Groups.AddRange(stagedGroups);
         Cycles.AddRange(stagedCycles);
@@ -315,13 +309,6 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
 
     private void CheckIndexes()
     {
-        foreach (var lane in Cycles.GroupBy(c => (c.UserId, c.Kind)))
-        {
-            if (lane.Count(c => c.Status == CycleStatuses.Active) > 1)
-                throw new UniqueViolationException("ux_user_subscriptions_one_active_per_lane");
-            if (lane.Count(c => c.Status == CycleStatuses.Queued) > 1)
-                throw new UniqueViolationException("ux_user_subscriptions_one_queued_per_lane");
-        }
         if (Groups.Where(g => g.Status == FamilyGroupStatuses.Active).GroupBy(g => g.OwnerUserId).Any(g => g.Count() > 1))
             throw new UniqueViolationException("ux_family_groups_one_active_per_owner");
         if (Members.Where(m => m.Status == FamilyMemberStatuses.Active && m.UserId != null).GroupBy(m => m.UserId).Any(g => g.Count() > 1))
@@ -395,7 +382,7 @@ internal sealed class RecordingNotifications : INotificationService
     public Task<int> MarkAllReadAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
 }
 
-/// <summary>OrderService thật trên EntitlementService thật và cơ sở dữ liệu giả, để luật làn và đơn hàng được kiểm đúng như chạy thật.</summary>
+/// <summary>OrderService thật trên EntitlementService thật và cơ sở dữ liệu giả, để luật kỳ và đơn hàng được kiểm đúng như chạy thật.</summary>
 internal sealed class OrderHarness
 {
     public const string ChecksumKey = "ck-test";

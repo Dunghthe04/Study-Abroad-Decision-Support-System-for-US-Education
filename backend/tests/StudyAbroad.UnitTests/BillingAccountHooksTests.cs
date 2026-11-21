@@ -90,7 +90,7 @@ public class BillingAccountHooksTests
 
         public Task<int> EndOpenCyclesAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default)
         {
-            var open = store.Cycles.Where(c => c.UserId == userId && (c.Status == CycleStatuses.Active || c.Status == CycleStatuses.Queued)).ToList();
+            var open = store.Cycles.Where(c => c.UserId == userId && c.Status == CycleStatuses.Active).ToList();
             foreach (var c in open)
             {
                 c.Status = CycleStatuses.Ended;
@@ -248,7 +248,7 @@ public class BillingAccountHooksTests
     {
         var env = new Env();
         var cycle = env.Family();
-        var queued = env.Store.AddQueued(env.Owner, "family-3m");
+        var second = env.Store.AddFamilyCycle(env.Owner, "family-3m");   // gói cộng dồn: nhiều kỳ Gia đình cùng active
         var pendingInvite = new FamilyMember
         {
             FamilyGroupId = env.Group.Id, InvitedEmail = "p@x.vn", SeatRole = FamilySeats.Parent, Status = FamilyMemberStatuses.Pending, TokenHash = "p-hash",
@@ -267,7 +267,7 @@ public class BillingAccountHooksTests
         Assert.Equal((FamilyMemberStatuses.Ended, FamilyMemberEndReasons.OwnerPurged, null), (active.Status, active.EndedReason, active.TokenHash));
         Assert.Equal((FamilyMemberStatuses.Ended, FamilyMemberEndReasons.OwnerPurged, null), (pendingInvite.Status, pendingInvite.EndedReason, pendingInvite.TokenHash));
         Assert.Equal(FamilyMemberStatuses.Removed, lapsedBefore.Status);   // dòng đã kết thúc từ trước giữ nguyên lý do cũ
-        foreach (var c in new[] { cycle, queued })
+        foreach (var c in new[] { cycle, second })
             Assert.Equal((CycleStatuses.Ended, CycleEndReasons.OwnerPurged, Now), (c.Status, c.EndedReason, c.EndedAt));
         Assert.Equal((OrderStatuses.Paid, env.Owner), (order.Status, order.UserId));   // thanh toán không bị đụng, DB tự bỏ liên kết khi xóa user
         Assert.Empty(env.Notes.Sent);
@@ -390,11 +390,11 @@ public class BillingAccountHooksTests
     }
 
     [Fact]
-    public async Task D6_PersonalBuyerPurged_OpenCyclesEndedNothingNotified()
+    public async Task D6_PersonalBuyerPurged_AllActiveCyclesEndedNothingNotified()
     {
         var env = new Env();
         var active = env.Store.AddActive(env.Owner, "personal-1m");
-        var queued = env.Store.AddQueued(env.Owner, "personal-1m");
+        var second = env.Store.AddActive(env.Owner, "personal-1m");
         var ended = env.Store.AddActive(env.Owner, "personal-3m");
         ended.Status = CycleStatuses.Ended;
         ended.EndedReason = CycleEndReasons.Expired;
@@ -403,7 +403,7 @@ public class BillingAccountHooksTests
         var afterCommit = await env.Hooks.OnBeforePurgeAsync(env.Owner, Now);
         await afterCommit(CancellationToken.None);
 
-        Assert.All(new[] { active, queued }, c => Assert.Equal((CycleStatuses.Ended, CycleEndReasons.OwnerPurged), (c.Status, c.EndedReason)));
+        Assert.All(new[] { active, second }, c => Assert.Equal((CycleStatuses.Ended, CycleEndReasons.OwnerPurged), (c.Status, c.EndedReason)));
         Assert.Equal(CycleEndReasons.Expired, ended.EndedReason);
         Assert.Equal(OrderStatuses.Paid, order.Status);
         Assert.Empty(env.Notes.Sent);

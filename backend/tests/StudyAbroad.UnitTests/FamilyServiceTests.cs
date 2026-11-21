@@ -50,7 +50,7 @@ public class FamilyServiceTests
         Assert.False(dto.Members[1].IsMe);
         Assert.NotEqual(env.Student.Id, dto.Members[1].MemberId);                // thành viên: id dòng family_members
         Assert.Equal("Học sinh A", dto.Members[1].Name);
-        Assert.Equal((1, 1), (dto.Seats.Students.Used, dto.Seats.Students.Max));
+        Assert.Equal((1, 2), (dto.Seats.Students.Used, dto.Seats.Students.Max));
         Assert.Equal((1, 2), (dto.Seats.Parents.Used, dto.Seats.Parents.Max));    // lời mời đang chờ giữ chỗ
         var invite = Assert.Single(dto.Invites);
         Assert.Equal((pending.Id, "p2@x.vn", FamilySeats.Parent), (invite.InviteId, invite.Email, invite.SeatRole));
@@ -245,19 +245,20 @@ public class FamilyServiceTests
     }
 
     [Fact]
-    public async Task F5_SeatFull_PendingInvitesCount_StudentOne_ParentTwo()
+    public async Task F5_SeatFull_PendingInvitesCount_TwoStudentsTwoParentsAccepted_ThirdRefused()
     {
         var env = new Env();
         await env.Service.InviteAsync(env.Owner.Id, "s1@x.vn", FamilySeats.Student, Now);
+        await env.Service.InviteAsync(env.Owner.Id, "s2@x.vn", FamilySeats.Student, Now);
         await env.Service.InviteAsync(env.Owner.Id, "p1@x.vn", FamilySeats.Parent, Now);
         await env.Service.InviteAsync(env.Owner.Id, "p2@x.vn", FamilySeats.Parent, Now);
 
-        var student = await Assert.ThrowsAsync<BillingRuleException>(() => env.Service.InviteAsync(env.Owner.Id, "s2@x.vn", FamilySeats.Student, Now));
+        var student = await Assert.ThrowsAsync<BillingRuleException>(() => env.Service.InviteAsync(env.Owner.Id, "s3@x.vn", FamilySeats.Student, Now));
         var parent = await Assert.ThrowsAsync<BillingRuleException>(() => env.Service.InviteAsync(env.Owner.Id, "p3@x.vn", FamilySeats.Parent, Now));
 
         Assert.Equal(("seat_full", 409), (student.Code, student.StatusCode));
         Assert.Equal("seat_full", parent.Code);
-        Assert.Equal(3, env.Store.Members.Count);
+        Assert.Equal(4, env.Store.Members.Count);
     }
 
     [Fact]
@@ -265,10 +266,23 @@ public class FamilyServiceTests
     {
         var env = new Env();
         env.AddActive(env.Student, FamilySeats.Student);
+        env.AddActive(env.Student2, FamilySeats.Student);
 
-        var ex = await Assert.ThrowsAsync<BillingRuleException>(() => env.Service.InviteAsync(env.Owner.Id, "s2@x.vn", FamilySeats.Student, Now));
+        var ex = await Assert.ThrowsAsync<BillingRuleException>(() => env.Service.InviteAsync(env.Owner.Id, "s3@x.vn", FamilySeats.Student, Now));
 
         Assert.Equal("seat_full", ex.Code);
+    }
+
+    [Fact]
+    public async Task F5_SeatsStayAtTwoPlusTwo_NoMatterHowManyFamilyCyclesTheOwnerHas()
+    {
+        var env = new Env();
+        env.Store.AddCycle(env.Owner.Id, "family-3m", Now.AddDays(-1), env.Group.Id);
+        env.Store.AddCycle(env.Owner.Id, "family-1m", Now.AddDays(-1), env.Group.Id);
+
+        var dto = await env.Service.GetAsync(env.Owner.Id, UserRoles.Parent, Now);
+
+        Assert.Equal((2, 2), (dto.Seats.Students.Max, dto.Seats.Parents.Max));
     }
 
     [Fact]
@@ -676,23 +690,20 @@ public class FamilyServiceTests
     }
 
     [Fact]
-    public async Task F34_InviteeWithAnActivePersonalCycle_Joins_PersonalSpentFirstThenFamily()
+    public async Task F34_InviteeWithAnActivePersonalCycle_Joins_ChargedByEarliestEndThenTheOther()
     {
         var env = new Env();
-        var personal = env.Store.AddCycle(env.Student.Id, "personal-1m", Now.AddDays(-1));
-        env.Store.AddCycle(env.Student.Id, "personal-3m", null, status: CycleStatuses.Queued);   // F35: hàng chờ không bị ảnh hưởng
+        var personal = env.Store.AddCycle(env.Student.Id, "personal-1m", Now.AddDays(-1));   // hết hạn sau 29 ngày, kỳ Gia đình sau 28 ngày
         var (_, token) = env.AddPending(env.Student.Email, FamilySeats.Student);
 
         await env.Service.AcceptAsync(env.Student.Id, UserRoles.Student, token, Now);
         var entitlements = new EntitlementService(env.Store);
         var first = await entitlements.ResolveChatChargeAsync(env.Student.Id, UserRoles.Student, Now);
-        env.Store.Calls.Add(new AiCall { UserId = env.Student.Id, Kind = BillingRules.MeteredAiKind, TotalTokens = 500_000, UserSubscriptionId = personal.Id, PlanCode = "personal-1m" });
-        env.Store.Cycles.Single(c => c.Kind == PlanKinds.Personal && c.Status == CycleStatuses.Queued).Status = CycleStatuses.Ended;   // bỏ hàng chờ để thấy rơi về Family
+        env.Use(env.Student.Id, 500_000);   // cạn kỳ Gia đình
         var second = await entitlements.ResolveChatChargeAsync(env.Student.Id, UserRoles.Student, Now);
 
-        Assert.Equal(personal.Id, first.CycleId);
-        Assert.Equal(PlanKinds.Family, second.PoolKind);
-        Assert.Equal(env.Cycle.Id, second.CycleId);
+        Assert.Equal((env.Cycle.Id, PlanKinds.Family), (first.CycleId!.Value, first.PoolKind));
+        Assert.Equal((personal.Id, PlanKinds.Personal), (second.CycleId!.Value, second.PoolKind));
         Assert.Equal(1, env.Store.Members.Count(m => m.Status == FamilyMemberStatuses.Active));
     }
 
@@ -701,6 +712,7 @@ public class FamilyServiceTests
     {
         var env = new Env();
         env.AddActive(env.Student2, FamilySeats.Student);                          // trạng thái quá đầy (hai bên cùng giành chỗ cuối)
+        env.AddActive(env.AddUser("Học sinh C", UserRoles.Student, "hoc.sinh.c@x.vn"), FamilySeats.Student);
         var (invite, token) = env.AddPending(env.Student.Email, FamilySeats.Student);
 
         var ex = await Assert.ThrowsAsync<BillingRuleException>(() => env.Service.AcceptAsync(env.Student.Id, UserRoles.Student, token, Now));
@@ -904,21 +916,39 @@ public class FamilyServiceTests
     // ---- Gia hạn, hết hạn, job: F26, F27, F13
 
     [Fact]
-    public async Task F26_QueuedRenewalTakesOver_MembersAndPendingInvitesCarryOver()
+    public async Task F26_AnotherFamilyCycleKeepsTheGroup_MembersAndPendingInvitesCarryOver()
     {
         var env = new Env();
         env.AddActive(env.Student, FamilySeats.Student);
         var (invite, _) = env.AddPending("p2@x.vn", FamilySeats.Parent);
         env.Cycle.EndsAt = Now.AddMinutes(-30);
-        var renewal = env.Store.AddCycle(env.Owner.Id, "family-3m", null, env.Group.Id, CycleStatuses.Queued);
+        var renewal = env.Store.AddCycle(env.Owner.Id, "family-3m", Now.AddDays(-1), env.Group.Id);
 
         var dto = await env.Service.GetAsync(env.Student.Id, UserRoles.Student, Now);
 
         Assert.Equal(env.Group.Id, dto.GroupId);
-        Assert.Equal(CycleStatuses.Active, renewal.Status);
+        Assert.Equal((CycleStatuses.Ended, CycleStatuses.Active), (env.Cycle.Status, renewal.Status));
         Assert.Equal("Gia đình 3 tháng", dto.Cycle!.PlanName);
         Assert.Equal(FamilyMemberStatuses.Pending, invite.Status);
         Assert.Equal(2, dto.Members.Count);
+    }
+
+    [Fact]
+    public async Task G_TwoFamilyCycles_UsageAndMemberSharesAggregateOverBoth()
+    {
+        var env = new Env();
+        var second = env.Store.AddCycle(env.Owner.Id, "family-3m", Now.AddDays(-1), env.Group.Id);   // 600 000 + 500 000 = 1 100 000
+        env.AddActive(env.Student, FamilySeats.Student);
+        env.Use(env.Student.Id, 300_000);
+        env.Store.Calls.Add(new AiCall { UserId = env.Owner.Id, Kind = BillingRules.MeteredAiKind, TotalTokens = 150_000, UserSubscriptionId = second.Id, PlanCode = "family-3m", CreatedAt = Now.AddHours(-1) });
+
+        var asOwner = await env.Service.GetAsync(env.Owner.Id, UserRoles.Parent, Now);
+        var asMember = await env.Service.GetAsync(env.Student.Id, UserRoles.Student, Now);
+
+        Assert.Equal(("Gia đình 1 tháng", 40), (asOwner.Cycle!.PlanName, asOwner.Cycle.UsedPercent));   // 450 000 / 1 100 000, kỳ hết hạn sớm nhất
+        Assert.Equal([13, 27], asOwner.Members.Select(m => m.SharePercent));
+        Assert.Equal(40, asMember.Cycle!.UsedPercent);
+        Assert.Equal([13, 27], asMember.Members.Select(m => m.SharePercent));
     }
 
     [Fact]
@@ -940,7 +970,7 @@ public class FamilyServiceTests
     }
 
     [Fact]
-    public async Task F27_FamilyEndsWithNothingQueued_MembershipsAndInvitesEnd()
+    public async Task F27_FamilyEndsWithNoCycleLeft_MembershipsAndInvitesEnd()
     {
         var env = new Env();
         var member = env.AddActive(env.Student, FamilySeats.Student);
@@ -1167,12 +1197,12 @@ public class FamilyServiceTests
         public bool InTransaction { get; set; }
         public bool ConflictOnNextSave { get; set; }
 
-        public UserSubscription AddCycle(Guid owner, string planCode, DateTime? startsAt, Guid? groupId = null, string status = CycleStatuses.Active)
+        public UserSubscription AddCycle(Guid owner, string planCode, DateTime? startsAt, Guid? groupId = null)
         {
             var plan = Plans.Single(p => p.Code == planCode);
             var cycle = new UserSubscription
             {
-                UserId = owner, SubscriptionPlanId = plan.Id, Kind = plan.Kind, Status = status, FamilyGroupId = groupId, StartsAt = startsAt,
+                UserId = owner, SubscriptionPlanId = plan.Id, Kind = plan.Kind, Status = CycleStatuses.Active, FamilyGroupId = groupId, StartsAt = startsAt,
                 EndsAt = startsAt?.AddDays(plan.DurationDays!.Value), DurationDays = plan.DurationDays!.Value, QuotaPeriodDays = plan.QuotaPeriodDays,
                 TokenQuota = plan.TokenQuota, PlanName = plan.Name,
             };
@@ -1184,9 +1214,9 @@ public class FamilyServiceTests
 
         public Task<IReadOnlyList<SubscriptionPlan>> GetPlansAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SubscriptionPlan>>(Plans.ToList());
 
-        public Task<List<UserSubscription>> GetOpenCyclesAsync(Guid ownerUserId, string kind, CancellationToken ct = default) =>
+        public Task<List<UserSubscription>> GetActiveCyclesAsync(Guid ownerUserId, string kind, CancellationToken ct = default) =>
             Task.FromResult(Cycles.Where(c => c.UserId == ownerUserId && c.Kind == kind
-                && (c.Status == CycleStatuses.Active || c.Status == CycleStatuses.Queued)).ToList());
+                && c.Status == CycleStatuses.Active).ToList());
 
         public Task<FamilyGroup?> FindActiveOwnedGroupAsync(Guid ownerUserId, CancellationToken ct = default) =>
             Task.FromResult(Groups.FirstOrDefault(g => g.OwnerUserId == ownerUserId && g.Status == FamilyGroupStatuses.Active));

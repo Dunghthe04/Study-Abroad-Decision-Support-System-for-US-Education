@@ -5,20 +5,19 @@ using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.UnitTests;
 
-// Chuyển kỳ khi nhiều request chạm cùng một làn (M1) và thông báo chuyển kỳ trong transaction thanh toán (M3).
+// Kết thúc kỳ hết hạn khi nhiều request chạm cùng lúc (M1) và thông báo trong transaction thanh toán (M3).
 public class EntitlementRaceTests
 {
     private static readonly DateTime Now = OrderHarness.Now;
     private static readonly DateTime PayAt = Now.AddMinutes(1);
 
-    // Làn personal có kỳ 1 tháng đã quá hạn và một kỳ gia hạn đang chờ
-    private static (OrderHarness H, User User, UserSubscription Due, UserSubscription Next) DueLane()
+    // Người dùng có một kỳ personal 1 tháng đã quá hạn (chưa ai kết thúc)
+    private static (OrderHarness H, User User, UserSubscription Due) DueCycle()
     {
         var h = new OrderHarness();
         var user = h.AddUser();
         var due = h.Store.AddActive(user.Id, "personal-1m", startsAt: Now.AddDays(-31));
-        var next = h.Store.AddQueued(user.Id, "personal-3m");
-        return (h, user, due, next);
+        return (h, user, due);
     }
 
     private static int Count(OrderHarness h, string type) => h.Notes.Sent.Count(n => n.Type == type);
@@ -26,9 +25,9 @@ public class EntitlementRaceTests
     // ---- M1
 
     [Fact]
-    public async Task M1_TwoSequentialReadsOfADueLane_SecondChangesNothingAndNotifiesNothing()
+    public async Task M1_TwoSequentialReadsOfADueCycle_SecondChangesNothingAndNotifiesNothing()
     {
-        var (h, user, due, next) = DueLane();
+        var (h, user, due) = DueCycle();
 
         await h.Entitlements.GetSummaryAsync(user.Id, Now);
         var savesAfterFirst = h.Store.Saves;
@@ -36,42 +35,53 @@ public class EntitlementRaceTests
         await h.Entitlements.GetSummaryAsync(user.Id, Now);
 
         Assert.Equal(CycleStatuses.Ended, due.Status);
-        Assert.Equal(CycleStatuses.Active, next.Status);
-        Assert.Equal(1, Count(h, NotificationTypes.BillingCycleStarted));
+        Assert.Equal(1, Count(h, NotificationTypes.BillingExpired));
         Assert.Equal(savesAfterFirst, h.Store.Saves);
         Assert.Equal(notesAfterFirst, h.Notes.Sent.Count);
-        Assert.Equal(1, h.Store.LaneLocks);   // lượt đọc thứ hai không còn gì để chuyển nên không chạm khóa
+        Assert.Equal(1, h.Store.CycleLocks);   // lượt đọc thứ hai không còn gì để kết thúc nên không chạm khóa
     }
 
     [Fact]
-    public async Task M1_AnotherRequestAlreadyTransitionedTheLane_ThisOneChangesNothingAndSendsNothing()
+    public async Task M1_AnotherRequestAlreadyEndedTheCycle_ThisOneChangesNothingAndSendsNothing()
     {
-        var (h, user, due, next) = DueLane();
-        // Request kia chuyển xong (và tự báo) ngay sau lượt đọc không khóa của request này, trước khi nó khóa được dòng làn
-        h.Store.RaceBeforeLaneLock = s =>
+        var (h, user, due) = DueCycle();
+        // Request kia kết thúc xong (và tự báo) ngay sau lượt đọc không khóa của request này, trước khi nó khóa được dòng kỳ
+        h.Store.RaceBeforeCycleLock = s =>
         {
-            foreach (var change in CycleRules.Advance(due, next, 0, Now))
-                change.Apply();
+            due.Status = CycleStatuses.Ended;
+            due.EndedReason = CycleEndReasons.Expired;
         };
 
-        var lane = await h.Entitlements.AdvanceLaneAsync(user.Id, PlanKinds.Personal, Now);
+        var cycles = await h.Entitlements.EndExpiredCyclesAsync(user.Id, PlanKinds.Personal, Now);
 
-        Assert.Equal(next.Id, lane.Active?.Id);
+        Assert.Empty(cycles);
         Assert.Equal(CycleStatuses.Ended, due.Status);
         Assert.Empty(h.Notes.Sent);
-        Assert.Equal(1, h.Store.LaneLocks);
+        Assert.Equal(1, h.Store.CycleLocks);
     }
 
     [Fact]
-    public async Task M1_TransitionUnderTheLock_StillNotifiesOnceForTheCallerThatChangedIt()
+    public async Task M1_EndingUnderTheLock_NotifiesOnceForTheCallerThatChangedIt()
     {
-        var (h, user, _, next) = DueLane();
+        var (h, user, due) = DueCycle();
 
-        await h.Entitlements.AdvanceLaneAsync(user.Id, PlanKinds.Personal, Now);
+        await h.Entitlements.EndExpiredCyclesAsync(user.Id, PlanKinds.Personal, Now);
 
-        Assert.Equal(CycleStatuses.Active, next.Status);
+        Assert.Equal(CycleStatuses.Ended, due.Status);
         var note = Assert.Single(h.Notes.Sent);
-        Assert.Equal((user.Id, NotificationTypes.BillingCycleStarted), (note.UserId, note.Type));
+        Assert.Equal((user.Id, NotificationTypes.BillingExpired), (note.UserId, note.Type));
+    }
+
+    [Fact]
+    public async Task M1_AnExpiredCycleWithAnotherStillRunning_DoesNotNotifyExpiry()
+    {
+        var (h, user, due) = DueCycle();
+        h.Store.AddActive(user.Id, "personal-3m");
+
+        await h.Entitlements.EndExpiredCyclesAsync(user.Id, PlanKinds.Personal, Now);
+
+        Assert.Equal(CycleStatuses.Ended, due.Status);
+        Assert.Empty(h.Notes.Sent);   // vẫn đang Premium bằng kỳ còn lại
     }
 
     [Fact]
@@ -98,16 +108,16 @@ public class EntitlementRaceTests
     }
 
     [Fact]
-    public async Task M1_PaymentRenewedTheFamilyLaneBeforeTheLapseLock_GroupStaysActive()
+    public async Task M1_PaymentAddedAFamilyCycleBeforeTheLapseLock_GroupStaysActive()
     {
         var h = new OrderHarness();
         var owner = h.AddUser(UserRoles.Parent, 40);
         var cycle = h.Store.AddFamily(owner.Id, startsAt: Now.AddDays(-31));
         cycle.Status = CycleStatuses.Ended;
         var group = h.Store.Groups.Single();
-        h.Store.RaceBeforeLaneLock = s => s.AddActive(owner.Id, "family-1m", startsAt: Now).FamilyGroupId = group.Id;
+        h.Store.RaceBeforeCycleLock = s => s.AddActive(owner.Id, "family-1m", startsAt: Now).FamilyGroupId = group.Id;
 
-        await h.Entitlements.AdvanceLaneAsync(owner.Id, PlanKinds.Family, Now);
+        await h.Entitlements.EndExpiredCyclesAsync(owner.Id, PlanKinds.Family, Now);
 
         Assert.Equal(FamilyGroupStatuses.Active, group.Status);
         Assert.Empty(h.Notes.Sent);
@@ -119,15 +129,16 @@ public class EntitlementRaceTests
     public async Task M3_RetriedAttempt_SendsEachTransitionNotificationOnce()
     {
         var h = new OrderHarness();
-        var buyer = h.AddUser();
-        var order = await h.CreateOrder(buyer, "personal-1m");
-        h.Store.AddActive(buyer.Id, "personal-1m", startsAt: Now.AddDays(-31));   // kỳ cũ quá hạn: thanh toán sẽ chuyển kỳ (hết hạn) trong transaction
-        h.Store.FailOnCycleInsert = new UniqueViolationException("ux_user_subscriptions_one_active_per_lane");   // lần thử đầu vướng index, lần hai thành công
+        var buyer = h.AddUser(UserRoles.Parent, 40);
+        var order = await h.CreateOrder(buyer, "family-1m");
+        h.Store.AddFamily(buyer.Id, startsAt: Now.AddDays(-31));   // kỳ Gia đình cũ quá hạn: thanh toán kết thúc nó và nhóm cũ trong transaction
+        h.Store.FailOnCycleInsert = new UniqueViolationException("xung đột");   // lần thử đầu vướng xung đột, lần hai thành công
 
         await h.Orders.ApplyPaymentAsync(order.OrderCode, order.AmountVnd, null, PayAt);
 
         Assert.Equal(2, h.Store.Transactions);
         Assert.Equal(1, Count(h, NotificationTypes.BillingExpired));
+        Assert.Equal(1, Count(h, NotificationTypes.FamilyEnded));
         Assert.Equal(1, Count(h, NotificationTypes.BillingPaymentPaid));
     }
 
@@ -135,9 +146,9 @@ public class EntitlementRaceTests
     public async Task M3_FailureBeforeCommit_SendsNoTransitionNotification()
     {
         var h = new OrderHarness();
-        var buyer = h.AddUser();
-        var order = await h.CreateOrder(buyer, "personal-1m");
-        h.Store.AddActive(buyer.Id, "personal-1m", startsAt: Now.AddDays(-31));
+        var buyer = h.AddUser(UserRoles.Parent, 40);
+        var order = await h.CreateOrder(buyer, "family-1m");
+        h.Store.AddFamily(buyer.Id, startsAt: Now.AddDays(-31));
         h.Store.FailOnCycleInsert = new InvalidOperationException("DB sập");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => h.Orders.ApplyPaymentAsync(order.OrderCode, order.AmountVnd, null, PayAt));
@@ -146,25 +157,25 @@ public class EntitlementRaceTests
     }
 
     [Fact]
-    public async Task M3_ReadPathKeepsSendingTransitionNotificationsImmediately()
+    public async Task M3_ReadPathKeepsSendingExpiryNotificationsImmediately()
     {
-        var (h, user, _, _) = DueLane();
+        var (h, user, _) = DueCycle();
 
-        await h.Entitlements.AdvanceLaneAsync(user.Id, PlanKinds.Personal, Now);
+        await h.Entitlements.EndExpiredCyclesAsync(user.Id, PlanKinds.Personal, Now);
 
-        Assert.Equal(1, Count(h, NotificationTypes.BillingCycleStarted));
+        Assert.Equal(1, Count(h, NotificationTypes.BillingExpired));
     }
 
     [Fact]
     public async Task M3_DeferredCollector_QueuesInsteadOfSending()
     {
-        var (h, user, _, _) = DueLane();
+        var (h, user, _) = DueCycle();
         var deferred = new List<Func<CancellationToken, Task>>();
 
-        await h.Entitlements.AdvanceLaneAsync(user.Id, PlanKinds.Personal, Now, default, deferred);
+        await h.Entitlements.EndExpiredCyclesAsync(user.Id, PlanKinds.Personal, Now, default, deferred);
 
         Assert.Empty(h.Notes.Sent);
         await deferred.Single()(CancellationToken.None);
-        Assert.Equal(1, Count(h, NotificationTypes.BillingCycleStarted));
+        Assert.Equal(1, Count(h, NotificationTypes.BillingExpired));
     }
 }

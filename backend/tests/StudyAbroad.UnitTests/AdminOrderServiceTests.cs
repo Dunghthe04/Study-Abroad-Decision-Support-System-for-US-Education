@@ -15,7 +15,7 @@ using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.UnitTests;
 
-// Admin xử lý đơn hàng (UC-132..134): A6 đến A10, kích hoạt khi làn đầy, hợp đồng JSON với frontend.
+// Admin xử lý đơn hàng (UC-132..134): A6 đến A10, kích hoạt khi người mua đã có kỳ chạy, hợp đồng JSON với frontend.
 public class AdminOrderServiceTests
 {
     private static readonly DateTime Now = BillingStore.Now;
@@ -129,7 +129,7 @@ public class AdminOrderServiceTests
         Assert.Equal((OrderStatuses.Paid, "Đã đối chiếu sao kê", admin.FullName), (dto.Status, dto.AdminNote, dto.HandledBy));
         Assert.Equal((buyer.Id, CycleStatuses.Active, (DateTime?)ActAt, 500_000L, 79_000m), (cycle.UserId, cycle.Status, cycle.StartsAt, cycle.TokenQuota, cycle.PriceVnd));   // số tiền và hạn mức theo đơn
         Assert.Equal(ActAt, dto.PaidAt);
-        Assert.Equal(new OrderCycleDto(ActAt, ActAt.AddDays(30), false), dto.Cycle);
+        Assert.Equal(new OrderCycleDto(ActAt, ActAt.AddDays(30)), dto.Cycle);
         Assert.Equal(admin.Id, j.H.Order(order.OrderCode).HandledByUserId);
         Assert.Equal(buyer.Id, Assert.Single(j.Sent(NotificationTypes.BillingPaymentPaid)).UserId);
         var audit = Assert.Single(j.Audit.Entries);
@@ -390,45 +390,25 @@ public class AdminOrderServiceTests
         Assert.Single(j.Notes.Sent);
     }
 
-    // ---- Kích hoạt khi làn đầy (P22) và các trường hợp biên
+    // ---- Kích hoạt khi người mua đã có kỳ đang chạy, và các trường hợp biên
 
     [Fact]
-    public async Task P22_ActivateWhenTheLaneIsFull_Is409LaneFull_AndNothingIsGranted()
+    public async Task Activate_WhenTheBuyerAlreadyHasCycles_AlwaysCreatesANewActiveCycle()
     {
         var j = new JobHarness();
         var (buyer, admin) = (j.AddUser(), j.AddAdmin());
         var order = await j.H.CreateOrder(buyer, "personal-1m");
-        j.Store.AddActive(buyer.Id, "personal-1m", Now.AddDays(-1));
-        j.Store.AddQueued(buyer.Id, "personal-3m");
-        await j.H.Orders.ApplyPaymentAsync(order.OrderCode, order.AmountVnd, null, Now.AddMinutes(1));   // tiền về nhưng làn đầy: mismatch
-        Assert.Contains("lane_full", j.H.Order(order.OrderCode).AdminNote);
-
-        var error = await Fails(j.Admin.ActivateAsync(admin.Id, order.OrderCode, "thử", ActAt));
-
-        Assert.Equal(("lane_full", 409), (error.Code, error.StatusCode));
+        var running = j.Store.AddActive(buyer.Id, "personal-1m", Now.AddDays(-1));
+        j.Store.AddActive(buyer.Id, "personal-3m", Now.AddDays(-2));
+        await j.H.Orders.ApplyPaymentAsync(order.OrderCode, 1, null, Now.AddMinutes(1));   // lệch tiền: mismatch chờ admin
         Assert.Equal(OrderStatuses.Mismatch, j.H.Order(order.OrderCode).Status);
-        Assert.Equal(2, j.Store.Cycles.Count);
-        var audit = Assert.Single(j.Audit.Entries);   // L6: admin đã xác nhận tiền nhưng không kích hoạt được vẫn để lại dấu vết
-        Assert.Equal(("order.activate", admin.Id), (audit.Action, audit.ActorUserId));
-        Assert.Contains("\"outcome\":\"lane_full\"", audit.DetailJson);
-        Assert.Contains("\"result\":\"LaneFull\"", audit.DetailJson);
-    }
 
-    [Fact]
-    public async Task P22_AfterTheLaneFreesUp_TheSameOrderCanBeActivated()
-    {
-        var j = new JobHarness();
-        var (buyer, admin) = (j.AddUser(), j.AddAdmin());
-        var order = await j.H.CreateOrder(buyer, "personal-1m");
-        var active = j.Store.AddActive(buyer.Id, "personal-1m", Now.AddDays(-1));
-        var queued = j.Store.AddQueued(buyer.Id, "personal-3m");
-        await j.H.Orders.ApplyPaymentAsync(order.OrderCode, order.AmountVnd, null, Now.AddMinutes(1));
-        queued.Status = CycleStatuses.Ended;   // kỳ chờ đã qua: làn có chỗ cho một kỳ chờ mới
+        var dto = await j.Admin.ActivateAsync(admin.Id, order.OrderCode, "đã đối chiếu", ActAt);
 
-        var dto = await j.Admin.ActivateAsync(admin.Id, order.OrderCode, "đã có chỗ", ActAt);
-
-        Assert.Equal((OrderStatuses.Paid, true), (dto.Status, dto.Cycle!.Queued));
-        Assert.Equal(CycleStatuses.Active, active.Status);
+        Assert.Equal(OrderStatuses.Paid, dto.Status);
+        Assert.Equal(new OrderCycleDto(ActAt, ActAt.AddDays(30)), dto.Cycle);
+        Assert.Equal(3, j.Store.Cycles.Count(c => c.Status == CycleStatuses.Active));
+        Assert.Equal(CycleStatuses.Active, running.Status);
     }
 
     [Fact]
@@ -501,19 +481,20 @@ public class AdminOrderServiceTests
     }
 
     [Fact]
-    public async Task L6_ActivateAPendingOrderWhoseLaneIsFull_StillClosesTheLink_AndAudits_Then409()
+    public async Task L6_ActivateAPendingOrderWhileTheBuyerHasACycle_ClosesTheLink_AndAudits()
     {
         var j = new JobHarness();
         var (buyer, admin) = (j.AddUser(), j.AddAdmin());
         var order = await j.H.CreateOrder(buyer, "personal-1m");
         j.Store.AddActive(buyer.Id, "personal-1m", Now.AddDays(-1));
-        j.Store.AddQueued(buyer.Id, "personal-3m");
 
-        var error = await Fails(j.Admin.ActivateAsync(admin.Id, order.OrderCode, "chuyển tay", ActAt));
+        var dto = await j.Admin.ActivateAsync(admin.Id, order.OrderCode, "chuyển tay", ActAt);
 
-        Assert.Equal("lane_full", error.Code);
+        Assert.Equal(OrderStatuses.Paid, dto.Status);
         Assert.Equal(order.OrderCode, Assert.Single(j.H.Gateway.Cancelled).Code);
-        Assert.Contains("lane_full", Assert.Single(j.Audit.Entries).DetailJson);
+        var audit = Assert.Single(j.Audit.Entries);
+        Assert.Equal(("order.activate", admin.Id), (audit.Action, audit.ActorUserId));
+        Assert.Contains("\"result\":\"Activated\"", audit.DetailJson);
     }
 
     [Fact]
@@ -546,7 +527,7 @@ public class AdminOrderServiceTests
         Assert.Equal(orderDto.Concat(admin4).Order(), Keys(list.Items[0]));
         Assert.Equal(orderDto.Concat(admin4).Append("payloadJson").Order(), Keys(detail));
         Assert.Equal(["items", "page", "pageSize", "totalCount", "totalPages"], Keys(list));
-        Assert.Equal(["endsAt", "queued", "startsAt"], Keys(detail.Cycle!));
+        Assert.Equal(["endsAt", "startsAt"], Keys(detail.Cycle!));
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(detail, Web));
         Assert.Equal(JsonValueKind.Number, json.RootElement.GetProperty("amountVnd").ValueKind);
         Assert.Equal("paid", json.RootElement.GetProperty("status").GetString());

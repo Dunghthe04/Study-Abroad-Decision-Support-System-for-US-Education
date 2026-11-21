@@ -343,76 +343,50 @@ public class BillingJobTests
         Assert.Single(j.Store.Cycles);
     }
 
-    // ---- R2: chuyển kỳ, thông báo kỳ mới / hết hạn; job và đọc đều chỉ báo một lần
-
-    private static (UserSubscription Active, UserSubscription Queued) ActiveWithQueued(JobHarness j, Guid owner)
-    {
-        var active = j.Store.AddActive(owner, "personal-1m", Now.AddDays(-30));   // hết hạn đúng Now
-        return (active, j.Store.AddQueued(owner, "personal-3m"));
-    }
+    // ---- R2: kết thúc kỳ hết hạn, thông báo hết hạn; job và đọc đều chỉ báo một lần
 
     [Fact]
-    public async Task R2_ActiveReachesItsEnd_JobStartsTheQueuedCycleAtTheOldEnd_AndNotifiesOnce()
+    public async Task R2_ActiveReachesItsEnd_JobEndsItAtTheEndDate_AndNotifiesOnce()
     {
         var j = new JobHarness();
         var owner = j.AddUser();
-        var (active, queued) = ActiveWithQueued(j, owner.Id);
-        var oldEnd = active.EndsAt;
+        var active = j.Store.AddActive(owner.Id, "personal-1m", Now.AddDays(-30));   // hết hạn đúng Now
 
-        Assert.Equal(1, await j.Jobs.AdvanceDueLanesAsync(Now.AddMinutes(10)));
-        await j.Jobs.AdvanceDueLanesAsync(Now.AddMinutes(11));
+        Assert.Equal(1, await j.Jobs.EndExpiredCyclesAsync(Now.AddMinutes(10)));
+        await j.Jobs.EndExpiredCyclesAsync(Now.AddMinutes(11));
 
-        Assert.Equal((CycleStatuses.Ended, CycleEndReasons.Expired), (active.Status, active.EndedReason));
-        Assert.Equal((CycleStatuses.Active, oldEnd, oldEnd!.Value.AddDays(90)), (queued.Status, queued.StartsAt, queued.EndsAt));   // không mất ngày đã trả
-        var note = Assert.Single(j.Notes.Sent);
-        Assert.Equal((owner.Id, NotificationTypes.BillingCycleStarted, "Kỳ gói mới đã bắt đầu"), (note.UserId, note.Type, note.Title));
-    }
-
-    [Fact]
-    public async Task Transition_ActiveEndsWithNothingQueued_NotifiesExpiredOnce()
-    {
-        var j = new JobHarness();
-        var owner = j.AddUser();
-        var cycle = j.Store.AddActive(owner.Id, "personal-1m", Now.AddDays(-31));
-
-        await j.Jobs.AdvanceDueLanesAsync(Now);
-        await j.Jobs.AdvanceDueLanesAsync(Now.AddMinutes(1));
-
-        Assert.Equal((CycleStatuses.Ended, CycleEndReasons.Expired), (cycle.Status, cycle.EndedReason));
+        Assert.Equal((CycleStatuses.Ended, CycleEndReasons.Expired, active.EndsAt), (active.Status, active.EndedReason, active.EndedAt));
         var note = Assert.Single(j.Notes.Sent);
         Assert.Equal((owner.Id, NotificationTypes.BillingExpired, "Gói Cá nhân 1 tháng đã hết hạn"), (note.UserId, note.Type, note.Title));
     }
 
     [Fact]
-    public async Task Transition_ExhaustedRollover_NotifiesTheNewCycleOnly()
+    public async Task Transition_OneOfTwoCyclesExpires_EndsOnlyThatOne_AndDoesNotNotify()
+    {
+        var j = new JobHarness();
+        var owner = j.AddUser();
+        var old = j.Store.AddActive(owner.Id, "personal-1m", Now.AddDays(-31));
+        var running = j.Store.AddActive(owner.Id, "personal-3m", Now.AddDays(-1));
+
+        await j.Jobs.EndExpiredCyclesAsync(Now);
+
+        Assert.Equal((CycleStatuses.Ended, CycleStatuses.Active), (old.Status, running.Status));
+        Assert.Empty(j.Notes.Sent);
+    }
+
+    [Fact]
+    public async Task Transition_ExhaustedCycle_IsNotEndedByTheJob_UntilItsEndDate()
     {
         var j = new JobHarness();
         var owner = j.AddUser();
         var active = j.Store.AddActive(owner.Id, "personal-1m", Now.AddDays(-2), quota: 1_000);
-        var queued = j.Store.AddQueued(owner.Id, "personal-1m");
+        j.Store.AddActive(owner.Id, "personal-1m");
         j.Store.Use(owner.Id, active, 1_000);
 
-        await j.Jobs.AdvanceDueLanesAsync(Now);
+        Assert.Equal(0, await j.Jobs.EndExpiredCyclesAsync(Now));
 
-        Assert.Equal((CycleEndReasons.ExhaustedRollover, CycleStatuses.Active), (active.EndedReason, queued.Status));
-        Assert.Equal(NotificationTypes.BillingCycleStarted, Assert.Single(j.Notes.Sent).Type);
-    }
-
-    [Fact]
-    public async Task Transition_TriggeredByAReadNotifiesOnce_AndTheLaterJobTickAddsNothing()
-    {
-        var j = new JobHarness();
-        var owner = j.AddUser();
-        ActiveWithQueued(j, owner.Id);
-
-        var summary = await j.H.Entitlements.GetSummaryAsync(owner.Id, Now.AddMinutes(5));
-        await j.H.Entitlements.GetSummaryAsync(owner.Id, Now.AddMinutes(6));
-        await j.H.Entitlements.ResolveChatChargeAsync(owner.Id, UserRoles.Student, Now.AddMinutes(7));
-        await j.Jobs.AdvanceDueLanesAsync(Now.AddMinutes(8));
-
-        Assert.Equal(AccountTiers.Premium, summary.Tier);
-        Assert.Single(j.Sent(NotificationTypes.BillingCycleStarted));
-        Assert.Single(j.Notes.Sent);
+        Assert.Equal(CycleStatuses.Active, active.Status);
+        Assert.Empty(j.Notes.Sent);
     }
 
     [Fact]
@@ -424,70 +398,26 @@ public class BillingJobTests
 
         Assert.Equal(AccountTiers.Free, (await j.H.Entitlements.GetSummaryAsync(owner.Id, Now)).Tier);
         await j.H.Entitlements.IsPremiumAsync(owner.Id, UserRoles.Student, Now.AddMinutes(1));
-        await j.Jobs.AdvanceDueLanesAsync(Now.AddMinutes(2));
+        await j.Jobs.EndExpiredCyclesAsync(Now.AddMinutes(2));
 
         Assert.Equal(NotificationTypes.BillingExpired, Assert.Single(j.Notes.Sent).Type);
     }
 
     [Fact]
-    public async Task AdvanceDueLanes_HealthyLane_NoChangeNoNotification()
+    public async Task EndExpiredCycles_HealthyCycle_NoChangeNoNotification()
     {
         var j = new JobHarness();
         var owner = j.AddUser();
         var cycle = j.Store.AddActive(owner.Id, "personal-1m", Now.AddDays(-5));
 
-        Assert.Equal(0, await j.Jobs.AdvanceDueLanesAsync(Now));
+        Assert.Equal(0, await j.Jobs.EndExpiredCyclesAsync(Now));
 
         Assert.Equal(CycleStatuses.Active, cycle.Status);
         Assert.Empty(j.Notes.Sent);
     }
 
-    // L5: kỳ chờ đứng sau kỳ active còn token thì làn chưa cần chuyển (không tốn một lượt đọc mỗi phút); hết token / không còn kỳ active thì vẫn chuyển ngay trong lượt
     [Fact]
-    public async Task L5_QueuedBehindAnActiveCycleWithTokensLeft_IsNotDue()
-    {
-        var j = new JobHarness();
-        var owner = j.AddUser();
-        var active = j.Store.AddActive(owner.Id, "personal-1m", Now.AddDays(-2), quota: 1_000);
-        var queued = j.Store.AddQueued(owner.Id, "personal-3m");
-        j.Store.Use(owner.Id, active, 999);   // sát hạn mức nhưng chưa hết
-
-        Assert.Equal(0, await j.Jobs.AdvanceDueLanesAsync(Now));
-
-        Assert.Equal((CycleStatuses.Active, CycleStatuses.Queued), (active.Status, queued.Status));
-        Assert.Empty(j.Notes.Sent);
-    }
-
-    [Fact]
-    public async Task L5_ThatSameLaneBecomesDueTheMomentTheActiveCycleRunsOut()
-    {
-        var j = new JobHarness();
-        var owner = j.AddUser();
-        var active = j.Store.AddActive(owner.Id, "personal-1m", Now.AddDays(-2), quota: 1_000);
-        var queued = j.Store.AddQueued(owner.Id, "personal-3m");
-        j.Store.Use(owner.Id, active, 999);
-        Assert.Equal(0, await j.Jobs.AdvanceDueLanesAsync(Now));
-        j.Store.Use(owner.Id, active, 1);
-
-        Assert.Equal(1, await j.Jobs.AdvanceDueLanesAsync(Now.AddMinutes(1)));
-
-        Assert.Equal((CycleEndReasons.ExhaustedRollover, CycleStatuses.Active), (active.EndedReason, queued.Status));
-    }
-
-    [Fact]
-    public async Task L5_AQueuedCycleWithNoActiveOne_IsDue()
-    {
-        var j = new JobHarness();
-        var owner = j.AddUser();
-        var stray = j.Store.AddQueued(owner.Id, "personal-1m");   // lần lưu trước bị dở: kỳ chờ mà không có kỳ active
-
-        Assert.Equal(1, await j.Jobs.AdvanceDueLanesAsync(Now));
-
-        Assert.Equal(CycleStatuses.Active, stray.Status);
-    }
-
-    [Fact]
-    public async Task AdvanceDueLanes_ALaneThatFails_DoesNotStopTheOthers()
+    public async Task EndExpiredCycles_AnOwnerThatFails_DoesNotStopTheOthers()
     {
         var j = new JobHarness();
         var (bad, good) = (j.AddUser(), j.AddUser());
@@ -495,7 +425,7 @@ public class BillingJobTests
         var goodCycle = j.Store.AddActive(good.Id, "personal-1m", Now.AddDays(-31));
         var cleared = j.Store.TrackingCleared;
 
-        var handled = await j.JobsWith(new ThrowingEntitlements(j.H.Entitlements, bad.Id)).AdvanceDueLanesAsync(Now);
+        var handled = await j.JobsWith(new ThrowingEntitlements(j.H.Entitlements, bad.Id)).EndExpiredCyclesAsync(Now);
 
         Assert.Equal(1, handled);
         Assert.Equal(CycleStatuses.Ended, goodCycle.Status);
@@ -504,9 +434,9 @@ public class BillingJobTests
 
     private sealed class ThrowingEntitlements(IEntitlementService inner, Guid failFor) : IEntitlementService
     {
-        public Task<LaneState> AdvanceLaneAsync(
+        public Task<IReadOnlyList<ActiveCycle>> EndExpiredCyclesAsync(
             Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default, ICollection<Func<CancellationToken, Task>>? deferredNotifications = null) =>
-            ownerUserId == failFor ? throw new InvalidOperationException("lưu lỗi") : inner.AdvanceLaneAsync(ownerUserId, kind, nowUtc, ct, deferredNotifications);
+            ownerUserId == failFor ? throw new InvalidOperationException("lưu lỗi") : inner.EndExpiredCyclesAsync(ownerUserId, kind, nowUtc, ct, deferredNotifications);
 
         public Task<SubscriptionSummaryDto> GetSummaryAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) => inner.GetSummaryAsync(userId, nowUtc, ct);
         public Task<ChatCharge> ResolveChatChargeAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default) => inner.ResolveChatChargeAsync(userId, role, nowUtc, ct);
@@ -514,10 +444,10 @@ public class BillingJobTests
         public Task<IReadOnlyList<PlanDto>> GetPlansOnSaleAsync(CancellationToken ct = default) => inner.GetPlansOnSaleAsync(ct);
     }
 
-    // ---- F27: Gia đình hết hạn không có kỳ chờ: thành viên được báo
+    // ---- F27: Gia đình hết hạn (không còn kỳ Gia đình nào): thành viên được báo
 
     [Fact]
-    public async Task F27_FamilyEndsWithNothingQueued_OwnerAndActiveMembersNotified_PendingInviteEnds_Once()
+    public async Task F27_FamilyEndsWithNoCycleLeft_OwnerAndActiveMembersNotified_PendingInviteEnds_Once()
     {
         var j = new JobHarness();
         var (owner, member) = (j.AddUser(UserRoles.Parent, 40, name: "Chủ Gói"), j.AddUser());
@@ -526,8 +456,8 @@ public class BillingJobTests
         var invite = new FamilyMember { FamilyGroupId = group.Id, InvitedEmail = "p@x.vn", SeatRole = FamilySeats.Parent, Status = FamilyMemberStatuses.Pending, TokenHash = "t" };
         j.Store.Members.Add(invite);
 
-        await j.Jobs.AdvanceDueLanesAsync(Now);
-        await j.Jobs.AdvanceDueLanesAsync(Now.AddMinutes(1));
+        await j.Jobs.EndExpiredCyclesAsync(Now);
+        await j.Jobs.EndExpiredCyclesAsync(Now.AddMinutes(1));
 
         Assert.Equal(CycleStatuses.Ended, cycle.Status);
         Assert.Equal((FamilyGroupStatuses.Ended, CycleEndReasons.FamilyLapsed), (group.Status, group.EndedReason));
@@ -542,19 +472,19 @@ public class BillingJobTests
     }
 
     [Fact]
-    public async Task F27_FamilyWithAQueuedRenewal_KeepsTheGroup_AndOnlyReportsTheNewCycle()
+    public async Task F27_FamilyWithAnotherCycleStillRunning_KeepsTheGroup_AndSaysNothing()
     {
         var j = new JobHarness();
         var (owner, member) = (j.AddUser(UserRoles.Parent, 40), j.AddUser());
-        j.Store.AddFamily(owner.Id, member.Id, Now.AddDays(-30));
-        var queued = j.Store.AddQueued(owner.Id, "family-1m");
+        var old = j.Store.AddFamily(owner.Id, member.Id, Now.AddDays(-30));
+        var running = j.Store.AddFamilyCycle(owner.Id, "family-3m", Now.AddDays(-5));
 
-        await j.Jobs.AdvanceDueLanesAsync(Now.AddMinutes(1));
+        await j.Jobs.EndExpiredCyclesAsync(Now.AddMinutes(1));
 
-        Assert.Equal(CycleStatuses.Active, queued.Status);
+        Assert.Equal((CycleStatuses.Ended, CycleStatuses.Active), (old.Status, running.Status));
         Assert.Equal(FamilyGroupStatuses.Active, j.Store.Groups.Single().Status);
         Assert.Empty(j.Sent(NotificationTypes.FamilyEnded));
-        Assert.Single(j.Sent(NotificationTypes.BillingCycleStarted));
+        Assert.Empty(j.Notes.Sent);
     }
 
     [Fact]
@@ -564,7 +494,7 @@ public class BillingJobTests
         var owner = j.AddUser(UserRoles.Parent, 40);
         j.Store.Groups.Add(new FamilyGroup { OwnerUserId = owner.Id, Status = FamilyGroupStatuses.Active });
 
-        Assert.Equal(1, await j.Jobs.AdvanceDueLanesAsync(Now));
+        Assert.Equal(1, await j.Jobs.EndExpiredCyclesAsync(Now));
 
         Assert.Equal(FamilyGroupStatuses.Ended, j.Store.Groups.Single().Status);
         Assert.Equal(owner.Id, Assert.Single(j.Sent(NotificationTypes.FamilyEnded)).UserId);
@@ -616,18 +546,21 @@ public class BillingJobTests
     }
 
     [Fact]
-    public async Task R8_NoReminderWhenARenewalIsAlreadyQueued_AndFamilyRemindersGoToTheOwnerOnly()
+    public async Task R8_EachExpiringCycleIsRemindedOnce_FamilyRemindersGoToTheOwnerOnly()
     {
         var j = new JobHarness();
-        var (renewed, owner, member) = (j.AddUser(), j.AddUser(UserRoles.Parent, 40), j.AddUser());
-        j.Store.AddActive(renewed.Id, "personal-1m", Now.AddDays(-25));
-        j.Store.AddQueued(renewed.Id, "personal-1m");
+        var (buyer, owner, member) = (j.AddUser(), j.AddUser(UserRoles.Parent, 40), j.AddUser());
+        j.Store.AddActive(buyer.Id, "personal-1m", Now.AddDays(-25));
+        j.Store.AddActive(buyer.Id, "personal-1m", Now.AddDays(-26));   // hai kỳ cùng sắp hết: mỗi kỳ một lần nhắc
         j.Store.AddFamily(owner.Id, member.Id, Now.AddDays(-25));
 
-        Assert.Equal(1, await j.Jobs.SendRenewalRemindersAsync(Now));
+        Assert.Equal(3, await j.Jobs.SendRenewalRemindersAsync(Now));
+        Assert.Equal(0, await j.Jobs.SendRenewalRemindersAsync(Now.AddMinutes(1)));
 
-        Assert.Equal(owner.Id, Assert.Single(j.Notes.Sent).UserId);
-        Assert.Equal(owner.Email, Assert.Single(j.H.Email.SentEmails).To);
+        Assert.Equal(2, j.Notes.Sent.Count(n => n.UserId == buyer.Id));
+        Assert.Single(j.Notes.Sent, n => n.UserId == owner.Id);
+        Assert.DoesNotContain(j.Notes.Sent, n => n.UserId == member.Id);
+        Assert.Single(j.H.Email.SentEmails, e => e.To == owner.Email);
     }
 
     [Fact]
@@ -731,37 +664,38 @@ public class BillingJobTests
     }
 
     [Fact]
-    public async Task RecurringCycle_Notifies80And100PerWindow_AndOnlyRollsOverInFinalWindow()
+    public async Task RecurringCycle_Notifies80And100PerWindow_AndNeverEndsEarlyWhenExhausted()
     {
         var j = new JobHarness();
         var owner = j.AddUser();
         var start = Now.AddDays(-35);   // đang ở cửa sổ 1 (ngày 30..60) của gói 90d/30d
         var cycle = j.Store.AddActive(owner.Id, "personal-3m", start, quota: 1_000);
-        var queued = j.Store.AddQueued(owner.Id, "personal-1m");
         // Cửa sổ 0 đã cảnh báo và dùng hết
         j.Store.Use(owner.Id, cycle, 1_000, start.AddDays(5));
         cycle.Warned80At = start.AddDays(4);
         cycle.ExhaustedNotifiedAt = start.AddDays(5);
 
-        // Cửa sổ 1: chưa dùng gì -> không rollover, không báo
-        await j.Jobs.AdvanceDueLanesAsync(Now);
-        Assert.Equal((CycleStatuses.Active, CycleStatuses.Queued), (cycle.Status, queued.Status));
+        // Cửa sổ 1: chưa dùng gì -> không báo
+        await j.Jobs.EndExpiredCyclesAsync(Now);
+        Assert.Equal(CycleStatuses.Active, cycle.Status);
         Assert.Empty(j.Notes.Sent);
         Assert.Equal(0, await j.Jobs.SendUsageNotificationsAsync(Now));
 
-        // Cửa sổ 1 dùng hết -> báo 80% và 100% lại cho cửa sổ 1, nhưng vẫn KHÔNG rollover vì chưa phải cửa sổ cuối
+        // Cửa sổ 1 dùng hết -> báo 80% và 100% lại cho cửa sổ 1; kỳ vẫn chạy
         j.Store.Use(owner.Id, cycle, 1_000, Now.AddMinutes(-1));
         Assert.Equal(1, await j.Jobs.SendUsageNotificationsAsync(Now));
-        await j.Jobs.AdvanceDueLanesAsync(Now);
-        Assert.Equal((CycleStatuses.Active, CycleStatuses.Queued), (cycle.Status, queued.Status));
+        await j.Jobs.EndExpiredCyclesAsync(Now);
+        Assert.Equal(CycleStatuses.Active, cycle.Status);
         Assert.Single(j.Sent(NotificationTypes.BillingUsage80));
         Assert.Single(j.Sent(NotificationTypes.BillingUsage100));
 
-        // Cửa sổ cuối (ngày 65) dùng hết -> rollover sang kỳ queued
+        // Cửa sổ cuối (ngày 65) dùng hết -> vẫn không kết thúc sớm: chạy tới ngày hết hạn (ngày 90)
         var finalNow = start.AddDays(65);
         j.Store.Use(owner.Id, cycle, 1_000, finalNow.AddMinutes(-1));
-        await j.Jobs.AdvanceDueLanesAsync(finalNow);
-        Assert.Equal((CycleEndReasons.ExhaustedRollover, CycleStatuses.Active), (cycle.EndedReason, queued.Status));
+        await j.Jobs.EndExpiredCyclesAsync(finalNow);
+        Assert.Equal(CycleStatuses.Active, cycle.Status);
+        await j.Jobs.EndExpiredCyclesAsync(start.AddDays(90));
+        Assert.Equal((CycleStatuses.Ended, CycleEndReasons.Expired), (cycle.Status, cycle.EndedReason));
     }
 
     // Mục lỗi làm bước dừng (lỗi lưu / gửi thường là sự cố chung); lượt sau nạp lại và làm tiếp.
@@ -823,7 +757,7 @@ public class BillingJobTests
         }
 
         public Task<int> ReconcilePendingOrdersAsync(DateTime nowUtc, CancellationToken ct = default) => Run("reconcile");
-        public Task<int> AdvanceDueLanesAsync(DateTime nowUtc, CancellationToken ct = default) => Run("advance");
+        public Task<int> EndExpiredCyclesAsync(DateTime nowUtc, CancellationToken ct = default) => Run("advance");
         public Task<int> ExpireFamilyInvitesAsync(DateTime nowUtc, CancellationToken ct = default) => Run("invites");
         public Task<int> SendRenewalRemindersAsync(DateTime nowUtc, CancellationToken ct = default) => Run("reminders");
         public Task<int> SendUsageNotificationsAsync(DateTime nowUtc, CancellationToken ct = default) => Run("usage");

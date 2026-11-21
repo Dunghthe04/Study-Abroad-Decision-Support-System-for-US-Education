@@ -7,7 +7,7 @@ using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.UnitTests;
 
-// Áp dụng thanh toán và webhook: đường tiền (P1, P12, P14–P18, P22, R1, R4, R5, R10, F1, F26, F38/C15). Tạo đơn ở OrderServiceTests.
+// Áp dụng thanh toán và webhook: đường tiền (P1, P12, P14–P18, R5, R10, F1, F26, F38/C15, gói cộng dồn). Tạo đơn ở OrderServiceTests.
 public class OrderPaymentTests
 {
     private static readonly DateTime Now = OrderHarness.Now;
@@ -285,44 +285,7 @@ public class OrderPaymentTests
         Assert.DoesNotContain("NGUYEN VAN A", h.Order(order.OrderCode).PayloadJson);
     }
 
-    // ---- P22 và kích hoạt của admin
-
-    [Fact]
-    public async Task P22_LaneFull_MoneyReceivedButNoSlot_MismatchWithLaneFullNote()
-    {
-        var (h, buyer, order) = await Ordered();
-        h.Store.AddActive(buyer.Id, "personal-1m", startsAt: PayAt.AddDays(-2));   // sau khi đặt đơn, kỳ chạy và kỳ chờ cùng xuất hiện
-        h.Store.AddQueued(buyer.Id, "personal-3m");
-
-        var result = await Pay(h, order);
-
-        Assert.Equal(new PaymentApplyResult(PaymentApplyStatus.LaneFull), result);
-        var stored = h.Order(order.OrderCode);
-        Assert.Equal((OrderStatuses.Mismatch, "lane_full: đã có kỳ đang chạy và kỳ chờ"), (stored.Status, stored.AdminNote));
-        Assert.Equal(2, h.Store.Cycles.Count);
-        var note = Assert.Single(h.Notes.Sent);
-        Assert.Equal((buyer.Id, NotificationTypes.BillingPaymentMismatch, $"/orders/{order.OrderCode}"), (note.UserId, note.Type, note.Link));
-        Assert.Empty(h.Email.SentEmails);
-    }
-
-    [Fact]
-    public async Task P22_AdminActivatesTheLaneFullOrderOnceTheLaneHasRoom()
-    {
-        var (h, buyer, order) = await Ordered();
-        var active = h.Store.AddActive(buyer.Id, "personal-1m", startsAt: PayAt.AddDays(-2));
-        var queued = h.Store.AddQueued(buyer.Id, "personal-3m");
-        await Pay(h, order);
-        queued.Status = CycleStatuses.Ended;   // kỳ chờ đã chạy xong / được xử lý
-        active.Status = CycleStatuses.Ended;
-        var admin = Guid.NewGuid();
-
-        var result = await h.Orders.ApplyPaymentAsync(order.OrderCode, order.AmountVnd, null, PayAt.AddHours(1), default,
-            new PaymentApplyOptions(SkipAmountCheck: true, AdminUserId: admin, AdminNote: "đã đối chiếu sao kê"));
-
-        Assert.Equal(PaymentApplyStatus.Activated, result.Status);
-        var stored = h.Order(order.OrderCode);
-        Assert.Equal((OrderStatuses.Paid, "đã đối chiếu sao kê", (Guid?)admin), (stored.Status, stored.AdminNote, stored.HandledByUserId));
-    }
+    // ---- kích hoạt của admin
 
     [Fact]
     public async Task Admin_SkipAmountCheck_ActivatesAnOrderThatWasMismatch()
@@ -351,56 +314,47 @@ public class OrderPaymentTests
         Assert.Equal(PaymentApplyStatus.Activated, result.Status);
     }
 
-    // ---- R1, R4, R5: đặt chỗ lúc thanh toán
+    // ---- gói cộng dồn: mọi đơn đã trả tạo kỳ active chạy ngay
 
     [Fact]
-    public async Task R1_RenewalWhileActiveWithTokensLeft_Queues_WithNoDates()
+    public async Task A_PayWhileAnotherCycleIsActive_CreatesASecondActiveCycleNow_OldOneUntouched()
     {
         var (h, buyer, order) = await Ordered("personal-3m");
         var active = h.Store.AddActive(buyer.Id, "personal-1m", startsAt: Now.AddDays(-5));
         h.Store.Use(buyer.Id, active, 100_000);
-
-        var result = await Pay(h, order);
-
-        Assert.Equal(PaymentApplyStatus.Queued, result.Status);
-        var queued = h.Store.Cycles.Single(c => c.Id == result.CycleId);
-        Assert.Equal((CycleStatuses.Queued, (DateTime?)null, (DateTime?)null, 90, (int?)30, 600_000L),
-            (queued.Status, queued.StartsAt, queued.EndsAt, queued.DurationDays, queued.QuotaPeriodDays, queued.TokenQuota));
-        Assert.Equal(CycleStatuses.Active, active.Status);
-        Assert.Contains("bắt đầu khi kỳ hiện tại kết thúc", Assert.Single(h.Notes.Sent).Body);
-        Assert.Single(h.Email.SentEmails);
-        var summary = await h.Entitlements.GetSummaryAsync(buyer.Id, PayAt);
-        Assert.Equal(("Cá nhân 3 tháng", active.EndsAt), (summary.Personal!.Queued!.PlanName, summary.Personal.Queued.ExpectedStartsAt));
-    }
-
-    [Fact]
-    public async Task R1_TheQueuedCycleStartsExactlyWhenTheActiveOneEnds()
-    {
-        var (h, buyer, order) = await Ordered("personal-3m");
-        var active = h.Store.AddActive(buyer.Id, "personal-1m", startsAt: Now.AddDays(-5));
-        await Pay(h, order);
-
-        await h.Entitlements.GetSummaryAsync(buyer.Id, active.EndsAt!.Value.AddHours(1));
-
-        var started = h.Store.Cycles.Single(c => c.ActivatedFromOrderId == h.Order(order.OrderCode).Id);
-        Assert.Equal((CycleStatuses.Active, active.EndsAt, active.EndsAt!.Value.AddDays(90)), (started.Status, started.StartsAt, started.EndsAt));
-    }
-
-    [Fact]
-    public async Task R4_PayWhileActiveIsExhausted_OldEndsNow_NewStartsNow()
-    {
-        var (h, buyer, order) = await Ordered("personal-3m");
-        var old = h.Store.AddActive(buyer.Id, "personal-1m", startsAt: Now.AddDays(-5));
-        h.Store.Use(buyer.Id, old, 500_000);
+        var endsAt = active.EndsAt;
 
         var result = await Pay(h, order);
 
         Assert.Equal(PaymentApplyStatus.Activated, result.Status);
-        Assert.Equal((CycleStatuses.Ended, CycleEndReasons.ExhaustedRollover, (DateTime?)PayAt, (DateTime?)PayAt), (old.Status, old.EndedReason, old.EndedAt, old.EndsAt));
+        var created = h.Store.Cycles.Single(c => c.Id == result.CycleId);
+        Assert.Equal((CycleStatuses.Active, (DateTime?)PayAt, (DateTime?)PayAt.AddDays(90), 90, (int?)30, 600_000L),
+            (created.Status, created.StartsAt, created.EndsAt, created.DurationDays, created.QuotaPeriodDays, created.TokenQuota));
+        Assert.Equal((CycleStatuses.Active, endsAt, (string?)null), (active.Status, active.EndsAt, active.EndedReason));
+        Assert.Contains("đã được kích hoạt", Assert.Single(h.Notes.Sent).Body);
+        Assert.Single(h.Email.SentEmails);
+        var summary = await h.Entitlements.GetSummaryAsync(buyer.Id, PayAt);
+        Assert.Equal(2, summary.Cycles.Count);
+        Assert.Null(summary.Personal!.Queued);
+    }
+
+    [Fact]
+    public async Task A_PayWhileActiveIsExhausted_OldStaysActiveUntilItsEnd_NoRollover()
+    {
+        var (h, buyer, order) = await Ordered("personal-3m");
+        var old = h.Store.AddActive(buyer.Id, "personal-1m", startsAt: Now.AddDays(-5));
+        h.Store.Use(buyer.Id, old, 500_000);
+        var endsAt = old.EndsAt;
+
+        var result = await Pay(h, order);
+
+        Assert.Equal(PaymentApplyStatus.Activated, result.Status);
+        Assert.Equal((CycleStatuses.Active, endsAt, (string?)null), (old.Status, old.EndsAt, old.EndedReason));
         var created = h.Store.Cycles.Single(c => c.Id == result.CycleId);
         Assert.Equal((CycleStatuses.Active, (DateTime?)PayAt, (DateTime?)PayAt.AddDays(90)), (created.Status, created.StartsAt, created.EndsAt));
         Assert.Equal(2, h.Store.Cycles.Count);
-        Assert.Contains("đã được kích hoạt", Assert.Single(h.Notes.Sent).Body);
+        // chat được trừ vào kỳ mới (kỳ cũ đã hết token)
+        Assert.Equal(created.Id, (await h.Entitlements.ResolveChatChargeAsync(buyer.Id, UserRoles.Student, PayAt)).CycleId);
     }
 
     [Fact]
@@ -417,23 +371,36 @@ public class OrderPaymentTests
         Assert.Equal((CycleStatuses.Active, (DateTime?)PayAt), (created.Status, created.StartsAt));
     }
 
-    // ---- R10: hai kích hoạt đua nhau trên một làn
+    // ---- R10: hai kích hoạt đua nhau
 
     [Fact]
-    public async Task R10_RaceOnTheLane_TheLoserRetriesOnceAndQueuesBehindTheWinner()
+    public async Task R10_TwoPaymentsRacing_BothCreateTheirOwnActiveCycle()
     {
         var (h, buyer, order) = await Ordered();
-        // Giữa lúc đọc làn (trống) và lúc ghi, một request khác đã commit một kỳ active cho cùng làn
+        // Giữa lúc đọc và lúc ghi, một request khác đã commit một kỳ active cho cùng người: không còn gì để tranh
         h.Store.RaceBeforeCycleInsert = s => s.AddActive(buyer.Id, "personal-3m", startsAt: PayAt);
 
         var result = await Pay(h, order);
 
-        Assert.Equal(PaymentApplyStatus.Queued, result.Status);
+        Assert.Equal(PaymentApplyStatus.Activated, result.Status);
+        Assert.Equal(1, h.Store.Transactions);
+        Assert.Equal([CycleStatuses.Active, CycleStatuses.Active], h.Store.Cycles.Select(c => c.Status));
+        Assert.Equal(OrderStatuses.Paid, h.Order(order.OrderCode).Status);
+        Assert.Equal(h.Order(order.OrderCode).UserSubscriptionId, result.CycleId);
+    }
+
+    [Fact]
+    public async Task R10_ConflictOnInsert_TheLoserRetriesOnceAndSucceeds_WithOneReceipt()
+    {
+        var (h, buyer, order) = await Ordered(role: UserRoles.Parent, age: 40, plan: "family-1m");
+        h.Store.FailOnCycleInsert = new UniqueViolationException("ux_family_groups_one_active_per_owner");   // request khác vừa tạo nhóm của chủ này
+
+        var result = await Pay(h, order);
+
+        Assert.Equal(PaymentApplyStatus.Activated, result.Status);
         Assert.Equal(2, h.Store.Transactions);       // lần đầu bị quay lui, lần hai thành công
         Assert.True(h.Store.TrackingCleared >= 2);   // mỗi lần thử đọc lại từ đầu
-        Assert.Equal([CycleStatuses.Active, CycleStatuses.Queued], h.Store.Cycles.Select(c => c.Status).OrderBy(s => s));
         Assert.Equal(OrderStatuses.Paid, h.Order(order.OrderCode).Status);
-        Assert.Equal(h.Order(order.OrderCode).UserSubscriptionId, h.Store.Cycles.Single(c => c.Status == CycleStatuses.Queued).Id);
         // Lần thử bị hủy không để lại biên nhận hay thông báo
         Assert.Single(h.Email.SentEmails);
         Assert.Single(h.Notes.Sent);
@@ -517,7 +484,7 @@ public class OrderPaymentTests
     }
 
     [Fact]
-    public async Task F26_FamilyRenewal_QueuesOnTheOwnersExistingGroup_MembersCarryOver()
+    public async Task F26_SecondFamilyPlan_AddsAnActiveCycleToTheOwnersExistingGroup_MembersShareBoth()
     {
         var (h, owner, order) = await Ordered("family-3m", UserRoles.Parent, 40);
         var member = h.AddUser();
@@ -526,16 +493,18 @@ public class OrderPaymentTests
 
         var result = await Pay(h, order);
 
-        Assert.Equal(PaymentApplyStatus.Queued, result.Status);
-        var queued = h.Store.Cycles.Single(c => c.Id == result.CycleId);
-        Assert.Equal((CycleStatuses.Queued, (Guid?)group.Id), (queued.Status, queued.FamilyGroupId));
+        Assert.Equal(PaymentApplyStatus.Activated, result.Status);
+        var added = h.Store.Cycles.Single(c => c.Id == result.CycleId);
+        Assert.Equal((CycleStatuses.Active, (Guid?)group.Id, (DateTime?)PayAt), (added.Status, added.FamilyGroupId, added.StartsAt));
+        Assert.Equal(CycleStatuses.Active, current.Status);
         Assert.Single(h.Store.Groups);   // không tạo nhóm thứ hai
         Assert.Equal(FamilyMemberStatuses.Active, h.Store.Members.Single().Status);
+        Assert.Equal(2, (await h.Entitlements.GetSummaryAsync(member.Id, PayAt)).Cycles.Count);
 
-        // Hết kỳ cũ: kỳ gia hạn chạy, thành viên vẫn ở trong nhóm và vẫn Premium
+        // Hết kỳ cũ: thành viên vẫn ở trong nhóm và vẫn Premium nhờ kỳ mới
         var later = current.EndsAt!.Value.AddHours(1);
         Assert.Equal(AccountTiers.Premium, (await h.Entitlements.GetSummaryAsync(member.Id, later)).Tier);
-        Assert.Equal(CycleStatuses.Active, queued.Status);
+        Assert.Equal(CycleStatuses.Ended, current.Status);
         Assert.Equal(FamilyMemberStatuses.Active, h.Store.Members.Single().Status);
     }
 

@@ -6,7 +6,7 @@ using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.UnitTests;
 
-// Quyền dùng gói: tier theo ngày, thứ tự trừ Personal → Family → Free, chuyển kỳ khi đọc, phần trăm (kế hoạch billing v2).
+// Quyền dùng gói: tier theo ngày, thứ tự trừ theo kỳ hết hạn sớm nhất (chỉ kỳ còn token) rồi Free, kết thúc kỳ hết hạn khi đọc, phần trăm.
 public class EntitlementServiceTests
 {
     private static readonly DateTime Now = new(2026, 11, 20, 3, 0, 0, DateTimeKind.Utc);
@@ -41,36 +41,65 @@ public class EntitlementServiceTests
     }
 
     [Fact]
-    public async Task F18_MemberWithOwnPersonal_PersonalIsChargedFirst()
+    public async Task F18_MemberWithOwnPersonal_TheEarliestEndingCycleIsChargedFirst()
     {
         var repo = new FakeBilling();
-        repo.AddFamily(Owner, member: Me);
-        var personal = repo.AddActive(Me, "personal-1m");
+        var family = repo.AddFamily(Owner, member: Me, startsAt: Now.AddDays(-20));   // hết hạn sau 10 ngày
+        var personal = repo.AddActive(Me, "personal-1m");                              // hết hạn sau 29 ngày
 
         var charge = await Service(repo).ResolveChatChargeAsync(Me, UserRoles.Student, Now);
 
-        Assert.Equal(personal.Id, charge.CycleId);
+        Assert.Equal(family.Id, charge.CycleId);
+        Assert.Equal(PlanKinds.Family, charge.PoolKind);
+
+        personal.StartsAt = Now.AddDays(-29);   // personal hết hạn sau 1 ngày: tới lượt personal
+        personal.EndsAt = Now.AddDays(1);
+        Assert.Equal(personal.Id, (await Service(repo).ResolveChatChargeAsync(Me, UserRoles.Student, Now)).CycleId);
     }
 
     [Fact]
-    public async Task F40_MemberWhosePersonalRanOut_FallsBackToTheFamilyPool()
+    public async Task B_ChargePicksTheEarliestEndingCycleWithTokens_AndSkipsExhaustedOnes()
     {
         var repo = new FakeBilling();
-        var family = repo.AddFamily(Owner, member: Me);
-        var personal = repo.AddActive(Me, "personal-1m");
-        repo.Use(Me, personal, 500_000);
+        var soonest = repo.AddActive(Me, "personal-1m", startsAt: Now.AddDays(-25));    // hết hạn sau 5 ngày
+        var middle = repo.AddActive(Me, "personal-1m", startsAt: Now.AddDays(-10));     // sau 20 ngày
+        var latest = repo.AddActive(Me, "personal-3m", startsAt: Now.AddDays(-1));      // sau 89 ngày
+        var service = Service(repo);
+
+        Assert.Equal(soonest.Id, (await service.ResolveChatChargeAsync(Me, UserRoles.Student, Now)).CycleId);
+
+        repo.Use(Me, soonest, 500_000);   // hết token: bỏ qua nhưng vẫn active
+        var charge = await service.ResolveChatChargeAsync(Me, UserRoles.Student, Now);
+        Assert.Equal((middle.Id, PlanKinds.Personal), (charge.CycleId!.Value, charge.PoolKind));
+
+        repo.Use(Me, middle, 500_000);
+        Assert.Equal(latest.Id, (await service.ResolveChatChargeAsync(Me, UserRoles.Student, Now)).CycleId);
+
+        repo.Use(Me, latest, 600_000);
+        var free = await service.ResolveChatChargeAsync(Me, UserRoles.Student, Now);
+        Assert.Equal((true, (Guid?)null, PlanKinds.Free), (free.IsPremium, free.CycleId, free.PoolKind));
+        Assert.Equal(CycleStatuses.Active, soonest.Status);
+    }
+
+    [Fact]
+    public async Task B_EqualEndDates_TieBreakByEarlierStart_ThenId()
+    {
+        var repo = new FakeBilling();
+        var shorterPlanSameEnd = repo.AddActive(Me, "personal-1m", startsAt: Now.AddDays(-10));   // kết thúc Now+20, bắt đầu muộn
+        var longerPlanSameEnd = repo.AddActive(Me, "personal-3m", startsAt: Now.AddDays(-70));    // kết thúc Now+20, bắt đầu sớm
+        Assert.Equal(shorterPlanSameEnd.EndsAt, longerPlanSameEnd.EndsAt);
 
         var charge = await Service(repo).ResolveChatChargeAsync(Me, UserRoles.Student, Now);
 
-        Assert.Equal((family.Id, "family-1m", PlanKinds.Family), (charge.CycleId!.Value, charge.PlanCode, charge.PoolKind));
+        Assert.Equal(longerPlanSameEnd.Id, charge.CycleId);
     }
 
     [Fact]
-    public async Task F19_OwnerWithPersonalAndFamily_PersonalFirst_FamilyKeptForOthers()
+    public async Task F19_OwnerWithPersonalAndFamily_ChargesTheEarlierEnding_FamilyStillShownAsOwner()
     {
         var repo = new FakeBilling();
-        repo.AddFamily(Me);
-        var personal = repo.AddActive(Me, "personal-1m");
+        repo.AddFamily(Me, startsAt: Now.AddDays(-5));
+        var personal = repo.AddActive(Me, "personal-1m", startsAt: Now.AddDays(-20));
 
         var service = Service(repo);
         var charge = await service.ResolveChatChargeAsync(Me, UserRoles.Parent, Now);
@@ -78,6 +107,76 @@ public class EntitlementServiceTests
 
         Assert.Equal(personal.Id, charge.CycleId);
         Assert.Equal((PlanKinds.Personal, "owner"), (summary.ChargingPool, summary.Family!.Role));
+        Assert.Equal(["owner", "owner"], summary.Cycles.Select(c => c.Role));
+    }
+
+    [Fact]
+    public async Task C_MemberIsChargedAgainstBothOfTheOwnersFamilyCycles_AndSummaryListsThemAsMember()
+    {
+        var repo = new FakeBilling();
+        var first = repo.AddFamily(Owner, member: Me, startsAt: Now.AddDays(-20));        // hết hạn sau 10 ngày
+        var second = repo.AddFamilyCycle(Owner, "family-3m", startsAt: Now.AddDays(-1));   // hết hạn sau 89 ngày
+        var service = Service(repo);
+
+        Assert.Equal(first.Id, (await service.ResolveChatChargeAsync(Me, UserRoles.Student, Now)).CycleId);
+        repo.Use(Me, first, 500_000);   // cạn kỳ đầu: chuyển sang kỳ thứ hai của chủ gói
+        var charge = await service.ResolveChatChargeAsync(Me, UserRoles.Student, Now);
+        Assert.Equal((second.Id, "family-3m", PlanKinds.Family), (charge.CycleId!.Value, charge.PlanCode, charge.PoolKind));
+
+        var summary = await service.GetSummaryAsync(Me, Now);
+
+        Assert.Equal(AccountTiers.Premium, summary.Tier);
+        Assert.Equal([first.Id, second.Id], summary.Cycles.Select(c => c.Id));
+        Assert.All(summary.Cycles, c => Assert.Equal((PlanKinds.Family, "member", "Chủ gói"), (c.Kind, c.Role, c.OwnerName)));
+        Assert.Equal((100, true), (summary.Cycles[0].UsedPercent, summary.Cycles[0].Exhausted));
+        Assert.Equal((0, false), (summary.Cycles[1].UsedPercent, summary.Cycles[1].Exhausted));
+        Assert.Equal(("member", "Chủ gói"), (summary.Family!.Role, summary.Family.OwnerName));
+        Assert.Equal(PlanKinds.Family, summary.ChargingPool);
+        Assert.Null(summary.Personal);
+    }
+
+    [Fact]
+    public async Task D_OwnersPersonalCycleIsNeitherVisibleNorUsableByMembers()
+    {
+        var repo = new FakeBilling();
+        repo.AddFamily(Owner, member: Me);
+        var ownersPersonal = repo.AddActive(Owner, "personal-3m", startsAt: Now.AddDays(-80));   // hết hạn sớm hơn kỳ Gia đình: nếu chia sẻ thì sẽ bị chọn
+        var service = Service(repo);
+
+        var charge = await service.ResolveChatChargeAsync(Me, UserRoles.Student, Now);
+        var summary = await service.GetSummaryAsync(Me, Now);
+
+        Assert.NotEqual(ownersPersonal.Id, charge.CycleId);
+        Assert.Equal(PlanKinds.Family, charge.PoolKind);
+        Assert.DoesNotContain(summary.Cycles, c => c.Id == ownersPersonal.Id);
+        Assert.Null(summary.Personal);
+        Assert.Single(summary.Cycles);
+
+        var ownerSummary = await service.GetSummaryAsync(Owner, Now);   // chủ gói thấy cả hai kỳ của mình
+        Assert.Equal(2, ownerSummary.Cycles.Count);
+        Assert.Equal(ownersPersonal.Id, ownerSummary.Cycles[0].Id);
+    }
+
+    [Fact]
+    public async Task A_SummaryCycles_AreSortedByEndDate_WithPurchaseTimeAndExpiringSoon()
+    {
+        var repo = new FakeBilling();
+        var later = repo.AddActive(Me, "personal-3m", startsAt: Now.AddDays(-1));
+        var sooner = repo.AddActive(Me, "personal-1m", startsAt: Now.AddDays(-25));
+        sooner.CreatedAt = Now.AddDays(-25);
+        repo.Use(Me, sooner, 410_000);
+
+        var summary = await Service(repo).GetSummaryAsync(Me, Now);
+
+        Assert.Equal([sooner.Id, later.Id], summary.Cycles.Select(c => c.Id));
+        var dto = summary.Cycles[0];
+        Assert.Equal((PlanKinds.Personal, "personal-1m", "Cá nhân 1 tháng", "owner", (string?)null), (dto.Kind, dto.PlanCode, dto.PlanName, dto.Role, dto.OwnerName));
+        Assert.Equal((CycleRules.ToVietnamTime(sooner.CreatedAt), CycleRules.ToVietnamTime(sooner.StartsAt!.Value), CycleRules.ToVietnamTime(sooner.EndsAt!.Value)),
+            (dto.PurchasedAt, dto.StartsAt, dto.EndsAt));
+        Assert.Equal((82, false, true, true, true), (dto.UsedPercent, dto.Exhausted, dto.LowQuota, dto.ExpiringSoon, dto.QuotaResetsAt is null));
+        Assert.False(summary.Cycles[1].ExpiringSoon);
+        Assert.Equal(sooner.PlanName, summary.Personal!.PlanName);   // Personal = kỳ hết hạn sớm nhất
+        Assert.Equal((PlanKinds.Personal, true, true), (summary.ChargingPool, summary.LowQuota, summary.ExpiringSoon));
     }
 
     [Fact]
@@ -123,36 +222,38 @@ public class EntitlementServiceTests
         Assert.Equal(0, repo.Reads);   // không chạm DB
     }
 
-    // ---- chuyển kỳ khi đọc
+    // ---- kết thúc kỳ khi đọc
 
     [Fact]
-    public async Task R2_R9_ChatRightAfterExpiry_StartsTheRenewalAtTheOldEndDateWithoutTheJob()
+    public async Task R2_ChatRightAfterExpiry_EndsTheOldCycleAtItsEndDateWithoutTheJob_AndChargesTheOtherOne()
     {
         var repo = new FakeBilling();
         var old = repo.AddActive(Me, "personal-1m", startsAt: Now.AddDays(-30).AddMinutes(-1));
-        var renewal = repo.AddQueued(Me, "personal-3m");
+        var running = repo.AddActive(Me, "personal-3m");
 
         var charge = await Service(repo).ResolveChatChargeAsync(Me, UserRoles.Student, Now);
 
-        Assert.Equal(renewal.Id, charge.CycleId);
-        Assert.Equal((CycleStatuses.Ended, CycleEndReasons.Expired), (old.Status, old.EndedReason));
-        Assert.Equal((old.EndsAt, old.EndsAt!.Value.AddDays(90)), (renewal.StartsAt, renewal.EndsAt));
-        Assert.Equal(2, repo.Saves);   // kết thúc kỳ cũ và kích hoạt kỳ mới lưu riêng, theo thứ tự
+        Assert.Equal(running.Id, charge.CycleId);
+        Assert.Equal((CycleStatuses.Ended, CycleEndReasons.Expired, old.EndsAt), (old.Status, old.EndedReason, old.EndedAt));
+        Assert.Equal(1, repo.Saves);
     }
 
     [Fact]
-    public async Task R3_ExhaustedWithQueued_RollsOverNow()
+    public async Task R3_ExhaustedCycle_StaysActiveAndPremiumUntilItsEndDate_ThenFree()
     {
         var repo = new FakeBilling();
-        var old = repo.AddActive(Me, "personal-1m");
-        var renewal = repo.AddQueued(Me, "personal-1m");
-        repo.Use(Me, old, 500_000);
+        var cycle = repo.AddActive(Me, "personal-1m");
+        repo.Use(Me, cycle, 500_000);
+        var service = Service(repo);
 
-        var summary = await Service(repo).GetSummaryAsync(Me, Now);
+        var summary = await service.GetSummaryAsync(Me, Now);
 
-        Assert.Equal((CycleEndReasons.ExhaustedRollover, (DateTime?)Now, (DateTime?)Now), (old.EndedReason, old.EndedAt, old.EndsAt));   // kỳ cũ hết hạn đúng lúc đổi kỳ (như đường thanh toán)
-        Assert.Equal((Now, Now.AddDays(30)), (renewal.StartsAt!.Value, renewal.EndsAt!.Value));
-        Assert.Equal((0, false, (QueuedCycleDto?)null), (summary.Personal!.UsedPercent, summary.Personal.Exhausted, summary.Personal.Queued));
+        Assert.Equal((CycleStatuses.Active, AccountTiers.Premium, PlanKinds.Free), (cycle.Status, summary.Tier, summary.ChargingPool));
+        Assert.Equal((100, true), (summary.Personal!.UsedPercent, summary.Personal.Exhausted));
+        Assert.Equal(0, repo.Saves);
+
+        Assert.Equal(AccountTiers.Free, (await service.GetSummaryAsync(Me, cycle.EndsAt!.Value)).Tier);
+        Assert.Equal(CycleStatuses.Ended, cycle.Status);
     }
 
     [Fact]
@@ -192,17 +293,18 @@ public class EntitlementServiceTests
     }
 
     [Fact]
-    public async Task FamilyRenewalQueued_MembersCarryOverToTheNewCycle()
+    public async Task FamilyCycleExpired_WithAnotherStillRunning_MembersKeepTheGroupAndTheRemainingCycle()
     {
         var repo = new FakeBilling();
-        repo.AddFamily(Owner, member: Me, startsAt: Now.AddDays(-31));
-        var renewal = repo.AddQueued(Owner, "family-3m");
+        var old = repo.AddFamily(Owner, member: Me, startsAt: Now.AddDays(-31));
+        var running = repo.AddFamilyCycle(Owner, "family-3m", startsAt: Now.AddDays(-2));
 
         var summary = await Service(repo).GetSummaryAsync(Me, Now);
 
         Assert.Equal(FamilyGroupStatuses.Active, repo.Groups.Single().Status);
         Assert.Equal(("family-3m", "member", "Chủ gói"), (summary.Family!.PlanCode, summary.Family.Role, summary.Family.OwnerName));
-        Assert.Equal(CycleStatuses.Active, renewal.Status);
+        Assert.Equal((CycleStatuses.Ended, CycleStatuses.Active), (old.Status, running.Status));
+        Assert.Equal([running.Id], summary.Cycles.Select(c => c.Id));
     }
 
     // ---- tóm tắt và phần trăm
@@ -279,20 +381,23 @@ public class EntitlementServiceTests
     }
 
     [Fact]
-    public async Task Warnings_AreForTheChargingPool_AndExpiringSoonIsQuietWhenRenewed()
+    public async Task Warnings_AreForTheChargedCycle()
     {
         var repo = new FakeBilling();
-        var personal = repo.AddActive(Me, "personal-1m", startsAt: Now.AddDays(-25));
-        repo.Use(Me, personal, 410_000);
-
+        var soon = repo.AddActive(Me, "personal-1m", startsAt: Now.AddDays(-25));
+        var far = repo.AddActive(Me, "personal-3m", startsAt: Now.AddDays(-1));
+        repo.Use(Me, soon, 410_000);
         var service = Service(repo);
+
         var warned = await service.GetSummaryAsync(Me, Now);
-        repo.AddQueued(Me, "personal-1m");
-        var renewed = await service.GetSummaryAsync(Me, Now);
+        repo.Use(Me, soon, 90_000);   // cạn kỳ sắp hết: cảnh báo chuyển sang kỳ dài còn rất nhiều token
+        var next = await service.GetSummaryAsync(Me, Now);
 
         Assert.Equal((true, true), (warned.LowQuota, warned.ExpiringSoon));
-        Assert.False(renewed.ExpiringSoon);
-        Assert.Equal(("Cá nhân 1 tháng", personal.EndsAt), (renewed.Personal!.Queued!.PlanName, renewed.Personal.Queued.ExpectedStartsAt));
+        Assert.Equal((false, false, PlanKinds.Personal), (next.LowQuota, next.ExpiringSoon, next.ChargingPool));
+        Assert.Null(next.Personal!.Queued);
+        Assert.Equal(soon.PlanName, next.Personal.PlanName);   // Personal vẫn là kỳ hết hạn sớm nhất
+        Assert.Equal(far.PlanName, next.Cycles[1].PlanName);
     }
 
     [Fact]
@@ -316,7 +421,7 @@ public class EntitlementServiceTests
         var plans = await Service(repo).GetPlansOnSaleAsync();
 
         Assert.Equal(["free", "personal-1m", "family-1m", "family-3m"], plans.Select(p => p.Code));
-        Assert.Equal(new PlanSeatsDto(1, 2), plans.Single(p => p.Code == "family-1m").Seats);
+        Assert.Equal(new PlanSeatsDto(2, 2), plans.Single(p => p.Code == "family-1m").Seats);
         Assert.Null(plans.Single(p => p.Code == "personal-1m").Seats);
         Assert.Equal(79_000L, plans.Single(p => p.Code == "personal-1m").PriceVnd);
         Assert.Null(plans.Single(p => p.Code == "free").QuotaMultiplier);
@@ -325,21 +430,19 @@ public class EntitlementServiceTests
     }
 
     [Fact]
-    public async Task RecurringCycle_WindowResetsFresh_AndDoesNotRolloverEarly()
+    public async Task RecurringCycle_WindowResetsFresh_AndIsNotEndedEarly()
     {
         var repo = new FakeBilling();
         var start = Now.AddDays(-35);   // đang ở cửa sổ 1 (ngày 30..60) của gói 90 ngày / 30 ngày
         var cycle = repo.AddActive(Me, "personal-3m", startsAt: start);
-        var queued = repo.AddQueued(Me, "personal-1m");
         repo.Use(Me, cycle, 600_000, start.AddDays(5));   // dùng hết cửa sổ 0
 
         var service = Service(repo);
         var summary = await service.GetSummaryAsync(Me, Now);
-        var lane = await service.AdvanceLaneAsync(Me, PlanKinds.Personal, Now);
+        var cycles = await service.EndExpiredCyclesAsync(Me, PlanKinds.Personal, Now);
 
         Assert.Equal(CycleStatuses.Active, cycle.Status);
-        Assert.Equal(CycleStatuses.Queued, queued.Status);
-        Assert.False(lane.ActiveExhausted);
+        Assert.False(Assert.Single(cycles).Exhausted);
         Assert.Equal((0, false, (int?)30), (summary.Personal!.UsedPercent, summary.Personal.Exhausted, summary.Personal.QuotaPeriodDays));
         Assert.Equal(CycleRules.ToVietnamTime(start.AddDays(60)), summary.Personal.QuotaResetsAt);
     }
@@ -366,7 +469,7 @@ public class EntitlementServiceTests
         Type[] customerDtos =
         [
             typeof(PlanDto), typeof(PlanSeatsDto), typeof(SubscriptionSummaryDto), typeof(PoolDto),
-            typeof(FamilyPoolDto), typeof(FreePoolDto), typeof(QueuedCycleDto),
+            typeof(FamilyPoolDto), typeof(FreePoolDto), typeof(QueuedCycleDto), typeof(SubscriptionCycleDto),
         ];
         foreach (var type in customerDtos)
         {
@@ -411,7 +514,7 @@ public class EntitlementServiceTests
         var json = JsonSerializer.Serialize(summary, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         Assert.Equal(("", ""), (summary.Personal!.PlanCode, summary.Family!.PlanCode));
-        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(json, "\"planCode\":\"\"").Count);
+        Assert.Equal(4, System.Text.RegularExpressions.Regex.Matches(json, "\"planCode\":\"\"").Count);   // personal, family và hai mục trong cycles
         Assert.DoesNotContain("\"planCode\":null", json);
     }
 
@@ -457,20 +560,6 @@ public class EntitlementServiceTests
             return cycle;
         }
 
-        public UserSubscription AddQueued(Guid owner, string planCode)
-        {
-            var plan = Plans.Single(p => p.Code == planCode);
-            var cycle = new UserSubscription
-            {
-                UserId = owner, SubscriptionPlanId = plan.Id, Kind = plan.Kind, Status = CycleStatuses.Queued,
-                DurationDays = plan.DurationDays!.Value, QuotaPeriodDays = plan.QuotaPeriodDays,
-                TokenQuota = plan.TokenQuota, PlanName = plan.Name,
-                FamilyGroupId = plan.Kind == PlanKinds.Family ? Groups.Single(g => g.OwnerUserId == owner).Id : null,
-            };
-            Cycles.Add(cycle);
-            return cycle;
-        }
-
         /// <summary>Nhóm gia đình của owner với một kỳ family-1m active; member (nếu có) là thành viên active.</summary>
         public UserSubscription AddFamily(Guid owner, Guid? member = null, DateTime? startsAt = null)
         {
@@ -486,6 +575,13 @@ public class EntitlementServiceTests
             return cycle;
         }
 
+        public UserSubscription AddFamilyCycle(Guid owner, string planCode = "family-1m", DateTime? startsAt = null)
+        {
+            var cycle = AddActive(owner, planCode, startsAt);
+            cycle.FamilyGroupId = Groups.First(g => g.OwnerUserId == owner && g.Status == FamilyGroupStatuses.Active).Id;
+            return cycle;
+        }
+
         public void Use(Guid userId, UserSubscription cycle, int tokens, DateTime? at = null) =>
             Calls.Add(Call(userId, tokens, BillingRules.MeteredAiKind, cycle.Id, Plans.Single(p => p.Id == cycle.SubscriptionPlanId).Code, at));
 
@@ -495,9 +591,8 @@ public class EntitlementServiceTests
         public Task<IReadOnlyList<SubscriptionPlan>> GetPlansAsync(CancellationToken ct = default) =>
             Read<IReadOnlyList<SubscriptionPlan>>(Plans.ToList());
 
-        public Task<List<UserSubscription>> GetOpenCyclesAsync(Guid ownerUserId, string kind, CancellationToken ct = default) =>
-            Read(Cycles.Where(c => c.UserId == ownerUserId && c.Kind == kind
-                && (c.Status == CycleStatuses.Active || c.Status == CycleStatuses.Queued)).ToList());
+        public Task<List<UserSubscription>> GetActiveCyclesAsync(Guid ownerUserId, string kind, CancellationToken ct = default) =>
+            Read(Cycles.Where(c => c.UserId == ownerUserId && c.Kind == kind && c.Status == CycleStatuses.Active).ToList());
 
         public Task<FamilyGroup?> FindActiveOwnedGroupAsync(Guid ownerUserId, CancellationToken ct = default) =>
             Read(Groups.FirstOrDefault(g => g.OwnerUserId == ownerUserId && g.Status == FamilyGroupStatuses.Active));
@@ -529,12 +624,6 @@ public class EntitlementServiceTests
             {
                 step();
                 Saves++;
-                // Như index duy nhất trong DB: mỗi làn tối đa 1 active và 1 queued sau mỗi lần lưu
-                Assert.All(Cycles.GroupBy(c => (c.UserId, c.Kind)), lane =>
-                {
-                    Assert.True(lane.Count(c => c.Status == CycleStatuses.Active) <= 1, "Hai kỳ active cùng một làn");
-                    Assert.True(lane.Count(c => c.Status == CycleStatuses.Queued) <= 1, "Hai kỳ queued cùng một làn");
-                });
             }
             return Task.CompletedTask;
         }

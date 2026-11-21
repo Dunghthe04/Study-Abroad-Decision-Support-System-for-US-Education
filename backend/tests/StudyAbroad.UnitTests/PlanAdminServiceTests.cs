@@ -35,7 +35,7 @@ public class PlanAdminServiceTests
         public PlanConflictException? ThrowOnRemove { get; set; }
 
         private PlanWithUsage WithUsage(SubscriptionPlan p) => new(p, new PlanUsage(
-            Cycles.Count(c => c.SubscriptionPlanId == p.Id && c.Status is CycleStatuses.Active or CycleStatuses.Queued),
+            Cycles.Count(c => c.SubscriptionPlanId == p.Id && c.Status == CycleStatuses.Active),
             Cycles.Count(c => c.SubscriptionPlanId == p.Id),
             Orders.Count(o => o.SubscriptionPlanId == p.Id)));
 
@@ -142,7 +142,7 @@ public class PlanAdminServiceTests
         var f = new Fixture();
         f.Personal.DisplayOrder = 0;   // cùng thứ tự với Free: xếp theo tên ("free" < "personal-1m")
         f.AddCycle(f.Personal, CycleStatuses.Active);
-        f.AddCycle(f.Personal, CycleStatuses.Queued);
+        f.AddCycle(f.Personal, CycleStatuses.Active);
         f.AddCycle(f.Personal, CycleStatuses.Ended);   // kỳ đã kết thúc không tính vào activeCycles
         f.AddOrder(f.Personal, OrderStatuses.Paid);
         f.AddOrder(f.Personal, OrderStatuses.Cancelled);
@@ -165,7 +165,7 @@ public class PlanAdminServiceTests
 
         Assert.Null(list.Single(p => p.Kind == PlanKinds.Personal).Seats);
         Assert.Null(list.Single(p => p.Kind == PlanKinds.Free).Seats);
-        Assert.Equal(new PlanSeatsDto(1, 2), list.Single(p => p.Kind == PlanKinds.Family).Seats);
+        Assert.Equal(new PlanSeatsDto(2, 2), list.Single(p => p.Kind == PlanKinds.Family).Seats);
         var json = JsonSerializer.Serialize(list.Single(p => p.Kind == PlanKinds.Personal), new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.Contains("\"priceVnd\":99000,", json);
         Assert.Contains("\"tokenQuota\":500000", json);
@@ -419,7 +419,7 @@ public class PlanAdminServiceTests
 
         var dto = await f.Service.CreateAsync(Admin, Create(code: "family-3m", kind: PlanKinds.Family, days: 90));
 
-        Assert.Equal(new PlanSeatsDto(1, 2), dto.Seats);
+        Assert.Equal(new PlanSeatsDto(2, 2), dto.Seats);
     }
 
     // ---- update
@@ -662,7 +662,6 @@ public class PlanAdminServiceTests
 
     [Theory]
     [InlineData(CycleStatuses.Active)]
-    [InlineData(CycleStatuses.Queued)]
     [InlineData(CycleStatuses.Ended)]
     public async Task A4_DeletePlanWithACycle_ReturnsPlanInUse(string cycleStatus)
     {
@@ -722,14 +721,14 @@ public class PlanAdminServiceTests
     {
         var f = new Fixture();
         var cycle = f.AddCycle(f.Personal, CycleStatuses.Active);
-        var queued = f.AddCycle(f.Personal, CycleStatuses.Queued);
+        var second = f.AddCycle(f.Personal, CycleStatuses.Active);
         var pending = f.AddOrder(f.Personal, OrderStatuses.Pending);
 
         await f.Service.UpdateAsync(Admin, f.Personal.Id,
             Create(code: null, kind: null, name: "Cá nhân", price: 50_000, days: 90, quotaPeriodDays: 30, quota: 100_000));
 
         Assert.Equal((500_000L, "personal-1m", 99_000m, 30), (cycle.TokenQuota, cycle.PlanName, cycle.PriceVnd, cycle.DurationDays));
-        Assert.Equal((500_000L, 99_000m), (queued.TokenQuota, queued.PriceVnd));
+        Assert.Equal((500_000L, 99_000m), (second.TokenQuota, second.PriceVnd));
         Assert.Equal((99_000m, 30, 500_000L, "personal-1m"), (pending.AmountVnd, pending.PlanDurationDays, pending.PlanTokenQuota, pending.PlanName));
         Assert.Equal(["save"], f.Repo.Writes);
         Assert.Equal((50_000m, 90, 100_000L), (f.Personal.PriceVnd, f.Personal.DurationDays, f.Personal.TokenQuota));
