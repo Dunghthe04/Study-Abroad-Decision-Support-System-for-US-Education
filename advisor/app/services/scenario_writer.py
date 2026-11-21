@@ -13,7 +13,7 @@ from app.schemas.scenario_note import (
     ScenarioNoteResult,
     scenario_note_schema,
 )
-from app.services.note_checks import check_no_strangers, check_numbers, numbers
+from app.services.note_checks import check_no_promise, check_no_strangers, check_numbers, numbers
 from app.services.skill_call import SKILLS_DIR, SkillCall
 
 SKILL_PATH = Path(SKILLS_DIR) / "skill_kich_ban.md"
@@ -105,6 +105,7 @@ def check_answer(raw: dict[str, Any], req: ScenarioNoteRequest) -> ScenarioNoteR
 
     text = " ".join(_texts(result))
     check_numbers(text, allowed_numbers(req), "kết quả")
+    check_no_promise(text)
 
     # Không có yếu tố nào chưa thử được thì không được nói "chưa thử được" (có lần Claude viết "không có yếu tố nào chưa thử được")
     if not req.unsupported and "chưa thử được" in text.lower():
