@@ -20,7 +20,7 @@ import { adminBillingApi, adminBillingErrorMessage, PLAN_KIND_LABELS } from "@/l
 import { formatMultiplier, formatVnd } from "@/lib/billing-api";
 import type { AdminPlanDto, SavePlanRequest } from "@/types/admin-billing";
 import { DataTable, type DataTableColumn } from "../shared/DataTable";
-import { PlanFormDialog } from "./PlanFormDialog";
+import { PlanFormPanel } from "./PlanFormPanel";
 
 interface LoadResult {
   key: number;
@@ -170,27 +170,29 @@ export function PlansTab() {
   ];
 
   return (
-    <>
-      <DataTable
-        columns={columns}
-        items={plans}
-        getRowId={(p) => p.id}
-        isLoading={isLoading}
-        error={isLoading ? null : result.error}
-        emptyMessage="Chưa có gói nào."
-        label="Danh sách gói"
-        toolbar={{
-          actions: (
-            <Button type="button" size="sm" onClick={() => setEditing({ kind: "new" })}>
-              <PlusIcon />
-              Thêm gói
-            </Button>
-          ),
-        }}
-      />
+    <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+        <DataTable
+          columns={columns}
+          items={plans}
+          getRowId={(p) => p.id}
+          isLoading={isLoading}
+          error={isLoading ? null : result.error}
+          emptyMessage="Chưa có gói nào."
+          label="Danh sách gói"
+          toolbar={{
+            actions: (
+              <Button type="button" size="sm" onClick={() => setEditing({ kind: "new" })}>
+                <PlusIcon />
+                Thêm gói
+              </Button>
+            ),
+          }}
+        />
+      </div>
 
       {editing.kind !== "none" && (
-        <PlanFormDialog
+        <PlanFormPanel
           key={editing.kind === "edit" ? editing.plan.id : "new"}
           plan={editing.kind === "edit" ? editing.plan : null}
           freePlan={plans.find((p) => p.kind === "free") ?? null}
@@ -218,6 +220,6 @@ export function PlansTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </div>
   );
 }

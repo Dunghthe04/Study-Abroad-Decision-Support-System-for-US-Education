@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Switch } from "@/components/ui/switch";
@@ -12,11 +11,12 @@ import { adminBillingApi, adminBillingErrorMessage, PLAN_KIND_LABELS } from "@/l
 import { formatMultiplier } from "@/lib/billing-api";
 import type { AdminPlanDto, SavePlanRequest } from "@/types/admin-billing";
 import type { PlanKind } from "@/types/billing";
+import { DetailPanel } from "../shared/DetailPanel";
 
 const CODE_PATTERN = /^[a-z0-9-]+$/;
 const DURATION_PRESETS = [7, 30, 90, 365] as const;
 
-interface PlanFormDialogProps {
+interface PlanFormPanelProps {
   /** null = tạo gói mới. */
   plan: AdminPlanDto | null;
   freePlan: AdminPlanDto | null;
@@ -38,7 +38,7 @@ function positiveInt(text: string): number | null {
   return n !== null && n >= 1 ? n : null;
 }
 
-export function PlanFormDialog({ plan, freePlan, onClose, onSaved }: PlanFormDialogProps) {
+export function PlanFormPanel({ plan, freePlan, onClose, onSaved }: PlanFormPanelProps) {
   const isNew = plan === null;
   const hasFreePlan = freePlan !== null;
   const [code, setCode] = useState("");
@@ -138,116 +138,113 @@ export function PlanFormDialog({ plan, freePlan, onClose, onSaved }: PlanFormDia
   );
 
   return (
-    <Dialog open onOpenChange={(open) => !open && !saving && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{isNew ? "Thêm gói" : `Sửa gói ${plan.code}`}</DialogTitle>
-          <DialogDescription>
-            {isNew ? "Mã và loại gói không đổi được sau khi tạo." : `Loại: ${PLAN_KIND_LABELS[plan.kind]}. Giá, thời hạn và quota mới chỉ áp dụng cho đơn và chu kỳ sau này.`}
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={submit} className="space-y-4">
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          {isNew && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {field("plan-code", "Mã gói", (
-                <Input id="plan-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="personal-1m" required pattern="[a-z0-9\-]+" />
-              ), "Chữ thường, số, dấu gạch ngang")}
-              {field("plan-kind", "Loại gói", (
-                <NativeSelect id="plan-kind" className="w-full" value={kind} onChange={(e) => setKind(e.target.value as PlanKind)}>
-                  <NativeSelectOption value="free" disabled={hasFreePlan}>{PLAN_KIND_LABELS.free}</NativeSelectOption>
-                  <NativeSelectOption value="personal">{PLAN_KIND_LABELS.personal}</NativeSelectOption>
-                  <NativeSelectOption value="family">{PLAN_KIND_LABELS.family}</NativeSelectOption>
-                </NativeSelect>
-              ))}
-            </div>
-          )}
-          {field("plan-name", "Tên gói", <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} required />)}
-          {field("plan-description", "Mô tả", (
-            <Textarea id="plan-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
-          ))}
+    <DetailPanel
+      title={isNew ? "Thêm gói" : `Sửa gói ${plan.name}`}
+      description={isNew ? "Mã và loại gói không đổi được sau khi tạo." : `Loại: ${PLAN_KIND_LABELS[plan.kind]}. Giá, thời hạn và quota mới chỉ áp dụng cho đơn và chu kỳ sau này.`}
+      onClose={onClose}
+      closeDisabled={saving}
+    >
+      <form onSubmit={submit} className="space-y-4">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {isNew && (
           <div className="grid gap-4 sm:grid-cols-2">
-            {field("plan-price", "Giá (VND)", (
-              <Input id="plan-price" type="number" min={0} step={1} value={isFree ? "0" : price} disabled={isFree} onChange={(e) => setPrice(e.target.value)} />
-            ), isFree ? "Gói Miễn phí luôn 0đ" : undefined)}
-            {!isFree && field("plan-duration", "Thời hạn (ngày)", (
-              <div className="space-y-1.5">
-                <Input
-                  id="plan-duration"
-                  type="number"
-                  min={1}
-                  max={3650}
-                  step={1}
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                />
-                <div className="flex flex-wrap gap-1">
-                  {DURATION_PRESETS.map((days) => (
-                    <button
-                      key={days}
-                      type="button"
-                      onClick={() => setDuration(String(days))}
-                      className={`rounded-md border px-2 py-0.5 text-xs transition-colors cursor-pointer ${
-                        duration.trim() === String(days)
-                          ? "border-brand bg-brand-wash font-medium text-brand"
-                          : "border-line bg-ground text-ink-2 hover:text-ink"
-                      }`}
-                    >
-                      {days} ngày
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {field("plan-code", "Mã gói", (
+              <Input id="plan-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="personal-1m" required pattern="[a-z0-9\-]+" />
+            ), "Chữ thường, số, dấu gạch ngang")}
+            {field("plan-kind", "Loại gói", (
+              <NativeSelect id="plan-kind" className="w-full" value={kind} onChange={(e) => setKind(e.target.value as PlanKind)}>
+                <NativeSelectOption value="free" disabled={hasFreePlan}>{PLAN_KIND_LABELS.free}</NativeSelectOption>
+                <NativeSelectOption value="personal">{PLAN_KIND_LABELS.personal}</NativeSelectOption>
+                <NativeSelectOption value="family">{PLAN_KIND_LABELS.family}</NativeSelectOption>
+              </NativeSelect>
             ))}
-            {field("plan-quota", "Quota token", (
-              <Input id="plan-quota" type="number" min={0} step={1} value={tokenQuota} onChange={(e) => setTokenQuota(e.target.value)} />
-            ), "Chu kỳ đang chạy giữ quota cũ")}
-            {field("plan-quota-period", "Chu kỳ cấp token (ngày)", (
+          </div>
+        )}
+        {field("plan-name", "Tên gói", <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} required />)}
+        {field("plan-description", "Mô tả", (
+          <Textarea id="plan-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
+        ))}
+        <div className="grid gap-4 sm:grid-cols-2">
+          {field("plan-price", "Giá (VND)", (
+            <Input id="plan-price" type="number" min={0} step={1} value={isFree ? "0" : price} disabled={isFree} onChange={(e) => setPrice(e.target.value)} />
+          ), isFree ? "Gói Miễn phí luôn 0đ" : undefined)}
+          {!isFree && field("plan-duration", "Thời hạn (ngày)", (
+            <div className="space-y-1.5">
               <Input
-                id="plan-quota-period"
+                id="plan-duration"
                 type="number"
                 min={1}
-                max={isFree ? 365 : (parsedDuration ?? 3650)}
+                max={3650}
                 step={1}
-                placeholder={isFree ? "Mỗi tháng" : "Cả kỳ"}
-                value={quotaPeriodDays}
-                onChange={(e) => setQuotaPeriodDays(e.target.value)}
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
               />
-            ), isFree
-              ? "Để trống = làm mới ngày 1 mỗi tháng, hoặc nhập số ngày (vd 7, 30)."
-              : "Để trống = cấp 1 lần cho cả kỳ. Nhập số ngày (vd 7, 30) để cấp lại token mỗi N ngày.")}
-            {field("plan-order", "Thứ tự hiển thị", (
-              <Input id="plan-order" type="number" min={0} step={1} value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value)} />
-            ))}
-          </div>
-
-          {parsedQuota !== null && (
-            <div className="rounded-lg border border-line bg-ground px-3.5 py-2.5 text-xs text-ink-2 space-y-0.5">
-              <p className="font-medium text-ink">
-                Cấp {parsedQuota.toLocaleString("vi-VN")} token mỗi {periodLabel}
-              </p>
-              {previewMultiplier !== null && (
-                <p>≈ Gấp {formatMultiplier(previewMultiplier)}x hạn mức gói Miễn phí</p>
-              )}
+              <div className="flex flex-wrap gap-1">
+                {DURATION_PRESETS.map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    onClick={() => setDuration(String(days))}
+                    className={`rounded-md border px-2 py-0.5 text-xs transition-colors cursor-pointer ${
+                      duration.trim() === String(days)
+                        ? "border-brand bg-brand-wash font-medium text-brand"
+                        : "border-line bg-ground text-ink-2 hover:text-ink"
+                    }`}
+                  >
+                    {days} ngày
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
+          ))}
+          {field("plan-quota", "Quota token", (
+            <Input id="plan-quota" type="number" min={0} step={1} value={tokenQuota} onChange={(e) => setTokenQuota(e.target.value)} />
+          ), "Chu kỳ đang chạy giữ quota cũ")}
+          {field("plan-quota-period", "Chu kỳ cấp token (ngày)", (
+            <Input
+              id="plan-quota-period"
+              type="number"
+              min={1}
+              max={isFree ? 365 : (parsedDuration ?? 3650)}
+              step={1}
+              placeholder={isFree ? "Mỗi tháng" : "Cả kỳ"}
+              value={quotaPeriodDays}
+              onChange={(e) => setQuotaPeriodDays(e.target.value)}
+            />
+          ), isFree
+            ? "Để trống = làm mới ngày 1 mỗi tháng, hoặc nhập số ngày (vd 7, 30)."
+            : "Để trống = cấp 1 lần cho cả kỳ. Nhập số ngày (vd 7, 30) để cấp lại token mỗi N ngày.")}
+          {field("plan-order", "Thứ tự hiển thị", (
+            <Input id="plan-order" type="number" min={0} step={1} value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value)} />
+          ))}
+        </div>
 
-          <div className="flex items-center justify-between gap-3">
-            <label htmlFor="plan-active" className="text-sm font-medium">Đang mở bán</label>
-            <Switch id="plan-active" checked={isFree || isActive} disabled={isFree} onCheckedChange={setIsActive} />
+        {parsedQuota !== null && (
+          <div className="rounded-lg border border-line bg-ground px-3.5 py-2.5 text-xs text-ink-2 space-y-0.5">
+            <p className="font-medium text-ink">
+              Cấp {parsedQuota.toLocaleString("vi-VN")} token mỗi {periodLabel}
+            </p>
+            {previewMultiplier !== null && (
+              <p>≈ Gấp {formatMultiplier(previewMultiplier)}x hạn mức gói Miễn phí</p>
+            )}
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Hủy</Button>
-            <Button type="submit" loading={saving}>
-              {isNew ? "Tạo gói" : "Lưu"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        )}
+
+        <div className="flex items-center justify-between gap-3">
+          <label htmlFor="plan-active" className="text-sm font-medium">Đang mở bán</label>
+          <Switch id="plan-active" checked={isFree || isActive} disabled={isFree} onCheckedChange={setIsActive} />
+        </div>
+        <div className="sticky bottom-0 -mx-4 -mb-4 flex justify-end gap-2 border-t bg-card p-4">
+          <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Hủy</Button>
+          <Button type="submit" loading={saving}>
+            {isNew ? "Tạo gói" : "Lưu"}
+          </Button>
+        </div>
+      </form>
+    </DetailPanel>
   );
 }
