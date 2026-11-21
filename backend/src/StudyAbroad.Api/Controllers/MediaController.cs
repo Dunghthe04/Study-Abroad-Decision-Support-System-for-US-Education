@@ -12,7 +12,7 @@ using StudyAbroad.Infrastructure.MediaUploads;
 namespace StudyAbroad.Api.Controllers;
 
 [ApiController]
-[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
+[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator},{UserRoles.Center}")]
 [Route("api/v1/media")]
 public sealed class MediaController(IServiceProvider services, IOptions<CloudinaryOptions> options) : ControllerBase
 {
@@ -43,7 +43,15 @@ public sealed class MediaController(IServiceProvider services, IOptions<Cloudina
 
         var purposeLimit = ImageUploadPolicy.GetPurposeLimit(request.Purpose);
         if (purposeLimit is null)
-            return BadRequest(new MediaUploadError("Purpose must be school-logo or school-cover."));
+            return BadRequest(new MediaUploadError("Purpose must be school-logo, school-cover, center-logo or center-cover."));
+
+        // Trung tâm chỉ được tải ảnh của chính trung tâm; Admin và Moderator chỉ tải ảnh của trường
+        var isCenterPurpose = ImageUploadPolicy.IsCenterPurpose(request.Purpose);
+        var allowed = isCenterPurpose
+            ? User.IsInRole(UserRoles.Center)
+            : User.IsInRole(UserRoles.Admin) || User.IsInRole(UserRoles.Moderator);
+        if (!allowed)
+            return Forbid();
         if (request.File is null || request.File.Length == 0)
             return BadRequest(new MediaUploadError("One non-empty image file is required."));
         if (Request.Form.Files.Count != 1)
@@ -60,7 +68,11 @@ public sealed class MediaController(IServiceProvider services, IOptions<Cloudina
             var uploader = services.GetRequiredService<IMediaUploader>();
             await using var stream = request.File.OpenReadStream();
             var result = await uploader.UploadImageAsync(
-                new MediaUploadRequest(stream, request.File.FileName, request.File.ContentType, maxSizeBytes), ct);
+                new MediaUploadRequest(
+                    stream, request.File.FileName, request.File.ContentType, maxSizeBytes,
+                    // Ảnh trung tâm do người dùng tự đăng: gom vào thư mục riêng và kiểm duyệt nội dung như ảnh chat
+                    FolderSuffix: isCenterPurpose ? "centers" : null,
+                    ModerateContent: isCenterPurpose), ct);
             return Ok(result);
         }
         catch (OptionsValidationException)
