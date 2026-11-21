@@ -371,8 +371,9 @@ public class BillingJobTests
 
     private sealed class ThrowingEntitlements(IEntitlementService inner, Guid failFor) : IEntitlementService
     {
-        public Task<LaneState> AdvanceLaneAsync(Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default) =>
-            ownerUserId == failFor ? throw new InvalidOperationException("lưu lỗi") : inner.AdvanceLaneAsync(ownerUserId, kind, nowUtc, ct);
+        public Task<LaneState> AdvanceLaneAsync(
+            Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default, ICollection<Func<CancellationToken, Task>>? deferredNotifications = null) =>
+            ownerUserId == failFor ? throw new InvalidOperationException("lưu lỗi") : inner.AdvanceLaneAsync(ownerUserId, kind, nowUtc, ct, deferredNotifications);
 
         public Task<SubscriptionSummaryDto> GetSummaryAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) => inner.GetSummaryAsync(userId, nowUtc, ct);
         public Task<ChatCharge> ResolveChatChargeAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default) => inner.ResolveChatChargeAsync(userId, role, nowUtc, ct);

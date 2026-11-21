@@ -36,4 +36,13 @@ public interface IBillingRepository
     /// Lưu theo thứ tự để index duy nhất một-active-mỗi-làn không vấp: kết thúc kỳ cũ trước, kích hoạt kỳ mới sau.
     /// </summary>
     Task SaveStepsAsync(IReadOnlyList<Action> steps, CancellationToken ct = default);
+
+    /// <summary>
+    /// Chuyển kỳ / kết thúc nhóm của một làn (chủ, loại) an toàn khi nhiều request chạm cùng lúc. Trong một transaction (dùng transaction đang có nếu có):
+    /// bỏ theo dõi bản cũ của làn, <c>SELECT ... FOR UPDATE</c> các dòng kỳ active / queued của làn (lockGroup thì thêm dòng nhóm active của chủ),
+    /// rồi gọi <paramref name="plan"/> để đọc lại dữ liệu mới trên dòng đã khóa và trả các bước cần làm (rỗng = bên kia đã làm xong), lưu như <see cref="SaveStepsAsync"/>.
+    /// Trả true khi đã lưu ít nhất một bước, tức chính lần gọi này đổi dữ liệu. Vướng xung đột đồng thời (xmin) khi tự mở transaction thì quay lui, bỏ theo dõi và trả false
+    /// ("đã có người làm"); trong transaction của người gọi thì ném lên để người gọi thử lại.
+    /// </summary>
+    Task<bool> SaveLockedStepsAsync(Guid ownerUserId, string kind, bool lockGroup, Func<Task<IReadOnlyList<Action>>> plan, CancellationToken ct = default);
 }

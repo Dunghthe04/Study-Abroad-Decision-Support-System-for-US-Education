@@ -57,4 +57,64 @@ public class BillingRepository(AppDbContext db) : IBillingRepository
         if (own is not null)
             await own.CommitAsync(ct);
     }
+
+    public async Task<bool> SaveLockedStepsAsync(
+        Guid ownerUserId, string kind, bool lockGroup, Func<Task<IReadOnlyList<Action>>> plan, CancellationToken ct = default)
+    {
+        await using var own = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(ct) : null;
+        try
+        {
+            // Bản đang theo dõi có thể cũ: bỏ đi để sau khi khóa, truy vấn trong plan đọc dòng mới nhất (cách OrderRepository.LockByCodeAsync)
+            DetachLane(ownerUserId, kind, lockGroup);
+            // Thứ tự khóa: kỳ của làn trước, nhóm sau (cùng thứ tự với mọi nơi khác); ORDER BY id để hai bên khóa cùng tập dòng theo cùng thứ tự
+            await db.Database.SqlQuery<Guid>($"""
+                SELECT id AS "Value" FROM app.user_subscriptions
+                WHERE user_id = {ownerUserId} AND kind = {kind} AND status IN ({CycleStatuses.Active}, {CycleStatuses.Queued})
+                ORDER BY id
+                FOR UPDATE
+                """).ToListAsync(ct);
+            if (lockGroup)
+                await db.Database.SqlQuery<Guid>($"""
+                    SELECT id AS "Value" FROM app.family_groups
+                    WHERE owner_user_id = {ownerUserId} AND status = {FamilyGroupStatuses.Active}
+                    ORDER BY id
+                    FOR UPDATE
+                    """).ToListAsync(ct);
+
+            var steps = await plan();
+            foreach (var step in steps)
+            {
+                step();
+                await db.SaveChangesAsync(ct);
+            }
+            if (own is not null)
+                await own.CommitAsync(ct);
+            return steps.Count > 0;
+        }
+        catch (DbUpdateConcurrencyException) when (own is not null)
+        {
+            // Dòng thành viên (xmin) vừa bị request khác đổi: transaction quay lui, request kia là bên đã làm
+            DetachLane(ownerUserId, kind, lockGroup);
+            return false;
+        }
+        catch
+        {
+            DetachLane(ownerUserId, kind, lockGroup);   // phần sửa dang dở không được lưu lại ở lần SaveChanges sau của request
+            throw;
+        }
+    }
+
+    private void DetachLane(Guid ownerUserId, string kind, bool includeGroup)
+    {
+        var groupIds = includeGroup ? db.FamilyGroups.Local.Where(g => g.OwnerUserId == ownerUserId).Select(g => g.Id).ToHashSet() : [];
+        var stale = db.ChangeTracker.Entries().Where(e => e.State != EntityState.Added && e.Entity switch
+        {
+            UserSubscription c => c.UserId == ownerUserId && c.Kind == kind,
+            FamilyGroup g => includeGroup && g.OwnerUserId == ownerUserId,
+            FamilyMember m => includeGroup && groupIds.Contains(m.FamilyGroupId),
+            _ => false,
+        }).ToList();
+        foreach (var entry in stale)
+            entry.State = EntityState.Detached;
+    }
 }

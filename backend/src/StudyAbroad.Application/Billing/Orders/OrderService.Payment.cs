@@ -91,7 +91,7 @@ public sealed partial class OrderService
         }
 
         // 3. Chỗ đặt kỳ mới được quyết định lúc thanh toán (C5)
-        var lane = await entitlements.AdvanceLaneAsync(buyerId, order.PlanKind, now, ct);
+        var lane = await entitlements.AdvanceLaneAsync(buyerId, order.PlanKind, now, ct, afterCommit);   // thông báo chuyển kỳ xếp hàng, gửi sau commit
         if (lane.Queued is not null)
         {
             // P22: đã nhận tiền nhưng làn đầy (đang chạy + đang chờ). Admin kích hoạt sau
@@ -118,7 +118,7 @@ public sealed partial class OrderService
             }
             if (await billing.FindActiveMemberGroupAsync(buyerId, ct) is { } memberOf)
             {
-                await entitlements.AdvanceLaneAsync(memberOf.OwnerUserId, PlanKinds.Family, now, ct);   // nhóm đã hết kỳ thì kết thúc ở đây, không còn gì để rời
+                await entitlements.AdvanceLaneAsync(memberOf.OwnerUserId, PlanKinds.Family, now, ct, afterCommit);   // nhóm đã hết kỳ thì kết thúc ở đây, không còn gì để rời
                 leaving = (await billing.GetOpenMembersAsync(memberOf.Id, ct)).FirstOrDefault(m => m.UserId == buyerId && m.Status == FamilyMemberStatuses.Active);
                 leftOwnerId = memberOf.OwnerUserId;
             }

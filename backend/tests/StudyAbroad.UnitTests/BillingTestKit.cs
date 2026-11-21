@@ -12,6 +12,9 @@ namespace StudyAbroad.UnitTests;
 /// <summary>Ném thay cho vi phạm index duy nhất của Postgres (IOrderRepository.IsConflict nhận ra).</summary>
 internal sealed class UniqueViolationException(string message) : Exception(message);
 
+/// <summary>Ném thay cho DbUpdateConcurrencyException (xmin của dòng thành viên đã bị request khác đổi).</summary>
+internal sealed class LaneXminConflictException : Exception;
+
 /// <summary>
 /// Cơ sở dữ liệu trong bộ nhớ cho test đơn hàng: cùng một đối tượng là IBillingRepository, IOrderRepository và IUnitOfWork như DbContext dùng chung.
 /// Giữ các luật của DB mà tiền phụ thuộc vào: một active và một queued mỗi làn, một nhóm active mỗi chủ, một đơn chờ mỗi người,
@@ -49,6 +52,12 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
     public bool AlwaysConflictOnCycleInsert { get; set; }
     /// <summary>Ném lỗi này ở lần lưu kỳ mới đầu tiên (lỗi không phải xung đột thì không được thử lại).</summary>
     public Exception? FailOnCycleInsert { get; set; }
+    /// <summary>Một request khác chuyển làn xong ngay sau lượt đọc không khóa của request này, trước khi nó khóa dòng làn (chạy một lần).</summary>
+    public Action<BillingStore>? RaceBeforeLaneLock { get; set; }
+    /// <summary>Lần lưu chuyển kỳ / kết thúc nhóm có khóa tiếp theo vướng xung đột xmin sau khi đã sửa (chạy một lần).</summary>
+    public bool ConcurrencyConflictOnLockedSave { get; set; }
+    /// <summary>Số lần lưu có khóa đã chạy tới bước kế hoạch (chạm tới khóa dòng), kể cả khi kế hoạch rỗng.</summary>
+    public int LaneLocks { get; private set; }
 
     private readonly List<UserSubscription> stagedCycles = [];
     private readonly List<FamilyGroup> stagedGroups = [];
@@ -146,6 +155,46 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
             Flush();
         }
         return Task.CompletedTask;
+    }
+
+    // Như BillingRepository.SaveLockedStepsAsync: chạy trong transaction (dùng cái đang có), kế hoạch đọc lại sau khóa, xung đột xmin khi tự mở transaction thì quay lui và trả false
+    public async Task<bool> SaveLockedStepsAsync(Guid ownerUserId, string kind, bool lockGroup, Func<Task<IReadOnlyList<Action>>> plan, CancellationToken ct = default)
+    {
+        if (inTransaction)
+            return await RunLockedAsync(plan);
+        var saved = false;
+        try
+        {
+            await ExecuteInTransactionAsync(async _ => saved = await RunLockedAsync(plan), ct);
+        }
+        catch (LaneXminConflictException)
+        {
+            return false;
+        }
+        return saved;
+    }
+
+    private async Task<bool> RunLockedAsync(Func<Task<IReadOnlyList<Action>>> plan)
+    {
+        LaneLocks++;
+        if (RaceBeforeLaneLock is { } race)
+        {
+            RaceBeforeLaneLock = null;
+            race(this);
+            externalWrites.Add(race);   // request kia đã commit độc lập: còn nguyên khi transaction này quay lui
+        }
+        var steps = await plan();
+        foreach (var step in steps)
+        {
+            step();
+            Flush();
+        }
+        if (steps.Count > 0 && ConcurrencyConflictOnLockedSave)
+        {
+            ConcurrencyConflictOnLockedSave = false;
+            throw new LaneXminConflictException();
+        }
+        return steps.Count > 0;
     }
 
     // ---- IOrderRepository

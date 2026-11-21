@@ -24,7 +24,12 @@ public interface IEntitlementService
     /// Đưa một làn (chủ, loại) tới nowUtc và trả kỳ active, kỳ queued, token đã dùng của kỳ active (thực thể đang theo dõi, đã lưu các chuyển kỳ).
     /// Làn family không còn kỳ nào thì nhóm active của chủ bị kết thúc (family_lapsed) như khi đọc quyền dùng.
     /// </summary>
-    Task<LaneState> AdvanceLaneAsync(Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default);
+    /// <param name="deferredNotifications">
+    /// Khác null thì thông báo chuyển kỳ / nhóm kết thúc được xếp vào đây (hàm gửi) thay vì gửi ngay: người gọi đang trong transaction chưa commit
+    /// (áp dụng thanh toán) gửi sau commit, chỉ cho lần thử đã commit. Null thì gửi ngay sau khi lưu.
+    /// </param>
+    Task<LaneState> AdvanceLaneAsync(
+        Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default, ICollection<Func<CancellationToken, Task>>? deferredNotifications = null);
 }
 
 /// <summary>Trạng thái một làn sau khi chuyển kỳ. Active / Queued là thực thể đang theo dõi (sửa được rồi lưu).</summary>
