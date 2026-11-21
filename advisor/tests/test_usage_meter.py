@@ -152,6 +152,7 @@ async def test_calls_inside_a_skill_are_labelled_with_the_skill_name(tmp_path):
 
 
 async def test_slm_classifier_calls_are_labelled_with_the_prompt_name_and_version():
+    from app.services.ollama import OllamaError
     from app.services.slm_classifier import OllamaSlm
 
     calls = usage_meter.start()
@@ -160,11 +161,11 @@ async def test_slm_classifier_calls_are_labelled_with_the_prompt_name_and_versio
         # Giống OllamaClient thật: ghi token rồi trả kết quả. Ở đây trả kết quả hỏng để chỉ kiểm tra nhãn của hai lần gọi
         async def chat_json_scored(self, messages, output):
             usage_meter.ollama_ok("usas-slm-v4", {"prompt_eval_count": 10, "eval_count": 3}, 5)
-            raise ValueError("kết quả không dùng được")
+            raise OllamaError("Ollama lỗi")
 
     await OllamaSlm(FakeSlm(), prompt="slm_intents").read("em GPA 3.5", None, "")
 
-    assert len(calls) == 2  # gọi lại một lần khi kết quả hỏng
+    assert len(calls) == 2  # Ollama lỗi thì gọi lại một lần; cả hai lần đều mang nhãn
     assert {(c.purpose, c.skill_version) for c in calls} == {("slm_intents", "3.1")}
 
 

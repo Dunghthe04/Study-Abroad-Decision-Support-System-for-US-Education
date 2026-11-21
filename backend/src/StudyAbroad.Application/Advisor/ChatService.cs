@@ -369,13 +369,13 @@ namespace StudyAbroad.Application.Advisor
                 // Lỗi do hồ sơ ("Chưa...", "Hồ sơ...") thì nói rõ; lỗi kết quả AI thì báo chung
                 var reason = ex.Message.StartsWith("Chưa") || ex.Message.StartsWith("Hồ sơ")
                     ? $"Mình chưa tạo được danh sách trường: {ex.Message}"
-                    : ChatRecommendation.Invalid;
+                    : AdvisorMessages.RecommendationInvalid;
                 return response with { Answer = $"{response.Answer}\n\n{reason}" };
             }
             catch (Exception ex) when (ex is HttpRequestException
                                        || (ex is TaskCanceledException && !ct.IsCancellationRequested))
             {
-                return response with { Answer = $"{response.Answer}\n\n{ChatRecommendation.Busy}" };
+                return response with { Answer = $"{response.Answer}\n\n{AdvisorMessages.RecommendationBusy}" };
             }
         }
 
@@ -429,7 +429,7 @@ namespace StudyAbroad.Application.Advisor
         {
             var code = ChatExplanation.CodeOf(response.ActionData);
             if (code is null)
-                return response with { Answer = ChatExplanation.Failed };
+                return response with { Answer = AdvisorMessages.ExplanationFailed };
             try
             {
                 // Thẻ do code dựng gửi trước để học sinh thấy ngay, rồi mới chờ AI viết lời tư vấn (chậm hơn)
@@ -441,7 +441,7 @@ namespace StudyAbroad.Application.Advisor
                 var suggested = Suggested((await LatestSchoolsAsync(userId, ct)).Shown, code);
                 return response with
                 {
-                    Answer = result.Status == "OK" ? ChatExplanation.Format(result) : ChatExplanation.Failed,
+                    Answer = result.Status == "OK" ? ChatExplanation.Format(result) : AdvisorMessages.ExplanationFailed,
                     Widget = widget,
                     QuickReplies = result.Status == "OK" ? ChatNextSteps.AfterExplain(code, suggested) : ChatNextSteps.AfterExplainFailed(suggested),
                 };
@@ -458,13 +458,13 @@ namespace StudyAbroad.Application.Advisor
                 }
                 var reason = ex.Message.StartsWith("Chưa")
                     ? $"Mình chưa giải thích được trường này: {ex.Message}"
-                    : ChatRecommendation.Invalid;
+                    : AdvisorMessages.RecommendationInvalid;
                 return response with { Answer = reason };
             }
             catch (Exception ex) when (ex is HttpRequestException
                                        || (ex is TaskCanceledException && !ct.IsCancellationRequested))
             {
-                return response with { Answer = ChatExplanation.Busy };
+                return response with { Answer = AdvisorMessages.ExplanationBusy };
             }
         }
 
@@ -475,7 +475,7 @@ namespace StudyAbroad.Application.Advisor
             var scale = gradeScale is null ? null : await gradeScale.GetAsync(ct);
             var scenario = ChatSimulation.Parse(response.ActionData, scale);
             if (scenario is null)
-                return response with { Answer = ChatSimulation.Failed };
+                return response with { Answer = AdvisorMessages.SimulationFailed };
             try
             {
                 // Ưu tiên mới tính từ ưu tiên của lần gợi ý đã lưu (mức học sinh không nhắc thì giữ nguyên)
@@ -514,7 +514,7 @@ namespace StudyAbroad.Application.Advisor
             {
                 var reason = ex.Message.StartsWith("Chưa") || ex.Message.StartsWith("Hồ sơ")
                     ? $"Mình chưa thử được kịch bản này: {ex.Message}"
-                    : ChatSimulation.Failed;
+                    : AdvisorMessages.SimulationFailed;
                 return response with { Answer = reason };
             }
         }
@@ -594,7 +594,7 @@ namespace StudyAbroad.Application.Advisor
             {
                 // Có kho kiến thức làm dự phòng thì giữ câu của kho; model đã bỏ qua kho thì báo chưa tra được thay vì để câu tạm
                 return query.KbSkipped
-                    ? MergeSchoolInfo(response, query, ChatSchoolInfo.Unavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() }
+                    ? MergeSchoolInfo(response, query, AdvisorMessages.SchoolInfoUnavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() }
                     : response;
             }
         }
@@ -646,7 +646,7 @@ namespace StudyAbroad.Application.Advisor
             }
             catch (InvalidOperationException)
             {
-                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.Unavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
+                return MergeSchoolInfo(response, asQuery, AdvisorMessages.SchoolInfoUnavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
             }
         }
 
@@ -706,7 +706,7 @@ namespace StudyAbroad.Application.Advisor
             }
             catch (InvalidOperationException)
             {
-                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.Unavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
+                return MergeSchoolInfo(response, asQuery, AdvisorMessages.SchoolInfoUnavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
             }
         }
 
@@ -735,7 +735,7 @@ namespace StudyAbroad.Application.Advisor
         {
             var query = ChatGoalSeek.Parse(response.ActionData);
             if (query is null)
-                return response with { Answer = ChatGoalSeek.Failed };
+                return response with { Answer = AdvisorMessages.GoalSeekFailed };
             try
             {
                 var code = query.Code;
@@ -786,7 +786,7 @@ namespace StudyAbroad.Application.Advisor
             {
                 var reason = ex.Message.StartsWith("Chưa") || ex.Message.StartsWith("Hồ sơ")
                     ? $"Mình chưa tính được: {ex.Message}"
-                    : ChatGoalSeek.Failed;
+                    : AdvisorMessages.GoalSeekFailed;
                 return response with { Answer = reason };
             }
         }

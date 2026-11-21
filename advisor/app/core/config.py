@@ -75,9 +75,13 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-haiku-5-5"
     # Model dự phòng khi model chính quá tải (529, 5xx) hoặc treo. Để trống = không có dự phòng
     anthropic_fallback_model: str = ""
-    # Thời gian chờ mỗi lần gọi và số lần thử mỗi model. 2 model x 2 lần x 60 giây vẫn dưới 300 giây .NET chờ
+    # Thời gian chờ mỗi lần gọi và số lần thử mỗi model
     anthropic_timeout_seconds: float = 60
     anthropic_max_retries: int = 2
+    # Ngân sách thời gian cho MỘT lượt viết lời (gồm cả lần kiểm lại, thử lại đường truyền và model dự phòng). Hết thì dùng lời
+    # dự phòng của code. Không có ngân sách này thì trường hợp xấu nhất là 2 lần kiểm x 2 model x 2 lần thử x 60 giây = 480 giây,
+    # vượt 300 giây .NET và Nginx chờ, học sinh nhận lỗi thay vì lời dự phòng
+    writer_budget_seconds: float = 90
 
 
 # Lần gọi hàm sau nó lấy đối tượng đã lưu trong lru_cache

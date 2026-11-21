@@ -1177,7 +1177,7 @@ public class ChatServiceTests
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
 
         Assert.Equal(0, advisor.RecommendNoteCalls); // không có trường nào thì không có gì để viết
-        Assert.Equal($"ok\n\n{ChatRecommendation.Empty}", res.Answer);
+        Assert.Equal($"ok\n\n{AdvisorMessages.RecommendationEmpty}", res.Answer);
     }
 
     [Fact]
@@ -1207,7 +1207,7 @@ public class ChatServiceTests
 
     [Theory]
     [InlineData("Hồ sơ chưa chọn ngành, cần chọn ngành trước khi gợi ý trường.", "Mình chưa tạo được danh sách trường: Hồ sơ chưa chọn ngành")]
-    [InlineData("Gemini trả code lạ", ChatRecommendation.Invalid)]
+    [InlineData("Gemini trả code lạ", AdvisorMessages.RecommendationInvalid)]
     public async Task RecommendationFails_KeepsTheRoadmap_AndExplains(string error, string expected)
     {
         var runner = new FakeRunner { Error = new InvalidOperationException(error) };
@@ -1230,7 +1230,7 @@ public class ChatServiceTests
         var res = await new ChatService(new FakeAdvisor("B4") { Action = "recommend" }, new FakeSessions(), new FakeProfileFlow(), null, runner)
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
 
-        Assert.Equal($"ok\n\n{ChatRecommendation.Busy}", res.Answer);
+        Assert.Equal($"ok\n\n{AdvisorMessages.RecommendationBusy}", res.Answer);
     }
 
     // Gemini treo: advisor thử lại nhiều lần, HttpClient của .NET hết giờ (TaskCanceledException). Không được làm lỗi 500 cả lượt chat
@@ -1242,7 +1242,7 @@ public class ChatServiceTests
         var res = await new ChatService(new FakeAdvisor("B4") { Action = "recommend" }, new FakeSessions(), new FakeProfileFlow(), null, runner)
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
 
-        Assert.Equal($"ok\n\n{ChatRecommendation.Busy}", res.Answer);
+        Assert.Equal($"ok\n\n{AdvisorMessages.RecommendationBusy}", res.Answer);
     }
 
     // Trả lời theo từng ý (stream): các tin của advisor đi thẳng ra ngoài, còn lại chạy y như lượt chat thường
@@ -1471,7 +1471,7 @@ public class ChatServiceTests
         var res = await new ChatService(new FakeAdvisor("B4") { Action = "explain" }, new FakeSessions(), new FakeProfileFlow(), null, runner)
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
 
-        Assert.Equal(ChatExplanation.Failed, res.Answer);
+        Assert.Equal(AdvisorMessages.ExplanationFailed, res.Answer);
         Assert.Null(runner.ExplainedCode);
     }
 
@@ -1483,12 +1483,12 @@ public class ChatServiceTests
         var res = await new ChatService(new FakeAdvisor("B4") { Action = "explain", ActionData = IowaCode }, new FakeSessions(), new FakeProfileFlow(), null, runner)
             .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
 
-        Assert.Equal(ChatExplanation.Failed, res.Answer);
+        Assert.Equal(AdvisorMessages.ExplanationFailed, res.Answer);
     }
 
     [Theory]
     [InlineData("Chưa có trường iowa trong lần gợi ý gần nhất.", "Mình chưa giải thích được trường này: Chưa có trường iowa")]
-    [InlineData("Dữ liệu lưu bị hỏng", ChatRecommendation.Invalid)]
+    [InlineData("Dữ liệu lưu bị hỏng", AdvisorMessages.RecommendationInvalid)]
     public async Task ExplainAction_WhenTheServiceRejects_ExplainsWhy(string error, string expected)
     {
         var runner = new FakeRunner { ExplainError = new InvalidOperationException(error) };
@@ -1528,7 +1528,7 @@ public class ChatServiceTests
             var res = await new ChatService(new FakeAdvisor("B4") { Action = "explain", ActionData = IowaCode }, new FakeSessions(), new FakeProfileFlow(), null, runner)
                 .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
 
-            Assert.Equal(ChatExplanation.Busy, res.Answer);
+            Assert.Equal(AdvisorMessages.ExplanationBusy, res.Answer);
         }
     }
 
@@ -1742,7 +1742,7 @@ public class ChatServiceTests
 
         var res = await SimulateChat(new FakeAdvisor("B4") { Action = "simulate" }, runner);
 
-        Assert.Equal(ChatSimulation.Failed, res.Answer);
+        Assert.Equal(AdvisorMessages.SimulationFailed, res.Answer);
         Assert.Null(runner.SimulatedWith);
         Assert.Null(res.Widget);
     }
@@ -1751,7 +1751,7 @@ public class ChatServiceTests
     [InlineData(typeof(ArgumentException), "SAT giả định phải từ 400 đến 1600.", "Mình chưa thử được kịch bản này: SAT giả định phải từ 400 đến 1600.")]
     [InlineData(typeof(InvalidOperationException), "Chưa có hồ sơ.", "Mình chưa thử được kịch bản này: Chưa có hồ sơ.")]
     [InlineData(typeof(InvalidOperationException), "Hồ sơ chưa có bậc học muốn theo.", "Mình chưa thử được kịch bản này: Hồ sơ chưa có bậc học")]
-    [InlineData(typeof(InvalidOperationException), "Dữ liệu lưu bị hỏng", ChatSimulation.Failed)]
+    [InlineData(typeof(InvalidOperationException), "Dữ liệu lưu bị hỏng", AdvisorMessages.SimulationFailed)]
     public async Task SimulateAction_WhenTheSimulationIsRejected_ExplainsWhy(Type type, string message, string expected)
     {
         var runner = new FakeRunner { SimulateError = (Exception)Activator.CreateInstance(type, message)! };
@@ -1975,7 +1975,7 @@ public class ChatServiceTests
 
         var res = await KnowledgeChat(ModelAction("học phí Harvard", "Harvard", ["cost"]), runner);
 
-        Assert.Equal(ChatSchoolInfo.Unavailable, res.Answer);
+        Assert.Equal(AdvisorMessages.SchoolInfoUnavailable, res.Answer);
     }
 
     [Fact]
@@ -2466,7 +2466,7 @@ public class ChatServiceTests
 
         var res = await CompareChat(CompareAction(["BU", "NYU"], ["cost"]), runner);
 
-        Assert.Equal(ChatSchoolInfo.Unavailable, res.Answer);
+        Assert.Equal(AdvisorMessages.SchoolInfoUnavailable, res.Answer);
     }
 
     [Fact]
@@ -2905,14 +2905,14 @@ public class ChatServiceTests
 
         var res = await GoalChat(null, runner);
 
-        Assert.Equal(ChatGoalSeek.Failed, res.Answer);
+        Assert.Equal(AdvisorMessages.GoalSeekFailed, res.Answer);
         Assert.Null(runner.SearchedFor);
     }
 
     [Theory]
     [InlineData(typeof(ArgumentException), "Nhóm đích phải là reach, match hoặc safety.", "Mình chưa tính được: Nhóm đích phải là reach, match hoặc safety.")]
     [InlineData(typeof(InvalidOperationException), "Hồ sơ chưa có bậc học muốn theo.", "Mình chưa tính được: Hồ sơ chưa có bậc học muốn theo.")]
-    [InlineData(typeof(InvalidOperationException), "Dữ liệu lưu bị hỏng", ChatGoalSeek.Failed)]
+    [InlineData(typeof(InvalidOperationException), "Dữ liệu lưu bị hỏng", AdvisorMessages.GoalSeekFailed)]
     public async Task GoalSeekAction_WhenGoalSeekingIsRejected_ExplainsWhy(Type type, string message, string expected)
     {
         var runner = new FakeRunner { Match = Found(), GoalError = (Exception)Activator.CreateInstance(type, message)! };

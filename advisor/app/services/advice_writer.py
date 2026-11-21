@@ -4,6 +4,7 @@ System = quy tắc chung (viet_tra_loi_ho_so.md) + skill riêng của học sinh
 danh sách trường đã gợi ý. Sai thì gọi lại 1 lần; vẫn sai thì trả None để nhánh tư vấn báo chưa trả lời được.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -15,7 +16,7 @@ from app.schemas.slm import SkillRequest
 from app.services import usage_meter
 from app.services.explainer import GROUP_LABEL
 from app.services.ollama import OllamaError
-from app.services.skill_call import MAX_ATTEMPTS, SKILLS_DIR, load_skill
+from app.services.skill_call import MAX_ATTEMPTS, SKILLS_DIR, load_skill, writer_budget
 
 logger = logging.getLogger(__name__)
 
@@ -210,25 +211,33 @@ class AdviceWriter:
         self.last_attempts, self.last_errors = 0, []
         retry_note: dict[str, str] | None = None
         partial: str | None = None  # câu trả lời đúng mực nhưng thiếu một việc, dùng nếu viết lại vẫn hỏng
-        for attempt in range(1, MAX_ATTEMPTS + 1):
-            self.last_attempts = attempt
-            try:
-                # Gắn nhãn để báo cáo token biết đây là lời tư vấn hồ sơ (trước đây dòng này để trống nhãn)
-                with usage_meter.purpose(PURPOSE, self.version):
-                    raw = await self._llm.chat_json(
-                        messages + ([retry_note] if retry_note else []), ANSWER_SCHEMA, temperature=0.0
-                    )
-                text = check_answer(raw)
-                task = missing_task(text, tasks)
-                if task:
-                    raise MissingTaskError(task, text)
-                return text
-            except (OllamaError, ValueError) as e:  # ClaudeError là OllamaError
-                # Ghi lý do để biết vì sao học sinh nhận câu "chưa viết được"; không ghi hồ sơ hay câu trả lời
-                logger.warning("Writer hỏng lần %d/%d: %s", attempt, MAX_ATTEMPTS, e or type(e).__name__)
-                self.last_errors.append(error_code(e))
-                if isinstance(e, MissingTaskError):
-                    partial = e.answer
-                retry_note = retry_note_for(e)
+        try:
+            async with asyncio.timeout(writer_budget()):
+                for attempt in range(1, MAX_ATTEMPTS + 1):
+                    self.last_attempts = attempt
+                    try:
+                        # Gắn nhãn để báo cáo token biết đây là lời tư vấn hồ sơ (trước đây dòng này để trống nhãn)
+                        with usage_meter.purpose(PURPOSE, self.version):
+                            raw = await self._llm.chat_json(
+                                messages + ([retry_note] if retry_note else []),
+                                ANSWER_SCHEMA,
+                                temperature=0.0,
+                            )
+                        text = check_answer(raw)
+                        task = missing_task(text, tasks)
+                        if task:
+                            raise MissingTaskError(task, text)
+                        return text
+                    except (OllamaError, ValueError) as e:  # ClaudeError là OllamaError
+                        # Ghi lý do để biết vì sao học sinh nhận câu "chưa viết được"; không ghi hồ sơ hay câu trả lời
+                        logger.warning(
+                            "Writer hỏng lần %d/%d: %s", attempt, MAX_ATTEMPTS, e or type(e).__name__
+                        )
+                        self.last_errors.append(error_code(e))
+                        if isinstance(e, MissingTaskError):
+                            partial = e.answer
+                        retry_note = retry_note_for(e)
+        except TimeoutError:
+            logger.warning("Writer hết ngân sách %.0f giây", writer_budget())
         # Thiếu một phần vẫn hơn báo "chưa viết được": câu đó đã qua kiểm hứa đỗ và JSON
         return partial
