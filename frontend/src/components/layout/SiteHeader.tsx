@@ -229,7 +229,7 @@ export function SiteHeader() {
                 >
                   <span
                     aria-hidden="true"
-                    className="flex size-7 shrink-0 items-center justify-center rounded-md bg-brand-wash text-brand"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-md bg-brand text-brand-wash"
                   >
                     <UserRoleIcon role={user.role} className="size-[18px]" />
                   </span>
