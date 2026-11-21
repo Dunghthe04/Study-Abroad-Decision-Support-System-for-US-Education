@@ -119,19 +119,7 @@ public class AdminUsersControllerTests
             return Task.FromResult(AuthResult.Ok(updated, "Đã khóa tài khoản."));
         }
 
-        public Task<AuthResult> RegisterCenterAsync(RegisterCenterRequest request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> VerifyCenterEmailAsync(VerifyCenterEmailRequest request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> UpdateCenterPhoneAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> RequestCenterEmailChangeAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> ConfirmCenterEmailChangeAsync(Guid userId, ConfirmContactChangeDto request, CancellationToken ct = default) =>
+        public Task<AuthResult> StartSessionAsync(StudyAbroad.Domain.Entities.User user, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
         public (Guid TargetId, UnlockUserAccountRequest Request, Guid ActorId)? LastUnlockCall { get; private set; }

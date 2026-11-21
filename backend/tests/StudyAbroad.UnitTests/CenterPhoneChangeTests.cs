@@ -44,10 +44,12 @@ public class CenterPhoneChangeTests
     private readonly FakeAuditLogRepository _audit = new();
     private readonly FakeCenters _centers = new();
 
-    private AuthService Service() => new(
-        _users, new FakeHasher(), new FakeTokenService(), _email, _links, _audit,
-        new ParentLinkService(_links, _users, _email, _audit), new FakeUnitOfWork(), new FakeLeadWithdrawalRepository(),
-        studyCenters: _centers);
+    private CenterAccountService Service() => new(
+        _users, new FakeHasher(), _email, _audit, _centers,
+        new AuthService(
+            _users, new FakeHasher(), new FakeTokenService(), _email, _links, _audit,
+            new ParentLinkService(_links, _users, _email, _audit), new FakeUnitOfWork(), new FakeLeadWithdrawalRepository(),
+            studyCenters: _centers));
 
     private (User User, StudyCenter Center) Setup(string phone = "0912345678")
     {
@@ -63,7 +65,7 @@ public class CenterPhoneChangeTests
     {
         var (user, center) = Setup();
 
-        var result = await Service().UpdateCenterPhoneAsync(user.Id, new RequestContactChangeDto("+84987654321"));
+        var result = await Service().UpdatePhoneAsync(user.Id, new RequestContactChangeDto("+84987654321"));
 
         Assert.Equal(AuthError.None, result.Error);
         Assert.Equal(user.Phone, center.Phone);
@@ -81,7 +83,7 @@ public class CenterPhoneChangeTests
     {
         var (user, center) = Setup();
 
-        var result = await Service().UpdateCenterPhoneAsync(user.Id, new RequestContactChangeDto(newValue));
+        var result = await Service().UpdatePhoneAsync(user.Id, new RequestContactChangeDto(newValue));
 
         Assert.NotEqual(AuthError.None, result.Error);
         Assert.Equal("0912345678", center.Phone);
@@ -94,7 +96,7 @@ public class CenterPhoneChangeTests
         var (user, center) = Setup();
         _users.Users.Add(new User { Id = Guid.NewGuid(), Email = "khac@example.com", FullName = "K", Role = UserRoles.Student, Status = UserStatuses.Active, Phone = "0987654321" });
 
-        var result = await Service().UpdateCenterPhoneAsync(user.Id, new RequestContactChangeDto("0987654321"));
+        var result = await Service().UpdatePhoneAsync(user.Id, new RequestContactChangeDto("0987654321"));
 
         Assert.NotEqual(AuthError.None, result.Error);
         Assert.Equal("0912345678", center.Phone);

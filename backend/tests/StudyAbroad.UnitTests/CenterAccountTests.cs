@@ -1,3 +1,7 @@
+using System.Reflection;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using StudyAbroad.Api.Controllers;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.ParentLinks;
@@ -9,7 +13,7 @@ using Xunit;
 namespace StudyAbroad.UnitTests;
 
 /// <summary>
-/// [UC-64] Trung tâm tự đăng ký tài khoản và [UC-91] xác thực email trung tâm (OTP khi đăng ký và khi đổi email liên lạc).
+/// [UC-64] Trung tâm tự đăng ký tài khoản và [UC-91] xác thực email trung tâm (OTP khi đăng ký và khi đổi email liên lạc), qua CenterAccountService.
 /// </summary>
 public class CenterAccountTests
 {
@@ -46,10 +50,12 @@ public class CenterAccountTests
     private readonly FakeAuditLogRepository _audit = new();
     private readonly FakeCenters _centers = new();
 
-    private AuthService Service() => new(
-        _users, new FakeHasher(), new FakeTokenService(), _email, _links, _audit,
-        new ParentLinkService(_links, _users, _email, _audit), new FakeUnitOfWork(), new FakeLeadWithdrawalRepository(),
-        studyCenters: _centers);
+    private CenterAccountService Service() => new(
+        _users, new FakeHasher(), _email, _audit, _centers,
+        new AuthService(
+            _users, new FakeHasher(), new FakeTokenService(), _email, _links, _audit,
+            new ParentLinkService(_links, _users, _email, _audit), new FakeUnitOfWork(), new FakeLeadWithdrawalRepository(),
+            studyCenters: _centers));
 
     private static RegisterCenterRequest Request(
         string email = "TrungTam@Example.com",
@@ -67,7 +73,7 @@ public class CenterAccountTests
     [Fact]
     public async Task RegisterCenter_Valid_CreatesUnverifiedAccountAndCenterAndSendsOtp()
     {
-        var result = await Service().RegisterCenterAsync(Request());
+        var result = await Service().RegisterAsync(Request());
 
         Assert.Equal(AuthError.None, result.Error);
         var user = Assert.Single(_users.Users);
@@ -93,7 +99,7 @@ public class CenterAccountTests
     [InlineData(false, false)]
     public async Task RegisterCenter_TermsOrTruthfulnessCommitmentNotAccepted_IsRejected(bool terms, bool commitment)
     {
-        var result = await Service().RegisterCenterAsync(Request(agreeTerms: terms, agreeCommitment: commitment));
+        var result = await Service().RegisterAsync(Request(agreeTerms: terms, agreeCommitment: commitment));
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Empty(_users.Users);
@@ -104,7 +110,7 @@ public class CenterAccountTests
     [Fact]
     public async Task RegisterCenter_PasswordConfirmationMismatch_IsRejected()
     {
-        var result = await Service().RegisterCenterAsync(Request(password: "password123", confirm: "password124"));
+        var result = await Service().RegisterAsync(Request(password: "password123", confirm: "password124"));
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Empty(_users.Users);
@@ -113,7 +119,7 @@ public class CenterAccountTests
     [Fact]
     public async Task RegisterCenter_PasswordShorterThanMinimum_IsRejected()
     {
-        var result = await Service().RegisterCenterAsync(Request(password: "short1"));
+        var result = await Service().RegisterAsync(Request(password: "short1"));
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Empty(_users.Users);
@@ -124,7 +130,7 @@ public class CenterAccountTests
     [InlineData("")]
     public async Task RegisterCenter_InvalidEmail_IsRejected(string email)
     {
-        var result = await Service().RegisterCenterAsync(Request(email: email));
+        var result = await Service().RegisterAsync(Request(email: email));
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Empty(_users.Users);
@@ -136,7 +142,7 @@ public class CenterAccountTests
     [InlineData("")]
     public async Task RegisterCenter_InvalidVietnamesePhone_IsRejected(string phone)
     {
-        var result = await Service().RegisterCenterAsync(Request(phone: phone));
+        var result = await Service().RegisterAsync(Request(phone: phone));
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Empty(_users.Users);
@@ -147,8 +153,8 @@ public class CenterAccountTests
     {
         var service = Service();
 
-        Assert.Equal(AuthError.Validation, (await service.RegisterCenterAsync(Request(centerName: "  "))).Error);
-        Assert.Equal(AuthError.Validation, (await service.RegisterCenterAsync(Request(registrant: ""))).Error);
+        Assert.Equal(AuthError.Validation, (await service.RegisterAsync(Request(centerName: "  "))).Error);
+        Assert.Equal(AuthError.Validation, (await service.RegisterAsync(Request(registrant: ""))).Error);
         Assert.Empty(_users.Users);
     }
 
@@ -156,11 +162,11 @@ public class CenterAccountTests
     public async Task RegisterCenter_EmailAlreadyUsed_IsRejectedAndUnverifiedOwnerIsToldToVerify()
     {
         var service = Service();
-        Assert.Equal(AuthError.None, (await service.RegisterCenterAsync(Request())).Error);
+        Assert.Equal(AuthError.None, (await service.RegisterAsync(Request())).Error);
 
-        var whileUnverified = await service.RegisterCenterAsync(Request(phone: "0987654321"));
+        var whileUnverified = await service.RegisterAsync(Request(phone: "0987654321"));
         _users.Users[0].Status = UserStatuses.Active;
-        var whileActive = await service.RegisterCenterAsync(Request(phone: "0987654321"));
+        var whileActive = await service.RegisterAsync(Request(phone: "0987654321"));
 
         Assert.Equal(AuthError.Validation, whileUnverified.Error);
         Assert.Contains("chưa xác thực", whileUnverified.Message);
@@ -174,7 +180,7 @@ public class CenterAccountTests
     {
         _users.Users.Add(new User { Id = Guid.NewGuid(), Email = "khac@example.com", FullName = "K", Role = UserRoles.Student, Status = UserStatuses.Active, Phone = "0912345678" });
 
-        var result = await Service().RegisterCenterAsync(Request());
+        var result = await Service().RegisterAsync(Request());
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Contains("đã được sử dụng", result.Message);
@@ -187,10 +193,10 @@ public class CenterAccountTests
     public async Task VerifyCenterEmail_CorrectOtp_ActivatesAccountAndMarksCenterEmailVerified()
     {
         var service = Service();
-        await service.RegisterCenterAsync(Request());
+        await service.RegisterAsync(Request());
         var code = _email.SentEmails[0].Code;
 
-        var result = await service.VerifyCenterEmailAsync(new VerifyCenterEmailRequest("trungtam@example.com", code));
+        var result = await service.VerifyEmailAsync(new VerifyCenterEmailRequest("trungtam@example.com", code));
 
         Assert.Equal(AuthError.None, result.Error);
         Assert.NotNull(result.Response);
@@ -206,14 +212,14 @@ public class CenterAccountTests
     public async Task VerifyCenterEmail_WrongOtpFiveTimes_InvalidatesCodeEvenIfCorrectLater()
     {
         var service = Service();
-        await service.RegisterCenterAsync(Request());
+        await service.RegisterAsync(Request());
         var code = _email.SentEmails[0].Code;
         var wrong = code == "000000" ? "111111" : "000000";
 
         for (var i = 0; i < AuthService.MaxOtpAttempts; i++)
-            Assert.Equal(AuthError.OtpInvalid, (await service.VerifyCenterEmailAsync(new VerifyCenterEmailRequest("trungtam@example.com", wrong))).Error);
+            Assert.Equal(AuthError.OtpInvalid, (await service.VerifyEmailAsync(new VerifyCenterEmailRequest("trungtam@example.com", wrong))).Error);
 
-        var late = await service.VerifyCenterEmailAsync(new VerifyCenterEmailRequest("trungtam@example.com", code));
+        var late = await service.VerifyEmailAsync(new VerifyCenterEmailRequest("trungtam@example.com", code));
 
         Assert.Equal(AuthError.OtpInvalid, late.Error);
         Assert.Equal(UserStatuses.Unverified, _users.Users[0].Status);
@@ -224,10 +230,10 @@ public class CenterAccountTests
     public async Task VerifyCenterEmail_ExpiredOtp_IsRejected()
     {
         var service = Service();
-        await service.RegisterCenterAsync(Request());
+        await service.RegisterAsync(Request());
         _users.Otps[0].ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
 
-        var result = await service.VerifyCenterEmailAsync(new VerifyCenterEmailRequest("trungtam@example.com", _email.SentEmails[0].Code));
+        var result = await service.VerifyEmailAsync(new VerifyCenterEmailRequest("trungtam@example.com", _email.SentEmails[0].Code));
 
         Assert.Equal(AuthError.OtpInvalid, result.Error);
         Assert.Equal(UserStatuses.Unverified, _users.Users[0].Status);
@@ -237,12 +243,12 @@ public class CenterAccountTests
     public async Task VerifyCenterEmail_UnknownEmailOrAlreadyActive_GetsTheSameGenericError()
     {
         var service = Service();
-        await service.RegisterCenterAsync(Request());
+        await service.RegisterAsync(Request());
         var code = _email.SentEmails[0].Code;
         _users.Users[0].Status = UserStatuses.Active;
 
-        var unknown = await service.VerifyCenterEmailAsync(new VerifyCenterEmailRequest("nobody@example.com", code));
-        var alreadyActive = await service.VerifyCenterEmailAsync(new VerifyCenterEmailRequest("trungtam@example.com", code));
+        var unknown = await service.VerifyEmailAsync(new VerifyCenterEmailRequest("nobody@example.com", code));
+        var alreadyActive = await service.VerifyEmailAsync(new VerifyCenterEmailRequest("trungtam@example.com", code));
 
         Assert.Equal(AuthError.OtpInvalid, unknown.Error);
         Assert.Equal(AuthError.OtpInvalid, alreadyActive.Error);
@@ -251,12 +257,12 @@ public class CenterAccountTests
 
     // ===== UC-91 Đổi email liên lạc bằng OTP gửi tới email mới =====
 
-    private async Task<(AuthService Service, User User, StudyCenter Center)> ActiveCenter()
+    private async Task<(CenterAccountService Service, User User, StudyCenter Center)> ActiveCenter()
     {
         var service = Service();
-        await service.RegisterCenterAsync(Request());
+        await service.RegisterAsync(Request());
         var code = _email.SentEmails[0].Code;
-        await service.VerifyCenterEmailAsync(new VerifyCenterEmailRequest("trungtam@example.com", code));
+        await service.VerifyEmailAsync(new VerifyCenterEmailRequest("trungtam@example.com", code));
         _email.SentEmails.Clear();
         _users.Otps.Clear();
         return (service, _users.Users[0], _centers.Centers[0]);
@@ -267,9 +273,9 @@ public class CenterAccountTests
     {
         var (service, user, center) = await ActiveCenter();
 
-        var request = await service.RequestCenterEmailChangeAsync(user.Id, new RequestContactChangeDto("New.Contact@Example.com"));
+        var request = await service.RequestEmailChangeAsync(user.Id, new RequestContactChangeDto("New.Contact@Example.com"));
         var mail = Assert.Single(_email.SentEmails);
-        var confirm = await service.ConfirmCenterEmailChangeAsync(user.Id, new ConfirmContactChangeDto("new.contact@example.com", mail.Code));
+        var confirm = await service.ConfirmEmailChangeAsync(user.Id, new ConfirmContactChangeDto("new.contact@example.com", mail.Code));
 
         Assert.Equal(AuthError.None, request.Error);
         Assert.Equal("new.contact@example.com", mail.To);   // OTP goes to the NEW address
@@ -289,7 +295,7 @@ public class CenterAccountTests
     {
         var (service, user, center) = await ActiveCenter();
 
-        var result = await service.RequestCenterEmailChangeAsync(user.Id, new RequestContactChangeDto(newEmail));
+        var result = await service.RequestEmailChangeAsync(user.Id, new RequestContactChangeDto(newEmail));
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Empty(_email.SentEmails);
@@ -302,7 +308,7 @@ public class CenterAccountTests
         var (service, user, _) = await ActiveCenter();
         _users.Users.Add(new User { Id = Guid.NewGuid(), Email = "taken@example.com", FullName = "T", Role = UserRoles.Student, Status = UserStatuses.Active });
 
-        var result = await service.RequestCenterEmailChangeAsync(user.Id, new RequestContactChangeDto("taken@example.com"));
+        var result = await service.RequestEmailChangeAsync(user.Id, new RequestContactChangeDto("taken@example.com"));
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Empty(_email.SentEmails);
@@ -313,8 +319,8 @@ public class CenterAccountTests
     {
         var (service, user, _) = await ActiveCenter();
 
-        var first = await service.RequestCenterEmailChangeAsync(user.Id, new RequestContactChangeDto("a@example.com"));
-        var second = await service.RequestCenterEmailChangeAsync(user.Id, new RequestContactChangeDto("b@example.com"));
+        var first = await service.RequestEmailChangeAsync(user.Id, new RequestContactChangeDto("a@example.com"));
+        var second = await service.RequestEmailChangeAsync(user.Id, new RequestContactChangeDto("b@example.com"));
 
         Assert.Equal(AuthError.None, first.Error);
         Assert.Equal(AuthError.Validation, second.Error);
@@ -325,15 +331,37 @@ public class CenterAccountTests
     public async Task ChangeCenterEmail_WrongCodeOrCodeForAnotherAddress_IsRejectedAndEmailUnchanged()
     {
         var (service, user, center) = await ActiveCenter();
-        await service.RequestCenterEmailChangeAsync(user.Id, new RequestContactChangeDto("a@example.com"));
+        await service.RequestEmailChangeAsync(user.Id, new RequestContactChangeDto("a@example.com"));
         var code = _email.SentEmails[0].Code;
         var wrong = code == "000000" ? "111111" : "000000";
 
-        var wrongCode = await service.ConfirmCenterEmailChangeAsync(user.Id, new ConfirmContactChangeDto("a@example.com", wrong));
-        var otherAddress = await service.ConfirmCenterEmailChangeAsync(user.Id, new ConfirmContactChangeDto("b@example.com", code));
+        var wrongCode = await service.ConfirmEmailChangeAsync(user.Id, new ConfirmContactChangeDto("a@example.com", wrong));
+        var otherAddress = await service.ConfirmEmailChangeAsync(user.Id, new ConfirmContactChangeDto("b@example.com", code));
 
         Assert.Equal(AuthError.OtpInvalid, wrongCode.Error);
         Assert.Equal(AuthError.OtpInvalid, otherAddress.Error);
         Assert.Equal("trungtam@example.com", center.Email);
     }
-}
+
+    // ===== Vị trí của API: đăng ký trung tâm thuộc nhóm trung tâm, không nằm trong /auth =====
+
+    [Fact]
+    public void CenterAccountController_IsAnonymousAndLivesUnderCenterAccountsRoute()
+    {
+        var type = typeof(CenterAccountController);
+
+        Assert.Equal("api/v1/center-accounts", type.GetCustomAttribute<RouteAttribute>()!.Template);
+        Assert.NotNull(type.GetCustomAttribute<AllowAnonymousAttribute>());
+        Assert.Equal("register", type.GetMethod(nameof(CenterAccountController.Register))!.GetCustomAttribute<HttpPostAttribute>()!.Template);
+        Assert.Equal("verify-email", type.GetMethod(nameof(CenterAccountController.VerifyEmail))!.GetCustomAttribute<HttpPostAttribute>()!.Template);
+    }
+
+    [Fact]
+    public void AuthController_NoLongerExposesCenterRegistrationOrCenterEmailVerification()
+    {
+        var names = typeof(AuthController).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Select(m => m.Name).ToList();
+
+        Assert.DoesNotContain("RegisterCenter", names);
+        Assert.DoesNotContain("VerifyCenterEmail", names);
+    }}

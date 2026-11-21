@@ -14,7 +14,7 @@ namespace StudyAbroad.Api.Controllers;
 [Authorize(Roles = UserRoles.Center)]
 public class CenterPortalController(
     IStudyCenterService centerService,
-    IAuthService authService,
+    ICenterAccountService accountService,
     IWebHostEnvironment env) : ControllerBase
 {
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -104,19 +104,19 @@ public class CenterPortalController(
     /// <summary>Đổi số điện thoại liên lạc. Không xác thực SMS OTP: chỉ kiểm tra định dạng Việt Nam và không trùng số.</summary>
     [HttpPost("contact/phone")]
     public Task<IActionResult> ChangePhone([FromBody] RequestContactChangeDto request, CancellationToken ct) =>
-        RunContactChange(userId => authService.UpdateCenterPhoneAsync(userId, request, ct));
+        RunContactChange(userId => accountService.UpdatePhoneAsync(userId, request, ct));
 
     /// <summary>Gửi OTP tới email MỚI để đổi email liên lạc.</summary>
     [HttpPost("contact/email/request")]
     [EnableRateLimiting(AuthRateLimit.PolicyName)]
     public Task<IActionResult> RequestEmailChange([FromBody] RequestContactChangeDto request, CancellationToken ct) =>
-        RunContactChange(userId => authService.RequestCenterEmailChangeAsync(userId, request, ct));
+        RunContactChange(userId => accountService.RequestEmailChangeAsync(userId, request, ct));
 
     /// <summary>Xác nhận OTP và đổi email liên lạc (email đăng nhập không đổi).</summary>
     [HttpPost("contact/email/confirm")]
     [EnableRateLimiting(AuthRateLimit.PolicyName)]
     public Task<IActionResult> ConfirmEmailChange([FromBody] ConfirmContactChangeDto request, CancellationToken ct) =>
-        RunContactChange(userId => authService.ConfirmCenterEmailChangeAsync(userId, request, ct));
+        RunContactChange(userId => accountService.ConfirmEmailChangeAsync(userId, request, ct));
 
     private async Task<IActionResult> RunContactChange(Func<Guid, Task<AuthResult>> action)
     {
