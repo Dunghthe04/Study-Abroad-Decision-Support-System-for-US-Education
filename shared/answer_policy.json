@@ -1,0 +1,102 @@
+{
+  "_ghi_chu": [
+    "Bảng chính sách: mỗi loại ý của SLM và mỗi hành động backend do AI hay do code viết chữ trả về học sinh.",
+    "Quy tắc: câu có tư vấn hoặc giải thích do Claude viết từ dữ kiện code đã tính, rồi code kiểm và có lời dự phòng.",
+    "Câu mang tính giao thức (hỏi tiếp hồ sơ, từ chối ngoài phạm vi, báo lỗi) và tra cứu số liệu thuần do code viết.",
+    "who: code (không gọi Claude để viết), claude (Claude viết, code kiểm), mixed (một phần Claude viết, phần còn lại code).",
+    "Advisor (advisor/tests/test_answer_policy.py) và backend (AnswerPolicyTests.cs) cùng đọc file này; thêm loại ý hoặc hành động mà quên khai báo thì test đỏ."
+  ],
+  "intents": {
+    "collect_profile": {
+      "branch": "ProfileBranch",
+      "who": "code",
+      "reads": ["skill_bac_hoc", "skill_ho_so"],
+      "why": "Hỏi tiếp hồ sơ theo khung câu hỏi cố định, AI không tự nghĩ câu hỏi. Claude chỉ đọc câu trả lời của học sinh ra giá trị (skill đọc hiểu), chữ hiện ra là của code."
+    },
+    "profile_review": {
+      "branch": "GeneratedAdviceBranch",
+      "who": "claude",
+      "skills": ["skill_ho_so_khuon", "viet_tra_loi_ho_so"],
+      "writer": "app.services.advice_writer.AdviceWriter",
+      "fallback": "Câu cố định CANNOT_ANSWER (replies.py) kèm nút hỏi lại; nếu chỉ thiếu một việc thì dùng phần câu trả lời đã qua kiểm.",
+      "may_emit": ["recommend", "explain", "goal_seek"],
+      "why": "Đánh giá hồ sơ và lộ trình: code tính mức và dựng khuôn skill, Claude viết lời. Chỉ xin danh sách trường thì phát action recommend."
+    },
+    "scenario": {
+      "branch": "ScenarioBranch",
+      "who": "mixed",
+      "skills": ["skill_neu_doi"],
+      "writer": "app.services.what_if_writer.WhatIfWriter",
+      "fallback": "Câu cố định trong replies.py (CANNOT_TRY_OTHERS và các câu cùng nhóm).",
+      "may_emit": ["simulate", "goal_seek"],
+      "why": "Mục thử được (GPA, SAT...) thì backend mô phỏng rồi Claude viết lời (action simulate). Mục không thử được (ngành, bang...) thì Claude nói rõ vì sao."
+    },
+    "knowledge": {
+      "branch": "KnowledgeBranch",
+      "who": "claude",
+      "skills": ["skill_tra_loi"],
+      "writer": "app.services.skills.skill_tra_loi.TraLoiHandler",
+      "fallback": "Câu trả lời chuẩn nguyên văn của dòng kho kiến thức; không có dòng đủ điểm thì nói chưa có thông tin.",
+      "may_emit": ["school_info", "school_search", "school_compare"],
+      "why": "Claude chỉ viết lại câu trả lời chuẩn đã kiểm chứng, không thêm ý. Câu hỏi về trường cụ thể thì chuyển sang tra cứu số liệu."
+    },
+    "center_referral": {
+      "branch": "CenterBranch",
+      "who": "mixed",
+      "skills": ["skill_giai_thich_trung_tam"],
+      "writer": "app.services.skills.skill_chuyen_trung_tam.ChuyenTrungTamHandler",
+      "fallback": "Lời giải thích dựng bằng code từ dữ liệu trung tâm; các câu hệ thống (hỏi dịch vụ, không có kết quả, chưa hỗ trợ đặt lịch hay so sánh) là câu cố định.",
+      "why": "Claude viết đoạn mở và lý do cho ba trung tâm đầu; phần còn lại và các câu hệ thống do code viết. AI không chọn trung tâm, không nêu giá."
+    },
+    "out_of_scope": {
+      "branch": "OutOfScopeBranch",
+      "who": "code",
+      "why": "Từ chối, chào hỏi, chuyển người: câu cố định để ổn định và không cho model chỗ bị dụ."
+    }
+  },
+  "actions": {
+    "recommend": {
+      "who": "claude",
+      "skills": ["skill_goi_y_truong"],
+      "writer": "app.services.recommend_writer.RecommendWriter",
+      "fallback": "ChatRecommendation.Summarize (liệt kê nhóm và trường); không có kết quả hoặc lỗi thì Empty, Invalid, Busy.",
+      "why": "Danh sách do code xếp nhóm. Chỉ xin danh sách thì advisor đặt cờ note và Claude viết đoạn tóm tắt; câu có cả đánh giá hồ sơ thì lời đã do Claude viết, danh sách chỉ nối thêm."
+    },
+    "explain": {
+      "who": "claude",
+      "skills": ["skill_explain"],
+      "writer": "app.services.explainer.Explainer",
+      "fallback": "ChatExplanation.Failed (câu cố định).",
+      "why": "Giải thích một trường: so sánh số do code viết thành dữ kiện, Claude chỉ diễn đạt lại."
+    },
+    "goal_seek": {
+      "who": "claude",
+      "skills": ["skill_goal_seek"],
+      "writer": "app.services.goal_writer.GoalWriter",
+      "fallback": "ChatGoalSeek.Summarize (lời ghép bằng code từ kết quả tìm ngược).",
+      "why": "Cần gì để vào trường X: code tính bảng so sánh và mức cần đạt, Claude viết lời giải thích dưới bảng."
+    },
+    "simulate": {
+      "who": "claude",
+      "skills": ["skill_kich_ban"],
+      "writer": "app.services.scenario_writer.ScenarioWriter",
+      "fallback": "ChatSimulation.Fallback (lời mẫu dựng bằng code); lỗi gọi mô phỏng thì ChatSimulation.Failed.",
+      "why": "What-if: code chạy mô phỏng trên bản sao hồ sơ, Claude viết lời; không thể đổi nhóm hay thêm trường."
+    },
+    "school_compare": {
+      "who": "claude",
+      "skills": ["skill_so_sanh"],
+      "writer": "app.services.compare_writer.CompareWriter",
+      "fallback": "Chỉ hiện bảng số liệu, không có nhận xét.",
+      "why": "So sánh trường: bảng số liệu do code tra, Claude chỉ nhận xét ngắn, không phán trường nào tốt hơn."
+    },
+    "school_info": {
+      "who": "code",
+      "why": "Tra cứu số liệu một trường (học phí, xếp hạng...): câu trả lời là sự thật lấy từ cơ sở dữ liệu, không có lời tư vấn nào cần viết. Không có dữ liệu thì dùng kho kiến thức hoặc nói chưa có."
+    },
+    "school_search": {
+      "who": "code",
+      "why": "Tìm trường theo điều kiện: danh sách lọc từ cơ sở dữ liệu, không có lời tư vấn nào cần viết."
+    }
+  }
+}
