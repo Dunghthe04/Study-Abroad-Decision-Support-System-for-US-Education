@@ -121,7 +121,7 @@ public class CenterRegistrationAndVerificationTests
     }
 
     [Fact]
-    public async Task SubmitVerification_FailsWhenPhoneNotVerified()
+    public async Task SubmitVerification_FailsWhenEmailNotVerified()
     {
         var centerRepo = new FakeStudyCenterRepo();
         var verifRepo = new FakeVerificationRepo();
