@@ -188,4 +188,75 @@ public class BillingCycleRulesTests
         Assert.Equal(2, changes.Count);
         Assert.Equal(CycleStatuses.Active, queued.Status);   // kỳ mới vẫn active (Premium theo ngày), chỉ không còn token
     }
+
+    // ---- chu kỳ cấp token động (FreeWindowUtc, CycleWindowUtc, QuotaMultiplier, Advance)
+
+    [Fact]
+    public void FreeWindowUtc_NullUsesCalendarMonth_PositiveUsesAnchorCadence()
+    {
+        var now = Utc(2026, 1, 10, 3);   // 2026-01-10 10:00 +07:00 (9 ngày sau 2026-01-01 00:00 +07:00)
+        var (mStart, mEnd) = CycleRules.FreeWindowUtc(now, null);
+        Assert.Equal((Utc(2025, 12, 31, 17), Utc(2026, 1, 31, 17)), (mStart, mEnd));
+
+        var (wStart, wEnd) = CycleRules.FreeWindowUtc(now, 7);
+        // 9 / 7 = idx 1 -> start = anchor + 7d = 2026-01-07 17:00 UTC, end = 2026-01-14 17:00 UTC
+        Assert.Equal((Utc(2026, 1, 7, 17), Utc(2026, 1, 14, 17)), (wStart, wEnd));
+    }
+
+    [Fact]
+    public void CycleWindowUtc_SplitsRecurringCycleAndClampsFinalWindow()
+    {
+        var start = Utc(2026, 11, 1);
+        var cycle = new UserSubscription
+        {
+            Kind = PlanKinds.Personal, Status = CycleStatuses.Active, StartsAt = start, EndsAt = start.AddDays(35),
+            DurationDays = 35, QuotaPeriodDays = 14, TokenQuota = 100_000, PlanName = "35d/14d",
+        };
+
+        var w0 = CycleRules.CycleWindowUtc(cycle, start.AddDays(5));
+        var w1 = CycleRules.CycleWindowUtc(cycle, start.AddDays(14));
+        var w2 = CycleRules.CycleWindowUtc(cycle, start.AddDays(30));
+
+        Assert.Equal((start, start.AddDays(14), false), w0);
+        Assert.Equal((start.AddDays(14), start.AddDays(28), false), w1);
+        Assert.Equal((start.AddDays(28), start.AddDays(35), true), w2);
+    }
+
+    [Fact]
+    public void QuotaMultiplier_ComputesDailyRatioAgainstFreePlan()
+    {
+        var free = new SubscriptionPlan { Kind = PlanKinds.Free, TokenQuota = 120_000, QuotaPeriodDays = null };
+        var p1m = new SubscriptionPlan { Kind = PlanKinds.Personal, DurationDays = 30, QuotaPeriodDays = 30, TokenQuota = 500_000 };
+        var p3m = new SubscriptionPlan { Kind = PlanKinds.Personal, DurationDays = 90, QuotaPeriodDays = 30, TokenQuota = 600_000 };
+        var customFree = new SubscriptionPlan { Kind = PlanKinds.Free, TokenQuota = 70_000, QuotaPeriodDays = 7 };   // 10k/ngày
+        var p14d = new SubscriptionPlan { Kind = PlanKinds.Personal, DurationDays = 14, QuotaPeriodDays = 7, TokenQuota = 350_000 };   // 50k/ngày
+
+        Assert.Null(CycleRules.QuotaMultiplier(free, free));
+        Assert.Equal(4.2m, CycleRules.QuotaMultiplier(p1m, free));
+        Assert.Equal(5.0m, CycleRules.QuotaMultiplier(p3m, free));
+        Assert.Equal(5.0m, CycleRules.QuotaMultiplier(p14d, customFree));
+        Assert.Null(CycleRules.QuotaMultiplier(p1m, new SubscriptionPlan { Kind = PlanKinds.Free, TokenQuota = 0 }));
+    }
+
+    [Fact]
+    public void Advance_RecurringCycleExhaustedInEarlyWindow_DoesNotRolloverUntilFinalWindow()
+    {
+        var start = Utc(2026, 11, 1);
+        var active = new UserSubscription
+        {
+            Kind = PlanKinds.Personal, Status = CycleStatuses.Active, StartsAt = start, EndsAt = start.AddDays(90),
+            DurationDays = 90, QuotaPeriodDays = 30, TokenQuota = 600_000, PlanName = "Cá nhân 3 tháng",
+        };
+        var queued = Queued(days: 30);
+
+        // Cửa sổ 0 (ngày 5) dùng hết: không rollover vì còn cửa sổ 1 và 2
+        Assert.Empty(CycleRules.Advance(active, queued, 600_000, start.AddDays(5)));
+        Assert.Equal(CycleStatuses.Active, active.Status);
+
+        // Cửa sổ cuối (ngày 65) dùng hết: rollover ngay
+        var changes = CycleRules.Advance(active, queued, 600_000, start.AddDays(65));
+        ApplyAll(changes);
+        Assert.Equal(CycleEndReasons.ExhaustedRollover, active.EndedReason);
+        Assert.Equal(CycleStatuses.Active, queued.Status);
+    }
 }

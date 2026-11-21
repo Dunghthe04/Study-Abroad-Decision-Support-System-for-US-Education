@@ -54,10 +54,10 @@ public class FamilyRepository(AppDbContext db) : IFamilyRepository
         db.PaymentTransactions.AnyAsync(
             o => o.UserId == userId && o.Status == OrderStatuses.Pending && o.PlanKind == PlanKinds.Family, ct);
 
-    public async Task<Dictionary<Guid, long>> SumTokensByUserAsync(Guid cycleId, CancellationToken ct = default)
+    public async Task<Dictionary<Guid, long>> SumTokensByUserAsync(Guid cycleId, DateTime? fromUtc = null, DateTime? toUtc = null, CancellationToken ct = default)
     {
         var rows = await db.AiCalls
-            .Where(MeteringFilters.Cycle(cycleId))
+            .Where(MeteringFilters.Cycle(cycleId, fromUtc, toUtc))
             .Where(a => a.UserId != null)
             .GroupBy(a => a.UserId!.Value)
             .Select(g => new { UserId = g.Key, Tokens = g.Sum(a => (long?)a.TotalTokens) ?? 0 })

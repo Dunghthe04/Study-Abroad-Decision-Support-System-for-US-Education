@@ -13,8 +13,10 @@ namespace StudyAbroad.Application.Billing;
 /// </summary>
 public static class MeteringFilters
 {
-    public static Expression<Func<AiCall, bool>> Cycle(Guid cycleId) =>
-        a => a.UserSubscriptionId == cycleId && a.Kind == BillingRules.MeteredAiKind;
+    public static Expression<Func<AiCall, bool>> Cycle(Guid cycleId, DateTime? fromUtc = null, DateTime? toUtc = null) =>
+        fromUtc is { } from && toUtc is { } to
+            ? a => a.UserSubscriptionId == cycleId && a.Kind == BillingRules.MeteredAiKind && a.CreatedAt >= from && a.CreatedAt < to
+            : a => a.UserSubscriptionId == cycleId && a.Kind == BillingRules.MeteredAiKind;
 
     /// <summary>Lượt chat dùng hạn mức Free của người này từ fromUtc: không có kỳ, plan_code = free.</summary>
     public static Expression<Func<AiCall, bool>> Free(Guid userId, DateTime fromUtc) =>

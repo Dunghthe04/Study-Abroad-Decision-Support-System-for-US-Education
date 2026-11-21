@@ -87,14 +87,14 @@ public class PlanAdminServiceTests
         public Fixture()
         {
             Free = Plan("free", PlanKinds.Free, 0, null, 100_000, order: 0);
-            Personal = Plan("personal-1m", PlanKinds.Personal, 99_000, 30, 500_000, order: 1);
-            Family = Plan("family-1m", PlanKinds.Family, 199_000, 30, 1_500_000, order: 2);
+            Personal = Plan("personal-1m", PlanKinds.Personal, 99_000, 30, 500_000, order: 1, quotaPeriodDays: 30);
+            Family = Plan("family-1m", PlanKinds.Family, 199_000, 30, 1_500_000, order: 2, quotaPeriodDays: 30);
             Repo.Plans.AddRange([Free, Personal, Family]);
         }
 
-        private static SubscriptionPlan Plan(string code, string kind, decimal price, int? days, long quota, int order) => new()
+        private static SubscriptionPlan Plan(string code, string kind, decimal price, int? days, long quota, int order, int? quotaPeriodDays = null) => new()
         {
-            Code = code, Name = code, Kind = kind, PriceVnd = price, DurationDays = days, TokenQuota = quota, EstimatedQuestions = 50,
+            Code = code, Name = code, Kind = kind, PriceVnd = price, DurationDays = days, QuotaPeriodDays = quotaPeriodDays, TokenQuota = quota,
             DisplayOrder = order, IsActive = true,
         };
 
@@ -123,8 +123,8 @@ public class PlanAdminServiceTests
 
     private static SavePlanRequest Create(
         string? code = "test-2k", string? kind = PlanKinds.Personal, string? name = "Thử 2k", string? description = "Gói thử",
-        long price = 2000, int? days = 30, long quota = 3000, int estimate = 2, bool active = true, int order = 5) =>
-        new(code, kind, name, description, price, days, quota, estimate, active, order);
+        long price = 2000, int? days = 30, int? quotaPeriodDays = 30, long quota = 3000, bool active = true, int order = 5) =>
+        new(code, kind, name, description, price, days, quotaPeriodDays, quota, active, order);
 
     private static async Task<BillingRuleException> Fails(Task task)
     {
@@ -182,7 +182,7 @@ public class PlanAdminServiceTests
 
         var stored = f.Repo.Plans.Single(p => p.Code == "test-2k");
         Assert.Equal(stored.Id, dto.Id);
-        Assert.Equal((PlanKinds.Personal, 2000L, 30, 3000L, 2, true, 5), (dto.Kind, dto.PriceVnd, dto.DurationDays, dto.TokenQuota, dto.EstimatedQuestions, dto.IsActive, dto.DisplayOrder));
+        Assert.Equal((PlanKinds.Personal, 2000L, 30, (int?)30, 3000L, true, 5), (dto.Kind, dto.PriceVnd, dto.DurationDays, dto.QuotaPeriodDays, dto.TokenQuota, dto.IsActive, dto.DisplayOrder));
         Assert.Equal((0, 0), (dto.ActiveCycles, dto.OrderCount));
         Assert.Equal(1, f.Uow.Calls);
     }
@@ -232,7 +232,7 @@ public class PlanAdminServiceTests
         var f = new Fixture();
         f.Repo.ThrowOnAdd = new PlanConflictException(PlanConflict.FreePlanExists);
 
-        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(code: "free-2", kind: PlanKinds.Free, price: 0, days: null))), "free_plan_exists", 409);
+        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(code: "free-2", kind: PlanKinds.Free, price: 0, days: null, quotaPeriodDays: null))), "free_plan_exists", 409);
 
         Assert.Empty(f.Audit.Entries);
     }
@@ -280,7 +280,7 @@ public class PlanAdminServiceTests
     {
         var f = new Fixture();
 
-        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(code: "free-2", kind: PlanKinds.Free, price: 0, days: null))), "free_plan_exists", 409);
+        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(code: "free-2", kind: PlanKinds.Free, price: 0, days: null, quotaPeriodDays: null))), "free_plan_exists", 409);
     }
 
     [Fact]
@@ -289,7 +289,7 @@ public class PlanAdminServiceTests
         var f = new Fixture();
         f.Repo.Plans.Remove(f.Free);
 
-        var dto = await f.Service.CreateAsync(Admin, Create(code: "free", kind: PlanKinds.Free, price: 0, days: 30));
+        var dto = await f.Service.CreateAsync(Admin, Create(code: "free", kind: PlanKinds.Free, price: 0, days: 30, quotaPeriodDays: null));
 
         Assert.Null(dto.DurationDays);
         Assert.Null(f.Repo.Plans.Single(p => p.Code == "free").DurationDays);
@@ -326,40 +326,79 @@ public class PlanAdminServiceTests
     }
 
     [Theory]
-    [InlineData(-1, 0, 0)]
-    [InlineData(0, -1, 0)]
-    [InlineData(0, 0, -1)]
-    [InlineData(10_000_000_000, 0, 0)]   // vượt numeric(12,2)
-    public async Task Create_NegativeOrOversizedNumbers_ReturnInvalidValue(long price, long quota, int estimate)
+    [InlineData(-1, 0)]
+    [InlineData(0, -1)]
+    [InlineData(10_000_000_000, 0)]   // vượt numeric(12,2)
+    public async Task Create_NegativeOrOversizedNumbers_ReturnInvalidValue(long price, long quota)
     {
         var f = new Fixture();
 
-        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(price: price, quota: quota, estimate: estimate))), "invalid_value", 400);
+        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(price: price, quota: quota))), "invalid_value", 400);
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData(0)]
-    [InlineData(7)]
-    [InlineData(60)]
-    [InlineData(365)]
-    public async Task Create_PaidPlanDurationNotThirtyOrNinety_ReturnsInvalidDuration(int? days)
+    [InlineData(-1)]
+    [InlineData(3651)]
+    public async Task Create_PaidPlanDurationOutOfRange_ReturnsInvalidDuration(int? days)
     {
         var f = new Fixture();
 
-        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(days: days))), "invalid_duration", 400);
+        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(days: days, quotaPeriodDays: null))), "invalid_duration", 400);
     }
 
     [Theory]
+    [InlineData(1)]
+    [InlineData(7)]
+    [InlineData(14)]
     [InlineData(30)]
     [InlineData(90)]
-    public async Task Create_ThirtyOrNinetyDays_Accepted(int days)
+    [InlineData(180)]
+    [InlineData(365)]
+    [InlineData(3650)]
+    public async Task Create_DynamicPaidDurations_Accepted(int days)
     {
         var f = new Fixture();
 
-        var dto = await f.Service.CreateAsync(Admin, Create(days: days));
+        var dto = await f.Service.CreateAsync(Admin, Create(days: days, quotaPeriodDays: null));
 
         Assert.Equal(days, dto.DurationDays);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    [InlineData(15)]   // > durationDays (14)
+    public async Task Create_PaidQuotaPeriodOutOfRange_ReturnsInvalidQuotaPeriod(int quotaPeriodDays)
+    {
+        var f = new Fixture();
+
+        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(days: 14, quotaPeriodDays: quotaPeriodDays))), "invalid_quota_period", 400);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(1)]
+    [InlineData(7)]
+    [InlineData(14)]
+    public async Task Create_PaidQuotaPeriodValid_Accepted(int? quotaPeriodDays)
+    {
+        var f = new Fixture();
+
+        var dto = await f.Service.CreateAsync(Admin, Create(days: 14, quotaPeriodDays: quotaPeriodDays));
+
+        Assert.Equal(quotaPeriodDays, dto.QuotaPeriodDays);
+    }
+
+    [Fact]
+    public async Task Create_ComputesQuotaMultiplierAgainstFreePlan()
+    {
+        var f = new Fixture();
+        // Free = 100_000 / 30 days; new plan = 500_000 / 30 days -> 5.0x
+        var dto = await f.Service.CreateAsync(Admin, Create(days: 90, quotaPeriodDays: 30, quota: 500_000));
+
+        Assert.Equal(5.0m, dto.QuotaMultiplier);
     }
 
     [Fact]
@@ -367,9 +406,10 @@ public class PlanAdminServiceTests
     {
         var f = new Fixture();
 
-        var dto = await f.Service.CreateAsync(Admin, Create(price: 0, quota: 0, estimate: 0));
+        var dto = await f.Service.CreateAsync(Admin, Create(price: 0, quota: 0));
 
         Assert.Equal(0, dto.PriceVnd);
+        Assert.Null(dto.QuotaMultiplier);
     }
 
     [Fact]
@@ -407,9 +447,10 @@ public class PlanAdminServiceTests
         var f = new Fixture();
 
         var dto = await f.Service.UpdateAsync(Admin, f.Personal.Id,
-            Create(code: null, kind: null, name: "Mới", description: "Mô tả mới", price: 150_000, days: 90, quota: 900_000, estimate: 120, active: false, order: 9));
+            Create(code: null, kind: null, name: "Mới", description: "Mô tả mới", price: 150_000, days: 90, quotaPeriodDays: 15, quota: 900_000, active: false, order: 9));
 
-        Assert.Equal(("Mới", "Mô tả mới", 150_000L, 90, 900_000L, 120, false, 9), (dto.Name, dto.Description, dto.PriceVnd, dto.DurationDays, dto.TokenQuota, dto.EstimatedQuestions, dto.IsActive, dto.DisplayOrder));
+        Assert.Equal(("Mới", "Mô tả mới", 150_000L, 90, (int?)15, 900_000L, false, 9), (dto.Name, dto.Description, dto.PriceVnd, dto.DurationDays, dto.QuotaPeriodDays, dto.TokenQuota, dto.IsActive, dto.DisplayOrder));
+        Assert.Equal(18.0m, dto.QuotaMultiplier);   // (900k/15) / (100k/30) = 18.0
         Assert.Equal(150_000m, f.Personal.PriceVnd);
         Assert.False(f.Personal.IsActive);
     }
@@ -450,12 +491,14 @@ public class PlanAdminServiceTests
         Assert.Equal("personal-1m", f.Personal.Code);
     }
 
-    [Fact]
-    public async Task Update_PaidPlanDurationNotThirtyOrNinety_ReturnsInvalidDuration()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3651)]
+    public async Task Update_PaidPlanDurationOutOfRange_ReturnsInvalidDuration(int days)
     {
         var f = new Fixture();
 
-        AssertRule(await Fails(f.Service.UpdateAsync(Admin, f.Personal.Id, Create(code: null, days: 45))), "invalid_duration", 400);
+        AssertRule(await Fails(f.Service.UpdateAsync(Admin, f.Personal.Id, Create(code: null, days: days, quotaPeriodDays: null))), "invalid_duration", 400);
 
         Assert.Equal(30, f.Personal.DurationDays);
     }
@@ -502,10 +545,31 @@ public class PlanAdminServiceTests
         var f = new Fixture();
 
         var dto = await f.Service.UpdateAsync(Admin, f.Free.Id,
-            Create(code: null, kind: null, name: "Miễn phí", description: "Hạn mức hằng tháng", price: 0, days: null, quota: 150_000, estimate: 30, active: true, order: 0));
+            Create(code: null, kind: null, name: "Miễn phí", description: "Hạn mức hằng tháng", price: 0, days: null, quotaPeriodDays: null, quota: 150_000, active: true, order: 0));
 
-        Assert.Equal(("Miễn phí", 0L, (int?)null, 150_000L, 30, true), (dto.Name, dto.PriceVnd, dto.DurationDays, dto.TokenQuota, dto.EstimatedQuestions, dto.IsActive));
+        Assert.Equal(("Miễn phí", 0L, (int?)null, (int?)null, 150_000L, true), (dto.Name, dto.PriceVnd, dto.DurationDays, dto.QuotaPeriodDays, dto.TokenQuota, dto.IsActive));
+        Assert.Null(dto.QuotaMultiplier);
         Assert.Equal(150_000, f.Free.TokenQuota);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(366)]
+    public async Task A3_Free_QuotaPeriodOutOfRange_ReturnsInvalidQuotaPeriod(int quotaPeriodDays)
+    {
+        var f = new Fixture();
+
+        AssertRule(await Fails(f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, price: 0, days: null, quotaPeriodDays: quotaPeriodDays))), "invalid_quota_period", 400);
+    }
+
+    [Fact]
+    public async Task A3_Free_ValidQuotaPeriod_Accepted()
+    {
+        var f = new Fixture();
+
+        var dto = await f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, price: 0, days: null, quotaPeriodDays: 7));
+
+        Assert.Equal(7, dto.QuotaPeriodDays);
     }
 
     [Fact]
@@ -513,7 +577,7 @@ public class PlanAdminServiceTests
     {
         var f = new Fixture();
 
-        var dto = await f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: PlanKinds.Free, price: 0, days: null));
+        var dto = await f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: PlanKinds.Free, price: 0, days: null, quotaPeriodDays: null));
 
         Assert.Equal(PlanKinds.Free, dto.Kind);
     }
@@ -523,7 +587,7 @@ public class PlanAdminServiceTests
     {
         var f = new Fixture();
 
-        var dto = await f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, price: 0, days: 30));
+        var dto = await f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, price: 0, days: 30, quotaPeriodDays: null));
 
         Assert.Null(dto.DurationDays);
         Assert.Null(f.Free.DurationDays);
@@ -534,7 +598,7 @@ public class PlanAdminServiceTests
     {
         var f = new Fixture();
 
-        AssertRule(await Fails(f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, price: 1000, days: null))), "free_plan_locked", 409);
+        AssertRule(await Fails(f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, price: 1000, days: null, quotaPeriodDays: null))), "free_plan_locked", 409);
 
         Assert.Equal(0m, f.Free.PriceVnd);
         Assert.Empty(f.Audit.Entries);
@@ -545,7 +609,7 @@ public class PlanAdminServiceTests
     {
         var f = new Fixture();
 
-        AssertRule(await Fails(f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, price: 0, days: null, active: false))), "free_plan_locked", 409);
+        AssertRule(await Fails(f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, price: 0, days: null, quotaPeriodDays: null, active: false))), "free_plan_locked", 409);
 
         Assert.True(f.Free.IsActive);
     }
@@ -662,7 +726,7 @@ public class PlanAdminServiceTests
         var pending = f.AddOrder(f.Personal, OrderStatuses.Pending);
 
         await f.Service.UpdateAsync(Admin, f.Personal.Id,
-            Create(code: null, kind: null, name: "Cá nhân", price: 50_000, days: 90, quota: 100_000, estimate: 10));
+            Create(code: null, kind: null, name: "Cá nhân", price: 50_000, days: 90, quotaPeriodDays: 30, quota: 100_000));
 
         Assert.Equal((500_000L, "personal-1m", 99_000m, 30), (cycle.TokenQuota, cycle.PlanName, cycle.PriceVnd, cycle.DurationDays));
         Assert.Equal((500_000L, 99_000m), (queued.TokenQuota, queued.PriceVnd));

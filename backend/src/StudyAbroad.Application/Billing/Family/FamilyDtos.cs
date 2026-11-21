@@ -3,7 +3,7 @@ namespace StudyAbroad.Application.Billing.Family;
 // Phản hồi gói Gia đình cho khách hàng: chỉ phần trăm, không bao giờ có số token (D4). JSON camelCase khớp frontend (types/billing.ts).
 
 /// <summary>Kỳ Gia đình đang chạy: tên gói, ngày hết hạn, phần trăm đã dùng của cả nhóm.</summary>
-public sealed record FamilyCycleDto(string PlanName, DateTime? EndsAt, int UsedPercent);
+public sealed record FamilyCycleDto(string PlanName, DateTime? EndsAt, int UsedPercent, int? QuotaPeriodDays = null, DateTimeOffset? QuotaResetsAt = null);
 
 public sealed record FamilySeatCountDto(int Used, int Max);
 

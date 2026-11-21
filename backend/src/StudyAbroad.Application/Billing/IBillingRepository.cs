@@ -20,8 +20,8 @@ public interface IBillingRepository
     /// <summary>Lời mời đang chờ và thành viên active của nhóm.</summary>
     Task<List<FamilyMember>> GetOpenMembersAsync(Guid familyGroupId, CancellationToken ct = default);
 
-    /// <summary>Token tính phí (Claude) của mọi lượt chat đóng dấu kỳ này, mọi người dùng cộng lại.</summary>
-    Task<long> SumCycleTokensAsync(Guid cycleId, CancellationToken ct = default);
+    /// <summary>Token tính phí (Claude) của mọi lượt chat đóng dấu kỳ này, mọi người dùng cộng lại (tùy chọn lọc theo cửa sổ [fromUtc, toUtc)).</summary>
+    Task<long> SumCycleTokensAsync(Guid cycleId, DateTime? fromUtc = null, DateTime? toUtc = null, CancellationToken ct = default);
 
     /// <summary>Token tính phí của các lượt chat dùng hạn mức Free (không kỳ, có plan_code) từ fromUtc.</summary>
     Task<long> SumFreeTokensAsync(Guid userId, DateTime fromUtc, CancellationToken ct = default);

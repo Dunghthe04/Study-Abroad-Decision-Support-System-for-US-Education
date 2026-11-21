@@ -27,10 +27,10 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
     public List<SubscriptionPlan> Plans { get; } =
     [
         new() { Code = "free", Name = "Miễn phí", Kind = PlanKinds.Free, TokenQuota = 120_000, DisplayOrder = 0 },
-        new() { Code = "personal-1m", Name = "Cá nhân 1 tháng", Kind = PlanKinds.Personal, PriceVnd = 79_000, DurationDays = 30, TokenQuota = 500_000, DisplayOrder = 1 },
-        new() { Code = "personal-3m", Name = "Cá nhân 3 tháng", Kind = PlanKinds.Personal, PriceVnd = 199_000, DurationDays = 90, TokenQuota = 1_800_000, DisplayOrder = 2 },
-        new() { Code = "family-1m", Name = "Gia đình 1 tháng", Kind = PlanKinds.Family, PriceVnd = 99_000, DurationDays = 30, TokenQuota = 500_000, DisplayOrder = 3 },
-        new() { Code = "family-3m", Name = "Gia đình 3 tháng", Kind = PlanKinds.Family, PriceVnd = 249_000, DurationDays = 90, TokenQuota = 1_800_000, DisplayOrder = 4 },
+        new() { Code = "personal-1m", Name = "Cá nhân 1 tháng", Kind = PlanKinds.Personal, PriceVnd = 79_000, DurationDays = 30, QuotaPeriodDays = 30, TokenQuota = 500_000, DisplayOrder = 1 },
+        new() { Code = "personal-3m", Name = "Cá nhân 3 tháng", Kind = PlanKinds.Personal, PriceVnd = 199_000, DurationDays = 90, QuotaPeriodDays = 30, TokenQuota = 600_000, DisplayOrder = 2 },
+        new() { Code = "family-1m", Name = "Gia đình 1 tháng", Kind = PlanKinds.Family, PriceVnd = 99_000, DurationDays = 30, QuotaPeriodDays = 30, TokenQuota = 500_000, DisplayOrder = 3 },
+        new() { Code = "family-3m", Name = "Gia đình 3 tháng", Kind = PlanKinds.Family, PriceVnd = 249_000, DurationDays = 90, QuotaPeriodDays = 30, TokenQuota = 600_000, DisplayOrder = 4 },
     ];
     public List<UserSubscription> Cycles { get; private set; } = [];
     public List<FamilyGroup> Groups { get; private set; } = [];
@@ -68,14 +68,16 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
 
     public SubscriptionPlan Plan(string code) => Plans.Single(p => p.Code == code);
 
-    public UserSubscription AddActive(Guid owner, string planCode, DateTime? startsAt = null, long? quota = null)
+    public UserSubscription AddActive(Guid owner, string planCode, DateTime? startsAt = null, long? quota = null, int? quotaPeriodDays = null)
     {
         var plan = Plan(planCode);
         var start = startsAt ?? Now.AddDays(-1);
         var cycle = new UserSubscription
         {
             UserId = owner, SubscriptionPlanId = plan.Id, Kind = plan.Kind, Status = CycleStatuses.Active, StartsAt = start,
-            EndsAt = start.AddDays(plan.DurationDays!.Value), DurationDays = plan.DurationDays!.Value, TokenQuota = quota ?? plan.TokenQuota, PlanName = plan.Name,
+            EndsAt = start.AddDays(plan.DurationDays!.Value), DurationDays = plan.DurationDays!.Value,
+            QuotaPeriodDays = quotaPeriodDays ?? plan.QuotaPeriodDays,
+            TokenQuota = quota ?? plan.TokenQuota, PlanName = plan.Name,
             PriceVnd = plan.PriceVnd,
         };
         Cycles.Add(cycle);
@@ -88,7 +90,8 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
         var cycle = new UserSubscription
         {
             UserId = owner, SubscriptionPlanId = plan.Id, Kind = plan.Kind, Status = CycleStatuses.Queued,
-            DurationDays = plan.DurationDays!.Value, TokenQuota = plan.TokenQuota, PlanName = plan.Name, PriceVnd = plan.PriceVnd,
+            DurationDays = plan.DurationDays!.Value, QuotaPeriodDays = plan.QuotaPeriodDays,
+            TokenQuota = plan.TokenQuota, PlanName = plan.Name, PriceVnd = plan.PriceVnd,
             FamilyGroupId = plan.Kind == PlanKinds.Family ? Groups.First(g => g.OwnerUserId == owner && g.Status == FamilyGroupStatuses.Active).Id : null,
         };
         Cycles.Add(cycle);
@@ -110,10 +113,10 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
         return cycle;
     }
 
-    public void Use(Guid userId, UserSubscription cycle, int tokens) => Calls.Add(new AiCall
+    public void Use(Guid userId, UserSubscription cycle, int tokens, DateTime? at = null) => Calls.Add(new AiCall
     {
         UserId = userId, Kind = BillingRules.MeteredAiKind, TotalTokens = tokens, UserSubscriptionId = cycle.Id, PlanCode = Plans.Single(p => p.Id == cycle.SubscriptionPlanId).Code,
-        CreatedAt = Now.AddHours(-1),
+        CreatedAt = at ?? Now.AddHours(-1),
     });
 
     // ---- IBillingRepository
@@ -135,8 +138,8 @@ internal sealed partial class BillingStore : IBillingRepository, IOrderRepositor
         Task.FromResult(Members.Where(m => m.FamilyGroupId == familyGroupId
             && (m.Status == FamilyMemberStatuses.Pending || m.Status == FamilyMemberStatuses.Active)).ToList());
 
-    public Task<long> SumCycleTokensAsync(Guid cycleId, CancellationToken ct = default) =>
-        Task.FromResult(Calls.AsQueryable().Where(MeteringFilters.Cycle(cycleId)).Sum(a => (long)(a.TotalTokens ?? 0)));
+    public Task<long> SumCycleTokensAsync(Guid cycleId, DateTime? fromUtc = null, DateTime? toUtc = null, CancellationToken ct = default) =>
+        Task.FromResult(Calls.AsQueryable().Where(MeteringFilters.Cycle(cycleId, fromUtc, toUtc)).Sum(a => (long)(a.TotalTokens ?? 0)));
 
     public Task<long> SumFreeTokensAsync(Guid userId, DateTime fromUtc, CancellationToken ct = default) =>
         Task.FromResult(Calls.AsQueryable().Where(MeteringFilters.Free(userId, fromUtc)).Sum(a => (long)(a.TotalTokens ?? 0)));

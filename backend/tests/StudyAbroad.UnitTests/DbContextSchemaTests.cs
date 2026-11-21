@@ -144,7 +144,11 @@ public class DbContextSchemaTests
         var plan = db.Model.FindEntityType(typeof(SubscriptionPlan))!;
         Assert.Null(plan.FindProperty("DailyAiChatQuota"));
         Assert.Null(plan.FindProperty("MaxLeadsQuota"));
+        Assert.Null(plan.FindProperty("EstimatedQuestions"));
         Assert.True(plan.FindProperty(nameof(SubscriptionPlan.DurationDays))!.IsNullable);
+        Assert.True(plan.FindProperty(nameof(SubscriptionPlan.QuotaPeriodDays))!.IsNullable);
+        Assert.True(cycle.FindProperty(nameof(UserSubscription.QuotaPeriodDays))!.IsNullable);
+        Assert.True(db.Model.FindEntityType(typeof(PaymentTransaction))!.FindProperty(nameof(PaymentTransaction.PlanQuotaPeriodDays))!.IsNullable);
         Assert.Equal(16, plan.FindProperty(nameof(SubscriptionPlan.Kind))!.GetMaxLength());
         Assert.True(HasUniqueIndex<PaymentTransaction>(db, nameof(PaymentTransaction.OrderCode)));
         Assert.True(db.Model.FindEntityType(typeof(FamilyMember))!.FindProperty(nameof(FamilyMember.Version))!.IsConcurrencyToken);
@@ -163,7 +167,7 @@ public class DbContextSchemaTests
 
         var designModel = db.GetService<IDesignTimeModel>().Model;   // ràng buộc kiểm tra chỉ có trong model lúc thiết kế
         Assert.Equal(
-            ["ck_subscription_plans_duration", "ck_subscription_plans_kind"],
+            ["ck_subscription_plans_duration", "ck_subscription_plans_kind", "ck_subscription_plans_quota_period"],
             designModel.FindEntityType(typeof(SubscriptionPlan))!.GetCheckConstraints().Select(c => c.Name).Order());
         Assert.Contains("'mismatch'", designModel.FindEntityType(typeof(PaymentTransaction))!.GetCheckConstraints()
             .Single(c => c.Name == "ck_payment_transactions_status").Sql);

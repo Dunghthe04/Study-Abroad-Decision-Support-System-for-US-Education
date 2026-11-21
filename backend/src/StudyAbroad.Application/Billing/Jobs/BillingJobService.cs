@@ -86,27 +86,39 @@ public sealed class BillingJobService(
         var cycles = await jobs.FindActiveCyclesAwaitingUsageNoticeAsync(ct);
         if (cycles.Count == 0)
             return 0;
-        var used = await jobs.SumCycleTokensAsync(cycles.Select(c => c.Id).ToList(), ct);
+        var singleWindowIds = cycles
+            .Where(c => !(c.QuotaPeriodDays is > 0 && c.QuotaPeriodDays.Value < c.DurationDays))
+            .Select(c => c.Id)
+            .ToList();
+        var used = singleWindowIds.Count > 0
+            ? await jobs.SumCycleTokensAsync(singleWindowIds, ct)
+            : new Dictionary<Guid, long>();
 
         var handled = 0;
         foreach (var cycle in cycles)
         {
-            var tokens = used.GetValueOrDefault(cycle.Id);
-            var reached80 = cycle.Warned80At is null && CycleRules.IsLowQuota(CycleRules.UsedPercent(tokens, cycle.TokenQuota));
-            var reached100 = cycle.ExhaustedNotifiedAt is null && CycleRules.IsExhausted(tokens, cycle.TokenQuota);
+            var (windowStart, windowEnd, _) = CycleRules.CycleWindowUtc(cycle, nowUtc);
+            var isRecurring = cycle.QuotaPeriodDays is > 0 && cycle.QuotaPeriodDays.Value < cycle.DurationDays;
+            var tokens = isRecurring
+                ? await billing.SumCycleTokensAsync(cycle.Id, windowStart, windowEnd, ct)
+                : used.GetValueOrDefault(cycle.Id);
+            var warnedInWindow = cycle.Warned80At is { } w && w >= windowStart;
+            var exhaustedInWindow = cycle.ExhaustedNotifiedAt is { } e && e >= windowStart;
+            var reached80 = !warnedInWindow && CycleRules.IsLowQuota(CycleRules.UsedPercent(tokens, cycle.TokenQuota));
+            var reached100 = !exhaustedInWindow && CycleRules.IsExhausted(tokens, cycle.TokenQuota);
             if (!reached80 && !reached100)
                 continue;
             var flagged = false;
             var ok = await TryAsync($"thông báo dùng hạn mức kỳ {cycle.Id}", async () =>
             {
-                // Danh sách đọc không theo dõi: nạp riêng kỳ này (đang theo dõi) rồi mới ghi dấu; kỳ đã được báo trong lúc đó thì thôi
+                // Danh sách đọc không theo dõi: nạp riêng kỳ này (đang theo dõi) rồi mới ghi dấu; kỳ đã được báo trong cửa sổ này thì thôi
                 if (await jobs.FindCycleAsync(cycle.Id, ct) is not { } tracked)
                     return;
-                var send80 = reached80 && tracked.Warned80At is null;
-                var send100 = reached100 && tracked.ExhaustedNotifiedAt is null;
+                var send80 = reached80 && !(tracked.Warned80At is { } tw && tw >= windowStart);
+                var send100 = reached100 && !(tracked.ExhaustedNotifiedAt is { } te && te >= windowStart);
                 if (!send80 && !send100)
                     return;
-                // Ghi dấu trước rồi mới gửi (một lần mỗi kỳ)
+                // Ghi dấu trước rồi mới gửi (một lần mỗi cửa sổ)
                 if (send80)
                     tracked.Warned80At = nowUtc;
                 if (send100)

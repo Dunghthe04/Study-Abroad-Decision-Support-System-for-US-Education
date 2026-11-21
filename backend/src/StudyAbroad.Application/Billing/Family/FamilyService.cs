@@ -32,7 +32,21 @@ public class FamilyService(
         var (group, isOwner) = await FindCurrentGroupAsync(userId, nowUtc, ct) ?? throw FamilyErrors.NotInFamily();
 
         var cycle = (await billing.GetOpenCyclesAsync(group.OwnerUserId, PlanKinds.Family, ct)).FirstOrDefault(c => c.Status == CycleStatuses.Active);
-        var tokensByUser = cycle is null ? [] : await family.SumTokensByUserAsync(cycle.Id, ct);
+        DateTime? windowStart = null;
+        DateTime? windowEnd = null;
+        DateTimeOffset? quotaResetsAt = null;
+        if (cycle is not null)
+        {
+            var (ws, we, isFinal) = CycleRules.CycleWindowUtc(cycle, nowUtc);
+            if (cycle.QuotaPeriodDays is > 0 && cycle.QuotaPeriodDays.Value < cycle.DurationDays)
+            {
+                windowStart = ws;
+                windowEnd = we;
+            }
+            if (!isFinal)
+                quotaResetsAt = CycleRules.ToVietnamTime(we);
+        }
+        var tokensByUser = cycle is null ? [] : await family.SumTokensByUserAsync(cycle.Id, windowStart, windowEnd, ct);
         int Share(Guid personId) =>
             cycle is not null && tokensByUser.TryGetValue(personId, out var tokens) && tokens > 0 ? CycleRules.UsedPercent(tokens, cycle.TokenQuota) : 0;
 
@@ -62,7 +76,9 @@ public class FamilyService(
 
         return new FamilyDto(
             group.Id, isOwner, ownerName,
-            cycle is null ? null : new FamilyCycleDto(cycle.PlanName, cycle.EndsAt, CycleRules.UsedPercent(await billing.SumCycleTokensAsync(cycle.Id, ct), cycle.TokenQuota)),
+            cycle is null ? null : new FamilyCycleDto(cycle.PlanName, cycle.EndsAt,
+                CycleRules.UsedPercent(await billing.SumCycleTokensAsync(cycle.Id, windowStart, windowEnd, ct), cycle.TokenQuota),
+                cycle.QuotaPeriodDays, quotaResetsAt),
             seats, members, invites);
     }
 

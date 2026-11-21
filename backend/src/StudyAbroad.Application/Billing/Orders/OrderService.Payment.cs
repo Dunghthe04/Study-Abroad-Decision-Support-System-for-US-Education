@@ -147,6 +147,7 @@ public sealed partial class OrderService
             PlanName = order.PlanName,
             PriceVnd = order.AmountVnd,
             DurationDays = order.PlanDurationDays,
+            QuotaPeriodDays = order.PlanQuotaPeriodDays,
             ActivatedFromOrderId = order.Id,
             CreatedAt = now,
         };

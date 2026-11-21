@@ -409,7 +409,9 @@ def phase_plans_and_setup():
         expect(by["free"]["priceVnd"] == 0 and by["free"]["durationDays"] is None, "gói free")
         expect(by["personal-1m"]["priceVnd"] == 79000 and by["personal-1m"]["durationDays"] == 30, "personal-1m")
         expect(by["family-3m"]["seats"] == {"students": 1, "parents": 2} and by["personal-1m"]["seats"] is None, "seats")
-        expect(all({"code", "name", "kind", "priceVnd", "estimatedQuestions"} <= set(p) for p in plans), "thiếu trường")
+        expect(all({"code", "name", "kind", "priceVnd", "quotaPeriodDays", "quotaMultiplier"} <= set(p) for p in plans), "thiếu trường")
+        expect(by["free"]["quotaMultiplier"] is None and by["personal-1m"]["quotaPeriodDays"] == 30 and by["personal-3m"]["quotaPeriodDays"] == 30, "quotaPeriodDays/quotaMultiplier")
+        expect(by["personal-1m"]["quotaMultiplier"] and by["personal-1m"]["quotaMultiplier"] > 0, "quotaMultiplier")
         note(f"{len(plans)} gói")
 
     with case("P11-setup", "tạo đơn chờ cho P11 (job làm hết hạn, kiểm ở cuối)"):
@@ -743,8 +745,8 @@ def phase_admin():
     admin = ADMIN()
     plans = lambda: status(admin.get("/api/v1/admin/plans"), 200)
     pick = lambda code: next(p for p in plans() if p["code"] == code)
-    body = lambda p, **over: {**{k: p[k] for k in ("code", "kind", "name", "description", "priceVnd", "durationDays", "tokenQuota",
-                                                    "estimatedQuestions", "isActive", "displayOrder")}, **over}
+    body = lambda p, **over: {**{k: p[k] for k in ("code", "kind", "name", "description", "priceVnd", "durationDays", "quotaPeriodDays", "tokenQuota",
+                                                    "isActive", "displayOrder")}, **over}
 
     with case("A-list", "GET admin/plans: đủ 5 gói, có tokenQuota (admin được xem)"):
         ps = plans()
@@ -757,12 +759,14 @@ def phase_admin():
 
     new_code = f"e2e-{RUN}"
     plan_id = {}
-    with case("A5", "tạo, sửa, xóa gói: có dòng audit plan.create / plan.update / plan.delete kèm before-after") as note:
-        draft = {"code": new_code, "kind": "personal", "name": "E2E 2k", "description": "gói thử", "priceVnd": 2000, "durationDays": 30,
-                 "tokenQuota": 3000, "estimatedQuestions": 1, "isActive": False, "displayOrder": 90}
+    with case("A5", "tạo, sửa, xóa gói động (14 ngày / chu kỳ 7 ngày): kiểm tra validation và audit plan.create / plan.update / plan.delete") as note:
+        draft = {"code": new_code, "kind": "personal", "name": "E2E 2k", "description": "gói thử", "priceVnd": 2000, "durationDays": 14,
+                 "quotaPeriodDays": 7, "tokenQuota": 140000, "isActive": False, "displayOrder": 90}
+        status(admin.post("/api/v1/admin/plans", json={**draft, "durationDays": 0}), 400, "invalid_duration")
+        status(admin.post("/api/v1/admin/plans", json={**draft, "quotaPeriodDays": 15}), 400, "invalid_quota_period")
         created = status(admin.post("/api/v1/admin/plans", json=draft), 201)
         plan_id["id"] = created["id"]
-        expect(created["priceVnd"] == 2000 and created["tokenQuota"] == 3000 and created["activeCycles"] == 0 and created["orderCount"] == 0, created)
+        expect(created["priceVnd"] == 2000 and created["durationDays"] == 14 and created["quotaPeriodDays"] == 7 and created["tokenQuota"] == 140000 and created["quotaMultiplier"] == 5.0 and created["activeCycles"] == 0 and created["orderCount"] == 0, created)
         upd = status(admin.put(f"/api/v1/admin/plans/{created['id']}", json={**draft, "priceVnd": 2500, "code": "bị-bỏ-qua"}), 200)
         expect(upd["priceVnd"] == 2500 and upd["code"] == new_code, f"code không được đổi: {upd}")
         status(admin.delete(f"/api/v1/admin/plans/{created['id']}"), 204)

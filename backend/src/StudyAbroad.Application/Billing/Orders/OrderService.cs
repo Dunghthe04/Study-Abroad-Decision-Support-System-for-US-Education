@@ -68,6 +68,7 @@ public sealed partial class OrderService(
             PlanKind = plan.Kind,
             PlanName = plan.Name,
             PlanDurationDays = durationDays,
+            PlanQuotaPeriodDays = plan.QuotaPeriodDays,
             PlanTokenQuota = plan.TokenQuota,
             AmountVnd = plan.PriceVnd,
             Gateway = GatewayName,

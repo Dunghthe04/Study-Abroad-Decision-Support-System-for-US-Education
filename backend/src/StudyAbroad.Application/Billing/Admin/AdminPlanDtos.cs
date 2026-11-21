@@ -8,10 +8,11 @@ namespace StudyAbroad.Application.Billing.Admin;
 /// <param name="OrderCount">Số đơn hàng của gói, mọi trạng thái.</param>
 public sealed record AdminPlanDto(
     Guid Id, string Code, string Name, string? Description, string Kind, long PriceVnd, int? DurationDays,
-    int EstimatedQuestions, PlanSeatsDto? Seats, long TokenQuota, bool IsActive, int DisplayOrder, int ActiveCycles, int OrderCount)
+    int? QuotaPeriodDays, decimal? QuotaMultiplier, PlanSeatsDto? Seats, long TokenQuota, bool IsActive, int DisplayOrder, int ActiveCycles, int OrderCount)
 {
-    public static AdminPlanDto From(SubscriptionPlan plan, PlanUsage usage) => new(
-        plan.Id, plan.Code, plan.Name, plan.Description, plan.Kind, (long)plan.PriceVnd, plan.DurationDays, plan.EstimatedQuestions,
+    public static AdminPlanDto From(SubscriptionPlan plan, PlanUsage usage, SubscriptionPlan? freePlan = null) => new(
+        plan.Id, plan.Code, plan.Name, plan.Description, plan.Kind, (long)plan.PriceVnd, plan.DurationDays,
+        plan.QuotaPeriodDays, CycleRules.QuotaMultiplier(plan, freePlan),
         plan.Kind == PlanKinds.Family ? new PlanSeatsDto(FamilySeats.MaxStudents, FamilySeats.MaxParents) : null,
         plan.TokenQuota, plan.IsActive, plan.DisplayOrder, usage.ActiveCycles, usage.Orders);
 }
@@ -22,7 +23,7 @@ public sealed record AdminPlanDto(
 /// </summary>
 public sealed record SavePlanRequest(
     string? Code, string? Kind, string? Name, string? Description, long PriceVnd, int? DurationDays,
-    long TokenQuota, int EstimatedQuestions, bool IsActive, int DisplayOrder);
+    int? QuotaPeriodDays, long TokenQuota, bool IsActive, int DisplayOrder);
 
 /// <summary>Số kỳ và đơn tham chiếu một gói. <paramref name="Cycles"/> tính mọi trạng thái (chặn xóa), <paramref name="ActiveCycles"/> chỉ active + queued.</summary>
 public sealed record PlanUsage(int ActiveCycles, int Cycles, int Orders);

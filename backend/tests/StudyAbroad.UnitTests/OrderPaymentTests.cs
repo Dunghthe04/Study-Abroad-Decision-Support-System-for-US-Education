@@ -364,7 +364,8 @@ public class OrderPaymentTests
 
         Assert.Equal(PaymentApplyStatus.Queued, result.Status);
         var queued = h.Store.Cycles.Single(c => c.Id == result.CycleId);
-        Assert.Equal((CycleStatuses.Queued, (DateTime?)null, (DateTime?)null, 90, 1_800_000L), (queued.Status, queued.StartsAt, queued.EndsAt, queued.DurationDays, queued.TokenQuota));
+        Assert.Equal((CycleStatuses.Queued, (DateTime?)null, (DateTime?)null, 90, (int?)30, 600_000L),
+            (queued.Status, queued.StartsAt, queued.EndsAt, queued.DurationDays, queued.QuotaPeriodDays, queued.TokenQuota));
         Assert.Equal(CycleStatuses.Active, active.Status);
         Assert.Contains("bắt đầu khi kỳ hiện tại kết thúc", Assert.Single(h.Notes.Sent).Body);
         Assert.Single(h.Email.SentEmails);

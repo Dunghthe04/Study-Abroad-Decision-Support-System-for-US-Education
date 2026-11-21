@@ -27,6 +27,7 @@ internal sealed partial class BillingStore : IBillingJobRepository, IAdminOrderR
         // Kỳ queued chỉ làm làn tới hạn khi kỳ active của nó chuyển được ngay (cùng luật với BillingJobRepository)
         var queuedReady = Cycles.Where(q => q.Status == CycleStatuses.Queued && Cycles.Where(a => a.UserId == q.UserId && a.Kind == q.Kind && a.Status == CycleStatuses.Active)
                 .DefaultIfEmpty().Any(a => a is null || a.EndsAt == null || a.EndsAt <= nowUtc || a.TokenQuota <= 0
+                    || (a.QuotaPeriodDays != null && a.QuotaPeriodDays < a.DurationDays)
                     || Calls.Where(t => t.UserSubscriptionId == a.Id && t.Kind == BillingRules.MeteredAiKind).Sum(t => (long)(t.TotalTokens ?? 0)) >= a.TokenQuota))
             .Select(c => new LaneRef(c.UserId, c.Kind));
         var lapsed = Groups.Where(g => g.Status == FamilyGroupStatuses.Active
@@ -40,7 +41,8 @@ internal sealed partial class BillingStore : IBillingJobRepository, IAdminOrderR
             && !Cycles.Any(q => q.UserId == c.UserId && q.Kind == c.Kind && q.Status == CycleStatuses.Queued)).ToList());
 
     public Task<List<UserSubscription>> FindActiveCyclesAwaitingUsageNoticeAsync(CancellationToken ct = default) =>
-        Task.FromResult(Cycles.Where(c => c.Status == CycleStatuses.Active && c.TokenQuota > 0 && (c.Warned80At == null || c.ExhaustedNotifiedAt == null)).ToList());
+        Task.FromResult(Cycles.Where(c => c.Status == CycleStatuses.Active && c.TokenQuota > 0
+            && (c.Warned80At == null || c.ExhaustedNotifiedAt == null || (c.QuotaPeriodDays != null && c.QuotaPeriodDays < c.DurationDays))).ToList());
 
     public Task<UserSubscription?> FindCycleAsync(Guid cycleId, CancellationToken ct = default) =>
         Task.FromResult(Cycles.FirstOrDefault(c => c.Id == cycleId));

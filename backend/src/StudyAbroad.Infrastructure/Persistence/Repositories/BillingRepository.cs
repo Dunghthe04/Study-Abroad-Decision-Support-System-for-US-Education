@@ -29,8 +29,8 @@ public class BillingRepository(AppDbContext db) : IBillingRepository
             .Where(m => m.FamilyGroupId == familyGroupId && (m.Status == FamilyMemberStatuses.Pending || m.Status == FamilyMemberStatuses.Active))
             .ToListAsync(ct);
 
-    public async Task<long> SumCycleTokensAsync(Guid cycleId, CancellationToken ct = default) =>
-        await db.AiCalls.Where(MeteringFilters.Cycle(cycleId)).SumAsync(a => (long?)a.TotalTokens, ct) ?? 0;
+    public async Task<long> SumCycleTokensAsync(Guid cycleId, DateTime? fromUtc = null, DateTime? toUtc = null, CancellationToken ct = default) =>
+        await db.AiCalls.Where(MeteringFilters.Cycle(cycleId, fromUtc, toUtc)).SumAsync(a => (long?)a.TotalTokens, ct) ?? 0;
 
     public async Task<long> SumFreeTokensAsync(Guid userId, DateTime fromUtc, CancellationToken ct = default) =>
         await db.AiCalls.Where(MeteringFilters.Free(userId, fromUtc)).SumAsync(a => (long?)a.TotalTokens, ct) ?? 0;

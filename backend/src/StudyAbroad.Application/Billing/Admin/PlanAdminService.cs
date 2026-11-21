@@ -18,13 +18,16 @@ public sealed partial class PlanAdminService(IPlanAdminRepository plans, IAuditL
     private const int MaxDescriptionLength = 1000;
     /// <summary>Cột price_vnd là numeric(12,2): tối đa 10 chữ số phần nguyên.</summary>
     private const long MaxPriceVnd = 9_999_999_999;
-    private static readonly int[] PaidDurations = [30, 90];
 
     [GeneratedRegex("^[a-z0-9]+(-[a-z0-9]+)*$")]
     private static partial Regex CodePattern();
 
-    public async Task<IReadOnlyList<AdminPlanDto>> ListAsync(CancellationToken ct = default) =>
-        (await plans.ListAsync(ct)).Select(r => AdminPlanDto.From(r.Plan, r.Usage)).ToList();
+    public async Task<IReadOnlyList<AdminPlanDto>> ListAsync(CancellationToken ct = default)
+    {
+        var rows = await plans.ListAsync(ct);
+        var freePlan = rows.Select(r => r.Plan).FirstOrDefault(p => p.Kind == PlanKinds.Free);
+        return rows.Select(r => AdminPlanDto.From(r.Plan, r.Usage, freePlan)).ToList();
+    }
 
     public async Task<AdminPlanDto> CreateAsync(Guid adminUserId, SavePlanRequest request, CancellationToken ct = default)
     {
@@ -55,7 +58,10 @@ public sealed partial class PlanAdminService(IPlanAdminRepository plans, IAuditL
                 throw ToRule(ex);
             }
             await AuditAsync(adminUserId, "plan.create", plan, before: null, after: Snapshot(plan), txCt);
-            result = AdminPlanDto.From(plan, new PlanUsage(0, 0, 0));
+            var freePlan = plan.Kind == PlanKinds.Free
+                ? plan
+                : (await plans.ListAsync(txCt)).Select(r => r.Plan).FirstOrDefault(p => p.Kind == PlanKinds.Free);
+            result = AdminPlanDto.From(plan, new PlanUsage(0, 0, 0), freePlan);
         }, ct);
         return result!;
     }
@@ -76,7 +82,10 @@ public sealed partial class PlanAdminService(IPlanAdminRepository plans, IAuditL
             fields.ApplyTo(plan);
             await plans.SaveAsync(txCt);
             await AuditAsync(adminUserId, "plan.update", plan, before, after: Snapshot(plan), txCt);
-            result = AdminPlanDto.From(plan, found.Usage);
+            var freePlan = plan.Kind == PlanKinds.Free
+                ? plan
+                : (await plans.ListAsync(txCt)).Select(r => r.Plan).FirstOrDefault(p => p.Kind == PlanKinds.Free);
+            result = AdminPlanDto.From(plan, found.Usage, freePlan);
         }, ct);
         return result!;
     }
@@ -115,26 +124,31 @@ public sealed partial class PlanAdminService(IPlanAdminRepository plans, IAuditL
         var description = string.IsNullOrWhiteSpace(r.Description) ? null : r.Description.Trim();
         if (description is { Length: > MaxDescriptionLength })
             throw Rule("invalid_value", 400, "Mô tả tối đa 1000 ký tự.");
-        if (r.PriceVnd is < 0 or > MaxPriceVnd || r.TokenQuota < 0 || r.EstimatedQuestions < 0)
-            throw Rule("invalid_value", 400, "Giá, hạn mức token và số câu hỏi ước lượng phải là số không âm.");
+        if (r.PriceVnd is < 0 or > MaxPriceVnd || r.TokenQuota < 0)
+            throw Rule("invalid_value", 400, "Giá và hạn mức token phải là số không âm.");
 
         int? durationDays = null;
+        int? quotaPeriodDays = r.QuotaPeriodDays;
         if (kind == PlanKinds.Free)
         {
             if (r.PriceVnd != 0 || !r.IsActive)
                 throw FreePlanLocked();
+            if (quotaPeriodDays is < 1 or > 365)
+                throw Rule("invalid_quota_period", 400, "Chu kỳ cấp token gói miễn phí phải từ 1 đến 365 ngày.");
         }
         else
         {
-            if (r.DurationDays is not { } days || !PaidDurations.Contains(days))
-                throw Rule("invalid_duration", 400, "Thời hạn chỉ được 30 hoặc 90 ngày.");
+            if (r.DurationDays is not { } days || days is < 1 or > 3650)
+                throw Rule("invalid_duration", 400, "Thời hạn gói trả phí phải từ 1 đến 3650 ngày.");
             durationDays = days;
+            if (quotaPeriodDays is { } qp && (qp < 1 || qp > days))
+                throw Rule("invalid_quota_period", 400, "Chu kỳ cấp token phải từ 1 đến bằng thời hạn gói.");
         }
-        return new PlanFields(name, description, r.PriceVnd, durationDays, r.TokenQuota, r.EstimatedQuestions, r.IsActive, r.DisplayOrder);
+        return new PlanFields(name, description, r.PriceVnd, durationDays, quotaPeriodDays, r.TokenQuota, r.IsActive, r.DisplayOrder);
     }
 
     private sealed record PlanFields(
-        string Name, string? Description, long PriceVnd, int? DurationDays, long TokenQuota, int EstimatedQuestions, bool IsActive, int DisplayOrder)
+        string Name, string? Description, long PriceVnd, int? DurationDays, int? QuotaPeriodDays, long TokenQuota, bool IsActive, int DisplayOrder)
     {
         public void ApplyTo(SubscriptionPlan plan)
         {
@@ -142,8 +156,8 @@ public sealed partial class PlanAdminService(IPlanAdminRepository plans, IAuditL
             plan.Description = Description;
             plan.PriceVnd = PriceVnd;
             plan.DurationDays = DurationDays;
+            plan.QuotaPeriodDays = QuotaPeriodDays;
             plan.TokenQuota = TokenQuota;
-            plan.EstimatedQuestions = EstimatedQuestions;
             plan.IsActive = IsActive;
             plan.DisplayOrder = DisplayOrder;
         }
@@ -152,7 +166,7 @@ public sealed partial class PlanAdminService(IPlanAdminRepository plans, IAuditL
     private static object Snapshot(SubscriptionPlan p) => new
     {
         code = p.Code, name = p.Name, description = p.Description, kind = p.Kind, priceVnd = (long)p.PriceVnd, durationDays = p.DurationDays,
-        tokenQuota = p.TokenQuota, estimatedQuestions = p.EstimatedQuestions, isActive = p.IsActive, displayOrder = p.DisplayOrder,
+        quotaPeriodDays = p.QuotaPeriodDays, tokenQuota = p.TokenQuota, isActive = p.IsActive, displayOrder = p.DisplayOrder,
     };
 
     private Task AuditAsync(Guid adminUserId, string action, SubscriptionPlan plan, object? before, object? after, CancellationToken ct) =>

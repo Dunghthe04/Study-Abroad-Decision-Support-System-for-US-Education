@@ -730,6 +730,40 @@ public class BillingJobTests
         Assert.Equal(new[] { owner.Id, member.Id }.Order(), j.Sent(NotificationTypes.BillingUsage80).Select(n => n.UserId).Order());
     }
 
+    [Fact]
+    public async Task RecurringCycle_Notifies80And100PerWindow_AndOnlyRollsOverInFinalWindow()
+    {
+        var j = new JobHarness();
+        var owner = j.AddUser();
+        var start = Now.AddDays(-35);   // đang ở cửa sổ 1 (ngày 30..60) của gói 90d/30d
+        var cycle = j.Store.AddActive(owner.Id, "personal-3m", start, quota: 1_000);
+        var queued = j.Store.AddQueued(owner.Id, "personal-1m");
+        // Cửa sổ 0 đã cảnh báo và dùng hết
+        j.Store.Use(owner.Id, cycle, 1_000, start.AddDays(5));
+        cycle.Warned80At = start.AddDays(4);
+        cycle.ExhaustedNotifiedAt = start.AddDays(5);
+
+        // Cửa sổ 1: chưa dùng gì -> không rollover, không báo
+        await j.Jobs.AdvanceDueLanesAsync(Now);
+        Assert.Equal((CycleStatuses.Active, CycleStatuses.Queued), (cycle.Status, queued.Status));
+        Assert.Empty(j.Notes.Sent);
+        Assert.Equal(0, await j.Jobs.SendUsageNotificationsAsync(Now));
+
+        // Cửa sổ 1 dùng hết -> báo 80% và 100% lại cho cửa sổ 1, nhưng vẫn KHÔNG rollover vì chưa phải cửa sổ cuối
+        j.Store.Use(owner.Id, cycle, 1_000, Now.AddMinutes(-1));
+        Assert.Equal(1, await j.Jobs.SendUsageNotificationsAsync(Now));
+        await j.Jobs.AdvanceDueLanesAsync(Now);
+        Assert.Equal((CycleStatuses.Active, CycleStatuses.Queued), (cycle.Status, queued.Status));
+        Assert.Single(j.Sent(NotificationTypes.BillingUsage80));
+        Assert.Single(j.Sent(NotificationTypes.BillingUsage100));
+
+        // Cửa sổ cuối (ngày 65) dùng hết -> rollover sang kỳ queued
+        var finalNow = start.AddDays(65);
+        j.Store.Use(owner.Id, cycle, 1_000, finalNow.AddMinutes(-1));
+        await j.Jobs.AdvanceDueLanesAsync(finalNow);
+        Assert.Equal((CycleEndReasons.ExhaustedRollover, CycleStatuses.Active), (cycle.EndedReason, queued.Status));
+    }
+
     // Mục lỗi làm bước dừng (lỗi lưu / gửi thường là sự cố chung); lượt sau nạp lại và làm tiếp.
     // Quan trọng: kỳ sau không được gửi thông báo khi dấu chưa lưu, nếu không lượt sau sẽ gửi lặp.
     [Fact]

@@ -37,6 +37,7 @@ public class BillingJobRepository(AppDbContext db) : IBillingJobRepository
                 && (!db.UserSubscriptions.Any(a => a.UserId == q.UserId && a.Kind == q.Kind && a.Status == CycleStatuses.Active)
                     || db.UserSubscriptions.Any(a => a.UserId == q.UserId && a.Kind == q.Kind && a.Status == CycleStatuses.Active
                         && (a.EndsAt == null || a.EndsAt <= nowUtc || a.TokenQuota <= 0
+                            || (a.QuotaPeriodDays != null && a.QuotaPeriodDays < a.DurationDays)
                             || db.AiCalls.Where(t => t.UserSubscriptionId == a.Id && t.Kind == BillingRules.MeteredAiKind).Sum(t => (long?)t.TotalTokens) >= a.TokenQuota))))
             .Select(c => new { c.UserId, c.Kind })
             .Distinct()
@@ -61,7 +62,8 @@ public class BillingJobRepository(AppDbContext db) : IBillingJobRepository
 
     public Task<List<UserSubscription>> FindActiveCyclesAwaitingUsageNoticeAsync(CancellationToken ct = default) =>
         db.UserSubscriptions.AsNoTracking()
-            .Where(c => c.Status == CycleStatuses.Active && c.TokenQuota > 0 && (c.Warned80At == null || c.ExhaustedNotifiedAt == null))
+            .Where(c => c.Status == CycleStatuses.Active && c.TokenQuota > 0
+                && (c.Warned80At == null || c.ExhaustedNotifiedAt == null || (c.QuotaPeriodDays != null && c.QuotaPeriodDays < c.DurationDays)))
             .ToListAsync(ct);
 
     public Task<UserSubscription?> FindCycleAsync(Guid cycleId, CancellationToken ct = default) =>

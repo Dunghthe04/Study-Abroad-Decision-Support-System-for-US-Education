@@ -922,6 +922,24 @@ public class FamilyServiceTests
     }
 
     [Fact]
+    public async Task RecurringFamilyCycle_ResetsUsagePerWindow_AndExposesQuotaResetsAt()
+    {
+        var env = new Env(withFamily: false);
+        var start = Now.AddDays(-35);
+        env.Store.Groups.Add(env.Group);
+        var cycle = env.Store.AddCycle(env.Owner.Id, "family-3m", start, env.Group.Id);
+        env.AddActive(env.Student, FamilySeats.Student);
+        env.Store.Calls.Add(new AiCall { UserId = env.Student.Id, Kind = BillingRules.MeteredAiKind, TotalTokens = 600_000, UserSubscriptionId = cycle.Id, PlanCode = "family-3m", CreatedAt = start.AddDays(5) });
+        env.Store.Calls.Add(new AiCall { UserId = env.Owner.Id, Kind = BillingRules.MeteredAiKind, TotalTokens = 150_000, UserSubscriptionId = cycle.Id, PlanCode = "family-3m", CreatedAt = Now.AddHours(-1) });
+
+        var dto = await env.Service.GetAsync(env.Owner.Id, UserRoles.Parent, Now);
+
+        Assert.Equal((25, (int?)30), (dto.Cycle!.UsedPercent, dto.Cycle.QuotaPeriodDays));
+        Assert.Equal(CycleRules.ToVietnamTime(start.AddDays(60)), dto.Cycle.QuotaResetsAt);
+        Assert.Equal([25, 0], dto.Members.Select(m => m.SharePercent));
+    }
+
+    [Fact]
     public async Task F27_FamilyEndsWithNothingQueued_MembershipsAndInvitesEnd()
     {
         var env = new Env();
@@ -1134,10 +1152,10 @@ public class FamilyServiceTests
         public List<SubscriptionPlan> Plans { get; } =
         [
             new() { Code = "free", Name = "Miễn phí", Kind = PlanKinds.Free, TokenQuota = 120_000 },
-            new() { Code = "personal-1m", Name = "Cá nhân 1 tháng", Kind = PlanKinds.Personal, PriceVnd = 79_000, DurationDays = 30, TokenQuota = 500_000 },
-            new() { Code = "personal-3m", Name = "Cá nhân 3 tháng", Kind = PlanKinds.Personal, PriceVnd = 199_000, DurationDays = 90, TokenQuota = 1_800_000 },
-            new() { Code = "family-1m", Name = "Gia đình 1 tháng", Kind = PlanKinds.Family, PriceVnd = 99_000, DurationDays = 30, TokenQuota = 500_000 },
-            new() { Code = "family-3m", Name = "Gia đình 3 tháng", Kind = PlanKinds.Family, PriceVnd = 249_000, DurationDays = 90, TokenQuota = 1_800_000 },
+            new() { Code = "personal-1m", Name = "Cá nhân 1 tháng", Kind = PlanKinds.Personal, PriceVnd = 79_000, DurationDays = 30, QuotaPeriodDays = 30, TokenQuota = 500_000 },
+            new() { Code = "personal-3m", Name = "Cá nhân 3 tháng", Kind = PlanKinds.Personal, PriceVnd = 199_000, DurationDays = 90, QuotaPeriodDays = 30, TokenQuota = 600_000 },
+            new() { Code = "family-1m", Name = "Gia đình 1 tháng", Kind = PlanKinds.Family, PriceVnd = 99_000, DurationDays = 30, QuotaPeriodDays = 30, TokenQuota = 500_000 },
+            new() { Code = "family-3m", Name = "Gia đình 3 tháng", Kind = PlanKinds.Family, PriceVnd = 249_000, DurationDays = 90, QuotaPeriodDays = 30, TokenQuota = 600_000 },
         ];
         public List<UserSubscription> Cycles { get; } = [];
         public List<FamilyGroup> Groups { get; } = [];
@@ -1155,7 +1173,8 @@ public class FamilyServiceTests
             var cycle = new UserSubscription
             {
                 UserId = owner, SubscriptionPlanId = plan.Id, Kind = plan.Kind, Status = status, FamilyGroupId = groupId, StartsAt = startsAt,
-                EndsAt = startsAt?.AddDays(plan.DurationDays!.Value), DurationDays = plan.DurationDays!.Value, TokenQuota = plan.TokenQuota, PlanName = plan.Name,
+                EndsAt = startsAt?.AddDays(plan.DurationDays!.Value), DurationDays = plan.DurationDays!.Value, QuotaPeriodDays = plan.QuotaPeriodDays,
+                TokenQuota = plan.TokenQuota, PlanName = plan.Name,
             };
             Cycles.Add(cycle);
             return cycle;
@@ -1180,8 +1199,8 @@ public class FamilyServiceTests
             Task.FromResult(Members.Where(m => m.FamilyGroupId == familyGroupId
                 && (m.Status == FamilyMemberStatuses.Pending || m.Status == FamilyMemberStatuses.Active)).ToList());
 
-        public Task<long> SumCycleTokensAsync(Guid cycleId, CancellationToken ct = default) =>
-            Task.FromResult(Calls.AsQueryable().Where(MeteringFilters.Cycle(cycleId)).Sum(a => (long)(a.TotalTokens ?? 0)));
+        public Task<long> SumCycleTokensAsync(Guid cycleId, DateTime? fromUtc = null, DateTime? toUtc = null, CancellationToken ct = default) =>
+            Task.FromResult(Calls.AsQueryable().Where(MeteringFilters.Cycle(cycleId, fromUtc, toUtc)).Sum(a => (long)(a.TotalTokens ?? 0)));
 
         public Task<long> SumFreeTokensAsync(Guid userId, DateTime fromUtc, CancellationToken ct = default) =>
             Task.FromResult(Calls.AsQueryable().Where(MeteringFilters.Free(userId, fromUtc)).Sum(a => (long)(a.TotalTokens ?? 0)));
@@ -1238,8 +1257,8 @@ public class FamilyServiceTests
         public Task<bool> HasPendingFamilyOrderAsync(Guid userId, CancellationToken ct = default) =>
             Task.FromResult(Orders.Any(o => o.UserId == userId && o.Status == OrderStatuses.Pending && o.PlanKind == PlanKinds.Family));
 
-        public Task<Dictionary<Guid, long>> SumTokensByUserAsync(Guid cycleId, CancellationToken ct = default) =>
-            Task.FromResult(Calls.AsQueryable().Where(MeteringFilters.Cycle(cycleId)).Where(a => a.UserId != null)
+        public Task<Dictionary<Guid, long>> SumTokensByUserAsync(Guid cycleId, DateTime? fromUtc = null, DateTime? toUtc = null, CancellationToken ct = default) =>
+            Task.FromResult(Calls.AsQueryable().Where(MeteringFilters.Cycle(cycleId, fromUtc, toUtc)).Where(a => a.UserId != null)
                 .GroupBy(a => a.UserId!.Value).ToDictionary(g => g.Key, g => g.Sum(a => (long)(a.TotalTokens ?? 0))));
 
         public Task AddMemberAsync(FamilyMember member, CancellationToken ct = default)

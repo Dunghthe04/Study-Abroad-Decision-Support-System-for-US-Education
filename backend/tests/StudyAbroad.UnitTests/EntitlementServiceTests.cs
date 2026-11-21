@@ -319,6 +319,43 @@ public class EntitlementServiceTests
         Assert.Equal(new PlanSeatsDto(1, 2), plans.Single(p => p.Code == "family-1m").Seats);
         Assert.Null(plans.Single(p => p.Code == "personal-1m").Seats);
         Assert.Equal(79_000L, plans.Single(p => p.Code == "personal-1m").PriceVnd);
+        Assert.Null(plans.Single(p => p.Code == "free").QuotaMultiplier);
+        Assert.Equal(4.2m, plans.Single(p => p.Code == "personal-1m").QuotaMultiplier);
+        Assert.Equal((30, 5.0m), (plans.Single(p => p.Code == "family-3m").QuotaPeriodDays, plans.Single(p => p.Code == "family-3m").QuotaMultiplier));
+    }
+
+    [Fact]
+    public async Task RecurringCycle_WindowResetsFresh_AndDoesNotRolloverEarly()
+    {
+        var repo = new FakeBilling();
+        var start = Now.AddDays(-35);   // đang ở cửa sổ 1 (ngày 30..60) của gói 90 ngày / 30 ngày
+        var cycle = repo.AddActive(Me, "personal-3m", startsAt: start);
+        var queued = repo.AddQueued(Me, "personal-1m");
+        repo.Use(Me, cycle, 600_000, start.AddDays(5));   // dùng hết cửa sổ 0
+
+        var service = Service(repo);
+        var summary = await service.GetSummaryAsync(Me, Now);
+        var lane = await service.AdvanceLaneAsync(Me, PlanKinds.Personal, Now);
+
+        Assert.Equal(CycleStatuses.Active, cycle.Status);
+        Assert.Equal(CycleStatuses.Queued, queued.Status);
+        Assert.False(lane.ActiveExhausted);
+        Assert.Equal((0, false, (int?)30), (summary.Personal!.UsedPercent, summary.Personal.Exhausted, summary.Personal.QuotaPeriodDays));
+        Assert.Equal(CycleRules.ToVietnamTime(start.AddDays(60)), summary.Personal.QuotaResetsAt);
+    }
+
+    [Fact]
+    public async Task FreeCustomQuotaPeriod_ResetsOnCustomCadence()
+    {
+        var repo = new FakeBilling();
+        repo.Plans.Single(p => p.Kind == PlanKinds.Free).QuotaPeriodDays = 7;
+        var now = new DateTime(2026, 1, 10, 3, 0, 0, DateTimeKind.Utc);   // cửa sổ [2026-01-07 17:00, 2026-01-14 17:00)
+        repo.UseFree(Me, 120_000, new DateTime(2026, 1, 5, 3, 0, 0, DateTimeKind.Utc));   // cửa sổ trước
+
+        var summary = await Service(repo).GetSummaryAsync(Me, now);
+
+        Assert.Equal((0, (int?)7), (summary.Free.UsedPercent, summary.Free.QuotaPeriodDays));
+        Assert.Equal(CycleRules.ToVietnamTime(new DateTime(2026, 1, 14, 17, 0, 0, DateTimeKind.Utc)), summary.Free.ResetsAt);
     }
 
     // ---- T1: không phản hồi khách hàng nào có số token
@@ -336,7 +373,12 @@ public class EntitlementServiceTests
             foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
                 Assert.DoesNotContain("token", property.Name, StringComparison.OrdinalIgnoreCase);
-                Assert.DoesNotContain("quota", property.Name.Replace("LowQuota", ""), StringComparison.OrdinalIgnoreCase);
+                var stripped = property.Name
+                    .Replace("LowQuota", "")
+                    .Replace("QuotaPeriodDays", "")
+                    .Replace("QuotaMultiplier", "")
+                    .Replace("QuotaResetsAt", "");
+                Assert.DoesNotContain("quota", stripped, StringComparison.OrdinalIgnoreCase);
             }
         }
     }
@@ -387,10 +429,10 @@ public class EntitlementServiceTests
         public List<SubscriptionPlan> Plans { get; } =
         [
             new() { Code = "free", Name = "Miễn phí", Kind = PlanKinds.Free, TokenQuota = 120_000, DisplayOrder = 0 },
-            new() { Code = "personal-1m", Name = "Cá nhân 1 tháng", Kind = PlanKinds.Personal, PriceVnd = 79_000, DurationDays = 30, TokenQuota = 500_000, DisplayOrder = 1 },
-            new() { Code = "personal-3m", Name = "Cá nhân 3 tháng", Kind = PlanKinds.Personal, PriceVnd = 199_000, DurationDays = 90, TokenQuota = 1_800_000, DisplayOrder = 2 },
-            new() { Code = "family-1m", Name = "Gia đình 1 tháng", Kind = PlanKinds.Family, PriceVnd = 99_000, DurationDays = 30, TokenQuota = 500_000, DisplayOrder = 3 },
-            new() { Code = "family-3m", Name = "Gia đình 3 tháng", Kind = PlanKinds.Family, PriceVnd = 249_000, DurationDays = 90, TokenQuota = 1_800_000, DisplayOrder = 4 },
+            new() { Code = "personal-1m", Name = "Cá nhân 1 tháng", Kind = PlanKinds.Personal, PriceVnd = 79_000, DurationDays = 30, QuotaPeriodDays = 30, TokenQuota = 500_000, DisplayOrder = 1 },
+            new() { Code = "personal-3m", Name = "Cá nhân 3 tháng", Kind = PlanKinds.Personal, PriceVnd = 199_000, DurationDays = 90, QuotaPeriodDays = 30, TokenQuota = 600_000, DisplayOrder = 2 },
+            new() { Code = "family-1m", Name = "Gia đình 1 tháng", Kind = PlanKinds.Family, PriceVnd = 99_000, DurationDays = 30, QuotaPeriodDays = 30, TokenQuota = 500_000, DisplayOrder = 3 },
+            new() { Code = "family-3m", Name = "Gia đình 3 tháng", Kind = PlanKinds.Family, PriceVnd = 249_000, DurationDays = 90, QuotaPeriodDays = 30, TokenQuota = 600_000, DisplayOrder = 4 },
         ];
         public List<UserSubscription> Cycles { get; } = [];
         public List<FamilyGroup> Groups { get; } = [];
@@ -400,14 +442,16 @@ public class EntitlementServiceTests
         public int Reads { get; private set; }
         public int Saves { get; private set; }
 
-        public UserSubscription AddActive(Guid owner, string planCode, DateTime? startsAt = null, long? quota = null)
+        public UserSubscription AddActive(Guid owner, string planCode, DateTime? startsAt = null, long? quota = null, int? quotaPeriodDays = null)
         {
             var plan = Plans.Single(p => p.Code == planCode);
             var start = startsAt ?? Now.AddDays(-1);
             var cycle = new UserSubscription
             {
                 UserId = owner, SubscriptionPlanId = plan.Id, Kind = plan.Kind, Status = CycleStatuses.Active, StartsAt = start,
-                EndsAt = start.AddDays(plan.DurationDays!.Value), DurationDays = plan.DurationDays!.Value, TokenQuota = quota ?? plan.TokenQuota, PlanName = plan.Name,
+                EndsAt = start.AddDays(plan.DurationDays!.Value), DurationDays = plan.DurationDays!.Value,
+                QuotaPeriodDays = quotaPeriodDays ?? plan.QuotaPeriodDays,
+                TokenQuota = quota ?? plan.TokenQuota, PlanName = plan.Name,
             };
             Cycles.Add(cycle);
             return cycle;
@@ -419,7 +463,8 @@ public class EntitlementServiceTests
             var cycle = new UserSubscription
             {
                 UserId = owner, SubscriptionPlanId = plan.Id, Kind = plan.Kind, Status = CycleStatuses.Queued,
-                DurationDays = plan.DurationDays!.Value, TokenQuota = plan.TokenQuota, PlanName = plan.Name,
+                DurationDays = plan.DurationDays!.Value, QuotaPeriodDays = plan.QuotaPeriodDays,
+                TokenQuota = plan.TokenQuota, PlanName = plan.Name,
                 FamilyGroupId = plan.Kind == PlanKinds.Family ? Groups.Single(g => g.OwnerUserId == owner).Id : null,
             };
             Cycles.Add(cycle);
@@ -441,8 +486,8 @@ public class EntitlementServiceTests
             return cycle;
         }
 
-        public void Use(Guid userId, UserSubscription cycle, int tokens) =>
-            Calls.Add(Call(userId, tokens, BillingRules.MeteredAiKind, cycle.Id, Plans.Single(p => p.Id == cycle.SubscriptionPlanId).Code));
+        public void Use(Guid userId, UserSubscription cycle, int tokens, DateTime? at = null) =>
+            Calls.Add(Call(userId, tokens, BillingRules.MeteredAiKind, cycle.Id, Plans.Single(p => p.Id == cycle.SubscriptionPlanId).Code, at));
 
         public void UseFree(Guid userId, int tokens, DateTime at) =>
             Calls.Add(Call(userId, tokens, BillingRules.MeteredAiKind, null, "free", at));
@@ -466,8 +511,8 @@ public class EntitlementServiceTests
                 && (m.Status == FamilyMemberStatuses.Pending || m.Status == FamilyMemberStatuses.Active)).ToList());
 
         // Bộ lọc thật của repository (MeteringFilters), chạy trên danh sách trong bộ nhớ
-        public Task<long> SumCycleTokensAsync(Guid cycleId, CancellationToken ct = default) =>
-            Read(Calls.AsQueryable().Where(MeteringFilters.Cycle(cycleId)).Sum(a => (long)(a.TotalTokens ?? 0)));
+        public Task<long> SumCycleTokensAsync(Guid cycleId, DateTime? fromUtc = null, DateTime? toUtc = null, CancellationToken ct = default) =>
+            Read(Calls.AsQueryable().Where(MeteringFilters.Cycle(cycleId, fromUtc, toUtc)).Sum(a => (long)(a.TotalTokens ?? 0)));
 
         public Task<long> SumFreeTokensAsync(Guid userId, DateTime fromUtc, CancellationToken ct = default) =>
             Read(Calls.AsQueryable().Where(MeteringFilters.Free(userId, fromUtc)).Sum(a => (long)(a.TotalTokens ?? 0)));

@@ -7,10 +7,11 @@ namespace StudyAbroad.Application.Billing;
 
 /// <summary>Một gói đang bán trên trang gói (GET /api/v1/plans).</summary>
 public sealed record PlanDto(
-    string Code, string Name, string? Description, string Kind, long PriceVnd, int? DurationDays, int EstimatedQuestions, PlanSeatsDto? Seats)
+    string Code, string Name, string? Description, string Kind, long PriceVnd, int? DurationDays, int? QuotaPeriodDays, decimal? QuotaMultiplier, PlanSeatsDto? Seats)
 {
-    public static PlanDto From(SubscriptionPlan plan) => new(
-        plan.Code, plan.Name, plan.Description, plan.Kind, (long)plan.PriceVnd, plan.DurationDays, plan.EstimatedQuestions,
+    public static PlanDto From(SubscriptionPlan plan, SubscriptionPlan? freePlan = null) => new(
+        plan.Code, plan.Name, plan.Description, plan.Kind, (long)plan.PriceVnd, plan.DurationDays,
+        plan.QuotaPeriodDays, CycleRules.QuotaMultiplier(plan, freePlan),
         plan.Kind == PlanKinds.Family ? new PlanSeatsDto(FamilySeats.MaxStudents, FamilySeats.MaxParents) : null);
 }
 
@@ -23,16 +24,18 @@ public sealed record QueuedCycleDto(string PlanName, DateTime? ExpectedStartsAt)
 /// <param name="PlanCode">Luôn là chuỗi (frontend không nhận null); "" khi dòng gói của kỳ không còn.</param>
 public sealed record PoolDto(
     string PlanCode, string PlanName, DateTime? StartsAt, DateTime? EndsAt,
-    int UsedPercent, bool Exhausted, bool LowQuota, bool ExpiringSoon, QueuedCycleDto? Queued);
+    int UsedPercent, bool Exhausted, bool LowQuota, bool ExpiringSoon, QueuedCycleDto? Queued,
+    int? QuotaPeriodDays = null, DateTimeOffset? QuotaResetsAt = null);
 
 /// <summary>PoolDto kèm vai trò trong gói Gia đình (owner | member) và tên chủ gói.</summary>
 public sealed record FamilyPoolDto(
     string PlanCode, string PlanName, DateTime? StartsAt, DateTime? EndsAt,
     int UsedPercent, bool Exhausted, bool LowQuota, bool ExpiringSoon, QueuedCycleDto? Queued,
-    string Role, string OwnerName);
+    string Role, string OwnerName,
+    int? QuotaPeriodDays = null, DateTimeOffset? QuotaResetsAt = null);
 
-/// <summary>Hạn mức Free tháng này; làm mới 00:00 ngày 1 giờ Việt Nam.</summary>
-public sealed record FreePoolDto(int UsedPercent, DateTimeOffset ResetsAt);
+/// <summary>Hạn mức Free; làm mới 00:00 ngày 1 giờ Việt Nam hoặc mỗi QuotaPeriodDays ngày.</summary>
+public sealed record FreePoolDto(int UsedPercent, DateTimeOffset ResetsAt, int? QuotaPeriodDays = null);
 
 /// <summary>GET /api/v1/subscription. LowQuota / ExpiringSoon là của pool đang bị trừ.</summary>
 public sealed record SubscriptionSummaryDto(

@@ -33,9 +33,10 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
     {
         var e = await LoadAsync(userId, nowUtc, ct);
         var freePlan = e.FreePlan;
+        var (freeStart, freeResetsAt) = CycleRules.FreeWindowUtc(nowUtc, freePlan?.QuotaPeriodDays);
         var freePercent = CycleRules.UsedPercent(
-            await repository.SumFreeTokensAsync(userId, CycleRules.FreeMonthStartUtc(nowUtc), ct), freePlan?.TokenQuota ?? 0);
-        var free = new FreePoolDto(freePercent, CycleRules.ToVietnamTime(CycleRules.FreeResetsAtUtc(nowUtc)));
+            await repository.SumFreeTokensAsync(userId, freeStart, ct), freePlan?.TokenQuota ?? 0);
+        var free = new FreePoolDto(freePercent, CycleRules.ToVietnamTime(freeResetsAt), freePlan?.QuotaPeriodDays);
 
         var personal = e.Personal.Active is null ? null : Pool(e.Personal, e, nowUtc);
         FamilyPoolDto? family = null;
@@ -44,7 +45,7 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
             var p = Pool(e.Family, e, nowUtc);
             var ownerName = await repository.GetUserNameAsync(e.Group.OwnerUserId, ct) ?? string.Empty;
             family = new FamilyPoolDto(p.PlanCode, p.PlanName, p.StartsAt, p.EndsAt, p.UsedPercent, p.Exhausted, p.LowQuota, p.ExpiringSoon, p.Queued,
-                e.IsFamilyOwner ? FamilySeats.Owner : "member", ownerName);
+                e.IsFamilyOwner ? FamilySeats.Owner : "member", ownerName, p.QuotaPeriodDays, p.QuotaResetsAt);
         }
 
         var (pool, lowQuota, expiringSoon) =
@@ -59,20 +60,20 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
 
     public async Task<ChatCharge> ResolveChatChargeAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default)
     {
-        var resetsAt = CycleRules.FreeResetsAtUtc(nowUtc);
         if (StaffRoles.Contains(role))
-            return new ChatCharge(true, true, null, null, PlanKinds.Free, null, false, resetsAt);
+            return new ChatCharge(true, true, null, null, PlanKinds.Free, null, false, CycleRules.FreeResetsAtUtc(nowUtc));
 
         var e = await LoadAsync(userId, nowUtc, ct);
+        var freePlan = e.FreePlan;
+        var (freeStart, resetsAt) = CycleRules.FreeWindowUtc(nowUtc, freePlan?.QuotaPeriodDays);
         foreach (var (lane, kind) in new[] { (e.Personal, PlanKinds.Personal), (e.Family, PlanKinds.Family) })
         {
             if (lane.HasTokens)
                 return new ChatCharge(false, true, lane.Active!.Id, e.CodeOf(lane.Active), kind, null, false, resetsAt);
         }
 
-        // Không còn pool trả phí có token: hạn mức Free tháng này, chỉ hỏi kiến thức
-        var freePlan = e.FreePlan;
-        var freeUsed = await repository.SumFreeTokensAsync(userId, CycleRules.FreeMonthStartUtc(nowUtc), ct);
+        // Không còn pool trả phí có token: hạn mức Free chu kỳ này, chỉ hỏi kiến thức
+        var freeUsed = await repository.SumFreeTokensAsync(userId, freeStart, ct);
         return new ChatCharge(false, e.IsPremium, null, PlanKinds.Free, PlanKinds.Free, PremiumIntents.FreeAllowed,
             CycleRules.IsExhausted(freeUsed, freePlan?.TokenQuota ?? 0), resetsAt);
     }
@@ -80,8 +81,12 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
     public async Task<bool> IsPremiumAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default) =>
         StaffRoles.Contains(role) || (await LoadAsync(userId, nowUtc, ct)).IsPremium;
 
-    public async Task<IReadOnlyList<PlanDto>> GetPlansOnSaleAsync(CancellationToken ct = default) =>
-        (await repository.GetPlansAsync(ct)).Where(p => p.IsActive).OrderBy(p => p.DisplayOrder).Select(PlanDto.From).ToList();
+    public async Task<IReadOnlyList<PlanDto>> GetPlansOnSaleAsync(CancellationToken ct = default)
+    {
+        var allPlans = await repository.GetPlansAsync(ct);
+        var freePlan = allPlans.FirstOrDefault(p => p.Kind == PlanKinds.Free);
+        return allPlans.Where(p => p.IsActive).OrderBy(p => p.DisplayOrder).Select(p => PlanDto.From(p, freePlan)).ToList();
+    }
 
     private static PoolDto Pool(Lane lane, Entitlement e, DateTime nowUtc)
     {
@@ -89,9 +94,12 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
         var percent = CycleRules.UsedPercent(lane.Used, cycle.TokenQuota);
         // Đã có kỳ gia hạn xếp hàng thì không cảnh báo sắp hết hạn
         var expiringSoon = lane.Queued is null && CycleRules.IsExpiringSoon(cycle.EndsAt, nowUtc);
+        var (_, windowEnd, isFinal) = CycleRules.CycleWindowUtc(cycle, nowUtc);
+        DateTimeOffset? quotaResetsAt = !isFinal ? CycleRules.ToVietnamTime(windowEnd) : null;
         return new PoolDto(e.CodeOf(cycle) ?? string.Empty, cycle.PlanName, cycle.StartsAt, cycle.EndsAt, percent,
             CycleRules.IsExhausted(lane.Used, cycle.TokenQuota), CycleRules.IsLowQuota(percent), expiringSoon,
-            lane.Queued is null ? null : new QueuedCycleDto(lane.Queued.PlanName, cycle.EndsAt));
+            lane.Queued is null ? null : new QueuedCycleDto(lane.Queued.PlanName, cycle.EndsAt),
+            cycle.QuotaPeriodDays, quotaResetsAt);
     }
 
     public async Task<LaneState> AdvanceLaneAsync(
@@ -102,7 +110,8 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
         if (kind == PlanKinds.Family && lane.Active is null && lane.Queued is null
             && await repository.FindActiveOwnedGroupAsync(ownerUserId, ct) is not null)
             await LapseAsync(ownerUserId, nowUtc, deferredNotifications, ct);
-        return new LaneState(lane.Active, lane.Queued, lane.Used, lane.Active is not null && CycleRules.IsExhausted(lane.Used, lane.Active.TokenQuota));
+        return new LaneState(lane.Active, lane.Queued, lane.Used,
+            lane.Active is not null && CycleRules.CycleWindowUtc(lane.Active, nowUtc).IsFinalWindow && CycleRules.IsExhausted(lane.Used, lane.Active.TokenQuota));
     }
 
     private async Task<Entitlement> LoadAsync(Guid userId, DateTime nowUtc, CancellationToken ct)
@@ -128,12 +137,25 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
         return new Entitlement(personal, family, group, isOwner, plans);
     }
 
-    private async Task<Lane> ReadLaneAsync(Guid ownerUserId, string kind, CancellationToken ct)
+    private async Task<Lane> ReadLaneAsync(Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct)
     {
         var cycles = await repository.GetOpenCyclesAsync(ownerUserId, kind, ct);
         var active = cycles.FirstOrDefault(c => c.Status == CycleStatuses.Active);
         var queued = cycles.FirstOrDefault(c => c.Status == CycleStatuses.Queued);
-        return new Lane(active, queued, active is null ? 0 : await repository.SumCycleTokensAsync(active.Id, ct));
+        long used = 0;
+        if (active is not null)
+        {
+            if (active.QuotaPeriodDays is > 0 && active.QuotaPeriodDays.Value < active.DurationDays)
+            {
+                var (windowStart, windowEnd, _) = CycleRules.CycleWindowUtc(active, nowUtc);
+                used = await repository.SumCycleTokensAsync(active.Id, windowStart, windowEnd, ct);
+            }
+            else
+            {
+                used = await repository.SumCycleTokensAsync(active.Id, null, null, ct);
+            }
+        }
+        return new Lane(active, queued, used);
     }
 
     // Đọc không khóa trước: không có gì phải chuyển (đa số lượt đọc) thì không mở transaction. Có thì chuyển dưới khóa dòng làn, tính lại trên dòng đã khóa
@@ -141,20 +163,20 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
     private async Task<Lane> AdvanceCyclesAsync(
         Guid ownerUserId, string kind, DateTime nowUtc, ICollection<Func<CancellationToken, Task>>? deferred, CancellationToken ct)
     {
-        var lane = await ReadLaneAsync(ownerUserId, kind, ct);
+        var lane = await ReadLaneAsync(ownerUserId, kind, nowUtc, ct);
         if (CycleRules.Advance(lane.Active, lane.Queued, lane.Used, nowUtc).Count == 0)
             return lane;
 
         IReadOnlyList<CycleChange> applied = [];
         var saved = await repository.SaveLockedStepsAsync(ownerUserId, kind, lockGroup: false, async () =>
         {
-            var fresh = await ReadLaneAsync(ownerUserId, kind, ct);
+            var fresh = await ReadLaneAsync(ownerUserId, kind, nowUtc, ct);
             applied = CycleRules.Advance(fresh.Active, fresh.Queued, fresh.Used, nowUtc);
             return applied.Select(c => (Action)c.Apply).ToList();
         }, ct);
         if (saved)
             await NotifyTransitionsAsync(applied, deferred, ct);
-        return await ReadLaneAsync(ownerUserId, kind, ct);   // thực thể mới nạp (đã theo dõi), người gọi sửa tiếp được
+        return await ReadLaneAsync(ownerUserId, kind, nowUtc, ct);   // thực thể mới nạp (đã theo dõi), người gọi sửa tiếp được
     }
 
     // Kỳ mới bắt đầu → báo chủ kỳ; kỳ cuối của làn hết hạn mà không còn kỳ nào chạy → báo chủ kỳ. Chỉ tính trạng thái cuối của mỗi kỳ trong lượt này

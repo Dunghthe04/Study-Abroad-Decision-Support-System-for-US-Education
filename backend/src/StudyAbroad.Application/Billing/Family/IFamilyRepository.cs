@@ -37,8 +37,8 @@ public interface IFamilyRepository
     /// <summary>Người này có đơn pending cho gói loại family.</summary>
     Task<bool> HasPendingFamilyOrderAsync(Guid userId, CancellationToken ct = default);
 
-    /// <summary>Token tính phí mỗi người đã dùng trong một kỳ (để chia phần trăm). Chỉ dùng nội bộ, không bao giờ ra khỏi server.</summary>
-    Task<Dictionary<Guid, long>> SumTokensByUserAsync(Guid cycleId, CancellationToken ct = default);
+    /// <summary>Token tính phí mỗi người đã dùng trong một kỳ (để chia phần trăm, tùy chọn lọc theo cửa sổ [fromUtc, toUtc)). Chỉ dùng nội bộ, không bao giờ ra khỏi server.</summary>
+    Task<Dictionary<Guid, long>> SumTokensByUserAsync(Guid cycleId, DateTime? fromUtc = null, DateTime? toUtc = null, CancellationToken ct = default);
 
     Task AddMemberAsync(FamilyMember member, CancellationToken ct = default);
 
