@@ -105,6 +105,7 @@ interface FieldErrors {
   password?: string;
   confirmPassword?: string;
   parentEmail?: string;
+  agreeTerms?: string;
 }
 
 export function RegisterForm() {
@@ -125,6 +126,7 @@ export function RegisterForm() {
   const [parentEmail, setParentEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [agreeTerms, setAgreeTerms] = useState(false);
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
@@ -235,6 +237,10 @@ export function RegisterForm() {
       } else if (isMinorStudent && parentEmail.trim().toLowerCase() === email.trim().toLowerCase()) {
         errors.parentEmail = "Email phụ huynh phải khác email của học sinh.";
       }
+    }
+
+    if (!agreeTerms) {
+      errors.agreeTerms = "Vui lòng đồng ý với Điều khoản sử dụng và Chính sách bảo mật để tiếp tục.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -563,6 +569,43 @@ export function RegisterForm() {
               </Field>
             </>
           )}
+
+          {/* Đồng ý điều khoản và chính sách bảo mật */}
+          <Field data-invalid={Boolean(fieldErrors.agreeTerms)} className="pt-1">
+            <div className="flex items-start gap-2.5">
+              <input
+                id="agreeTerms"
+                type="checkbox"
+                checked={agreeTerms}
+                aria-invalid={Boolean(fieldErrors.agreeTerms)}
+                aria-describedby={fieldErrors.agreeTerms ? "agreeTerms-error" : undefined}
+                onChange={(e) => {
+                  setAgreeTerms(e.target.checked);
+                  clearFieldError("agreeTerms");
+                }}
+                className={cn(
+                  "mt-0.5 size-4 rounded border-line text-brand focus:ring-brand cursor-pointer",
+                  fieldErrors.agreeTerms && "border-destructive ring-2 ring-destructive/20"
+                )}
+              />
+              <label htmlFor="agreeTerms" className="text-sm leading-snug text-ink-2 cursor-pointer select-none">
+                Tôi đồng ý với{" "}
+                <Link href="/terms" target="_blank" className="font-medium text-brand hover:underline">
+                  Điều khoản sử dụng
+                </Link>{" "}
+                và{" "}
+                <Link href="/privacy" target="_blank" className="font-medium text-brand hover:underline">
+                  Chính sách bảo mật
+                </Link>{" "}
+                của USDSS.
+              </label>
+            </div>
+            {fieldErrors.agreeTerms && (
+              <FieldError id="agreeTerms-error" className="pl-6.5">
+                {fieldErrors.agreeTerms}
+              </FieldError>
+            )}
+          </Field>
 
           <Button type="submit" size="xl" disabled={isSubmitting} className="w-full" loading={isSubmitting}>
             {isSubmitting ? "Đang xử lý..." : "Tạo tài khoản"}
