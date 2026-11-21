@@ -9,10 +9,7 @@ export const metadata: Metadata = {
 
 export default function AdminLayout({ children }: LayoutProps<"/admin">) {
   return (
-    <ProtectedRoute
-      allowedRoles={ADMIN_ROLES}
-      deniedMessage={<>Khu vực quản trị chỉ dành cho tài khoản <strong>Quản trị viên</strong> hoặc <strong>Moderator</strong>.</>}
-    >
+    <ProtectedRoute allowedRoles={ADMIN_ROLES}>
       <AdminShell>{children}</AdminShell>
     </ProtectedRoute>
   );

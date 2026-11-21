@@ -2,31 +2,34 @@
 
 import React, { useEffect, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import type { UserRole } from "@/types/api";
-import { formatUserRole } from "@/lib/user-role-labels";
-import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 
 interface ProtectedRouteProps {
   children: ReactNode;
   allowedRoles?: UserRole[];
-  deniedMessage?: ReactNode;
 }
 
-export function ProtectedRoute({ children, allowedRoles, deniedMessage }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
+  const isDenied =
+    !isLoading &&
+    user !== null &&
+    Boolean(allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(user.role));
+
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (isLoading) return;
+    if (!user) {
       const redirectUrl = pathname ? `/login?redirect=${encodeURIComponent(pathname)}` : "/login";
       router.push(redirectUrl);
+    } else if (isDenied) {
+      router.replace("/");
     }
-  }, [user, isLoading, router, pathname]);
+  }, [user, isLoading, isDenied, router, pathname]);
 
   if (isLoading) {
     return (
@@ -37,39 +40,8 @@ export function ProtectedRoute({ children, allowedRoles, deniedMessage }: Protec
     );
   }
 
-  if (!user) {
+  if (!user || isDenied) {
     return null;
-  }
-
-  if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
-    const roleHint =
-      allowedRoles.length === 1
-        ? formatUserRole(allowedRoles[0])
-        : allowedRoles.map((r) => formatUserRole(r)).join(", ");
-
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center p-4">
-        <Card className="w-full max-w-md text-center">
-          <CardHeader>
-            <CardTitle>
-              <h2>Không có quyền truy cập</h2>
-            </CardTitle>
-            <CardDescription>
-              {deniedMessage ?? (
-                <>
-                  Khu vực này chỉ dành cho tài khoản <strong>{roleHint}</strong>.
-                </>
-              )}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/" className={buttonVariants({ size: "lg" })}>
-              Về Trang chủ
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
   }
 
   return <>{children}</>;

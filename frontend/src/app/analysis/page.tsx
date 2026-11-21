@@ -12,10 +12,7 @@ export const metadata: Metadata = {
 export default function AnalysisPage() {
   return (
     // Chỉ học sinh / phụ huynh mới có hồ sơ để lưu nháp; tài khoản khác vào sẽ bị BE trả 403 mỗi lần tự lưu
-    <ProtectedRoute
-      allowedRoles={["student", "parent"]}
-      deniedMessage="Form phân tích hồ sơ chỉ dành cho tài khoản học sinh hoặc phụ huynh. Bạn đang đăng nhập bằng loại tài khoản khác."
-    >
+    <ProtectedRoute allowedRoles={["student", "parent"]}>
       <AgeGate feature="process_student_data">
         <ProfileFlowWizard />
       </AgeGate>
