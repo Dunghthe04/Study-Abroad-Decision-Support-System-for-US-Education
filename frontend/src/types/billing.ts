@@ -38,6 +38,17 @@ export interface FreePoolDto {
   quotaPeriodDays?: number | null;
 }
 
+/** Một kỳ gói đã hết hạn của chính người dùng (GET /subscription/expired). */
+export interface ExpiredCycleDto {
+  id: string;
+  kind: "personal" | "family";
+  planCode: string;
+  planName: string;
+  purchasedAt: string;
+  startsAt: string;
+  endsAt: string;
+}
+
 /** Một kỳ gói còn hiệu lực (mỗi lần mua là một kỳ, chạy song song và cộng dồn hạn mức). */
 export interface SubscriptionCycleDto {
   id: string;

@@ -33,7 +33,7 @@ import { FamilyCard } from "@/components/account/FamilyCard";
 import { QuotaCard } from "@/components/account/QuotaCard";
 import { billingApi } from "@/lib/billing-api";
 import { useFetched } from "@/lib/use-fetched";
-import type { SubscriptionSummaryDto } from "@/types/billing";
+import type { ExpiredCycleDto, SubscriptionSummaryDto } from "@/types/billing";
 import {
   ArrowRightIcon,
   ArrowUpRightIcon,
@@ -99,6 +99,10 @@ export function AccountView() {
   const sub = useFetched<SubscriptionSummaryDto | null>(
     isStudentOrParent ? `sub:${user?.id}:${billingVersion}` : "none",
     () => (isStudentOrParent ? billingApi.subscription() : Promise.resolve(null)),
+  );
+  const expired = useFetched<ExpiredCycleDto[]>(
+    isStudentOrParent ? `expired:${user?.id}:${billingVersion}` : "none",
+    () => (isStudentOrParent ? billingApi.expiredCycles() : Promise.resolve([])),
   );
   const familyCycleCount = (sub.data?.cycles ?? []).filter((c) => c.kind === "family").length;
   const hasFamily = Boolean(sub.data?.family) || familyCycleCount > 0;
@@ -349,7 +353,7 @@ export function AccountView() {
         {/* NỘI DUNG MỤC ĐANG CHỌN: nền trong suốt, tiêu đề ngoài thẻ, căn thẳng mép phải với thanh đầu trang */}
         <section className="min-w-0">
           {activeSection === "personal" && <PersonalInfoCard />}
-          {activeSection === "subscription" && <SubscriptionCard sub={sub} />}
+          {activeSection === "subscription" && <SubscriptionCard sub={sub} expired={expired} />}
           {activeSection === "quota" && <QuotaCard sub={sub} />}
           {activeSection === "family" && <FamilyCard version={billingVersion} onChanged={reloadBilling} familyCycleCount={familyCycleCount} />}
           {activeSection === "academic" &&
