@@ -104,4 +104,7 @@ public record AdvisorChatResponse(
     // Loại ý advisor bỏ vì gói không cho (allowedIntents). Nội bộ: ChatService đổi thành Locked rồi bỏ trước khi trả trình duyệt
     IReadOnlyList<string>? LockedIntents = null,
     // Lượt bị khóa vì gói (cần Premium hoặc hết hạn mức Free): giao diện hiện thẻ nâng cấp. Chỉ .NET đặt, trả cho trình duyệt
-    ChatLock? Locked = null);
+    ChatLock? Locked = null,
+    // Câu trả lời này nói "chưa có thông tin": kho kiến thức không có dòng phù hợp và cơ sở dữ liệu trường cũng không có số liệu học sinh hỏi.
+    // Chỉ .NET đặt (ở bước hỏi thông tin trường), advisor không gửi; dùng để đánh dấu lượt là no_answer, không trả cho trình duyệt
+    bool? NoBasis = null);

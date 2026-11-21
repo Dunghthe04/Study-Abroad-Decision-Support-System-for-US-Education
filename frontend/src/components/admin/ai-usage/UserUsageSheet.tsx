@@ -13,7 +13,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { adminAiUsageApi, type DateRange } from "@/lib/ai-usage-api";
 import {
-  dailySeries, formatCompact, formatDateTime, formatInt, formatMs, formatPct, formatUsd, kindLabel, purposeLabel,
+  dailySeries, formatCompact, formatDateTime, formatInt, formatMs, formatPct, formatUsd, kindLabel, outcomeLabel, purposeLabel,
   purposeRows, PURPOSE_METRICS, ratio, totalTokens, type PurposeMetric,
 } from "@/lib/ai-usage-format";
 import { useFetched } from "@/lib/use-fetched";
@@ -137,7 +137,7 @@ function Turns({ user, range }: { user: AiUsageUserRank; range: DateRange }) {
                     <TableCell>
                       <span className="tabular block">{formatDateTime(turn.createdAt)}</span>
                       <span className="block text-xs text-ink-3">
-                        {ROLE_LABELS[turn.role] ?? turn.role}{turn.outcome ? ` · ${turn.outcome}` : ""}
+                        {ROLE_LABELS[turn.role] ?? turn.role}{turn.outcome ? ` · ${outcomeLabel(turn.outcome)}` : ""}
                       </span>
                     </TableCell>
                     <TableCell className="tabular text-right">

@@ -156,6 +156,28 @@ public class ChatServiceTests
         Assert.Empty(repo.Items);
     }
 
+    [Theory]
+    [InlineData("exception")]
+    [InlineData("sensitive")]
+    public async Task RefusedTurn_IsNotInTheAdminQueue_AndNotCapturedAsKnowledgeDraft(string subtype)
+    {
+        // Câu ngoài chuyện du học hoặc nhạy cảm: hệ thống cố ý không trả lời, không phải chỗ kho kiến thức còn thiếu
+        var saved = new FakeMessages();
+        var repo = new FakeKnowledgeRepository();
+        var advisor = new FakeAdvisor("B0")
+        {
+            Slm = new AdvisorSlmDto([new AdvisorSlmIntentDto("out_of_scope", "bạn có người yêu chưa")], ["out_of_scope"], subtype, 0.9, false),
+        };
+
+        await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved, knowledgeBase: Knowledge(repo))
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "bạn có người yêu chưa")]));
+
+        var reply = saved.Rows[1];
+        Assert.Equal("refused", reply.Outcome);
+        Assert.Null(reply.ReviewStatus);
+        Assert.Empty(repo.Items);
+    }
+
     [Fact]
     public async Task CaptureFailure_DoesNotBreakTheChatReply()
     {
@@ -2972,6 +2994,85 @@ public class ChatServiceTests
 
         Assert.Equal("ok", res.Answer);
         Assert.Null(runner.InfoCode);
+    }
+
+    // ---- câu "chưa có thông tin" là no_answer: kho không có nguồn và cơ sở dữ liệu trường cũng không có số liệu
+
+    private static async Task<(AdvisorChatResponse Res, string? Outcome, string? Review)> KnowledgeTurn(JsonElement data, FakeRunner runner)
+    {
+        var saved = new FakeMessages();
+        var res = await new ChatService(
+                new FakeAdvisor("B4") { Action = "school_info", ActionData = data, Answer = data.GetProperty("kb_answer").GetString()! },
+                new FakeSessions(), new FakeProfileFlow(), null, runner, messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+        return (res, saved.Rows[1].Outcome, saved.Rows[1].ReviewStatus);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_KnowledgeBaseHasNoSourceAndNoSchoolIsFound_IsNoAnswerAndGoesToTheQueue()
+    {
+        var runner = new FakeRunner { Info = InfoOf() };
+
+        var (res, outcome, review) = await KnowledgeTurn(KnowledgeAction("Whitman College có học bổng riêng không"), runner);
+
+        Assert.Equal(("no_answer", "open"), (outcome, review));
+        Assert.Null(res.NoBasis);   // dấu nội bộ, không trả cho trình duyệt
+    }
+
+    [Fact]
+    public async Task SchoolInfo_KnowledgeBaseHasASource_IsAnswered()
+    {
+        var runner = new FakeRunner { Info = InfoOf() };
+
+        var (_, outcome, review) = await KnowledgeTurn(KnowledgeAction("I-20 là gì", kbFound: true, kb: "I-20 là giấy xác nhận"), runner);
+
+        Assert.Equal(("answered", null), (outcome, review));
+    }
+
+    [Fact]
+    public async Task SchoolInfo_TheKnowledgeBaseHasNothingButTheDatabaseHasTheNumbers_IsAnswered()
+    {
+        var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
+
+        var (_, outcome, _) = await KnowledgeTurn(KnowledgeAction("học phí Harvard bao nhiêu", school: "Harvard"), runner);
+
+        Assert.Equal("answered", outcome);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_OnlyAnUnstoredTopic_IsNoAnswerWhenTheKnowledgeBaseHasNoSourceEither()
+    {
+        var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
+
+        var (_, withoutSource, _) = await KnowledgeTurn(KnowledgeAction("ký túc xá của Harvard thế nào", school: "Harvard"), runner);
+        var (_, withSource, _) = await KnowledgeTurn(KnowledgeAction("ký túc xá của Harvard thế nào", school: "Harvard", kbFound: true, kb: "Câu của kho"), runner);
+
+        Assert.Equal("no_answer", withoutSource);
+        Assert.Equal("answered", withSource);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_ASchoolNotInTheSystem_IsNoAnswer()
+    {
+        var runner = new FakeRunner { Match = new NameMatch(NameMatchKind.NotFound, []), Info = InfoOf() };
+
+        var (_, outcome, _) = await KnowledgeTurn(ModelAction("học phí Hogwarts", "Hogwarts", ["cost"]), runner);
+
+        Assert.Equal("no_answer", outcome);
+    }
+
+    [Fact]
+    public async Task SchoolInfo_AnAmbiguousSchoolName_IsAnswered_BecauseTheSystemAsksWhichOne()
+    {
+        var runner = new FakeRunner
+        {
+            Match = new NameMatch(NameMatchKind.Ambiguous, [new SchoolRef("bu", "Boston University"), new SchoolRef("bc", "Boston College")]),
+            Info = InfoOf(),
+        };
+
+        var (_, outcome, _) = await KnowledgeTurn(KnowledgeAction("học phí Boston bao nhiêu", school: "Boston"), runner);
+
+        Assert.Equal("answered", outcome);
     }
 
     [Fact]

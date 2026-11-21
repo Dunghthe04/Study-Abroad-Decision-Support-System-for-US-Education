@@ -24,20 +24,49 @@ public class ChatTurnTests
     [Fact]
     public void NoSlmSummaryAndNoUsage_IsAnswered() => Assert.Equal(ChatOutcomes.Answered, ChatTurn.Outcome(null, null));
 
-    [Theory]
-    [InlineData("ambiguous")]
-    [InlineData("exception")]
-    public void NotUnderstoodOrOffTopic_IsNoAnswer(string subtype) =>
-        Assert.Equal(ChatOutcomes.NoAnswer, ChatTurn.Outcome(Slm(subtype), null));
+    [Fact]
+    public void NotUnderstood_IsNoAnswer() =>
+        Assert.Equal(ChatOutcomes.NoAnswer, ChatTurn.Outcome(Slm("ambiguous"), null));
 
     [Theory]
-    [InlineData("sensitive")]      // bị chặn có chủ ý, hệ thống đã làm đúng việc của nó
+    [InlineData("exception")]      // ngoài chuyện du học: hiểu rồi nhưng cố ý không trả lời
+    [InlineData("sensitive")]      // bị chặn có chủ ý
+    public void UnderstoodButDeliberatelyDeclined_IsRefused(string subtype) =>
+        Assert.Equal(ChatOutcomes.Refused, ChatTurn.Outcome(Slm(subtype), null));
+
+    [Theory]
     [InlineData("greeting")]
     [InlineData("farewell")]
     [InlineData("about_system")]
     [InlineData("human_handoff")]
-    public void DeliberateOutOfScopeKinds_AreAnswered(string subtype) =>
+    public void NormalConversationKinds_AreAnswered(string subtype) =>
         Assert.Equal(ChatOutcomes.Answered, ChatTurn.Outcome(Slm(subtype), null));
+
+    [Fact]
+    public void RefusedSubtypeOnlyCountsWhenTheTurnReallyRanAsOutOfScope()
+    {
+        var rescued = new AdvisorSlmDto(Intents: ["knowledge"], OutOfScope: "exception");
+
+        Assert.Equal(ChatOutcomes.Answered, ChatTurn.Outcome(rescued, null));
+    }
+
+    [Fact]
+    public void NoBasis_IsNoAnswer_ButOnlyWhenNothingElseDecidedTheTurn()
+    {
+        var plain = new AdvisorSlmDto(Intents: ["knowledge"], Confidence: 0.9);
+
+        Assert.Equal(ChatOutcomes.NoAnswer, ChatTurn.Outcome(plain, null, noBasis: true));
+        Assert.Equal(ChatOutcomes.Answered, ChatTurn.Outcome(plain, null, noBasis: false));
+        Assert.Equal(ChatOutcomes.Failed, ChatTurn.Outcome(plain, [Call("claude", "skill_tra_loi", ok: false)], noBasis: true));
+    }
+
+    [Fact]
+    public void Failed_WinsOverRefused()
+    {
+        var usage = new[] { Call("claude", "skill_tra_loi", ok: false) };
+
+        Assert.Equal(ChatOutcomes.Failed, ChatTurn.Outcome(Slm("exception"), usage));
+    }
 
     [Fact]
     public void AmbiguousSubtypeOnlyCountsWhenTheTurnReallyRanAsOutOfScope()
@@ -86,9 +115,10 @@ public class ChatTurnTests
     // ---- review_status
 
     [Fact]
-    public void ReviewStatus_IsOpenOnlyWhenTheTurnWasNotAnswered()
+    public void ReviewStatus_IsOpenOnlyWhenThereIsSomethingForAdminToFix()
     {
         Assert.Null(ChatTurn.ReviewStatus(ChatOutcomes.Answered));
+        Assert.Null(ChatTurn.ReviewStatus(ChatOutcomes.Refused));   // đúng thiết kế, không có gì để bổ sung
         Assert.Equal(ChatReviewStatuses.Open, ChatTurn.ReviewStatus(ChatOutcomes.NoAnswer));
         Assert.Equal(ChatReviewStatuses.Open, ChatTurn.ReviewStatus(ChatOutcomes.Failed));
     }

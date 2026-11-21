@@ -56,6 +56,11 @@ export interface AdminNavItem {
   section: AdminNavSectionId;
   roles: AdminRole[];
   useCases: string[];
+  /**
+   * Ẩn khỏi menu và trang tổng quan nhưng trang vẫn vào được (đường dẫn trực tiếp, liên kết từ trang khác) và vẫn qua kiểm tra vai trò
+   * của AdminSection. Dùng cho chức năng chưa muốn đưa lên menu.
+   */
+  hidden?: boolean;
 }
 
 export interface AdminNavSection extends AdminNavSectionMeta {
@@ -184,7 +189,17 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: BarChart3FilledIcon,
     section: "ai",
     roles: ["admin"],
-    useCases: ["UC-83", "UC-90"],
+    useCases: ["UC-83"],
+  },
+  {
+    href: "/admin/ai-quality",
+    label: "Chất lượng AI",
+    description: "Tỉ lệ trả lời được, không trả lời được, từ chối, lỗi, thời gian phản hồi và hội thoại mẫu đã che thông tin",
+    icon: MessagesSquareIcon,
+    filledIcon: MessagesSquareFilledIcon,
+    section: "ai",
+    roles: ["admin"],
+    useCases: ["UC-90"],
   },
   {
     href: "/admin/review-batches",
@@ -195,6 +210,8 @@ export const ADMIN_NAV: AdminNavItem[] = [
     section: "ai",
     roles: ["admin"],
     useCases: [],
+    // Ẩn khỏi menu; trang Chất lượng AI (UC-90) có liên kết sang đây cho nhóm câu đã trả lời được
+    hidden: true,
   },
   {
     href: "/admin/users",
@@ -253,7 +270,7 @@ export function adminNavForRole(role: UserRole | undefined): AdminNavItem[] {
   if (role !== "admin" && role !== "moderator") {
     return [];
   }
-  return ADMIN_NAV.filter((item) => item.roles.includes(role));
+  return ADMIN_NAV.filter((item) => !item.hidden && item.roles.includes(role));
 }
 
 export function adminNavSectionsForRole(role: UserRole | undefined): AdminNavSection[] {

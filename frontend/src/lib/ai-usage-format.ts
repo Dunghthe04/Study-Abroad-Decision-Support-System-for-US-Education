@@ -116,6 +116,18 @@ export function kindLabel(kind: string): string {
   return kind;
 }
 
+// Kết quả một lượt chat (chat_messages.outcome). Mã lạ giữ nguyên để không giấu giá trị mới của backend
+export const OUTCOME_LABELS: Record<string, string> = {
+  answered: "Trả lời được",
+  no_answer: "Không trả lời được",
+  refused: "Từ chối",
+  failed: "Lỗi",
+};
+
+export function outcomeLabel(outcome: string): string {
+  return OUTCOME_LABELS[outcome] ?? outcome;
+}
+
 // Tên dễ đọc của các skill đã biết; tên lạ giữ nguyên (bảng vẫn hiện tên gốc)
 const PURPOSE_LABELS: Record<string, string> = {
   slm_intents: "Phân loại tin nhắn",
