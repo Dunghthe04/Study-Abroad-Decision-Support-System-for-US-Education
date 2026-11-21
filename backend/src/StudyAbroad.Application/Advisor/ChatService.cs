@@ -112,6 +112,15 @@ namespace StudyAbroad.Application.Advisor
             // chỉ có lockedIntents thì Action là của ý được phép và vẫn chạy bình thường
             if (gate is null && ReferenceEquals(beforeParentGate, response))
                 locked = ChatPremiumGate.LockOf(charge, response);
+            // Chạy TRƯỚC lớp chặn Premium bên dưới: câu hỏi số liệu mà SLM lỡ xếp vào giải thích / goal-seeking của tài khoản Free là câu tra cứu Free được dùng, phải được trả lời chứ không bị khóa.
+            // SLM đôi khi xếp câu hỏi số liệu một trường ("UCLA xếp hạng bao nhiêu", "MIT cần IELTS bao nhiêu") vào giải thích hoặc goal-seeking:
+            // câu tự gõ (không phải nút) mà chỉ hỏi số liệu thì chuyển sang trả lời số liệu
+            if (request.Action is null && recommender is not null
+                && response.Action is ChatExplanation.Action or ChatGoalSeek.Action
+                && request.Messages.LastOrDefault(m => m.Role == "user")?.Content is { } typed
+                && ChatSchoolInfo.Reroute(response, typed) is { } rerouted)
+                response = rerouted;
+
             // Advisor bản cũ có thể bỏ qua allowedIntents và trả hành động Premium cho tài khoản Free: khóa luôn, không chạy nhánh nào và không lưu gì vào nháp hồ sơ
             if (ChatPremiumGate.BlockPremiumAction(charge, response, state) is { } blocked)
             {
@@ -151,14 +160,6 @@ namespace StudyAbroad.Application.Advisor
             // Chạy sau khi lưu analysis để bản lưu lộ trình không lẫn danh sách trường
             if (response.Action == ChatRecommendation.Action && recommender is not null)
                 response = await RecommendAsync(userId, response, ct);
-
-            // SLM đôi khi xếp câu hỏi số liệu một trường ("UCLA xếp hạng bao nhiêu", "MIT cần IELTS bao nhiêu") vào giải thích hoặc goal-seeking:
-            // câu tự gõ (không phải nút) mà chỉ hỏi số liệu thì chuyển sang trả lời số liệu
-            if (request.Action is null && recommender is not null
-                && response.Action is ChatExplanation.Action or ChatGoalSeek.Action
-                && request.Messages.LastOrDefault(m => m.Role == "user")?.Content is { } typed
-                && ChatSchoolInfo.Reroute(response, typed) is { } rerouted)
-                response = rerouted;
 
             // Học sinh hỏi về một trường: lời tư vấn lấy từ phần tư vấn từng trường có sẵn, thay câu tạm của advisor
             if (response.Action == ChatExplanation.Action && recommender is not null)
