@@ -58,7 +58,8 @@ public class MediaControllerTests
         Assert.IsType<OkObjectResult>(response);
         Assert.Equal(expectedLimit, uploader.Request!.MaxSizeBytes);
         Assert.True(uploader.Request.ModerateContent);
-        Assert.Equal("centers", uploader.Request.FolderSuffix);
+        var userId = Guid.Parse(controller.ControllerContext.HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        Assert.Equal($"centers/{userId:N}", uploader.Request.FolderSuffix);
     }
 
     [Theory]

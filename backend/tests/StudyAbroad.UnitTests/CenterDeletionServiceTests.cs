@@ -155,6 +155,9 @@ public class CenterDeletionServiceTests
         public FakeEmailSender Email { get; } = new();
         public FakeMediaCleaner Media { get; } = new();
         public CenterDeletionService Service { get; }
+
+        /// <summary>URL ảnh nằm trong thư mục riêng của tài khoản chủ, như ảnh trung tâm tự tải lên.</summary>
+        public string OwnedUrl(string name) => $"https://res.cloudinary.com/demo/image/upload/v1/usas/centers/{Owner.Id:N}/{name}.png";
         public User Owner { get; }
         public StudyCenter Center { get; }
         public CenterDeletionRequest Request { get; }
@@ -280,7 +283,7 @@ public class CenterDeletionServiceTests
     public async Task PurgeDue_DeletesCenterImagesFromCdnUsingUrlsReadBeforeTheColumnsAreWiped()
     {
         var s = new Setup();
-        s.Work.MediaUrls.AddRange(["https://res.cloudinary.com/demo/image/upload/v1/usas/logo.png", "https://res.cloudinary.com/demo/image/upload/v1/usas/cover.png"]);
+        s.Work.MediaUrls.AddRange([s.OwnedUrl("logo"), s.OwnedUrl("cover")]);
         await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
 
         var due = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(31));
@@ -295,8 +298,8 @@ public class CenterDeletionServiceTests
     public async Task PurgeDue_ErasesCenterSideChatAndDeletesItsAttachmentsFromCdn()
     {
         var s = new Setup();
-        s.Work.MediaUrls.Add("https://res.cloudinary.com/demo/image/upload/v1/usas/logo.png");
-        s.Work.ChatAttachments.AddRange(["https://res.cloudinary.com/demo/image/upload/v1/usas/chat/a.png", "https://res.cloudinary.com/demo/image/upload/v1/usas/logo.png"]);
+        s.Work.MediaUrls.Add(s.OwnedUrl("logo"));
+        s.Work.ChatAttachments.AddRange(["https://res.cloudinary.com/demo/image/upload/v1/usas/chat/a.png", s.OwnedUrl("logo")]);
         await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
 
         var due = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(31));
@@ -367,10 +370,24 @@ public class CenterDeletionServiceTests
     }
 
     [Fact]
+    public async Task PurgeDue_DoesNotDeleteImagesThatPointAtOtherPeoplesAssets()
+    {
+        var s = new Setup();
+        var foreign = "https://res.cloudinary.com/demo/image/upload/v1/usas/universities/harvard.png";
+        var trick = $"{foreign}?x=/centers/{s.Owner.Id:N}/a.png";
+        s.Work.MediaUrls.AddRange([foreign, trick, s.OwnedUrl("mine")]);
+        await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
+
+        await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(31));
+
+        Assert.Equal([s.OwnedUrl("mine")], s.Media.Deleted);
+    }
+
+    [Fact]
     public async Task PurgeDue_CdnFailure_StillCompletesDeletionAndReportsUrlsToCleanByHand()
     {
         var s = new Setup();
-        s.Work.MediaUrls.AddRange(["https://res.cloudinary.com/demo/image/upload/v1/usas/a.png", "https://res.cloudinary.com/demo/image/upload/v1/usas/b.png"]);
+        s.Work.MediaUrls.AddRange([s.OwnedUrl("a"), s.OwnedUrl("b")]);
         s.Media.FailUrls.Add(s.Work.MediaUrls[1]);
         await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
         s.Email.CenterDeletionEmails.Clear();
@@ -391,7 +408,7 @@ public class CenterDeletionServiceTests
     public async Task PurgeDue_CleanerThrows_IsReportedAsFailureWithoutUndoingDeletion()
     {
         var s = new Setup();
-        s.Work.MediaUrls.Add("https://res.cloudinary.com/demo/image/upload/v1/usas/a.png");
+        s.Work.MediaUrls.Add(s.OwnedUrl("a"));
         s.Media.Throws = true;
         await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
 
@@ -406,7 +423,7 @@ public class CenterDeletionServiceTests
     public async Task PurgeDue_HeldAtLock_DoesNotTouchTheCdn()
     {
         var s = new Setup();
-        s.Work.MediaUrls.Add("https://res.cloudinary.com/demo/image/upload/v1/usas/a.png");
+        s.Work.MediaUrls.Add(s.OwnedUrl("a"));
         await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
         s.Work.HeldAtLock = true;
 

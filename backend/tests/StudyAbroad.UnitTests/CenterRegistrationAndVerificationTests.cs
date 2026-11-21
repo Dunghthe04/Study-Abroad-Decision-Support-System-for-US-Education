@@ -770,13 +770,32 @@ public class CenterRegistrationAndVerificationTests
             Task.FromResult(new PagedResult<CenterDeletionRequest>(Items, page, pageSize, Items.Count));
     }
 
+    private sealed class FakeMediaCleaner : ICenterMediaCleaner
+    {
+        public List<string> Deleted { get; } = [];
+        public int Calls { get; private set; }
+        public bool Throws { get; set; }
+
+        public Task<IReadOnlyList<string>> DeleteAsync(IReadOnlyCollection<string> urls, CancellationToken ct = default)
+        {
+            Calls++;
+            if (Throws) throw new InvalidOperationException("CDN down");
+            Deleted.AddRange(urls);
+            return Task.FromResult<IReadOnlyList<string>>([]);
+        }
+    }
+
+    private static string OwnImage(Guid owner, string name) =>
+        $"https://res.cloudinary.com/demo/image/upload/v1/usas/centers/{owner:N}/{name}.png";
+
     private sealed record ProfileSetup(
         StudyCenterService Service,
         StudyCenter Center,
         FakeAuditLogs Audit,
         FakeVerificationRepo Verifications,
         FakeProfileChangeRepo Changes,
-        FakeDeletionRepo Deletions);
+        FakeDeletionRepo Deletions,
+        FakeMediaCleaner Cleaner);
 
     private static async Task<ProfileSetup> ProfileEditSetup(string status, Action<StudyCenter>? configure = null)
     {
@@ -785,6 +804,7 @@ public class CenterRegistrationAndVerificationTests
         var verifications = new FakeVerificationRepo();
         var changes = new FakeProfileChangeRepo();
         var deletions = new FakeDeletionRepo();
+        var cleaner = new FakeMediaCleaner();
         var center = new StudyCenter
         {
             Id = Guid.NewGuid(),
@@ -798,8 +818,70 @@ public class CenterRegistrationAndVerificationTests
         };
         configure?.Invoke(center);
         await centers.AddAsync(center);
-        var service = new StudyCenterService(centers, audit, verifications, emailSender: null, notifications: null, profileChanges: changes, deletionRequests: deletions);
-        return new ProfileSetup(service, center, audit, verifications, changes, deletions);
+        var service = new StudyCenterService(centers, audit, verifications, emailSender: null, notifications: null, profileChanges: changes, deletionRequests: deletions, mediaCleaner: cleaner);
+        return new ProfileSetup(service, center, audit, verifications, changes, deletions, cleaner);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_ReplacingOwnLogo_DeletesTheOldImageFromTheCdn()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified, c => c.LogoUrl = OwnImage(c.OwnerUserId!.Value, "old"));
+        var owner = s.Center.OwnerUserId!.Value;
+
+        var result = await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(LogoUrl: OwnImage(owner, "new")));
+
+        Assert.True(result.Success);
+        Assert.Equal([OwnImage(owner, "old")], s.Cleaner.Deleted);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_ReplacingALogoThatPointsAtSomeoneElsesAsset_DoesNotDeleteIt()
+    {
+        var foreign = "https://res.cloudinary.com/demo/image/upload/v1/usas/universities/harvard.png";
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified, c => c.LogoUrl = foreign);
+        var owner = s.Center.OwnerUserId!.Value;
+
+        var result = await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(LogoUrl: OwnImage(owner, "new")));
+
+        Assert.True(result.Success);
+        Assert.Empty(s.Cleaner.Deleted);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_RemovingAGalleryImage_DeletesOnlyTheRemovedOwnImage()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified,
+            c => c.GalleryImages = [OwnImage(c.OwnerUserId!.Value, "a"), OwnImage(c.OwnerUserId!.Value, "b")]);
+        var owner = s.Center.OwnerUserId!.Value;
+
+        await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(GalleryImages: [OwnImage(owner, "a")]));
+
+        Assert.Equal([OwnImage(owner, "b")], s.Cleaner.Deleted);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_NothingRemoved_DoesNotCallTheCdn()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified,
+            c => { c.LogoUrl = OwnImage(c.OwnerUserId!.Value, "a"); c.GalleryImages = [OwnImage(c.OwnerUserId!.Value, "g")]; });
+        var owner = s.Center.OwnerUserId!.Value;
+
+        await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(Description: "Mô tả mới", GalleryImages: [OwnImage(owner, "g"), OwnImage(owner, "h")]));
+
+        Assert.Equal(0, s.Cleaner.Calls);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_CdnFailure_DoesNotFailTheSave()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified, c => c.LogoUrl = OwnImage(c.OwnerUserId!.Value, "old"));
+        s.Cleaner.Throws = true;
+        var owner = s.Center.OwnerUserId!.Value;
+
+        var result = await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(LogoUrl: OwnImage(owner, "new")));
+
+        Assert.True(result.Success);
+        Assert.Equal(OwnImage(owner, "new"), s.Center.LogoUrl);
     }
 
     [Fact]
