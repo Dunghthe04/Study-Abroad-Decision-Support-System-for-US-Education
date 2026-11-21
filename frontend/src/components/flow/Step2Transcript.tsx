@@ -546,6 +546,75 @@ export function Step2Transcript({
     });
   };
 
+  // Khối lớp cao nhất được phép hiển thị dựa trên khai báo ở Bước 1
+  const maxAllowedGradeName = useMemo(() => {
+    if (!defaultYears || defaultYears.length === 0) return null;
+    return defaultYears[defaultYears.length - 1]?.gradeName ?? null;
+  }, [defaultYears]);
+
+  // Xóa khối lớp hiện tại (chỉ lớp hiện tại mới được xóa nếu học sinh chưa có điểm năm nay; lớp cũ không được xóa)
+  const handleRemoveCurrentGradeYear = () => {
+    if (!maxAllowedGradeName) return;
+    if (years.length <= 1) {
+      setValidationError("Bảng điểm cần giữ lại ít nhất một năm học đã có điểm.");
+      return;
+    }
+    const currentGradeNormalized = normalizeGrade(maxAllowedGradeName);
+    const targetYear = years.find((y) => normalizeGrade(y.gradeName) === currentGradeNormalized);
+    if (!targetYear) return;
+
+    const hasScores = targetYear.subjects.some(
+      (s) => s.semester1Score !== null || s.semester2Score !== null
+    );
+
+    if (
+      hasScores &&
+      !window.confirm(
+        `Khối ${targetYear.gradeName} đang có điểm. Bạn có chắc muốn xóa khối này (vì chưa hoàn tất năm học) không?`
+      )
+    ) {
+      return;
+    }
+
+    const updatedYears = years.filter((y) => normalizeGrade(y.gradeName) !== currentGradeNormalized);
+    const newGpas = calculateTranscriptGpa(updatedYears);
+    onUpdate({
+      academicYears: updatedYears,
+      manualGpa10Scale: newGpas.gpa10,
+      calculatedGpa4Scale: newGpas.gpa4,
+    });
+    setActiveYearIndex((prev) => Math.max(0, Math.min(prev, updatedYears.length - 1)));
+    setValidationError(null);
+  };
+
+  // Thêm lại khối lớp hiện tại (tối đa bằng đúng lớp đã khai báo ở Bước 1, không được vượt quá)
+  const handleAddCurrentGradeYear = () => {
+    if (!maxAllowedGradeName) return;
+    if (years.some((y) => normalizeGrade(y.gradeName) === normalizeGrade(maxAllowedGradeName))) return;
+
+    const newYear: AcademicYearDraft = {
+      gradeName: maxAllowedGradeName,
+      subjects: DEFAULT_SUBJECTS.map((s) => ({
+        subjectName: s,
+        semester1Score: null,
+        semester2Score: null,
+      })),
+    };
+
+    const updatedYears = [...years, newYear].sort((a, b) => gradeOrder(a.gradeName) - gradeOrder(b.gradeName));
+    const newGpas = calculateTranscriptGpa(updatedYears);
+    onUpdate({
+      academicYears: updatedYears,
+      manualGpa10Scale: newGpas.gpa10,
+      calculatedGpa4Scale: newGpas.gpa4,
+    });
+    const newIdx = updatedYears.findIndex(
+      (y) => normalizeGrade(y.gradeName) === normalizeGrade(maxAllowedGradeName)
+    );
+    if (newIdx !== -1) setActiveYearIndex(newIdx);
+    setValidationError(null);
+  };
+
   // Bổ sung Lớp 9 cho học sinh có nháp chỉ có Lớp 10-12 (chuẩn 4 năm Common App Mỹ)
   const handleAddGrade9 = () => {
     if (years.some((y) => normalizeGrade(y.gradeName) === "lop 9")) return;
@@ -794,9 +863,20 @@ export function Step2Transcript({
     );
 
     if (emptyYears.length > 0) {
-      setValidationError(
-        `Hồ sơ cần có điểm của các năm học (${years.map((y) => y.gradeName).join(", ")}) để tính toán cơ hội trúng tuyển chuẩn xác nhất. Hiện bạn đang thiếu điểm của ${emptyYears.map((y) => y.gradeName).join(", ")}. Vui lòng tải thêm ảnh bảng điểm hoặc điền tay các năm còn thiếu.`
-      );
+      const isOnlyCurrentGradeEmpty =
+        maxAllowedGradeName &&
+        emptyYears.length === 1 &&
+        normalizeGrade(emptyYears[0].gradeName) === normalizeGrade(maxAllowedGradeName);
+
+      if (isOnlyCurrentGradeEmpty) {
+        setValidationError(
+          `Bạn đang để trống điểm của ${emptyYears[0].gradeName}. Nếu bạn chưa học xong hoặc chưa có điểm năm nay, vui lòng bấm nút xóa (biểu tượng thùng rác/x) trên tab ${emptyYears[0].gradeName} để tiếp tục với điểm các năm trước.`
+        );
+      } else {
+        setValidationError(
+          `Hồ sơ cần có điểm của các năm học (${years.map((y) => y.gradeName).join(", ")}) để tính toán cơ hội trúng tuyển chuẩn xác nhất. Hiện bạn đang thiếu điểm của ${emptyYears.map((y) => y.gradeName).join(", ")}. Vui lòng tải thêm ảnh bảng điểm hoặc điền tay các năm còn thiếu.`
+        );
+      }
       setShowManualTable(true);
       const firstMissingIdx = years.findIndex((y) => y.gradeName === emptyYears[0].gradeName);
       if (firstMissingIdx !== -1) setActiveYearIndex(firstMissingIdx);
@@ -1426,22 +1506,62 @@ export function Step2Transcript({
             </div>
 
             <div className="flex flex-wrap items-center gap-2 border-b border-line pb-2">
-              {years.map((y, idx) => (
-                <button
-                  key={y.gradeName}
-                  type="button"
-                  onClick={() => setActiveYearIndex(idx)}
-                  className={cn(
-                    "rounded-lg px-4 py-2 text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                    activeYearIndex === idx
-                      ? "bg-brand text-white "
-                      : "bg-surface border border-line text-muted-foreground hover:border-brand/40 hover:text-foreground"
-                  )}
-                >
-                  {y.gradeName}
-                  {idx === years.length - 1 && " (hiện tại)"}
-                </button>
-              ))}
+              {years.map((y, idx) => {
+                const isCurrentGradeYear =
+                  Boolean(maxAllowedGradeName && normalizeGrade(y.gradeName) === normalizeGrade(maxAllowedGradeName));
+                return (
+                  <div key={y.gradeName} className="inline-flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => setActiveYearIndex(idx)}
+                      className={cn(
+                        "rounded-lg px-4 py-2 text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default flex items-center gap-1.5",
+                        activeYearIndex === idx
+                          ? "bg-brand text-white "
+                          : "bg-surface border border-line text-muted-foreground hover:border-brand/40 hover:text-foreground"
+                      )}
+                    >
+                      <span>{y.gradeName}</span>
+                      {isCurrentGradeYear && (
+                        <span className={cn("text-[10px]", activeYearIndex === idx ? "text-white/80" : "text-brand font-medium")}>
+                          (hiện tại)
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Chỉ cho phép xóa khối lớp hiện tại (học sinh chưa có điểm kỳ nào của năm nay; không cho xóa lớp cũ) */}
+                    {isCurrentGradeYear && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveCurrentGradeYear();
+                        }}
+                        title={`Chưa có điểm ${y.gradeName}? Bấm để xóa khối này`}
+                        aria-label={`Xóa khối ${y.gradeName}`}
+                        className="ml-1 p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                      >
+                        <XIcon className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Nút thêm lại khối lớp hiện tại nếu đã xóa (tối đa bằng đúng lớp đã khai báo ở Bước 1, không thêm lớp cao hơn) */}
+              {maxAllowedGradeName &&
+                !years.some((y) => normalizeGrade(y.gradeName) === normalizeGrade(maxAllowedGradeName)) && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleAddCurrentGradeYear}
+                    className="rounded-lg px-3 py-2 text-xs font-semibold gap-1 border-dashed border-brand/50 text-brand hover:bg-brand/10 hover:text-brand"
+                  >
+                    <PlusIcon className="size-3" />
+                    Thêm {maxAllowedGradeName} (đang học)
+                  </Button>
+                )}
 
               {/* Nút bổ sung Lớp 9 nếu danh sách năm chưa có */}
               {!years.some((y) => normalizeGrade(y.gradeName) === "lop 9") && (
@@ -1486,6 +1606,36 @@ export function Step2Transcript({
           {/* Subjects Table */}
           {years[activeYearIndex] && (
             <div className="space-y-4">
+              {/* Thông báo hướng dẫn nếu lớp hiện tại đang chưa có điểm học kỳ nào */}
+              {Boolean(
+                maxAllowedGradeName &&
+                  normalizeGrade(years[activeYearIndex].gradeName) === normalizeGrade(maxAllowedGradeName) &&
+                  years[activeYearIndex].subjects.every(
+                    (s) =>
+                      (s.semester1Score === null || s.semester1Score === undefined) &&
+                      (s.semester2Score === null || s.semester2Score === undefined)
+                  )
+              ) && (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 rounded-xl bg-brand-wash/50 border border-brand/30 text-xs text-muted-foreground animate-in fade-in-50">
+                  <div className="leading-relaxed">
+                    💡 <strong>Lưu ý:</strong> Bạn đang học{" "}
+                    <span className="font-semibold text-foreground">{years[activeYearIndex].gradeName}</span> nhưng
+                    chưa học xong hoặc chưa có điểm học kỳ nào? Bạn có thể tạm xóa khối này để tiếp tục nộp hồ sơ bằng
+                    điểm các năm trước.
+                  </div>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="outline"
+                    onClick={handleRemoveCurrentGradeYear}
+                    className="text-destructive hover:bg-destructive/10 border-destructive/30 shrink-0 text-xs font-medium"
+                  >
+                    <Trash2Icon className="size-3 mr-1" />
+                    Xóa khối {years[activeYearIndex].gradeName}
+                  </Button>
+                </div>
+              )}
+
               <div className="overflow-hidden rounded-xl border border-line bg-surface ">
                 <table className="w-full text-left text-xs">
                   <thead className="border-b border-line bg-muted/30 text-muted-foreground font-semibold text-xs">
