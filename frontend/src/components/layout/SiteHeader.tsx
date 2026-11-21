@@ -8,6 +8,7 @@ import {
   BookOpenIcon,
   BookmarkCheckIcon,
   Building2Icon,
+  ChevronDownIcon,
   CreditCardIcon,
   CrownIcon,
   GaugeIcon,
@@ -28,11 +29,10 @@ import {
 import { billingApi } from "@/lib/billing-api";
 import { useFetched } from "@/lib/use-fetched";
 import { formatUserRole } from "@/lib/user-role-labels";
+import { UserRoleIcon } from "@/components/layout/UserRoleIcon";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsLinkedParent } from "@/hooks/use-is-linked-parent";
-import type { SubscriptionSummaryDto } from "@/types/billing";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import type { QuotaOverviewDto, SubscriptionSummaryDto } from "@/types/billing";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -77,6 +77,14 @@ export function SiteHeader() {
     () => (isStudentOrParent ? billingApi.subscription() : Promise.resolve(null)),
   );
   const hasFamily = Boolean(sub.data?.family) || (sub.data?.cycles ?? []).some((c) => c.kind === "family");
+
+  // Hạn mức chung hiện ở đầu menu avatar: chỉ tải khi mở menu (mỗi lần mở là một lần tải mới), không tải theo từng trang
+  const showQuota = isStudentOrParent && !acting;
+  const [menuOpens, setMenuOpens] = useState(0);
+  const quota = useFetched<QuotaOverviewDto | null>(
+    showQuota && menuOpens > 0 ? `quota:${user?.id}:${menuOpens}` : "none",
+    () => (showQuota ? billingApi.quotaOverview() : Promise.resolve(null)),
+  );
 
   // 1f: phụ huynh đã liên kết không có hồ sơ riêng, các mục hồ sơ riêng nhường chỗ cho "Con của tôi"
   const { linked: isLinkedParent } = useIsLinkedParent();
@@ -211,45 +219,81 @@ export function SiteHeader() {
                 )}
                 {/* [UC-110] Chuông thông báo */}
                 <NotificationBell />
-                <DropdownMenu>
+                <DropdownMenu onOpenChange={(open) => open && setMenuOpens((n) => n + 1)}>
                 <DropdownMenuTrigger
                   aria-label={`Tài khoản của ${user.fullName}`}
-                  className="cursor-pointer rounded-full outline-none focus-visible:ring-3 focus-visible:ring-white/50"
+                  className="group flex h-10 cursor-pointer items-center rounded-full border border-white/30 bg-white/10 pr-1 pl-1 text-white outline-none transition-colors hover:bg-white/15 focus-visible:ring-3 focus-visible:ring-white/50 data-popup-open:bg-white/20"
                 >
-                  <Avatar className="size-9">
-                    <AvatarFallback className="bg-white font-semibold text-brand-ink">
-                      {user.fullName.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+                  <span
+                    aria-hidden="true"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-full border border-white/40 bg-white/15"
+                  >
+                    <UserRoleIcon role={user.role} className="size-4" />
+                  </span>
+                  <span className="hidden max-w-40 truncate px-2.5 text-sm font-medium sm:block">{user.fullName}</span>
+                  <span aria-hidden="true" className="ml-1.5 flex h-6 items-center border-l border-white/30 px-2 sm:ml-0">
+                    <ChevronDownIcon className="size-4 transition-transform group-data-popup-open:rotate-180" />
+                  </span>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64">
-                  {/* Đầu menu: ảnh đại diện, tên, vai trò */}
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel className="flex items-center gap-3 px-2 py-2.5">
-                      <Avatar className="size-10">
-                        <AvatarFallback className="bg-brand-wash font-semibold text-brand-ink">
-                          {user.fullName.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="flex min-w-0 flex-col items-start gap-0.5">
-                        <span className="w-full truncate text-sm font-semibold text-ink">{user.fullName}</span>
+                <DropdownMenuContent align="end" className="w-80 p-0">
+                  {/* Đầu menu: biểu tượng vai trò, tên, gói; học sinh / phụ huynh có thêm hạn mức chung còn lại */}
+                  <div className="space-y-4 bg-brand-wash px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <span
+                        aria-hidden="true"
+                        className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-brand/20 bg-surface text-brand"
+                      >
+                        <UserRoleIcon role={user.role} className="size-5" />
+                      </span>
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="truncate text-sm font-semibold text-ink">{user.fullName}</span>
                         {isStudentOrParent ? (
                           sub.data ? (
-                            <span className="w-full truncate text-xs font-normal text-ink-2">
-                              {formatSubscriptionLabel(sub.data)}
-                            </span>
+                            <span className="truncate text-xs text-ink-2">{formatSubscriptionLabel(sub.data)}</span>
                           ) : (
                             <Skeleton className="h-3.5 w-20" />
                           )
                         ) : (
-                          <Badge variant="neutral">{formatUserRole(user.role)}</Badge>
+                          <span className="truncate text-xs text-ink-2">{formatUserRole(user.role)}</span>
                         )}
                       </span>
-                    </DropdownMenuLabel>
-                  </DropdownMenuGroup>
+                      {isStudentOrParent && sub.data?.tier === "premium" && (
+                        <CrownIcon className="size-5 shrink-0 text-gold" aria-label="Premium" />
+                      )}
+                    </div>
 
+                    {showQuota && (
+                      <Link href="/account#quota" className="block space-y-2 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+                        <div className="flex items-baseline justify-between gap-3 text-xs">
+                          <span className="text-ink-2">Hạn mức chung của bạn còn lại</span>
+                          {quota.data ? (
+                            <span className="font-semibold text-ink tabular-nums">{quota.data.remainingPercent}%</span>
+                          ) : (
+                            <Skeleton className="h-3.5 w-8" />
+                          )}
+                        </div>
+                        <div
+                          role="progressbar"
+                          aria-label="Hạn mức chung còn lại"
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={quota.data?.remainingPercent ?? 0}
+                          className="h-2.5 w-full overflow-hidden rounded-full bg-surface ring-1 ring-brand/15"
+                        >
+                          <div
+                            className={cn("h-full rounded-full transition-[width] duration-500", quota.data?.lowQuota ? "bg-risk" : "bg-brand")}
+                            style={{ width: `${quota.data?.remainingPercent ?? 0}%` }}
+                          />
+                        </div>
+                      </Link>
+                    )}
+                  </div>
+
+                  <div className="p-1">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className="px-2 pt-2 pb-1 text-[13px]">Tài khoản của bạn</DropdownMenuLabel>
+                  </DropdownMenuGroup>
                   {/* Tài khoản */}
-                  <DropdownMenuSeparator />
                   <DropdownMenuItem render={<Link href="/account#personal" />}>
                     <UserIcon />
                     Thông tin cá nhân
@@ -345,6 +389,7 @@ export function SiteHeader() {
                     <LogOutIcon />
                     Đăng xuất
                   </DropdownMenuItem>
+                  </div>
                 </DropdownMenuContent>
                 </DropdownMenu>
               </>

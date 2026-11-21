@@ -31,6 +31,7 @@ import { SubscriptionCard } from "@/components/account/SubscriptionCard";
 import { FamilyCard } from "@/components/account/FamilyCard";
 import { QuotaCard } from "@/components/account/QuotaCard";
 import { billingApi } from "@/lib/billing-api";
+import { UserRoleIcon } from "@/components/layout/UserRoleIcon";
 import { useFetched } from "@/lib/use-fetched";
 import type { ExpiredCycleDto, SubscriptionSummaryDto } from "@/types/billing";
 import {
@@ -38,15 +39,12 @@ import {
   ArrowUpRightIcon,
   BookmarkCheckIcon,
   BookOpenIcon,
-  Building2Icon,
   CreditCardIcon,
   GaugeIcon,
-  GraduationCapIcon,
   HeartHandshakeIcon,
   KeyRoundIcon,
   LogOutIcon,
   SendIcon,
-  ShieldIcon,
   TriangleAlertIcon,
   UserIcon,
   UsersIcon,
@@ -201,14 +199,6 @@ export function AccountView() {
     router.push("/login");
   };
 
-  const RoleIcon =
-    user.role === "student"
-      ? GraduationCapIcon
-      : user.role === "parent"
-        ? UsersIcon
-        : user.role === "center"
-          ? Building2Icon
-          : ShieldIcon;
 
   return (
     <>
@@ -251,7 +241,7 @@ export function AccountView() {
               aria-hidden="true"
               className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-muted-foreground"
             >
-              <RoleIcon className="size-4" />
+              <UserRoleIcon role={user.role} className="size-4" />
             </span>
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-ink" title={user.fullName}>
