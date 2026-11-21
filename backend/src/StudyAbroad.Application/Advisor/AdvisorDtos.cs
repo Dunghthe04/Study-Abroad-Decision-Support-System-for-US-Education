@@ -97,4 +97,7 @@ public record AdvisorChatResponse(
     AdvisorSlmDto? Slm = null,
     // Lượt này vừa lưu hồ sơ chính thức (bấm "Đúng rồi" ở bảng rà soát): trang Gợi ý trường hiện nút cập nhật danh sách.
     // Chỉ .NET đặt, advisor không gửi
-    bool? ProfileSaved = null);
+    bool? ProfileSaved = null,
+    // Câu trả lời này nói "chưa có thông tin": kho kiến thức không có nguồn và cơ sở dữ liệu trường cũng không có số liệu học sinh hỏi.
+    // Chỉ .NET đặt (ở bước hỏi thông tin trường), advisor không gửi; dùng để đánh dấu lượt là no_answer, không trả cho trình duyệt
+    bool? NoBasis = null);

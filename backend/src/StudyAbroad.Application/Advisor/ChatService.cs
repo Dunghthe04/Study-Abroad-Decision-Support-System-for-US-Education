@@ -195,7 +195,7 @@ namespace StudyAbroad.Application.Advisor
             var replyId = await RecordTurnAsync(session, request, response, turnSignals, turnClock.ElapsedMilliseconds, ct);
             // Token ghi sau tin trả lời để nối được (chat_message_id). Tin không lưu (tắt công tắc hoặc lỗi) thì vẫn ghi token, chỉ không có liên kết
             await RecordAiCallsAsync(userId, replyId, turnSignals.Usage, ct);
-            if (ChatTurn.Outcome(turnSignals.Slm, turnSignals.Usage) == ChatOutcomes.NoAnswer)
+            if (ChatTurn.Outcome(turnSignals.Slm, turnSignals.Usage, response.NoBasis == true) == ChatOutcomes.NoAnswer)
                 await CaptureUnansweredAsync(request, ct);
 
             //Trả về trình duyệt: có mã phiên, ko lộ trạng thái nội bôk.
@@ -213,6 +213,7 @@ namespace StudyAbroad.Application.Advisor
                 ActionData = null,
                 AiUsage = null,   // số token là việc nội bộ, học sinh không thấy
                 Slm = null,       // nhãn model gán chứa chữ của học sinh, chỉ lưu cho admin
+                NoBasis = null,   // dấu nội bộ để đánh dấu lượt, học sinh không thấy
             };
         }
 
@@ -263,7 +264,7 @@ namespace StudyAbroad.Application.Advisor
                     rows.Add(question);
                 }
 
-                var outcome = ChatTurn.Outcome(signals.Slm, signals.Usage);
+                var outcome = ChatTurn.Outcome(signals.Slm, signals.Usage, response.NoBasis == true);
                 var reply = new StudyAbroad.Domain.Entities.ChatMessage
                 {
                     ChatSessionId = session.Id,
@@ -558,7 +559,7 @@ namespace StudyAbroad.Application.Advisor
                 // Model đã trả trường và mục (không chạy kho kiến thức) mà không khớp được trường nào trong hệ thống: nói rõ, không để câu tạm
                 if (code is null && query.KbSkipped && query.School is { } unknown
                     && (await recommender!.FindMentionedSchoolsAsync(userId, query.Question, ct)).Count != 1)
-                    return MergeSchoolInfo(response, query, ChatSchoolInfo.SchoolNotFound(unknown), clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
+                    return MergeSchoolInfo(response, query, ChatSchoolInfo.SchoolNotFound(unknown), clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData(), NoBasis = true };
                 if (code is null)
                 {
                     // SLM không trích được tên: quét câu, chỉ nhận khi đúng một trường chắc chắn (nhiều trường là so sánh, làm sau)
@@ -567,7 +568,7 @@ namespace StudyAbroad.Application.Advisor
                         code = mentioned[0].Code;
                 }
                 if (code is null)
-                    return response;
+                    return query.KbFound ? response : response with { NoBasis = true };   // giữ câu của kho: chỉ là câu trả lời thật khi kho có nguồn
 
                 var info = await recommender!.SchoolInfoAsync(userId, code, ct);
                 var answer = ChatSchoolInfo.Answer(info, fields, unstored);
@@ -578,7 +579,7 @@ namespace StudyAbroad.Application.Advisor
                     // Chỉ hỏi điều cơ sở dữ liệu không có: kho kiến thức có nguồn thật thì giữ, không thì nói chưa có và chỉ website
                     return query.KbFound
                         ? response
-                        : MergeSchoolInfo(response, query, answer.Text, clearKb: true) with { QuickReplies = ChatNextSteps.AfterSchoolInfo(info.Code, info.Name, fields) };
+                        : MergeSchoolInfo(response, query, answer.Text, clearKb: true) with { QuickReplies = ChatNextSteps.AfterSchoolInfo(info.Code, info.Name, fields), NoBasis = true };
                 }
                 // Thẻ nói đủ số liệu nên giao diện bỏ đoạn chữ này cho gọn; còn lời về điều hệ thống không lưu thì thẻ không nói, giữ chữ
                 var merged = MergeSchoolInfo(response, query, answer.Text, clearKb: true)
@@ -594,8 +595,8 @@ namespace StudyAbroad.Application.Advisor
             {
                 // Có kho kiến thức làm dự phòng thì giữ câu của kho; model đã bỏ qua kho thì báo chưa tra được thay vì để câu tạm
                 return query.KbSkipped
-                    ? MergeSchoolInfo(response, query, AdvisorMessages.SchoolInfoUnavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() }
-                    : response;
+                    ? MergeSchoolInfo(response, query, AdvisorMessages.SchoolInfoUnavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData(), NoBasis = true }
+                    : query.KbFound ? response : response with { NoBasis = true };
             }
         }
 

@@ -5,8 +5,10 @@ public static class ChatOutcomes
 {
     /// <summary>Hệ thống trả lời bằng dữ liệu hoặc kiến thức có nguồn.</summary>
     public const string Answered = "answered";
-    /// <summary>Hệ thống không hiểu hoặc không có dữ liệu để trả lời (SLM dùng kết quả dự phòng, ý ngoài phạm vi hoặc mơ hồ, kho kiến thức không có nguồn).</summary>
+    /// <summary>Hệ thống MUỐN trả lời nhưng không thể: không hiểu câu hỏi (mơ hồ) hoặc không có dữ liệu. Đây là khoảng trống cần admin bổ sung.</summary>
     public const string NoAnswer = "no_answer";
+    /// <summary>Hệ thống hiểu câu hỏi và CỐ Ý không trả lời: ngoài chuyện du học hoặc chủ đề nhạy cảm. Đúng thiết kế, không phải khoảng trống nên không vào hàng đợi.</summary>
+    public const string Refused = "refused";
     /// <summary>Có bước AI hoặc dịch vụ bị lỗi trong lượt (hết thời gian, bị từ chối, trả sai khuôn).</summary>
     public const string Failed = "failed";
 }
