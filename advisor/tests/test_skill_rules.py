@@ -1,7 +1,8 @@
 """Luật hồ sơ: mục nào còn thiếu thì chưa đủ để tư vấn. Hàm thuần nên không cần AI, DB hay Ollama."""
 
 from app.schemas.chat import ChatState, ProfileField
-from app.services.skill_rules import REQUIRED_B3, missing_fields
+from app.schemas.slm import PROFILE_KEYS
+from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
 
 
 def state(step: str = "B2", **fields: str) -> ChatState:
@@ -100,3 +101,8 @@ def test_missing_fields_can_be_counted_for_the_b3_milestone_only():
 
     assert missing_fields(state(**profile).profile, REQUIRED_B3) == []
     assert missing_fields(state(**profile).profile) == ["major"]  # mặc định tính theo B4
+
+
+def test_every_required_item_is_a_profile_key():
+    # skill_rules hỏi mục nào thì khuôn dữ liệu của SLM phải biết khóa đó
+    assert set(REQUIRED_B4) <= set(PROFILE_KEYS)
