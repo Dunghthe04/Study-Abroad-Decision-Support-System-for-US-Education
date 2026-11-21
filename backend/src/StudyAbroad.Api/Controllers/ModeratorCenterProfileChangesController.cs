@@ -41,11 +41,14 @@ public class ModeratorCenterProfileChangesController(ICenterProfileChangeReviewS
     [ProducesResponseType(typeof(CenterProfileChangeDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Pass(Guid id, CancellationToken ct)
+    public async Task<IActionResult> Pass(Guid id, [FromBody] PassCenterProfileChangeRequest? request, CancellationToken ct)
     {
         if (User.GetUserId() is not { } moderatorId)
             return Unauthorized();
-        return ToActionResult(await service.PassAsync(id, moderatorId, ct));
+        // Bắt buộc gửi giá trị đang xem để không duyệt nhầm giá trị trung tâm vừa sửa lại
+        if (request is null)
+            return ValidationProblem("Thiếu giá trị mới đang kiểm tra. Vui lòng tải lại trang.");
+        return ToActionResult(await service.PassAsync(id, request.NewValue, moderatorId, ct));
     }
 
     /// <summary>Không đạt: lý do bắt buộc, trung tâm nhận thông báo để sửa lại.</summary>
@@ -57,7 +60,9 @@ public class ModeratorCenterProfileChangesController(ICenterProfileChangeReviewS
     {
         if (User.GetUserId() is not { } moderatorId)
             return Unauthorized();
-        return ToActionResult(await service.FailAsync(id, request?.Reason, moderatorId, ct));
+        if (request is null)
+            return ValidationProblem("Thiếu lý do và giá trị mới đang kiểm tra. Vui lòng tải lại trang.");
+        return ToActionResult(await service.FailAsync(id, request.Reason, request.NewValue, moderatorId, ct));
     }
 
     private IActionResult ToActionResult(CenterProfileChangeReviewResult result)

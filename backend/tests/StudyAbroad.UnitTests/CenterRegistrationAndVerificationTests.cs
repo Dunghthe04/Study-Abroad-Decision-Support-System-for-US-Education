@@ -868,7 +868,8 @@ public class CenterRegistrationAndVerificationTests
         Assert.Equal("https://lan-2.edu.vn", pending.NewValue);
 
         await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(Website: "https://abc.edu.vn"));
-        Assert.Equal(CenterProfileChangeStatuses.Passed, pending.Status);
+        // Không phải Moderator duyệt nên dùng trạng thái riêng, không lẫn vào danh sách Đạt
+        Assert.Equal(CenterProfileChangeStatuses.Withdrawn, pending.Status);
     }
 
     [Theory]
