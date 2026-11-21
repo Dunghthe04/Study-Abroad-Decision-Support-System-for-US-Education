@@ -1,15 +1,14 @@
 "use client";
 
 import React, { useCallback, useState, useEffect, type ComponentType } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { profileApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { AcademicProfileResponse, ParentProfileOverviewDto } from "@/types/api";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AcademicSummaryCard, hasCompleteAcademicProfile } from "@/components/account/AcademicSummaryCard";
 import { AccountSectionHeader } from "@/components/account/AccountSectionHeader";
 import {
@@ -150,6 +149,8 @@ export function AccountView() {
   const [profile, setProfile] = useState<AcademicProfileResponse | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(isStudentOrParent);
   const [showWarningModal, setShowWarningModal] = useState(false);
+  // Chỉ đọc khi showWarningModal đã bật (sau effect, phía client) nên không lệch hydration
+  const bannerSlot = showWarningModal ? document.getElementById("page-banner-slot") : null;
   // Phụ huynh: hồ sơ các con đã liên kết. Có con liên kết thì xem hồ sơ con (chỉ đọc), không cảnh báo hồ sơ của mình.
   const [parentOverview, setParentOverview] = useState<ParentProfileOverviewDto | null>(null);
   const [profileVersion, setProfileVersion] = useState(0);
@@ -211,47 +212,35 @@ export function AccountView() {
 
   return (
     <>
-      {/* POPUP MODAL CẢNH BÁO KHI CHƯA CÓ BẢNG ĐIỂM */}
-      <Dialog
-        open={showWarningModal && !hasCompleteAcademicProfile(profile) && !isLoadingProfile}
-        onOpenChange={(open) => {
-          if (!open) setShowWarningModal(false);
-        }}
-      >
-        <DialogContent showCloseButton={false}>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => setShowWarningModal(false)}
-            className="absolute top-2 right-2"
-            title="Đóng thông báo"
-          >
-            <XIcon aria-hidden />
-          </Button>
-
-          <DialogHeader>
-            <DialogTitle>Yêu cầu hoàn thiện bảng điểm</DialogTitle>
-            <Badge variant="warn">
-              <TriangleAlertIcon aria-hidden />
-              Hồ sơ học thuật chưa được thiết lập
-            </Badge>
-          </DialogHeader>
-
-          <DialogDescription>
-            Tài khoản của bạn hiện <strong>chưa có thông tin bảng điểm</strong> và các chứng chỉ học thuật. Vui lòng cập nhật bảng điểm để hệ thống hỗ trợ bạn tốt nhất.
-          </DialogDescription>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setShowWarningModal(false)}>
-              Để sau
-            </Button>
-            <Link href="/analysis" className={buttonVariants()}>
-              <span>Điền bảng điểm ngay</span>
-              <ArrowRightIcon aria-hidden />
-            </Link>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Thanh cảnh báo thiếu bảng điểm: đưa lên đầu trang (khe trong AppShell), không dùng popup */}
+      {showWarningModal && !hasCompleteAcademicProfile(profile) && !isLoadingProfile && bannerSlot &&
+        createPortal(
+          <div role="status" className="relative z-30 border-b border-line bg-warn-wash print:hidden">
+            <div className="mx-auto flex max-w-[1560px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 text-sm text-foreground sm:px-8 lg:px-12">
+              <TriangleAlertIcon className="size-4 shrink-0 text-warn" aria-hidden />
+              <p className="min-w-0 flex-1 basis-64">
+                <span className="font-semibold">Hồ sơ học thuật chưa được thiết lập.</span>{" "}
+                Tài khoản của bạn chưa có thông tin bảng điểm và chứng chỉ học thuật, hãy cập nhật để hệ thống hỗ trợ tốt nhất.
+              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                <Link href="/analysis" className={buttonVariants({ size: "sm" })}>
+                  <span>Điền bảng điểm ngay</span>
+                  <ArrowRightIcon aria-hidden />
+                </Link>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setShowWarningModal(false)}
+                  title="Để sau"
+                  aria-label="Để sau"
+                >
+                  <XIcon aria-hidden />
+                </Button>
+              </div>
+            </div>
+          </div>,
+          bannerSlot,
+        )}
 
       <div className="grid grid-cols-1 gap-8 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[276px_minmax(0,1fr)] lg:gap-12">
         {/* THANH BÊN TRÁI: nền trong suốt, danh tính gọn + điều hướng phân nhóm giống AdminShell */}

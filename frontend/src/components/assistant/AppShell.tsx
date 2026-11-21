@@ -45,6 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         {!adminRoute && !authRoute && <SiteHeader />}
         {!adminRoute && !authRoute && <ActingAsBanner />}
+        <div id="page-banner-slot" />
         <main
           className={cn(
             "w-full flex-1",
