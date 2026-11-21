@@ -105,17 +105,106 @@ public class BillingJobTests
     }
 
     [Fact]
-    public async Task P11_ExpiredByTheJob_SecondTickTouchesNothing()
+    public async Task P11_ExpiredByTheJob_SecondTickChangesNothing_AndDoesNotCancelTheLinkAgain()
     {
         var (j, _, order) = await Pending();
         var later = PastGrace(order, j.H.Billing);
         await j.Jobs.ReconcilePendingOrdersAsync(later);
         j.H.Gateway.StatusRequests.Clear();
 
-        Assert.Equal(0, await j.Jobs.ReconcilePendingOrdersAsync(later.AddMinutes(1)));
+        Assert.Equal(0, await j.Jobs.ReconcilePendingOrdersAsync(later.AddMinutes(1)));   // không còn đơn chờ
 
-        Assert.Empty(j.H.Gateway.StatusRequests);   // chỉ đơn đang chờ mới bị hỏi payOS
+        Assert.Equal(OrderStatuses.Expired, j.H.Order(order.OrderCode).Status);
         Assert.Single(j.H.Gateway.Cancelled);
+    }
+
+    // ---- M2: payOS không hỏi được thì chưa coi là hết hạn; đơn hết hạn vẫn được hỏi lại trong cửa sổ trả muộn
+
+    [Fact]
+    public async Task M2_GatewayUnreachable_AnOverdueOrderStaysPending_UntilTheHardLimit()
+    {
+        var (j, _, order) = await Pending();
+        j.H.Gateway.FailStatusFor.Add(order.OrderCode);
+
+        await j.Jobs.ReconcilePendingOrdersAsync(PastGrace(order, j.H.Billing));
+        await j.Jobs.ReconcilePendingOrdersAsync(order.ExpiresAt.AddHours(j.H.Billing.UnknownStatusExpiryHours));   // đúng hạn cứng: chưa quá
+        Assert.Equal(OrderStatuses.Pending, j.H.Order(order.OrderCode).Status);
+        Assert.Empty(j.H.Gateway.Cancelled);
+
+        await j.Jobs.ReconcilePendingOrdersAsync(order.ExpiresAt.AddHours(j.H.Billing.UnknownStatusExpiryHours).AddSeconds(1));
+
+        Assert.Equal(OrderStatuses.Expired, j.H.Order(order.OrderCode).Status);
+        Assert.Equal(order.OrderCode, Assert.Single(j.H.Gateway.Cancelled).Code);
+    }
+
+    [Fact]
+    public async Task M2_GatewayUnreachableThenPaid_TheOrderIsStillActivatedNotExpired()
+    {
+        var (j, buyer, order) = await Pending();
+        j.H.Gateway.FailStatusFor.Add(order.OrderCode);
+        await j.Jobs.ReconcilePendingOrdersAsync(PastGrace(order, j.H.Billing));   // payOS sập: giữ nguyên
+        j.H.Gateway.FailStatusFor.Clear();
+        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus("PAID", order.AmountVnd);
+
+        await j.Jobs.ReconcilePendingOrdersAsync(PastGrace(order, j.H.Billing).AddMinutes(1));
+
+        Assert.Equal(OrderStatuses.Paid, j.H.Order(order.OrderCode).Status);
+        Assert.Equal(buyer.Id, Assert.Single(j.Store.Cycles).UserId);
+    }
+
+    [Fact]
+    public async Task M2_AnExpiredOrderThatPayOsNowSaysIsPaid_IsActivated_C6()
+    {
+        var (j, buyer, order) = await Pending();
+        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus("EXPIRED", 0);
+        await j.Jobs.ReconcilePendingOrdersAsync(Now.AddMinutes(1));
+        Assert.Equal(OrderStatuses.Expired, j.H.Order(order.OrderCode).Status);
+        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus("PAID", order.AmountVnd);   // khách quét mã trễ
+
+        var handled = await j.Jobs.ReconcilePendingOrdersAsync(Now.AddHours(3));
+
+        Assert.Equal(0, handled);   // đơn hết hạn hỏi lại không tính vào số đơn chờ đã xử lý
+        Assert.Equal(OrderStatuses.Paid, j.H.Order(order.OrderCode).Status);
+        Assert.Equal(buyer.Id, Assert.Single(j.Store.Cycles).UserId);
+        Assert.Single(j.Sent(NotificationTypes.BillingPaymentPaid));
+    }
+
+    [Theory]
+    [InlineData("EXPIRED")]
+    [InlineData("CANCELLED")]
+    [InlineData("PENDING")]
+    public async Task M2_AnExpiredOrderPayOsDoesNotSayIsPaid_IsLeftAlone(string gatewayStatus)
+    {
+        var (j, _, order) = await Pending();
+        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus("EXPIRED", 0);
+        await j.Jobs.ReconcilePendingOrdersAsync(Now.AddMinutes(1));
+        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus(gatewayStatus, 0);
+        j.H.Gateway.StatusRequests.Clear();
+
+        await j.Jobs.ReconcilePendingOrdersAsync(Now.AddHours(3));
+
+        Assert.Equal(order.OrderCode, Assert.Single(j.H.Gateway.StatusRequests));   // đã hỏi lại
+        Assert.Equal(OrderStatuses.Expired, j.H.Order(order.OrderCode).Status);
+        Assert.Empty(j.Store.Cycles);
+    }
+
+    [Fact]
+    public async Task M2_AnExpiredOrderPayOsCannotBeReached_IsLeftAlone_AndAnOldOneIsNotAskedAnymore()
+    {
+        var (j, _, order) = await Pending();
+        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus("EXPIRED", 0);
+        await j.Jobs.ReconcilePendingOrdersAsync(Now.AddMinutes(1));
+        j.H.Gateway.FailStatusFor.Add(order.OrderCode);
+        j.H.Gateway.StatusRequests.Clear();
+
+        await j.Jobs.ReconcilePendingOrdersAsync(Now.AddHours(3));
+        Assert.Single(j.H.Gateway.StatusRequests);
+        Assert.Equal(OrderStatuses.Expired, j.H.Order(order.OrderCode).Status);
+
+        j.H.Gateway.StatusRequests.Clear();
+        await j.Jobs.ReconcilePendingOrdersAsync(order.ExpiresAt.AddHours(j.H.Billing.UnknownStatusExpiryHours).AddMinutes(1));   // ra ngoài cửa sổ trả muộn
+
+        Assert.Empty(j.H.Gateway.StatusRequests);
     }
 
     // ---- Bảng ánh xạ trạng thái payOS
@@ -186,7 +275,7 @@ public class BillingJobTests
     }
 
     [Fact]
-    public async Task Reconcile_AGatewayErrorOnOneOrder_DoesNotStopTheOthers_AndAnOverdueOneStillExpires()
+    public async Task Reconcile_AGatewayErrorOnOneOrder_DoesNotStopTheOthers_AndAnOverdueOneIsNotExpiredBlind()
     {
         var j = new JobHarness();
         var (u1, u2, u3, u4) = (j.AddUser(), j.AddUser(), j.AddUser(), j.AddUser());
@@ -203,7 +292,7 @@ public class BillingJobTests
         Assert.Equal(4, handled);   // lỗi cổng chỉ ghi log, đơn vẫn được xét xong
         Assert.Equal(OrderStatuses.Pending, j.H.Order(failing.OrderCode).Status);   // chưa quá hạn: giữ nguyên
         Assert.Equal(OrderStatuses.Paid, j.H.Order(paid.OrderCode).Status);
-        Assert.Equal(OrderStatuses.Expired, j.H.Order(overdue.OrderCode).Status);   // quá hạn: vẫn hết hạn dù payOS lỗi
+        Assert.Equal(OrderStatuses.Pending, j.H.Order(overdue.OrderCode).Status);   // quá hạn nhưng payOS lỗi: chưa biết đã trả chưa nên chờ tới hạn cứng (M2)
         Assert.Equal(OrderStatuses.Pending, j.H.Order(waiting.OrderCode).Status);
     }
 
@@ -351,6 +440,50 @@ public class BillingJobTests
 
         Assert.Equal(CycleStatuses.Active, cycle.Status);
         Assert.Empty(j.Notes.Sent);
+    }
+
+    // L5: kỳ chờ đứng sau kỳ active còn token thì làn chưa cần chuyển (không tốn một lượt đọc mỗi phút); hết token / không còn kỳ active thì vẫn chuyển ngay trong lượt
+    [Fact]
+    public async Task L5_QueuedBehindAnActiveCycleWithTokensLeft_IsNotDue()
+    {
+        var j = new JobHarness();
+        var owner = j.AddUser();
+        var active = j.Store.AddActive(owner.Id, "personal-1m", Now.AddDays(-2), quota: 1_000);
+        var queued = j.Store.AddQueued(owner.Id, "personal-3m");
+        j.Store.Use(owner.Id, active, 999);   // sát hạn mức nhưng chưa hết
+
+        Assert.Equal(0, await j.Jobs.AdvanceDueLanesAsync(Now));
+
+        Assert.Equal((CycleStatuses.Active, CycleStatuses.Queued), (active.Status, queued.Status));
+        Assert.Empty(j.Notes.Sent);
+    }
+
+    [Fact]
+    public async Task L5_ThatSameLaneBecomesDueTheMomentTheActiveCycleRunsOut()
+    {
+        var j = new JobHarness();
+        var owner = j.AddUser();
+        var active = j.Store.AddActive(owner.Id, "personal-1m", Now.AddDays(-2), quota: 1_000);
+        var queued = j.Store.AddQueued(owner.Id, "personal-3m");
+        j.Store.Use(owner.Id, active, 999);
+        Assert.Equal(0, await j.Jobs.AdvanceDueLanesAsync(Now));
+        j.Store.Use(owner.Id, active, 1);
+
+        Assert.Equal(1, await j.Jobs.AdvanceDueLanesAsync(Now.AddMinutes(1)));
+
+        Assert.Equal((CycleEndReasons.ExhaustedRollover, CycleStatuses.Active), (active.EndedReason, queued.Status));
+    }
+
+    [Fact]
+    public async Task L5_AQueuedCycleWithNoActiveOne_IsDue()
+    {
+        var j = new JobHarness();
+        var owner = j.AddUser();
+        var stray = j.Store.AddQueued(owner.Id, "personal-1m");   // lần lưu trước bị dở: kỳ chờ mà không có kỳ active
+
+        Assert.Equal(1, await j.Jobs.AdvanceDueLanesAsync(Now));
+
+        Assert.Equal(CycleStatuses.Active, stray.Status);
     }
 
     [Fact]
@@ -597,7 +730,7 @@ public class BillingJobTests
         Assert.Equal(new[] { owner.Id, member.Id }.Order(), j.Sent(NotificationTypes.BillingUsage80).Select(n => n.UserId).Order());
     }
 
-    // Mục lỗi làm bước dừng (danh sách kỳ đã nạp bị bỏ theo dõi nên không thể lưu dấu cho các kỳ sau); lượt sau nạp lại và làm tiếp.
+    // Mục lỗi làm bước dừng (lỗi lưu / gửi thường là sự cố chung); lượt sau nạp lại và làm tiếp.
     // Quan trọng: kỳ sau không được gửi thông báo khi dấu chưa lưu, nếu không lượt sau sẽ gửi lặp.
     [Fact]
     public async Task Usage_AFailingItem_StopsTheStep_TheRestIsDoneOnTheNextTick_EachOnce()

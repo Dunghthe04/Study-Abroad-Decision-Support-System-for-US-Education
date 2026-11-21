@@ -9,16 +9,26 @@ public sealed record PendingOrderRef(long OrderCode, DateTime ExpiresAt);
 public sealed record LaneRef(Guid OwnerUserId, string Kind);
 
 /// <summary>
-/// Truy vấn riêng của job nền thanh toán. Các hàm trả <see cref="UserSubscription"/> cho thực thể đang theo dõi
-/// (đặt dấu thời gian rồi lưu bằng <see cref="SaveAsync"/>).
+/// Truy vấn riêng của job nền thanh toán. Truy vấn chỉ đọc không theo dõi; <see cref="FindCyclesDueForReminderAsync"/> và <see cref="FindCycleAsync"/> trả
+/// <see cref="UserSubscription"/> đang theo dõi (đặt dấu thời gian rồi lưu bằng <see cref="SaveAsync"/>).
 /// </summary>
 public interface IBillingJobRepository
 {
-    /// <summary>Mọi đơn đang chờ thanh toán, cũ nhất trước.</summary>
+    /// <summary>Tối đa <see cref="MaxOrdersPerTick"/> đơn mỗi lượt job (đơn dồn lại thì lượt sau làm tiếp).</summary>
+    const int MaxOrdersPerTick = 200;
+
+    /// <summary>Các đơn đang chờ thanh toán, hết hạn sớm nhất trước (đơn quá hạn được xử lý trước), tối đa <see cref="MaxOrdersPerTick"/>.</summary>
     Task<IReadOnlyList<PendingOrderRef>> ListPendingOrdersAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Các làn cần chuyển kỳ: có kỳ active đã tới hạn (<c>ends_at &lt;= now</c>), hoặc có kỳ queued (có thể bắt đầu khi kỳ cũ dùng hết),
+    /// Các đơn đã hết hạn mà ExpiresAt từ <paramref name="sinceUtc"/> trở lại (còn trong cửa sổ khách có thể trả muộn), hết hạn muộn nhất trước, tối đa <see cref="MaxOrdersPerTick"/>.
+    /// Job hỏi lại payOS: PAID thì kích hoạt, còn lại giữ nguyên.
+    /// </summary>
+    Task<IReadOnlyList<PendingOrderRef>> ListRecentlyExpiredOrdersAsync(DateTime sinceUtc, CancellationToken ct = default);
+
+    /// <summary>
+    /// Các làn cần chuyển kỳ: có kỳ active đã tới hạn (<c>ends_at &lt;= now</c>), hoặc có kỳ queued mà kỳ active của làn đó chuyển được ngay
+    /// (không còn kỳ active, đã tới hạn, hạn mức 0 hoặc đã dùng hết token); kỳ queued đứng sau kỳ active còn token thì làn chưa cần chuyển (lượt sau xét lại),
     /// hoặc nhóm Gia đình active mà làn family không còn kỳ active (cần kết thúc nhóm).
     /// </summary>
     Task<IReadOnlyList<LaneRef>> FindDueLanesAsync(DateTime nowUtc, CancellationToken ct = default);
@@ -26,8 +36,11 @@ public interface IBillingJobRepository
     /// <summary>Kỳ active hết hạn trong (now, until], chưa nhắc, và làn không có kỳ queued.</summary>
     Task<List<UserSubscription>> FindCyclesDueForReminderAsync(DateTime nowUtc, DateTime untilUtc, CancellationToken ct = default);
 
-    /// <summary>Kỳ active có hạn mức &gt; 0 mà còn thiếu thông báo 80% hoặc 100%.</summary>
+    /// <summary>Kỳ active có hạn mức &gt; 0 mà còn thiếu thông báo 80% hoặc 100%. Đọc KHÔNG theo dõi: kỳ nào cần ghi dấu thì nạp riêng bằng <see cref="FindCycleAsync"/>.</summary>
     Task<List<UserSubscription>> FindActiveCyclesAwaitingUsageNoticeAsync(CancellationToken ct = default);
+
+    /// <summary>Một kỳ theo id, đang theo dõi (đặt dấu thời gian rồi lưu bằng <see cref="SaveAsync"/>). Null nếu kỳ đã mất.</summary>
+    Task<UserSubscription?> FindCycleAsync(Guid cycleId, CancellationToken ct = default);
 
     /// <summary>Token tính phí (Claude) đã dùng của từng kỳ, theo cùng luật với <see cref="IBillingRepository.SumCycleTokensAsync"/>. Kỳ chưa dùng thì không có khóa.</summary>
     Task<IReadOnlyDictionary<Guid, long>> SumCycleTokensAsync(IReadOnlyCollection<Guid> cycleIds, CancellationToken ct = default);

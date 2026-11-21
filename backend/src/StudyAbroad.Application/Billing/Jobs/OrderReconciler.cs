@@ -18,7 +18,10 @@ public sealed class OrderReconciler(
     BillingOptions options,
     ILogger<OrderReconciler>? logger = null)
 {
-    /// <summary>Hỏi payOS rồi áp dụng. Lỗi cổng được ghi log và coi như không biết trạng thái (đơn quá hạn vẫn hết hạn).</summary>
+    /// <summary>
+    /// Hỏi payOS rồi áp dụng. Lỗi cổng được ghi log và coi như không biết trạng thái: đơn chờ chưa bị coi là hết hạn tới ExpiresAt + UnknownStatusExpiryHours
+    /// (chưa biết khách đã trả chưa). Đơn đã hết hạn cũng đi qua đây: payOS báo PAID thì kích hoạt (trả muộn, C6), còn lại giữ nguyên.
+    /// </summary>
     public async Task ReconcileAsync(long orderCode, DateTime nowUtc, CancellationToken ct = default)
     {
         GatewayStatus? status = null;
@@ -66,8 +69,10 @@ public sealed class OrderReconciler(
             }
         }
 
-        // PENDING / PROCESSING / không biết: chờ thêm ân hạn cho webhook tới muộn, rồi hết hạn và đóng link
-        if (order.Status == OrderStatuses.Pending && nowUtc > order.ExpiresAt.AddMinutes(options.PendingGraceMinutes)
+        // PENDING / PROCESSING: chờ thêm ân hạn cho webhook tới muộn, rồi hết hạn và đóng link.
+        // Không hỏi được payOS (status null): có thể khách đã trả mà ta không biết, nên chỉ hết hạn tới hạn cứng ExpiresAt + UnknownStatusExpiryHours
+        var expireAfter = status is null ? order.ExpiresAt.AddHours(options.UnknownStatusExpiryHours) : order.ExpiresAt.AddMinutes(options.PendingGraceMinutes);
+        if (order.Status == OrderStatuses.Pending && nowUtc > expireAfter
             && await MovePendingAsync(orderCode, OrderStatuses.Expired, ct))
         {
             try

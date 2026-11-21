@@ -13,17 +13,26 @@ internal sealed partial class BillingStore : IBillingJobRepository, IAdminOrderR
     public Dictionary<Guid, User> Accounts { get; } = [];
 
     public Task<IReadOnlyList<PendingOrderRef>> ListPendingOrdersAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<PendingOrderRef>>(Orders.Where(o => o.Status == OrderStatuses.Pending).OrderBy(o => o.CreatedAt)
-            .Select(o => new PendingOrderRef(o.OrderCode, o.ExpiresAt)).ToList());
+        Task.FromResult<IReadOnlyList<PendingOrderRef>>(Orders.Where(o => o.Status == OrderStatuses.Pending).OrderBy(o => o.ExpiresAt)
+            .Select(o => new PendingOrderRef(o.OrderCode, o.ExpiresAt)).Take(IBillingJobRepository.MaxOrdersPerTick).ToList());
+
+    public Task<IReadOnlyList<PendingOrderRef>> ListRecentlyExpiredOrdersAsync(DateTime sinceUtc, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<PendingOrderRef>>(Orders.Where(o => o.Status == OrderStatuses.Expired && o.ExpiresAt >= sinceUtc).OrderByDescending(o => o.ExpiresAt)
+            .Select(o => new PendingOrderRef(o.OrderCode, o.ExpiresAt)).Take(IBillingJobRepository.MaxOrdersPerTick).ToList());
 
     public Task<IReadOnlyList<LaneRef>> FindDueLanesAsync(DateTime nowUtc, CancellationToken ct = default)
     {
-        var due = Cycles.Where(c => c.Status == CycleStatuses.Queued || (c.Status == CycleStatuses.Active && c.EndsAt <= nowUtc))
+        var dueActive = Cycles.Where(c => c.Status == CycleStatuses.Active && (c.EndsAt == null || c.EndsAt <= nowUtc))
+            .Select(c => new LaneRef(c.UserId, c.Kind));
+        // Kỳ queued chỉ làm làn tới hạn khi kỳ active của nó chuyển được ngay (cùng luật với BillingJobRepository)
+        var queuedReady = Cycles.Where(q => q.Status == CycleStatuses.Queued && Cycles.Where(a => a.UserId == q.UserId && a.Kind == q.Kind && a.Status == CycleStatuses.Active)
+                .DefaultIfEmpty().Any(a => a is null || a.EndsAt == null || a.EndsAt <= nowUtc || a.TokenQuota <= 0
+                    || Calls.Where(t => t.UserSubscriptionId == a.Id && t.Kind == BillingRules.MeteredAiKind).Sum(t => (long)(t.TotalTokens ?? 0)) >= a.TokenQuota))
             .Select(c => new LaneRef(c.UserId, c.Kind));
         var lapsed = Groups.Where(g => g.Status == FamilyGroupStatuses.Active
                 && !Cycles.Any(c => c.UserId == g.OwnerUserId && c.Kind == PlanKinds.Family && c.Status == CycleStatuses.Active))
             .Select(g => new LaneRef(g.OwnerUserId, PlanKinds.Family));
-        return Task.FromResult<IReadOnlyList<LaneRef>>(due.Concat(lapsed).Distinct().ToList());
+        return Task.FromResult<IReadOnlyList<LaneRef>>(dueActive.Concat(queuedReady).Concat(lapsed).Distinct().ToList());
     }
 
     public Task<List<UserSubscription>> FindCyclesDueForReminderAsync(DateTime nowUtc, DateTime untilUtc, CancellationToken ct = default) =>
@@ -32,6 +41,9 @@ internal sealed partial class BillingStore : IBillingJobRepository, IAdminOrderR
 
     public Task<List<UserSubscription>> FindActiveCyclesAwaitingUsageNoticeAsync(CancellationToken ct = default) =>
         Task.FromResult(Cycles.Where(c => c.Status == CycleStatuses.Active && c.TokenQuota > 0 && (c.Warned80At == null || c.ExhaustedNotifiedAt == null)).ToList());
+
+    public Task<UserSubscription?> FindCycleAsync(Guid cycleId, CancellationToken ct = default) =>
+        Task.FromResult(Cycles.FirstOrDefault(c => c.Id == cycleId));
 
     public Task<IReadOnlyDictionary<Guid, long>> SumCycleTokensAsync(IReadOnlyCollection<Guid> cycleIds, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyDictionary<Guid, long>>(Calls.Where(a => a.UserSubscriptionId is { } id && cycleIds.Contains(id) && a.Kind == BillingRules.MeteredAiKind)
