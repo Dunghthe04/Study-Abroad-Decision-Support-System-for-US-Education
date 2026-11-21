@@ -53,6 +53,9 @@ import { cn } from "@/lib/utils";
  * Hàng dưới: điều hướng chính bên trái, nút "Phân tích hồ sơ của bạn" bên phải.
  * Trang chủ: nền trong suốt nằm trên ảnh trường, cuộn xuống thì thành nền trắng như các trang khác.
  */
+// Mục menu avatar: to và thoáng hơn mặc định để dễ bấm
+const MENU_ITEM = "cursor-pointer gap-3 rounded-lg px-3 py-2.5 text-[15px] [&_svg:not([class*='size-'])]:size-[18px]";
+
 function formatSubscriptionLabel(sub: SubscriptionSummaryDto): string {
   const activePool =
     sub.chargingPool === "family"
@@ -222,39 +225,39 @@ export function SiteHeader() {
                 <DropdownMenu onOpenChange={(open) => open && setMenuOpens((n) => n + 1)}>
                 <DropdownMenuTrigger
                   aria-label={`Tài khoản của ${user.fullName}`}
-                  className="group flex h-10 cursor-pointer items-center rounded-full border border-white/30 bg-white/10 pr-1 pl-1 text-white outline-none transition-colors hover:bg-white/15 focus-visible:ring-3 focus-visible:ring-white/50 data-popup-open:bg-white/20"
+                  className="group flex h-9 cursor-pointer items-center rounded-lg border border-white/30 bg-white/10 p-1 text-white outline-none transition-colors hover:bg-white/15 focus-visible:ring-3 focus-visible:ring-white/50 data-popup-open:bg-white/20"
                 >
                   <span
                     aria-hidden="true"
-                    className="flex size-8 shrink-0 items-center justify-center rounded-full border border-white/40 bg-white/15"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-md border border-white/40 bg-white/15"
                   >
-                    <UserRoleIcon role={user.role} className="size-4" />
+                    <UserRoleIcon role={user.role} className="size-3.5" />
                   </span>
-                  <span className="hidden max-w-40 truncate px-2.5 text-sm font-medium sm:block">{user.fullName}</span>
-                  <span aria-hidden="true" className="ml-1.5 flex h-6 items-center border-l border-white/30 px-2 sm:ml-0">
-                    <ChevronDownIcon className="size-4 transition-transform group-data-popup-open:rotate-180" />
+                  <span className="hidden max-w-36 truncate px-2 text-sm font-medium sm:block">{user.fullName}</span>
+                  <span aria-hidden="true" className="ml-1 flex h-5 items-center border-l border-white/30 px-1.5">
+                    <ChevronDownIcon className="size-3.5 transition-transform group-data-popup-open:rotate-180" />
                   </span>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80 p-0">
+                <DropdownMenuContent align="end" sideOffset={8} className="w-[22rem] p-0">
                   {/* Đầu menu: biểu tượng vai trò, tên, gói; học sinh / phụ huynh có thêm hạn mức chung còn lại */}
-                  <div className="space-y-4 bg-brand-wash px-4 py-4">
-                    <div className="flex items-center gap-3">
+                  <div className="space-y-5 bg-brand-wash px-5 py-5">
+                    <div className="flex items-center gap-4">
                       <span
                         aria-hidden="true"
-                        className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-brand/20 bg-surface text-brand"
+                        className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-brand/20 bg-surface text-brand"
                       >
-                        <UserRoleIcon role={user.role} className="size-5" />
+                        <UserRoleIcon role={user.role} className="size-6" />
                       </span>
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="truncate text-sm font-semibold text-ink">{user.fullName}</span>
+                        <span className="truncate text-base font-semibold text-ink">{user.fullName}</span>
                         {isStudentOrParent ? (
                           sub.data ? (
-                            <span className="truncate text-xs text-ink-2">{formatSubscriptionLabel(sub.data)}</span>
+                            <span className="truncate text-sm text-ink-2">{formatSubscriptionLabel(sub.data)}</span>
                           ) : (
                             <Skeleton className="h-3.5 w-20" />
                           )
                         ) : (
-                          <span className="truncate text-xs text-ink-2">{formatUserRole(user.role)}</span>
+                          <span className="truncate text-sm text-ink-2">{formatUserRole(user.role)}</span>
                         )}
                       </span>
                       {isStudentOrParent && sub.data?.tier === "premium" && (
@@ -264,7 +267,7 @@ export function SiteHeader() {
 
                     {showQuota && (
                       <Link href="/account#quota" className="block space-y-2 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                        <div className="flex items-baseline justify-between gap-3 text-xs">
+                        <div className="flex items-baseline justify-between gap-3 text-sm">
                           <span className="text-ink-2">Hạn mức chung của bạn còn lại</span>
                           {quota.data ? (
                             <span className="font-semibold text-ink tabular-nums">{quota.data.remainingPercent}%</span>
@@ -278,7 +281,7 @@ export function SiteHeader() {
                           aria-valuemin={0}
                           aria-valuemax={100}
                           aria-valuenow={quota.data?.remainingPercent ?? 0}
-                          className="h-2.5 w-full overflow-hidden rounded-full bg-surface ring-1 ring-brand/15"
+                          className="h-3 w-full overflow-hidden rounded-full bg-surface ring-1 ring-brand/15"
                         >
                           <div
                             className={cn("h-full rounded-full transition-[width] duration-500", quota.data?.lowQuota ? "bg-risk" : "bg-brand")}
@@ -289,16 +292,16 @@ export function SiteHeader() {
                     )}
                   </div>
 
-                  <div className="p-1">
+                  <div className="p-2">
                   <DropdownMenuGroup>
-                    <DropdownMenuLabel className="px-2 pt-2 pb-1 text-[13px]">Tài khoản của bạn</DropdownMenuLabel>
+                    <DropdownMenuLabel className="px-3 pt-2 pb-1.5 text-sm">Tài khoản của bạn</DropdownMenuLabel>
                   </DropdownMenuGroup>
                   {/* Tài khoản */}
-                  <DropdownMenuItem render={<Link href="/account#personal" />}>
+                  <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#personal" />}>
                     <UserIcon />
                     Thông tin cá nhân
                   </DropdownMenuItem>
-                  <DropdownMenuItem render={<Link href="/account#password" />}>
+                  <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#password" />}>
                     <KeyRoundIcon />
                     Bảo mật tài khoản
                   </DropdownMenuItem>
@@ -306,17 +309,17 @@ export function SiteHeader() {
                   {/* Gói & Thanh toán */}
                   {isStudentOrParent && !acting && (
                     <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem render={<Link href="/account#subscription" />}>
+                      <DropdownMenuSeparator className="my-1.5" />
+                      <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#subscription" />}>
                         <CreditCardIcon />
                         Gói dịch vụ
                       </DropdownMenuItem>
-                      <DropdownMenuItem render={<Link href="/account#quota" />}>
+                      <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#quota" />}>
                         <GaugeIcon />
                         Hạn mức
                       </DropdownMenuItem>
                       {hasFamily && (
-                        <DropdownMenuItem render={<Link href="/account#family" />}>
+                        <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#family" />}>
                           <HeartHandshakeIcon />
                           Chia sẻ cho gia đình
                         </DropdownMenuItem>
@@ -327,27 +330,27 @@ export function SiteHeader() {
                   {/* Hồ sơ & Kết nối */}
                   {(hasOwnProfile || (isStudentOrParent && !acting)) && (
                     <>
-                      <DropdownMenuSeparator />
+                      <DropdownMenuSeparator className="my-1.5" />
                       {hasOwnProfile && (
-                        <DropdownMenuItem render={<Link href={academicHref} />}>
+                        <DropdownMenuItem className={MENU_ITEM} render={<Link href={academicHref} />}>
                           <BookOpenIcon />
                           Học bạ
                         </DropdownMenuItem>
                       )}
                       {isStudentOrParent && !acting && (
                         <>
-                          <DropdownMenuItem render={<Link href="/account#parent-links" />}>
+                          <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#parent-links" />}>
                             <UsersIcon />
                             {user.role === "student" ? "Liên kết phụ huynh" : "Con đã liên kết"}
                           </DropdownMenuItem>
-                          <DropdownMenuItem render={<Link href="/account#sent-leads" />}>
+                          <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#sent-leads" />}>
                             <SendIcon />
                             Yêu cầu liên hệ đã gửi
                           </DropdownMenuItem>
                         </>
                       )}
                       {hasOwnProfile && (
-                        <DropdownMenuItem render={<Link href="/target-schools" />}>
+                        <DropdownMenuItem className={MENU_ITEM} render={<Link href="/target-schools" />}>
                           <BookmarkCheckIcon />
                           Trường mục tiêu
                         </DropdownMenuItem>
@@ -358,25 +361,25 @@ export function SiteHeader() {
                   {/* Khu vực theo vai trò (trung tâm, quản trị) */}
                   {(user.role === "center" || canOpenAdmin) && (
                     <>
-                      <DropdownMenuSeparator />
+                      <DropdownMenuSeparator className="my-1.5" />
                       {canOpenAdmin && (
-                        <DropdownMenuItem render={<Link href="/admin" />}>
+                        <DropdownMenuItem className={MENU_ITEM} render={<Link href="/admin" />}>
                           <LayoutDashboardIcon />
                           {isModerator ? "Khu vực kiểm duyệt" : "Trang quản trị"}
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuItem render={<Link href="/center/leads" />}>
+                      <DropdownMenuItem className={MENU_ITEM} render={<Link href="/center/leads" />}>
                         <InboxIcon />
                         Yêu cầu liên hệ nhận được
                       </DropdownMenuItem>
                       {isModerator && (
-                        <DropdownMenuItem render={<Link href="/admin/centers" />}>
+                        <DropdownMenuItem className={MENU_ITEM} render={<Link href="/admin/centers" />}>
                           <Building2Icon />
                           Quản lý trung tâm
                         </DropdownMenuItem>
                       )}
                       {isAdmin && (
-                        <DropdownMenuItem render={<Link href="/admin/users" />}>
+                        <DropdownMenuItem className={MENU_ITEM} render={<Link href="/admin/users" />}>
                           <ShieldIcon />
                           Quản trị người dùng
                         </DropdownMenuItem>
@@ -384,8 +387,8 @@ export function SiteHeader() {
                     </>
                   )}
 
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onClick={handleLogout}>
+                  <DropdownMenuSeparator className="my-1.5" />
+                  <DropdownMenuItem className={MENU_ITEM} variant="destructive" onClick={handleLogout}>
                     <LogOutIcon />
                     Đăng xuất
                   </DropdownMenuItem>
