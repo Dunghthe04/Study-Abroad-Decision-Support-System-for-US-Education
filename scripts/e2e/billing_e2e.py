@@ -585,6 +585,8 @@ def phase_renewal():
         expect(new["ends_at"] - new["starts_at"] == 30 * DAY, "kỳ mới phải đủ 30 ngày")
         expect(close(row_old["ended_at"], new["starts_at"], 2), "kỳ cũ kết thúc đúng lúc kỳ mới bắt đầu")
         expect(wait_notif(u, "billing_cycle_started"), "thiếu thông báo billing_cycle_started")
+        settle()
+        expect(len(notifs(u, "billing_cycle_started")) == 1, f"{len(notifs(u, 'billing_cycle_started'))} thông báo billing_cycle_started, cần đúng 1 (job và đọc cùng chuyển kỳ)")
 
     with case("R2", "kỳ active hết hạn khi có kỳ queued: kỳ queued bắt đầu đúng lúc kỳ cũ hết hạn") as note:
         u = new_premium("r2")
@@ -600,6 +602,9 @@ def phase_renewal():
         expect(close(new["starts_at"], old_end, 1), f"kỳ mới phải bắt đầu tại {old_end}, thực tế {new['starts_at']}")
         expect(new["ends_at"] - new["starts_at"] == 30 * DAY, "kỳ mới đủ 30 ngày từ lúc bắt đầu")
         expect(sub(u)["tier"] == "premium", "vẫn premium")
+        expect(wait_notif(u, "billing_cycle_started"), "thiếu thông báo billing_cycle_started")
+        settle()
+        expect(len(notifs(u, "billing_cycle_started")) == 1, f"{len(notifs(u, 'billing_cycle_started'))} thông báo billing_cycle_started, cần đúng 1")
 
     with case("R7", "hết hạn không có kỳ chờ: về free, lịch sử còn, tính năng Premium khóa") as note:
         u = new_premium("r7")
@@ -612,6 +617,8 @@ def phase_renewal():
         history = status(u.get("/api/v1/orders"), 200)
         expect(history["totalCount"] == 1 and history["items"][0]["status"] == "paid", "lịch sử đơn phải còn")
         expect(wait_notif(u, "billing_expired"), "thiếu thông báo billing_expired")
+        settle()
+        expect(len(notifs(u, "billing_expired")) == 1, f"{len(notifs(u, 'billing_expired'))} thông báo billing_expired, cần đúng 1")
         r = u.post("/api/v1/recommendations", json={})
         status(r, 403, "premium_required")
 
