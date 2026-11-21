@@ -24,6 +24,8 @@ public class PaymentTransaction : BaseEntity
     public string PlanKind { get; set; } = string.Empty;
     public string PlanName { get; set; } = string.Empty;
     public int PlanDurationDays { get; set; }
+    /// <summary>Bản chụp chu kỳ cấp lại token (ngày) từ gói lúc tạo đơn.</summary>
+    public int? PlanQuotaPeriodDays { get; set; }
     public long PlanTokenQuota { get; set; }
     /// <summary>Nội dung chuyển khoản (USAS + 5 số cuối mã đơn).</summary>
     public string Description { get; set; } = string.Empty;

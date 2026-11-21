@@ -2549,6 +2549,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("plan_name");
 
+                    b.Property<int?>("PlanQuotaPeriodDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("plan_quota_period_days");
+
                     b.Property<long>("PlanTokenQuota")
                         .HasColumnType("bigint")
                         .HasColumnName("plan_token_quota");
@@ -4190,10 +4194,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("duration_days");
 
-                    b.Property<int>("EstimatedQuestions")
-                        .HasColumnType("integer")
-                        .HasColumnName("estimated_questions");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
@@ -4217,6 +4217,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(0m)
                         .HasColumnName("price_vnd");
 
+                    b.Property<int?>("QuotaPeriodDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("quota_period_days");
+
                     b.Property<long>("TokenQuota")
                         .HasColumnType("bigint")
                         .HasColumnName("token_quota");
@@ -4239,9 +4243,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.ToTable("subscription_plans", "app", t =>
                         {
-                            t.HasCheckConstraint("ck_subscription_plans_duration", "kind = 'free' OR duration_days IN (30, 90)");
+                            t.HasCheckConstraint("ck_subscription_plans_duration", "(kind = 'free' AND duration_days IS NULL) OR (kind IN ('personal', 'family') AND duration_days >= 1 AND duration_days <= 3650)");
 
                             t.HasCheckConstraint("ck_subscription_plans_kind", "kind IN ('free', 'personal', 'family')");
+
+                            t.HasCheckConstraint("ck_subscription_plans_quota_period", "quota_period_days IS NULL OR (quota_period_days >= 1 AND (duration_days IS NULL OR quota_period_days <= duration_days))");
                         });
                 });
 
@@ -5167,6 +5173,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("price_vnd");
+
+                    b.Property<int?>("QuotaPeriodDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("quota_period_days");
 
                     b.Property<DateTime?>("ReminderSentAt")
                         .HasColumnType("timestamp with time zone")

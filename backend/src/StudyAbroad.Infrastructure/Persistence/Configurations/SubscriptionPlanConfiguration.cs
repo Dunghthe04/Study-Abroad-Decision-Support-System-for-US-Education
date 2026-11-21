@@ -11,8 +11,11 @@ public class SubscriptionPlanConfiguration : IEntityTypeConfiguration<Subscripti
         b.ToTable("subscription_plans", t =>
         {
             t.HasCheckConstraint("ck_subscription_plans_kind", "kind IN ('free', 'personal', 'family')");
-            // Gói trả phí chỉ 30 hoặc 90 ngày; gói free không có thời hạn (làm mới đầu tháng)
-            t.HasCheckConstraint("ck_subscription_plans_duration", "kind = 'free' OR duration_days IN (30, 90)");
+            // Gói trả phí 1..3650 ngày; gói free không có thời hạn
+            t.HasCheckConstraint("ck_subscription_plans_duration",
+                "(kind = 'free' AND duration_days IS NULL) OR (kind IN ('personal', 'family') AND duration_days >= 1 AND duration_days <= 3650)");
+            t.HasCheckConstraint("ck_subscription_plans_quota_period",
+                "quota_period_days IS NULL OR (quota_period_days >= 1 AND (duration_days IS NULL OR quota_period_days <= duration_days))");
         });
         b.HasKey(x => x.Id);
         b.Property(x => x.Code).HasMaxLength(64).IsRequired();

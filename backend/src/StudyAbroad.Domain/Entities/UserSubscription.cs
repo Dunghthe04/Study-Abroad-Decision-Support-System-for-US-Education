@@ -25,6 +25,8 @@ public class UserSubscription : BaseEntity
     public string PlanName { get; set; } = string.Empty;
     public decimal PriceVnd { get; set; }
     public int DurationDays { get; set; }
+    /// <summary>Bản chụp chu kỳ cấp lại token (ngày) từ đơn/gói lúc mua; null hoặc bằng DurationDays = cả kỳ.</summary>
+    public int? QuotaPeriodDays { get; set; }
     /// <summary>CycleEndReasons</summary>
     public string? EndedReason { get; set; }
     public DateTime? EndedAt { get; set; }

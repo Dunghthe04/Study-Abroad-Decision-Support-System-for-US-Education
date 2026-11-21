@@ -75,15 +75,15 @@ public static class DbSeeder
     {
         SubscriptionPlan[] plans =
         [
-            new() { Code = "free", Name = "Miễn phí", Kind = PlanKinds.Free, PriceVnd = 0, DurationDays = null, TokenQuota = 120_000, EstimatedQuestions = 28, DisplayOrder = 0,
+            new() { Code = "free", Name = "Miễn phí", Kind = PlanKinds.Free, PriceVnd = 0, DurationDays = null, QuotaPeriodDays = null, TokenQuota = 120_000, DisplayOrder = 0,
                 Description = "Hỏi đáp kiến thức du học, làm mới đầu mỗi tháng." },
-            new() { Code = "personal-1m", Name = "Cá nhân 1 tháng", Kind = PlanKinds.Personal, PriceVnd = 79_000, DurationDays = 30, TokenQuota = 500_000, EstimatedQuestions = 118, DisplayOrder = 1,
+            new() { Code = "personal-1m", Name = "Cá nhân 1 tháng", Kind = PlanKinds.Personal, PriceVnd = 79_000, DurationDays = 30, QuotaPeriodDays = 30, TokenQuota = 500_000, DisplayOrder = 1,
                 Description = "USDSS Premium cho 1 tài khoản trong 30 ngày." },
-            new() { Code = "personal-3m", Name = "Cá nhân 3 tháng", Kind = PlanKinds.Personal, PriceVnd = 199_000, DurationDays = 90, TokenQuota = 1_800_000, EstimatedQuestions = 425, DisplayOrder = 2,
+            new() { Code = "personal-3m", Name = "Cá nhân 3 tháng", Kind = PlanKinds.Personal, PriceVnd = 199_000, DurationDays = 90, QuotaPeriodDays = 30, TokenQuota = 600_000, DisplayOrder = 2,
                 Description = "USDSS Premium cho 1 tài khoản trong 90 ngày." },
-            new() { Code = "family-1m", Name = "Gia đình 1 tháng", Kind = PlanKinds.Family, PriceVnd = 99_000, DurationDays = 30, TokenQuota = 500_000, EstimatedQuestions = 118, DisplayOrder = 3,
+            new() { Code = "family-1m", Name = "Gia đình 1 tháng", Kind = PlanKinds.Family, PriceVnd = 99_000, DurationDays = 30, QuotaPeriodDays = 30, TokenQuota = 500_000, DisplayOrder = 3,
                 Description = "USDSS Premium cho người mua và tối đa 3 tài khoản trong 30 ngày." },
-            new() { Code = "family-3m", Name = "Gia đình 3 tháng", Kind = PlanKinds.Family, PriceVnd = 249_000, DurationDays = 90, TokenQuota = 1_800_000, EstimatedQuestions = 425, DisplayOrder = 4,
+            new() { Code = "family-3m", Name = "Gia đình 3 tháng", Kind = PlanKinds.Family, PriceVnd = 249_000, DurationDays = 90, QuotaPeriodDays = 30, TokenQuota = 600_000, DisplayOrder = 4,
                 Description = "USDSS Premium cho người mua và tối đa 3 tài khoản trong 90 ngày." },
         ];
         var existing = await db.SubscriptionPlans.Select(p => p.Code).ToListAsync(ct);

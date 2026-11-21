@@ -10,14 +10,17 @@ public class SubscriptionPlan : BaseEntity
     public string? Description { get; set; }
     /// <summary>Giá, đồng nguyên. Gói free luôn 0.</summary>
     public decimal PriceVnd { get; set; } = 0;
-    /// <summary>30 hoặc 90 ngày; null với gói free (làm mới đầu tháng).</summary>
+    /// <summary>Thời hạn gói trả phí (1..3650 ngày); null với gói free (làm mới theo chu kỳ).</summary>
     public int? DurationDays { get; set; }
+    /// <summary>
+    /// Chu kỳ cấp lại token (ngày). Với gói free: null = làm mới ngày 1 hằng tháng (UTC+7), hoặc 1..365 ngày.
+    /// Với gói personal/family: null hoặc bằng DurationDays = dùng chung cả kỳ; 1..DurationDays = làm mới mỗi N ngày tính từ StartsAt.
+    /// </summary>
+    public int? QuotaPeriodDays { get; set; }
     /// <summary>free | personal | family (PlanKinds). Đặt một lần lúc tạo.</summary>
     public string Kind { get; set; } = string.Empty;
-    /// <summary>Hạn mức token mỗi kỳ (gói free: mỗi tháng). Kỳ đã mua giữ bản chụp riêng.</summary>
+    /// <summary>Hạn mức token mỗi chu kỳ cấp (gói free: mỗi tháng hoặc mỗi QuotaPeriodDays). Kỳ đã mua giữ bản chụp riêng.</summary>
     public long TokenQuota { get; set; }
-    /// <summary>Ước lượng số câu hỏi chỉ để hiển thị, không dùng để chặn.</summary>
-    public int EstimatedQuestions { get; set; }
     public int DisplayOrder { get; set; }
     /// <summary>Đang bán (hiện trên trang gói).</summary>
     public bool IsActive { get; set; } = true;
