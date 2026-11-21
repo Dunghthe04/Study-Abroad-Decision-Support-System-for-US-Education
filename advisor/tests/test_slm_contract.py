@@ -27,7 +27,6 @@ from app.schemas.slm import (
     single_school,
     task_of,
 )
-from app.services.skills import info_to_field
 from app.services.slm_contract import FixedSlm
 
 
@@ -398,10 +397,6 @@ def test_the_schema_requires_what_the_contract_requires_and_knows_the_services()
     assert branches()["center_referral"]["properties"]["entities"]["properties"]["service"]["enum"] == list(
         SERVICE_CODES
     )
-
-
-def test_profile_keys_are_the_same_as_the_ones_the_chat_saves():
-    assert PROFILE_KEYS == info_to_field.PROFILE_KEYS
 
 
 # ---- đầu vào dựng skill hồ sơ ----

@@ -32,8 +32,11 @@ def prompt_path(name: str) -> Path:
     return path
 
 
-MAX_ATTEMPTS = 2  # sai thì gọi lại đúng 1 lần
-# Hai lần đều sai (model trả sai luật, Ollama tắt): coi là tin mơ hồ, confidence 0 để chat hỏi lại học sinh
+# Ollama lỗi (bận, hết giờ, trả nội dung không đọc được) thì gọi lại tối đa MAX_ATTEMPTS lần. Model trả sai hợp đồng thì
+# KHÔNG gọi lại: nhiệt độ 0 và cùng prompt thì lần sau ra y hệt (đo lại 12 câu sai của usas-slm-v5: 12/12 giống nhau),
+# gọi lại chỉ tốn thêm vài giây mỗi câu mà không cứu được câu nào
+MAX_ATTEMPTS = 2
+# Hết lượt mà vẫn sai (model trả sai luật, Ollama tắt): coi là tin mơ hồ, confidence 0 để chat hỏi lại học sinh
 FALLBACK = SlmTinResult(
     intents=[SlmY(type="out_of_scope", span="tin không rõ", entities={"subtype": "ambiguous"})],
     confidence=0.0,
@@ -239,8 +242,11 @@ class OllamaSlm:
                     # Kiểm từng ý, gộp ý cùng loại, đưa collect_profile lên đầu, cắt ý quá trần kỹ thuật, rồi kiểm cả tin.
                     # ValidationError của pydantic cũng là ValueError
                     return SlmTinResult.from_raw(raw, confidence=label_confidence(content, logprobs))
-                except (OllamaError, ValueError) as ex:
-                    logger.warning("SLM trả kết quả không dùng được: %s", ex)
+                except OllamaError as ex:
+                    logger.warning("Ollama lỗi, thử lại nếu còn lượt: %s", ex)
+                except ValueError as ex:  # ValidationError của pydantic cũng là ValueError
+                    logger.warning("SLM trả kết quả sai hợp đồng, không gọi lại: %s", ex)
+                    break
         # Mang theo tin gốc của học sinh làm span: nhánh ngoài phạm vi và luật xã giao đọc span, không đọc chữ giữ chỗ "tin không rõ"
         return FALLBACK.model_copy(
             deep=True, update={"intents": [FALLBACK.intents[0].model_copy(update={"span": message})]}

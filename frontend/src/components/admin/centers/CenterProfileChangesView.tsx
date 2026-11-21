@@ -35,6 +35,7 @@ const FILTER_OPTIONS: { id: CenterProfileChangeFilter; label: string }[] = [
   { id: "pending", label: "Chờ kiểm tra" },
   { id: "passed", label: "Đạt" },
   { id: "failed", label: "Không đạt" },
+  { id: "withdrawn", label: "Đã rút lại" },
   { id: "all", label: "Tất cả" },
 ];
 
@@ -42,6 +43,7 @@ const EMPTY_TEXT: Record<CenterProfileChangeFilter, string> = {
   pending: "Không còn thay đổi nào chờ kiểm tra.",
   passed: "Chưa có thay đổi nào được đánh giá Đạt.",
   failed: "Chưa có thay đổi nào bị đánh giá Không đạt.",
+  withdrawn: "Chưa có thay đổi nào được trung tâm tự đổi lại giá trị cũ.",
   all: "Trung tâm chưa tự sửa website hoặc fanpage lần nào.",
 };
 
@@ -69,6 +71,7 @@ function SafeLink({ value }: { value?: string | null }) {
 function ChangeStatusBadge({ status }: { status: string }) {
   if (status === "passed") return <Badge variant="ok">Đạt</Badge>;
   if (status === "failed") return <Badge variant="risk">Không đạt</Badge>;
+  if (status === "withdrawn") return <Badge variant="neutral">Đã rút lại</Badge>;
   return <Badge variant="warn">Chờ kiểm tra</Badge>;
 }
 
@@ -107,7 +110,7 @@ export function CenterProfileChangesView() {
     if (busyId) return;
     setBusyId(item.id);
     try {
-      await centerProfileChangesApi.pass(item.id);
+      await centerProfileChangesApi.pass(item.id, item.newValue ?? null);
       toast.add({ type: "success", title: "Đã đánh giá Đạt", description: `${FIELD_LABEL[item.field] ?? item.field} của ${item.studyCenterName} được giữ nguyên.` });
       refresh();
     } catch (err: unknown) {
@@ -129,7 +132,7 @@ export function CenterProfileChangesView() {
     if (!reason) return;
     setBusyId(failTarget.id);
     try {
-      await centerProfileChangesApi.fail(failTarget.id, reason);
+      await centerProfileChangesApi.fail(failTarget.id, reason, failTarget.newValue ?? null);
       toast.add({ type: "success", title: "Đã đánh giá Không đạt", description: "Trung tâm đã nhận thông báo để sửa lại." });
       setFailTarget(null);
       setFailReason("");

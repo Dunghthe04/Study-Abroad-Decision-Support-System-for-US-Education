@@ -35,7 +35,6 @@ public static class ChatSimulation
     public const int MaxReasons = 2;
     public const int MaxOthers = 400;
 
-    public const string Failed = "Mình chưa thử được kịch bản này, bạn thử lại sau ít phút nhé.";
     private const string SeeTable = "Bạn xem chi tiết ở bảng kết quả nhé.";
 
     // Nhóm hiển thị theo đúng thứ tự và tên trên trang Gợi ý trường. Nhóm "chưa đủ dữ liệu" không nêu trong chat

@@ -125,7 +125,7 @@ public class CenterProfileChangeReviewTests
         var (service, repo, audit, change, _) = Setup();
         var moderatorId = Guid.NewGuid();
 
-        var result = await service.PassAsync(change.Id, moderatorId);
+        var result = await service.PassAsync(change.Id, change.NewValue, moderatorId);
 
         Assert.True(result.Success);
         Assert.Equal(CenterProfileChangeStatuses.Passed, change.Status);
@@ -144,8 +144,8 @@ public class CenterProfileChangeReviewTests
     {
         var (service, repo, audit, change, _) = Setup();
 
-        var empty = await service.FailAsync(change.Id, "   ", Guid.NewGuid());
-        var tooLong = await service.FailAsync(change.Id, new string('a', CenterProfileChangeReviewService.MaxReasonLength + 1), Guid.NewGuid());
+        var empty = await service.FailAsync(change.Id, "   ", change.NewValue, Guid.NewGuid());
+        var tooLong = await service.FailAsync(change.Id, new string('a', CenterProfileChangeReviewService.MaxReasonLength + 1), change.NewValue, Guid.NewGuid());
 
         Assert.False(empty.Success);
         Assert.False(tooLong.Success);
@@ -160,7 +160,7 @@ public class CenterProfileChangeReviewTests
         var (service, repo, audit, change, ownerId) = Setup();
         var moderatorId = Guid.NewGuid();
 
-        var result = await service.FailAsync(change.Id, "  Website dẫn tới trang cá cược  ", moderatorId);
+        var result = await service.FailAsync(change.Id, "  Website dẫn tới trang cá cược  ", change.NewValue, moderatorId);
 
         Assert.True(result.Success);
         Assert.Equal(CenterProfileChangeStatuses.Failed, change.Status);
@@ -183,12 +183,13 @@ public class CenterProfileChangeReviewTests
     [Theory]
     [InlineData(CenterProfileChangeStatuses.Passed)]
     [InlineData(CenterProfileChangeStatuses.Failed)]
+    [InlineData(CenterProfileChangeStatuses.Withdrawn)]
     public async Task AlreadyReviewed_IsRejected_AndNothingChanges(string status)
     {
         var (service, repo, audit, change, _) = Setup(status);
 
-        var pass = await service.PassAsync(change.Id, Guid.NewGuid());
-        var fail = await service.FailAsync(change.Id, "Lý do", Guid.NewGuid());
+        var pass = await service.PassAsync(change.Id, change.NewValue, Guid.NewGuid());
+        var fail = await service.FailAsync(change.Id, "Lý do", change.NewValue, Guid.NewGuid());
 
         Assert.False(pass.Success);
         Assert.False(pass.NotFound);
@@ -204,8 +205,48 @@ public class CenterProfileChangeReviewTests
     {
         var (service, _, _, _, _) = Setup();
 
-        Assert.True((await service.PassAsync(Guid.NewGuid(), Guid.NewGuid())).NotFound);
-        Assert.True((await service.FailAsync(Guid.NewGuid(), "Lý do", Guid.NewGuid())).NotFound);
+        Assert.True((await service.PassAsync(Guid.NewGuid(), "x", Guid.NewGuid())).NotFound);
+        Assert.True((await service.FailAsync(Guid.NewGuid(), "Lý do", "x", Guid.NewGuid())).NotFound);
+    }
+
+    [Fact]
+    public async Task PassAndFail_WhenCenterEditedAgainAfterModeratorOpenedList_AreRejected()
+    {
+        var (service, repo, audit, change, _) = Setup();
+        var seen = change.NewValue;                       // giá trị Moderator đang xem
+        change.NewValue = "https://khac.example.com";     // trung tâm sửa tiếp trong lúc đó
+
+        var pass = await service.PassAsync(change.Id, seen, Guid.NewGuid());
+        var fail = await service.FailAsync(change.Id, "Lý do", seen, Guid.NewGuid());
+
+        Assert.False(pass.Success);
+        Assert.False(fail.Success);
+        Assert.Contains("tải lại", pass.Error);
+        Assert.Equal(CenterProfileChangeStatuses.Pending, change.Status);
+        Assert.Equal(0, repo.Updates);
+        Assert.Empty(audit.Logs);
+        Assert.Empty(repo.Notifications);
+    }
+
+    [Fact]
+    public async Task Pass_EmptyAndNullValueAreTheSame_WhenCenterClearedTheField()
+    {
+        var (service, _, _, change, _) = Setup();
+        change.NewValue = null;   // trung tâm xóa website
+
+        var result = await service.PassAsync(change.Id, "", Guid.NewGuid());
+
+        Assert.True(result.Success);
+    }
+
+    [Fact]
+    public async Task Search_WithdrawnIsAValidFilter()
+    {
+        var (service, repo, _, _, _) = Setup();
+
+        await service.SearchAsync("withdrawn", 1, 20);
+
+        Assert.Equal(CenterProfileChangeStatuses.Withdrawn, repo.LastSearchStatus);
     }
 
     [Fact]
@@ -214,7 +255,7 @@ public class CenterProfileChangeReviewTests
         var (service, repo, _, change, _) = Setup();
         repo.Centers[0] = repo.Centers[0] with { OwnerUserId = null };
 
-        var result = await service.FailAsync(change.Id, "Lý do", Guid.NewGuid());
+        var result = await service.FailAsync(change.Id, "Lý do", change.NewValue, Guid.NewGuid());
 
         Assert.True(result.Success);
         Assert.Empty(repo.Notifications);
@@ -253,14 +294,19 @@ public class CenterProfileChangeReviewTests
     {
         var (controller, _, change) = CreateController(Guid.NewGuid());
 
-        Assert.IsType<NotFoundObjectResult>(await controller.Pass(Guid.NewGuid(), CancellationToken.None));
-        Assert.IsType<ObjectResult>(await controller.Fail(change.Id, new FailCenterProfileChangeRequest(null), CancellationToken.None));
+        var seen = new PassCenterProfileChangeRequest(change.NewValue);
+        Assert.IsType<NotFoundObjectResult>(await controller.Pass(Guid.NewGuid(), seen, CancellationToken.None));
+        Assert.IsType<ObjectResult>(await controller.Fail(change.Id, new FailCenterProfileChangeRequest(null, change.NewValue), CancellationToken.None));
 
-        var ok = Assert.IsType<OkObjectResult>(await controller.Pass(change.Id, CancellationToken.None));
+        // thiếu body: không cho duyệt khi không biết Moderator đã xem giá trị nào
+        Assert.IsType<ObjectResult>(await controller.Pass(change.Id, null, CancellationToken.None));
+        Assert.IsType<ObjectResult>(await controller.Fail(change.Id, null, CancellationToken.None));
+
+        var ok = Assert.IsType<OkObjectResult>(await controller.Pass(change.Id, seen, CancellationToken.None));
         Assert.Equal(CenterProfileChangeStatuses.Passed, Assert.IsType<CenterProfileChangeDto>(ok.Value).Status);
 
         // lần hai: đã kiểm tra -> 400
-        Assert.IsType<ObjectResult>(await controller.Pass(change.Id, CancellationToken.None));
+        Assert.IsType<ObjectResult>(await controller.Pass(change.Id, seen, CancellationToken.None));
     }
 
     [Fact]

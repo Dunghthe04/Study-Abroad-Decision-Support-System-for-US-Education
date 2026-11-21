@@ -33,8 +33,14 @@ public record CenterProfileChangeDto(
     DateTime? ReviewedAt,
     string? ReviewReason);
 
-/// <summary>[UC-114] Moderator chọn Không đạt: lý do bắt buộc, tối đa 500 ký tự.</summary>
-public record FailCenterProfileChangeRequest(string? Reason);
+/// <summary>
+/// [UC-114] Moderator chọn Đạt: gửi kèm giá trị mới mà họ đang xem. Nếu trung tâm đã sửa tiếp sau đó thì từ chối,
+/// để không ghi nhận Đạt cho giá trị chưa ai kiểm tra.
+/// </summary>
+public record PassCenterProfileChangeRequest(string? NewValue);
+
+/// <summary>[UC-114] Moderator chọn Không đạt: lý do bắt buộc (tối đa 500 ký tự) và giá trị mới đang xem (như Đạt).</summary>
+public record FailCenterProfileChangeRequest(string? Reason, string? NewValue = null);
 
 /// <summary>[UC-114] Kết quả thao tác duyệt: NotFound khi không có thay đổi, Error khi vi phạm quy tắc.</summary>
 public record CenterProfileChangeReviewResult(CenterProfileChangeDto? Change, string? Error = null, bool NotFound = false)
@@ -49,8 +55,9 @@ public record CenterProfileChangeReviewResult(CenterProfileChangeDto? Change, st
 public interface ICenterProfileChangeReviewService
 {
     Task<PagedResult<CenterProfileChangeDto>> SearchAsync(string? status, int page, int pageSize, CancellationToken ct = default);
-    Task<CenterProfileChangeReviewResult> PassAsync(Guid changeId, Guid moderatorUserId, CancellationToken ct = default);
-    Task<CenterProfileChangeReviewResult> FailAsync(Guid changeId, string? reason, Guid moderatorUserId, CancellationToken ct = default);
+    /// <param name="reviewedNewValue">Giá trị mới Moderator đã xem; khác giá trị hiện tại thì từ chối.</param>
+    Task<CenterProfileChangeReviewResult> PassAsync(Guid changeId, string? reviewedNewValue, Guid moderatorUserId, CancellationToken ct = default);
+    Task<CenterProfileChangeReviewResult> FailAsync(Guid changeId, string? reason, string? reviewedNewValue, Guid moderatorUserId, CancellationToken ct = default);
 }
 
 public class CenterProfileChangeReviewService(
@@ -62,7 +69,14 @@ public class CenterProfileChangeReviewService(
     private static readonly HashSet<string> Statuses = new(StringComparer.OrdinalIgnoreCase)
     {
         CenterProfileChangeStatuses.Pending, CenterProfileChangeStatuses.Passed, CenterProfileChangeStatuses.Failed,
+        CenterProfileChangeStatuses.Withdrawn,
     };
+
+    private const string StaleMessage =
+        "Trung tâm vừa cập nhật lại giá trị này sau khi bạn mở danh sách. Vui lòng tải lại và kiểm tra giá trị mới.";
+
+    // Trống và null coi như nhau (trung tâm xóa website thì NewValue là null, giao diện gửi chuỗi rỗng)
+    private static string Normalize(string? value) => value?.Trim() ?? string.Empty;
 
     private static readonly Dictionary<string, string> FieldLabels = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -79,7 +93,7 @@ public class CenterProfileChangeReviewService(
             null or "" => CenterProfileChangeStatuses.Pending,
             "all" => null,
             _ when Statuses.Contains(normalized) => normalized,
-            _ => throw new ArgumentException("Bộ lọc không hợp lệ. Chỉ nhận 'pending', 'passed', 'failed' hoặc 'all'."),
+            _ => throw new ArgumentException("Bộ lọc không hợp lệ. Chỉ nhận 'pending', 'passed', 'failed', 'withdrawn' hoặc 'all'."),
         };
 
         var result = await changes.SearchAsync(filter, page, pageSize, ct);
@@ -89,12 +103,14 @@ public class CenterProfileChangeReviewService(
     }
 
     /// <summary>Đạt: thay đổi giữ nguyên, đóng mục kiểm tra và ghi nhật ký.</summary>
-    public async Task<CenterProfileChangeReviewResult> PassAsync(Guid changeId, Guid moderatorUserId, CancellationToken ct = default)
+    public async Task<CenterProfileChangeReviewResult> PassAsync(Guid changeId, string? reviewedNewValue, Guid moderatorUserId, CancellationToken ct = default)
     {
         var change = await changes.GetByIdAsync(changeId, ct);
         if (change is null) return CenterProfileChangeReviewResult.Missing();
         if (change.Status != CenterProfileChangeStatuses.Pending)
             return CenterProfileChangeReviewResult.Fail("Thay đổi này đã được kiểm tra.");
+        if (Normalize(change.NewValue) != Normalize(reviewedNewValue))
+            return CenterProfileChangeReviewResult.Fail(StaleMessage);
 
         Review(change, CenterProfileChangeStatuses.Passed, moderatorUserId, null);
         await changes.UpdateAsync(change, ct);
@@ -108,7 +124,7 @@ public class CenterProfileChangeReviewService(
     /// Không đạt: lý do bắt buộc, trung tâm nhận thông báo để sửa lại, ghi nhật ký.
     /// Nếu vi phạm, Moderator dùng tiếp thao tác thu hồi dấu xác minh (UC-59) hoặc ẩn trung tâm (UC-72) có sẵn.
     /// </summary>
-    public async Task<CenterProfileChangeReviewResult> FailAsync(Guid changeId, string? reason, Guid moderatorUserId, CancellationToken ct = default)
+    public async Task<CenterProfileChangeReviewResult> FailAsync(Guid changeId, string? reason, string? reviewedNewValue, Guid moderatorUserId, CancellationToken ct = default)
     {
         var trimmed = reason?.Trim();
         if (string.IsNullOrEmpty(trimmed))
@@ -120,6 +136,8 @@ public class CenterProfileChangeReviewService(
         if (change is null) return CenterProfileChangeReviewResult.Missing();
         if (change.Status != CenterProfileChangeStatuses.Pending)
             return CenterProfileChangeReviewResult.Fail("Thay đổi này đã được kiểm tra.");
+        if (Normalize(change.NewValue) != Normalize(reviewedNewValue))
+            return CenterProfileChangeReviewResult.Fail(StaleMessage);
 
         Review(change, CenterProfileChangeStatuses.Failed, moderatorUserId, trimmed);
         await changes.UpdateAsync(change, ct);

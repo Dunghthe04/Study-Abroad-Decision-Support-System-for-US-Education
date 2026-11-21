@@ -3,7 +3,6 @@ from datetime import date
 import pytest
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
-from app.services.chat_flow import SkillOutput
 from app.services.replies import CONTINUE_CHAT
 from app.services.skills import build_handlers, buttons
 from app.services.skills.skill_ho_so import (
@@ -15,7 +14,7 @@ from app.services.skills.skill_ho_so import (
     OVERDUE_TAKEN,
 )
 from app.services.skills.validators import AskAgain, check_certification
-from tests.fakes import FakeLLM, flow_with, tin
+from tests.fakes import FakeAdviceWriter, FakeLLM, flow_with, tin
 from tests.test_chat_skills_flow import PAGE1_ASKED, field, turn
 
 # Ô nhập chứng chỉ ở E1 / D3: giống thẻ chứng chỉ ở bước 3 form, nhập được nhiều chứng chỉ
@@ -547,17 +546,6 @@ async def test_overdue_taken_turns_card_into_real_score():
 # --- Hồ sơ đã đủ mà còn dự định quá hạn: về từ form hoặc hỏi tư vấn thẳng vẫn hỏi dự định trước ---
 
 
-class AdviceSkill:
-    """Skill tư vấn giả: ghi lại câu hỏi được trả lời."""
-
-    def __init__(self) -> None:
-        self.questions: list[str] = []
-
-    async def run(self, state, message, entities=None):
-        self.questions.append(message)
-        return SkillOutput("lời tư vấn")
-
-
 def ready_profile(*cards):
     return {
         **plan_profile(*cards),
@@ -569,9 +557,8 @@ def ready_profile(*cards):
 
 
 def advice_flow(slm=None):
-    advice = AdviceSkill()
-    handlers = build_handlers(FakeLLM(), "qwen3:8b") | {"skill_danh_gia": advice}
-    return flow_with(handlers, slm), advice
+    advice = FakeAdviceWriter()  # Claude giả viết lời tư vấn, ghi lại câu hỏi được trả lời
+    return flow_with(build_handlers(FakeLLM(), "qwen3:8b"), slm, advice), advice
 
 
 async def say(flow, message, state, from_form=False):

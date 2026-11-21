@@ -902,7 +902,7 @@ export interface UnreadCountDto {
 }
 
 /** [UC-114] Bộ lọc danh sách thay đổi trung tâm chờ Moderator kiểm tra. */
-export type CenterProfileChangeFilter = "pending" | "passed" | "failed" | "all";
+export type CenterProfileChangeFilter = "pending" | "passed" | "failed" | "withdrawn" | "all";
 
 /** [UC-114] Một thay đổi website / fanpage do trung tâm tự sửa (UC-92). */
 export interface CenterProfileChangeDto {
@@ -914,7 +914,7 @@ export interface CenterProfileChangeDto {
   field: "website" | "fanpage" | string;
   oldValue?: string | null;
   newValue?: string | null;
-  status: "pending" | "passed" | "failed" | string;
+  status: "pending" | "passed" | "failed" | "withdrawn" | string;
   createdAt: string;
   reviewedByUserId?: string | null;
   reviewedAt?: string | null;

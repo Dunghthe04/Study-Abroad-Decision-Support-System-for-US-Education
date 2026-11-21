@@ -479,13 +479,17 @@ export const centerProfileChangesApi = {
     return apiFetch<PagedResult<CenterProfileChangeDto>>(`/api/v1/moderator/center-profile-changes${qs ? `?${qs}` : ""}`);
   },
 
-  pass: (id: string) =>
-    apiFetch<CenterProfileChangeDto>(`/api/v1/moderator/center-profile-changes/${encodeURIComponent(id)}/pass`, { method: "POST" }),
+  /** `newValue` là giá trị mới Moderator đang xem; trung tâm sửa tiếp sau đó thì máy chủ từ chối. */
+  pass: (id: string, newValue: string | null) =>
+    apiFetch<CenterProfileChangeDto>(`/api/v1/moderator/center-profile-changes/${encodeURIComponent(id)}/pass`, {
+      method: "POST",
+      body: JSON.stringify({ newValue }),
+    }),
 
-  fail: (id: string, reason: string) =>
+  fail: (id: string, reason: string, newValue: string | null) =>
     apiFetch<CenterProfileChangeDto>(`/api/v1/moderator/center-profile-changes/${encodeURIComponent(id)}/fail`, {
       method: "POST",
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ reason, newValue }),
     }),
 };
 

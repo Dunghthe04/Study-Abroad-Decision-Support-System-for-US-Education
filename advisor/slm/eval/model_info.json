@@ -5,9 +5,9 @@
     "params": "4.0B",
     "context": "262,144",
     "license": "Apache-2.0",
-    "size_gb": null,
-    "vram_gb": null,
-    "tokens_per_vi_word": null,
+    "size_gb": 2.5,
+    "vram_gb": 3.2,
+    "tokens_per_vi_word": 1.55,
     "source": "model card"
   },
   "gemma3:4b": {
@@ -15,9 +15,9 @@
     "params": "4B",
     "context": "131,072",
     "license": "Gemma Terms of Use",
-    "size_gb": null,
-    "vram_gb": null,
-    "tokens_per_vi_word": null,
+    "size_gb": 3.4,
+    "vram_gb": 2.9,
+    "tokens_per_vi_word": 1.49,
     "source": "model card"
   },
   "phi4-mini": {
@@ -25,9 +25,9 @@
     "params": "3.8B",
     "context": "131,072",
     "license": "MIT",
-    "size_gb": null,
-    "vram_gb": null,
-    "tokens_per_vi_word": null,
+    "size_gb": 2.5,
+    "vram_gb": 3.1,
+    "tokens_per_vi_word": 1.46,
     "source": "model card"
   }
 }

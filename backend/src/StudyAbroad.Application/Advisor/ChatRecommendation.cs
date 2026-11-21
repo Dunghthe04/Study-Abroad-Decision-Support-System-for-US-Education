@@ -14,10 +14,6 @@ public static class ChatRecommendation
     /// <summary>Widget hiện nút "Xem đầy đủ" mở trang Gợi ý trường.</summary>
     public const string WidgetType = "recommend";
 
-    public const string Busy = "Phần gợi ý trường đang bận, bạn thử lại sau ít phút hoặc mở trang Gợi ý trường nhé.";
-    public const string Invalid = "Mình chưa tạo được danh sách trường hợp lệ, bạn thử lại sau ít phút nhé.";
-    public const string Empty =
-        "Mình chưa tìm được trường nào khớp với hồ sơ hiện tại. Bạn mở trang Gợi ý trường để xem lý do và điều chỉnh tiêu chí nhé.";
     public const string More = "Bạn xem chi tiết và lý do từng trường ở trang Gợi ý trường.";
 
     // Nhóm theo đúng thứ tự và tên trên trang Gợi ý trường (RecommendationView.tsx)
@@ -42,7 +38,22 @@ public static class ChatRecommendation
             .GroupBy(s => s["code"]!.GetValue<string>(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First()["name"]!.GetValue<string>(), StringComparer.OrdinalIgnoreCase);
 
-        var lines = new List<string>();
+        var lines = ShownGroups(items, names).Select(g => $"- {GroupLine(g)}").ToList();
+
+        if (lines.Count == 0)
+            return AdvisorMessages.RecommendationEmpty;
+        return "Mình đã tìm được các trường phù hợp với hồ sơ của bạn:\n" + string.Join("\n", lines) + "\n" + More;
+    }
+
+    // Một nhóm trên màn hình: tên nhóm, các trường đang hiện (tối đa Max) và số trường còn lại chưa hiện
+    private sealed record ShownGroup(string Title, IReadOnlyList<string> Shown, IReadOnlyList<string> Hidden, int Total)
+    {
+        public int Rest => Hidden.Count;
+    }
+
+    private static List<ShownGroup> ShownGroups(JsonObject? items, IReadOnlyDictionary<string, string> names)
+    {
+        var groups = new List<ShownGroup>();
         foreach (var (key, title, max) in Groups)
         {
             // Lấy từng nhóm ra
@@ -53,15 +64,54 @@ public static class ChatRecommendation
                 .ToList();
             if (codes.Count == 0)
                 continue;
-            var shown = codes.Take(max).Select(c => names.GetValueOrDefault(c, c));
-            var rest = codes.Count - max;
-            lines.Add($"- {title}: {string.Join(", ", shown)}" + (rest > 0 ? $" và {rest} trường khác" : ""));
+            var shown = codes.Take(max).Select(c => names.GetValueOrDefault(c, c)).ToList();
+            var hidden = codes.Skip(max).Select(c => names.GetValueOrDefault(c, c)).ToList();
+            groups.Add(new ShownGroup(title, shown, hidden, codes.Count));
         }
-
-        if (lines.Count == 0)
-            return Empty;
-        return "Mình đã tìm được các trường phù hợp với hồ sơ của bạn:\n" + string.Join("\n", lines) + "\n" + More;
+        return groups;
     }
+
+    private static string GroupLine(ShownGroup g) =>
+        $"{g.Title}: {string.Join(", ", g.Shown)}" + (g.Rest > 0 ? $" và {g.Rest} trường khác" : "");
+
+    /// <summary>
+    /// Advisor đặt action_data.note = true khi học sinh chỉ xin danh sách trường, tức chưa có lời nào do Claude viết.
+    /// Lúc đó danh sách được gửi cho Claude viết lời. Câu có cả đánh giá hồ sơ thì lời đã do Claude viết, danh sách chỉ nối thêm.
+    /// </summary>
+    public static bool NoteRequested(JsonElement? actionData) =>
+        actionData is { ValueKind: JsonValueKind.Object } data
+        && data.TryGetProperty("note", out var note)
+        && note.ValueKind == JsonValueKind.True;
+
+    /// <summary>
+    /// Dữ kiện gửi Claude viết lời cho danh sách: tổng số trường, mỗi nhóm một dòng (đúng chữ như câu ghép bằng code),
+    /// tên các trường đang hiện, và tên các trường đã chấm nhưng không hiện để chặn nhắc tên lạ. Null khi chưa có trường nào.
+    /// </summary>
+    public static RecommendNoteRequestDto? Note(Recommendation recommendation)
+    {
+        var items = JsonNode.Parse(recommendation.ItemsJson) as JsonObject;
+        var names = (items?["scored"] as JsonArray ?? [])
+            .OfType<JsonObject>()
+            .Where(s => s["code"] is not null && s["name"] is not null)
+            .GroupBy(s => s["code"]!.GetValue<string>(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First()["name"]!.GetValue<string>(), StringComparer.OrdinalIgnoreCase);
+        var groups = ShownGroups(items, names);
+        if (groups.Count == 0)
+            return null;
+
+        var facts = new List<string> { $"Tổng cộng {groups.Sum(g => g.Total)} trường phù hợp với hồ sơ của bạn." };
+        facts.AddRange(groups.Select(GroupLine));
+        var schools = groups.SelectMany(g => g.Shown).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        // Chặn nhắc tên: trường cùng nhóm nhưng chưa hiện (lời chỉ nói "và N trường khác") và trường không nằm trong nhóm nào
+        var others = groups.SelectMany(g => g.Hidden).Concat(OtherSchools(recommendation).Select(s => s.Name))
+            .Where(n => !schools.Contains(n, StringComparer.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(MaxOthers)
+            .ToList();
+        return new RecommendNoteRequestDto(schools, facts, others);
+    }
+
+    private const int MaxOthers = 400; // trần của advisor (RecommendNoteRequest.others)
 
     /// <summary>
     /// Các trường học sinh đang thấy (4 nhóm hiển thị, đủ danh sách không cắt), theo thứ tự trang Gợi ý trường.

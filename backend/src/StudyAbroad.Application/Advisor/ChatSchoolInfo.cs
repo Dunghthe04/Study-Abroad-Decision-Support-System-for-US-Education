@@ -523,7 +523,6 @@ public static class ChatSchoolInfo
             : $"{priced[0].Name} rẻ hơn {priced[^1].Name} khoảng {Money(gap)} USD mỗi năm.";
     }
 
-    public const string Unavailable = "Mình chưa tra được số liệu của trường này lúc này, bạn thử lại sau ít phút nhé.";
 
     public static string SchoolNotFound(string typed) =>
         $"Mình chưa thấy trường “{typed}” trong danh sách của hệ thống. Bạn kiểm tra lại tên trường giúp mình nhé.";
