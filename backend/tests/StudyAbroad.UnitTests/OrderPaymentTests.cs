@@ -102,6 +102,38 @@ public class OrderPaymentTests
         Assert.Equal(PayAt, h.Order(order.OrderCode).PaidAt);
     }
 
+    // E1: job đối soát thắng cuộc đua (không payload), webhook thật tới sau: payload đã lọc vẫn được lưu
+    [Fact]
+    public async Task E1_AlreadyPaidWithoutPayload_LateWebhookStoresItsPayload_NothingElseChanges()
+    {
+        var (h, _, order) = await Ordered();
+        var first = await Pay(h, order);   // job: payload null
+        Assert.Null(h.Order(order.OrderCode).PayloadJson);
+
+        var late = await Pay(h, order, payload: "{\"reference\":\"TF0001\"}");
+        var again = await Pay(h, order, payload: "{\"reference\":\"OTHER\"}");
+
+        Assert.Equal(new PaymentApplyResult(PaymentApplyStatus.AlreadyPaid, first.CycleId), late);
+        Assert.Equal(PaymentApplyStatus.AlreadyPaid, again.Status);
+        Assert.Equal("{\"reference\":\"TF0001\"}", h.Order(order.OrderCode).PayloadJson);   // chỉ lưu lần đầu, không ghi đè
+        Assert.Single(h.Store.Cycles);
+        Assert.Single(h.Email.SentEmails);
+        Assert.Single(h.Notes.Sent);
+        Assert.Equal(PayAt, h.Order(order.OrderCode).PaidAt);
+    }
+
+    [Fact]
+    public async Task E1_AlreadyPaidOrderOfAPurgedBuyer_DoesNotStoreAPayloadAgain()
+    {
+        var (h, _, order) = await Ordered();
+        await Pay(h, order);
+        h.Order(order.OrderCode).UserId = null;   // tài khoản đã bị xóa hẳn, payload đã được xóa
+
+        await Pay(h, order, payload: "{\"reference\":\"TF0001\"}");
+
+        Assert.Null(h.Order(order.OrderCode).PayloadJson);
+    }
+
     [Fact]
     public async Task P14_WebhookRepeated_OneCycleOneReceipt()
     {

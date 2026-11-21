@@ -71,7 +71,16 @@ public sealed partial class OrderService
         if (order is null)
             return new PaymentApplyResult(PaymentApplyStatus.UnknownOrder);
         if (order.Status == OrderStatuses.Paid)
+        {
+            // Job đối soát thắng cuộc đua nên đơn đã trả mà chưa có payload: webhook thật tới sau thì lưu payload đã lọc, không đổi gì khác (không thông báo, không kỳ mới).
+            // Người mua đã bị xóa hẳn (UserId null) thì payload đã được xóa theo luật lưu trữ: không lưu lại
+            if (order.PayloadJson is null && payloadJson is not null && order.UserId is not null)
+            {
+                order.PayloadJson = payloadJson;
+                await orders.SaveAsync(ct);
+            }
             return new PaymentApplyResult(PaymentApplyStatus.AlreadyPaid, order.UserSubscriptionId);
+        }
 
         var alreadyMismatch = order.Status == OrderStatuses.Mismatch;
         // Tài khoản người mua đã bị xóa hẳn: có tiền nhưng không có ai để nhận gói, admin xử lý
