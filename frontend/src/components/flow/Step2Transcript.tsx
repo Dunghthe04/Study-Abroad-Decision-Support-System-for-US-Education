@@ -853,53 +853,64 @@ export function Step2Transcript({
       return;
     }
 
-    // Kiểm tra từng năm học yêu cầu trong danh sách năm
-    const emptyYears = years.filter((y) =>
-      y.subjects.every(
-        (s) =>
-          (s.semester1Score === null || s.semester1Score === undefined) &&
-          (s.semester2Score === null || s.semester2Score === undefined)
-      )
-    );
+    // Kiểm tra tính đầy đủ của các năm học:
+    // 1. Các năm học đã hoàn thành (các lớp dưới lớp hiện tại, hoặc tất cả các lớp nếu đã xóa lớp hiện tại):
+    //    BẮT BUỘC phải nhập đủ cả 2 kỳ (Học kỳ 1 VÀ Học kỳ 2).
+    // 2. Chỉ duy nhất năm học hiện tại đang học dở (nếu còn giữ trong danh sách):
+    //    Được phép chỉ nhập 1 kỳ (Học kỳ 1). Nếu chưa có điểm kỳ nào thì nhắc xóa khối này.
+    for (let idx = 0; idx < years.length; idx++) {
+      const y = years[idx];
+      const hasSem1 = y.subjects.some((s) => s.semester1Score !== null && s.semester1Score !== undefined);
+      const hasSem2 = y.subjects.some((s) => s.semester2Score !== null && s.semester2Score !== undefined);
 
-    if (emptyYears.length > 0) {
-      const isOnlyCurrentGradeEmpty =
-        maxAllowedGradeName &&
-        emptyYears.length === 1 &&
-        normalizeGrade(emptyYears[0].gradeName) === normalizeGrade(maxAllowedGradeName);
-
-      if (isOnlyCurrentGradeEmpty) {
-        setValidationError(
-          `Bạn đang để trống điểm của ${emptyYears[0].gradeName}. Nếu bạn chưa học xong hoặc chưa có điểm năm nay, vui lòng bấm nút xóa (biểu tượng thùng rác/x) trên tab ${emptyYears[0].gradeName} để tiếp tục với điểm các năm trước.`
-        );
-      } else {
-        setValidationError(
-          `Hồ sơ cần có điểm của các năm học (${years.map((y) => y.gradeName).join(", ")}) để tính toán cơ hội trúng tuyển chuẩn xác nhất. Hiện bạn đang thiếu điểm của ${emptyYears.map((y) => y.gradeName).join(", ")}. Vui lòng tải thêm ảnh bảng điểm hoặc điền tay các năm còn thiếu.`
-        );
-      }
-      setShowManualTable(true);
-      const firstMissingIdx = years.findIndex((y) => y.gradeName === emptyYears[0].gradeName);
-      if (firstMissingIdx !== -1) setActiveYearIndex(firstMissingIdx);
-      return;
-    }
-
-    // Kiểm tra nếu tổng số học kỳ có điểm quá ít (chỉ có 1 học kỳ trên tổng số các năm)
-    let totalTermsWithScores = 0;
-    for (const y of years) {
-      if (y.subjects.some((s) => s.semester1Score !== null && s.semester1Score !== undefined)) {
-        totalTermsWithScores++;
-      }
-      if (y.subjects.some((s) => s.semester2Score !== null && s.semester2Score !== undefined)) {
-        totalTermsWithScores++;
-      }
-    }
-
-    if (years.length >= 2 && totalTermsWithScores < 2) {
-      setValidationError(
-        "Dữ liệu hiện tại mới chỉ ghi nhận 1 học kỳ. Vui lòng tải thêm ảnh hoặc điền thêm điểm các học kỳ khác để hồ sơ có đủ điểm đánh giá."
+      const isOngoingCurrentGrade = Boolean(
+        maxAllowedGradeName && normalizeGrade(y.gradeName) === normalizeGrade(maxAllowedGradeName)
       );
-      setShowManualTable(true);
-      return;
+
+      if (isOngoingCurrentGrade) {
+        if (!hasSem1 && !hasSem2) {
+          setValidationError(
+            `Bạn đang để trống điểm của ${y.gradeName}. Nếu bạn chưa học xong hoặc chưa có điểm năm nay, vui lòng bấm nút xóa (biểu tượng thùng rác/x) trên tab ${y.gradeName} để tiếp tục với điểm các năm trước.`
+          );
+          setShowManualTable(true);
+          setActiveYearIndex(idx);
+          return;
+        }
+        if (!hasSem1 && hasSem2) {
+          setValidationError(
+            `Bạn đang nhập điểm Học kỳ 2 của ${y.gradeName} nhưng thiếu Học kỳ 1. Vui lòng bổ sung điểm Học kỳ 1.`
+          );
+          setShowManualTable(true);
+          setActiveYearIndex(idx);
+          return;
+        }
+        // hasSem1 = true -> Cho phép tiếp tục dù hasSem2 = false (đang học dở năm nay)
+      } else {
+        if (!hasSem1 && !hasSem2) {
+          setValidationError(
+            `Hồ sơ cần có điểm của ${y.gradeName}. Vui lòng nhập điểm hoặc tải ảnh bảng điểm của năm học này.`
+          );
+          setShowManualTable(true);
+          setActiveYearIndex(idx);
+          return;
+        }
+        if (!hasSem1) {
+          setValidationError(
+            `Năm học ${y.gradeName} đã kết thúc nên bắt buộc phải có đủ điểm cả 2 kỳ. Bạn đang thiếu điểm Học kỳ 1 của ${y.gradeName}.`
+          );
+          setShowManualTable(true);
+          setActiveYearIndex(idx);
+          return;
+        }
+        if (!hasSem2) {
+          setValidationError(
+            `Năm học ${y.gradeName} đã kết thúc nên bắt buộc phải có đủ điểm cả 2 kỳ. Bạn đang thiếu điểm Học kỳ 2 của ${y.gradeName}.`
+          );
+          setShowManualTable(true);
+          setActiveYearIndex(idx);
+          return;
+        }
+      }
     }
 
     setValidationError(null);
