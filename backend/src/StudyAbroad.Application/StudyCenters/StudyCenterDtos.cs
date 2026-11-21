@@ -42,7 +42,6 @@ public record StudyCenterDto(
     IReadOnlyList<string>? LegalDocumentUrls = null,
     string? VerificationNote = null,
     DateTime? EmailVerifiedAt = null,
-    DateTime? PhoneVerifiedAt = null,
     decimal? FeeMin = null,
     decimal? FeeMax = null,
     string? FeeDescription = null,

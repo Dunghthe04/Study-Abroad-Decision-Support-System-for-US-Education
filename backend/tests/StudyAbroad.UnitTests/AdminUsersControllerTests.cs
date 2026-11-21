@@ -125,16 +125,7 @@ public class AdminUsersControllerTests
         public Task<AuthResult> VerifyCenterEmailAsync(VerifyCenterEmailRequest request, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
-        public Task<AuthResult> RequestCenterPhoneChangeAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> ConfirmCenterPhoneChangeAsync(Guid userId, ConfirmContactChangeDto request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> RequestCenterPhoneVerificationAsync(Guid userId, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> VerifyCenterPhoneAsync(Guid userId, string? code, CancellationToken ct = default) =>
+        public Task<AuthResult> UpdateCenterPhoneAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
         public Task<AuthResult> RequestCenterEmailChangeAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default) =>
