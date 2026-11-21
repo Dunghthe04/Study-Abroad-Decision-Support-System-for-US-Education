@@ -46,6 +46,7 @@ public class CenterDeletionServiceTests
         public List<Notification> Notifications { get; } = [];
         public List<Guid> PurgedCenters { get; } = [];
         public List<Guid> DeletedFileFolders { get; } = [];
+        public List<string> MediaUrls { get; } = [];
         public string? LastSearchStatus { get; private set; }
 
         public Task<PagedResult<AdminCenterDeletionRequestDto>> SearchAsync(string? status, int page, int pageSize, CancellationToken ct = default)
@@ -91,6 +92,10 @@ public class CenterDeletionServiceTests
             return Task.CompletedTask;
         }
 
+        /// <summary>Giống DB thật: sau khi purge, các cột ảnh đã bị xóa trắng nên không còn URL nào để đọc.</summary>
+        public Task<IReadOnlyList<string>> GetCenterMediaUrlsAsync(Guid studyCenterId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<string>>(PurgedCenters.Contains(studyCenterId) ? [] : MediaUrls.ToList());
+
         public int OpenReports { get; set; }
         public Task<int> CountOpenReportsAsync(Guid studyCenterId, CancellationToken ct = default) => Task.FromResult(OpenReports);
 
@@ -106,6 +111,22 @@ public class CenterDeletionServiceTests
         }
     }
 
+    private sealed class FakeMediaCleaner : ICenterMediaCleaner
+    {
+        public List<string> Deleted { get; } = [];
+        public int Calls { get; private set; }
+        public List<string> FailUrls { get; } = [];
+        public bool Throws { get; set; }
+
+        public Task<IReadOnlyList<string>> DeleteAsync(IReadOnlyCollection<string> urls, CancellationToken ct = default)
+        {
+            Calls++;
+            if (Throws) throw new InvalidOperationException("CDN down");
+            Deleted.AddRange(urls.Where(u => !FailUrls.Contains(u)));
+            return Task.FromResult<IReadOnlyList<string>>(urls.Where(FailUrls.Contains).ToList());
+        }
+    }
+
     private sealed class Setup
     {
         public FakeCenterRepo Centers { get; } = new();
@@ -115,6 +136,7 @@ public class CenterDeletionServiceTests
         public FakeAuditLogRepository Audit { get; } = new();
         public FakeUnitOfWork UnitOfWork { get; } = new();
         public FakeEmailSender Email { get; } = new();
+        public FakeMediaCleaner Media { get; } = new();
         public CenterDeletionService Service { get; }
         public User Owner { get; }
         public StudyCenter Center { get; }
@@ -130,7 +152,7 @@ public class CenterDeletionServiceTests
             Centers.Centers.Add(Center);
             Request = new CenterDeletionRequest { StudyCenterId = Center.Id, RequestedByUserId = Owner.Id, Reason = "Ngừng hoạt động" };
             Requests.Items.Add(Request);
-            Service = new CenterDeletionService(Requests, Work, Centers, Users, Audit, UnitOfWork, Email);
+            Service = new CenterDeletionService(Requests, Work, Centers, Users, Audit, UnitOfWork, Email, Media);
         }
     }
 
@@ -235,6 +257,72 @@ public class CenterDeletionServiceTests
         var rerun = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(40));
         Assert.Equal(0, rerun.Purged);
         Assert.Single(s.Work.AnonymizedUsers);
+    }
+
+    [Fact]
+    public async Task PurgeDue_DeletesCenterImagesFromCdnUsingUrlsReadBeforeTheColumnsAreWiped()
+    {
+        var s = new Setup();
+        s.Work.MediaUrls.AddRange(["https://res.cloudinary.com/demo/image/upload/v1/usas/logo.png", "https://res.cloudinary.com/demo/image/upload/v1/usas/cover.png"]);
+        await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
+
+        var due = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(31));
+
+        Assert.Equal(1, due.Purged);
+        Assert.Empty(due.Failures);
+        Assert.Equal(s.Work.MediaUrls, s.Media.Deleted);
+        Assert.Equal(1, s.Media.Calls);
+    }
+
+    [Fact]
+    public async Task PurgeDue_CdnFailure_StillCompletesDeletionAndReportsUrlsToCleanByHand()
+    {
+        var s = new Setup();
+        s.Work.MediaUrls.AddRange(["https://res.cloudinary.com/demo/image/upload/v1/usas/a.png", "https://res.cloudinary.com/demo/image/upload/v1/usas/b.png"]);
+        s.Media.FailUrls.Add(s.Work.MediaUrls[1]);
+        await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
+        s.Email.CenterDeletionEmails.Clear();
+
+        var due = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(31));
+
+        // DB đã lưu và trung tâm coi như đã xóa; chỉ báo lại URL còn sót
+        Assert.Equal(1, due.Purged);
+        Assert.Equal(CenterDeletionRequestStatuses.Completed, s.Request.Status);
+        var failure = Assert.Single(due.Failures);
+        var error = Assert.IsType<CenterMediaCleanupException>(failure.Error);
+        Assert.Equal([s.Work.MediaUrls[1]], error.FailedUrls);
+        Assert.Contains(s.Work.MediaUrls[1], error.Message);
+        Assert.NotEmpty(s.Email.CenterDeletionEmails);
+    }
+
+    [Fact]
+    public async Task PurgeDue_CleanerThrows_IsReportedAsFailureWithoutUndoingDeletion()
+    {
+        var s = new Setup();
+        s.Work.MediaUrls.Add("https://res.cloudinary.com/demo/image/upload/v1/usas/a.png");
+        s.Media.Throws = true;
+        await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
+
+        var due = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(31));
+
+        Assert.Equal(1, due.Purged);
+        Assert.Equal(CenterDeletionRequestStatuses.Completed, s.Request.Status);
+        Assert.IsType<InvalidOperationException>(Assert.Single(due.Failures).Error);
+    }
+
+    [Fact]
+    public async Task PurgeDue_HeldAtLock_DoesNotTouchTheCdn()
+    {
+        var s = new Setup();
+        s.Work.MediaUrls.Add("https://res.cloudinary.com/demo/image/upload/v1/usas/a.png");
+        await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
+        s.Work.HeldAtLock = true;
+
+        var due = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(31));
+
+        Assert.Equal(0, due.Purged);
+        Assert.Equal(0, s.Media.Calls);
+        Assert.Empty(s.Media.Deleted);
     }
 
     [Fact]
