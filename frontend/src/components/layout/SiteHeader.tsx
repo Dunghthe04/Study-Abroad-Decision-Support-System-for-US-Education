@@ -229,9 +229,9 @@ export function SiteHeader() {
                 >
                   <span
                     aria-hidden="true"
-                    className="flex size-7 shrink-0 items-center justify-center rounded-md bg-white text-brand-ink"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-md bg-brand-wash text-brand"
                   >
-                    <UserRoleIcon role={user.role} className="size-3.5" />
+                    <UserRoleIcon role={user.role} className="size-[18px]" />
                   </span>
                   <span className="hidden max-w-36 truncate px-2 text-sm font-medium sm:block">{user.fullName}</span>
                   <span aria-hidden="true" className="ml-1 flex h-5 items-center border-l border-white/30 px-1.5">
@@ -246,7 +246,7 @@ export function SiteHeader() {
                         aria-hidden="true"
                         className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand text-white"
                       >
-                        <UserRoleIcon role={user.role} className="size-6" />
+                        <UserRoleIcon role={user.role} className="size-7" />
                       </span>
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="truncate text-base font-semibold text-ink">{user.fullName}</span>
