@@ -68,6 +68,13 @@ export interface SubscriptionCycleDto {
   ownerName: string | null;
 }
 
+/** GET /api/v1/subscription/quota: hạn mức chung còn lại ngay lúc này (mọi kỳ dùng được + Free), chỉ phần trăm. */
+export interface QuotaOverviewDto {
+  remainingPercent: number;
+  usedPercent: number;
+  lowQuota: boolean;
+}
+
 export interface SubscriptionSummaryDto {
   tier: "free" | "premium";
   chargingPool: PlanKind;

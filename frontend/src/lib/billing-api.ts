@@ -2,7 +2,7 @@
 
 import { apiFetch, ApiError } from "@/lib/api";
 import type { PagedResult } from "@/types/api";
-import type { BillingError, ExpiredCycleDto, OrderDto, OrderStatus, PlanDto, SubscriptionSummaryDto } from "@/types/billing";
+import type { BillingError, ExpiredCycleDto, QuotaOverviewDto, OrderDto, OrderStatus, PlanDto, SubscriptionSummaryDto } from "@/types/billing";
 
 export const billingApi = {
   /** Không cần đăng nhập. Đã sắp theo displayOrder, chỉ gói đang bán. */
@@ -10,6 +10,9 @@ export const billingApi = {
 
   /** Chỉ học sinh, phụ huynh. */
   subscription: () => apiFetch<SubscriptionSummaryDto>("/api/v1/subscription"),
+
+  /** Hạn mức chung còn lại của tôi ngay lúc này, một con số phần trăm. Chỉ học sinh, phụ huynh. */
+  quotaOverview: () => apiFetch<QuotaOverviewDto>("/api/v1/subscription/quota"),
 
   /** Các kỳ đã hết hạn của tôi, hết hạn gần nhất trước (tối đa 100). */
   expiredCycles: () => apiFetch<ExpiredCycleDto[]>("/api/v1/subscription/expired"),
