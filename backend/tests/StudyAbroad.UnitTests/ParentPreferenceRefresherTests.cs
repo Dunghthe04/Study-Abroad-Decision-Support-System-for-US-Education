@@ -223,6 +223,7 @@ public class ParentPreferenceRefresherTests
         public Task<ScenarioNoteResponseDto> WriteScenarioNoteAsync(ScenarioNoteRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<GoalNoteResponseDto> WriteGoalNoteAsync(GoalNoteRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<RecommendNoteResponseDto> WriteRecommendNoteAsync(RecommendNoteRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     private sealed class MiniRecommendationStore : IRecommendationRepository

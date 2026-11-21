@@ -351,9 +351,14 @@ namespace StudyAbroad.Application.Advisor
             try
             {
                 var saved = await recommender!.CreateAsync(userId, null, ct);
+                // Chỉ xin danh sách: Claude viết lời cho danh sách (lỗi thì dùng câu liệt kê ghép bằng code).
+                // Có cả đánh giá hồ sơ: lời đã do Claude viết rồi, danh sách chỉ nối thêm
+                var answer = ChatRecommendation.NoteRequested(response.ActionData) && ChatRecommendation.Note(saved) is { } note
+                    ? await WriteRecommendNoteAsync(note, saved, ct)
+                    : $"{response.Answer}\n\n{ChatRecommendation.Summarize(saved)}";
                 return response with
                 {
-                    Answer = $"{response.Answer}\n\n{ChatRecommendation.Summarize(saved)}",
+                    Answer = answer,
                     State = ChatRecommendation.WithResults(response.State),
                     Widget = new Widget(ChatRecommendation.WidgetType),
                     QuickReplies = ChatNextSteps.AfterRecommend(Suggested(ChatRecommendation.Schools(saved))),
@@ -787,6 +792,22 @@ namespace StudyAbroad.Application.Advisor
         }
 
         // Gemini diễn đạt kết quả goal-seeking. Lỗi, hết lượt hoặc lời không qua kiểm tra thì dùng câu ghép bằng code (cùng dữ kiện)
+        private async Task<string> WriteRecommendNoteAsync(RecommendNoteRequestDto note, Recommendation saved, CancellationToken ct)
+        {
+            try
+            {
+                var written = await advisor.WriteRecommendNoteAsync(note, ct);
+                if (written.Status == "OK" && !string.IsNullOrWhiteSpace(written.Answer))
+                    return written.Answer;
+            }
+            catch (Exception ex) when (ex is HttpRequestException
+                                       || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+            {
+                // Claude không trả lời được: dùng câu liệt kê ghép bằng code, danh sách vẫn đúng
+            }
+            return ChatRecommendation.Summarize(saved);
+        }
+
         private async Task<string> WriteGoalNoteAsync(GoalNoteRequestDto note, SchoolGoalResult result, CancellationToken ct)
         {
             try
