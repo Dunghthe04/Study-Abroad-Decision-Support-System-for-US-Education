@@ -63,7 +63,10 @@ public class OrderRepository(AppDbContext db) : IOrderRepository
 
     public void ClearTracking() => db.ChangeTracker.Clear();
 
+    // Deadlock (40P01) là vòng chờ khóa với tiến trình khác (purge tài khoản...): Postgres hủy một bên, bên đó chạy lại được. Ném thẳng từ câu SELECT ... FOR UPDATE
+    // hoặc bọc trong DbUpdateException khi tới từ SaveChanges
     public bool IsConflict(Exception ex) =>
         ex is DbUpdateConcurrencyException
-        || ex is DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } };
+        || ex is PostgresException { SqlState: PostgresErrorCodes.DeadlockDetected }
+        || ex is DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.DeadlockDetected } };
 }
