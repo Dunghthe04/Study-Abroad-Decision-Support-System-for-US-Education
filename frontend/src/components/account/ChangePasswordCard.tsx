@@ -83,7 +83,7 @@ export function ChangePasswordCard() {
         <div className="space-y-1.5">
           <h2 className="font-heading text-lg font-semibold text-ink">Đổi mật khẩu</h2>
           <p className="text-xs leading-relaxed text-ink-2">
-            Sau khi đổi, các thiết bị khác đang đăng nhập sẽ bị đăng xuất. Nhập sai mật khẩu hiện tại 5 lần liên tiếp sẽ khóa tài khoản (cần Quản trị viên mở khóa).
+            Sau khi đổi, các thiết bị khác đang đăng nhập sẽ bị đăng xuất. Nhập sai mật khẩu hiện tại 5 lần liên tiếp sẽ khóa tài khoản (vui lòng liên hệ để được mở khóa).
           </p>
         </div>
 

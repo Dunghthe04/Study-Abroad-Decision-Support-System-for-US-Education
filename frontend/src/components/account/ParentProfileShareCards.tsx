@@ -14,7 +14,6 @@ import {
   EmptyContent,
   EmptyDescription,
   EmptyHeader,
-  EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
 
@@ -83,11 +82,8 @@ export function ParentAcademicSection({ overview, onChanged }: ParentAcademicSec
       />
 
       {overview.children.length === 0 ? (
-        <Empty className="border border-line bg-surface py-12">
+        <Empty className="py-16">
           <EmptyHeader>
-            <EmptyMedia variant="icon" className="size-12 rounded-2xl bg-brand-wash text-brand">
-              <UsersIcon className="size-6" aria-hidden />
-            </EmptyMedia>
             <EmptyTitle className="text-base font-semibold text-ink">
               Chưa có hồ sơ con để hiển thị
             </EmptyTitle>

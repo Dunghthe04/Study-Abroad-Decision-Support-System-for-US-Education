@@ -3,13 +3,12 @@
 import { useEffect, useState } from "react";
 import {
   CalendarIcon,
+  ClockIcon,
   LogOutIcon,
   MailIcon,
-  RefreshCwIcon,
   SendIcon,
   Trash2Icon,
   UserPlusIcon,
-  UsersIcon,
   XIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -40,7 +39,6 @@ import {
   EmptyContent,
   EmptyDescription,
   EmptyHeader,
-  EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
@@ -246,7 +244,7 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
               <div className="grid grid-cols-1 gap-2.5 border-t border-line pt-3.5 text-xs text-ink-2 sm:grid-cols-2">
                 {f.cycle.quotaResetsAt && (
                   <div className="flex items-center gap-2">
-                    <RefreshCwIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
+                    <CalendarIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
                     <span>
                       Làm mới hạn mức ngày {formatVnDate(f.cycle.quotaResetsAt)}
                       {f.cycle.quotaPeriodDays ? ` (mỗi ${f.cycle.quotaPeriodDays} ngày)` : ""}
@@ -255,7 +253,7 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
                 )}
                 {f.cycle.endsAt && (
                   <div className="flex items-center gap-2">
-                    <CalendarIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
+                    <ClockIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
                     <span>Hết hạn ngày {formatVnDate(f.cycle.endsAt)}</span>
                   </div>
                 )}
@@ -329,11 +327,8 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
           </ul>
 
           {emptyGroup && (
-            <Empty className="border border-line bg-surface py-10">
+            <Empty className="py-12">
               <EmptyHeader>
-                <EmptyMedia variant="icon" className="size-11 rounded-2xl bg-brand-wash text-brand">
-                  <UsersIcon className="size-5" aria-hidden />
-                </EmptyMedia>
                 <EmptyTitle className="text-base font-semibold text-ink">
                   Chưa có thành viên nào khác
                 </EmptyTitle>

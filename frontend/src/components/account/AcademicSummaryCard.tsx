@@ -11,7 +11,6 @@ import {
   EmptyContent,
   EmptyDescription,
   EmptyHeader,
-  EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -116,11 +115,8 @@ export function AcademicSummaryCard({ profile, isLoading, readOnly = false, titl
           description="Hoàn thành hồ sơ 6 bước để hệ thống lưu trữ bảng điểm và phân tích cơ hội trúng tuyển."
           badge={<Badge variant="warn">Chưa hoàn tất</Badge>}
         />
-        <Empty className="border border-line bg-surface py-12">
+        <Empty className="py-16">
           <EmptyHeader>
-            <EmptyMedia variant="icon" className="size-12 rounded-2xl bg-brand-wash text-brand">
-              <BookOpenIcon className="size-6" aria-hidden />
-            </EmptyMedia>
             <EmptyTitle className="text-base font-semibold text-ink">
               Bảng điểm và hồ sơ chưa được thiết lập
             </EmptyTitle>

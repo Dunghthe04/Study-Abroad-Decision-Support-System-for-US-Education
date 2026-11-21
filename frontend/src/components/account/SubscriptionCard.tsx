@@ -4,9 +4,8 @@ import Link from "next/link";
 import {
   CalendarIcon,
   ClockIcon,
-  CrownIcon,
+  CreditCardIcon,
   ReceiptTextIcon,
-  RefreshCwIcon,
   TriangleAlertIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -56,7 +55,7 @@ function PoolPanel({ title, pool }: { title: string; pool: PoolDto | FamilyPoolD
         <div className="grid grid-cols-1 gap-2.5 border-t border-line pt-3.5 text-xs text-ink-2 sm:grid-cols-2">
           {pool.quotaResetsAt && (
             <div className="flex items-center gap-2">
-              <RefreshCwIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
+              <CalendarIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
               <span>
                 Làm mới hạn mức ngày {formatVnDate(pool.quotaResetsAt)}
                 {pool.quotaPeriodDays ? ` (mỗi ${pool.quotaPeriodDays} ngày)` : ""}
@@ -65,7 +64,7 @@ function PoolPanel({ title, pool }: { title: string; pool: PoolDto | FamilyPoolD
           )}
           {pool.endsAt && (
             <div className="flex items-center gap-2">
-              <CalendarIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
+              <ClockIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
               <span>Hết hạn ngày {formatVnDate(pool.endsAt)}</span>
             </div>
           )}
@@ -89,13 +88,7 @@ export function SubscriptionCard() {
   const sub = useFetched(`sub:${user?.id}`, billingApi.subscription);
   const s = sub.data;
 
-  const tierBadge = s ? (
-    s.tier === "premium" ? (
-      <Badge variant="brand">USDSS Premium</Badge>
-    ) : (
-      <Badge variant="neutral">Miễn phí</Badge>
-    )
-  ) : undefined;
+  const tierBadge = s?.tier === "premium" ? <Badge variant="brand">USDSS Premium</Badge> : undefined;
 
   return (
     <div>
@@ -105,12 +98,12 @@ export function SubscriptionCard() {
         badge={tierBadge}
         actions={
           <>
-            <Link href="/orders" className={buttonVariants({ variant: "outline", size: "lg", className: "bg-surface" })}>
+            <Link href="/account#orders" className={buttonVariants({ variant: "outline", size: "lg", className: "bg-surface" })}>
               <ReceiptTextIcon data-icon="inline-start" aria-hidden />
               Lịch sử giao dịch
             </Link>
             <Link href="/plans" className={buttonVariants({ size: "lg" })}>
-              <CrownIcon data-icon="inline-start" aria-hidden />
+              <CreditCardIcon data-icon="inline-start" aria-hidden />
               Xem các gói
             </Link>
           </>
@@ -176,7 +169,7 @@ export function SubscriptionCard() {
               />
 
               <div className="flex items-center gap-2 border-t border-line pt-3.5 text-xs text-ink-2">
-                <RefreshCwIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
+                <CalendarIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
                 <span>Làm mới ngày {formatVnDate(s.free.resetsAt)}</span>
               </div>
             </div>

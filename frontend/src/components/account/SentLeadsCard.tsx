@@ -4,10 +4,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Building2Icon,
-  LockIcon,
   MessageSquareIcon,
   SearchIcon,
-  SendIcon,
   UsersIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,7 +24,6 @@ import {
   EmptyContent,
   EmptyDescription,
   EmptyHeader,
-  EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -142,11 +139,8 @@ export function SentLeadsCard() {
 
       <div className="space-y-4">
         {ageBlocked ? (
-          <Empty className="border border-line bg-surface py-12">
+          <Empty className="py-16">
             <EmptyHeader>
-              <EmptyMedia variant="icon" className="size-12 rounded-2xl bg-warn-wash text-warn">
-                <LockIcon className="size-6" aria-hidden />
-              </EmptyMedia>
               <EmptyTitle className="text-base font-semibold text-ink">
                 Cần phụ huynh xác nhận đồng ý
               </EmptyTitle>
@@ -155,7 +149,7 @@ export function SentLeadsCard() {
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
-              <Link href="#parent-links" className={buttonVariants({ variant: "outline", size: "lg" })}>
+              <Link href="#parent-links" className={buttonVariants({ variant: "outline", size: "lg", className: "bg-surface" })}>
                 <UsersIcon data-icon="inline-start" aria-hidden />
                 Xem liên kết phụ huynh
               </Link>
@@ -176,11 +170,8 @@ export function SentLeadsCard() {
               </div>
             ) : leads.length === 0 ? (
               !error && (
-                <Empty className="border border-line bg-surface py-12">
+                <Empty className="py-16">
                   <EmptyHeader>
-                    <EmptyMedia variant="icon" className="size-12 rounded-2xl bg-brand-wash text-brand">
-                      <SendIcon className="size-6" aria-hidden />
-                    </EmptyMedia>
                     <EmptyTitle className="text-base font-semibold text-ink">
                       Chưa có yêu cầu liên hệ nào
                     </EmptyTitle>

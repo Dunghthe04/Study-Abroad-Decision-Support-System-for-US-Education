@@ -86,9 +86,7 @@ export function PersonalInfoCard() {
       <Badge variant="warn"><TriangleAlertIcon aria-hidden />Tạm khóa (Sai 5 lần)</Badge>
     ) : user.status === "unverified" ? (
       <Badge variant="warn"><MailIcon aria-hidden />Chưa xác thực Email</Badge>
-    ) : (
-      <Badge variant="ok"><CheckIcon aria-hidden />Đang hoạt động</Badge>
-    );
+    ) : undefined;
 
   return (
     <div>
@@ -116,7 +114,7 @@ export function PersonalInfoCard() {
           <div className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:px-6">
             <div className="space-y-0.5 sm:w-56 sm:shrink-0">
               <div className="text-sm font-medium text-ink">Email đăng nhập</div>
-              <p className="text-xs text-ink-3">Cố định theo tài khoản.</p>
+              <p className="text-xs text-ink-3">Không thể thay đổi.</p>
             </div>
             <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-ink">
               <span className="truncate">{user.email}</span>
@@ -125,9 +123,8 @@ export function PersonalInfoCard() {
           </div>
 
           <div className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:px-6">
-            <div className="space-y-0.5 sm:w-56 sm:shrink-0">
+            <div className="sm:w-56 sm:shrink-0">
               <div className="text-sm font-medium text-ink">Vai trò</div>
-              <p className="text-xs text-ink-3">Phân quyền hiện tại trên USDSS.</p>
             </div>
             <div className="flex-1">
               <Badge variant="neutral">{formatUserRole(user.role)}</Badge>
@@ -138,7 +135,7 @@ export function PersonalInfoCard() {
             <div className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:px-6">
               <div className="space-y-0.5 sm:w-56 sm:shrink-0">
                 <div className="text-sm font-medium text-ink">Ngày sinh</div>
-                <p className="text-xs text-ink-3">Chỉ Quản trị viên điều chỉnh được.</p>
+                <p className="text-xs text-ink-3">Vui lòng liên hệ để được thay đổi.</p>
               </div>
               <div className="flex-1 text-sm font-medium text-ink tabular-nums">
                 {formatDob(user.dateOfBirth)}
@@ -181,11 +178,11 @@ export function PersonalInfoCard() {
                 <Label htmlFor="account-phone" className="text-sm font-medium text-ink">
                   Số điện thoại
                 </Label>
-                <p className="text-xs leading-relaxed text-ink-2">
-                  {user.role === "center"
-                    ? "Trung tâm đổi số điện thoại tại mục Hồ sơ trung tâm (cần xác thực)."
-                    : "Không bắt buộc. Để trống nếu muốn xóa số điện thoại."}
-                </p>
+                {user.role === "center" && (
+                  <p className="text-xs leading-relaxed text-ink-2">
+                    Trung tâm đổi số điện thoại tại mục Hồ sơ trung tâm (cần xác thực).
+                  </p>
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <Input
@@ -207,7 +204,7 @@ export function PersonalInfoCard() {
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-ground/60 px-5 py-3.5 sm:px-6">
             <span className="text-xs text-ink-3">
-              {isDirty ? "Bạn có thay đổi chưa lưu." : "Thông tin hiện tại đã được đồng bộ."}
+              {isDirty ? "Bạn có thay đổi chưa lưu." : ""}
             </span>
             <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
               {isDirty && (
