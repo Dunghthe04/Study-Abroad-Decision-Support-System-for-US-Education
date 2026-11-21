@@ -47,6 +47,16 @@ import { cn } from "@/lib/utils";
  * Hàng dưới: điều hướng chính bên trái, nút "Phân tích hồ sơ của bạn" bên phải.
  * Trang chủ: nền trong suốt nằm trên ảnh trường, cuộn xuống thì thành nền trắng như các trang khác.
  */
+function formatSubscriptionLabel(sub: SubscriptionSummaryDto): string {
+  const activePool =
+    sub.chargingPool === "family"
+      ? sub.family ?? sub.personal
+      : sub.chargingPool === "personal"
+        ? sub.personal ?? sub.family
+        : sub.family ?? sub.personal;
+  return activePool ? `Gói ${activePool.planName}` : "Gói Miễn phí";
+}
+
 export function SiteHeader() {
   const { user, isLoading, logout, acting } = useAuth();
   const router = useRouter();
@@ -214,9 +224,19 @@ export function SiteHeader() {
                           {user.fullName.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="flex min-w-0 flex-col items-start gap-1">
+                      <span className="flex min-w-0 flex-col items-start gap-0.5">
                         <span className="w-full truncate text-sm font-semibold text-ink">{user.fullName}</span>
-                        <Badge variant="neutral">{formatUserRole(user.role)}</Badge>
+                        {isStudentOrParent ? (
+                          sub.data ? (
+                            <span className="w-full truncate text-xs font-normal text-ink-2">
+                              {formatSubscriptionLabel(sub.data)}
+                            </span>
+                          ) : (
+                            <Skeleton className="h-3.5 w-20" />
+                          )
+                        ) : (
+                          <Badge variant="neutral">{formatUserRole(user.role)}</Badge>
+                        )}
                       </span>
                     </DropdownMenuLabel>
                   </DropdownMenuGroup>
