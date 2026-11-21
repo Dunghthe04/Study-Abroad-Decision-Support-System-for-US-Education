@@ -19,6 +19,7 @@ public static class ChatLockReasons
 /// </summary>
 public static class ChatPremiumGate
 {
+    public const string PremiumRequiredAction = ChatLockReasons.PremiumRequired;
     public const string PremiumRequiredAnswer = "Tính năng này cần tài khoản USDSS Premium.";
     public const string QuotaExhaustedAnswer = "Bạn đã dùng hết lượt hỏi miễn phí của tháng này.";
     public const string PlansHref = "/plans";
