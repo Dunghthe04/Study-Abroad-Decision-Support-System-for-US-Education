@@ -1,5 +1,8 @@
+using System.Net;
 using System.Reflection;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Api.Controllers;
@@ -7,6 +10,7 @@ using StudyAbroad.Application.Admin.AiQuality;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using StudyAbroad.Infrastructure.Persistence;
+using StudyAbroad.Infrastructure.Persistence.Repositories;
 
 namespace StudyAbroad.UnitTests;
 
@@ -190,10 +194,118 @@ public class AiQualityApiTests
     {
         var empty = AiQualityCalculator.Build([], new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 1));
 
-        var ok = await new AdminAiQualityController(new StubService(empty)).Get(null, null, default);
-        var bad = await new AdminAiQualityController(new StubService(fail: new ArgumentException("sai khoảng"))).Get(null, null, default);
+        var ok = await new AdminAiQualityController(new StubService(empty), new StubSamples()).Get(null, null, default);
+        var bad = await new AdminAiQualityController(new StubService(fail: new ArgumentException("sai khoảng")), new StubSamples()).Get(null, null, default);
 
         Assert.Same(empty, Assert.IsType<OkObjectResult>(ok.Result).Value);
         Assert.IsType<BadRequestObjectResult>(bad.Result);
+    }
+
+    // ---- API mẫu hội thoại (6c)
+
+    private sealed class StubSamples(Exception? fail = null) : IAiQualitySampleService
+    {
+        public (Guid Actor, string Outcome, string? Ip, string? Agent)? Called { get; private set; }
+
+        public Task<AiQualitySamplePage> GetPageAsync(
+            Guid actorUserId, DateOnly? from, DateOnly? to, string outcome, int page, int pageSize,
+            string? ipAddress, string? userAgent, CancellationToken ct = default)
+        {
+            Called = (actorUserId, outcome, ipAddress, userAgent);
+            return fail is not null ? throw fail : Task.FromResult(new AiQualitySamplePage([], page, pageSize, 0, 0));
+        }
+    }
+
+    private static AdminAiQualityController ControllerFor(StubSamples samples, Guid? userId)
+    {
+        var http = new DefaultHttpContext();
+        http.Connection.RemoteIpAddress = IPAddress.Parse("10.0.0.7");
+        http.Request.Headers.UserAgent = "unit-test";
+        if (userId is { } id)
+            http.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, id.ToString())], "test"));
+        return new AdminAiQualityController(new StubService(), samples) { ControllerContext = new ControllerContext { HttpContext = http } };
+    }
+
+    [Fact]
+    public async Task Samples_PassTheAdminTheIpAndTheAgentOn_AndTheResponseIsNeverCached()
+    {
+        var samples = new StubSamples();
+        var controller = ControllerFor(samples, Id(7));
+
+        var result = await controller.GetSamples("no_answer", null, null, 1, 10, default);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal((Id(7), "no_answer", "10.0.0.7", "unit-test"), samples.Called);
+        Assert.Equal("no-store", controller.Response.Headers.CacheControl.ToString());
+    }
+
+    [Fact]
+    public async Task Samples_WithoutALoggedInUser_AreUnauthorized_AndNothingIsCalled()
+    {
+        var samples = new StubSamples();
+
+        var result = await ControllerFor(samples, null).GetSamples("no_answer", null, null, 1, 10, default);
+
+        Assert.IsType<UnauthorizedResult>(result.Result);
+        Assert.Null(samples.Called);
+    }
+
+    [Fact]
+    public async Task Samples_ABadOutcomeOrRange_IsABadRequest_AndAMissingOutcomeIsTreatedAsBad()
+    {
+        var bad = await ControllerFor(new StubSamples(new ArgumentException("sai loại")), Id(7)).GetSamples("answered", null, null, 1, 10, default);
+        var missing = new StubSamples();
+        await ControllerFor(missing, Id(7)).GetSamples(null, null, null, 1, 10, default);
+
+        Assert.IsType<BadRequestObjectResult>(bad.Result);
+        Assert.Equal(string.Empty, missing.Called!.Value.Outcome);   // rỗng: dịch vụ sẽ từ chối
+    }
+
+    [Fact]
+    public void SamplesEndpoint_IsOnTheAdminOnlyController_AtTheSamplesPath()
+    {
+        var method = typeof(AdminAiQualityController).GetMethod(nameof(AdminAiQualityController.GetSamples))!;
+
+        Assert.Equal("samples", method.GetCustomAttribute<HttpGetAttribute>()!.Template);
+        Assert.Equal(UserRoles.Admin, typeof(AdminAiQualityController).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+    }
+
+    // ---- truy vấn thật của mẫu hội thoại dịch ra SQL được, và bước một không đọc nội dung
+
+    private static AppDbContext SchemaOnlyDb()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=usas_schema_check")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        return new AppDbContext(options);
+    }
+
+    [Fact]
+    public void CandidateQuery_TranslatesToSql_AndNeverReadsAnyChatTextColumn()
+    {
+        using var db = SchemaOnlyDb();
+
+        var sql = AiQualitySampleRepository.CandidateRows(db, From, ToExclusive, "no_answer").ToQueryString();
+
+        Assert.Contains("date_of_birth", sql);
+        Assert.Contains("LEFT JOIN", sql);
+        Assert.Contains("ORDER BY", sql);
+        // Bước một chỉ quyết định ai được xem: không cột nội dung hay meta nào của tin nhắn được chọn
+        Assert.DoesNotContain("content", sql);
+        Assert.DoesNotContain("meta_json", sql);
+    }
+
+    [Fact]
+    public void ReplyQuery_TranslatesToSql_AndReadsTheContentOnlyOfTheAskedMessages()
+    {
+        using var db = SchemaOnlyDb();
+
+        var sql = AiQualitySampleRepository.ReplyRows(db, [Id(1), Id(2)]).ToQueryString();
+
+        Assert.Contains("content", sql);
+        Assert.Contains("full_name", sql);
+        Assert.Contains("reply_to_message_id", sql);
+        Assert.Contains("ANY", sql);   // Npgsql dịch danh sách mã thành = ANY(...): chỉ các mã được hỏi, không đọc cả bảng
     }
 }

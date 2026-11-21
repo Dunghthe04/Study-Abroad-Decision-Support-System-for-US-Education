@@ -4,9 +4,12 @@ namespace StudyAbroad.Application.Admin.AiQuality;
 /// Một lượt chat ứng viên cho danh sách mẫu, CHƯA có nội dung: chỉ đủ thông tin để quyết định có được cho xem hay không.
 /// OwnerDateOfBirth: ngày sinh của chủ phiên (null nếu chưa khai). OwnerConsentVersions: phiên bản chính sách của các lần phụ huynh đồng ý
 /// xử lý dữ liệu của chủ phiên (consents, purpose child_data_processing, granted); rỗng nếu không có.
+/// OwnerIsParentOperated: tài khoản của con do phụ huynh vận hành (users.status = managed): dự án không áp luật dưới 16 cho loại này
+/// vì người thao tác là phụ huynh (xem AgeAccess.IsOperatedByParent).
 /// </summary>
 public record AiQualityCandidate(
-    Guid MessageId, DateTime CreatedAt, DateOnly? OwnerDateOfBirth, IReadOnlyList<string?> OwnerConsentVersions);
+    Guid MessageId, DateTime CreatedAt, DateOnly? OwnerDateOfBirth, IReadOnlyList<string?> OwnerConsentVersions,
+    bool OwnerIsParentOperated = false);
 
 /// <summary>Một tin trong ngữ cảnh của lượt (các tin ngay trước câu hỏi, cũ trước mới sau).</summary>
 public record AiQualitySampleMessage(string Role, string Content);

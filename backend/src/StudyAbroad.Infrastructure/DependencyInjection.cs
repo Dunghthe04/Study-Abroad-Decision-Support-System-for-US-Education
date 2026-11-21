@@ -43,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Admin.Settings.IGradeScaleSettingRepository, GradeScaleSettingRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.AiUsage.IAiUsageReportRepository, AiUsageReportRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.AiQuality.IAiQualityRepository, AiQualityRepository>();
+        services.AddScoped<StudyAbroad.Application.Admin.AiQuality.IAiQualitySampleRepository, AiQualitySampleRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.SlmSamples.ISlmSampleRepository, SlmSampleRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.ReviewBatches.IReviewBatchRepository, ReviewBatchRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();

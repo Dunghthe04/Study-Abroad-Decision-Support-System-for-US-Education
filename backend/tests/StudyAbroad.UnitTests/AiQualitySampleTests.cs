@@ -65,21 +65,38 @@ public class AiQualitySampleTests
     {
         var birth = new DateOnly(2010, 6, 1);   // tròn 16 tuổi ngày 1/6/2026
 
-        Assert.False(AiQualityContentGate.CanReadContent(Candidate(birth, new DateTime(2026, 5, 31, 23, 0, 0, DateTimeKind.Utc))));   // còn 15 tuổi
+        Assert.False(AiQualityContentGate.CanReadContent(Candidate(birth, new DateTime(2026, 5, 31, 10, 0, 0, DateTimeKind.Utc))));   // còn 15 tuổi
         Assert.True(AiQualityContentGate.CanReadContent(Candidate(birth, new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc))));     // vừa tròn 16
         // Lượt lúc 14 tuổi vẫn ẩn dù hôm nay (2026-11-20) học sinh đã 16: lúc đó cơ sở xử lý là sự đồng ý của phụ huynh
         Assert.False(AiQualityContentGate.CanReadContent(Candidate(birth, new DateTime(2025, 3, 1, 0, 0, 0, DateTimeKind.Utc))));
     }
 
-    [Theory]
-    [InlineData("2008-02-29", "2024-02-28", 15)]   // sinh ngày 29/2: chưa tới sinh nhật
-    [InlineData("2008-02-29", "2024-02-29", 16)]
-    [InlineData("2008-02-29", "2023-03-01", 15)]
-    [InlineData("2010-06-01", "2026-06-01", 16)]
-    [InlineData("2010-06-01", "2026-05-31", 15)]
-    [InlineData("2010-06-01", "2009-01-01", 0)]    // ngày chat trước ngày sinh (dữ liệu sai): không âm
-    public void AgeOn_CountsWholeYears(string birth, string on, int expected) =>
-        Assert.Equal(expected, AiQualityContentGate.AgeOn(DateOnly.Parse(birth), DateOnly.Parse(on)));
+    [Fact]
+    public void TheAgeUsesVietnamDates_LikeTheRestOfTheProject()
+    {
+        var birth = new DateOnly(2010, 6, 1);   // tròn 16 tuổi ngày 1/6/2026 (giờ Việt Nam)
+
+        // 20:00 UTC ngày 31/5 đã là 03:00 ngày 1/6 ở Việt Nam: vừa tròn 16
+        Assert.True(AiQualityContentGate.CanReadContent(Candidate(birth, new DateTime(2026, 5, 31, 20, 0, 0, DateTimeKind.Utc))));
+        Assert.False(AiQualityContentGate.CanReadContent(Candidate(birth, new DateTime(2026, 5, 31, 16, 0, 0, DateTimeKind.Utc))));
+    }
+
+    [Fact]
+    public void ALeapDayBirthday_IsCountedLikeAgePolicyDoes()
+    {
+        var birth = new DateOnly(2008, 2, 29);
+
+        Assert.False(AiQualityContentGate.CanReadContent(Candidate(birth, new DateTime(2024, 2, 28, 5, 0, 0, DateTimeKind.Utc))));   // chưa 16
+        Assert.True(AiQualityContentGate.CanReadContent(Candidate(birth, new DateTime(2024, 2, 29, 5, 0, 0, DateTimeKind.Utc))));    // đủ 16
+    }
+
+    [Fact]
+    public void AnAccountOperatedByTheParent_IsNotSubjectToTheUnder16Rule_LikeTheRestOfTheProject()
+    {
+        var child = new AiQualityCandidate(Id(1), At(5), new DateOnly(2014, 1, 1), [], OwnerIsParentOperated: true);
+
+        Assert.True(AiQualityContentGate.CanReadContent(child));
+    }
 
     // ---- dịch vụ
 
