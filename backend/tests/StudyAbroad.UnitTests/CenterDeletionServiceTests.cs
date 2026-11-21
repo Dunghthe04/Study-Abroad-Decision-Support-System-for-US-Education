@@ -92,6 +92,14 @@ public class CenterDeletionServiceTests
             return Task.CompletedTask;
         }
 
+        public List<string> LeftoverAttachments { get; } = [];
+        public int SweepCalls { get; private set; }
+        public Task<IReadOnlyList<string>> EraseResolvedCenterMessagesAsync(DateTime now, CancellationToken ct = default)
+        {
+            SweepCalls++;
+            return Task.FromResult<IReadOnlyList<string>>(LeftoverAttachments.ToList());
+        }
+
         public List<string> ChatAttachments { get; } = [];
         public int ChatKept { get; set; }
         public (Guid CenterId, Guid? OwnerId)? ErasedChatFor { get; private set; }
@@ -316,6 +324,34 @@ public class CenterDeletionServiceTests
         Assert.Equal(CenterDeletionRequestStatuses.Completed, s.Request.Status);
         Assert.NotEmpty(s.Email.CenterDeletionEmails);
         Assert.All(s.Email.CenterDeletionEmails, e => Assert.Equal("completed_partial", e.Outcome));
+    }
+
+    [Fact]
+    public async Task PurgeDue_EvenWithNothingDue_SweepsMessagesWhoseReportWasResolved()
+    {
+        var s = new Setup();
+        s.Work.LeftoverAttachments.Add("https://res.cloudinary.com/demo/image/upload/v1/usas/chat/old.png");
+
+        var result = await s.Service.PurgeDueAsync(DateTime.UtcNow);
+
+        Assert.Equal(0, result.Purged);
+        Assert.Equal(1, s.Work.SweepCalls);
+        Assert.Equal(["https://res.cloudinary.com/demo/image/upload/v1/usas/chat/old.png"], s.Media.Deleted);
+        Assert.Empty(result.Failures);
+    }
+
+    [Fact]
+    public async Task PurgeDue_SweepCdnFailure_IsReportedWithoutRequestId()
+    {
+        var s = new Setup();
+        s.Work.LeftoverAttachments.Add("https://res.cloudinary.com/demo/image/upload/v1/usas/chat/old.png");
+        s.Media.FailUrls.Add(s.Work.LeftoverAttachments[0]);
+
+        var result = await s.Service.PurgeDueAsync(DateTime.UtcNow);
+
+        var failure = Assert.Single(result.Failures);
+        Assert.Equal(Guid.Empty, failure.RequestId);
+        Assert.IsType<CenterMediaCleanupException>(failure.Error);
     }
 
     [Fact]
