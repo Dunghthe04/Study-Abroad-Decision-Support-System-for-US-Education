@@ -14,10 +14,6 @@ public static class ChatRecommendation
     /// <summary>Widget hiện nút "Xem đầy đủ" mở trang Gợi ý trường.</summary>
     public const string WidgetType = "recommend";
 
-    public const string Busy = "Phần gợi ý trường đang bận, bạn thử lại sau ít phút hoặc mở trang Gợi ý trường nhé.";
-    public const string Invalid = "Mình chưa tạo được danh sách trường hợp lệ, bạn thử lại sau ít phút nhé.";
-    public const string Empty =
-        "Mình chưa tìm được trường nào khớp với hồ sơ hiện tại. Bạn mở trang Gợi ý trường để xem lý do và điều chỉnh tiêu chí nhé.";
     public const string More = "Bạn xem chi tiết và lý do từng trường ở trang Gợi ý trường.";
 
     // Nhóm theo đúng thứ tự và tên trên trang Gợi ý trường (RecommendationView.tsx)
@@ -45,7 +41,7 @@ public static class ChatRecommendation
         var lines = ShownGroups(items, names).Select(g => $"- {GroupLine(g)}").ToList();
 
         if (lines.Count == 0)
-            return Empty;
+            return AdvisorMessages.RecommendationEmpty;
         return "Mình đã tìm được các trường phù hợp với hồ sơ của bạn:\n" + string.Join("\n", lines) + "\n" + More;
     }
 

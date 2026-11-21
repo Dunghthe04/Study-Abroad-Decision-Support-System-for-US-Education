@@ -198,7 +198,7 @@ public class ChatRecommendationTests
     [InlineData("""[]""")]
     public void Summarize_SaysNothingMatched_WhenThereIsNoSchool(string items)
     {
-        Assert.Equal(ChatRecommendation.Empty, ChatRecommendation.Summarize(Run(items)));
+        Assert.Equal(AdvisorMessages.RecommendationEmpty, ChatRecommendation.Summarize(Run(items)));
     }
 
     [Fact]

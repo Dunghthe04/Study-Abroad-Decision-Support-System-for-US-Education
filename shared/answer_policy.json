@@ -59,28 +59,28 @@
       "who": "claude",
       "skills": ["skill_goi_y_truong"],
       "writer": "app.services.recommend_writer.RecommendWriter",
-      "fallback": "ChatRecommendation.Summarize (liệt kê nhóm và trường); không có kết quả hoặc lỗi thì Empty, Invalid, Busy.",
+      "fallback": "ChatRecommendation.Summarize (liệt kê nhóm và trường); không có kết quả hoặc lỗi thì AdvisorMessages.RecommendationEmpty, RecommendationInvalid, RecommendationBusy.",
       "why": "Danh sách do code xếp nhóm. Chỉ xin danh sách thì advisor đặt cờ note và Claude viết đoạn tóm tắt; câu có cả đánh giá hồ sơ thì lời đã do Claude viết, danh sách chỉ nối thêm."
     },
     "explain": {
       "who": "claude",
       "skills": ["skill_explain"],
       "writer": "app.services.explainer.Explainer",
-      "fallback": "ChatExplanation.Failed (câu cố định).",
+      "fallback": "AdvisorMessages.ExplanationFailed (câu cố định); lỗi kết nối thì AdvisorMessages.ExplanationBusy.",
       "why": "Giải thích một trường: so sánh số do code viết thành dữ kiện, Claude chỉ diễn đạt lại."
     },
     "goal_seek": {
       "who": "claude",
       "skills": ["skill_goal_seek"],
       "writer": "app.services.goal_writer.GoalWriter",
-      "fallback": "ChatGoalSeek.Summarize (lời ghép bằng code từ kết quả tìm ngược).",
+      "fallback": "ChatGoalSeek.Summarize (lời ghép bằng code từ kết quả tìm ngược); lỗi tính thì AdvisorMessages.GoalSeekFailed.",
       "why": "Cần gì để vào trường X: code tính bảng so sánh và mức cần đạt, Claude viết lời giải thích dưới bảng."
     },
     "simulate": {
       "who": "claude",
       "skills": ["skill_kich_ban"],
       "writer": "app.services.scenario_writer.ScenarioWriter",
-      "fallback": "ChatSimulation.Fallback (lời mẫu dựng bằng code); lỗi gọi mô phỏng thì ChatSimulation.Failed.",
+      "fallback": "ChatSimulation.Fallback (lời mẫu dựng bằng code); lỗi gọi mô phỏng thì AdvisorMessages.SimulationFailed.",
       "why": "What-if: code chạy mô phỏng trên bản sao hồ sơ, Claude viết lời; không thể đổi nhóm hay thêm trường."
     },
     "school_compare": {

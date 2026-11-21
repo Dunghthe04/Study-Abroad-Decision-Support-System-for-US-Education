@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using StudyAbroad.Application.Advisor;
 
 namespace StudyAbroad.UnitTests;
@@ -56,6 +57,25 @@ public class AnswerPolicyTests
         Assert.Equal(
             ["explain", "goal_seek", "recommend", "school_compare", "school_info", "school_search", "simulate"],
             ActionsInCode().OrderBy(a => a, StringComparer.Ordinal));
+    }
+
+    // Lời dự phòng bảng nhắc tới (AdvisorMessages.X, ChatXxx.Y) phải là thành viên có thật, để bảng không nói sai về code
+    [Fact]
+    public void EveryCodeMemberNamedInAFallback_Exists()
+    {
+        var assembly = typeof(ChatService).Assembly;
+        var named = Policy.GetProperty("actions").EnumerateObject()
+            .Where(a => a.Value.TryGetProperty("fallback", out _))
+            .SelectMany(a => Regex.Matches(a.Value.GetProperty("fallback").GetString()!, @"(AdvisorMessages|Chat[A-Za-z]+)\.([A-Z][A-Za-z]+)").Select(m => (Action: a.Name, Type: m.Groups[1].Value, Member: m.Groups[2].Value)))
+            .ToList();
+
+        Assert.NotEmpty(named);
+        foreach (var (action, typeName, member) in named)
+        {
+            var type = assembly.GetType($"StudyAbroad.Application.Advisor.{typeName}");
+            Assert.True(type is not null, $"{action}: không có lớp {typeName}");
+            Assert.True(type!.GetMember(member, BindingFlags.Public | BindingFlags.Static).Length > 0, $"{action}: {typeName} không có thành viên {member}");
+        }
     }
 
     [Fact]
