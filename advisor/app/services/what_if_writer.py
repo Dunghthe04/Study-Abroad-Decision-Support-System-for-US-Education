@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from app.schemas.what_if_note import WhatIfNoteResult, what_if_note_schema
+from app.services.note_checks import numbers
 from app.services.scenario import LABELS, SUPPORTED_TEXT, WhatIf
-from app.services.scenario_writer import numbers
 from app.services.skill_call import SKILLS_DIR, SkillCall
 
 SKILL_PATH = Path(SKILLS_DIR) / "skill_neu_doi.md"

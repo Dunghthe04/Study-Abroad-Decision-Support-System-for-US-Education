@@ -13,22 +13,18 @@ from app.schemas.recommend_note import (
     RecommendNoteResult,
     recommend_note_schema,
 )
-from app.services.scenario_writer import numbers
+from app.services.note_checks import (
+    check_mentions_all,
+    check_no_promise,
+    check_no_strangers,
+    check_no_verdict,
+    check_numbers,
+    numbers,
+    render_note,
+)
 from app.services.skill_call import SKILLS_DIR, SkillCall
 
 SKILL_PATH = Path(SKILLS_DIR) / "skill_goi_y_truong.md"
-
-# Lời hứa kết quả tuyển sinh: hệ thống chỉ so với sinh viên đã trúng tuyển, không nói được khả năng đỗ
-PROMISES = (
-    "chắc chắn đậu",
-    "chắc chắn đỗ",
-    "đảm bảo đậu",
-    "đảm bảo đỗ",
-    "chắc chắn được nhận",
-    "sẽ đậu",
-    "sẽ đỗ",
-    "100%",
-)
 
 # Chọn trường là việc của học sinh: lời tóm tắt không được xếp hạng trường nào hơn trường nào
 VERDICTS = ("tốt nhất", "đáng chọn nhất", "nên chọn", "hơn hẳn")
@@ -53,43 +49,13 @@ def _texts(result: RecommendNoteResult) -> list[str]:
 def check_answer(raw: dict[str, Any], req: RecommendNoteRequest) -> RecommendNoteResult:
     result = RecommendNoteResult.model_validate(raw)
     text = " ".join(_texts(result))
-    lowered = text.lower()
 
-    missing = [name for name in req.schools if name.lower() not in lowered]
-    if missing:
-        raise ValueError(f"lời phải nhắc đủ mọi trường đang hiện trong danh sách, thiếu: {missing}")
-
-    extra = sorted(set(numbers(text)) - allowed_numbers(req))
-    if extra:
-        raise ValueError(f"lời nhắc số không có trong dữ kiện: {extra}")
-
-    promised = [p for p in PROMISES if p in lowered]
-    if promised:
-        raise ValueError(f"lời hứa kết quả tuyển sinh: {promised}")
-
-    judged = [v for v in VERDICTS if v in lowered]
-    if judged:
-        raise ValueError(f"không được xếp hạng hay chọn thay học sinh: {judged}")
-
-    # Bỏ tên trường hợp lệ rồi tìm tên trường khác: nhắc tới là sai (có thể nhầm hoặc bịa)
-    rest = lowered
-    for name in sorted(set(req.schools), key=len, reverse=True):
-        rest = rest.replace(name.lower(), " ")
-    strangers = [name for name in req.others if name.lower() in rest]
-    if strangers:
-        raise ValueError(f"lời nhắc tên trường ngoài danh sách: {strangers[:3]}")
+    check_mentions_all(text, req.schools, "mọi trường đang hiện trong danh sách")
+    check_numbers(text, allowed_numbers(req), "dữ kiện")
+    check_no_promise(text)
+    check_no_verdict(text, VERDICTS, "không được xếp hạng hay chọn thay học sinh")
+    check_no_strangers(text, req.schools, req.others)
     return result
-
-
-# Nối các phần Claude viết thành tin nhắn: câu mở, mỗi nhóm một ý, câu kết
-def render(result: RecommendNoteResult) -> str:
-    lines = [result.intro.strip()]
-    if result.points:
-        lines.append("")
-        lines += [f"- {point.strip()}" for point in result.points if point.strip()]
-    if result.closing.strip():
-        lines += ["", result.closing.strip()]
-    return "\n".join(lines)
 
 
 # Một lượt AI: gửi dữ kiện cho Claude, kiểm tra lời, đóng gói trả về
@@ -106,5 +72,5 @@ class RecommendWriter:
             skill_version=self.skill_version,
             model=self._call.model,
             status="OK" if result is not None else "FAILED",
-            answer=render(result) if result else "",
+            answer=render_note(result) if result else "",
         )

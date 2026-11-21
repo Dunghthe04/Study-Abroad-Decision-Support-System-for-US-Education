@@ -4,7 +4,6 @@ Claude trả JSON có cấu trúc (lời mở, từng nhóm kèm tên trường 
 nhóm và số rồi nối thành tin nhắn: mọi chữ trong tin vẫn do Claude viết, nhưng không thể nêu sai nhóm hay bịa tên trường.
 """
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -14,12 +13,10 @@ from app.schemas.scenario_note import (
     ScenarioNoteResult,
     scenario_note_schema,
 )
+from app.services.note_checks import check_no_strangers, check_numbers, numbers
 from app.services.skill_call import SKILLS_DIR, SkillCall
 
 SKILL_PATH = Path(SKILLS_DIR) / "skill_kich_ban.md"
-
-NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
-THOUSANDS = re.compile(r"\d{1,3}(?:[.,]\d{3})+")
 
 # Mã lý do của một trường (backend suy từ số đã tính) → câu đúng. Claude chỉ diễn đạt lại, không tự so sánh
 REASON_TEXT = {
@@ -50,14 +47,6 @@ FACTOR_EFFECT = {
     "budget": "ngân sách làm trường vào hoặc ra khỏi danh sách, không đổi nhóm của từng trường",
     "scholarship": "mức cần học bổng làm trường vào hoặc ra khỏi danh sách, không đổi nhóm của từng trường",
 }
-
-
-# Các số trong một đoạn chữ. "40.000" và "40,000" là bốn mươi nghìn, "7,5" là bảy phẩy năm
-def numbers(text: str) -> list[float]:
-    return [
-        float(re.sub(r"[.,]", "", token)) if THOUSANDS.fullmatch(token) else float(token.replace(",", "."))
-        for token in NUMBER.findall(text)
-    ]
 
 
 # Gom dữ liệu thành đúng một JSON để gửi Claude (khóa camelCase, khớp mô tả trong skill)
@@ -115,21 +104,14 @@ def check_answer(raw: dict[str, Any], req: ScenarioNoteRequest) -> ScenarioNoteR
             raise ValueError(f"danh sách trường của nhóm {group.key} không khớp dữ liệu")
 
     text = " ".join(_texts(result))
-    extra = sorted(set(numbers(text)) - allowed_numbers(req))
-    if extra:
-        raise ValueError(f"lời nhắc số không có trong kết quả: {extra}")
+    check_numbers(text, allowed_numbers(req), "kết quả")
 
     # Không có yếu tố nào chưa thử được thì không được nói "chưa thử được" (có lần Claude viết "không có yếu tố nào chưa thử được")
     if not req.unsupported and "chưa thử được" in text.lower():
         raise ValueError("nói chưa thử được trong khi mọi yếu tố đều đã thử")
 
-    # Bỏ các tên trường hợp lệ rồi tìm tên trường khác của kết quả: nhắc tới là sai (có thể là nhầm nhóm hoặc bịa)
-    rest = text.lower()
-    for name in sorted({s.name for g in req.groups for s in g.schools}, key=len, reverse=True):
-        rest = rest.replace(name.lower(), " ")
-    strangers = [name for name in req.others if name.lower() in rest]
-    if strangers:
-        raise ValueError(f"lời nhắc tên trường ngoài danh sách: {strangers[:3]}")
+    # Tên trường khác của kết quả mà lời nhắc tới là sai (có thể là nhầm nhóm hoặc bịa)
+    check_no_strangers(text, {s.name for g in req.groups for s in g.schools}, req.others)
     return result
 
 
