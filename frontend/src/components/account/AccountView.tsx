@@ -7,7 +7,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { profileApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { AcademicProfileResponse, ParentProfileOverviewDto } from "@/types/api";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,9 +14,10 @@ import { AcademicSummaryCard, hasCompleteAcademicProfile } from "@/components/ac
 import { AccountSectionHeader } from "@/components/account/AccountSectionHeader";
 import {
   BookOpenFilledIcon,
-  CrownFilledIcon,
+  CreditCardFilledIcon,
   HeartHandshakeFilledIcon,
   KeyRoundFilledIcon,
+  ReceiptTextFilledIcon,
   SendFilledIcon,
   UserFilledIcon,
   UsersFilledIcon,
@@ -30,6 +30,7 @@ import { PersonalInfoCard } from "@/components/account/PersonalInfoCard";
 import { SentLeadsCard } from "@/components/account/SentLeadsCard";
 import { SubscriptionCard } from "@/components/account/SubscriptionCard";
 import { FamilyCard } from "@/components/account/FamilyCard";
+import { OrdersHistoryView } from "@/components/billing/OrdersHistoryView";
 import { billingApi } from "@/lib/billing-api";
 import { useFetched } from "@/lib/use-fetched";
 import type { SubscriptionSummaryDto } from "@/types/billing";
@@ -39,11 +40,12 @@ import {
   BookmarkCheckIcon,
   BookOpenIcon,
   Building2Icon,
-  CrownIcon,
+  CreditCardIcon,
   GraduationCapIcon,
   HeartHandshakeIcon,
   KeyRoundIcon,
   LogOutIcon,
+  ReceiptTextIcon,
   SendIcon,
   ShieldIcon,
   TriangleAlertIcon,
@@ -53,7 +55,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-type SectionId = "personal" | "subscription" | "family" | "academic" | "parent-links" | "sent-leads" | "password";
+type SectionId = "personal" | "subscription" | "family" | "orders" | "academic" | "parent-links" | "sent-leads" | "password";
 
 type NavGroupId = "account" | "billing" | "profile";
 
@@ -104,10 +106,11 @@ export function AccountView() {
     { id: "password", label: "Bảo mật tài khoản", icon: KeyRoundIcon, filledIcon: KeyRoundFilledIcon, group: "account" },
     ...(isStudentOrParent
       ? [
-          { id: "subscription" as const, label: "Gói dịch vụ", icon: CrownIcon, filledIcon: CrownFilledIcon, group: "billing" as const },
+          { id: "subscription" as const, label: "Gói dịch vụ", icon: CreditCardIcon, filledIcon: CreditCardFilledIcon, group: "billing" as const },
           ...(hasFamily
             ? [{ id: "family" as const, label: "Gói Gia đình", icon: HeartHandshakeIcon, filledIcon: HeartHandshakeFilledIcon, group: "billing" as const }]
             : []),
+          { id: "orders" as const, label: "Lịch sử giao dịch", icon: ReceiptTextIcon, filledIcon: ReceiptTextFilledIcon, group: "billing" as const },
           { id: "academic" as const, label: "Hồ sơ học thuật", icon: BookOpenIcon, filledIcon: BookOpenFilledIcon, group: "profile" as const },
           {
             id: "parent-links" as const,
@@ -191,15 +194,6 @@ export function AccountView() {
     router.push("/login");
   };
 
-  const roleLabel =
-    user.role === "student"
-      ? "Học sinh"
-      : user.role === "parent"
-        ? "Phụ huynh"
-        : user.role === "center"
-          ? "Trung tâm du học"
-          : "Quản trị viên";
-
   const RoleIcon =
     user.role === "student"
       ? GraduationCapIcon
@@ -256,23 +250,20 @@ export function AccountView() {
       <div className="grid grid-cols-1 gap-8 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[276px_minmax(0,1fr)] lg:gap-12">
         {/* THANH BÊN TRÁI: nền trong suốt, danh tính gọn + điều hướng phân nhóm giống AdminShell */}
         <aside className="md:sticky md:top-28 md:self-start">
-          {/* Thông tin người dùng không nền thẻ */}
-          <div className="flex items-center gap-3.5 border-b border-line pb-5">
-            <Avatar className="size-11 shrink-0">
-              <AvatarFallback className="bg-brand text-sm font-semibold text-white">
-                {user.fullName.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="min-w-0 flex-1 space-y-0.5">
+          {/* Thông tin người dùng: icon vai trò bo góc nhẹ giống AdminUserMenu, không nền thẻ, không đường kẻ */}
+          <div className="flex items-center gap-3 px-1 pb-3">
+            <span
+              aria-hidden="true"
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-muted-foreground"
+            >
+              <RoleIcon className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-ink" title={user.fullName}>
                 {user.fullName}
               </div>
               <div className="truncate text-xs text-ink-2" title={user.email}>
                 {user.email}
-              </div>
-              <div className="flex items-center gap-1.5 pt-0.5 text-xs font-medium text-ink-3">
-                <RoleIcon className="size-3.5 shrink-0" aria-hidden />
-                <span>{roleLabel}</span>
               </div>
             </div>
           </div>
@@ -280,7 +271,7 @@ export function AccountView() {
           {/* Menu điều hướng phân nhóm */}
           <nav
             aria-label="Mục tài khoản"
-            className="no-scrollbar mt-3 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] md:flex-col md:gap-0 md:overflow-visible md:pb-0"
+            className="no-scrollbar mt-2 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] md:flex-col md:gap-0 md:overflow-visible md:pb-0"
           >
             {groupedSections.map((group, groupIdx) => (
               <div key={group.id} className="flex shrink-0 gap-1.5 md:flex-col md:gap-1">
@@ -358,6 +349,7 @@ export function AccountView() {
           {activeSection === "personal" && <PersonalInfoCard />}
           {activeSection === "subscription" && <SubscriptionCard />}
           {activeSection === "family" && <FamilyCard version={billingVersion} onChanged={reloadBilling} />}
+          {activeSection === "orders" && <OrdersHistoryView inAccount />}
           {activeSection === "academic" &&
             (parentOverview ? (
               <ParentAcademicSection overview={parentOverview} onChanged={reloadProfile} />

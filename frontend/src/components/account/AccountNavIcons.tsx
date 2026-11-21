@@ -1,9 +1,14 @@
 "use client";
 
 import { useId } from "react";
-import { BookOpenFilledIcon, UsersFilledIcon, type AdminNavIconProps } from "@/components/admin/AdminNavIcons";
+import {
+  BookOpenFilledIcon,
+  CreditCardFilledIcon,
+  UsersFilledIcon,
+  type AdminNavIconProps,
+} from "@/components/admin/AdminNavIcons";
 
-export { BookOpenFilledIcon, UsersFilledIcon };
+export { BookOpenFilledIcon, CreditCardFilledIcon, UsersFilledIcon };
 
 export function UserFilledIcon({ className }: AdminNavIconProps) {
   return (
@@ -15,27 +20,8 @@ export function UserFilledIcon({ className }: AdminNavIconProps) {
       aria-hidden="true"
       className={className}
     >
-      <circle cx="12" cy="7.5" r="4.25" />
-      <path d="M4.5 20.25A6.75 6.75 0 0 1 11.25 13.5h1.5a6.75 6.75 0 0 1 6.75 6.75.75.75 0 0 1-.75.75H5.25a.75.75 0 0 1-.75-.75Z" />
-    </svg>
-  );
-}
-
-export function CrownFilledIcon({ className }: AdminNavIconProps) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="24"
-      height="24"
-      fill="none"
-      aria-hidden="true"
-      className={className}
-    >
-      <path
-        d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"
-        fill="currentColor"
-      />
-      <rect x="5" y="19" width="14" height="2.2" rx="1.1" fill="currentColor" />
+      <circle cx="12" cy="7" r="4" />
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2Z" />
     </svg>
   );
 }
@@ -78,6 +64,32 @@ export function HeartHandshakeFilledIcon({ className }: AdminNavIconProps) {
   );
 }
 
+export function ReceiptTextFilledIcon({ className }: AdminNavIconProps) {
+  const maskId = useId().replace(/:/g, "");
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="24"
+      height="24"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <defs>
+        <mask id={maskId}>
+          <rect width="24" height="24" fill="white" />
+          <path d="M14 8H8M16 12H8M13 16H8" stroke="black" strokeWidth="1.9" strokeLinecap="round" />
+        </mask>
+      </defs>
+      <path
+        mask={`url(#${maskId})`}
+        d="M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 export function SendFilledIcon({ className }: AdminNavIconProps) {
   const maskId = useId().replace(/:/g, "");
   return (
@@ -93,7 +105,7 @@ export function SendFilledIcon({ className }: AdminNavIconProps) {
         <mask id={maskId}>
           <rect width="24" height="24" fill="white" />
           <path
-            d="M21.5 2.5 10.5 13.5"
+            d="m21.854 2.147-10.94 10.939"
             stroke="black"
             strokeWidth="1.9"
             strokeLinecap="round"
@@ -102,7 +114,7 @@ export function SendFilledIcon({ className }: AdminNavIconProps) {
       </defs>
       <path
         mask={`url(#${maskId})`}
-        d="M21.42 2.58a.9.9 0 0 1 .23.95l-5.74 17.5a.9.9 0 0 1-1.67.1l-3.67-6.77a.9.9 0 0 0-.36-.36L3.44 10.33a.9.9 0 0 1 .1-1.67l17.5-5.74a.9.9 0 0 1 .38-.34Z"
+        d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"
         fill="currentColor"
       />
     </svg>
@@ -123,12 +135,14 @@ export function KeyRoundFilledIcon({ className }: AdminNavIconProps) {
       <defs>
         <mask id={maskId}>
           <rect width="24" height="24" fill="white" />
-          <circle cx="16.5" cy="7.5" r="1.75" fill="black" />
+          <circle cx="16.5" cy="7.5" r="1.6" fill="black" />
         </mask>
       </defs>
-      <g mask={`url(#${maskId})`} fill="currentColor">
-        <path d="M16.5 2A5.5 5.5 0 0 0 11 7.5c0 .7.14 1.38.39 2l-8.1 8.1a1 1 0 0 0-.29.7V21a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-1.5H9a1 1 0 0 0 1-1V17h1.5a1 1 0 0 0 .7-.29l2.3-2.3c.62.25 1.3.39 2 .39a5.5 5.5 0 0 0 0-11Z" />
-      </g>
+      <path
+        mask={`url(#${maskId})`}
+        d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"
+        fill="currentColor"
+      />
     </svg>
   );
 }

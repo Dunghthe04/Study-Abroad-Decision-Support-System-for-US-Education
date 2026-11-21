@@ -22,7 +22,7 @@ export function AccountSectionHeader({
   return (
     <header
       className={cn(
-        "mb-6 flex flex-col gap-4 border-b border-line pb-5 sm:flex-row sm:items-start sm:justify-between",
+        "mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between",
         className,
       )}
     >
