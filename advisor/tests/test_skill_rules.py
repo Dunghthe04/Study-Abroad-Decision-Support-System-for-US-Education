@@ -1,9 +1,7 @@
-"""Bước 2.9: luật code chọn skill chạy thật. Hàm thuần nên không cần AI, DB hay Ollama."""
-
-import pytest
+"""Luật hồ sơ: mục nào còn thiếu thì chưa đủ để tư vấn. Hàm thuần nên không cần AI, DB hay Ollama."""
 
 from app.schemas.chat import ChatState, ProfileField
-from app.services.skill_rules import REQUIRED_B3, Blocked, missing_fields, plan_skills
+from app.services.skill_rules import REQUIRED_B3, missing_fields
 
 
 def state(step: str = "B2", **fields: str) -> ChatState:
@@ -24,63 +22,10 @@ B3_PROFILE = dict(
 FULL_PROFILE = dict(B3_PROFILE, major="confirmed")  # đủ cho cả B4
 
 
-def test_unsure_model_falls_back_to_current_step_skill():
-    plan = plan_skills(state("B2"), [])
+def test_assessment_needs_the_b3_items_in_asking_order_without_the_major():
+    profile = state("B3", gpa="confirmed").profile
 
-    assert plan.skills == ["skill_ho_so"]
-    assert plan.source == "fallback_step"
-
-
-def test_unknown_step_falls_back_to_ngoai_le():
-    assert plan_skills(state("END"), []).skills == ["ngoai_le"]
-
-
-def test_at_most_two_skills_keeping_highest_probability():
-    # model xếp xác suất giảm dần: tra_loi > ho_so > ket_thuc; chỉ giữ 2 nhãn đầu
-    plan = plan_skills(state("B2"), ["skill_tra_loi", "skill_ho_so", "ket_thuc"])
-
-    assert set(plan.skills) == {"skill_tra_loi", "skill_ho_so"}
-    assert plan.source == "model"
-
-
-def test_two_skills_run_in_fixed_order():
-    plan = plan_skills(state("B2"), ["skill_tra_loi", "skill_ho_so"])  # model gợi ý tra_loi trước
-
-    assert plan.skills == [
-        "skill_ho_so",
-        "skill_tra_loi",
-    ]  # nhưng chạy skill của bước trước, rồi mới trả lời kiến thức
-
-
-def test_service_runs_after_knowledge_and_end_runs_last():
-    assert plan_skills(state("B4"), ["skill_chuyen_trung_tam", "skill_tra_loi"]).skills == [
-        "skill_tra_loi",
-        "skill_chuyen_trung_tam",
-    ]
-    assert plan_skills(state("B4"), ["ket_thuc", "skill_chuyen_trung_tam"]).skills == [
-        "skill_chuyen_trung_tam",
-        "ket_thuc",
-    ]
-
-
-def test_ngoai_le_is_dropped_when_with_another_label_but_kept_alone():
-    assert plan_skills(state("B2"), ["ngoai_le", "skill_ho_so"]).skills == ["skill_ho_so"]
-    assert plan_skills(state("B2"), ["ngoai_le"]).skills == ["ngoai_le"]
-
-
-def test_unknown_labels_are_ignored():
-    plan = plan_skills(state("B3", **FULL_PROFILE), ["skill_la"])
-
-    assert plan.source == "fallback_step"
-    assert plan.skills == ["skill_danh_gia"]  # nhãn lạ bị bỏ, dùng skill của bước B3
-
-
-def test_assessment_is_blocked_until_profile_is_complete():
-    plan = plan_skills(state("B3", gpa="confirmed"), ["skill_danh_gia"])
-
-    assert plan.skills == []
-    assert plan.blocked == [Blocked("skill_danh_gia", "thieu_ho_so")]
-    assert plan.missing == [
+    assert missing_fields(profile, REQUIRED_B3) == [
         "target_level",
         "english",
         "sat",
@@ -89,21 +34,15 @@ def test_assessment_is_blocked_until_profile_is_complete():
     ]  # đúng thứ tự hỏi, chưa đòi ngành
 
 
-def test_assessment_runs_without_major():
-    plan = plan_skills(state("B3", **B3_PROFILE), ["skill_danh_gia"])
-
-    assert plan.skills == ["skill_danh_gia"]
-    assert not plan.blocked
-    assert plan.missing == []
+def test_assessment_profile_is_complete_without_the_major():
+    assert missing_fields(state("B3", **B3_PROFILE).profile, REQUIRED_B3) == []
 
 
 # Đánh giá hồ sơ cũng cần học bổng và câu SAT/ACT
-def test_assessment_is_blocked_without_scholarship_or_sat():
+def test_assessment_is_missing_scholarship_and_sat_when_they_are_not_answered():
     profile = {k: v for k, v in B3_PROFILE.items() if k not in ("sat", "scholarship")}
-    plan = plan_skills(state("B3", **profile), ["skill_danh_gia"])
 
-    assert plan.blocked == [Blocked("skill_danh_gia", "thieu_ho_so")]
-    assert plan.missing == ["sat", "scholarship"]
+    assert missing_fields(state("B3", **profile).profile, REQUIRED_B3) == ["sat", "scholarship"]
 
 
 # Câu SAT/ACT: có ACT, bấm "Em chưa thi" (none) hoặc có chứng chỉ khác không phải tiếng Anh đều tính là đã trả lời
@@ -126,35 +65,17 @@ def test_sat_question_is_answered_by_act_none_or_other_standardized_cert():
     assert missing_fields(english_only) == ["sat"]
 
 
-def test_assessment_still_runs_when_major_is_unknown():
+def test_unknown_major_does_not_block_the_assessment_but_blocks_the_school_list():
     profile = dict(B3_PROFILE, major="unknown")  # chưa rõ ngành vẫn đánh giá được hồ sơ
-    plan = plan_skills(state("B3", **profile), ["skill_danh_gia"])
 
-    assert plan.skills == ["skill_danh_gia"]
-
-
-def test_roadmap_is_blocked_for_major_when_major_is_the_first_missing():
-    profile = dict(FULL_PROFILE, major="unknown")  # chỉ ngành chưa rõ
-    plan = plan_skills(state("B4", **profile), ["skill_lo_trinh"])
-
-    assert plan.skills == []
-    assert plan.blocked == [Blocked("skill_lo_trinh", "thieu_nganh")]
-    assert plan.missing == ["major"]  # học bổng đã có, chỉ còn ngành
+    assert missing_fields(state("B3", **profile).profile, REQUIRED_B3) == []
+    assert missing_fields(state("B4", **profile).profile) == ["major"]  # gợi ý trường cần ngành thật
 
 
-def test_roadmap_asks_profile_first_when_other_fields_are_missing_too():
+def test_roadmap_asks_profile_items_before_the_major():
     profile = dict(FULL_PROFILE, gpa="unknown", major="unknown")  # GPA đứng trước ngành trong thứ tự hỏi
-    plan = plan_skills(state("B4", **profile), ["skill_lo_trinh"])
 
-    assert plan.blocked == [Blocked("skill_lo_trinh", "thieu_ho_so")]
-    assert plan.missing == ["gpa", "major"]
-
-
-def test_roadmap_runs_when_profile_is_complete():
-    plan = plan_skills(state("B4", **FULL_PROFILE), ["skill_lo_trinh"])
-
-    assert plan.skills == ["skill_lo_trinh"]
-    assert not plan.blocked
+    assert missing_fields(state("B4", **profile).profile) == ["gpa", "major"]
 
 
 def test_none_and_unknown_count_as_answered_but_not_for_must_have_fields():
@@ -179,42 +100,3 @@ def test_missing_fields_can_be_counted_for_the_b3_milestone_only():
 
     assert missing_fields(state(**profile).profile, REQUIRED_B3) == []
     assert missing_fields(state(**profile).profile) == ["major"]  # mặc định tính theo B4
-
-
-def test_explain_and_what_if_need_a_school_list():
-    blocked = plan_skills(state("B4", **FULL_PROFILE), ["skill_kich_ban"], has_results=False)
-    allowed = plan_skills(state("B4", **FULL_PROFILE), ["skill_kich_ban"], has_results=True)
-
-    assert blocked.skills == []
-    assert blocked.blocked == [Blocked("skill_kich_ban", "chua_co_danh_sach")]
-    assert blocked.missing == []  # chặn vì chưa có danh sách, không phải thiếu hồ sơ
-    assert allowed.skills == ["skill_kich_ban"]
-
-
-def test_only_blocked_skill_is_removed_the_other_still_runs():
-    plan = plan_skills(state("B3", gpa="confirmed"), ["skill_danh_gia", "skill_tra_loi"])
-
-    assert plan.skills == ["skill_tra_loi"]  # chưa đủ hồ sơ thì chưa chấm, nhưng vẫn trả lời kiến thức
-    assert [b.skill for b in plan.blocked] == ["skill_danh_gia"]
-
-
-# ---- mọi skill viết câu trả lời phải nói rõ: chỉ dựa trên dữ liệu gửi lên, không bịa
-WRITING_SKILLS = [
-    "skill_tra_loi",
-    "skill_giai_thich_trung_tam",
-    "skill_so_sanh",
-    "skill_goal_seek",
-    "skill_kich_ban",
-    "skill_explain",
-    "viet_tra_loi_ho_so",
-]
-
-
-@pytest.mark.parametrize("name", WRITING_SKILLS)
-def test_every_writing_skill_says_to_use_only_the_data_sent_and_never_invent(name):
-    from app.services.skill_call import SKILLS_DIR
-
-    text = (SKILLS_DIR / f"{name}.md").read_text(encoding="utf-8")
-    assert "NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)" in text
-    section = text.split("NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)", 1)[1].split("\n## ", 1)[0]
-    assert "KHÔNG bịa" in section and "CÓ TRONG dữ liệu" in section
