@@ -7,7 +7,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authApi, ApiError } from "@/lib/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 
@@ -75,32 +74,33 @@ export function ChangePasswordCard() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <KeyRoundIcon aria-hidden />
-          Đổi mật khẩu
-        </CardTitle>
-        <CardDescription>
-          Sau khi đổi, các thiết bị khác đang đăng nhập sẽ bị đăng xuất. Nhập sai mật khẩu hiện tại 5 lần liên tiếp sẽ khóa tài khoản (cần Quản trị viên mở khóa).
-        </CardDescription>
-      </CardHeader>
+    <form
+      onSubmit={handleSubmit}
+      noValidate
+      className="overflow-hidden rounded-xl border border-line bg-surface"
+    >
+      <div className="grid grid-cols-1 gap-6 p-5 sm:p-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-8">
+        <div className="space-y-1.5">
+          <h2 className="font-heading text-lg font-semibold text-ink">Đổi mật khẩu</h2>
+          <p className="text-xs leading-relaxed text-ink-2">
+            Sau khi đổi, các thiết bị khác đang đăng nhập sẽ bị đăng xuất. Nhập sai mật khẩu hiện tại 5 lần liên tiếp sẽ khóa tài khoản (cần Quản trị viên mở khóa).
+          </p>
+        </div>
 
-      <CardContent className="space-y-4">
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+        <div className="min-w-0 space-y-4">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-        {successMessage && (
-          <Alert variant="success" role="status">
-            <AlertDescription>{successMessage}</AlertDescription>
-          </Alert>
-        )}
+          {successMessage && (
+            <Alert variant="success" role="status">
+              <AlertDescription>{successMessage}</AlertDescription>
+            </Alert>
+          )}
 
-        <form onSubmit={handleSubmit} noValidate>
-          <FieldGroup>
+          <FieldGroup className="max-w-md">
             <Field>
               <FieldLabel htmlFor="current-password">Mật khẩu hiện tại</FieldLabel>
               <PasswordInput
@@ -110,6 +110,7 @@ export function ChangePasswordCard() {
                 autoComplete="current-password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
+                className="h-10"
               />
             </Field>
 
@@ -123,6 +124,7 @@ export function ChangePasswordCard() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Tối thiểu 8 ký tự"
+                className="h-10"
               />
               <FieldDescription>Từ 8 đến 100 ký tự, khác mật khẩu hiện tại.</FieldDescription>
             </Field>
@@ -137,15 +139,25 @@ export function ChangePasswordCard() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Nhập lại mật khẩu mới"
+                className="h-10"
               />
             </Field>
-
-            <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto" loading={isSubmitting}>
-              {isSubmitting ? "Đang xử lý..." : "Đổi mật khẩu"}
-            </Button>
           </FieldGroup>
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-line bg-ground/60 px-5 py-3.5 sm:px-6">
+        <Button
+          type="submit"
+          size="lg"
+          disabled={isSubmitting}
+          loading={isSubmitting}
+          className="w-full sm:w-auto"
+        >
+          <KeyRoundIcon data-icon="inline-start" aria-hidden />
+          {isSubmitting ? "Đang xử lý..." : "Đổi mật khẩu"}
+        </Button>
+      </div>
+    </form>
   );
 }

@@ -1,7 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  CalendarIcon,
+  LogOutIcon,
+  MailIcon,
+  RefreshCwIcon,
+  SendIcon,
+  Trash2Icon,
+  UserPlusIcon,
+  UsersIcon,
+  XIcon,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { AccountSectionHeader } from "@/components/account/AccountSectionHeader";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -11,17 +24,34 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Progress } from "@/components/ui/progress";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatVnDate, formatVnDateTime } from "@/lib/billing-api";
 import { familyApi, familyErrorMessage } from "@/lib/family-api";
 import { useFetched } from "@/lib/use-fetched";
+import { cn } from "@/lib/utils";
 import type { FamilyDto, SeatRole } from "@/types/billing";
 
 const ROLE_LABEL: Record<FamilyDto["members"][number]["role"], string> = {
@@ -49,15 +79,16 @@ function useNow(intervalMs: number): number | null {
 
 // [UC-126..131] Mục "Gói Gia đình": chỉ hiện khi GET subscription có family (AccountView quyết định).
 // Chủ gói: thành viên, chỗ trống, lời mời, mời/gửi lại/hủy/xóa. Thành viên: chỉ xem và Rời gói.
-// Chỉ phần trăm (billing-plan-v2 "Percent-only usage"); thành viên không thấy email hay lời mời (máy chủ trả invites rỗng).
 export function FamilyCard({ version, onChanged }: { version: number; onChanged: () => void }) {
   const { user } = useAuth();
   const family = useFetched(`family:${user?.id}:${version}`, familyApi.get);
   const f = family.data;
   const now = useNow(5000);
 
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [seatRole, setSeatRole] = useState<SeatRole>("student");
+  const [dialogError, setDialogError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -66,6 +97,11 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
   const openConfirm = (c: Confirm) => {
     setError(null);
     setConfirm(c);
+  };
+
+  const openInviteDialog = () => {
+    setDialogError(null);
+    setInviteOpen(true);
   };
 
   const run = async (key: string, action: () => Promise<unknown>, success?: string) => {
@@ -79,8 +115,9 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
       onChanged();
       return true;
     } catch (err) {
-      setError(familyErrorMessage(err));
-      return false;
+      const msg = familyErrorMessage(err);
+      setError(msg);
+      return msg;
     } finally {
       setBusy(null);
     }
@@ -88,189 +125,384 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
 
   if (!f) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Gói Gia đình</CardTitle>
-        </CardHeader>
-        <CardContent>{family.error ? <p className="text-sm text-risk">{family.error}</p> : <Spinner className="text-brand" />}</CardContent>
-      </Card>
+      <div>
+        <AccountSectionHeader
+          title="Gói Gia đình"
+          description="Quản lý thành viên dùng chung hạn mức và lời mời tham gia gói."
+        />
+        {family.error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{family.error}</AlertDescription>
+          </Alert>
+        ) : (
+          <div className="space-y-4">
+            <Skeleton className="h-32 w-full rounded-xl" />
+            <Skeleton className="h-44 w-full rounded-xl" />
+          </div>
+        )}
+      </div>
     );
   }
 
   const owner = f.isOwner;
   const studentsFull = f.seats.students.used >= f.seats.students.max;
   const parentsFull = f.seats.parents.used >= f.seats.parents.max;
-  const effectiveSeat: SeatRole = seatRole === "student" && studentsFull ? "parent" : seatRole === "parent" && parentsFull ? "student" : seatRole;
+  const effectiveSeat: SeatRole =
+    seatRole === "student" && studentsFull
+      ? "parent"
+      : seatRole === "parent" && parentsFull
+        ? "student"
+        : seatRole;
   const allFull = studentsFull && parentsFull;
   const emptyGroup = owner && f.members.every((m) => m.role === "owner") && f.invites.length === 0;
 
   const submitInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    const ok = await run("invite", () => familyApi.invite(email.trim(), effectiveSeat), "Đã gửi lời mời");
-    if (ok) setEmail("");
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setDialogError("Vui lòng nhập email thành viên.");
+      return;
+    }
+    setDialogError(null);
+    const res = await run("invite", () => familyApi.invite(trimmed, effectiveSeat), "Đã gửi lời mời");
+    if (res === true) {
+      setEmail("");
+      setInviteOpen(false);
+    } else {
+      setDialogError(res);
+    }
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Gói Gia đình</CardTitle>
-        <CardDescription>{owner ? "Bạn là chủ gói" : `Thành viên gói Gia đình của ${f.ownerName}`}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        {error && <p className="text-sm text-risk" role="alert">{error}</p>}
-        {notice && <p className="text-sm text-ok" role="status">{notice}</p>}
+    <div>
+      <AccountSectionHeader
+        title="Gói Gia đình"
+        description={
+          owner
+            ? "Quản lý thành viên dùng chung hạn mức và lời mời tham gia gói."
+            : `Thành viên gói Gia đình của ${f.ownerName}.`
+        }
+        actions={
+          owner ? (
+            !emptyGroup ? (
+              <Button type="button" size="lg" disabled={allFull} onClick={openInviteDialog}>
+                <UserPlusIcon data-icon="inline-start" aria-hidden />
+                Mời thành viên
+              </Button>
+            ) : undefined
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="bg-surface text-risk hover:bg-risk-wash hover:text-risk"
+              onClick={() => openConfirm({ kind: "leave" })}
+            >
+              <LogOutIcon data-icon="inline-start" aria-hidden />
+              Rời gói
+            </Button>
+          )
+        }
+      />
+
+      <div className="space-y-6">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {notice && (
+          <Alert variant="success" role="status">
+            <AlertDescription>{notice}</AlertDescription>
+          </Alert>
+        )}
 
         {f.cycle && (
-          <div className="space-y-1 rounded-lg border border-line p-3">
-            <div className="flex justify-between text-sm">
-              <span className="font-semibold">{f.cycle.planName}</span>
-              <span className="tabular-nums text-muted-foreground">Cả gói đã dùng {f.cycle.usedPercent}%</span>
+          <div className="space-y-4 rounded-xl border border-line bg-surface p-5 sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1">
+                <h2 className="font-heading text-lg font-semibold text-ink">{f.cycle.planName}</h2>
+                {owner && (
+                  <p className="text-xs text-ink-2">
+                    Chỗ đã dùng: Học sinh {f.seats.students.used}/{f.seats.students.max} · Phụ huynh{" "}
+                    {f.seats.parents.used}/{f.seats.parents.max}
+                  </p>
+                )}
+              </div>
+              <div className="text-left sm:text-right">
+                <div className="text-2xl font-semibold text-ink tabular-nums">
+                  {f.cycle.usedPercent}%
+                </div>
+                <div className="text-xs text-ink-3">Cả gói đã dùng</div>
+              </div>
             </div>
-            <Progress value={Math.min(100, f.cycle.usedPercent)} aria-label={`Cả gói đã dùng ${f.cycle.usedPercent}%`} />
-            {f.cycle.quotaResetsAt && (
-              <p className="text-xs text-muted-foreground">
-                Làm mới hạn mức ngày {formatVnDate(f.cycle.quotaResetsAt)}
-                {f.cycle.quotaPeriodDays ? ` (mỗi ${f.cycle.quotaPeriodDays} ngày)` : ""}
-              </p>
+
+            <Progress
+              value={Math.min(100, f.cycle.usedPercent)}
+              aria-label={`Cả gói đã dùng ${f.cycle.usedPercent}%`}
+            />
+
+            {(f.cycle.quotaResetsAt || f.cycle.endsAt) && (
+              <div className="grid grid-cols-1 gap-2.5 border-t border-line pt-3.5 text-xs text-ink-2 sm:grid-cols-2">
+                {f.cycle.quotaResetsAt && (
+                  <div className="flex items-center gap-2">
+                    <RefreshCwIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
+                    <span>
+                      Làm mới hạn mức ngày {formatVnDate(f.cycle.quotaResetsAt)}
+                      {f.cycle.quotaPeriodDays ? ` (mỗi ${f.cycle.quotaPeriodDays} ngày)` : ""}
+                    </span>
+                  </div>
+                )}
+                {f.cycle.endsAt && (
+                  <div className="flex items-center gap-2">
+                    <CalendarIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
+                    <span>Hết hạn ngày {formatVnDate(f.cycle.endsAt)}</span>
+                  </div>
+                )}
+              </div>
             )}
-            {f.cycle.endsAt && <p className="text-xs text-muted-foreground">Hết hạn ngày {formatVnDate(f.cycle.endsAt)}</p>}
           </div>
         )}
 
-        <div className="space-y-2">
+        {/* Danh sách thành viên */}
+        <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-semibold">Thành viên</h3>
+            <h2 className="font-heading text-lg font-semibold text-ink">Thành viên</h2>
             {owner && (
-              <span className="text-xs text-muted-foreground">
-                Học sinh {f.seats.students.used}/{f.seats.students.max} · Phụ huynh {f.seats.parents.used}/{f.seats.parents.max}
+              <span className="text-xs text-ink-2 tabular-nums">
+                Học sinh {f.seats.students.used}/{f.seats.students.max} · Phụ huynh{" "}
+                {f.seats.parents.used}/{f.seats.parents.max}
               </span>
             )}
           </div>
-          <ul className="space-y-2">
+
+          <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
             {f.members.map((m) => (
-              <li key={m.memberId} className={`space-y-1 rounded-lg border p-3 ${m.isMe ? "border-brand/40 bg-brand-wash/40" : "border-line"}`}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{m.name}</span>
-                  {m.isMe && <Badge variant="brand">Bạn</Badge>}
-                  <Badge variant="neutral">{ROLE_LABEL[m.role]}</Badge>
+              <li
+                key={m.memberId}
+                className={cn(
+                  "flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6",
+                  m.isMe && "bg-brand-wash/30",
+                )}
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar className="size-9 shrink-0">
+                    <AvatarFallback className="bg-brand-wash text-xs font-semibold text-brand-ink">
+                      {m.name.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate font-semibold text-ink">{m.name}</span>
+                      {m.isMe && <Badge variant="brand">Bạn</Badge>}
+                      <Badge variant="neutral">{ROLE_LABEL[m.role]}</Badge>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+                  <div className="flex min-w-44 flex-1 items-center gap-2.5 sm:flex-initial">
+                    <Progress
+                      value={Math.min(100, m.sharePercent)}
+                      className="flex-1"
+                      aria-label={`${m.name} đã dùng ${m.sharePercent}% của gói`}
+                    />
+                    <span className="w-10 text-right text-xs font-medium text-ink-2 tabular-nums">
+                      {m.sharePercent}%
+                    </span>
+                  </div>
                   {owner && m.role !== "owner" && (
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="ml-auto text-destructive"
+                      className="text-risk hover:bg-risk-wash hover:text-risk"
                       onClick={() => openConfirm({ kind: "remove", memberId: m.memberId, name: m.name })}
                     >
+                      <Trash2Icon data-icon="inline-start" aria-hidden />
                       Xóa khỏi gói
                     </Button>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <Progress value={Math.min(100, m.sharePercent)} className="flex-1" aria-label={`${m.name} đã dùng ${m.sharePercent}% của gói`} />
-                  <span className="w-12 text-right text-xs tabular-nums text-muted-foreground">{m.sharePercent}%</span>
-                </div>
               </li>
             ))}
           </ul>
+
           {emptyGroup && (
-            <p className="text-sm text-muted-foreground">Gói chưa có thành viên. Nếu trước đây bạn đã có gói Gia đình, hãy mời lại thành viên cũ.</p>
+            <Empty className="border border-line bg-surface py-10">
+              <EmptyHeader>
+                <EmptyMedia variant="icon" className="size-11 rounded-2xl bg-brand-wash text-brand">
+                  <UsersIcon className="size-5" aria-hidden />
+                </EmptyMedia>
+                <EmptyTitle className="text-base font-semibold text-ink">
+                  Chưa có thành viên nào khác
+                </EmptyTitle>
+                <EmptyDescription>
+                  Gói chưa có thành viên. Nếu trước đây bạn đã có gói Gia đình, hãy mời lại thành viên cũ.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button type="button" size="lg" disabled={allFull} onClick={openInviteDialog}>
+                  <UserPlusIcon data-icon="inline-start" aria-hidden />
+                  Mời thành viên
+                </Button>
+              </EmptyContent>
+            </Empty>
           )}
         </div>
 
+        {/* Lời mời đang chờ */}
         {owner && f.invites.length > 0 && (
-          <div className="space-y-2">
-            <h3 className="font-semibold">Lời mời đang chờ</h3>
-            <ul className="space-y-2">
+          <div className="space-y-3">
+            <h2 className="font-heading text-lg font-semibold text-ink">Lời mời đang chờ</h2>
+            <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
               {f.invites.map((i) => {
                 const waitUntil = i.canResendAt ? new Date(i.canResendAt).getTime() : 0;
                 const tooSoon = now === null || now < waitUntil;
                 return (
-                  <li key={i.inviteId} className="flex flex-wrap items-center gap-2 rounded-lg border border-line p-3 text-sm">
-                    <span className="font-medium">{i.email}</span>
-                    <Badge variant="neutral">{ROLE_LABEL[i.seatRole]}</Badge>
-                    <span className="text-xs text-muted-foreground">Hết hạn {formatVnDateTime(i.expiresAt)}</span>
-                    <span className="ml-auto flex gap-1">
+                  <li
+                    key={i.inviteId}
+                    className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 text-sm sm:px-6"
+                  >
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="truncate font-medium text-ink">{i.email}</span>
+                        <Badge variant="neutral">{ROLE_LABEL[i.seatRole]}</Badge>
+                      </div>
+                      <p className="text-xs text-ink-2">Hết hạn {formatVnDateTime(i.expiresAt)}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         disabled={busy !== null || tooSoon}
-                        title={tooSoon && i.canResendAt ? `Gửi lại được sau ${formatVnDateTime(i.canResendAt)}` : undefined}
-                        onClick={() => run(`resend:${i.inviteId}`, () => familyApi.resendInvite(i.inviteId), "Đã gửi lại lời mời")}
+                        title={
+                          tooSoon && i.canResendAt
+                            ? `Gửi lại được sau ${formatVnDateTime(i.canResendAt)}`
+                            : undefined
+                        }
+                        onClick={() =>
+                          run(`resend:${i.inviteId}`, () => familyApi.resendInvite(i.inviteId), "Đã gửi lại lời mời")
+                        }
+                        loading={busy === `resend:${i.inviteId}`}
                       >
+                        <MailIcon data-icon="inline-start" aria-hidden />
                         Gửi lại
                       </Button>
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="text-destructive"
+                        className="text-risk hover:bg-risk-wash hover:text-risk"
                         disabled={busy !== null}
-                        onClick={() => run(`cancel:${i.inviteId}`, () => familyApi.cancelInvite(i.inviteId), "Đã hủy lời mời")}
+                        onClick={() =>
+                          run(`cancel:${i.inviteId}`, () => familyApi.cancelInvite(i.inviteId), "Đã hủy lời mời")
+                        }
                       >
+                        <XIcon data-icon="inline-start" aria-hidden />
                         Hủy
                       </Button>
-                    </span>
+                    </div>
                   </li>
                 );
               })}
             </ul>
           </div>
         )}
+      </div>
 
-        {owner && (
-          <form onSubmit={submitInvite} className="space-y-2">
-            <h3 className="font-semibold">Mời thành viên</h3>
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="min-w-56 flex-1 space-y-1">
-                <Label htmlFor="family-invite-email">Email</Label>
-                <Input
-                  id="family-invite-email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={allFull}
-                  placeholder="email@vidu.com"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="family-invite-role">Loại chỗ</Label>
-                <NativeSelect
-                  id="family-invite-role"
-                  value={effectiveSeat}
-                  onChange={(e) => setSeatRole(e.target.value as SeatRole)}
-                  disabled={allFull}
-                >
-                  <NativeSelectOption value="student" disabled={studentsFull}>
-                    Học sinh{studentsFull ? " (đã đủ)" : ""}
-                  </NativeSelectOption>
-                  <NativeSelectOption value="parent" disabled={parentsFull}>
-                    Phụ huynh{parentsFull ? " (đã đủ)" : ""}
-                  </NativeSelectOption>
-                </NativeSelect>
-              </div>
-              <Button type="submit" disabled={allFull || busy !== null || !email.trim()}>
+      {/* Hộp thoại mời thành viên */}
+      <Dialog
+        open={inviteOpen}
+        onOpenChange={(open) => {
+          if (busy === "invite") return;
+          setInviteOpen(open);
+          if (!open) setDialogError(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mời thành viên vào gói Gia đình</DialogTitle>
+            <DialogDescription>
+              Lời mời có hiệu lực 7 ngày. Loại tài khoản của người được mời phải khớp với loại chỗ đã chọn.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={submitInvite} noValidate className="space-y-4">
+            {dialogError && (
+              <Alert variant="destructive">
+                <AlertDescription>{dialogError}</AlertDescription>
+              </Alert>
+            )}
+
+            <Field>
+              <FieldLabel htmlFor="family-invite-email">Email thành viên</FieldLabel>
+              <Input
+                id="family-invite-email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={allFull || busy === "invite"}
+                placeholder="email@vidu.com"
+                className="h-10"
+              />
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="family-invite-role">Loại chỗ</FieldLabel>
+              <NativeSelect
+                id="family-invite-role"
+                value={effectiveSeat}
+                onChange={(e) => setSeatRole(e.target.value as SeatRole)}
+                disabled={allFull || busy === "invite"}
+                className="h-10 w-full"
+              >
+                <NativeSelectOption value="student" disabled={studentsFull}>
+                  Học sinh{studentsFull ? " (đã đủ)" : ""}
+                </NativeSelectOption>
+                <NativeSelectOption value="parent" disabled={parentsFull}>
+                  Phụ huynh{parentsFull ? " (đã đủ)" : ""}
+                </NativeSelectOption>
+              </NativeSelect>
+              <FieldDescription>
+                {allFull
+                  ? "Gói đã đủ chỗ (tính cả lời mời đang chờ)."
+                  : `Còn ${f.seats.students.max - f.seats.students.used} chỗ Học sinh · ${f.seats.parents.max - f.seats.parents.used} chỗ Phụ huynh.`}
+              </FieldDescription>
+            </Field>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setInviteOpen(false)}
+                disabled={busy === "invite"}
+              >
+                Hủy
+              </Button>
+              <Button
+                type="submit"
+                disabled={allFull || busy !== null || !email.trim()}
+                loading={busy === "invite"}
+              >
+                <SendIcon data-icon="inline-start" aria-hidden />
                 {busy === "invite" ? "Đang gửi..." : "Gửi lời mời"}
               </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {allFull ? "Gói đã đủ chỗ (tính cả lời mời đang chờ)." : "Lời mời có hạn 7 ngày. Loại tài khoản của người được mời phải khớp loại chỗ."}
-            </p>
+            </DialogFooter>
           </form>
-        )}
-
-        {!owner && (
-          <Button type="button" variant="outline" className="text-destructive" onClick={() => openConfirm({ kind: "leave" })}>
-            Rời gói
-          </Button>
-        )}
-      </CardContent>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{confirm?.kind === "leave" ? "Rời gói Gia đình?" : `Xóa ${confirm?.kind === "remove" ? confirm.name : ""} khỏi gói?`}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {confirm?.kind === "leave"
+                ? "Rời gói Gia đình?"
+                : `Xóa ${confirm?.kind === "remove" ? confirm.name : ""} khỏi gói?`}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {confirm?.kind === "leave"
                 ? "Bạn sẽ không dùng chung lượt hỏi của gói này nữa. Phần đã dùng vẫn được tính vào gói."
@@ -284,6 +516,7 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
               type="button"
               variant="destructive"
               disabled={busy !== null}
+              loading={busy === "leave" || (confirm?.kind === "remove" && busy === `remove:${confirm.memberId}`)}
               onClick={() => {
                 if (confirm?.kind === "leave") run("leave", familyApi.leave, "Bạn đã rời gói Gia đình");
                 else if (confirm?.kind === "remove") {
@@ -297,6 +530,6 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Card>
+    </div>
   );
 }

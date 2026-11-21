@@ -5,7 +5,6 @@ import { Trash2Icon } from "lucide-react";
 import { authApi, ApiError } from "@/lib/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -79,22 +78,24 @@ export function DeleteAccountCard() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-destructive">
-          <Trash2Icon aria-hidden />
-          Xóa tài khoản
-        </CardTitle>
-        <CardDescription>
+    <div className="flex flex-col gap-4 rounded-xl border border-risk/30 bg-surface p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+      <div className="min-w-0 space-y-1">
+        <h2 className="font-heading text-lg font-semibold text-risk">Xóa tài khoản</h2>
+        <p className="max-w-xl text-sm text-ink-2">
           Tài khoản bị khóa ngay và xóa hẳn sau {RETENTION_DAYS} ngày. Trong {RETENTION_DAYS} ngày đó, bạn đăng nhập lại là khôi phục được.
-        </CardDescription>
-      </CardHeader>
+        </p>
+      </div>
 
-      <CardContent>
-        <Button type="button" variant="destructive" onClick={openDialog}>
-          Xóa tài khoản
-        </Button>
-      </CardContent>
+      <Button
+        type="button"
+        variant="destructive"
+        size="lg"
+        onClick={openDialog}
+        className="w-full shrink-0 sm:w-auto"
+      >
+        <Trash2Icon data-icon="inline-start" aria-hidden />
+        Xóa tài khoản
+      </Button>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent>
@@ -139,6 +140,7 @@ export function DeleteAccountCard() {
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
               disabled={isSubmitting}
+              className="h-10"
             />
           </Field>
 
@@ -147,11 +149,12 @@ export function DeleteAccountCard() {
               Hủy
             </Button>
             <Button type="button" variant="destructive" onClick={handleDelete} disabled={!canConfirm || isSubmitting} loading={isSubmitting}>
+              <Trash2Icon data-icon="inline-start" aria-hidden />
               {isSubmitting ? "Đang xóa..." : "Xóa tài khoản"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   );
 }
