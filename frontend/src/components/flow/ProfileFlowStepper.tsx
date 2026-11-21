@@ -96,6 +96,9 @@ function stepSummary(step: number, draft: ProfileFlowDraft, metadata: ProfileMet
     case 4: {
       const tier = draft.step4.annualBudgetTier;
       if (!tier) return null;
+      // UC-94: có số tiền tối đa/năm chính xác (phụ huynh nhập) thì ghi đúng số đó
+      const exactUsd = draft.step4.annualBudgetUsd;
+      if (exactUsd != null) return `Tối đa ${exactUsd.toLocaleString("vi-VN")} USD/năm`;
       return (
         metadata?.budgetTiers.find((t) => t.key === tier)?.label ??
         DEFAULT_BUDGET_TIERS.find((t) => t.key === tier)?.label ??
@@ -163,8 +166,8 @@ export function ProfileFlowStepper({
                   aria-current={isCurrent ? "step" : undefined}
                   title={s.title}
                   className={cn(
-                    "flex flex-col items-center gap-1.5 text-center",
-                    isClickable ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+                    "flex flex-col items-center gap-1.5 rounded-lg text-center focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
+                    isClickable ? "cursor-pointer" : "opacity-50"
                   )}
                 >
                   <span
@@ -215,10 +218,11 @@ export function ProfileFlowStepper({
                 disabled={!isClickable}
                 onClick={() => isClickable && onSelectStep(s.step)}
                 className={cn(
-                  "group flex w-full items-start gap-3 text-left transition-all rounded-lg p-2 -mx-2",
+                  "group flex w-full items-start gap-3 rounded-lg p-2 -mx-2 text-left transition-all focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                   isCurrent && "bg-brand-wash/50",
-                  isClickable && !isCurrent && "hover:bg-muted/50 cursor-pointer",
-                  !isClickable && "opacity-45 cursor-not-allowed"
+                  isClickable && "cursor-pointer",
+                  isClickable && !isCurrent && "hover:bg-muted/50",
+                  !isClickable && "opacity-45"
                 )}
               >
                 {/* Step indicator circle */}

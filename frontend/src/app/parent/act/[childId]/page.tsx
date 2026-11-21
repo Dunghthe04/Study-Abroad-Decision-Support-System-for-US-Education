@@ -4,7 +4,7 @@ import { ActAndOpenChat } from "@/components/parent/ActAndOpenChat";
 
 // 1.5e: nút tên con trong chat của phụ huynh trỏ tới đây: vào làm thay con đó rồi mở khung chat
 export const metadata: Metadata = {
-  title: "Đang mở hồ sơ của con – USAS",
+  title: "Đang mở hồ sơ của con – USDSS",
 };
 
 interface Props {

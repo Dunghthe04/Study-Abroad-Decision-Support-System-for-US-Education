@@ -3,7 +3,7 @@ import { AdminSection } from "@/components/admin/AdminSection";
 import { ReviewGradingView } from "@/components/admin/review-batches/ReviewGradingView";
 
 export const metadata: Metadata = {
-  title: "Chấm đợt duyệt mẫu – Quản trị USAS",
+  title: "Chấm đợt duyệt mẫu – Quản trị USDSS",
 };
 
 interface Props {

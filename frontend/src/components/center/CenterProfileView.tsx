@@ -295,15 +295,17 @@ export function CenterProfileView() {
         <Alert className="relative border-emerald-500/30 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200 pr-9 transition-all duration-300">
           <CheckCircle2Icon className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
           <AlertDescription className="ml-2">{success}</AlertDescription>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-xs"
             onClick={() => setSuccess(null)}
-            className="absolute top-3 right-3 p-1 rounded hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 transition-colors"
+            className="absolute top-2.5 right-2.5 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/10 text-emerald-700 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-300"
             title="Đóng thông báo"
             aria-label="Đóng thông báo"
           >
             <XIcon className="h-4 w-4" />
-          </button>
+          </Button>
         </Alert>
       )}
 
@@ -325,7 +327,6 @@ export function CenterProfileView() {
         phone={center?.phone}
         email={center?.email}
         emailVerified={Boolean(center?.emailVerifiedAt)}
-        phoneVerified={Boolean(center?.phoneVerifiedAt)}
         onChanged={() => {
           void centerPortalApi.getProfile().then(setCenter).catch(() => undefined);
         }}
@@ -707,9 +708,8 @@ export function CenterProfileView() {
               </Field>
             </div>
 
-            <Button type="submit" size="lg" disabled={isSubmitting} className="w-full sm:w-auto">
-              {isSubmitting && <Spinner data-icon="inline-start" />}
-              {isSubmitting ? "Đang lưu thay đổi..." : "Lưu hồ sơ trung tâm"}
+            <Button type="submit" size="lg" loading={isSubmitting} className="w-full sm:w-auto">
+              Lưu hồ sơ trung tâm
             </Button>
           </FieldGroup>
         </form>

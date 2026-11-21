@@ -149,9 +149,8 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
           {isActive ? (
             <Button
               variant="outline"
-              size="sm"
               onClick={() => setConfirmAction("hide")}
-              className="h-8 gap-1.5 text-xs text-ink-2 hover:text-risk hover:border-risk/30 hover:bg-risk-wash"
+              className="gap-1.5 text-xs text-ink-2 hover:text-risk hover:border-risk/30 hover:bg-risk-wash"
               title="Ẩn trung tâm khỏi luồng gợi ý và danh bạ"
             >
               <EyeOffIcon className="w-3.5 h-3.5" />
@@ -160,9 +159,8 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
           ) : (
             <Button
               variant="outline"
-              size="sm"
               onClick={() => setConfirmAction("show")}
-              className="h-8 gap-1.5 text-xs text-ok border-ok/30 bg-ok-wash/60 hover:bg-ok-wash"
+              className="gap-1.5 text-xs text-ok border-ok/30 bg-ok-wash/60 hover:bg-ok-wash"
               title="Hiện lại trung tâm trên danh bạ và luồng gợi ý"
             >
               <EyeIcon className="w-3.5 h-3.5" />
@@ -217,11 +215,11 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
               )}
             </div>
 
-            {/* Kênh tư vấn USAS (Ẩn hotline & website để tránh liên hệ trực tiếp ngoài hệ thống) */}
+            {/* Kênh tư vấn USDSS (Ẩn hotline & website để tránh liên hệ trực tiếp ngoài hệ thống) */}
             <div className="flex flex-wrap items-center gap-2 shrink-0 pb-1">
               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand/20 bg-brand-wash text-xs font-medium text-brand-ink">
                 <ShieldCheckIcon className="w-3.5 h-3.5 text-brand shrink-0" />
-                <span>Tư vấn qua hệ thống USAS</span>
+                <span>Tư vấn qua hệ thống USDSS</span>
               </div>
             </div>
           </div>
@@ -396,7 +394,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
                 <div className="text-xs text-muted-foreground flex items-start gap-2 bg-muted/40 p-2.5 rounded-lg">
                   <ShieldCheckIcon className="w-4 h-4 text-brand shrink-0 mt-0.5" />
                   <span>
-                    Toàn bộ quy trình tiếp nhận tư vấn, đánh giá hồ sơ và đối soát dịch vụ được thực hiện tập trung qua hệ thống USAS để bảo đảm quyền lợi và bảo mật thông tin.
+                    Toàn bộ quy trình tiếp nhận tư vấn, đánh giá hồ sơ và đối soát dịch vụ được thực hiện tập trung qua hệ thống USDSS để bảo đảm quyền lợi và bảo mật thông tin.
                   </span>
                 </div>
               </CardContent>
@@ -413,7 +411,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
                 Các Dịch vụ Hồ sơ Du học Mỹ
               </CardTitle>
               <CardDescription className="text-xs">
-                Các gói dịch vụ chuyên môn được xác thực trên hệ thống USAS
+                Các gói dịch vụ chuyên môn được xác thực trên hệ thống USDSS
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

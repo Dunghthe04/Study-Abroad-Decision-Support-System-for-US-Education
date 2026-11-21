@@ -15,7 +15,6 @@ from app.services.centers import (
     db_service,
     match_city,
 )
-from app.services.skill_rules import ORDER
 
 # Đúng dạng JSON backend trả (StudyCenterDto, camelCase)
 CENTER_HCM = {
@@ -101,10 +100,6 @@ DB_CITIES = ["Hà Nội", "TP.HCM", "Hải Phòng", "Đà Nẵng"]
 )
 def test_match_city_maps_the_ways_students_write_a_city_to_the_name_in_the_db(written, expected):
     assert match_city(written, DB_CITIES) == expected
-
-
-def test_b6_skill_is_a_known_skill_label():
-    assert "skill_chuyen_trung_tam" in ORDER
 
 
 async def test_find_calls_the_referrals_api_with_the_filters():

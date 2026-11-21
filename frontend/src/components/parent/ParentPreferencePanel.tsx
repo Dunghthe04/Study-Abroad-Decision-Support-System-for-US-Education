@@ -65,6 +65,7 @@ export function ParentPreferencePanel({ studentId }: { studentId: string }) {
 
   const dirty =
     saved.data == null ||
+    saved.data.hasPref === false ||   // mới có số tiền từ Tổng quan: lưu ưu tiên lần đầu
     pref.some((v, i) => v !== savedPref[i]) ||
     (budget ?? null) !== (saved.data?.budgetVnd ?? null);
   const canSave = !saved.loading && !budgetError && dirty && !saving;
@@ -168,8 +169,7 @@ export function ParentPreferencePanel({ studentId }: { studentId: string }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" disabled={!canSave} onClick={save}>
-            {saving && <Spinner data-icon="inline-start" />}
+          <Button type="button" disabled={!canSave} onClick={save} loading={saving}>
             Lưu và cho con xem
           </Button>
           {saveMessage && <p className="text-sm text-ink-2" role="status">{saveMessage}</p>}

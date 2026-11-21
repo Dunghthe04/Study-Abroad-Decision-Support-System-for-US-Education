@@ -22,6 +22,10 @@ public record AdvisorStreamEvent(string Type, int? Answers = null, string? Text 
 /// mục bắt buộc còn thiếu; false thì hỏi đủ như form; null = advisor tự đoán theo các ô hồ sơ như cũ.</param>
 /// <param name="FromForm">Tin do form gửi ngay sau khi lưu hồ sơ chính thức (frontend đặt, .NET chuyển nguyên sang advisor):
 /// form đã là bước rà soát nên advisor bỏ bảng xác nhận X1 đang treo và trả lời luôn câu học sinh hỏi.</param>
+/// <param name="ExactBudget">UC-94: phụ huynh đang nhập hộ con managed (controller đặt theo token, không lấy từ frontend):
+/// câu ngân sách F1 hỏi số tiền tối đa/năm chính xác bằng VNĐ như bước 4 của form; null/false = hỏi chọn mức như cũ.</param>
+/// <param name="AllowedIntents">Gói của tài khoản cho chạy những loại ý nào trong chat (ChatPremiumGate); null = tất cả (Premium còn token, nhân viên).
+/// Cùng record này được nhận từ trình duyệt nên ChatService LUÔN ghi đè bằng giá trị của server, không bao giờ chuyển giá trị trình duyệt gửi.</param>
 public record AdvisorChatRequest(
     IReadOnlyList<ChatMessage> Messages,
     string? SessionId = null,
@@ -36,7 +40,9 @@ public record AdvisorChatRequest(
     SimulationOverrides? Simulation = null,
     IReadOnlyList<GradeScaleRuleDto>? GradeScale = null,
     bool? HasCommittedProfile = null,
-    bool FromForm = false);
+    bool FromForm = false,
+    bool? ExactBudget = null,
+    IReadOnlyList<string>? AllowedIntents = null);
 
 /// <summary>
 /// Hành động có cấu trúc từ một nút trên giao diện (không qua SLM hiểu câu): Type là goal_seek hoặc explain,
@@ -94,4 +100,8 @@ public record AdvisorChatResponse(
     AdvisorSlmDto? Slm = null,
     // Lượt này vừa lưu hồ sơ chính thức (bấm "Đúng rồi" ở bảng rà soát): trang Gợi ý trường hiện nút cập nhật danh sách.
     // Chỉ .NET đặt, advisor không gửi
-    bool? ProfileSaved = null);
+    bool? ProfileSaved = null,
+    // Loại ý advisor bỏ vì gói không cho (allowedIntents). Nội bộ: ChatService đổi thành Locked rồi bỏ trước khi trả trình duyệt
+    IReadOnlyList<string>? LockedIntents = null,
+    // Lượt bị khóa vì gói (cần Premium hoặc hết hạn mức Free): giao diện hiện thẻ nâng cấp. Chỉ .NET đặt, trả cho trình duyệt
+    ChatLock? Locked = null);

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StudyAbroad.Api.Authorization;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Constants;
@@ -38,6 +39,7 @@ public class RecommendationsController(RecommendationService recommendations) : 
 
 
     [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
+    [Authorize(Policy = PremiumPolicies.Recommendations)] // Free nhận 403 premium_required
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateRecommendationRequest? request, CancellationToken ct)
     {
@@ -95,6 +97,7 @@ public class RecommendationsController(RecommendationService recommendations) : 
 
         // Đổi nút ưu tiên: chỉ chạy lại lượt chọn trên số đã lưu.
     [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
+    [Authorize(Policy = PremiumPolicies.Recommendations)] // Free nhận 403 premium_required
     [HttpPost("repick")]
     public async Task<IActionResult> Repick([FromBody] RepickRequest? request, CancellationToken ct)
     {
@@ -126,6 +129,7 @@ public class RecommendationsController(RecommendationService recommendations) : 
 
     // Trình mô phỏng hồ sơ: tính lại với GPA, SAT, ngân sách... giả định. Không lưu, không gọi advisor.
     [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
+    [Authorize(Policy = PremiumPolicies.Recommendations)] // Free nhận 403 premium_required
     [HttpPost("simulate")]
     public async Task<IActionResult> Simulate([FromBody] SimulateRequest? request, CancellationToken ct)
     {

@@ -390,7 +390,7 @@ public class StudyCenterService(
             c.TaxCode, c.LegalRepresentative, c.LicenseIssuedBy, c.LicenseIssuedDate,
             c.LegalComplianceMode, c.TrainingLicenseNumber, c.CertifiedCounselorCount,
             c.LegalDocumentUrls, c.VerificationNote,
-            c.EmailVerifiedAt, c.PhoneVerifiedAt, c.FeeMin, c.FeeMax, c.FeeDescription,
+            c.EmailVerifiedAt, c.FeeMin, c.FeeMax, c.FeeDescription,
             c.RegistrantName, c.RegistrantPosition, c.Fanpage, c.ServiceAreas, c.Branches);
 
     /// <summary>True nếu yêu cầu thay đổi một trường pháp lý so với giá trị hiện tại.</summary>
@@ -559,7 +559,7 @@ public class StudyCenterService(
         {
             return new CenterVerificationStatusDto(
                 CenterVerificationStatuses.Unverified,
-                false, null, false, null, null, null);
+                false, null, null, null);
         }
 
         CenterVerificationDto? currentReqDto = null;
@@ -583,8 +583,6 @@ public class StudyCenterService(
             center.VerificationStatus,
             center.EmailVerifiedAt.HasValue,
             center.EmailVerifiedAt,
-            center.PhoneVerifiedAt.HasValue,
-            center.PhoneVerifiedAt,
             currentReqDto,
             rejectionReason);
     }
@@ -617,11 +615,9 @@ public class StudyCenterService(
         if (center is null)
             return CreateStudyCenterResult.Fail("Không tìm thấy thông tin trung tâm cho tài khoản này.");
 
-        // [UC-91] Phải xác thực cả email (OTP email) và số điện thoại (OTP SMS) trước khi nộp hồ sơ xác minh.
+        // [UC-91] Phải xác thực email (OTP email) trước khi nộp hồ sơ xác minh. Số điện thoại không xác thực bằng SMS OTP.
         if (!center.EmailVerifiedAt.HasValue)
             return CreateStudyCenterResult.Fail("Bạn cần xác thực email bằng mã OTP trước khi nộp hồ sơ xác minh.");
-        if (!center.PhoneVerifiedAt.HasValue)
-            return CreateStudyCenterResult.Fail("Bạn cần xác thực số điện thoại bằng mã OTP qua SMS trước khi nộp hồ sơ xác minh.");
 
         var existingPending = await verificationRepository.GetCurrentByCenterIdAsync(center.Id, ct);
         if (existingPending is not null && existingPending.Status == CenterVerificationStatuses.PendingReview)
@@ -1135,7 +1131,8 @@ public class StudyCenterService(
             if (string.Equals(pending.OldValue, newValue, StringComparison.Ordinal))
             {
                 // Sửa lại đúng giá trị đã được chấp nhận trước đó: không còn gì để kiểm tra.
-                pending.Status = CenterProfileChangeStatuses.Passed;
+                // Trạng thái riêng (không dùng passed) để không lẫn với mục do Moderator duyệt
+                pending.Status = CenterProfileChangeStatuses.Withdrawn;
                 pending.ReviewReason = "Trung tâm đã đổi lại giá trị cũ.";
                 pending.ReviewedAt = DateTime.UtcNow;
             }
@@ -1312,6 +1309,5 @@ public class StudyCenterService(
             center?.Code,
             center?.Email,
             center?.Phone,
-            center?.EmailVerifiedAt,
-            center?.PhoneVerifiedAt);
+            center?.EmailVerifiedAt);
 }

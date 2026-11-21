@@ -6,7 +6,6 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { ApiError, targetSchoolsApi } from "@/lib/api";
 import { useFetched } from "@/lib/use-fetched";
@@ -64,8 +63,7 @@ export function ParentSuggestions({ onAccepted }: { onAccepted: () => void }) {
               {t.notes && <p className="text-xs text-ink-2">Lời nhắn: {t.notes}</p>}
             </div>
             <div className="flex gap-2">
-              <Button size="sm" disabled={busy === t.id} onClick={() => act(t, true)}>
-                {busy === t.id && <Spinner />}
+              <Button size="sm" disabled={busy === t.id} onClick={() => act(t, true)} loading={busy === t.id}>
                 Thêm vào danh sách
               </Button>
               <Button size="sm" variant="outline" disabled={busy === t.id} onClick={() => act(t, false)}>

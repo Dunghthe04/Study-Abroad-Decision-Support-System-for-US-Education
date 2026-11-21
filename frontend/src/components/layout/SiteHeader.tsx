@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -7,21 +8,32 @@ import {
   BookOpenIcon,
   BookmarkCheckIcon,
   Building2Icon,
+  ChevronDownIcon,
+  CreditCardIcon,
+  CrownIcon,
+  GaugeIcon,
+  GraduationCapIcon,
+  HeartHandshakeIcon,
+  HomeIcon,
   InboxIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  PlusIcon,
   SearchIcon,
+  SendIcon,
   ShieldIcon,
   UserIcon,
   UsersIcon,
 } from "lucide-react";
+import { billingApi } from "@/lib/billing-api";
+import { useFetched } from "@/lib/use-fetched";
 import { formatUserRole } from "@/lib/user-role-labels";
+import { UserRoleIcon } from "@/components/layout/UserRoleIcon";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsLinkedParent } from "@/hooks/use-is-linked-parent";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import type { QuotaOverviewDto, SubscriptionSummaryDto } from "@/types/billing";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,8 +45,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
-import { isAdminRoute } from "@/lib/admin-nav";
-import { isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
 
 /**
@@ -43,6 +53,20 @@ import { cn } from "@/lib/utils";
  * Hàng dưới: điều hướng chính bên trái, nút "Phân tích hồ sơ của bạn" bên phải.
  * Trang chủ: nền trong suốt nằm trên ảnh trường, cuộn xuống thì thành nền trắng như các trang khác.
  */
+// Mục menu avatar: to và thoáng hơn mặc định để dễ bấm
+const MENU_ITEM = "cursor-pointer gap-3 rounded-lg px-3 py-2 text-sm [&_svg:not([class*='size-'])]:size-[17px]";
+const MENU_LABEL = "px-3 pt-3 pb-1 text-[13px]";
+
+function formatSubscriptionLabel(sub: SubscriptionSummaryDto): string {
+  const activePool =
+    sub.chargingPool === "family"
+      ? sub.family ?? sub.personal
+      : sub.chargingPool === "personal"
+        ? sub.personal ?? sub.family
+        : sub.family ?? sub.personal;
+  return activePool ? `Gói ${activePool.planName}` : "Gói Miễn phí";
+}
+
 export function SiteHeader() {
   const { user, isLoading, logout, acting } = useAuth();
   const router = useRouter();
@@ -52,6 +76,20 @@ export function SiteHeader() {
   const isModerator = user?.role === "moderator";
   const canOpenAdmin = isAdmin || isModerator;
   const isStudentOrParent = user?.role === "student" || user?.role === "parent";
+  const sub = useFetched<SubscriptionSummaryDto | null>(
+    isStudentOrParent ? `sub:${user?.id}:${pathname}` : "none",
+    () => (isStudentOrParent ? billingApi.subscription() : Promise.resolve(null)),
+  );
+  const hasFamily = Boolean(sub.data?.family) || (sub.data?.cycles ?? []).some((c) => c.kind === "family");
+
+  // Hạn mức chung hiện ở đầu menu avatar: chỉ tải khi mở menu (mỗi lần mở là một lần tải mới), không tải theo từng trang
+  const showQuota = isStudentOrParent && !acting;
+  const [menuOpens, setMenuOpens] = useState(0);
+  const quota = useFetched<QuotaOverviewDto | null>(
+    showQuota && menuOpens > 0 ? `quota:${user?.id}:${menuOpens}` : "none",
+    () => (showQuota ? billingApi.quotaOverview() : Promise.resolve(null)),
+  );
+
   // 1f: phụ huynh đã liên kết không có hồ sơ riêng, các mục hồ sơ riêng nhường chỗ cho "Con của tôi"
   const { linked: isLinkedParent } = useIsLinkedParent();
   // Chỉ hiện khi đã biết chắc là không liên kết (=== false), để lúc đang tải phụ huynh không thấy mục hồ sơ riêng nháy lên.
@@ -63,26 +101,33 @@ export function SiteHeader() {
   // Phụ huynh chưa có con nào, không làm thay: nút "Thêm con" thay cho "Phân tích hồ sơ của tôi"
   const isParentWithoutChild = user?.role === "parent" && !acting && isLinkedParent === false;
 
-  const navLinks = [
-    { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
-    { href: "/universities", label: "Tìm trường" },
-    { href: isModerator ? "/admin/centers" : "/centers", label: "Trung tâm" },
-    { href: "/methodology", label: "Phương pháp của chúng tôi" },
-    ...(hasOwnProfile ? [{ href: "/target-schools", label: "Trường mục tiêu" }] : []),
-    // 2h-1: đang làm thay con thì ẩn "Con của tôi", muốn quay lại thì bấm thoát làm thay trên băng ActingAsBanner
-    ...(user?.role === "parent" && !acting ? [{ href: "/parent/children", label: "Con của tôi" }] : []),
-    ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ" }] : []),
+  const leftLinks = [
+    { href: "/", label: "Trang chủ", icon: HomeIcon },
+    { href: "/universities", label: "Tìm trường", icon: GraduationCapIcon },
+    { href: "/centers", label: "Trung tâm tư vấn", icon: Building2Icon },
+    ...(!user ? [{ href: "/plans", label: "Gói dịch vụ", icon: CrownIcon }] : []),
+  ];
+
+  const rightLinks = [
+    ...(hasOwnProfile
+      ? [
+          { href: "/dashboard", label: "Tổng quan", icon: LayoutDashboardIcon },
+          { href: "/target-schools", label: "Mục tiêu", icon: BookmarkCheckIcon },
+        ]
+      : []),
+    // 2h-1: đang làm thay con thì ẩn "Quản lý con", muốn quay lại thì bấm thoát làm thay trên băng ActingAsBanner
+    ...(user?.role === "parent" && !acting ? [{ href: "/parent/children", label: "Quản lý con", icon: UsersIcon }] : []),
+    ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ", icon: InboxIcon }] : []),
   ];
 
   const isLinkActive = (href: string) => {
-    if (href === "/admin" || href === "/") return pathname === href;
-    if (href === "/admin/centers") return pathname.startsWith("/admin/centers") || pathname.startsWith("/centers");
+    if (href === "/") return pathname === href;
     if (href === "/universities") return pathname.startsWith("/universities") || pathname.startsWith("/university");
     return pathname.startsWith(href);
   };
 
-  // Trang có ảnh lớn ở đầu (trang chủ, chi tiết trường): thanh đầu trong suốt nằm trên ảnh cho tới khi cuộn
-  const overHero = pathname === "/" || pathname.startsWith("/university/");
+  // Trang có ảnh lớn ở đầu (trang chủ, phương pháp, chi tiết trường): thanh đầu trong suốt nằm trên ảnh cho tới khi cuộn
+  const overHero = pathname === "/" || pathname === "/methodology" || pathname.startsWith("/university/");
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     if (!overHero) return;
@@ -114,23 +159,24 @@ export function SiteHeader() {
         clear ? "border-white/15 bg-brand-ink/55" : "border-brand-ink bg-brand",
       )}
     >
-      <div
-        className={cn(
-          "mx-auto px-4",
-          isAdminRoute(pathname) || pathname.startsWith("/recommendations")
-            ? "max-w-none sm:px-6"
-            : isWideRoute(pathname)
-              ? "max-w-[1560px] sm:px-8 lg:px-12"
-              : "max-w-5xl",
-        )}
-      >
+      <div className="mx-auto max-w-[1560px] px-4 sm:px-8 lg:px-12">
         {/* Hàng trên */}
-        <div className="flex h-14 items-center gap-4 lg:gap-8">
+        <div className="flex h-13 items-center gap-3">
           <Link
             href={canOpenAdmin ? "/admin" : "/"}
-            className="shrink-0 font-heading text-xl font-bold tracking-tight text-white transition-opacity hover:opacity-90"
+            aria-label="USDSS"
+            className="flex shrink-0 items-center transition-opacity hover:opacity-90"
           >
-            USAS
+            <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-0.5">
+              <Image
+                src="/icons/USDSS.png"
+                alt=""
+                width={32}
+                height={32}
+                priority
+                className="size-8 object-contain"
+              />
+            </span>
           </Link>
 
           <form role="search" onSubmit={submitSearch} className="relative hidden max-w-2xl flex-1 md:block">
@@ -144,15 +190,17 @@ export function SiteHeader() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Tìm trường theo tên, thành phố, bang…"
               // Ô tìm kiếm luôn nền trắng trên nền xanh của thanh đầu
-              className="h-10 w-full rounded-lg border border-transparent bg-surface pr-11 pl-3.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus-visible:ring-3 focus-visible:ring-white/40"
+              className="h-9 w-full rounded-lg border border-transparent bg-surface pr-11 pl-3.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus-visible:ring-3 focus-visible:ring-white/40"
             />
-            <button
+            <Button
               type="submit"
+              variant="ghost"
+              size="icon"
               aria-label="Tìm"
-              className="absolute top-1/2 right-1 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-muted hover:text-ink"
+              className="absolute top-1/2 right-1 -translate-y-1/2 text-ink-2 hover:bg-muted hover:text-ink dark:hover:bg-muted"
             >
               <SearchIcon className="size-4" />
-            </button>
+            </Button>
           </form>
 
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
@@ -160,105 +208,187 @@ export function SiteHeader() {
               <Skeleton className="h-9 w-24" />
             ) : user ? (
               <>
+                {isStudentOrParent && sub.data?.tier === "free" && (
+                  <Link
+                    href="/plans"
+                    className={buttonVariants({
+                      variant: "ghost",
+                      size: "sm",
+                      className: "h-8 rounded-lg !bg-gold-wash px-3 text-xs font-semibold !text-brand-ink hover:!bg-white",
+                    })}
+                  >
+                    <CrownIcon className="size-3.5" aria-hidden />
+                    Nâng cấp
+                  </Link>
+                )}
                 {/* [UC-110] Chuông thông báo */}
                 <NotificationBell />
-                <DropdownMenu>
+                <DropdownMenu onOpenChange={(open) => open && setMenuOpens((n) => n + 1)}>
                 <DropdownMenuTrigger
                   aria-label={`Tài khoản của ${user.fullName}`}
-                  className="rounded-full outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-white/50 active:scale-95"
+                  className="group flex h-9 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-white outline-none transition-colors hover:bg-white/10 focus-visible:ring-3 focus-visible:ring-white/50 data-popup-open:bg-white/10"
                 >
-                  <Avatar className="size-9">
-                    <AvatarFallback className="bg-white font-semibold text-brand-ink">
-                      {user.fullName.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+                  <span className="max-w-36 truncate text-sm font-medium">{user.fullName}</span>
+                  <ChevronDownIcon aria-hidden="true" className="size-3.5 shrink-0 transition-transform group-data-popup-open:rotate-180" />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64">
-                  {/* Đầu menu: ảnh đại diện, tên, vai trò */}
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel className="flex items-center gap-3 px-2 py-2.5">
-                      <Avatar className="size-10">
-                        <AvatarFallback className="bg-brand-wash font-semibold text-brand-ink">
-                          {user.fullName.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="flex min-w-0 flex-col items-start gap-1">
-                        <span className="w-full truncate text-sm font-semibold text-ink">{user.fullName}</span>
-                        <Badge variant="neutral">{formatUserRole(user.role)}</Badge>
+                <DropdownMenuContent align="end" sideOffset={8} className="w-[22rem] p-0">
+                  {/* Đầu menu: biểu tượng vai trò, tên, gói; học sinh / phụ huynh có thêm hạn mức chung còn lại */}
+                  <div className="space-y-5 bg-brand-wash px-5 py-5">
+                    <div className="flex items-center gap-4">
+                      <span
+                        aria-hidden="true"
+                        className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand text-white"
+                      >
+                        <UserRoleIcon role={user.role} className="size-7" />
                       </span>
-                    </DropdownMenuLabel>
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="truncate text-base font-semibold text-ink">{user.fullName}</span>
+                        {isStudentOrParent ? (
+                          sub.data ? (
+                            <span className="truncate text-sm text-ink-2">{formatSubscriptionLabel(sub.data)}</span>
+                          ) : (
+                            <Skeleton className="h-3.5 w-20" />
+                          )
+                        ) : (
+                          <span className="truncate text-sm text-ink-2">{formatUserRole(user.role)}</span>
+                        )}
+                      </span>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={handleLogout}
+                        aria-label="Đăng xuất"
+                        title="Đăng xuất"
+                        className="size-10 shrink-0 cursor-pointer justify-center rounded-lg p-0 text-risk hover:bg-risk-wash focus:bg-risk-wash [&_svg:not([class*='size-'])]:size-5"
+                      >
+                        <LogOutIcon />
+                      </DropdownMenuItem>
+                    </div>
+
+                    {showQuota && (
+                      <Link href="/account#quota" className="block space-y-2 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+                        <div className="flex items-baseline justify-between gap-3 text-sm">
+                          <span className="text-ink-2">Hạn mức chung của bạn còn lại</span>
+                          {quota.data ? (
+                            <span className="font-semibold text-ink tabular-nums">{quota.data.remainingPercent}%</span>
+                          ) : (
+                            <Skeleton className="h-3.5 w-8" />
+                          )}
+                        </div>
+                        <div
+                          role="progressbar"
+                          aria-label="Hạn mức chung còn lại"
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={quota.data?.remainingPercent ?? 0}
+                          className="h-3 w-full overflow-hidden rounded-full bg-surface ring-1 ring-brand/15"
+                        >
+                          <div
+                            className={cn("h-full rounded-full transition-[width] duration-500", quota.data?.lowQuota ? "bg-risk" : "bg-brand")}
+                            style={{ width: `${quota.data?.remainingPercent ?? 0}%` }}
+                          />
+                        </div>
+                      </Link>
+                    )}
+                  </div>
+
+                  <div className="px-2 pt-1 pb-2">
+                  {/* Tài khoản */}
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className={MENU_LABEL}>Tài khoản của bạn</DropdownMenuLabel>
+                    <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#personal" />}>
+                      <UserIcon />
+                      Thông tin cá nhân
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#password" />}>
+                      <KeyRoundIcon />
+                      Bảo mật tài khoản
+                    </DropdownMenuItem>
                   </DropdownMenuGroup>
 
-                  {hasOwnProfile && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem render={<Link href="/target-schools" />}>
-                        <BookmarkCheckIcon />
-                        Trường mục tiêu
-                      </DropdownMenuItem>
-                    </>
-                  )}
-
-                  {/* Hồ sơ */}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem render={<Link href="/account#personal" />}>
-                    <UserIcon />
-                    Thông tin cá nhân
-                  </DropdownMenuItem>
-                  {hasOwnProfile && (
-                    <DropdownMenuItem render={<Link href={academicHref} />}>
-                      <BookOpenIcon />
-                      Hồ sơ học thuật
-                    </DropdownMenuItem>
-                  )}
-
-                  {/* Tài khoản */}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem render={<Link href="/account#password" />}>
-                    <KeyRoundIcon />
-                    Bảo mật tài khoản
-                  </DropdownMenuItem>
+                  {/* Gói & Thanh toán */}
                   {isStudentOrParent && !acting && (
-                    <DropdownMenuItem render={<Link href="/account#parent-links" />}>
-                      <UsersIcon />
-                      {user.role === "student" ? "Liên kết phụ huynh" : "Con đã liên kết"}
-                    </DropdownMenuItem>
+                    <DropdownMenuGroup>
+                      <DropdownMenuSeparator className="mt-2 mb-0" />
+                      <DropdownMenuLabel className={MENU_LABEL}>Gói &amp; Thanh toán</DropdownMenuLabel>
+                      <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#subscription" />}>
+                        <CreditCardIcon />
+                        Gói dịch vụ
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#quota" />}>
+                        <GaugeIcon />
+                        Hạn mức
+                      </DropdownMenuItem>
+                      {hasFamily && (
+                        <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#family" />}>
+                          <HeartHandshakeIcon />
+                          Chia sẻ cho gia đình
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuGroup>
+                  )}
+
+                  {/* Hồ sơ & Kết nối */}
+                  {(hasOwnProfile || (isStudentOrParent && !acting)) && (
+                    <DropdownMenuGroup>
+                      <DropdownMenuSeparator className="mt-2 mb-0" />
+                      <DropdownMenuLabel className={MENU_LABEL}>Hồ sơ &amp; Kết nối</DropdownMenuLabel>
+                      {hasOwnProfile && (
+                        <DropdownMenuItem className={MENU_ITEM} render={<Link href={academicHref} />}>
+                          <BookOpenIcon />
+                          Học bạ
+                        </DropdownMenuItem>
+                      )}
+                      {isStudentOrParent && !acting && (
+                        <>
+                          <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#parent-links" />}>
+                            <UsersIcon />
+                            {user.role === "student" ? "Liên kết phụ huynh" : "Con đã liên kết"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#sent-leads" />}>
+                            <SendIcon />
+                            Yêu cầu liên hệ đã gửi
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      {hasOwnProfile && (
+                        <DropdownMenuItem className={MENU_ITEM} render={<Link href="/target-schools" />}>
+                          <BookmarkCheckIcon />
+                          Trường mục tiêu
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuGroup>
                   )}
 
                   {/* Khu vực theo vai trò (trung tâm, quản trị) */}
                   {(user.role === "center" || canOpenAdmin) && (
-                    <>
-                      <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <DropdownMenuSeparator className="mt-2 mb-0" />
+                      <DropdownMenuLabel className={MENU_LABEL}>{canOpenAdmin ? "Quản trị" : "Trung tâm"}</DropdownMenuLabel>
                       {canOpenAdmin && (
-                        <DropdownMenuItem render={<Link href="/admin" />}>
+                        <DropdownMenuItem className={MENU_ITEM} render={<Link href="/admin" />}>
                           <LayoutDashboardIcon />
                           {isModerator ? "Khu vực kiểm duyệt" : "Trang quản trị"}
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuItem render={<Link href="/center/leads" />}>
+                      <DropdownMenuItem className={MENU_ITEM} render={<Link href="/center/leads" />}>
                         <InboxIcon />
                         Yêu cầu liên hệ nhận được
                       </DropdownMenuItem>
                       {isModerator && (
-                        <DropdownMenuItem render={<Link href="/admin/centers" />}>
+                        <DropdownMenuItem className={MENU_ITEM} render={<Link href="/admin/centers" />}>
                           <Building2Icon />
                           Quản lý trung tâm
                         </DropdownMenuItem>
                       )}
                       {isAdmin && (
-                        <DropdownMenuItem render={<Link href="/admin/users" />}>
+                        <DropdownMenuItem className={MENU_ITEM} render={<Link href="/admin/users" />}>
                           <ShieldIcon />
                           Quản trị người dùng
                         </DropdownMenuItem>
                       )}
-                    </>
+                    </DropdownMenuGroup>
                   )}
-
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onClick={handleLogout}>
-                    <LogOutIcon />
-                    Đăng xuất
-                  </DropdownMenuItem>
+                  </div>
                 </DropdownMenuContent>
                 </DropdownMenu>
               </>
@@ -281,7 +411,7 @@ export function SiteHeader() {
                   className={buttonVariants({
                     variant: "outline",
                     size: "lg",
-                    className: "active:translate-y-px !border-white/60 !bg-transparent !text-white hover:!bg-white/10",
+                    className: "!border-white/60 !bg-transparent !text-white hover:!bg-white/10",
                   })}
                 >
                   Đăng ký ngay
@@ -292,53 +422,78 @@ export function SiteHeader() {
         </div>
 
         {/* Hàng dưới */}
-        <nav aria-label="Điều hướng chính" className="flex h-12 items-center justify-between gap-4">
-          <ul className="-ml-3 flex min-w-0 items-center overflow-x-auto [scrollbar-width:none]">
-            {navLinks.map((l) => {
+        <nav aria-label="Điều hướng chính" className="flex h-11 items-center justify-between gap-4 overflow-x-auto [scrollbar-width:none]">
+          <ul className="-ml-3 flex shrink-0 items-center">
+            {leftLinks.map((l) => {
               const active = isLinkActive(l.href);
+              const Icon = l.icon;
               return (
                 <li key={l.href}>
                   <Link
                     href={l.href}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "relative inline-flex h-12 items-center whitespace-nowrap px-3 text-sm font-medium transition-colors",
+                      "relative inline-flex h-11 items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium transition-colors",
                       "after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:rounded-full after:transition-transform after:duration-300 hover:after:scale-x-100 motion-reduce:after:transition-none",
                       "after:bg-white",
                       active ? "font-semibold text-white after:scale-x-100" : "text-white/80 hover:text-white",
                     )}
                   >
+                    <Icon className="size-4 shrink-0" aria-hidden />
                     {l.label}
                   </Link>
                 </li>
               );
             })}
           </ul>
-          {/* Phụ huynh đã liên kết đi qua mục menu "Con của tôi", không có nút riêng; chưa có con thì nút "Thêm con" (1.5e) */}
-          {isParentWithoutChild && (
-            <Link
-              href="/parent/children/add"
-              className={buttonVariants({
-                variant: "ghost",
-                size: "lg",
-                className: "shrink-0 active:translate-y-px !bg-white !text-brand-ink hover:!bg-white/90",
-              })}
-            >
-              Thêm con
-            </Link>
-          )}
-          {!canOpenAdmin && (acting !== null || (user?.role !== "parent" && isLinkedParent === false)) && (
-            <Link
-              href="/analysis"
-              className={buttonVariants({
-                variant: "ghost",
-                size: "lg",
-                className: "shrink-0 active:translate-y-px !bg-white !text-brand-ink hover:!bg-white/90",
-              })}
-            >
-              Phân tích hồ sơ của tôi
-            </Link>
-          )}
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            {rightLinks.map((l) => {
+              const active = isLinkActive(l.href);
+              const Icon = l.icon;
+              return (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "relative inline-flex h-11 items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium transition-colors",
+                    "after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:rounded-full after:transition-transform after:duration-300 hover:after:scale-x-100 motion-reduce:after:transition-none",
+                    "after:bg-white",
+                    active ? "font-semibold text-white after:scale-x-100" : "text-white/80 hover:text-white",
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" aria-hidden />
+                  {l.label}
+                </Link>
+              );
+            })}
+            {/* Phụ huynh đã liên kết đi qua mục menu "Quản lý con", không có nút riêng; chưa có con thì nút "Thêm con" (1.5e) */}
+            {isParentWithoutChild && (
+              <Link
+                href="/parent/children/add"
+                className={buttonVariants({
+                  variant: "ghost",
+                  size: "sm",
+                  className: "ml-1 h-8 shrink-0 px-3 text-xs font-semibold !bg-white !text-brand-ink hover:!bg-white/90",
+                })}
+              >
+                <PlusIcon className="size-3.5" aria-hidden />
+                Thêm con
+              </Link>
+            )}
+            {!canOpenAdmin && (acting !== null || (user?.role !== "parent" && isLinkedParent === false)) && (
+              <Link
+                href="/analysis"
+                className={buttonVariants({
+                  variant: "ghost",
+                  size: "sm",
+                  className: "ml-1 h-8 shrink-0 px-3 text-xs font-semibold !bg-white !text-brand-ink hover:!bg-white/90",
+                })}
+              >
+                Phân tích hồ sơ của tôi
+              </Link>
+            )}
+          </div>
         </nav>
       </div>
     </header>

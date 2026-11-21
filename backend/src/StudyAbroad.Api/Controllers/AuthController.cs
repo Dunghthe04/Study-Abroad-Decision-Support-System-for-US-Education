@@ -46,37 +46,6 @@ namespace StudyAbroad.Api.Controllers
             };
         }
 
-        // [UC-64] Trung tâm tự đăng ký tài khoản
-        [HttpPost("register-center")]
-        [EnableRateLimiting(AuthRateLimit.PolicyName)]
-        public async Task<IActionResult> RegisterCenter(RegisterCenterRequest request, CancellationToken ct)
-        {
-            var result = await auth.RegisterCenterAsync(request, ct);
-            return result.Error switch
-            {
-                AuthError.None => StatusCode(StatusCodes.Status201Created, new { message = result.Message, email = request.Email }),
-                _ => ValidationProblem(result.Message),
-            };
-        }
-
-        // [UC-91] Xác thực email trung tâm qua mã OTP 6 số
-        [HttpPost("verify-center-email")]
-        [EnableRateLimiting(AuthRateLimit.PolicyName)]
-        public async Task<IActionResult> VerifyCenterEmail(VerifyCenterEmailRequest request, CancellationToken ct)
-        {
-            var result = await auth.VerifyCenterEmailAsync(request, ct);
-            if (result.Error == AuthError.None && result.Response != null)
-            {
-                return SetSessionCookie(result.Response);
-            }
-
-            return result.Error switch
-            {
-                AuthError.OtpInvalid => Problem(result.Message, statusCode: StatusCodes.Status400BadRequest, title: "Mã OTP không hợp lệ"),
-                _ => Problem(result.Message, statusCode: StatusCodes.Status400BadRequest)
-            };
-        }
-
         // [USAS-12] Gửi lại mã OTP (verify_email, reset_password)
         [HttpPost("resend-otp")]
         [EnableRateLimiting(AuthRateLimit.PolicyName)]

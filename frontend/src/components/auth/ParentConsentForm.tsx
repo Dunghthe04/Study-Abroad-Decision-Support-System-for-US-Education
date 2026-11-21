@@ -252,8 +252,8 @@ export function ParentConsentForm() {
                 className="flex-1"
                 disabled={!isGuardian || submitting !== null}
                 onClick={() => decide("accept")}
+                loading={submitting === "accept"}
               >
-                {submitting === "accept" && <Spinner data-icon="inline-start" />}
                 {submitting === "accept" ? "Đang ghi nhận..." : "Đồng ý"}
               </Button>
               )}
@@ -264,8 +264,8 @@ export function ParentConsentForm() {
                 className="flex-1"
                 disabled={submitting !== null}
                 onClick={() => decide("reject")}
+                loading={submitting === "reject"}
               >
-                {submitting === "reject" && <Spinner data-icon="inline-start" />}
                 {submitting === "reject" ? "Đang ghi nhận..." : "Từ chối"}
               </Button>
             </div>

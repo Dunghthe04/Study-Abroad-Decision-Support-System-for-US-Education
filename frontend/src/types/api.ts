@@ -1,4 +1,5 @@
 import type { ProfileFlowDraft } from "@/types/profile-flow";
+export * from "@/types/dashboard";
 
 // Mirrors the DTOs of the ASP.NET Core API (StudyAbroad.Application).
 
@@ -51,7 +52,6 @@ export interface StudyCenter {
   legalDocumentUrls?: string[];
   verificationNote?: string | null;
   emailVerifiedAt?: string | null;
-  phoneVerifiedAt?: string | null;
   feeMin?: number | null;
   feeMax?: number | null;
   feeDescription?: string | null;
@@ -78,10 +78,6 @@ export interface RegisterCenterRequest {
 
 export interface VerifyCenterEmailRequest {
   email: string;
-  code: string;
-}
-
-export interface VerifyPhoneOtpRequest {
   code: string;
 }
 
@@ -137,15 +133,12 @@ export interface CenterVerificationDto {
   centerEmail?: string | null;
   centerPhone?: string | null;
   emailVerifiedAt?: string | null;
-  phoneVerifiedAt?: string | null;
 }
 
 export interface CenterVerificationStatusDto {
   verificationStatus: string;
   isEmailVerified: boolean;
   emailVerifiedAt?: string | null;
-  isPhoneVerified: boolean;
-  phoneVerifiedAt?: string | null;
   currentRequest?: CenterVerificationDto | null;
   rejectionReason?: string | null;
 }
@@ -406,6 +399,13 @@ export interface AdvisorChatResponse {
   profileSaved?: boolean | null; // lượt này vừa lưu hồ sơ chính thức (bấm "Đúng rồi" ở bảng rà soát)
   formStep?: number | null; // trang form (1–6) của câu chat đang hỏi; form chuyển theo
   formGoals?: string[] | null; // việc học sinh đã hỏi khi điền hồ sơ trong chat (danh_gia, lo_trinh, goi_y_truong); form tích sẵn
+  /** Lượt bị khóa theo gói (billing spec mục 5): cần Premium, hoặc hết lượt miễn phí của tháng (resetsAt là ngày làm mới) */
+  locked?: ChatLock | null;
+}
+
+export interface ChatLock {
+  reason: "premium_required" | "quota_exhausted";
+  resetsAt: string | null;
 }
 
 /** Một dòng của POST /api/v1/advisor/chat/stream (mỗi dòng một JSON): trả lời theo từng ý khi xong. */
@@ -922,7 +922,7 @@ export interface UnreadCountDto {
 }
 
 /** [UC-114] Bộ lọc danh sách thay đổi trung tâm chờ Moderator kiểm tra. */
-export type CenterProfileChangeFilter = "pending" | "passed" | "failed" | "all";
+export type CenterProfileChangeFilter = "pending" | "passed" | "failed" | "withdrawn" | "all";
 
 /** [UC-114] Một thay đổi website / fanpage do trung tâm tự sửa (UC-92). */
 export interface CenterProfileChangeDto {
@@ -934,7 +934,7 @@ export interface CenterProfileChangeDto {
   field: "website" | "fanpage" | string;
   oldValue?: string | null;
   newValue?: string | null;
-  status: "pending" | "passed" | "failed" | string;
+  status: "pending" | "passed" | "failed" | "withdrawn" | string;
   createdAt: string;
   reviewedByUserId?: string | null;
   reviewedAt?: string | null;

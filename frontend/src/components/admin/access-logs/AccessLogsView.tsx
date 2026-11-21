@@ -10,7 +10,6 @@ import {
   DownloadIcon,
   EyeIcon,
   FileTextIcon,
-  LockIcon,
   MailWarningIcon,
   RotateCcwIcon,
   SearchIcon,
@@ -22,7 +21,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -49,7 +48,6 @@ import type {
   AccessLogCategory,
   AccessLogDto,
   AccessLogFilterQuery,
-  AccessLogSummaryDto,
 } from "@/types/api";
 
 const PAGE_SIZE = 20;
@@ -333,17 +331,8 @@ export function AccessLogsView() {
     [category, debouncedSearch, fromDate, toDate, page]
   );
 
-  const summaryKey = useMemo(
-    () => `access-logs-summary:${fromDate}:${toDate}`,
-    [fromDate, toDate]
-  );
-
   const { data: logsData, loading, error } = useFetched(queryKey, () =>
     accessLogsApi.list(filterQuery)
-  );
-
-  const { data: summaryData } = useFetched(summaryKey, () =>
-    accessLogsApi.summary({ from: fromDate || undefined, to: toDate || undefined })
   );
 
   const totalPages = logsData?.totalPages ?? 1;
@@ -372,126 +361,7 @@ export function AccessLogsView() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header & Immutability Rule Alert */}
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-              Nhật ký truy cập
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              [UC-97] Giám sát hoạt động hệ thống và ai đã xem hoặc xuất dữ liệu nhạy cảm (tài liệu xác minh trung tâm, tin nhắn bị báo cáo, xuất mẫu ở UC-102).
-            </p>
-          </div>
-          <Badge variant="ok" className="h-7 gap-1.5 px-3 text-xs font-semibold">
-            <LockIcon className="size-3.5" />
-            Nhật ký bất biến (Append-only)
-          </Badge>
-        </div>
-
-        <div className="rounded-lg border border-border/80 bg-muted/40 p-3 text-xs text-muted-foreground">
-          <span className="font-semibold text-foreground">Quy tắc bảo mật:</span> Dữ liệu nhật ký được ghi tuần tự, lưu trữ vĩnh viễn,
-          chỉ cho phép đọc và không thể sửa đổi hoặc xóa dưới bất kỳ hình thức nào.
-        </div>
-      </div>
-
-      {/* KPI Summary Cards */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Card 1: Tổng lượt nhạy cảm & Toàn hệ thống */}
-        <Card size="sm" className="bg-card/80">
-          <CardHeader className="pb-1">
-            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center justify-between">
-              <span>Tổng lượt nhạy cảm (UC-97)</span>
-              {summaryData?.totalAllCount !== undefined && summaryData.totalAllCount > 0 && (
-                <span className="text-[10px] text-muted-foreground font-normal">
-                  / {summaryData.totalAllCount} tổng số
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-2xl font-bold text-foreground">
-                  {summaryData?.totalSensitiveCount ?? 0}
-                </span>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Toàn hệ thống: {summaryData?.totalAllCount ?? logsData?.totalCount ?? 0} lượt
-                </div>
-              </div>
-              <ShieldAlertIcon className="size-6 text-brand" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Card 2: Tài liệu xác minh */}
-        <Card size="sm" className="bg-card/80">
-          <CardHeader className="pb-1">
-            <CardTitle className="text-xs font-medium text-muted-foreground">
-              Xem tài liệu xác minh (UC-59)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-2xl font-bold text-reach">
-                  {summaryData?.centerDocumentViews ?? 0}
-                </span>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Giấy phép & Hồ sơ trung tâm
-                </div>
-              </div>
-              <FileTextIcon className="size-6 text-reach" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Card 3: Đọc tin nhắn bị báo cáo */}
-        <Card size="sm" className="bg-card/80">
-          <CardHeader className="pb-1">
-            <CardTitle className="text-xs font-medium text-muted-foreground">
-              Đọc tin nhắn bị báo cáo (UC-58)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-2xl font-bold text-warn">
-                  {summaryData?.reportedMessageViews ?? 0}
-                </span>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Tin nhắn vi phạm & Ngữ cảnh
-                </div>
-              </div>
-              <MailWarningIcon className="size-6 text-warn" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Card 4: Xuất mẫu SLM */}
-        <Card size="sm" className="bg-card/80">
-          <CardHeader className="pb-1">
-            <CardTitle className="text-xs font-medium text-muted-foreground">
-              Xuất mẫu SLM (UC-102)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-2xl font-bold text-ok">
-                  {summaryData?.slmSampleExports ?? 0}
-                </span>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Tập dữ liệu huấn luyện AI
-                </div>
-              </div>
-              <DownloadIcon className="size-6 text-ok" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
+    <div className="flex flex-col gap-4">
       {/* Filter Toolbar */}
       <Card>
         <CardContent className="flex flex-col gap-4 p-4">
@@ -509,7 +379,7 @@ export function AccessLogsView() {
                     setPage(1);
                   }}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                    "flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                     active
                       ? "bg-brand font-semibold text-white shadow-sm"
                       : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -577,7 +447,7 @@ export function AccessLogsView() {
                 size="sm"
                 variant="ghost"
                 onClick={() => setPresetRange("today")}
-                className="h-7 px-2 text-xs"
+                className="px-2 text-xs"
               >
                 Hôm nay
               </Button>
@@ -586,17 +456,18 @@ export function AccessLogsView() {
                 size="sm"
                 variant="ghost"
                 onClick={() => setPresetRange("7d")}
-                className="h-7 px-2 text-xs"
+                className="px-2 text-xs"
               >
                 7 ngày
               </Button>
               <Button
                 type="button"
-                size="sm"
+                size="icon-sm"
                 variant="ghost"
                 onClick={handleResetFilters}
                 title="Đặt lại bộ lọc về mặc định"
-                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                aria-label="Đặt lại bộ lọc về mặc định"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <RotateCcwIcon className="size-3.5" />
               </Button>
@@ -765,7 +636,7 @@ export function AccessLogsView() {
                             setShowRawJson(false);
                             setCopiedId(false);
                           }}
-                          className="h-8 px-2 text-xs gap-1 hover:text-brand"
+                          className="px-2 text-xs gap-1 hover:text-brand"
                           title="Xem chi tiết đầy đủ"
                         >
                           <EyeIcon className="size-3.5" />
@@ -809,14 +680,17 @@ export function AccessLogsView() {
                 {detailItem?.id}
               </code>
               {detailItem?.id && (
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon-xs"
                   onClick={() => copyToClipboard(detailItem.id)}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  className="text-muted-foreground hover:text-foreground"
                   title="Sao chép mã bản ghi"
+                  aria-label="Sao chép mã bản ghi"
                 >
                   {copiedId ? <CheckIcon className="size-3 text-ok" /> : <CopyIcon className="size-3" />}
-                </button>
+                </Button>
               )}
             </DialogDescription>
           </DialogHeader>
@@ -921,7 +795,7 @@ export function AccessLogsView() {
                     <button
                       type="button"
                       onClick={() => setShowRawJson((prev) => !prev)}
-                      className="text-[11px] text-brand hover:underline font-medium flex items-center gap-1"
+                      className="text-[11px] text-brand hover:underline font-medium flex items-center gap-1 cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                     >
                       {showRawJson ? "Ẩn JSON gốc" : "Xem JSON kỹ thuật"}
                       {showRawJson ? <ChevronDownIcon className="size-3" /> : <ChevronRightIcon className="size-3" />}

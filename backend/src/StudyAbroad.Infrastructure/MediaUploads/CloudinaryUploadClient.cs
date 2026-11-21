@@ -1,3 +1,4 @@
+using System.Net;
 using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
 using Microsoft.Extensions.Options;
@@ -13,6 +14,18 @@ public interface ICloudinaryUploadClient
         string contentType,
         string? folderSuffix,
         bool moderateContent,
+        CancellationToken cancellationToken);
+
+    Task<bool> ExistsAsync(
+        string publicId,
+        MediaResourceType resourceType,
+        string deliveryType,
+        CancellationToken cancellationToken);
+
+    Task<bool> DeleteAsync(
+        string publicId,
+        MediaResourceType resourceType,
+        string deliveryType,
         CancellationToken cancellationToken);
 }
 
@@ -79,4 +92,99 @@ public sealed class CloudinaryUploadClient : ICloudinaryUploadClient
         return new MediaUploadResult(
             result.SecureUrl.AbsoluteUri, result.PublicId, contentType, result.Bytes, result.Width, result.Height);
     }
+
+    public async Task<bool> ExistsAsync(
+        string publicId,
+        MediaResourceType resourceType,
+        string deliveryType,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var parameters = new GetResourceParams(publicId)
+        {
+            ResourceType = ToResourceType(resourceType),
+            Type = deliveryType,
+        };
+
+        GetResourceResult result;
+        try
+        {
+            result = await _cloudinary.GetResourceAsync(parameters, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            throw new InvalidOperationException("The media provider could not verify the media asset.");
+        }
+
+        return InterpretExistsResult(result);
+    }
+
+    public async Task<bool> DeleteAsync(
+        string publicId,
+        MediaResourceType resourceType,
+        string deliveryType,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var parameters = new DeletionParams(publicId)
+        {
+            ResourceType = ToResourceType(resourceType),
+            Type = deliveryType,
+            Invalidate = true,
+        };
+
+        DeletionResult result;
+        try
+        {
+            // CloudinaryDotNet 1.29.3 DestroyAsync không nhận CancellationToken.
+            result = await _cloudinary.DestroyAsync(parameters);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            throw new InvalidOperationException("The media provider could not delete the media asset.");
+        }
+
+        return InterpretDeleteResult(result);
+    }
+
+    public static bool InterpretExistsResult(GetResourceResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        if (result.StatusCode == HttpStatusCode.NotFound)
+            return false;
+        if (result.StatusCode == HttpStatusCode.OK && result.Error is null && !string.IsNullOrWhiteSpace(result.PublicId))
+            return true;
+        throw new InvalidOperationException("The media provider returned an unsuccessful resource lookup response.");
+    }
+
+    public static bool InterpretDeleteResult(DeletionResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        if (result.StatusCode == HttpStatusCode.NotFound)
+            return false;
+        if (result.StatusCode == HttpStatusCode.OK && result.Error is null)
+        {
+            if (string.Equals(result.Result, "ok", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (string.Equals(result.Result, "not found", StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        throw new InvalidOperationException("The media provider returned an unsuccessful deletion response.");
+    }
+
+    private static ResourceType ToResourceType(MediaResourceType resourceType) => resourceType switch
+    {
+        MediaResourceType.Image => ResourceType.Image,
+        MediaResourceType.Video => ResourceType.Video,
+        MediaResourceType.Raw => ResourceType.Raw,
+        _ => throw new ArgumentOutOfRangeException(nameof(resourceType), resourceType, "Unsupported media resource type."),
+    };
 }

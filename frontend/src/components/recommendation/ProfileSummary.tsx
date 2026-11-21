@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { RefreshCwIcon } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { useAssistant } from "@/components/assistant/AssistantProvider";
 import { useGradeScale } from "@/hooks/use-grade-scale";
 import { profileFlowApi } from "@/lib/profile-flow-api";
@@ -26,12 +26,15 @@ interface StudentProfile {
   duolingo: number | null;
   budgetMinUsd: number | null;
   budgetMaxUsd: number | null;
+  /** UC-94: số tiền tối đa/năm chính xác phụ huynh nhập (có thì hiện số này thay cho khoảng) */
+  budgetExactUsd?: number | null;
 }
 
 const usd = formatUsd; // "20.000 USD", cùng định dạng vi-VN với thẻ trường và mô phỏng
 
 // Mức ngân sách: khoảng min–max, "Dưới max" hoặc "Trên min" (mức cao nhất không có trần)
 function budgetLabel(s: StudentProfile): string | null {
+  if (s.budgetExactUsd != null) return `Tối đa ${usd(s.budgetExactUsd)}`;
   const min = s.budgetMinUsd && s.budgetMinUsd > 0 ? s.budgetMinUsd : null;
   const max = s.budgetMaxUsd ?? null;
   if (min && max) return `${usd(min).replace(" USD", "")} – ${usd(max)}`;
@@ -100,6 +103,7 @@ function profileFromDraft(draft: ProfileFlowDraft, meta: ProfileMetadataResponse
       duolingo: scores.duolingo ?? null,
       budgetMinUsd: tier?.minUsd ?? null,
       budgetMaxUsd: tier?.maxUsd ?? null,
+      budgetExactUsd: draft.step4?.annualBudgetUsd ?? null,
     },
     gpa10,
     states: (draft.step1?.targetStates ?? []).map((c) => stateName.get(c) ?? c),
@@ -156,7 +160,7 @@ export function ProfileSummary({ rec, onRerun }: ProfileSummaryProps) {
   ].join(" · ");
   if (!rec && !flowProfile) return null;
 
-  const small = buttonVariants({ variant: "outline", size: "sm", className: "h-8 gap-1.5 px-3 text-xs" });
+  const small = buttonVariants({ variant: "outline", className: "text-xs" });
 
   return (
     <section className="space-y-2.5 rounded-xl border border-line bg-surface px-4 py-3 sm:px-5">
@@ -180,7 +184,7 @@ export function ProfileSummary({ rec, onRerun }: ProfileSummaryProps) {
             type="button"
             // Cùng câu mặc định advisor dùng cho "đánh giá hồ sơ" (branches.DEFAULT_QUESTION): kết quả hiện trong chat
             onClick={() => openPanel("Đánh giá hồ sơ của em giúp em.")}
-            className="text-xs font-semibold text-brand underline-offset-4 hover:underline"
+            className="cursor-pointer rounded text-xs font-semibold text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
           >
             Đánh giá hồ sơ
           </button>
@@ -188,15 +192,16 @@ export function ProfileSummary({ rec, onRerun }: ProfileSummaryProps) {
             Sửa hồ sơ
           </Link>
           {onRerun && (
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={onRerun}
               title="Tính lại danh sách theo hồ sơ hiện tại. Dùng sau khi bạn sửa hồ sơ."
-              className={small}
+              className="text-xs"
             >
               <RefreshCwIcon className="size-3.5" />
               Gợi ý lại
-            </button>
+            </Button>
           )}
         </div>
       </div>

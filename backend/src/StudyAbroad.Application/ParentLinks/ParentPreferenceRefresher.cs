@@ -34,6 +34,7 @@ public class ParentPreferenceRefresher(
             foreach (var link in withPref)
             {
                 var stored = ParentPreferenceService.Read(link.ParentPreferenceJson)!;
+                if (stored.Pref is null) continue;   // UC-94: mới lưu số tiền, chưa có ưu tiên nên không có danh sách để tính
                 ParentPreferenceService.Stored next;
                 try
                 {

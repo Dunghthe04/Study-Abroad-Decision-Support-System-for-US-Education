@@ -58,5 +58,17 @@ namespace StudyAbroad.Application.Auth
 
         /// <summary>[UC-93] Kết quả xử lý yêu cầu xóa trung tâm. outcome: received (đã nhận, kèm hạn xử lý) | extended (gia hạn, kèm hạn mới và lý do) | held (chưa thể xóa vì giữ pháp lý, Luật 91/2025 Điều 14 khoản 5) | resumed (gỡ giữ, yêu cầu được xử lý tiếp) | approved (kèm ngày xóa hẳn) | rejected (kèm lý do) | completed. Tham số purgeAt mang ngày tương ứng với từng outcome.</summary>
         Task SendCenterDeletionOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? note, DateTime? purgeAt, CancellationToken ct = default);
+
+        /// <summary>
+        /// Biên nhận thanh toán gói, hiện ngày bắt đầu / kết thúc hiệu lực.
+        /// Chỉ nhận mã đơn, tên gói và số tiền: hệ thống không lưu thông tin thẻ hay tài khoản ngân hàng.
+        /// </summary>
+        Task SendPaymentReceiptEmailAsync(string toEmail, string fullName, long orderCode, string planName, decimal amountVnd, DateTime paidAtUtc, DateTime? startsAtUtc, DateTime? endsAtUtc, CancellationToken ct = default);
+
+        /// <summary>Nhắc gói sắp hết hạn. Gia hạn là thủ công, hệ thống không tự trừ tiền.</summary>
+        Task SendSubscriptionExpiringEmailAsync(string toEmail, string fullName, string planName, DateTime endsAtUtc, CancellationToken ct = default);
+
+        /// <summary>Mời tham gia gói Gia đình. <paramref name="seatRole"/>: student | parent; link chứa token dùng một lần.</summary>
+        Task SendFamilyInviteEmailAsync(string toEmail, string ownerName, string seatRole, string inviteToken, int expiryDays, CancellationToken ct = default);
     }
 }

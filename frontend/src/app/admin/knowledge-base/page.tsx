@@ -3,7 +3,7 @@ import { AdminSection } from "@/components/admin/AdminSection";
 import { KnowledgeBaseListView } from "@/components/admin/knowledge-base/KnowledgeBaseListView";
 
 export const metadata: Metadata = {
-  title: "Kho tri thức – Quản trị USAS",
+  title: "Kho tri thức – Quản trị USDSS",
 };
 
 export default function AdminKnowledgeBasePage() {

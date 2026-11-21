@@ -126,6 +126,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnName("user_id")
                         .HasComment("Học sinh gây ra lần gọi. Null nếu gọi ngoài phiên đăng nhập.");
 
+                    b.Property<Guid?>("UserSubscriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_subscription_id");
+
                     b.HasKey("Id")
                         .HasName("pk_ai_calls");
 
@@ -137,6 +141,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId", "CreatedAt")
                         .HasDatabaseName("ix_ai_calls_user_id_created_at");
+
+                    b.HasIndex("UserSubscriptionId", "CreatedAt")
+                        .HasDatabaseName("ix_ai_calls_user_subscription_id_created_at");
 
                     b.ToTable("ai_calls", "app", t =>
                         {
@@ -1203,6 +1210,158 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_expert_rules_rule_code");
 
                     b.ToTable("expert_rules", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.FamilyGroup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<string>("EndedReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("ended_reason");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_family_groups");
+
+                    b.HasIndex(new[] { "OwnerUserId" }, "ux_family_groups_one_active_per_owner")
+                        .IsUnique()
+                        .HasDatabaseName("ux_family_groups_one_active_per_owner")
+                        .HasFilter("status = 'active'");
+
+                    b.ToTable("family_groups", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.FamilyMember", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<string>("EndedReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("ended_reason");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid>("FamilyGroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("family_group_id");
+
+                    b.Property<int>("InviteSentCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("invite_sent_count");
+
+                    b.Property<DateTime>("InvitedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("invited_at");
+
+                    b.Property<string>("InvitedEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("invited_email");
+
+                    b.Property<DateTime?>("JoinedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("joined_at");
+
+                    b.Property<DateTime?>("LastInviteSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_invite_sent_at");
+
+                    b.Property<string>("SeatRole")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("seat_role");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_family_members");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_family_members_token_hash")
+                        .HasFilter("token_hash IS NOT NULL");
+
+                    b.HasIndex("FamilyGroupId", "Status")
+                        .HasDatabaseName("ix_family_members_family_group_id_status");
+
+                    b.HasIndex(new[] { "UserId" }, "ux_family_members_one_active_per_user")
+                        .IsUnique()
+                        .HasDatabaseName("ux_family_members_one_active_per_user")
+                        .HasFilter("status = 'active'");
+
+                    b.HasIndex(new[] { "FamilyGroupId", "InvitedEmail" }, "ux_family_members_one_pending_per_email")
+                        .IsUnique()
+                        .HasDatabaseName("ux_family_members_one_pending_per_email")
+                        .HasFilter("status = 'pending'");
+
+                    b.ToTable("family_members", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.FieldEvidence", b =>
@@ -2330,14 +2489,35 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AdminNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("admin_note");
+
                     b.Property<decimal>("AmountVnd")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("amount_vnd");
 
+                    b.Property<string>("CheckoutUrl")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("checkout_url");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("description");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
 
                     b.Property<string>("Gateway")
                         .IsRequired()
@@ -2350,6 +2530,14 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("gateway_transaction_id");
 
+                    b.Property<Guid?>("HandledByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("handled_by_user_id");
+
+                    b.Property<long>("OrderCode")
+                        .HasColumnType("bigint")
+                        .HasColumnName("order_code");
+
                     b.Property<DateTime?>("PaidAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("paid_at");
@@ -2358,6 +2546,35 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("payload_json");
 
+                    b.Property<int>("PlanDurationDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("plan_duration_days");
+
+                    b.Property<string>("PlanKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("plan_kind");
+
+                    b.Property<string>("PlanName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("plan_name");
+
+                    b.Property<int?>("PlanQuotaPeriodDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("plan_quota_period_days");
+
+                    b.Property<long>("PlanTokenQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("plan_token_quota");
+
+                    b.Property<string>("QrCode")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("qr_code");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2365,6 +2582,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasDefaultValue("pending")
                         .HasColumnName("status");
+
+                    b.Property<Guid>("SubscriptionPlanId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plan_id");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -2381,13 +2602,31 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_payment_transactions");
 
+                    b.HasIndex("HandledByUserId")
+                        .HasDatabaseName("ix_payment_transactions_handled_by_user_id");
+
+                    b.HasIndex("OrderCode")
+                        .IsUnique()
+                        .HasDatabaseName("ix_payment_transactions_order_code");
+
+                    b.HasIndex("SubscriptionPlanId")
+                        .HasDatabaseName("ix_payment_transactions_subscription_plan_id");
+
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_payment_transactions_user_id");
 
                     b.HasIndex("UserSubscriptionId")
                         .HasDatabaseName("ix_payment_transactions_user_subscription_id");
 
-                    b.ToTable("payment_transactions", "app");
+                    b.HasIndex(new[] { "UserId" }, "ux_payment_transactions_one_pending_per_user")
+                        .IsUnique()
+                        .HasDatabaseName("ux_payment_transactions_one_pending_per_user")
+                        .HasFilter("status = 'pending'");
+
+                    b.ToTable("payment_transactions", "app", t =>
+                        {
+                            t.HasCheckConstraint("ck_payment_transactions_status", "status IN ('pending', 'paid', 'mismatch', 'expired', 'cancelled')");
+                        });
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.PolicyAlert", b =>
@@ -3966,18 +4205,16 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<int>("DailyAiChatQuota")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(10)
-                        .HasColumnName("ai_chat_daily_quota");
-
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("description");
 
-                    b.Property<int>("DurationDays")
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("display_order");
+
+                    b.Property<int?>("DurationDays")
                         .HasColumnType("integer")
                         .HasColumnName("duration_days");
 
@@ -3985,9 +4222,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
-                    b.Property<int>("MaxLeadsQuota")
-                        .HasColumnType("integer")
-                        .HasColumnName("max_leads_quota");
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -4000,7 +4239,15 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)")
                         .HasDefaultValue(0m)
-                        .HasColumnName("price_monthly_vnd");
+                        .HasColumnName("price_vnd");
+
+                    b.Property<int?>("QuotaPeriodDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("quota_period_days");
+
+                    b.Property<long>("TokenQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("token_quota");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -4013,7 +4260,19 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_subscription_plans_code");
 
-                    b.ToTable("subscription_plans", "app");
+                    b.HasIndex(new[] { "Kind" }, "ux_subscription_plans_single_free")
+                        .IsUnique()
+                        .HasDatabaseName("ux_subscription_plans_single_free")
+                        .HasFilter("kind = 'free'");
+
+                    b.ToTable("subscription_plans", "app", t =>
+                        {
+                            t.HasCheckConstraint("ck_subscription_plans_duration", "(kind = 'free' AND duration_days IS NULL) OR (kind IN ('personal', 'family') AND duration_days >= 1 AND duration_days <= 3650)");
+
+                            t.HasCheckConstraint("ck_subscription_plans_kind", "kind IN ('free', 'personal', 'family')");
+
+                            t.HasCheckConstraint("ck_subscription_plans_quota_period", "quota_period_days IS NULL OR (quota_period_days >= 1 AND (duration_days IS NULL OR quota_period_days <= duration_days))");
+                        });
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.TargetSchool", b =>
@@ -4889,33 +5148,81 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<bool>("AutoRenew")
-                        .HasColumnType("boolean")
-                        .HasColumnName("auto_renew");
+                    b.Property<Guid?>("ActivatedFromOrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("activated_from_order_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expires_at");
+                    b.Property<int>("DurationDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_days");
 
-                    b.Property<DateTime>("StartsAt")
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<string>("EndedReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("ended_reason");
+
+                    b.Property<DateTime?>("EndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ends_at");
+
+                    b.Property<DateTime?>("ExhaustedNotifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("exhausted_notified_at");
+
+                    b.Property<Guid?>("FamilyGroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("family_group_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("PlanName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("plan_name");
+
+                    b.Property<decimal>("PriceVnd")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("price_vnd");
+
+                    b.Property<int?>("QuotaPeriodDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("quota_period_days");
+
+                    b.Property<DateTime?>("ReminderSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reminder_sent_at");
+
+                    b.Property<DateTime?>("StartsAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("starts_at");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasDefaultValue("active")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
                         .HasColumnName("status");
 
                     b.Property<Guid>("SubscriptionPlanId")
                         .HasColumnType("uuid")
                         .HasColumnName("plan_id");
+
+                    b.Property<long>("TokenQuota")
+                        .HasColumnType("bigint")
+                        .HasColumnName("token_quota");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -4925,14 +5232,21 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
+                    b.Property<DateTime?>("Warned80At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("warned_80_at");
+
                     b.HasKey("Id")
                         .HasName("pk_user_subscriptions");
+
+                    b.HasIndex("FamilyGroupId")
+                        .HasDatabaseName("ix_user_subscriptions_family_group_id");
 
                     b.HasIndex("SubscriptionPlanId")
                         .HasDatabaseName("ix_user_subscriptions_subscription_plan_id");
 
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_user_subscriptions_user_id");
+                    b.HasIndex("UserId", "Kind", "Status")
+                        .HasDatabaseName("ix_user_subscriptions_user_id_kind_status");
 
                     b.ToTable("user_subscriptions", "app");
                 });
@@ -4997,6 +5311,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ChatMessageId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_ai_calls_chat_messages_chat_message_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.UserSubscription", null)
+                        .WithMany()
+                        .HasForeignKey("UserSubscriptionId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_ai_calls_user_subscriptions_user_subscription_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.AnalysisResult", b =>
@@ -5179,6 +5499,32 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_consents_users_user_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.FamilyGroup", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_family_groups_users_owner_user_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.FamilyMember", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.FamilyGroup", null)
+                        .WithMany()
+                        .HasForeignKey("FamilyGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_family_members_family_groups_family_group_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_family_members_users_user_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.FieldEvidence", b =>
@@ -5388,6 +5734,19 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.PaymentTransaction", b =>
                 {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("HandledByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_payment_transactions_users_handled_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.SubscriptionPlan", null)
+                        .WithMany()
+                        .HasForeignKey("SubscriptionPlanId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_payment_transactions_subscription_plans_subscription_plan_id");
+
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
@@ -5705,10 +6064,16 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.UserSubscription", b =>
                 {
+                    b.HasOne("StudyAbroad.Domain.Entities.FamilyGroup", null)
+                        .WithMany()
+                        .HasForeignKey("FamilyGroupId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_user_subscriptions_family_groups_family_group_id");
+
                     b.HasOne("StudyAbroad.Domain.Entities.SubscriptionPlan", null)
                         .WithMany()
                         .HasForeignKey("SubscriptionPlanId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_user_subscriptions_subscription_plans_subscription_plan_id");
 

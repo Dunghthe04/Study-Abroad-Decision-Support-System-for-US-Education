@@ -13,6 +13,7 @@ from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
 from app.services.goal_writer import GoalWriter
 from app.services.ollama import OllamaClient
+from app.services.recommend_writer import RecommendWriter
 from app.services.scenario_writer import ScenarioWriter
 
 
@@ -55,6 +56,11 @@ def get_explainer(request: Request) -> Explainer:
 # Nhận xét so sánh trường
 def get_compare_writer(request: Request) -> CompareWriter:
     return request.app.state.compare_writer
+
+
+# Lời cho danh sách gợi ý trường
+def get_recommend_writer(request: Request) -> RecommendWriter:
+    return request.app.state.recommend_writer
 
 
 # Lời cho goal-seeking

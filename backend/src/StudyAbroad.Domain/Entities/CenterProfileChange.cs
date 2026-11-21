@@ -14,7 +14,7 @@ public class CenterProfileChange : BaseEntity
     public string? OldValue { get; set; }
     public string? NewValue { get; set; }
 
-    /// <summary>pending | passed | failed (<see cref="Constants.CenterProfileChangeStatuses"/>).</summary>
+    /// <summary>pending | passed | failed | withdrawn (<see cref="Constants.CenterProfileChangeStatuses"/>).</summary>
     public string Status { get; set; } = Constants.CenterProfileChangeStatuses.Pending;
 
     public Guid? ReviewedByUserId { get; set; }

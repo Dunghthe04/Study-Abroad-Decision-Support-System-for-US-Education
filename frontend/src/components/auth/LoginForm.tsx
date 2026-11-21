@@ -13,7 +13,6 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
-import { Spinner } from "@/components/ui/spinner";
 
 export function LoginForm() {
   const router = useRouter();
@@ -116,7 +115,7 @@ export function LoginForm() {
     <div className="space-y-6">
       <div className="space-y-2">
         <h1 className="font-heading text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-          Đăng nhập vào USAS
+          Đăng nhập vào USDSS
         </h1>
       </div>
 
@@ -149,8 +148,8 @@ export function LoginForm() {
       )}
 
       {error && lockType === "pending_deletion" && restoreToken && (
-        <Button type="button" size="sm" onClick={handleRestore} disabled={isRestoring}>
-          {isRestoring ? <Spinner data-icon="inline-start" /> : <RotateCcwIcon aria-hidden="true" />}
+        <Button type="button" size="sm" onClick={handleRestore} disabled={isRestoring} loading={isRestoring}>
+          <RotateCcwIcon aria-hidden="true" />
           {isRestoring ? "Đang khôi phục..." : "Khôi phục và đăng nhập"}
         </Button>
       )}
@@ -186,8 +185,7 @@ export function LoginForm() {
             />
           </Field>
 
-          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full">
-            {isSubmitting && <Spinner data-icon="inline-start" />}
+          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full" loading={isSubmitting}>
             {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
           </Button>
         </FieldGroup>
@@ -206,14 +204,6 @@ export function LoginForm() {
             Khôi phục tài khoản
           </Link>
         </p>
-        <div className="pt-3 border-t border-line">
-          <p className="text-xs text-ink-3">
-            Bạn là đơn vị tư vấn du học?{" "}
-            <Link href="/register/center" className="font-semibold text-brand hover:underline">
-              Đăng ký dành cho trung tâm
-            </Link>
-          </p>
-        </div>
       </div>
     </div>
   );

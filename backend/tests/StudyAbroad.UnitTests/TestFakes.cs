@@ -331,6 +331,29 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
+    public Task SendPaymentReceiptEmailAsync(string toEmail, string fullName, long orderCode, string planName, decimal amountVnd, DateTime paidAtUtc, DateTime? startsAtUtc, DateTime? endsAtUtc, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "payment_receipt", orderCode.ToString()));
+        return Task.CompletedTask;
+    }
+
+    public Task SendSubscriptionExpiringEmailAsync(string toEmail, string fullName, string planName, DateTime endsAtUtc, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "subscription_expiring", planName));
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Đặt thì thư mời gói Gia đình ném lỗi này (SMTP sập).</summary>
+    public Exception? FamilyInviteError { get; set; }
+
+    public Task SendFamilyInviteEmailAsync(string toEmail, string ownerName, string seatRole, string inviteToken, int expiryDays, CancellationToken ct = default)
+    {
+        if (FamilyInviteError is not null)
+            throw FamilyInviteError;
+        SentEmails.Add((toEmail, "family_invite", inviteToken));
+        return Task.CompletedTask;
+    }
+
     /// <summary>[UC-93] Email kết quả xử lý yêu cầu xóa trung tâm.</summary>
     public List<(string To, string CenterName, string Outcome, string? Note, DateTime? PurgeAt)> CenterDeletionEmails { get; } = [];
 

@@ -334,8 +334,8 @@ export function GradeScaleSettings() {
               <Button variant="ghost" onClick={() => showSetting(setting)} disabled={saving}>
                 <RotateCcwIcon /> Bỏ thay đổi
               </Button>
-              <Button onClick={askSave} disabled={saving}>
-                {saving ? <Spinner /> : <SaveIcon />} Lưu bảng
+              <Button onClick={askSave} loading={saving}>
+                <SaveIcon /> Lưu bảng
               </Button>
             </div>
           )}
@@ -354,8 +354,8 @@ export function GradeScaleSettings() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={saving}>Hủy</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void save()} disabled={saving}>
-              {saving && <Spinner />} Lưu
+            <AlertDialogAction onClick={() => void save()} loading={saving}>
+              Lưu
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -3,7 +3,7 @@ import { AdminSection } from "@/components/admin/AdminSection";
 import { AdminCenterListView } from "@/components/admin/centers/AdminCenterListView";
 
 export const metadata: Metadata = {
-  title: "Trung tâm tư vấn – Quản trị & Kiểm duyệt USAS",
+  title: "Trung tâm tư vấn – Quản trị & Kiểm duyệt USDSS",
 };
 
 export default function AdminCentersPage() {

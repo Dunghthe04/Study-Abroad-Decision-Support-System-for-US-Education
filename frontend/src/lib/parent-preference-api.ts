@@ -18,6 +18,8 @@ export interface ParentPreferenceDto {
   budgetUsd: number | null;
   updatedAt: string;
   hasResult: boolean;
+  /** false: mới lưu số tiền từ Tổng quan (UC-94), chưa chọn ưu tiên. API cũ không có thì coi là true. */
+  hasPref?: boolean;
 }
 
 /** Nhãn của PreferenceComparer (backend CompareLabels) */
@@ -99,6 +101,15 @@ export const parentPreferenceApi = {
       await apiFetch<Wrapped<ParentPreferenceDto>>(base(studentId), {
         method: "PUT",
         body: JSON.stringify({ pref, budgetVnd }),
+      })
+    ).data,
+
+  // UC-94: chỉ lưu số tiền tối đa/năm (VND), giữ ưu tiên nếu đã có, không báo cho con
+  saveBudget: async (studentId: string, budgetVnd: number) =>
+    (
+      await apiFetch<Wrapped<ParentPreferenceDto>>(`${base(studentId)}/budget`, {
+        method: "PUT",
+        body: JSON.stringify({ budgetVnd }),
       })
     ).data,
 

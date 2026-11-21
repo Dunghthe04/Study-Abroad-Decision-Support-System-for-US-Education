@@ -158,9 +158,9 @@ export function CenterVerificationView() {
     setFormError(null);
     setFormSuccess(null);
 
-    // [UC-91] Phải xác thực cả email và số điện thoại trước khi nộp hồ sơ
-    if (!status?.isEmailVerified || !status?.isPhoneVerified) {
-      setFormError("Bạn phải xác thực email và số điện thoại bằng mã OTP trước khi nộp hồ sơ.");
+    // [UC-91] Phải xác thực email bằng mã OTP trước khi nộp hồ sơ
+    if (!status?.isEmailVerified) {
+      setFormError("Bạn phải xác thực email bằng mã OTP trước khi nộp hồ sơ.");
       return;
     }
 
@@ -311,20 +311,19 @@ export function CenterVerificationView() {
           </Alert>
         )}
 
-        {/* [UC-91] Chưa xác thực đủ email và số điện thoại thì xác thực ngay tại đây trước khi nộp */}
-        {status && (!status.isEmailVerified || !status.isPhoneVerified) && (
+        {/* [UC-91] Chưa xác thực email thì xác thực ngay tại đây trước khi nộp */}
+        {status && !status.isEmailVerified && (
           <div className="space-y-3">
             <Alert>
               <InfoIcon className="h-5 w-5" />
               <AlertDescription className="ml-2">
-                Cần xác thực cả email và số điện thoại bằng mã OTP trước khi nộp hồ sơ. Việc xác thực không tự cấp dấu xác minh.
+                Cần xác thực email bằng mã OTP trước khi nộp hồ sơ. Việc xác thực không tự cấp dấu xác minh.
               </AlertDescription>
             </Alert>
             <CenterContactCard
               phone={center?.phone}
               email={center?.email}
               emailVerified={status.isEmailVerified}
-              phoneVerified={status.isPhoneVerified}
               onChanged={() => {
                 void fetchStatus();
               }}
@@ -620,7 +619,7 @@ export function CenterVerificationView() {
               <Button
                 type="submit"
                 size="lg"
-                disabled={isSubmitting || !status?.isEmailVerified || !status?.isPhoneVerified}
+                disabled={isSubmitting || !status?.isEmailVerified}
                 className="w-full sm:w-auto"
               >
                 {isSubmitting && <Spinner data-icon="inline-start" />}

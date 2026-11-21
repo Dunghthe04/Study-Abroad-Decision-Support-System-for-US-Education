@@ -48,7 +48,7 @@ function ButtonGroupText({
     props: mergeProps<"div">(
       {
         className: cn(
-          "flex items-center gap-2 rounded-lg border bg-muted px-2.5 text-sm font-medium [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4",
+          "flex items-center gap-1.5 rounded-lg border bg-muted px-3 text-sm font-medium [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4",
           className
         ),
       },
@@ -79,9 +79,77 @@ function ButtonGroupSeparator({
   )
 }
 
+/* Khuôn SplitDropdownButton theo claude-ui: đường chia 50% chiều cao tự ẩn khi hover/mở menu */
+function SplitButton({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"div">) {
+  return (
+    <div
+      role="group"
+      data-slot="button-group"
+      data-cds="SplitDropdownButton"
+      className={cn(
+        "group/split relative inline-flex w-fit shrink-0 items-stretch rounded-lg *:focus-visible:relative *:focus-visible:z-10",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  )
+}
+
+function SplitButtonSegment({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"div">) {
+  return (
+    <div data-cds-segment className={cn("contents", className)} {...props}>
+      {children}
+    </div>
+  )
+}
+
+function SplitButtonSeparator({
+  className,
+  ...props
+}: React.ComponentProps<"span">) {
+  return (
+    <span
+      aria-hidden="true"
+      data-slot="split-button-separator"
+      className={cn(
+        "relative w-px shrink-0 self-stretch bg-border/40 transition-opacity duration-[var(--cds-dur-fast)]",
+        "[[data-cds-segment]:hover+&>[data-cds-seam-line]]:opacity-0",
+        "[&:has(+[data-cds-segment]:hover)>[data-cds-seam-line]]:opacity-0",
+        "[[data-cds-segment]:has([aria-haspopup][aria-expanded=true])+&>[data-cds-seam-line]]:opacity-0",
+        "[&:has(+[data-cds-segment]_[aria-haspopup][aria-expanded=true])>[data-cds-seam-line]]:opacity-0",
+        "[[data-cds-segment]:has([aria-pressed=true])+&>[data-cds-seam-line]]:opacity-0",
+        "[&:has(+[data-cds-segment]_[aria-pressed=true])>[data-cds-seam-line]]:opacity-0",
+        className
+      )}
+      {...props}
+    >
+      <span
+        data-cds-seam-line
+        className="absolute inset-x-0 inset-y-1/4 bg-border transition-opacity duration-[var(--cds-dur-fast)]"
+      />
+    </span>
+  )
+}
+
+const SplitDropdownButton = SplitButton
+
 export {
   ButtonGroup,
   ButtonGroupSeparator,
   ButtonGroupText,
   buttonGroupVariants,
+  SplitButton,
+  SplitButtonSegment,
+  SplitButtonSeparator,
+  SplitDropdownButton,
 }

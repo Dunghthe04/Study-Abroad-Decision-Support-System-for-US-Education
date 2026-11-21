@@ -5,7 +5,6 @@ Advisor không tự chạy gợi ý: pipeline (lọc, chấm, chọn, lưu) nằ
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse, ChatState
 from app.services.chat_flow import SkillOutput
-from app.services.skills.skill_lo_trinh import RECOMMEND_ACTION, Route, action_for
 from tests.fakes import flow_with, tin
 
 
@@ -23,17 +22,6 @@ def request(message: str = "có") -> ChatRequest:
     )
 
 
-def route(name: str) -> Route:
-    return Route(route=name, alt_routes=[], codes=[], english_status="ok", months_to_deadline=None)
-
-
-def test_only_the_direct_route_asks_for_a_school_list():
-    assert action_for(route("direct")) == RECOMMEND_ACTION == "recommend"
-    # dự bị, 2+2, dời kỳ: hệ thống chưa có danh sách trường cho các lộ trình này
-    for name in ("pathway", "cc_2plus2", "postpone"):
-        assert action_for(route(name)) is None
-
-
 def test_response_has_no_action_by_default_and_sends_it_as_camel_case():
     assert ChatResponse(answer="x", state=ChatState()).action is None
 
@@ -44,7 +32,7 @@ def test_response_has_no_action_by_default_and_sends_it_as_camel_case():
 
 async def test_chat_flow_passes_the_action_of_a_skill_to_the_response():
     # skill_lo_trinh cần đủ hồ sơ mới chạy; ở đây chỉ kiểm tra ChatFlow chuyển action nên dùng nhánh kiến thức
-    flow = flow_with({"skill_tra_loi": SkillWith("...", RECOMMEND_ACTION)}, tin("knowledge"))
+    flow = flow_with({"skill_tra_loi": SkillWith("...", "recommend")}, tin("knowledge"))
 
     res = await flow.reply(request())
 

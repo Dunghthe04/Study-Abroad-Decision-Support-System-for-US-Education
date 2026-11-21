@@ -16,8 +16,7 @@ Intent = Literal[
     "collect_profile", "profile_review", "scenario", "knowledge", "center_referral", "out_of_scope"
 ]
 
-# Khóa hồ sơ, phải giống info_to_field.PROFILE_KEYS (có test kiểm).
-# Không import vì sẽ kéo cả gói skills và chat_flow theo, chat_flow lại cần file này nên dễ nhập vòng
+# Khóa chuẩn của hồ sơ chat. Mọi khóa skill_rules.REQUIRED_B4 hỏi phải nằm trong đây (có test kiểm)
 PROFILE_KEYS = (
     "current_level",
     "current_grade",

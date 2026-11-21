@@ -82,7 +82,7 @@ function ReviewCard({
             variant="ghost"
             size="sm"
             onClick={onEdit}
-            className="h-7 gap-1 px-2 text-xs font-semibold text-brand hover:bg-brand-wash"
+            className="gap-1 px-2 text-xs font-semibold text-brand hover:bg-brand-wash"
           >
             <Edit3Icon className="size-3.5" />
             Sửa
@@ -137,10 +137,15 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
     metadata?.majors.find((m) => m.value.toLowerCase() === step1.targetMajor?.toLowerCase())?.label ??
     step1.targetMajor;
 
+  // UC-94: phụ huynh nhập số tiền tối đa chính xác thì hiện đúng số đó (đã lưu: USD, chưa lưu: VNĐ), không hiện khoảng
   const budgetTierLabel =
-    metadata?.budgetTiers.find((b) => b.key === step4.annualBudgetTier)?.label ??
-    DEFAULT_BUDGET_TIERS.find((b) => b.key === step4.annualBudgetTier)?.label ??
-    "Chưa chọn";
+    step4.annualBudgetUsd != null
+      ? `Tối đa ${step4.annualBudgetUsd.toLocaleString("vi-VN")} USD`
+      : step4.annualBudgetVnd != null
+        ? `Tối đa ${step4.annualBudgetVnd.toLocaleString("vi-VN")} VNĐ`
+        : (metadata?.budgetTiers.find((b) => b.key === step4.annualBudgetTier)?.label ??
+          DEFAULT_BUDGET_TIERS.find((b) => b.key === step4.annualBudgetTier)?.label ??
+          "Chưa chọn");
 
   const need = SCHOLARSHIP_NEED_OPTIONS.find((o) => o.value === step4.needFinancialAid);
   const financialNeedLabel = need ? `${need.label} (${need.description.toLowerCase()})` : "Chưa chọn";

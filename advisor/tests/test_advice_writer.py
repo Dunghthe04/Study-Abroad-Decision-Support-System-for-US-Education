@@ -1,3 +1,4 @@
+import asyncio
 import json
 import unicodedata
 
@@ -5,6 +6,7 @@ import pytest
 
 from app.schemas.chat import ResultSchool
 from app.schemas.slm import SkillRequest
+from app.services import advice_writer
 from app.services.advice_writer import AdviceWriter, check_answer
 from app.services.claude import ClaudeError
 from tests.fakes import FakeLLM
@@ -285,3 +287,14 @@ async def test_last_errors_keeps_only_the_error_code_of_each_failed_try():
     writer._llm = FakeLLM(ClaudeError("HTTP 529"), {"tra_loi": ""})
     assert await writer.write(SKILL, REQ, []) is None
     assert (writer.last_attempts, writer.last_errors) == (2, ["goi_model", "rong"])
+
+
+async def test_the_advice_writer_gives_up_when_the_budget_is_spent(monkeypatch):
+    monkeypatch.setattr(advice_writer, "writer_budget", lambda: 0.05)
+
+    class Hang:
+        async def chat_json(self, messages, schema, temperature=0.0):
+            await asyncio.sleep(5)
+            return {"tra_loi": "quá muộn"}
+
+    assert await AdviceWriter(Hang()).write(SKILL, REQ, []) is None

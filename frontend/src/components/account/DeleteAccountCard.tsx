@@ -5,7 +5,6 @@ import { Trash2Icon } from "lucide-react";
 import { authApi, ApiError } from "@/lib/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -16,7 +15,6 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 
 /** Chữ người dùng phải gõ đúng để xác nhận xóa */
 export const DELETE_CONFIRM_WORD = "XÓA";
@@ -80,22 +78,24 @@ export function DeleteAccountCard() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-destructive">
-          <Trash2Icon aria-hidden />
-          Xóa tài khoản
-        </CardTitle>
-        <CardDescription>
+    <div className="flex flex-col gap-4 rounded-xl border border-risk/30 bg-surface p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+      <div className="min-w-0 space-y-1">
+        <h2 className="font-heading text-lg font-semibold text-risk">Xóa tài khoản</h2>
+        <p className="max-w-xl text-sm text-ink-2">
           Tài khoản bị khóa ngay và xóa hẳn sau {RETENTION_DAYS} ngày. Trong {RETENTION_DAYS} ngày đó, bạn đăng nhập lại là khôi phục được.
-        </CardDescription>
-      </CardHeader>
+        </p>
+      </div>
 
-      <CardContent>
-        <Button type="button" variant="destructive" onClick={openDialog}>
-          Xóa tài khoản
-        </Button>
-      </CardContent>
+      <Button
+        type="button"
+        variant="destructive"
+        size="lg"
+        onClick={openDialog}
+        className="w-full shrink-0 sm:w-auto"
+      >
+        <Trash2Icon data-icon="inline-start" aria-hidden />
+        Xóa tài khoản
+      </Button>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent>
@@ -115,7 +115,10 @@ export function DeleteAccountCard() {
               Liên kết với phụ huynh và các chia sẻ hồ sơ cho trung tâm bị hủy ngay; trung tâm thôi xem được dữ liệu của bạn. Nếu khôi phục, các liên
               kết và chia sẻ này không tự nối lại.
             </li>
-            <li>Gói đăng ký bị hủy; lịch sử giao dịch được giữ ẩn danh theo quy định kế toán.</li>
+            <li>
+              Gói của bạn dừng khi tài khoản bị xóa hẳn sau 30 ngày. Nếu bạn là chủ gói Gia đình, các thành viên vẫn dùng được tới lúc đó hoặc tới khi gói hết
+              hạn. Lịch sử giao dịch được giữ ẩn danh.
+            </li>
             <li>
               Nhật ký trò chuyện với trợ lý tư vấn đã được che thông tin cá nhân và tự xóa sau {CHAT_LOG_KEEP_DAYS} ngày.
             </li>
@@ -137,6 +140,7 @@ export function DeleteAccountCard() {
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
               disabled={isSubmitting}
+              className="h-10"
             />
           </Field>
 
@@ -144,13 +148,13 @@ export function DeleteAccountCard() {
             <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isSubmitting}>
               Hủy
             </Button>
-            <Button type="button" variant="destructive" onClick={handleDelete} disabled={!canConfirm || isSubmitting}>
-              {isSubmitting && <Spinner data-icon="inline-start" />}
+            <Button type="button" variant="destructive" onClick={handleDelete} disabled={!canConfirm || isSubmitting} loading={isSubmitting}>
+              <Trash2Icon data-icon="inline-start" aria-hidden />
               {isSubmitting ? "Đang xóa..." : "Xóa tài khoản"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   );
 }

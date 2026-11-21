@@ -153,7 +153,7 @@ export function LayerStack() {
 
           {/* Cột phải: các tầng 3D */}
           <div className="order-1 flex justify-center lg:order-2 lg:col-span-7">
-            <svg viewBox="0 0 600 640" className="max-h-[70vh] w-full max-w-[600px] overflow-visible" role="img" aria-label="Năm lớp của hệ thống USAS xếp chồng lên nhau">
+            <svg viewBox="0 0 600 640" className="max-h-[70vh] w-full max-w-[600px] overflow-visible" role="img" aria-label="Năm lớp của hệ thống USDSS xếp chồng lên nhau">
               <defs>
                 <pattern id="plateGrid" width="9" height="9" patternUnits="userSpaceOnUse">
                   <path d="M9 0H0V9" fill="none" className="stroke-line" strokeWidth="0.8" />

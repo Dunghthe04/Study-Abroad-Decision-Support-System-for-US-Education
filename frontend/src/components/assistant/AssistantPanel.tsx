@@ -31,12 +31,15 @@ import { BudgetWidget } from "./BudgetWidget";
 import { CenterCardsWidget } from "./CenterCardsWidget";
 import { ChatText } from "./ChatText";
 import { MajorWidget } from "./MajorWidget";
-import { ReviewWidget } from "./ReviewWidget";
+import { CurrentValues, ReviewWidget } from "./ReviewWidget";
 import { ScholarshipWidget } from "./ScholarshipWidget";
 import { SchoolSearchCard } from "./SchoolSearchCard";
 import { SchoolWidget } from "./SchoolWidget";
 import { SelectWidget } from "./SelectWidget";
 import { GoalCompareTable } from "./GoalCompareTable";
+import { PremiumLockedCard } from "@/components/billing/PremiumLockedCard";
+import { formatVnDate } from "@/lib/billing-api";
+import type { QuickReply } from "@/types/api";
 import type { SchoolGoalResult, SchoolSearchData } from "@/types/recommendation";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
@@ -45,9 +48,9 @@ export function useAssistantVisible() {
   return !isAuthRoute(pathname);
 }
 
-/** Khung "Trợ lý USAS" cố định bên phải; màn hẹp thì phủ kín */
+/** Khung "Trợ lý USDSS" cố định bên phải; màn hẹp thì phủ kín */
 export function AssistantPanel() {
-  const { open, wide, turns, loading, streaming, error, page, closePanel, toggleWide, newChat, send, retry } =
+  const { open, wide, turns, loading, streaming, error, page, closePanel, toggleWide, newChat, send, retry, subscription } =
     useAssistant();
   const visible = useAssistantVisible();
   const pathname = usePathname();
@@ -92,7 +95,7 @@ export function AssistantPanel() {
 
   return (
     <aside
-      aria-label="USAS Advisor"
+      aria-label="USDSS Advisor"
       className={cn(
         "fixed inset-0 z-50 flex flex-col overflow-hidden bg-surface",
         // Màn rộng: khung dính mép phải, cao hết màn hình, đẩy trang sang trái
@@ -104,16 +107,18 @@ export function AssistantPanel() {
         {/* Đầu khung dính trên cùng, nền mờ dần xuống dưới để tin nhắn trượt qua bên dưới */}
         <div className="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface)_70%,transparent)] px-3 pt-3 pb-6">
           <div className="flex items-center gap-2">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={newChat}
               aria-label="Cuộc trò chuyện mới"
               title="Cuộc trò chuyện mới"
-              className="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-line text-ink-2 transition-colors hover:border-brand/40 hover:bg-brand-wash hover:text-brand active:scale-95"
+              className="size-9 rounded-full border-line text-ink-2 hover:border-brand/40 hover:bg-brand-wash hover:text-brand dark:hover:bg-brand-wash"
             >
               <PlusIcon className="size-4.5" />
-            </button>
-            <h2 className="min-w-0 flex-1 truncate font-heading text-base font-semibold text-ink">USAS Advisor</h2>
+            </Button>
+            <h2 className="min-w-0 flex-1 truncate font-heading text-base font-semibold text-ink">USDSS Advisor</h2>
             <div className="flex shrink-0 items-center rounded-lg border border-line p-0.5">
               <IconButton
                 label={wide ? "Thu hẹp khung" : "Mở rộng khung"}
@@ -154,11 +159,24 @@ export function AssistantPanel() {
               <button
                 type="button"
                 onClick={resetSimulation}
-                className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-line px-2.5 py-1 font-semibold transition-colors hover:bg-ground"
+                className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-line px-2.5 py-1 font-semibold outline-none transition-colors hover:bg-ground focus-visible:ring-3 focus-visible:ring-ring/50"
               >
                 <Undo2Icon className="size-3.5" />
                 Về hồ sơ thật
               </button>
+            </div>
+          )}
+
+          {/* Gói đang trả lượt hỏi đã dùng 80% hoặc còn dưới 7 ngày (chỉ phần trăm, không có số token) */}
+          {subscription && (subscription.lowQuota || subscription.expiringSoon) && (
+            <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-warn-wash px-3 py-2 text-xs text-warn">
+              <TriangleAlertIcon className="size-3.5 shrink-0" />
+              <span className="min-w-0 flex-1">
+                {subscription.lowQuota ? "Bạn đã dùng hơn 80% lượt hỏi của gói." : "Gói của bạn sắp hết hạn."}
+              </span>
+              <Link href="/plans" className="shrink-0 font-semibold underline">
+                Xem gói
+              </Link>
             </div>
           )}
         </div>
@@ -166,7 +184,7 @@ export function AssistantPanel() {
         {empty ? (
           /* Chưa hỏi gì: lời chào ở giữa khung và các câu hỏi gợi ý xếp dọc */
           <div className="flex flex-1 flex-col items-center justify-center px-6 pb-10 text-center">
-            <p className="font-heading text-xl font-semibold text-ink">USAS Advisor</p>
+            <p className="font-heading text-xl font-semibold text-ink">USDSS Advisor</p>
             <p className="mt-1.5 max-w-[34ch] text-sm leading-relaxed text-ink-2">
               {page.greeting ?? "Tôi có thể giúp gì cho bạn?"}
             </p>
@@ -177,7 +195,7 @@ export function AssistantPanel() {
                     key={s}
                     type="button"
                     onClick={() => send(s)}
-                    className="min-h-10 w-full min-w-0 cursor-pointer whitespace-normal break-words rounded-lg border border-line bg-surface px-3.5 py-2 text-sm leading-snug text-ink transition-colors hover:border-brand/40 hover:bg-brand-wash active:translate-y-px"
+                    className="min-h-10 w-full min-w-0 cursor-pointer whitespace-normal break-words rounded-lg border border-line bg-surface px-3.5 py-2 text-sm leading-snug text-ink outline-none transition-[color,background-color,border-color,transform,scale] duration-[var(--cds-dur-fast)] hover:border-brand/40 hover:bg-brand-wash focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.975] motion-reduce:transition-none motion-reduce:active:scale-100"
                   >
                     {s}
                   </button>
@@ -285,18 +303,19 @@ export function AssistantPanel() {
                   submit();
                 }
               }}
-              placeholder="Hỏi USAS Advisor"
+              placeholder="Hỏi USDSS Advisor"
               aria-label="Câu hỏi cho trợ lý"
               className="min-h-12 w-full resize-none bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
             />
-            <button
+            <Button
               type="submit"
+              size="icon"
               aria-label="Gửi"
               disabled={loading || !canSend || !input.trim()}
-              className="flex size-9 shrink-0 cursor-pointer items-center justify-center self-end rounded-lg bg-brand text-brand-foreground transition-[opacity,transform] hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+              className="size-9 self-end bg-brand text-brand-foreground hover:bg-brand hover:opacity-90 [&:disabled:not([aria-busy])]:opacity-40"
             >
               <ArrowUpIcon className="size-4.5" />
-            </button>
+            </Button>
           </form>
         )}
       </div>
@@ -345,9 +364,22 @@ function formLink(data: Record<string, unknown> | null | undefined): string {
   return goals.length > 0 ? `/analysis?from=chat&goal=${goals.join(",")}` : "/analysis?from=chat";
 }
 
+// Nút "Trả lời trong chat" của advisor (CHAT_BUTTON trong replies.py) mở phần phỏng vấn hồ sơ trong chat, chỉ dành cho Premium.
+// Đang dùng lượt miễn phí thì thay bằng link sang form hồ sơ (form không tính lượt), bỏ nút "Điền bằng form" trùng ý.
+const INTERVIEW_REPLY = "Trả lời trong chat";
+const FORM_REPLY = "Điền bằng form";
+function withoutInterview(replies: QuickReply[] | null | undefined): QuickReply[] | null | undefined {
+  if (!replies?.some((r) => r.value === INTERVIEW_REPLY)) return replies;
+  return replies
+    .filter((r) => r.value !== FORM_REPLY)
+    .map((r) => (r.value === INTERVIEW_REPLY ? { label: FORM_REPLY, value: FORM_REPLY, href: "/analysis?from=chat" } : r));
+}
+
 function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string) => void }) {
   const router = useRouter();
-  const { sendAction } = useAssistant();
+  const { sendAction, subscription } = useAssistant();
+  // Xét chargingPool chứ không xét tier: Premium đã dùng hết các gói cũng bị khóa phỏng vấn trong chat (bảng gating)
+  const quickReplies = subscription?.chargingPool === "free" ? withoutInterview(turn.quickReplies) : turn.quickReplies;
   if (turn.role === "user") {
     return (
       <div className="rounded-xl bg-brand-wash px-4 py-3 whitespace-pre-wrap text-ink">{turn.content}</div>
@@ -370,6 +402,22 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       {goalResult && <GoalCompareTable result={goalResult} basisLabel={goalBasisLabel} />}
       {/* Có thẻ trung tâm thì danh sách chữ (các dòng bắt đầu bằng "- ") đã nằm trong thẻ: chỉ hiện phần mở đầu */}
       {content && <ChatText text={turn.widget?.type === "centers" ? content.split("\n- ")[0] : content} />}
+      {/* Lượt bị khóa theo gói: câu hỏi có ý cần Premium (phần được phép vẫn trả lời ở trên), hoặc hết lượt miễn phí tháng này */}
+      {turn.locked && (
+        <PremiumLockedCard
+          className="mt-2.5"
+          title={
+            turn.locked.reason === "quota_exhausted"
+              ? "Bạn đã dùng hết lượt hỏi miễn phí của tháng này"
+              : "Câu hỏi này cần tài khoản USDSS Premium"
+          }
+          note={
+            turn.locked.reason === "quota_exhausted" && turn.locked.resetsAt
+              ? `Lượt hỏi miễn phí được làm mới ngày ${formatVnDate(turn.locked.resetsAt)}.`
+              : null
+          }
+        />
+      )}
       {turn.widget?.type === "centers" && <CenterCardsWidget data={turn.widget.data} onPick={onReply} />}
       {searchData && <SchoolSearchCard data={searchData} />}
       {turn.citations && turn.citations.length > 0 && (
@@ -389,6 +437,8 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
         </ol>
       )}
       {turn.disclaimer && <p className="mt-2 text-xs text-muted-foreground italic">{turn.disclaimer}</p>}
+      {/* Đang sửa hồ sơ: giá trị cũ của mục đang hỏi lại */}
+      {turn.widget?.data?.current != null && <CurrentValues current={turn.widget.data.current} />}
       {turn.widget?.type === "review" && <ReviewWidget data={turn.widget.data} />}
       {/* E: chỉ chọn được ở lượt cuối, giống nút trả lời nhanh */}
       {turn.widget?.type === "major" && <MajorWidget onPick={onReply} />}
@@ -422,34 +472,34 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       {/* Chat vừa chạy gợi ý trường: mở trang Gợi ý trường xem đủ danh sách (đọc lượt vừa lưu, không chạy lại) */}
       {turn.widget?.type === "recommend" && (
         // Mỗi lần bấm thêm ts khác nhau để trang tải lại kết quả mới nhất, kể cả khi đang đứng sẵn ở trang này
-        <button
+        <Button
           type="button"
           onClick={() => router.push(`/recommendations?ts=${Date.now()}`)}
-          className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
+          className="mt-2.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white hover:bg-brand-ink"
         >
           <GraduationCapIcon className="size-4" />
           Xem đầy đủ danh sách trường
-        </button>
+        </Button>
       )}
       {/* What-if: mở trang Gợi ý trường với các giá trị vừa thử điền sẵn vào thanh kéo */}
       {turn.widget?.type === "simulate" && (
-        <button
+        <Button
           type="button"
           onClick={() => showSimulation(turn.widget?.data, router.push)}
-          className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
+          className="mt-2.5 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white hover:bg-brand-ink"
         >
           <SlidersHorizontalIcon className="size-4" />
           Xem trên thanh kéo
-        </button>
+        </Button>
       )}
-      {onReply && turn.quickReplies && turn.quickReplies.length > 0 && (
+      {onReply && quickReplies && quickReplies.length > 0 && (
         <div className="mt-2.5 flex flex-wrap gap-2">
-          {turn.quickReplies.map((r) => (
+          {quickReplies.map((r) => (
             <button
               key={r.value}
               type="button"
               onClick={() => (r.href ? router.push(r.href) : r.action ? sendAction(r.value, r.action) : onReply(r.value))}
-              className="group inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-left text-[13px] font-medium text-ink transition-colors hover:border-brand/40 hover:bg-brand-wash hover:text-brand active:translate-y-px"
+              className="group inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-left text-[13px] font-medium text-ink outline-none transition-[color,background-color,border-color,transform,scale] duration-[var(--cds-dur-fast)] hover:border-brand/40 hover:bg-brand-wash hover:text-brand focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.975] motion-reduce:transition-none motion-reduce:active:scale-100"
             >
               {r.label}
               <ChevronRightIcon className="size-3.5 shrink-0 opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:opacity-100" />
@@ -473,18 +523,17 @@ function IconButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="icon"
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={cn(
-        "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-ground hover:text-ink active:scale-95",
-        className
-      )}
+      className={cn("text-ink-2 hover:bg-ground hover:text-ink dark:hover:bg-ground", className)}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -505,7 +554,7 @@ function subscribePeek(fn: () => void) {
 
 /**
  * Lối vào trợ lý ở góc dưới phải khi khung lớn đang đóng.
- * Lần đầu vào: thẻ nhỏ "USAS Advisor · Tôi có thể giúp gì cho bạn?" có sẵn ô hỏi; gửi câu thì mở khung lớn và hỏi luôn.
+ * Lần đầu vào: thẻ nhỏ "USDSS Advisor · Tôi có thể giúp gì cho bạn?" có sẵn ô hỏi; gửi câu thì mở khung lớn và hỏi luôn.
  * Bấm X: thẻ thu thành nút tròn chỉ có icon, bấm nút để mở lại khung lớn.
  */
 export function AssistantLauncher() {
@@ -531,9 +580,9 @@ export function AssistantLauncher() {
       <button
         type="button"
         onClick={() => openPanel()}
-        aria-label="Mở USAS Advisor"
-        title="USAS Advisor"
-        className="fixed right-5 bottom-5 z-30 flex size-14 cursor-pointer items-center justify-center rounded-2xl bg-brand text-brand-foreground transition-transform hover:-translate-y-0.5 active:scale-95 motion-safe:animate-in motion-safe:zoom-in-90 motion-safe:duration-200 print:hidden"
+        aria-label="Mở USDSS Advisor"
+        title="USDSS Advisor"
+        className="fixed right-5 bottom-5 z-30 flex size-14 cursor-pointer items-center justify-center rounded-2xl bg-brand text-brand-foreground outline-none transition-transform hover:-translate-y-0.5 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.975] motion-safe:animate-in motion-safe:zoom-in-90 motion-safe:duration-200 print:hidden"
       >
         <MessageCircleIcon className="size-6" />
       </button>
@@ -556,7 +605,7 @@ export function AssistantLauncher() {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p id="advisor-peek-title" className="font-heading text-base font-semibold text-ink">
-            USAS Advisor
+            USDSS Advisor
           </p>
           <p className="mt-1 text-sm text-ink-2">Tôi có thể giúp gì cho bạn?</p>
         </div>
@@ -569,7 +618,7 @@ export function AssistantLauncher() {
         className="mt-3 flex items-center gap-2 rounded-xl border border-line py-1.5 pr-1.5 pl-3.5 transition-colors focus-within:border-brand focus-within:ring-3 focus-within:ring-ring/20"
       >
         <label htmlFor="advisor-peek-input" className="sr-only">
-          Câu hỏi cho USAS Advisor
+          Câu hỏi cho USDSS Advisor
         </label>
         <input
           id="advisor-peek-input"
@@ -579,13 +628,14 @@ export function AssistantLauncher() {
           placeholder="Aa"
           className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
         />
-        <button
+        <Button
           type="submit"
+          size="icon"
           aria-label="Gửi"
-          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-brand text-brand-foreground transition-[opacity,transform] hover:opacity-90 active:scale-95"
+          className="bg-brand text-brand-foreground hover:bg-brand hover:opacity-90"
         >
           <ArrowUpIcon className="size-4" />
-        </button>
+        </Button>
       </form>
     </div>
   );

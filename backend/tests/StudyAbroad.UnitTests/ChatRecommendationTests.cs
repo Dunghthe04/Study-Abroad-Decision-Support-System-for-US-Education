@@ -44,6 +44,60 @@ public class ChatRecommendationTests
             text);
     }
 
+    // ---- Dữ kiện gửi Claude viết lời cho danh sách
+    [Fact]
+    public void Note_SendsTheTotalAndOneLinePerGroup_AsInTheCodeSummary()
+    {
+        var note = ChatRecommendation.Note(Run(Items))!;
+
+        Assert.Equal(
+            [
+                "Tổng cộng 6 trường phù hợp với hồ sơ của bạn.",
+                "Khó vào: Massachusetts Institute of Technology",
+                "Vừa sức: University of Illinois Urbana-Champaign, Arizona State University, University of Arizona, University of Oregon",
+                "An toàn hơn: Oregon State University",
+            ],
+            note.Facts);
+        Assert.Equal(6, note.Schools.Count); // mọi trường đang hiện, mỗi trường một lần
+        Assert.Empty(note.Others);
+    }
+
+    [Fact]
+    public void Note_CutsAGroupAtFourLikeThePage_AndCountsTheRest()
+    {
+        var names = string.Join(",", Enumerable.Range(1, 6).Select(i => $$"""{ "code": "S{{i}}", "name": "School {{i}}" }"""));
+        var codes = string.Join(",", Enumerable.Range(1, 6).Select(i => $$"""{ "code": "S{{i}}" }"""));
+        var note = ChatRecommendation.Note(Run($$"""{ "scored": [ {{names}} ], "match": [ {{codes}} ] }"""))!;
+
+        Assert.Equal(["Tổng cộng 6 trường phù hợp với hồ sơ của bạn.", "Vừa sức: School 1, School 2, School 3, School 4 và 2 trường khác"], note.Facts);
+        Assert.Equal(["School 1", "School 2", "School 3", "School 4"], note.Schools);
+        Assert.Equal(["School 5", "School 6"], note.Others); // đã chấm nhưng không hiện: advisor chặn nhắc tới
+    }
+
+    [Fact]
+    public void Note_IsNull_WhenNoGroupHasASchool()
+    {
+        Assert.Null(ChatRecommendation.Note(Run("""{ "scored": [], "reach": [], "match": [], "safety": [], "aid": [] }""")));
+        Assert.Null(ChatRecommendation.Note(Run("{}")));
+    }
+
+    [Theory]
+    [InlineData("""{"note":true}""", true)]
+    [InlineData("""{"note":false}""", false)]
+    [InlineData("""{"code":"MIT"}""", false)]
+    [InlineData("""{"note":"true"}""", false)]
+    [InlineData("[]", false)]
+    public void NoteRequested_IsTrueOnlyForNoteTrue(string json, bool expected)
+    {
+        Assert.Equal(expected, ChatRecommendation.NoteRequested(JsonDocument.Parse(json).RootElement));
+    }
+
+    [Fact]
+    public void NoteRequested_IsFalse_WhenThereIsNoActionData()
+    {
+        Assert.False(ChatRecommendation.NoteRequested(null));
+    }
+
     [Fact]
     public void Schools_ListsEveryShownSchoolOnce_InPageOrder_WithItsGroupCode()
     {
@@ -144,7 +198,7 @@ public class ChatRecommendationTests
     [InlineData("""[]""")]
     public void Summarize_SaysNothingMatched_WhenThereIsNoSchool(string items)
     {
-        Assert.Equal(ChatRecommendation.Empty, ChatRecommendation.Summarize(Run(items)));
+        Assert.Equal(AdvisorMessages.RecommendationEmpty, ChatRecommendation.Summarize(Run(items)));
     }
 
     [Fact]

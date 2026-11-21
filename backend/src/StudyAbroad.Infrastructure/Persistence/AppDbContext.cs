@@ -67,6 +67,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UserSubscription> UserSubscriptions => Set<UserSubscription>();
     public DbSet<UserDailyUsage> UserDailyUsages => Set<UserDailyUsage>();
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
+    public DbSet<FamilyGroup> FamilyGroups => Set<FamilyGroup>();
+    public DbSet<FamilyMember> FamilyMembers => Set<FamilyMember>();
     public DbSet<PolicyAlert> PolicyAlerts => Set<PolicyAlert>();
     public DbSet<FieldEvidence> FieldEvidences => Set<FieldEvidence>();
 

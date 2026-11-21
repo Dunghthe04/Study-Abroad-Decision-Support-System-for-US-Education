@@ -7,6 +7,7 @@ using StudyAbroad.Domain.Constants;
 namespace StudyAbroad.Api.Controllers;
 
 public record SaveParentPreferenceRequest(int[]? Pref, long? BudgetVnd);
+public record SaveParentBudgetRequest(long? BudgetVnd);
 
 /// <summary>[UC-76] Phụ huynh chọn ưu tiên cho con có liên kết thật và xem so sánh với danh sách của con.
 /// Tách khỏi ParentChildrenController để không đổi constructor của controller đó.
@@ -30,6 +31,14 @@ public class ParentChildPreferenceController(ParentPreferenceService preferences
     {
         if (User.GetUserId() is not { } parentId) return Unauthorized(new { message = "Vui lòng đăng nhập." });
         return PreferenceResults.ToResult(this, await preferences.SaveAsync(parentId, studentId, request.Pref, request.BudgetVnd, ct));
+    }
+
+    // PUT budget: [UC-94] chỉ lưu số tiền tối đa/năm từ dashboard, không đụng ưu tiên, không báo cho con
+    [HttpPut("budget")]
+    public async Task<IActionResult> SaveBudget(Guid studentId, [FromBody] SaveParentBudgetRequest request, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } parentId) return Unauthorized(new { message = "Vui lòng đăng nhập." });
+        return PreferenceResults.ToResult(this, await preferences.SaveBudgetAsync(parentId, studentId, request.BudgetVnd, ct));
     }
 
     // GET compare?pref=4,2,0&budgetVnd=...: có tham số là xem thử (không lưu), không có là so với ý đã lưu

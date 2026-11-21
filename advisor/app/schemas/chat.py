@@ -75,6 +75,11 @@ class ChatState(CamelModel):
     required_only: list[str] | None = None
     # Học sinh đã từng lưu hồ sơ chính thức (.NET gửi mỗi lượt). None = .NET chưa gửi, đoán theo các ô hồ sơ
     has_committed_profile: bool | None = None
+    # UC-94: phụ huynh đang nhập hộ con managed (.NET đọc từ token, gửi mỗi lượt): F1 hỏi số tiền tối đa/năm chính xác (VNĐ).
+    # None = .NET chưa gửi, hỏi theo mức như cũ
+    exact_budget: bool | None = None
+    # Phụ huynh bấm "Chưa biết chính xác" ở F1: hỏi theo mức (ước tính) thay cho số chính xác
+    budget_unsure: bool = False
     has_results: bool = False  # đã có danh sách trường gợi ý chưa (skill_explain, skill_kich_ban cần)
     schools: list[ResultSchool] = []  # danh sách trường gợi ý gần nhất, .NET làm mới mỗi lượt khi has_results
     # Các trường đã chấm nhưng không nằm trong khối nào đang hiện: chỉ để khớp tên khi học sinh hỏi một trường cụ thể
@@ -135,9 +140,13 @@ class ChatRequest(CamelModel):
     grade_scale: list[GradeScaleRule] | None = None
     # Học sinh đã từng lưu hồ sơ chính thức chưa (.NET gửi mỗi lượt); None = không gửi (giữ giá trị cũ trong state)
     has_committed_profile: bool | None = None
+    # Phụ huynh đang nhập hộ con managed (.NET đọc từ token mỗi lượt, không tin trình duyệt); None = không gửi (giữ giá trị cũ)
+    exact_budget: bool | None = None
     # Tin này do form gửi ngay sau khi lưu hồ sơ chính thức (câu gộp việc đã tích, hoặc "Tiếp tục bằng chat"):
     # form đã là bước rà soát nên không hỏi lại bảng xác nhận X1 trong chat
     from_form: bool = False
+    # Loại ý được chạy theo gói của học sinh (.NET gửi, vd gói Free: ["knowledge", "out_of_scope"]); None = chạy mọi loại
+    allowed_intents: list[str] | None = None
 
 
 # Token của MỘT lần gọi AI (Claude hoặc Ollama), số do nhà cung cấp trả về. Một lượt chat có thể gồm nhiều lần gọi
@@ -212,10 +221,18 @@ class ChatResponse(CamelModel):
     #   (action_data["question"]: câu hỏi, ["school"]: tên trường SLM trích hoặc None, ["kb_answer"]: câu trả lời của kho, ["kb_found"]: kho có nguồn thật),
     # "school_compare" = so sánh sự thật của từ hai trường (action_data["schools"]: tên như học sinh gõ, ["fields"]: mã mục, ["question"]),
     # "school_search" = tìm trường theo điều kiện (action_data["filters"]: bộ lọc đã chuẩn hóa camelCase, ["sort"]: cách xếp, ["unresolved"]: điều chưa đọc được),
+    # "premium_required" = mọi ý của tin đều cần gói Premium (allowed_intents), không chạy nhánh nào,
     # None = không có
     action: (
         Literal[
-            "recommend", "explain", "simulate", "goal_seek", "school_info", "school_compare", "school_search"
+            "recommend",
+            "explain",
+            "simulate",
+            "goal_seek",
+            "school_info",
+            "school_compare",
+            "school_search",
+            "premium_required",
         ]
         | None
     ) = None
@@ -223,4 +240,5 @@ class ChatResponse(CamelModel):
     ai_usage: list[
         AiUsageCall
     ] = []  # token từng lần gọi AI trong lượt này, để .NET ghi nhật ký và tính chi phí
+    locked_intents: list[str] = []  # loại ý bị bỏ vì gói không cho (allowed_intents), .NET hiện thẻ nâng cấp
     slm: SlmSummary | None = None  # SLM hiểu tin nhắn ra sao; None nếu lượt không qua bước đọc tin

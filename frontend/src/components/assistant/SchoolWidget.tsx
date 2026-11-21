@@ -108,7 +108,7 @@ export function SchoolWidget({
               type="button"
               disabled={!onPick}
               onClick={() => onPick?.(questionFor(s.name, data?.target, data?.kind), s.code)}
-              className="flex w-full cursor-pointer items-baseline justify-between gap-3 px-3 py-1.5 text-left text-foreground hover:bg-brand-wash/50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full cursor-pointer items-baseline justify-between gap-3 px-3 py-1.5 text-left text-foreground hover:bg-brand-wash/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default disabled:opacity-60"
             >
               <span>{s.name}</span>
               {s.state && <span className="shrink-0 text-xs text-muted-foreground">{stateName(s.state)}</span>}
@@ -125,7 +125,7 @@ export function SchoolWidget({
             <button
               type="button"
               onClick={() => setShowAll(true)}
-              className="cursor-pointer text-xs text-brand underline-offset-2 hover:underline"
+              className="cursor-pointer rounded-sm text-xs text-brand underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
             >
               Tìm trong tất cả trường
             </button>

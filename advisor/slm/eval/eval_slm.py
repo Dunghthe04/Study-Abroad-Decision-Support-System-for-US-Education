@@ -155,7 +155,7 @@ async def read_intents_with_reason(
     client: OllamaClient, messages: list[dict[str, str]], question: str, context: dict[str, Any] | None
 ) -> tuple[SlmTinResult, str | None]:
     """Gọi model, làm sạch như lúc chạy thật (keep_verbatim) rồi kiểm bằng hợp đồng.
-    Sai luật hai lần thì lùi về tin mơ hồ (confidence 0), giống OllamaSlm. Trả thêm lý do của lần thất bại cuối (None nếu thành công)."""
+    Giống OllamaSlm: Ollama lỗi thì gọi lại tối đa hai lần, model trả sai luật thì không gọi lại; hết lượt thì lùi về tin mơ hồ (confidence 0). Trả thêm lý do của lần thất bại cuối (None nếu thành công)."""
     names = {name.lower() for name in (context or {}).get("schools", [])}
     reason: str | None = None
     for _ in range(2):
@@ -163,8 +163,11 @@ async def read_intents_with_reason(
             raw, content, logprobs = await client.chat_json_scored(messages, "json")
             raw = keep_verbatim(raw, question, names)
             return SlmTinResult.from_raw(raw, confidence=label_confidence(content, logprobs)), None
-        except (OllamaError, ValueError, TypeError, KeyError, AttributeError) as ex:
+        except OllamaError as ex:
             reason = classify_failure(ex)
+        except (ValueError, TypeError, KeyError, AttributeError) as ex:
+            reason = classify_failure(ex)
+            break
     return FALLBACK.model_copy(deep=True), reason
 
 

@@ -43,6 +43,13 @@ public class UsageCollectingAdvisorClient(IAdvisorClient inner, IAiUsageCollecto
         return response;
     }
 
+    public async Task<RecommendNoteResponseDto> WriteRecommendNoteAsync(RecommendNoteRequestDto request, CancellationToken ct = default)
+    {
+        var response = await inner.WriteRecommendNoteAsync(request, ct);
+        collector.Add(response.AiUsage);
+        return response;
+    }
+
     public async Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default)
     {
         var response = await inner.WriteCompareNoteAsync(request, ct);

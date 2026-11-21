@@ -7,18 +7,21 @@ from app.api.deps import (
     get_ec_reader,
     get_explainer,
     get_goal_writer,
+    get_recommend_writer,
     get_scenario_writer,
 )
 from app.schemas.compare_note import CompareNoteRequest, CompareNoteResponse
 from app.schemas.ec import EcRequest, EcResponse
 from app.schemas.explain import ExplainRequest, ExplainResponse
 from app.schemas.goal_note import GoalNoteRequest, GoalNoteResponse
+from app.schemas.recommend_note import RecommendNoteRequest, RecommendNoteResponse
 from app.schemas.scenario_note import ScenarioNoteRequest, ScenarioNoteResponse
 from app.services import usage_meter
 from app.services.compare_writer import CompareWriter
 from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
 from app.services.goal_writer import GoalWriter
+from app.services.recommend_writer import RecommendWriter
 from app.services.scenario_writer import ScenarioWriter
 
 router = APIRouter(prefix="/api/v1/recommend", tags=["recommend"])
@@ -47,6 +50,13 @@ async def what_if(
 async def compare(
     req: CompareNoteRequest, writer: Annotated[CompareWriter, Depends(get_compare_writer)]
 ) -> CompareNoteResponse:
+    return await usage_meter.metered(writer.write(req))
+
+
+@router.post("/school-list", response_model=RecommendNoteResponse)
+async def school_list(
+    req: RecommendNoteRequest, writer: Annotated[RecommendWriter, Depends(get_recommend_writer)]
+) -> RecommendNoteResponse:
     return await usage_meter.metered(writer.write(req))
 
 

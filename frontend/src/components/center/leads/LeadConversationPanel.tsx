@@ -259,7 +259,7 @@ export function LeadConversationPanel({
       <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
         <AlertTriangleIcon className="size-4 text-amber-600 shrink-0 mt-0.5" />
         <span>
-          <strong>Lưu ý bảo mật:</strong> USAS không thu phí dịch vụ qua tin nhắn. Tuyệt đối không yêu cầu hoặc thực hiện chuyển khoản tiền cọc qua tài khoản cá nhân.
+          <strong>Lưu ý bảo mật:</strong> USDSS không thu phí dịch vụ qua tin nhắn. Tuyệt đối không yêu cầu hoặc thực hiện chuyển khoản tiền cọc qua tài khoản cá nhân.
         </span>
       </div>
 
@@ -393,20 +393,12 @@ export function LeadConversationPanel({
             <Button
               type="submit"
               size="sm"
-              disabled={isSending || (!trimmedDraft && !imageFile) || trimmedDraft.length > MAX_LEAD_MESSAGE_LENGTH}
+              loading={isSending}
+              disabled={(!trimmedDraft && !imageFile) || trimmedDraft.length > MAX_LEAD_MESSAGE_LENGTH}
               className="gap-1.5 text-xs"
             >
-              {isSending ? (
-                <>
-                  <Spinner className="size-3.5" />
-                  Đang gửi...
-                </>
-              ) : (
-                <>
-                  <SendIcon className="size-3.5" />
-                  Gửi phản hồi
-                </>
-              )}
+              <SendIcon className="size-3.5" />
+              Gửi phản hồi
             </Button>
           </div>
         </form>

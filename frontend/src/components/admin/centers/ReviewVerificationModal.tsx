@@ -141,13 +141,16 @@ export function ReviewVerificationModal({
               Kiểm duyệt hồ sơ xác minh trung tâm (UC-59)
             </h2>
           </div>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-sm"
             onClick={onClose}
-            className="p-1 rounded-lg text-ink-3 hover:bg-surface-3 hover:text-ink transition-colors"
+            aria-label="Đóng"
+            className="text-ink-3 hover:bg-surface-3 hover:text-ink"
           >
             <XIcon className="h-5 w-5" />
-          </button>
+          </Button>
         </div>
 
         {/* Content Body */}
@@ -395,11 +398,11 @@ export function ReviewVerificationModal({
             <Button
               type="button"
               size="sm"
-              disabled={submitting || !allConditionsMet}
+              disabled={!allConditionsMet}
+              loading={submitting}
               onClick={() => handleAction("approve")}
               className="bg-emerald-600 hover:bg-emerald-700 text-white"
             >
-              {submitting && <Spinner data-icon="inline-start" />}
               Duyệt & Cấp tick xanh
             </Button>
           </div>

@@ -21,7 +21,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 
 export type CenterConfirmAction = "verify" | "unverify" | "hide" | "show";
@@ -182,19 +181,14 @@ function CenterActionConfirmContent({
         <Button
           variant={action === "verify" || action === "show" ? "default" : "destructive"}
           onClick={() => onConfirm(isVerificationAction ? note.trim() : undefined)}
-          disabled={isSubmitting}
+          loading={isSubmitting}
           className={
             action === "verify" || action === "show"
               ? "bg-ok hover:bg-ok/90 text-white"
               : undefined
           }
         >
-          {isSubmitting ? (
-            <>
-              <Spinner className="w-4 h-4 mr-1.5" />
-              Đang xử lý...
-            </>
-          ) : action === "verify" ? (
+          {action === "verify" ? (
             <>
               <CheckCircle2Icon className="w-4 h-4 mr-1.5" />
               Xác nhận xác minh

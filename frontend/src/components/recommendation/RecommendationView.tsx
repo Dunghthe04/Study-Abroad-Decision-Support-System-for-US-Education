@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { ErrorFallback } from "@/components/ui/error-fallback";
 import { Spinner } from "@/components/ui/spinner";
 import { useAssistant, useAssistantPageContext } from "@/components/assistant/AssistantProvider";
+import { PremiumLockedCard } from "@/components/billing/PremiumLockedCard";
+import { isPremiumRequired } from "@/lib/billing-api";
 import { recommendationApi } from "@/lib/recommendation-api";
 import { whyText } from "@/lib/recommendation-labels";
 import { mainGroupOf, restOfGroup, type MainGroup } from "@/lib/recommendation-groups";
@@ -63,6 +65,8 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
   // Vừa gửi hồ sơ thì bắt đầu ở trạng thái "running", còn lại là "loading" (đọc lần đã lưu)
   const [phase, setPhase] = useState<"loading" | "running" | "ready">(autoRun ? "running" : "loading");
   const [error, setError] = useState<string | null>(null);
+  // Tài khoản Miễn phí tạo gợi ý mới: server trả 403 premium_required, hiện thẻ khóa thay cho lỗi chung
+  const [locked, setLocked] = useState(false);
   const started = useRef(false); // dev mode chạy useEffect 2 lần; không được tạo 2 lần gợi ý
   const { openPanel, sendAction } = useAssistant();
   // Nút trên thẻ trường gửi câu hỏi vào khung chat kèm mã trường (không qua SLM): chat trả thẻ kết quả rồi lời tư vấn
@@ -150,11 +154,13 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
     setFocusCode(null);
     setPhase("running");
     setError(null);
+    setLocked(false);
     sim.resetAll();
     try {
       setRec(await recommendationApi.create(rec?.criteria.pref));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Chưa tạo được gợi ý.");
+      if (isPremiumRequired(err)) setLocked(true);
+      else setError(err instanceof Error ? err.message : "Chưa tạo được gợi ý.");
     } finally {
       setPhase("ready");
     }
@@ -171,7 +177,10 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
     const load = autoRun ? recommendationApi.create() : recommendationApi.getLatest();
     load
       .then(setRec)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Chưa tải được gợi ý."))
+      .catch((err: unknown) => {
+        if (isPremiumRequired(err)) setLocked(true);
+        else setError(err instanceof Error ? err.message : "Chưa tải được gợi ý.");
+      })
       .finally(() => setPhase("ready"));
   }, [autoRun, router]);
 
@@ -184,6 +193,17 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
             ? "Đang lọc trường, đọc hoạt động ngoại khóa và xếp nhóm..."
             : "Đang tải gợi ý của bạn..."}
         </p>
+      </div>
+    );
+  }
+
+  if (!rec && locked) {
+    return (
+      <div className="mx-auto max-w-lg space-y-3 px-4 py-10">
+        <PremiumLockedCard title="Gợi ý trường cần tài khoản USDSS Premium" note="Bạn vẫn xem được lịch sử gợi ý và kịch bản đã lưu." />
+        <Link href="/recommendations/history" className="text-sm font-medium text-brand underline">
+          Xem lịch sử gợi ý
+        </Link>
       </div>
     );
   }
@@ -244,6 +264,8 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
           </div>
         )}
       </div>
+
+      {locked && <PremiumLockedCard title="Gợi ý trường mới cần tài khoản USDSS Premium" />}
 
       {error && (
         <Alert variant="destructive">

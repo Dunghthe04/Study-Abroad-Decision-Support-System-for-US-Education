@@ -121,7 +121,7 @@ public class CenterRegistrationAndVerificationTests
     }
 
     [Fact]
-    public async Task SubmitVerification_FailsWhenPhoneNotVerified()
+    public async Task SubmitVerification_FailsWhenEmailNotVerified()
     {
         var centerRepo = new FakeStudyCenterRepo();
         var verifRepo = new FakeVerificationRepo();
@@ -702,17 +702,15 @@ public class CenterRegistrationAndVerificationTests
     }
 
     [Fact]
-    public async Task Submit_EmailVerifiedButPhoneNotVerified_IsRejected()
+    public async Task Submit_PhoneNeverVerified_IsNotABlocker()
     {
-        // [UC-91] Phải xác thực cả email và số điện thoại trước khi nộp hồ sơ xác minh
+        // [UC-91] Số điện thoại không xác thực bằng SMS OTP nữa: chỉ email là điều kiện nộp hồ sơ
         var (service, _, _, center) = SubmitSetup();
         center.PhoneVerifiedAt = null;
 
         var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(1));
 
-        Assert.False(result.Success);
-        Assert.Contains("xác thực số điện thoại", result.ErrorMessage);
-        Assert.Equal(CenterVerificationStatuses.Unverified, center.VerificationStatus);
+        Assert.True(result.Success);
     }
     // ===== [UC-92] Phân loại thay đổi khi trung tâm tự sửa hồ sơ, yêu cầu xóa tài khoản =====
 
@@ -869,7 +867,8 @@ public class CenterRegistrationAndVerificationTests
         Assert.Equal("https://lan-2.edu.vn", pending.NewValue);
 
         await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(Website: "https://abc.edu.vn"));
-        Assert.Equal(CenterProfileChangeStatuses.Passed, pending.Status);
+        // Không phải Moderator duyệt nên dùng trạng thái riêng, không lẫn vào danh sách Đạt
+        Assert.Equal(CenterProfileChangeStatuses.Withdrawn, pending.Status);
     }
 
     [Theory]

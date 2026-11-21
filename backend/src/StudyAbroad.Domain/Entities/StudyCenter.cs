@@ -36,7 +36,10 @@ public class StudyCenter : BaseEntity
     /// <summary>Thời điểm email liên hệ/đăng nhập của trung tâm được xác thực qua OTP (UC-91).</summary>
     public DateTime? EmailVerifiedAt { get; set; }
 
-    /// <summary>Thời điểm số điện thoại của trung tâm được xác thực qua SMS OTP (UC-91, BR-C3).</summary>
+    /// <summary>
+    /// Không còn dùng: xác thực số điện thoại bằng SMS OTP đã bỏ, số điện thoại chỉ là thông tin liên hệ.
+    /// Giữ cột để tránh migration; dữ liệu cũ không ảnh hưởng nghiệp vụ.
+    /// </summary>
     public DateTime? PhoneVerifiedAt { get; set; }
 
     /// <summary>Thời điểm trung tâm đồng ý Điều khoản &amp; Quyền riêng tư (UC-64).</summary>

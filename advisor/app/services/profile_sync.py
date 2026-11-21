@@ -18,6 +18,9 @@ DRAFT_KEYS = {
     "standardized_plan",
     "certifications",
     "budget",
+    # UC-94: số tiền tối đa/năm phụ huynh nhập hộ con managed (VNĐ vừa nhập, USD đã lưu lần trước)
+    "budget_vnd",
+    "budget_usd",
     "scholarship",
     "activities",
     "awards",

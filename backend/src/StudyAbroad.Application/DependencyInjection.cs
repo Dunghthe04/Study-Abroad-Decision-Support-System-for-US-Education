@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Universities.IUniversityDetailService, StudyAbroad.Application.Universities.UniversityDetailService>();
         services.AddScoped<StudyAbroad.Application.TargetSchools.ITargetSchoolService, StudyAbroad.Application.TargetSchools.TargetSchoolService>();
         services.AddScoped<IStudyCenterService, StudyCenterService>();
+        services.AddScoped<ICenterAccountService, CenterAccountService>();   // [UC-64 / UC-91] đăng ký, xác thực email, đổi liên lạc của trung tâm
         services.AddScoped<StudyAbroad.Application.Notifications.INotificationService, StudyAbroad.Application.Notifications.NotificationService>();
         services.AddScoped<ICenterProfileChangeReviewService, CenterProfileChangeReviewService>();   // [UC-114] Moderator kiểm tra thay đổi website/fanpage
         services.AddScoped<IAdminUniversityService, AdminUniversityService>();
@@ -58,7 +59,16 @@ public static class DependencyInjection
         services.AddScoped<ManagedChildService>();     // 1.5a: phụ huynh thêm / đổi tên / xóa con chưa có tài khoản
         services.AddScoped<ActingSessionGuard>();      // 1.5b: kiểm tra phiên làm thay con managed ở mỗi request
         services.AddScoped<ActingService>();           // 1.5b: vào / thoát làm thay
+        services.AddScoped<StudyAbroad.Application.Dashboard.IDashboardService, StudyAbroad.Application.Dashboard.DashboardService>(); // [UC-94] Dashboard KPI
         services.AddScoped<StudyAbroad.Application.Audit.IAccessLogService, StudyAbroad.Application.Audit.AccessLogService>();   // [UC-97] nhật ký truy cập dữ liệu nhạy cảm
+        services.AddScoped<StudyAbroad.Application.Billing.IEntitlementService, StudyAbroad.Application.Billing.EntitlementService>();   // gói dịch vụ: tier, pool trả cho lượt chat
+        services.AddScoped<StudyAbroad.Application.Billing.Admin.IPlanAdminService, StudyAbroad.Application.Billing.Admin.PlanAdminService>();   // UC-79: admin quản lý gói
+        services.AddScoped<StudyAbroad.Application.Billing.Family.IFamilyService, StudyAbroad.Application.Billing.Family.FamilyService>();   // gói Gia đình: lời mời, thành viên, rời gói (UC-126..131)
+        services.AddScoped<StudyAbroad.Application.Billing.Orders.IOrderService, StudyAbroad.Application.Billing.Orders.OrderService>();   // đơn hàng, thanh toán payOS
+        services.AddScoped<StudyAbroad.Application.Billing.IBillingAccountHooks, StudyAbroad.Application.Billing.BillingAccountHooks>();   // UC-80: xóa tài khoản kết thúc nhóm, đơn chờ
+        services.AddScoped<StudyAbroad.Application.Billing.Jobs.OrderReconciler>();   // áp dụng trạng thái payOS vào đơn (job đối soát, admin kiểm lại)
+        services.AddScoped<StudyAbroad.Application.Billing.Jobs.IBillingJobService, StudyAbroad.Application.Billing.Jobs.BillingJobService>();   // các bước của job nền thanh toán
+        services.AddScoped<StudyAbroad.Application.Billing.Admin.IAdminOrderService, StudyAbroad.Application.Billing.Admin.AdminOrderService>();   // UC-132..134: admin xử lý đơn
         return services;
     }
 }

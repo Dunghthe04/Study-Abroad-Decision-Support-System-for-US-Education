@@ -57,7 +57,7 @@ export function MajorWidget({ onPick }: { onPick?: (major: string) => void }) {
               type="button"
               disabled={!onPick}
               onClick={() => onPick?.(m.label)}
-              className="w-full cursor-pointer px-3 py-1.5 text-left text-foreground hover:bg-brand-wash/50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full cursor-pointer px-3 py-1.5 text-left text-foreground hover:bg-brand-wash/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default disabled:opacity-60"
             >
               {m.label}
             </button>

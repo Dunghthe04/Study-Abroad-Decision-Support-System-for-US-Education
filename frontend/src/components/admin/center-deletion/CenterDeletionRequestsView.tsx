@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
@@ -144,16 +143,6 @@ export function CenterDeletionRequestsView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-h2">Yêu cầu xóa trung tâm</h1>
-        <p className="text-sm text-ink-2">
-          Trung tâm gửi yêu cầu xóa tài khoản và dữ liệu từ trang hồ sơ. Kiểm tra danh tính người gửi (đúng tài khoản chủ trung tâm, liên hệ
-          lại qua email hoặc số điện thoại đã xác thực) trước khi duyệt. Sau khi duyệt, dữ liệu được xóa hẳn khi hết thời hạn chờ.
-          Nếu trung tâm bị nghi lừa đảo, có khiếu nại hoặc cơ quan có thẩm quyền yêu cầu giữ dữ liệu, bật giữ pháp lý: yêu cầu xóa không
-          thể duyệt và dữ liệu không bị xóa hẳn tới khi gỡ. Khi xóa hẳn, nhật ký và tin nhắn được giữ lại ở dạng ẩn danh để truy vết.
-        </p>
-      </header>
-
       <Segmented label="Lọc yêu cầu" value={filter} options={FILTER_OPTIONS} onChange={changeFilter} />
 
       {query.error ? (
@@ -364,10 +353,10 @@ export function CenterDeletionRequestsView() {
               type="button"
               variant={target?.decision === "approve" ? "destructive" : "default"}
               onClick={() => void confirm()}
-              disabled={busy || !note.trim()}
+              disabled={!note.trim()}
+              loading={busy}
               className="gap-1.5"
             >
-              {busy ? <Spinner className="size-3.5" /> : null}
               {decisionText?.confirm}
             </Button>
           </AlertDialogFooter>

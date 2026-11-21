@@ -223,8 +223,7 @@ export function SuggestToChildrenButton({
               <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={sending}>
                 Hủy
               </Button>
-              <Button type="button" onClick={submit} disabled={sending || picked.length === 0} className="gap-2">
-                {sending && <Spinner />}
+              <Button type="button" onClick={submit} disabled={sending || picked.length === 0} className="gap-2" loading={sending}>
                 Gửi gợi ý
               </Button>
             </DialogFooter>
