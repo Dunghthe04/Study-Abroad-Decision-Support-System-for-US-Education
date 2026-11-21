@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { connection } from "next/server";
 import { apiFetch } from "@/lib/api";
 import type { PagedResult, StudyCenter } from "@/types/api";
@@ -29,13 +28,6 @@ export default async function CentersPage() {
   return (
     <section className="space-y-6 pb-12">
       <PublicCenterListView initialCenters={data.items ?? []} />
-      {/* [UC-64] Lối vào đăng ký tài khoản trung tâm nằm ở khu vực trung tâm, không nằm ở trang đăng nhập */}
-      <div className="border-t border-line pt-4 text-center text-sm text-ink-2">
-        Bạn là đơn vị tư vấn du học?{" "}
-        <Link href="/register/center" className="font-semibold text-brand hover:underline">
-          Đăng ký tài khoản trung tâm
-        </Link>
-      </div>
     </section>
   );
 }
