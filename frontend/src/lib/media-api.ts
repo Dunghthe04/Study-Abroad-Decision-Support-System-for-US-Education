@@ -1,6 +1,6 @@
 import { authFetch } from "@/lib/auth-refresh";
 
-export type ImageUploadPurpose = "school-logo" | "school-cover";
+export type ImageUploadPurpose = "school-logo" | "school-cover" | "center-logo" | "center-cover";
 
 export interface UploadedImage {
   secureUrl: string;
@@ -14,6 +14,8 @@ export interface UploadedImage {
 export const IMAGE_UPLOAD_LIMITS: Record<ImageUploadPurpose, number> = {
   "school-logo": 2 * 1024 * 1024,
   "school-cover": 10 * 1024 * 1024,
+  "center-logo": 2 * 1024 * 1024,
+  "center-cover": 10 * 1024 * 1024,
 };
 
 export async function uploadImage(file: File, purpose: ImageUploadPurpose, signal?: AbortSignal): Promise<UploadedImage> {

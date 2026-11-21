@@ -15,6 +15,7 @@ import type { StudyCenter } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ImageUploadField } from "@/components/admin/shared/ImageUploadField";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
@@ -79,6 +80,7 @@ export function CenterProfileView() {
   const [feeMax, setFeeMax] = useState<string>("");
   const [feeDescription, setFeeDescription] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [coverImageUrl, setCoverImageUrl] = useState("");
 
   // Thông tin pháp lý (khóa khi đã xác minh)
@@ -557,6 +559,34 @@ export function CenterProfileView() {
               Website và fanpage mới hiển thị ngay nhưng sẽ được Moderator kiểm tra lại.
             </p>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field>
+                <FieldLabel htmlFor="center-logo">Logo trung tâm</FieldLabel>
+                <ImageUploadField
+                  id="center-logo"
+                  purpose="center-logo"
+                  value={logoUrl}
+                  onChange={setLogoUrl}
+                  disabled={isSubmitting}
+                  onUploadingChange={setIsUploadingImage}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="center-cover">Ảnh bìa trung tâm</FieldLabel>
+                <ImageUploadField
+                  id="center-cover"
+                  purpose="center-cover"
+                  value={coverImageUrl}
+                  onChange={setCoverImageUrl}
+                  disabled={isSubmitting}
+                  onUploadingChange={setIsUploadingImage}
+                />
+              </Field>
+            </div>
+            <p className="-mt-2 text-xs text-ink-3">
+              Ảnh được kiểm duyệt nội dung khi tải lên. Bấm &quot;Lưu hồ sơ trung tâm&quot; để áp dụng.
+            </p>
+
             <Field>
               <FieldLabel htmlFor="address">Địa chỉ văn phòng tư vấn</FieldLabel>
               <Input
@@ -708,7 +738,7 @@ export function CenterProfileView() {
               </Field>
             </div>
 
-            <Button type="submit" size="lg" loading={isSubmitting} className="w-full sm:w-auto">
+            <Button type="submit" size="lg" loading={isSubmitting} disabled={isUploadingImage} className="w-full sm:w-auto">
               Lưu hồ sơ trung tâm
             </Button>
           </FieldGroup>
