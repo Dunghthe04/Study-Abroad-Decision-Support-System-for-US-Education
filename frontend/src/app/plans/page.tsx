@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 // Trang công khai: khách xem bảng giá, học sinh/phụ huynh đã đăng nhập thấy gói hiện tại và nút mua.
 export default function PlansPage() {
   return (
-    <div className="py-6">
+    <div className="pt-8 pb-6 sm:pt-12 lg:pt-16">
       <PlansView />
     </div>
   );

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckIcon, GraduationCapIcon, UsersIcon } from "lucide-react";
+import { CheckIcon, ClockIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -18,15 +19,10 @@ import type { PlanDto, PlanKind, SubscriptionSummaryDto } from "@/types/billing"
 const AGE_REASON = "Tài khoản dưới 16 tuổi chưa thể mua gói";
 const KIND_ORDER: readonly PlanKind[] = ["free", "personal", "family"];
 
-const PLAN_VISUAL: Partial<Record<PlanKind, { boxClass: string; icon: ReactNode }>> = {
-  personal: {
-    boxClass: "bg-brand-wash border border-brand/15 text-brand",
-    icon: <GraduationCapIcon className="size-6" aria-hidden />,
-  },
-  family: {
-    boxClass: "bg-gold-wash border border-gold/20 text-gold",
-    icon: <UsersIcon className="size-6" aria-hidden />,
-  },
+const PLAN_IMAGE: Record<PlanKind, string> = {
+  free: "/plans/free_plan.png",
+  personal: "/plans/personal_plan.png",
+  family: "/plans/family_plan.png",
 };
 
 function buildFeatures(plan: PlanDto): ReactNode[] {
@@ -80,9 +76,10 @@ export function PlansView() {
   const { user, isLoading: authLoading } = useAuth();
   const canBuy = user?.role === "student" || user?.role === "parent";
 
+  const [subVersion, setSubVersion] = useState(0);
   const plans = useFetched("plans", billingApi.plans);
   // Chỉ học sinh/phụ huynh mới có GET subscription; khách gọi sẽ đi vào luồng 401 làm mới phiên
-  const sub = useFetched<SubscriptionSummaryDto | null>(canBuy ? `sub:${user?.id}` : "none", () =>
+  const sub = useFetched<SubscriptionSummaryDto | null>(canBuy ? `sub:${user?.id}:${subVersion}` : "none", () =>
     canBuy ? billingApi.subscription() : Promise.resolve(null),
   );
 
@@ -90,6 +87,25 @@ export function PlansView() {
   const [busy, setBusy] = useState<string | null>(null);
   const [messages, setMessages] = useState<Record<string, string>>({});
   const [ageBlocked, setAgeBlocked] = useState(false);
+  const [cancellingPending, setCancellingPending] = useState(false);
+  const [pendingError, setPendingError] = useState<string | null>(null);
+
+  const cancelPendingOrder = async () => {
+    const orderCode = sub.data?.pendingOrderCode;
+    if (!orderCode) return;
+    setCancellingPending(true);
+    setPendingError(null);
+    try {
+      await billingApi.cancelOrder(orderCode);
+      setSubVersion((v) => v + 1);
+    } catch (err) {
+      const e = getBillingError(err);
+      if (e?.code === "not_pending") setSubVersion((v) => v + 1);
+      else setPendingError(e?.message ?? (err instanceof Error ? err.message : "Chưa hủy được đơn."));
+    } finally {
+      setCancellingPending(false);
+    }
+  };
 
   const buy = async (code: string) => {
     setBusy(code);
@@ -205,18 +221,44 @@ export function PlansView() {
   };
 
   return (
-    <div className="w-full space-y-6">
-      <h1 className="text-center text-h1">Chọn gói phù hợp với bạn</h1>
+    <div className="w-full space-y-10 sm:space-y-14">
+      <h1 className="font-heading text-center text-3xl font-semibold tracking-tight text-ink sm:text-4xl lg:text-[2.625rem]">
+        Chọn gói phù hợp với bạn
+      </h1>
 
       {s?.pendingOrderCode && (
-        <Alert variant="info">
-          <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
-            <span>Bạn có một đơn hàng đang chờ thanh toán.</span>
-            <Link href={`/orders/${s.pendingOrderCode}`} className="font-medium underline">
-              Xem đơn hàng
-            </Link>
-          </AlertDescription>
-        </Alert>
+        <div
+          role="status"
+          className="rounded-2xl border border-brand/20 bg-brand-wash/60 px-5 py-4 sm:px-6 sm:py-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <ClockIcon className="size-5 shrink-0 text-brand" aria-hidden />
+              <span className="text-sm font-medium text-ink sm:text-base">
+                Bạn có một đơn hàng đang chờ thanh toán.
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Link
+                href={`/orders/${s.pendingOrderCode}`}
+                className={buttonVariants({ size: "sm", className: "h-9 rounded-lg px-4 font-semibold" })}
+              >
+                Thanh toán
+              </Link>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                loading={cancellingPending}
+                onClick={() => void cancelPendingOrder()}
+                className="h-9 rounded-lg bg-surface px-4 font-medium text-ink hover:bg-ground"
+              >
+                Hủy đơn
+              </Button>
+            </div>
+          </div>
+          {pendingError && <p className="mt-2.5 text-sm text-risk">{pendingError}</p>}
+        </div>
       )}
       {ageBlocked && (
         <Alert variant="warning">
@@ -225,41 +267,41 @@ export function PlansView() {
       )}
 
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 lg:grid-rows-[auto_auto_auto_1fr] lg:gap-y-0">
-        {grouped.map(({ kind, items }) => {
-          const explicitCode = selectedByKind[kind];
-          const activeCode = activeCodeForKind(kind);
-          const plan =
-            items.find((p) => p.code === explicitCode) ??
-            items.find((p) => p.code === activeCode) ??
-            items[0];
+          {grouped.map(({ kind, items }) => {
+            const explicitCode = selectedByKind[kind];
+            const activeCode = activeCodeForKind(kind);
+            const plan =
+              items.find((p) => p.code === explicitCode) ??
+              items.find((p) => p.code === activeCode) ??
+              items[0];
 
-          const hasDuplicateDuration = items.some(
-            (p, idx) => items.findIndex((q) => q.durationDays === p.durationDays) !== idx,
-          );
-          const visual = PLAN_VISUAL[kind];
-          const statusBadge = renderStatusBadge(plan);
-          const cta = renderCta(plan);
-          const periodUnit =
-            plan.kind === "free"
-              ? plan.quotaPeriodDays == null
-                ? "tháng"
-                : `${plan.quotaPeriodDays} ngày`
-              : `${plan.durationDays} ngày`;
-          const features = buildFeatures(plan);
+            const hasDuplicateDuration = items.some(
+              (p, idx) => items.findIndex((q) => q.durationDays === p.durationDays) !== idx,
+            );
+            const statusBadge = renderStatusBadge(plan);
+            const cta = renderCta(plan);
+            const periodUnit =
+              plan.kind === "free"
+                ? plan.quotaPeriodDays == null
+                  ? "tháng"
+                  : `${plan.quotaPeriodDays} ngày`
+                : `${plan.durationDays} ngày`;
+            const features = buildFeatures(plan);
 
-          return (
-            <section
-              key={kind}
-              className="flex flex-col rounded-2xl border border-line bg-surface p-6 lg:row-span-4 lg:grid lg:grid-rows-subgrid"
-            >
-              <div className="pb-5">
-                {(visual || items.length > 1) && (
+            return (
+              <section
+                key={kind}
+                className="flex flex-col rounded-2xl border border-line bg-surface p-6 lg:row-span-4 lg:grid lg:grid-rows-subgrid"
+              >
+                <div className="pb-5">
                   <div className="mb-5 flex items-start justify-between gap-3">
-                    {visual && (
-                      <div className={cn("flex size-14 shrink-0 items-center justify-center rounded-2xl", visual.boxClass)}>
-                        {visual.icon}
-                      </div>
-                    )}
+                    <Image
+                      src={PLAN_IMAGE[kind]}
+                      alt=""
+                      width={64}
+                      height={64}
+                      className="size-16 shrink-0 object-contain"
+                    />
 
                     {items.length > 1 && (
                       <div
@@ -297,41 +339,40 @@ export function PlansView() {
                       </div>
                     )}
                   </div>
-                )}
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-heading text-2xl font-semibold tracking-tight text-ink">{plan.name}</h2>
-                  {statusBadge}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="font-heading text-2xl font-semibold tracking-tight text-ink">{plan.name}</h2>
+                    {statusBadge}
+                  </div>
+                  {plan.description && <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{plan.description}</p>}
                 </div>
-                {plan.description && <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{plan.description}</p>}
-              </div>
 
-              <div className="pb-5">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-3xl font-bold tracking-tight text-ink tabular-nums sm:text-4xl">
-                    {plan.priceVnd === 0 ? "0 đ" : formatVnd(plan.priceVnd)}
-                  </span>
-                  <span className="text-sm font-normal text-ink-2">/ {periodUnit}</span>
+                <div className="pb-5">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-3xl font-bold tracking-tight text-ink tabular-nums sm:text-4xl">
+                      {plan.priceVnd === 0 ? "0 đ" : formatVnd(plan.priceVnd)}
+                    </span>
+                    <span className="text-sm font-normal text-ink-2">/ {periodUnit}</span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                {cta}
-                {messages[plan.code] && <p className="text-sm text-risk">{messages[plan.code]}</p>}
-                <hr className="my-6 border-t border-line" />
-              </div>
+                <div className="space-y-2">
+                  {cta}
+                  {messages[plan.code] && <p className="text-sm text-risk">{messages[plan.code]}</p>}
+                  <hr className="my-6 border-t border-line" />
+                </div>
 
-              <ul className="space-y-3 text-sm leading-relaxed text-ink-2">
-                {features.map((item, idx) => (
-                  <li key={idx} className="flex items-start gap-2.5">
-                    <CheckIcon className="mt-0.5 size-4 shrink-0 text-risk" aria-hidden />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          );
-        })}
+                <ul className="space-y-3 text-sm leading-relaxed text-ink-2">
+                  {features.map((item, idx) => (
+                    <li key={idx} className="flex items-start gap-2.5">
+                      <CheckIcon className="mt-0.5 size-4 shrink-0 text-risk" aria-hidden />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
       </div>
     </div>
   );
