@@ -33,7 +33,9 @@ interface Props {
 export function UserUsageSheet({ user, range, onClose }: Props) {
   return (
     <Sheet open={user !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent side="right" className="w-full gap-0 overflow-y-auto sm:max-w-3xl">
+      {/* Khung Sheet mặc định khóa bề ngang bằng data-[side=right]:w-3/4 và data-[side=right]:sm:max-w-sm (bộ chọn thuộc tính nặng hơn class thường),
+          nên phải ghi đè đúng biến thể đó; ghi sm:max-w-3xl thường không có tác dụng và khung bị thu còn 24rem làm cắt cột "Chi phí" */}
+      <SheetContent side="right" className="gap-0 overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-4xl">
         {/* Sheet vẽ ra ngoài khung trang nên tự mang bộ màu biểu đồ */}
         <div className="ai-viz flex flex-col gap-4 p-4">
           {user ? <Body key={user.userId} user={user} range={range} /> : null}
