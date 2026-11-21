@@ -194,7 +194,8 @@ public class FamilyService(
             throw FamilyErrors.InviteExpired();
 
         var user = await users.GetUserById(userId, ct);
-        if (user is null || !SameEmail(user.Email, member.InvitedEmail))
+        // Tài khoản đã xóa mềm không nhận lời mời được nữa: tư cách active chen vào sau lúc xóa sẽ không ai dọn tới khi xóa hẳn
+        if (user is null || user.DeletedAt is not null || !SameEmail(user.Email, member.InvitedEmail))
             throw FamilyErrors.WrongAccount();
         if (role != member.SeatRole)   // nhân viên và trung tâm không bao giờ khớp
             throw FamilyErrors.RoleMismatch();

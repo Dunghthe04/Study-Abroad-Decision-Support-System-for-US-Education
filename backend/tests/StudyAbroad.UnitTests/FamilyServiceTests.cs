@@ -572,6 +572,21 @@ public class FamilyServiceTests
         Assert.Equal(FamilyMemberStatuses.Pending, invite.Status);
     }
 
+    // L4: tài khoản đã xóa mềm không nhận lời mời được nữa (Accept chen vào lúc xóa mềm sẽ để lại tư cách active không ai dọn)
+    [Fact]
+    public async Task L4_SoftDeletedAccount_CannotAccept_403WrongAccount_InviteStaysPending()
+    {
+        var env = new Env();
+        var (invite, token) = env.AddPending(env.Student.Email, FamilySeats.Student);
+        env.Student.Status = UserStatuses.Deleted;
+        env.Student.DeletedAt = Now.AddMinutes(-1);
+
+        var ex = await Assert.ThrowsAsync<BillingRuleException>(() => env.Service.AcceptAsync(env.Student.Id, UserRoles.Student, token, Now));
+
+        Assert.Equal(("wrong_account", 403), (ex.Code, ex.StatusCode));
+        Assert.Equal((FamilyMemberStatuses.Pending, (Guid?)null), (invite.Status, invite.UserId));
+    }
+
     [Fact]
     public async Task F10_RoleDiffersFromTheSeat_RoleMismatch409()
     {
