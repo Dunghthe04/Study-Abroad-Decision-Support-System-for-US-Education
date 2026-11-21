@@ -54,7 +54,8 @@ import { cn } from "@/lib/utils";
  * Trang chủ: nền trong suốt nằm trên ảnh trường, cuộn xuống thì thành nền trắng như các trang khác.
  */
 // Mục menu avatar: to và thoáng hơn mặc định để dễ bấm
-const MENU_ITEM = "cursor-pointer gap-3 rounded-lg px-3 py-2.5 text-[15px] [&_svg:not([class*='size-'])]:size-[18px]";
+const MENU_ITEM = "cursor-pointer gap-3 rounded-lg px-3 py-2 text-sm [&_svg:not([class*='size-'])]:size-[17px]";
+const MENU_LABEL = "px-3 pt-3 pb-1 text-[13px]";
 
 function formatSubscriptionLabel(sub: SubscriptionSummaryDto): string {
   const activePool =
@@ -225,18 +226,10 @@ export function SiteHeader() {
                 <DropdownMenu onOpenChange={(open) => open && setMenuOpens((n) => n + 1)}>
                 <DropdownMenuTrigger
                   aria-label={`Tài khoản của ${user.fullName}`}
-                  className="group flex h-9 cursor-pointer items-center rounded-lg border border-white/30 bg-white/10 p-1 text-white outline-none transition-colors hover:bg-white/15 focus-visible:ring-3 focus-visible:ring-white/50 data-popup-open:bg-white/20"
+                  className="group flex h-9 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-white outline-none transition-colors hover:bg-white/10 focus-visible:ring-3 focus-visible:ring-white/50 data-popup-open:bg-white/10"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[color-mix(in_oklab,var(--brand),white_38%)] text-white"
-                  >
-                    <UserRoleIcon role={user.role} className="size-[18px]" />
-                  </span>
-                  <span className="hidden max-w-36 truncate px-2 text-sm font-medium sm:block">{user.fullName}</span>
-                  <span aria-hidden="true" className="ml-1 flex h-5 items-center border-l border-white/30 px-1.5">
-                    <ChevronDownIcon className="size-3.5 transition-transform group-data-popup-open:rotate-180" />
-                  </span>
+                  <span className="max-w-36 truncate text-sm font-medium">{user.fullName}</span>
+                  <ChevronDownIcon aria-hidden="true" className="size-3.5 shrink-0 transition-transform group-data-popup-open:rotate-180" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" sideOffset={8} className="w-[22rem] p-0">
                   {/* Đầu menu: biểu tượng vai trò, tên, gói; học sinh / phụ huynh có thêm hạn mức chung còn lại */}
@@ -260,9 +253,15 @@ export function SiteHeader() {
                           <span className="truncate text-sm text-ink-2">{formatUserRole(user.role)}</span>
                         )}
                       </span>
-                      {isStudentOrParent && sub.data?.tier === "premium" && (
-                        <CrownIcon className="size-5 shrink-0 text-gold" aria-label="Premium" />
-                      )}
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={handleLogout}
+                        aria-label="Đăng xuất"
+                        title="Đăng xuất"
+                        className="size-10 shrink-0 cursor-pointer justify-center rounded-lg p-0 text-risk hover:bg-risk-wash focus:bg-risk-wash [&_svg:not([class*='size-'])]:size-5"
+                      >
+                        <LogOutIcon />
+                      </DropdownMenuItem>
                     </div>
 
                     {showQuota && (
@@ -292,24 +291,25 @@ export function SiteHeader() {
                     )}
                   </div>
 
-                  <div className="p-2">
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel className="px-3 pt-2 pb-1.5 text-sm">Tài khoản của bạn</DropdownMenuLabel>
-                  </DropdownMenuGroup>
+                  <div className="px-2 pt-1 pb-2">
                   {/* Tài khoản */}
-                  <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#personal" />}>
-                    <UserIcon />
-                    Thông tin cá nhân
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#password" />}>
-                    <KeyRoundIcon />
-                    Bảo mật tài khoản
-                  </DropdownMenuItem>
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className={MENU_LABEL}>Tài khoản của bạn</DropdownMenuLabel>
+                    <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#personal" />}>
+                      <UserIcon />
+                      Thông tin cá nhân
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#password" />}>
+                      <KeyRoundIcon />
+                      Bảo mật tài khoản
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
 
                   {/* Gói & Thanh toán */}
                   {isStudentOrParent && !acting && (
-                    <>
-                      <DropdownMenuSeparator className="my-1.5" />
+                    <DropdownMenuGroup>
+                      <DropdownMenuSeparator className="mt-2 mb-0" />
+                      <DropdownMenuLabel className={MENU_LABEL}>Gói &amp; Thanh toán</DropdownMenuLabel>
                       <DropdownMenuItem className={MENU_ITEM} render={<Link href="/account#subscription" />}>
                         <CreditCardIcon />
                         Gói dịch vụ
@@ -324,13 +324,14 @@ export function SiteHeader() {
                           Chia sẻ cho gia đình
                         </DropdownMenuItem>
                       )}
-                    </>
+                    </DropdownMenuGroup>
                   )}
 
                   {/* Hồ sơ & Kết nối */}
                   {(hasOwnProfile || (isStudentOrParent && !acting)) && (
-                    <>
-                      <DropdownMenuSeparator className="my-1.5" />
+                    <DropdownMenuGroup>
+                      <DropdownMenuSeparator className="mt-2 mb-0" />
+                      <DropdownMenuLabel className={MENU_LABEL}>Hồ sơ &amp; Kết nối</DropdownMenuLabel>
                       {hasOwnProfile && (
                         <DropdownMenuItem className={MENU_ITEM} render={<Link href={academicHref} />}>
                           <BookOpenIcon />
@@ -355,13 +356,14 @@ export function SiteHeader() {
                           Trường mục tiêu
                         </DropdownMenuItem>
                       )}
-                    </>
+                    </DropdownMenuGroup>
                   )}
 
                   {/* Khu vực theo vai trò (trung tâm, quản trị) */}
                   {(user.role === "center" || canOpenAdmin) && (
-                    <>
-                      <DropdownMenuSeparator className="my-1.5" />
+                    <DropdownMenuGroup>
+                      <DropdownMenuSeparator className="mt-2 mb-0" />
+                      <DropdownMenuLabel className={MENU_LABEL}>{canOpenAdmin ? "Quản trị" : "Trung tâm"}</DropdownMenuLabel>
                       {canOpenAdmin && (
                         <DropdownMenuItem className={MENU_ITEM} render={<Link href="/admin" />}>
                           <LayoutDashboardIcon />
@@ -384,14 +386,8 @@ export function SiteHeader() {
                           Quản trị người dùng
                         </DropdownMenuItem>
                       )}
-                    </>
+                    </DropdownMenuGroup>
                   )}
-
-                  <DropdownMenuSeparator className="my-1.5" />
-                  <DropdownMenuItem className={MENU_ITEM} variant="destructive" onClick={handleLogout}>
-                    <LogOutIcon />
-                    Đăng xuất
-                  </DropdownMenuItem>
                   </div>
                 </DropdownMenuContent>
                 </DropdownMenu>
