@@ -42,6 +42,72 @@ public class MediaControllerTests
         Assert.Throws<ObjectDisposedException>(() => uploader.Request.Content.ReadByte());
     }
 
+    [Theory]
+    [InlineData("center-logo", ImageUploadPolicy.CenterLogoMaxBytes)]
+    [InlineData("center-cover", ImageUploadPolicy.CenterCoverMaxBytes)]
+    [InlineData("center-gallery", ImageUploadPolicy.CenterGalleryMaxBytes)]
+    public async Task Upload_CenterImage_ByCenter_IsModeratedAndGoesToTheCentersFolder(string purpose, int expectedLimit)
+    {
+        var uploader = new FakeUploader();
+        using var provider = CreateServices(uploader);
+        var file = CreateFile();
+        var controller = CreateController(provider, UserRoles.Center, file);
+
+        var response = await controller.UploadImage(new UploadImageForm { File = file, Purpose = purpose }, default);
+
+        Assert.IsType<OkObjectResult>(response);
+        Assert.Equal(expectedLimit, uploader.Request!.MaxSizeBytes);
+        Assert.True(uploader.Request.ModerateContent);
+        Assert.Equal("centers", uploader.Request.FolderSuffix);
+    }
+
+    [Theory]
+    [InlineData("school-logo")]
+    [InlineData("school-cover")]
+    public async Task Upload_SchoolImage_ByCenter_IsForbidden(string purpose)
+    {
+        var uploader = new FakeUploader();
+        using var provider = CreateServices(uploader);
+        var file = CreateFile();
+        var controller = CreateController(provider, UserRoles.Center, file);
+
+        var response = await controller.UploadImage(new UploadImageForm { File = file, Purpose = purpose }, default);
+
+        Assert.IsType<ForbidResult>(response);
+        Assert.Equal(0, uploader.Calls);
+    }
+
+    [Theory]
+    [InlineData(UserRoles.Admin, "center-logo")]
+    [InlineData(UserRoles.Moderator, "center-cover")]
+    [InlineData(UserRoles.Admin, "center-gallery")]
+    public async Task Upload_CenterImage_ByAdminOrModerator_IsForbidden(string role, string purpose)
+    {
+        var uploader = new FakeUploader();
+        using var provider = CreateServices(uploader);
+        var file = CreateFile();
+        var controller = CreateController(provider, role, file);
+
+        var response = await controller.UploadImage(new UploadImageForm { File = file, Purpose = purpose }, default);
+
+        Assert.IsType<ForbidResult>(response);
+        Assert.Equal(0, uploader.Calls);
+    }
+
+    [Fact]
+    public async Task Upload_SchoolImage_IsNotModerated_AndHasNoFolderSuffix()
+    {
+        var uploader = new FakeUploader();
+        using var provider = CreateServices(uploader);
+        var file = CreateFile();
+        var controller = CreateController(provider, file);
+
+        await controller.UploadImage(new UploadImageForm { File = file, Purpose = "school-logo" }, default);
+
+        Assert.False(uploader.Request!.ModerateContent);
+        Assert.Null(uploader.Request.FolderSuffix);
+    }
+
     [Fact]
     public async Task Upload_GlobalLimitIsLower_UsesGlobalLimit()
     {
@@ -268,7 +334,7 @@ public class MediaControllerTests
     {
         var controller = typeof(MediaController);
         var authorization = controller.GetCustomAttribute<AuthorizeAttribute>();
-        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator}", authorization!.Roles);
+        Assert.Equal($"{UserRoles.Admin},{UserRoles.Moderator},{UserRoles.Center}", authorization!.Roles);
         Assert.Equal("api/v1/media", controller.GetCustomAttribute<RouteAttribute>()!.Template);
         var action = controller.GetMethod(nameof(MediaController.UploadImage))!;
         Assert.Equal("images", action.GetCustomAttribute<HttpPostAttribute>()!.Template);
@@ -331,14 +397,17 @@ public class MediaControllerTests
         ContentType = "image/png",
     };
 
-    private static MediaController CreateController(IServiceProvider provider, params IFormFile[] files)
+    private static MediaController CreateController(IServiceProvider provider, params IFormFile[] files) =>
+        CreateController(provider, UserRoles.Admin, files);
+
+    private static MediaController CreateController(IServiceProvider provider, string role, params IFormFile[] files)
     {
         var fileCollection = new FormFileCollection();
         foreach (var file in files)
             fileCollection.Add(file);
         var context = new DefaultHttpContext
         {
-            User = Principal(Guid.NewGuid()),
+            User = Principal(Guid.NewGuid(), role),
             RequestServices = provider,
         };
         context.Request.ContentType = "multipart/form-data; boundary=test";
@@ -349,10 +418,10 @@ public class MediaControllerTests
         };
     }
 
-    private static ClaimsPrincipal Principal(Guid id) => new(new ClaimsIdentity(
+    private static ClaimsPrincipal Principal(Guid id, string role = UserRoles.Admin) => new(new ClaimsIdentity(
     [
         new Claim(ClaimTypes.NameIdentifier, id.ToString()),
-        new Claim(ClaimTypes.Role, UserRoles.Admin),
+        new Claim(ClaimTypes.Role, role),
     ], "test"));
 
     private sealed class FakeUploader : IMediaUploader

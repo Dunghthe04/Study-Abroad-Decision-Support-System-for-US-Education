@@ -904,6 +904,7 @@ public class StudyCenterService(
     public const int MaxProfileListItems = 20;
     public const int MaxProfileListItemLength = 256;
     public const int MaxProfileUrlLength = 512;
+    public const int MaxGalleryImages = 10;
     public const int MaxDeletionReasonLength = 1000;
 
     /// <summary>[UC-92] Trường pháp lý: đổi khi đã xác minh thì hồ sơ về Chờ duyệt (UC-59).</summary>
@@ -952,6 +953,7 @@ public class StudyCenterService(
             ["feeDescription"] = c.FeeDescription,
             ["logoUrl"] = c.LogoUrl,
             ["coverImageUrl"] = c.CoverImageUrl,
+            ["galleryImages"] = List(c.GalleryImages),
         };
     }
 
@@ -1006,6 +1008,21 @@ public class StudyCenterService(
         if (areasError is not null) return UpdateStudyCenterResult.Fail(areasError);
         var (branches, branchesError) = NormalizeProfileList(request.Branches, "Chi nhánh");
         if (branchesError is not null) return UpdateStudyCenterResult.Fail(branchesError);
+
+        List<string>? gallery = null;
+        if (request.GalleryImages is not null)
+        {
+            gallery = [];
+            foreach (var raw in request.GalleryImages)
+            {
+                var urlError = ValidateProfileUrl(raw, "Ảnh trong thư viện");
+                if (urlError is not null) return UpdateStudyCenterResult.Fail(urlError);
+                var url = TrimOrNull(raw);
+                if (url is not null && !gallery.Contains(url, StringComparer.Ordinal)) gallery.Add(url);
+            }
+            if (gallery.Count > MaxGalleryImages)
+                return UpdateStudyCenterResult.Fail($"Thư viện ảnh tối đa {MaxGalleryImages} ảnh.");
+        }
 
         if (request.FeeMin.HasValue && request.FeeMax.HasValue && request.FeeMin > request.FeeMax)
             return UpdateStudyCenterResult.Fail("Mức phí tối thiểu không được lớn hơn mức phí tối đa.");
@@ -1066,6 +1083,7 @@ public class StudyCenterService(
         if (request.FeeDescription != null) center.FeeDescription = TrimOrNull(request.FeeDescription);
         if (request.LogoUrl != null) center.LogoUrl = TrimOrNull(request.LogoUrl);
         if (request.CoverImageUrl != null) center.CoverImageUrl = TrimOrNull(request.CoverImageUrl);
+        if (gallery is not null) center.GalleryImages = gallery;
 
         if (center.FeeMin.HasValue && center.FeeMax.HasValue && center.FeeMin > center.FeeMax)
             return UpdateStudyCenterResult.Fail("Mức phí tối thiểu không được lớn hơn mức phí tối đa.");
