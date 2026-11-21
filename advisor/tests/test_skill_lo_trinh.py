@@ -2,8 +2,6 @@ from datetime import date
 
 from app.schemas.chat import ProfileField
 from app.services.skills.skill_lo_trinh import (
-    RECOMMEND_ACTION,
-    action_for,
     choose_route,
     render,
     template_reasons,
@@ -95,11 +93,3 @@ def test_other_route_text_says_no_list_and_gives_criteria():
 
     assert "Hệ thống chưa có danh sách trường cho lộ trình này" in text
     assert "Có ngành bạn muốn học (Computer Science)" in text
-
-
-def test_only_the_direct_route_leads_to_the_school_list():
-    direct, _ = planned(good())
-    other, _ = planned(good(budget="tier_under_20k"))
-
-    assert action_for(direct) == RECOMMEND_ACTION
-    assert action_for(other) is None

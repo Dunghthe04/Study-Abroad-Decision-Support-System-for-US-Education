@@ -46,7 +46,6 @@ CRITERIA = (
     "- Yêu cầu đầu vào (GPA, tiếng Anh) vừa sức với hồ sơ hiện tại",
 )
 # Lộ trình đại học thẳng: nhờ .NET chạy gợi ý trường (lọc, chấm, chọn) rồi đưa danh sách vào chat
-RECOMMEND_ACTION = "recommend"
 DIRECT_NEXT = "Bước tiếp theo: hệ thống sẽ gợi ý danh sách trường theo hồ sơ và ngành của bạn."
 
 
@@ -166,19 +165,6 @@ def timeline(intake: Intake | None, route: Route) -> list[str]:
     return lines
 
 
-# Số được phép trong lý do Qwen viết: số trong hồ sơ + năm, tháng của các mốc thời gian
-def timeline_numbers(intake: Intake | None, route: Route) -> frozenset[float]:
-    numbers = {float(MIN_MONTHS), float(TEST_LEAD_MONTHS), float(VISA_LEAD_MONTHS)}
-    if route.months_to_deadline is not None:
-        numbers.add(float(route.months_to_deadline))
-    if intake is not None:
-        for index in (intake.start, intake.deadline, intake.early, intake.start - VISA_LEAD_MONTHS):
-            if index is not None:
-                year, month = divmod(index - 1, 12)
-                numbers |= {float(year), float(month + 1)}
-    return frozenset(numbers)
-
-
 def render(route: Route, intake: Intake | None, major: Any) -> str:
     parts = [
         f"Lộ trình phù hợp với bạn: {ROUTE_LABELS[route.route]}.",
@@ -195,8 +181,3 @@ def render(route: Route, intake: Intake | None, major: Any) -> str:
         major_text = f" ({major})" if isinstance(major, str) and major else ""
         parts.append(NO_LIST + "\n" + "\n".join(CRITERIA).format(major=major_text))
     return "\n\n".join(parts)
-
-
-# Chỉ lộ trình đại học thẳng mới có danh sách trường; lộ trình khác hệ thống chưa có dữ liệu trường
-def action_for(route: Route) -> str | None:
-    return RECOMMEND_ACTION if route.route == "direct" else None

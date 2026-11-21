@@ -2,15 +2,14 @@ from datetime import date
 
 from app.schemas.chat import ProfileField
 from app.services.skills.skill_danh_gia import (
-    FREE_NUMBERS,
     TIER_FINANCE,
-    allowed_numbers,
     assess_levels,
     ec_tier_of,
     gpa10_to_4,
     read_facts,
 )
 from app.services.skills.validators import BUDGET_RANGES
+from tests.numbers import FREE_NUMBERS, allowed_numbers
 from tests.vef import VEF
 
 TODAY = date(2026, 10, 28)

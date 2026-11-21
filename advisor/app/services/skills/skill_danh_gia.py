@@ -6,14 +6,13 @@ Thiếu SAT, hoạt động... thì mức "none", khuyên đi thi / bổ sung, k
 Lời nhận xét không viết ở đây: skill_ho_so_khuon và viet_tra_loi_ho_so để Claude viết từ các mức này.
 """
 
-import re
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from app.schemas.chat import GradeScaleRule, ProfileField
-from app.services.skills.validators import BUDGET_RANGES, IMPACT_LEVELS, month_index, parse_month_year
+from app.services.skills.validators import IMPACT_LEVELS, month_index, parse_month_year
 
 # Ngưỡng [tham khảo] (giống assessProfile): (ngưỡng dưới, mức), dò từ cao xuống thấp; không đạt ngưỡng nào là mức cuối
 ACADEMIC_CUTS = [(3.5, "strong"), (3.0, "medium")]  # GPA thang 4
@@ -47,9 +46,6 @@ MAX_POINTS = 3  # tối đa 3 điểm mạnh, 3 điểm yếu
 
 ENGLISH_PASS = ("excellent", "good")
 SCHOLARSHIP_CHANCES = ("high", "medium", "low")
-# Số được phép xuất hiện ngoài số trong hồ sơ: thang điểm 4, 10, "bậc x/5" và các số trong câu mẫu
-# (thi trước 2 tháng, SAT khoảng 1400, ngân sách 35.000 USD)
-FREE_NUMBERS = {2.0, 4.0, 5.0, 10.0, 1400.0, 35_000.0}
 
 
 # Mức của một giá trị theo bảng ngưỡng
@@ -285,27 +281,3 @@ def template(levels: dict[str, Any], facts: Facts) -> Assessment:
     strengths, weak = template_points(levels, facts)
     summary = "Mình đã xem hồ sơ của bạn. " + SCHOLARSHIP_TEXT[levels["scholarship"]]
     return Assessment(levels=levels, summary=summary, strengths=strengths, weaknesses=weak)
-
-
-NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
-
-
-# Một cụm số trong câu có thể hiểu theo nhiều cách: "35.000" = 35000, "3.5" hay "3,5" = 3.5
-def readings(token: str) -> set[float]:
-    found = set()
-    if re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", token):
-        found.add(float(re.sub(r"[.,]", "", token)))
-    if token.count(".") + token.count(",") <= 1:
-        found.add(float(token.replace(",", ".")))
-    return found
-
-
-# Các số được phép xuất hiện trong lời nhận xét: số trong hồ sơ, thang điểm
-def allowed_numbers(facts: Facts) -> set[float]:
-    numbers = {facts.gpa, facts.gpa_scale, facts.gpa4, facts.sat, facts.english_score, facts.ielts}
-    numbers |= {facts.ec_tier, facts.activities}
-    if facts.budget_tier:
-        # Sàn và trần của mức ngân sách, viết đủ (35.000) hoặc theo nghìn (35k); bỏ sàn 0 và trần không có
-        bounds = {n for n in BUDGET_RANGES[facts.budget_tier] if n}
-        numbers |= bounds | {n / 1000 for n in bounds}
-    return {float(n) for n in numbers if n is not None} | FREE_NUMBERS
