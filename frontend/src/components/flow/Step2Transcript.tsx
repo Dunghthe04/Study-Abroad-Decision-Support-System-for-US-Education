@@ -22,6 +22,14 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RequiredMark } from "./RequiredMark";
@@ -103,6 +111,17 @@ const DEFAULT_SUBJECTS = [
   "Tin học",
   "Lịch sử",
   "Địa lý",
+];
+
+const SUGGESTED_ADDITIONAL_SUBJECTS = [
+  "Công nghệ",
+  "Giáo dục kinh tế & Pháp luật",
+  "Giáo dục công dân",
+  "Tiếng Pháp",
+  "Tiếng Trung",
+  "Âm nhạc",
+  "Mĩ thuật",
+  "Tâm lý học",
 ];
 
 // Sinh danh sách các năm học theo chuẩn tuyển sinh Mỹ (luôn bắt đầu từ Lớp 9 đến lớp/năm hiện tại)
@@ -317,6 +336,9 @@ export function Step2Transcript({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [scalePick, setScalePick] = useState<GpaScale>("10");
   const [showEstimator, setShowEstimator] = useState(false);
+  const [isAddSubjectOpen, setIsAddSubjectOpen] = useState(false);
+  const [newSubjectName, setNewSubjectName] = useState("");
+  const [addSubjectError, setAddSubjectError] = useState<string | null>(null);
   const fileInputId = useId();
   const overallInputId = useId();
 
@@ -472,19 +494,38 @@ export function Step2Transcript({
     });
   };
 
-  const handleAddSubject = (yearIdx: number) => {
-    const name = window.prompt("Nhập tên môn học mới:", "Môn tự chọn");
-    if (!name || !name.trim()) return;
+  const openAddSubjectDialog = (yearIdx: number) => {
+    setActiveYearIndex(yearIdx);
+    setNewSubjectName("");
+    setAddSubjectError(null);
+    setIsAddSubjectOpen(true);
+  };
+
+  const handleConfirmAddSubject = () => {
+    const trimmed = newSubjectName.trim();
+    if (!trimmed) {
+      setAddSubjectError("Vui lòng nhập tên môn học.");
+      return;
+    }
+
+    const currentYear = years[activeYearIndex];
+    if (currentYear?.subjects.some((s) => s.subjectName.toLowerCase() === trimmed.toLowerCase())) {
+      setAddSubjectError(`Môn "${trimmed}" đã có trong bảng điểm của ${currentYear.gradeName}.`);
+      return;
+    }
 
     const updatedYears = years.map((y, yIdx) => {
-      if (yIdx !== yearIdx) return y;
+      if (yIdx !== activeYearIndex) return y;
       return {
         ...y,
-        subjects: [...y.subjects, { subjectName: name.trim(), semester1Score: null, semester2Score: null }],
+        subjects: [...y.subjects, { subjectName: trimmed, semester1Score: null, semester2Score: null }],
       };
     });
 
     onUpdate({ academicYears: updatedYears });
+    setIsAddSubjectOpen(false);
+    setNewSubjectName("");
+    setAddSubjectError(null);
   };
 
   const handleRemoveSubject = (yearIdx: number, subIdx: number) => {
@@ -1543,7 +1584,7 @@ export function Step2Transcript({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => handleAddSubject(activeYearIndex)}
+                  onClick={() => openAddSubjectDialog(activeYearIndex)}
                   className="gap-1.5 text-xs"
                 >
                   <PlusIcon className="size-3.5" />
@@ -1655,6 +1696,99 @@ export function Step2Transcript({
         </div>
         </>
       )}
+
+      {/* Dialog Thêm môn học */}
+      <Dialog open={isAddSubjectOpen} onOpenChange={setIsAddSubjectOpen}>
+        <DialogContent className="sm:max-w-md">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleConfirmAddSubject();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Thêm môn học mới</DialogTitle>
+              <DialogDescription>
+                Bổ sung môn học vào bảng điểm của{" "}
+                <span className="font-semibold text-foreground">
+                  {years[activeYearIndex]?.gradeName || "năm học này"}
+                </span>
+                .
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="py-4 space-y-3.5">
+              <div className="space-y-1.5">
+                <Label htmlFor="new-subject-input" className="text-xs font-semibold text-foreground">
+                  Tên môn học <RequiredMark />
+                </Label>
+                <Input
+                  id="new-subject-input"
+                  autoFocus
+                  placeholder="Ví dụ: Công nghệ, Tiếng Pháp, GDCD..."
+                  value={newSubjectName}
+                  onChange={(e) => {
+                    setNewSubjectName(e.target.value);
+                    if (addSubjectError) setAddSubjectError(null);
+                  }}
+                  className={cn(addSubjectError && "border-destructive focus-visible:ring-destructive")}
+                />
+                {addSubjectError && (
+                  <p className="text-xs text-destructive font-medium">{addSubjectError}</p>
+                )}
+              </div>
+
+              {/* Gợi ý môn học phổ biến */}
+              <div className="space-y-1.5 pt-1">
+                <div className="text-xs text-muted-foreground font-medium">Gợi ý môn tự chọn phổ biến:</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {SUGGESTED_ADDITIONAL_SUBJECTS.filter(
+                    (suggested) =>
+                      !years[activeYearIndex]?.subjects.some(
+                        (s) => s.subjectName.toLowerCase() === suggested.toLowerCase()
+                      )
+                  ).map((suggested) => (
+                    <button
+                      key={suggested}
+                      type="button"
+                      onClick={() => {
+                        setNewSubjectName(suggested);
+                        if (addSubjectError) setAddSubjectError(null);
+                      }}
+                      className={cn(
+                        "rounded-full px-2.5 py-1 text-xs border transition-colors cursor-pointer",
+                        newSubjectName === suggested
+                          ? "bg-brand text-white border-brand font-medium"
+                          : "bg-surface hover:bg-muted text-foreground border-line"
+                      )}
+                    >
+                      + {suggested}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAddSubjectOpen(false)}
+              >
+                Hủy
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="bg-brand text-white hover:bg-brand-ink"
+              >
+                Thêm môn
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Bottom Actions */}
       <div className="flex justify-between pt-4 border-t border-line">
