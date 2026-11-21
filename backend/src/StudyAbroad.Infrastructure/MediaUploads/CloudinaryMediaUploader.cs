@@ -90,11 +90,26 @@ public sealed class CloudinaryMediaUploader : IMediaUploader
         cancellationToken.ThrowIfCancellationRequested();
 
         var trimmed = publicIdOrUrl.Trim();
-        if (trimmed.Contains("://", StringComparison.Ordinal) || Uri.TryCreate(trimmed, UriKind.Absolute, out _))
+        if (trimmed.Contains("://", StringComparison.Ordinal))
         {
             if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
                 throw new ArgumentException("The media URL is invalid.", nameof(publicIdOrUrl));
             return TryParseCloudinaryUrl(trimmed, uri, resourceType, out asset);
+        }
+
+        if (trimmed.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+        {
+            asset = default;
+            return false;
+        }
+
+        // Bỏ qua các đường dẫn tệp nội bộ mà System.Uri tự hiểu thành file:// (như "/usas/a" trên Linux hoặc "C:\..." trên Windows)
+        // để ValidateRawPublicId xử lý nhất quán trên mọi hệ điều hành.
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var nonHierarchicalUri) &&
+            !nonHierarchicalUri.IsFile &&
+            !(nonHierarchicalUri.Scheme.Length == 1 && trimmed.Length >= 2 && trimmed[1] == ':'))
+        {
+            return TryParseCloudinaryUrl(trimmed, nonHierarchicalUri, resourceType, out asset);
         }
 
         ValidateRawPublicId(trimmed, nameof(publicIdOrUrl));
@@ -106,6 +121,7 @@ public sealed class CloudinaryMediaUploader : IMediaUploader
     {
         if (publicId.StartsWith('/') || publicId.EndsWith('/') ||
             publicId.Contains('\\') || publicId.Contains('?') || publicId.Contains('#') ||
+            (publicId.Length >= 2 && char.IsAsciiLetter(publicId[0]) && publicId[1] == ':' && (publicId.Length == 2 || publicId[2] is '/' or '\\')) ||
             publicId.Any(char.IsControl))
             throw new ArgumentException("The Cloudinary public ID contains invalid characters.", paramName);
 

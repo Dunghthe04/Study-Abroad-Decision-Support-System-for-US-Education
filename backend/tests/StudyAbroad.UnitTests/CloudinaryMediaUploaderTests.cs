@@ -405,6 +405,8 @@ public class CloudinaryMediaUploaderTests
     [Theory]
     [InlineData("https://example.edu/logo.png", null)]
     [InlineData("file:///private/photo.jpg", null)]
+    [InlineData("file:/private/photo.jpg", null)]
+    [InlineData("data:image/png;base64,AAAA", null)]
     [InlineData("https://res.cloudinary.com/other-cloud/image/upload/v1/usas/a.png", null)]
     [InlineData("https://res.cloudinary.com/test-cloud/image/fetch/https://example.edu/a.png", null)]
     [InlineData("https://res.cloudinary.com/test-cloud/video/upload/v1/usas/clip.mp4", MediaResourceType.Image)]
@@ -432,7 +434,10 @@ public class CloudinaryMediaUploaderTests
     [InlineData("usas/a?b=1")]
     [InlineData("usas/a#frag")]
     [InlineData("usas\\a")]
+    [InlineData("C:\\usas\\a")]
+    [InlineData("C:/usas/a")]
     [InlineData("/usas/a")]
+    [InlineData("//usas/a")]
     [InlineData("https://[invalid")]
     public async Task ExistsAndDelete_InvalidIdentifier_ThrowsArgumentExceptionBeforeNetwork(string? invalid)
     {
