@@ -10,3 +10,5 @@ Các script ở đây chạy API tách biệt khỏi môi trường dev: CSDL ri
 
 Dừng API: `scripts/e2e/stop-api.sh 5095` (chỉ dừng tiến trình do run-api.sh chạy ở cổng đó).
 Thư mục `scripts/e2e/.mail` và file `.api-*.pid` không đưa vào git.
+
+5. Chat gõ chữ với advisor thật: chạy advisor của nhánh ở 127.0.0.1:8000 với DATABASE_URL trỏ tới usas_e2e (không dùng CSDL trong advisor/.env), rồi `python scripts/e2e/chat_e2e.py`. Script gọi SLM và Claude thật vài lượt.
