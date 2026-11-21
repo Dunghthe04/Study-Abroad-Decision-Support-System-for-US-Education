@@ -803,6 +803,52 @@ public class CenterRegistrationAndVerificationTests
     }
 
     [Fact]
+    public async Task UpdateCenterProfile_Gallery_SavedImmediately_TrimmedAndWithoutDuplicates()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified);
+
+        var result = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value, new UpdateCenterProfileRequest(
+            GalleryImages: [" https://res.cloudinary.com/x/a.png ", "https://res.cloudinary.com/x/b.png", "https://res.cloudinary.com/x/a.png"]));
+
+        Assert.True(result.Success);
+        Assert.Equal(["https://res.cloudinary.com/x/a.png", "https://res.cloudinary.com/x/b.png"], s.Center.GalleryImages);
+        var outcome = Assert.IsType<CenterProfileUpdateOutcome>(result.Outcome);
+        Assert.Contains("galleryImages", outcome.SavedFields);
+        Assert.Empty(outcome.ReviewFields);
+        Assert.Empty(outcome.LegalFields);
+        Assert.False(outcome.VerificationReset);
+        Assert.Equal(CenterVerificationStatuses.Verified, s.Center.VerificationStatus);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_Gallery_NullKeepsAndEmptyListClears()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified, c => c.GalleryImages = ["https://res.cloudinary.com/x/a.png"]);
+
+        await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value, new UpdateCenterProfileRequest(Description: "Mô tả mới"));
+        Assert.Equal(["https://res.cloudinary.com/x/a.png"], s.Center.GalleryImages);
+
+        var cleared = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value, new UpdateCenterProfileRequest(GalleryImages: []));
+        Assert.True(cleared.Success);
+        Assert.Empty(s.Center.GalleryImages);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_Gallery_RejectsTooManyImagesAndNonHttpLinks()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified, c => c.GalleryImages = ["https://res.cloudinary.com/x/keep.png"]);
+        var tooMany = Enumerable.Range(0, StudyCenterService.MaxGalleryImages + 1).Select(i => $"https://res.cloudinary.com/x/{i}.png").ToList();
+
+        var many = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value, new UpdateCenterProfileRequest(GalleryImages: tooMany));
+        var bad = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value, new UpdateCenterProfileRequest(GalleryImages: ["javascript:alert(1)"]));
+
+        Assert.False(many.Success);
+        Assert.Contains("tối đa", many.ErrorMessage);
+        Assert.False(bad.Success);
+        Assert.Equal(["https://res.cloudinary.com/x/keep.png"], s.Center.GalleryImages);
+    }
+
+    [Fact]
     public async Task UpdateCenterProfile_DescriptionServicesLogo_SavedImmediatelyWithoutReviewOrReset()
     {
         var s = await ProfileEditSetup(CenterVerificationStatuses.Verified);

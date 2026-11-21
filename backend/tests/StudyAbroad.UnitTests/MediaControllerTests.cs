@@ -45,6 +45,7 @@ public class MediaControllerTests
     [Theory]
     [InlineData("center-logo", ImageUploadPolicy.CenterLogoMaxBytes)]
     [InlineData("center-cover", ImageUploadPolicy.CenterCoverMaxBytes)]
+    [InlineData("center-gallery", ImageUploadPolicy.CenterGalleryMaxBytes)]
     public async Task Upload_CenterImage_ByCenter_IsModeratedAndGoesToTheCentersFolder(string purpose, int expectedLimit)
     {
         var uploader = new FakeUploader();
@@ -79,6 +80,7 @@ public class MediaControllerTests
     [Theory]
     [InlineData(UserRoles.Admin, "center-logo")]
     [InlineData(UserRoles.Moderator, "center-cover")]
+    [InlineData(UserRoles.Admin, "center-gallery")]
     public async Task Upload_CenterImage_ByAdminOrModerator_IsForbidden(string role, string purpose)
     {
         var uploader = new FakeUploader();
