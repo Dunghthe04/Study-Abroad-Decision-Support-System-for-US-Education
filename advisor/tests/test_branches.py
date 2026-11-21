@@ -806,6 +806,7 @@ async def test_only_choosing_schools_runs_the_recommendation_even_without_the_sc
     )
 
     assert out.action == "recommend" and out.answer == RECOMMENDING
+    assert out.action_data == {"note": True}  # chỉ có danh sách: nhờ Claude viết lời cho danh sách
     assert writer.skills == []
 
 

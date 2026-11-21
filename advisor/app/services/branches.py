@@ -457,7 +457,8 @@ class GeneratedAdviceBranch:
         # .NET chạy gợi ý rồi nối danh sách trường vào sau câu trả lời
         template_work = any(t in TEMPLATE_TASKS for t in tasks or [])
         if school_list and not template_work:
-            return SkillOutput(RECOMMENDING, action="recommend")
+            # note: chỉ xin danh sách nên chưa có lời nào do Claude viết, .NET nhờ Claude viết lời cho danh sách
+            return SkillOutput(RECOMMENDING, action="recommend", action_data={"note": True})
         recommend = "recommend" if school_list else None
 
         # Code dựng skill từ khuôn (không gọi SLM, không hỏng); writer chỉ nhận việc của khuôn
