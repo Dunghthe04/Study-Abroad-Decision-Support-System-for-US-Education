@@ -8,6 +8,7 @@ import {
   BookOpenIcon,
   BookmarkCheckIcon,
   Building2Icon,
+  CrownIcon,
   InboxIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
@@ -18,9 +19,12 @@ import {
   UserIcon,
   UsersIcon,
 } from "lucide-react";
+import { billingApi } from "@/lib/billing-api";
+import { useFetched } from "@/lib/use-fetched";
 import { formatUserRole } from "@/lib/user-role-labels";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsLinkedParent } from "@/hooks/use-is-linked-parent";
+import type { SubscriptionSummaryDto } from "@/types/billing";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -52,6 +56,10 @@ export function SiteHeader() {
   const isModerator = user?.role === "moderator";
   const canOpenAdmin = isAdmin || isModerator;
   const isStudentOrParent = user?.role === "student" || user?.role === "parent";
+  const sub = useFetched<SubscriptionSummaryDto | null>(
+    isStudentOrParent ? `sub:${user?.id}:${pathname}` : "none",
+    () => (isStudentOrParent ? billingApi.subscription() : Promise.resolve(null)),
+  );
   // 1f: phụ huynh đã liên kết không có hồ sơ riêng, các mục hồ sơ riêng nhường chỗ cho "Con của tôi"
   const { linked: isLinkedParent } = useIsLinkedParent();
   // Chỉ hiện khi đã biết chắc là không liên kết (=== false), để lúc đang tải phụ huynh không thấy mục hồ sơ riêng nháy lên.
@@ -63,13 +71,14 @@ export function SiteHeader() {
   // Phụ huynh chưa có con nào, không làm thay: nút "Thêm con" thay cho "Phân tích hồ sơ của tôi"
   const isParentWithoutChild = user?.role === "parent" && !acting && isLinkedParent === false;
 
-  const navLinks = [
+  const leftLinks = [
     { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
     { href: "/universities", label: "Tìm trường" },
     { href: isModerator ? "/admin/centers" : "/centers", label: "Trung tâm" },
-    { href: "/methodology", label: "Phương pháp của chúng tôi" },
-    // Bảng giá công khai; nhân viên và trung tâm không mua gói nên không hiện
-    ...(!canOpenAdmin && user?.role !== "center" ? [{ href: "/plans", label: "Gói dịch vụ" }] : []),
+    ...(!user ? [{ href: "/plans", label: "Gói dịch vụ" }] : []),
+  ];
+
+  const rightLinks = [
     ...(hasOwnProfile
       ? [
           { href: "/dashboard", label: "Tổng quan" },
@@ -123,7 +132,7 @@ export function SiteHeader() {
     >
       <div className="mx-auto max-w-[1560px] px-4 sm:px-8 lg:px-12">
         {/* Hàng trên */}
-        <div className="flex h-14 items-center gap-4 lg:gap-8">
+        <div className="flex h-13 items-center gap-3">
           <Link
             href={canOpenAdmin ? "/admin" : "/"}
             aria-label="USDSS"
@@ -152,7 +161,7 @@ export function SiteHeader() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Tìm trường theo tên, thành phố, bang…"
               // Ô tìm kiếm luôn nền trắng trên nền xanh của thanh đầu
-              className="h-10 w-full rounded-lg border border-transparent bg-surface pr-11 pl-3.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus-visible:ring-3 focus-visible:ring-white/40"
+              className="h-9 w-full rounded-lg border border-transparent bg-surface pr-11 pl-3.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus-visible:ring-3 focus-visible:ring-white/40"
             />
             <Button
               type="submit"
@@ -170,6 +179,19 @@ export function SiteHeader() {
               <Skeleton className="h-9 w-24" />
             ) : user ? (
               <>
+                {isStudentOrParent && sub.data?.tier === "free" && (
+                  <Link
+                    href="/plans"
+                    className={buttonVariants({
+                      variant: "ghost",
+                      size: "sm",
+                      className: "h-8 rounded-lg !bg-gold-wash px-3 text-xs font-semibold !text-brand-ink hover:!bg-white",
+                    })}
+                  >
+                    <CrownIcon className="size-3.5" aria-hidden />
+                    Nâng cấp
+                  </Link>
+                )}
                 {/* [UC-110] Chuông thông báo */}
                 <NotificationBell />
                 <DropdownMenu>
@@ -232,6 +254,12 @@ export function SiteHeader() {
                     <DropdownMenuItem render={<Link href="/account#parent-links" />}>
                       <UsersIcon />
                       {user.role === "student" ? "Liên kết phụ huynh" : "Con đã liên kết"}
+                    </DropdownMenuItem>
+                  )}
+                  {isStudentOrParent && !acting && (
+                    <DropdownMenuItem render={<Link href="/plans" />}>
+                      <CrownIcon />
+                      Gói dịch vụ
                     </DropdownMenuItem>
                   )}
                   {isStudentOrParent && !acting && (
@@ -308,9 +336,9 @@ export function SiteHeader() {
         </div>
 
         {/* Hàng dưới */}
-        <nav aria-label="Điều hướng chính" className="flex h-12 items-center justify-between gap-4">
-          <ul className="-ml-3 flex min-w-0 items-center overflow-x-auto [scrollbar-width:none]">
-            {navLinks.map((l) => {
+        <nav aria-label="Điều hướng chính" className="flex h-11 items-center justify-between gap-4 overflow-x-auto [scrollbar-width:none]">
+          <ul className="-ml-3 flex shrink-0 items-center">
+            {leftLinks.map((l) => {
               const active = isLinkActive(l.href);
               return (
                 <li key={l.href}>
@@ -318,7 +346,7 @@ export function SiteHeader() {
                     href={l.href}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "relative inline-flex h-12 items-center whitespace-nowrap px-3 text-sm font-medium transition-colors",
+                      "relative inline-flex h-11 items-center whitespace-nowrap px-3 text-sm font-medium transition-colors",
                       "after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:rounded-full after:transition-transform after:duration-300 hover:after:scale-x-100 motion-reduce:after:transition-none",
                       "after:bg-white",
                       active ? "font-semibold text-white after:scale-x-100" : "text-white/80 hover:text-white",
@@ -330,31 +358,51 @@ export function SiteHeader() {
               );
             })}
           </ul>
-          {/* Phụ huynh đã liên kết đi qua mục menu "Con của tôi", không có nút riêng; chưa có con thì nút "Thêm con" (1.5e) */}
-          {isParentWithoutChild && (
-            <Link
-              href="/parent/children/add"
-              className={buttonVariants({
-                variant: "ghost",
-                size: "lg",
-                className: "shrink-0 !bg-white !text-brand-ink hover:!bg-white/90",
-              })}
-            >
-              Thêm con
-            </Link>
-          )}
-          {!canOpenAdmin && (acting !== null || (user?.role !== "parent" && isLinkedParent === false)) && (
-            <Link
-              href="/analysis"
-              className={buttonVariants({
-                variant: "ghost",
-                size: "lg",
-                className: "shrink-0 !bg-white !text-brand-ink hover:!bg-white/90",
-              })}
-            >
-              Phân tích hồ sơ của tôi
-            </Link>
-          )}
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            {rightLinks.map((l) => {
+              const active = isLinkActive(l.href);
+              return (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "relative inline-flex h-11 items-center whitespace-nowrap px-3 text-sm font-medium transition-colors",
+                    "after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:rounded-full after:transition-transform after:duration-300 hover:after:scale-x-100 motion-reduce:after:transition-none",
+                    "after:bg-white",
+                    active ? "font-semibold text-white after:scale-x-100" : "text-white/80 hover:text-white",
+                  )}
+                >
+                  {l.label}
+                </Link>
+              );
+            })}
+            {/* Phụ huynh đã liên kết đi qua mục menu "Con của tôi", không có nút riêng; chưa có con thì nút "Thêm con" (1.5e) */}
+            {isParentWithoutChild && (
+              <Link
+                href="/parent/children/add"
+                className={buttonVariants({
+                  variant: "ghost",
+                  size: "sm",
+                  className: "ml-1 h-8 shrink-0 px-3 text-xs font-semibold !bg-white !text-brand-ink hover:!bg-white/90",
+                })}
+              >
+                Thêm con
+              </Link>
+            )}
+            {!canOpenAdmin && (acting !== null || (user?.role !== "parent" && isLinkedParent === false)) && (
+              <Link
+                href="/analysis"
+                className={buttonVariants({
+                  variant: "ghost",
+                  size: "sm",
+                  className: "ml-1 h-8 shrink-0 px-3 text-xs font-semibold !bg-white !text-brand-ink hover:!bg-white/90",
+                })}
+              >
+                Phân tích hồ sơ của tôi
+              </Link>
+            )}
+          </div>
         </nav>
       </div>
     </header>

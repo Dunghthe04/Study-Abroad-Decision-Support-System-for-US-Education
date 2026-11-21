@@ -16,6 +16,7 @@ const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
     links: [
       { href: "/centers", label: "Trung tâm tư vấn" },
       { href: "/methodology", label: "Giới thiệu phương pháp" },
+      { href: "/plans", label: "Gói dịch vụ" },
     ],
   },
   {
