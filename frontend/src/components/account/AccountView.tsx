@@ -116,7 +116,7 @@ export function AccountView() {
           ...(hasFamily
             ? [{ id: "family" as const, label: "Chia sẻ cho gia đình", icon: HeartHandshakeIcon, filledIcon: HeartHandshakeFilledIcon, group: "billing" as const }]
             : []),
-          { id: "academic" as const, label: "Hồ sơ học thuật", icon: BookOpenIcon, filledIcon: BookOpenFilledIcon, group: "profile" as const },
+          { id: "academic" as const, label: "Học bạ", icon: BookOpenIcon, filledIcon: BookOpenFilledIcon, group: "profile" as const },
           {
             id: "parent-links" as const,
             label: user?.role === "student" ? "Liên kết phụ huynh" : "Con đã liên kết",
@@ -219,7 +219,7 @@ export function AccountView() {
             <div className="mx-auto flex max-w-[1560px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 text-sm text-foreground sm:px-8 lg:px-12">
               <TriangleAlertIcon className="size-4 shrink-0 text-warn" aria-hidden />
               <p className="min-w-0 flex-1 basis-64">
-                <span className="font-semibold">Hồ sơ học thuật chưa được thiết lập.</span>{" "}
+                <span className="font-semibold">Học bạ chưa được thiết lập.</span>{" "}
                 Tài khoản của bạn chưa có thông tin bảng điểm và chứng chỉ học thuật, hãy cập nhật để hệ thống hỗ trợ tốt nhất.
               </p>
               <div className="flex shrink-0 items-center gap-2">

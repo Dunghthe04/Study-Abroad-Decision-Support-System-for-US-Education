@@ -71,7 +71,7 @@ export function ParentAcademicSection({ overview, onChanged }: ParentAcademicSec
   return (
     <div>
       <AccountSectionHeader
-        title="Hồ sơ học thuật của con"
+        title="Học bạ của con"
         description="Tài khoản phụ huynh không có hồ sơ riêng; bạn xem tổng quan bảng điểm và chứng chỉ của các con đã liên kết tại đây."
         actions={
           <Link href="/parent/children" className={buttonVariants({ variant: "outline", size: "lg", className: "bg-surface" })}>

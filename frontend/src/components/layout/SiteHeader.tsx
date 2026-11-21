@@ -8,16 +8,19 @@ import {
   BookOpenIcon,
   BookmarkCheckIcon,
   Building2Icon,
+  CreditCardIcon,
   CrownIcon,
+  GaugeIcon,
   GraduationCapIcon,
+  HeartHandshakeIcon,
   HomeIcon,
   InboxIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
   LogOutIcon,
   PlusIcon,
-  ReceiptTextIcon,
   SearchIcon,
+  SendIcon,
   ShieldIcon,
   UserIcon,
   UsersIcon,
@@ -73,6 +76,8 @@ export function SiteHeader() {
     isStudentOrParent ? `sub:${user?.id}:${pathname}` : "none",
     () => (isStudentOrParent ? billingApi.subscription() : Promise.resolve(null)),
   );
+  const hasFamily = Boolean(sub.data?.family) || (sub.data?.cycles ?? []).some((c) => c.kind === "family");
+
   // 1f: phụ huynh đã liên kết không có hồ sơ riêng, các mục hồ sơ riêng nhường chỗ cho "Con của tôi"
   const { linked: isLinkedParent } = useIsLinkedParent();
   // Chỉ hiện khi đã biết chắc là không liên kết (=== false), để lúc đang tải phụ huynh không thấy mục hồ sơ riêng nháy lên.
@@ -243,52 +248,67 @@ export function SiteHeader() {
                     </DropdownMenuLabel>
                   </DropdownMenuGroup>
 
-                  {hasOwnProfile && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem render={<Link href="/target-schools" />}>
-                        <BookmarkCheckIcon />
-                        Trường mục tiêu
-                      </DropdownMenuItem>
-                    </>
-                  )}
-
-                  {/* Hồ sơ */}
+                  {/* Tài khoản */}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem render={<Link href="/account#personal" />}>
                     <UserIcon />
                     Thông tin cá nhân
                   </DropdownMenuItem>
-                  {hasOwnProfile && (
-                    <DropdownMenuItem render={<Link href={academicHref} />}>
-                      <BookOpenIcon />
-                      Hồ sơ học thuật
-                    </DropdownMenuItem>
-                  )}
-
-                  {/* Tài khoản */}
-                  <DropdownMenuSeparator />
                   <DropdownMenuItem render={<Link href="/account#password" />}>
                     <KeyRoundIcon />
                     Bảo mật tài khoản
                   </DropdownMenuItem>
+
+                  {/* Gói & Thanh toán */}
                   {isStudentOrParent && !acting && (
-                    <DropdownMenuItem render={<Link href="/account#parent-links" />}>
-                      <UsersIcon />
-                      {user.role === "student" ? "Liên kết phụ huynh" : "Con đã liên kết"}
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem render={<Link href="/account#subscription" />}>
+                        <CreditCardIcon />
+                        Gói dịch vụ
+                      </DropdownMenuItem>
+                      <DropdownMenuItem render={<Link href="/account#quota" />}>
+                        <GaugeIcon />
+                        Hạn mức
+                      </DropdownMenuItem>
+                      {hasFamily && (
+                        <DropdownMenuItem render={<Link href="/account#family" />}>
+                          <HeartHandshakeIcon />
+                          Chia sẻ cho gia đình
+                        </DropdownMenuItem>
+                      )}
+                    </>
                   )}
-                  {isStudentOrParent && !acting && (
-                    <DropdownMenuItem render={<Link href="/plans" />}>
-                      <CrownIcon />
-                      Gói dịch vụ
-                    </DropdownMenuItem>
-                  )}
-                  {isStudentOrParent && !acting && (
-                    <DropdownMenuItem render={<Link href="/orders" />}>
-                      <ReceiptTextIcon />
-                      Lịch sử giao dịch
-                    </DropdownMenuItem>
+
+                  {/* Hồ sơ & Kết nối */}
+                  {(hasOwnProfile || (isStudentOrParent && !acting)) && (
+                    <>
+                      <DropdownMenuSeparator />
+                      {hasOwnProfile && (
+                        <DropdownMenuItem render={<Link href={academicHref} />}>
+                          <BookOpenIcon />
+                          Học bạ
+                        </DropdownMenuItem>
+                      )}
+                      {isStudentOrParent && !acting && (
+                        <>
+                          <DropdownMenuItem render={<Link href="/account#parent-links" />}>
+                            <UsersIcon />
+                            {user.role === "student" ? "Liên kết phụ huynh" : "Con đã liên kết"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem render={<Link href="/account#sent-leads" />}>
+                            <SendIcon />
+                            Yêu cầu liên hệ đã gửi
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      {hasOwnProfile && (
+                        <DropdownMenuItem render={<Link href="/target-schools" />}>
+                          <BookmarkCheckIcon />
+                          Trường mục tiêu
+                        </DropdownMenuItem>
+                      )}
+                    </>
                   )}
 
                   {/* Khu vực theo vai trò (trung tâm, quản trị) */}

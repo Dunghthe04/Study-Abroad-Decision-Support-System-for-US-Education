@@ -81,7 +81,7 @@ export function AcademicSummaryCard({ profile, isLoading, readOnly = false, titl
       <div>
         {!readOnly && (
           <AccountSectionHeader
-            title="Hồ sơ học thuật"
+            title="Học bạ"
             description="Tổng hợp bảng điểm, chứng chỉ, ngân sách và hoạt động ngoại khóa của bạn."
           />
         )}
@@ -100,7 +100,7 @@ export function AcademicSummaryCard({ profile, isLoading, readOnly = false, titl
       <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
         <div className="flex items-center gap-2.5">
           <BookOpenIcon className="size-5 text-brand" aria-hidden />
-          <h2 className="font-heading text-lg font-semibold text-ink">{title ?? "Hồ sơ học thuật"}</h2>
+          <h2 className="font-heading text-lg font-semibold text-ink">{title ?? "Học bạ"}</h2>
         </div>
         <p className="mt-1.5 text-sm text-ink-2">Con chưa hoàn thành hồ sơ 6 bước.</p>
       </div>
@@ -111,7 +111,7 @@ export function AcademicSummaryCard({ profile, isLoading, readOnly = false, titl
     return (
       <div>
         <AccountSectionHeader
-          title="Hồ sơ học thuật"
+          title="Học bạ"
           description="Hoàn thành hồ sơ 6 bước để hệ thống lưu trữ bảng điểm và phân tích cơ hội trúng tuyển."
           badge={<Badge variant="warn">Chưa hoàn tất</Badge>}
         />
@@ -153,7 +153,7 @@ export function AcademicSummaryCard({ profile, isLoading, readOnly = false, titl
   return (
     <div>
       {renderHeader({
-        heading: title ?? "Hồ sơ học thuật",
+        heading: title ?? "Học bạ",
         description: `${levelText} · ${gradeText}`,
         badge: (
           <Badge variant="ok">
