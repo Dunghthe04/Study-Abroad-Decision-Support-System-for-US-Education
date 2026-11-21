@@ -3,7 +3,7 @@ using StudyAbroad.Domain.Common;
 namespace StudyAbroad.Domain.Entities;
 
 /// <summary>
-/// Một kỳ gói đã thanh toán = một pool token (UC-77, UC-78). Làn = mọi kỳ cùng chủ và cùng loại: tối đa 1 active và 1 queued.
+/// Một kỳ gói đã thanh toán = một pool token (UC-77, UC-78). Mỗi đơn đã trả tạo một kỳ active ngay, nhiều kỳ cùng chủ và loại chạy song song.
 /// Gói, giá, hạn mức là bản chụp lúc mua nên admin sửa gói không ảnh hưởng kỳ đang chạy.
 /// </summary>
 public class UserSubscription : BaseEntity
@@ -15,11 +15,10 @@ public class UserSubscription : BaseEntity
     public string Kind { get; set; } = string.Empty;
     /// <summary>Nhóm gia đình của kỳ loại family.</summary>
     public Guid? FamilyGroupId { get; set; }
-    /// <summary>queued | active | ended (CycleStatuses)</summary>
+    /// <summary>active | ended (CycleStatuses)</summary>
     public string Status { get; set; } = string.Empty;
-    /// <summary>Null khi đang xếp hàng.</summary>
     public DateTime? StartsAt { get; set; }
-    /// <summary>Null khi đang xếp hàng. Cột ends_at (trước đây expires_at).</summary>
+    /// <summary>Cột ends_at (trước đây expires_at).</summary>
     public DateTime? EndsAt { get; set; }
     public long TokenQuota { get; set; }
     public string PlanName { get; set; } = string.Empty;

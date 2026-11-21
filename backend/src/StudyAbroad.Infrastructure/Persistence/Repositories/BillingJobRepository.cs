@@ -23,41 +23,28 @@ public class BillingJobRepository(AppDbContext db) : IBillingJobRepository
             .Take(IBillingJobRepository.MaxOrdersPerTick)
             .ToListAsync(ct);
 
-    public async Task<IReadOnlyList<LaneRef>> FindDueLanesAsync(DateTime nowUtc, CancellationToken ct = default)
+    public async Task<IReadOnlyList<CycleOwnerRef>> FindDueCycleOwnersAsync(DateTime nowUtc, CancellationToken ct = default)
     {
         var dueActive = await db.UserSubscriptions.AsNoTracking()
             .Where(c => c.Status == CycleStatuses.Active && (c.EndsAt == null || c.EndsAt <= nowUtc))
             .Select(c => new { c.UserId, c.Kind })
             .Distinct()
             .ToListAsync(ct);
-        // Kỳ queued chỉ làm làn tới hạn khi kỳ active của nó chuyển được ngay: không còn kỳ active, đã tới hạn, hạn mức 0, hoặc token đã dùng ≥ hạn mức
-        // (cùng luật với CycleRules.Advance và với bộ lọc MeteringFilters.Cycle). Còn nhiều token thì bỏ qua: không tốn một lượt đọc + cộng token mỗi phút cho mỗi làn đang gia hạn
-        var queuedReady = await db.UserSubscriptions.AsNoTracking()
-            .Where(q => q.Status == CycleStatuses.Queued
-                && (!db.UserSubscriptions.Any(a => a.UserId == q.UserId && a.Kind == q.Kind && a.Status == CycleStatuses.Active)
-                    || db.UserSubscriptions.Any(a => a.UserId == q.UserId && a.Kind == q.Kind && a.Status == CycleStatuses.Active
-                        && (a.EndsAt == null || a.EndsAt <= nowUtc || a.TokenQuota <= 0
-                            || (a.QuotaPeriodDays != null && a.QuotaPeriodDays < a.DurationDays)
-                            || db.AiCalls.Where(t => t.UserSubscriptionId == a.Id && t.Kind == BillingRules.MeteredAiKind).Sum(t => (long?)t.TotalTokens) >= a.TokenQuota))))
-            .Select(c => new { c.UserId, c.Kind })
-            .Distinct()
-            .ToListAsync(ct);
-        // Nhóm Gia đình còn active mà làn family không còn kỳ active: AdvanceLaneAsync sẽ kết thúc nhóm
+        // Nhóm Gia đình còn active mà chủ không còn kỳ Gia đình active nào: EndExpiredCyclesAsync sẽ kết thúc nhóm
         var lapsedGroups = await db.FamilyGroups.AsNoTracking()
             .Where(g => g.Status == FamilyGroupStatuses.Active
                 && !db.UserSubscriptions.Any(c => c.UserId == g.OwnerUserId && c.Kind == PlanKinds.Family && c.Status == CycleStatuses.Active))
             .Select(g => g.OwnerUserId)
             .ToListAsync(ct);
-        return dueActive.Concat(queuedReady).Select(l => new LaneRef(l.UserId, l.Kind))
-            .Concat(lapsedGroups.Select(owner => new LaneRef(owner, PlanKinds.Family)))
+        return dueActive.Select(l => new CycleOwnerRef(l.UserId, l.Kind))
+            .Concat(lapsedGroups.Select(owner => new CycleOwnerRef(owner, PlanKinds.Family)))
             .Distinct()
             .ToList();
     }
 
     public Task<List<UserSubscription>> FindCyclesDueForReminderAsync(DateTime nowUtc, DateTime untilUtc, CancellationToken ct = default) =>
         db.UserSubscriptions
-            .Where(c => c.Status == CycleStatuses.Active && c.EndsAt > nowUtc && c.EndsAt <= untilUtc && c.ReminderSentAt == null
-                && !db.UserSubscriptions.Any(q => q.UserId == c.UserId && q.Kind == c.Kind && q.Status == CycleStatuses.Queued))
+            .Where(c => c.Status == CycleStatuses.Active && c.EndsAt > nowUtc && c.EndsAt <= untilUtc && c.ReminderSentAt == null)
             .ToListAsync(ct);
 
     public Task<List<UserSubscription>> FindActiveCyclesAwaitingUsageNoticeAsync(CancellationToken ct = default) =>

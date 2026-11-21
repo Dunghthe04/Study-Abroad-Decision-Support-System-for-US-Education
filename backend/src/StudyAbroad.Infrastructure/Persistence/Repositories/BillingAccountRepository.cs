@@ -111,7 +111,7 @@ public class BillingAccountRepository(AppDbContext db) : IBillingAccountReposito
 
     public Task<int> EndOpenCyclesAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) =>
         db.UserSubscriptions
-            .Where(c => c.UserId == userId && (c.Status == CycleStatuses.Active || c.Status == CycleStatuses.Queued))
+            .Where(c => c.UserId == userId && c.Status == CycleStatuses.Active)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(c => c.Status, CycleStatuses.Ended)
                 .SetProperty(c => c.EndedReason, CycleEndReasons.OwnerPurged)

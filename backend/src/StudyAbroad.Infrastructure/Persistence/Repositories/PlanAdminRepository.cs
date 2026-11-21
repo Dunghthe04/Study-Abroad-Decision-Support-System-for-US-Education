@@ -15,7 +15,7 @@ public class PlanAdminRepository(AppDbContext db) : IPlanAdminRepository
 
     private IQueryable<Row> Rows(IQueryable<SubscriptionPlan> plans) => plans.Select(p => new Row(
         p,
-        db.UserSubscriptions.Count(c => c.SubscriptionPlanId == p.Id && (c.Status == CycleStatuses.Active || c.Status == CycleStatuses.Queued)),
+        db.UserSubscriptions.Count(c => c.SubscriptionPlanId == p.Id && c.Status == CycleStatuses.Active),
         db.UserSubscriptions.Count(c => c.SubscriptionPlanId == p.Id),
         db.PaymentTransactions.Count(o => o.SubscriptionPlanId == p.Id)));
 

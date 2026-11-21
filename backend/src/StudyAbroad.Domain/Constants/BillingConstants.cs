@@ -1,6 +1,6 @@
 namespace StudyAbroad.Domain.Constants;
 
-/// <summary>Loại gói. Loại quyết định làn (lane) và chỗ ngồi gia đình nên không đổi được sau khi tạo.</summary>
+/// <summary>Loại gói. Loại quyết định ai dùng được kỳ (cá nhân hay chia sẻ gia đình) nên không đổi được sau khi tạo.</summary>
 public static class PlanKinds
 {
     public const string Free = "free";
@@ -10,10 +10,9 @@ public static class PlanKinds
     public static readonly IReadOnlySet<string> All = new HashSet<string> { Free, Personal, Family };
 }
 
-/// <summary>Trạng thái một kỳ (user_subscriptions). Mỗi làn tối đa 1 active và 1 queued.</summary>
+/// <summary>Trạng thái một kỳ (user_subscriptions). Mỗi đơn đã trả tạo một kỳ active ngay; một người có thể có nhiều kỳ active cùng lúc.</summary>
 public static class CycleStatuses
 {
-    public const string Queued = "queued";
     public const string Active = "active";
     public const string Ended = "ended";
 }
@@ -21,7 +20,6 @@ public static class CycleStatuses
 public static class CycleEndReasons
 {
     public const string Expired = "expired";
-    public const string ExhaustedRollover = "exhausted_rollover";
     public const string OwnerPurged = "owner_purged";
     public const string FamilyLapsed = "family_lapsed";
 }
@@ -62,10 +60,10 @@ public static class FamilyGroupStatuses
     public const string Ended = "ended";
 }
 
-/// <summary>Chỗ ngồi gói Gia đình: chủ gói không chiếm chỗ.</summary>
+/// <summary>Chỗ ngồi gói Gia đình: chủ gói không chiếm chỗ. Cố định 2 học sinh + 2 phụ huynh dù chủ gói có bao nhiêu kỳ Gia đình.</summary>
 public static class FamilySeats
 {
-    public const int MaxStudents = 1;
+    public const int MaxStudents = 2;
     public const int MaxParents = 2;
     public const string Student = "student";
     public const string Parent = "parent";

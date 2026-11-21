@@ -38,7 +38,7 @@ public class BillingBackgroundService(
     public async Task RunTickAsync(DateTime nowUtc, CancellationToken ct)
     {
         await RunStepAsync("đối soát đơn", (job, t) => job.ReconcilePendingOrdersAsync(nowUtc, t), ct);
-        await RunStepAsync("chuyển kỳ", (job, t) => job.AdvanceDueLanesAsync(nowUtc, t), ct);
+        await RunStepAsync("kết thúc kỳ hết hạn", (job, t) => job.EndExpiredCyclesAsync(nowUtc, t), ct);
         await RunStepAsync("hết hạn lời mời Gia đình", (job, t) => job.ExpireFamilyInvitesAsync(nowUtc, t), ct);
         await RunStepAsync("nhắc gia hạn", (job, t) => job.SendRenewalRemindersAsync(nowUtc, t), ct);
         await RunStepAsync("thông báo hạn mức", (job, t) => job.SendUsageNotificationsAsync(nowUtc, t), ct);
@@ -51,7 +51,7 @@ public class BillingBackgroundService(
             using var scope = scopeFactory.CreateScope();
             var handled = await step(scope.ServiceProvider.GetRequiredService<IBillingJobService>(), ct);
             if (handled > 0)
-                logger.LogDebug("[Billing job] {Step}: {Handled} mục.", name, handled);   // số mục đã xét, không phải đã đổi: kỳ chờ nào còn thì lượt nào cũng đếm
+                logger.LogDebug("[Billing job] {Step}: {Handled} mục.", name, handled);   // số mục đã xét, không phải đã đổi
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

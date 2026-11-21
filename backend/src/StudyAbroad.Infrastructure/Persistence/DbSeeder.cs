@@ -82,9 +82,9 @@ public static class DbSeeder
             new() { Code = "personal-3m", Name = "Cá nhân 3 tháng", Kind = PlanKinds.Personal, PriceVnd = 199_000, DurationDays = 90, QuotaPeriodDays = 30, TokenQuota = 600_000, DisplayOrder = 2,
                 Description = "USDSS Premium cho 1 tài khoản trong 90 ngày." },
             new() { Code = "family-1m", Name = "Gia đình 1 tháng", Kind = PlanKinds.Family, PriceVnd = 99_000, DurationDays = 30, QuotaPeriodDays = 30, TokenQuota = 500_000, DisplayOrder = 3,
-                Description = "USDSS Premium cho người mua và tối đa 3 tài khoản trong 30 ngày." },
+                Description = "USDSS Premium cho người mua và tối đa 4 tài khoản (2 Học sinh, 2 Phụ huynh) trong 30 ngày." },
             new() { Code = "family-3m", Name = "Gia đình 3 tháng", Kind = PlanKinds.Family, PriceVnd = 249_000, DurationDays = 90, QuotaPeriodDays = 30, TokenQuota = 600_000, DisplayOrder = 4,
-                Description = "USDSS Premium cho người mua và tối đa 3 tài khoản trong 90 ngày." },
+                Description = "USDSS Premium cho người mua và tối đa 4 tài khoản (2 Học sinh, 2 Phụ huynh) trong 90 ngày." },
         ];
         var existing = await db.SubscriptionPlans.Select(p => p.Code).ToListAsync(ct);
         var missing = plans.Where(p => !existing.Contains(p.Code)).ToList();

@@ -10,9 +10,9 @@ public class BillingRepository(AppDbContext db) : IBillingRepository
     public async Task<IReadOnlyList<SubscriptionPlan>> GetPlansAsync(CancellationToken ct = default) =>
         await db.SubscriptionPlans.AsNoTracking().ToListAsync(ct);
 
-    public Task<List<UserSubscription>> GetOpenCyclesAsync(Guid ownerUserId, string kind, CancellationToken ct = default) =>
+    public Task<List<UserSubscription>> GetActiveCyclesAsync(Guid ownerUserId, string kind, CancellationToken ct = default) =>
         db.UserSubscriptions
-            .Where(c => c.UserId == ownerUserId && c.Kind == kind && (c.Status == CycleStatuses.Active || c.Status == CycleStatuses.Queued))
+            .Where(c => c.UserId == ownerUserId && c.Kind == kind && c.Status == CycleStatuses.Active)
             .ToListAsync(ct);
 
     public Task<FamilyGroup?> FindActiveOwnedGroupAsync(Guid ownerUserId, CancellationToken ct = default) =>
@@ -65,11 +65,11 @@ public class BillingRepository(AppDbContext db) : IBillingRepository
         try
         {
             // Bản đang theo dõi có thể cũ: bỏ đi để sau khi khóa, truy vấn trong plan đọc dòng mới nhất (cách OrderRepository.LockByCodeAsync)
-            DetachLane(ownerUserId, kind, lockGroup);
-            // Thứ tự khóa: kỳ của làn trước, nhóm sau (cùng thứ tự với mọi nơi khác); ORDER BY id để hai bên khóa cùng tập dòng theo cùng thứ tự
+            DetachCycles(ownerUserId, kind, lockGroup);
+            // Thứ tự khóa: các kỳ trước, nhóm sau (cùng thứ tự với mọi nơi khác); ORDER BY id để hai bên khóa cùng tập dòng theo cùng thứ tự
             await db.Database.SqlQuery<Guid>($"""
                 SELECT id AS "Value" FROM app.user_subscriptions
-                WHERE user_id = {ownerUserId} AND kind = {kind} AND status IN ({CycleStatuses.Active}, {CycleStatuses.Queued})
+                WHERE user_id = {ownerUserId} AND kind = {kind} AND status = {CycleStatuses.Active}
                 ORDER BY id
                 FOR UPDATE
                 """).ToListAsync(ct);
@@ -94,17 +94,17 @@ public class BillingRepository(AppDbContext db) : IBillingRepository
         catch (DbUpdateConcurrencyException) when (own is not null)
         {
             // Dòng thành viên (xmin) vừa bị request khác đổi: transaction quay lui, request kia là bên đã làm
-            DetachLane(ownerUserId, kind, lockGroup);
+            DetachCycles(ownerUserId, kind, lockGroup);
             return false;
         }
         catch
         {
-            DetachLane(ownerUserId, kind, lockGroup);   // phần sửa dang dở không được lưu lại ở lần SaveChanges sau của request
+            DetachCycles(ownerUserId, kind, lockGroup);   // phần sửa dang dở không được lưu lại ở lần SaveChanges sau của request
             throw;
         }
     }
 
-    private void DetachLane(Guid ownerUserId, string kind, bool includeGroup)
+    private void DetachCycles(Guid ownerUserId, string kind, bool includeGroup)
     {
         var groupIds = includeGroup ? db.FamilyGroups.Local.Where(g => g.OwnerUserId == ownerUserId).Select(g => g.Id).ToHashSet() : [];
         var stale = db.ChangeTracker.Entries().Where(e => e.State != EntityState.Added && e.Entity switch

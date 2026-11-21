@@ -21,11 +21,6 @@ public class UserSubscriptionConfiguration : IEntityTypeConfiguration<UserSubscr
         b.Property(x => x.PriceVnd).HasPrecision(12, 2);
         b.Property(x => x.EndedReason).HasMaxLength(32);
         b.Property(x => x.Warned80At).HasColumnName("warned_80_at");
-        // Mỗi làn (người, loại) tối đa 1 kỳ active và 1 kỳ queued: hai lần kích hoạt cùng lúc chỉ một bên thắng
-        b.HasIndex(x => new { x.UserId, x.Kind }, "ux_user_subscriptions_one_active_per_lane").IsUnique().HasFilter("status = 'active'")
-            .HasDatabaseName("ux_user_subscriptions_one_active_per_lane");
-        b.HasIndex(x => new { x.UserId, x.Kind }, "ux_user_subscriptions_one_queued_per_lane").IsUnique().HasFilter("status = 'queued'")
-            .HasDatabaseName("ux_user_subscriptions_one_queued_per_lane");
         b.HasIndex(x => new { x.UserId, x.Kind, x.Status });
     }
 }

@@ -435,12 +435,12 @@ namespace StudyAbroad.Infrastructure.Auth
         }
 
         // Biên nhận chỉ có mã đơn, tên gói và số tiền: không lưu, không in thông tin thẻ hay tài khoản ngân hàng.
-        public async Task SendPaymentReceiptEmailAsync(string toEmail, string fullName, long orderCode, string planName, decimal amountVnd, DateTime paidAtUtc, DateTime? startsAtUtc, DateTime? endsAtUtc, bool queued, CancellationToken ct = default)
+        public async Task SendPaymentReceiptEmailAsync(string toEmail, string fullName, long orderCode, string planName, decimal amountVnd, DateTime paidAtUtc, DateTime? startsAtUtc, DateTime? endsAtUtc, CancellationToken ct = default)
         {
             var subject = $"Biên nhận thanh toán gói {planName}";
             var encodedName = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(fullName) ? "Người dùng USAS" : fullName);
-            var validity = queued || startsAtUtc is null || endsAtUtc is null
-                ? "Gói được xếp hàng, bắt đầu khi kỳ hiện tại kết thúc hoặc dùng hết lượt."
+            var validity = startsAtUtc is null || endsAtUtc is null
+                ? "Gói của bạn đã được kích hoạt."
                 : $"Hiệu lực từ <strong>{VietnamTime(startsAtUtc.Value)}</strong> đến <strong>{VietnamTime(endsAtUtc.Value)}</strong>.";
             var body = $"""
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">

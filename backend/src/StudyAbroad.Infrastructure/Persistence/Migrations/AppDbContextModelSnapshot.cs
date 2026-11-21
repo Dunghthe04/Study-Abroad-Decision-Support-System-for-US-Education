@@ -5224,16 +5224,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "Kind", "Status")
                         .HasDatabaseName("ix_user_subscriptions_user_id_kind_status");
 
-                    b.HasIndex(new[] { "UserId", "Kind" }, "ux_user_subscriptions_one_active_per_lane")
-                        .IsUnique()
-                        .HasDatabaseName("ux_user_subscriptions_one_active_per_lane")
-                        .HasFilter("status = 'active'");
-
-                    b.HasIndex(new[] { "UserId", "Kind" }, "ux_user_subscriptions_one_queued_per_lane")
-                        .IsUnique()
-                        .HasDatabaseName("ux_user_subscriptions_one_queued_per_lane")
-                        .HasFilter("status = 'queued'");
-
                     b.ToTable("user_subscriptions", "app");
                 });
 

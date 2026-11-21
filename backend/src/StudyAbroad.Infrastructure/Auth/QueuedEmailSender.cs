@@ -83,8 +83,8 @@ namespace StudyAbroad.Infrastructure.Auth
         public Task SendCenterDeletionOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? note, DateTime? purgeAt, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendCenterDeletionOutcomeEmailAsync(toEmail, centerName, outcome, note, purgeAt, t));
 
-        public Task SendPaymentReceiptEmailAsync(string toEmail, string fullName, long orderCode, string planName, decimal amountVnd, DateTime paidAtUtc, DateTime? startsAtUtc, DateTime? endsAtUtc, bool queued, CancellationToken ct = default) =>
-            Enqueue(toEmail, (s, t) => s.SendPaymentReceiptEmailAsync(toEmail, fullName, orderCode, planName, amountVnd, paidAtUtc, startsAtUtc, endsAtUtc, queued, t));
+        public Task SendPaymentReceiptEmailAsync(string toEmail, string fullName, long orderCode, string planName, decimal amountVnd, DateTime paidAtUtc, DateTime? startsAtUtc, DateTime? endsAtUtc, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendPaymentReceiptEmailAsync(toEmail, fullName, orderCode, planName, amountVnd, paidAtUtc, startsAtUtc, endsAtUtc, t));
 
         public Task SendSubscriptionExpiringEmailAsync(string toEmail, string fullName, string planName, DateTime endsAtUtc, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendSubscriptionExpiringEmailAsync(toEmail, fullName, planName, endsAtUtc, t));
