@@ -348,16 +348,16 @@ def _value_str(v):
     return str(v) if isinstance(v, (int, str)) else json.dumps(v, ensure_ascii=False, separators=(",", ":"))
 
 
-def sign_webhook(code, amount, key=CHECKSUM, tamper_amount=None):
+def sign_webhook(code, amount, key=CHECKSUM, tamper_amount=None, inner="00", outer="00"):
     """Body webhook payOS tự ký (HMAC-SHA256 trên data xếp theo tên, key=value nối &). tamper_amount đổi số tiền SAU khi ký."""
     data = {"orderCode": code, "amount": amount, "description": "E2E", "accountNumber": "12345678", "reference": f"E2E{code}",
             "transactionDateTime": "2026-11-21 10:00:00", "currency": "VND", "paymentLinkId": f"fake-{code}",
-            "code": "00", "desc": "success", "counterAccountName": "NGUYEN VAN A"}
+            "code": inner, "desc": "success", "counterAccountName": "NGUYEN VAN A"}
     string = "&".join(f"{k}={_value_str(data[k])}" for k in sorted(data))
     signature = hmac.new(key.encode(), string.encode(), hashlib.sha256).hexdigest()
     if tamper_amount is not None:
         data["amount"] = tamper_amount
-    return json.dumps({"code": "00", "desc": "success", "success": True, "data": data, "signature": signature}, separators=(",", ":"))
+    return json.dumps({"code": outer, "desc": "success", "success": True, "data": data, "signature": signature}, separators=(",", ":"))
 
 
 def webhook(body):
@@ -429,6 +429,7 @@ def phase_purchase():
         ttl = (parse_dt(o["expiresAt"]) - parse_dt(o["createdAt"])).total_seconds()
         expect(abs(ttl - ORDER_MIN * 60) <= 5, f"hạn đơn {ttl:.0f}s, cần ~{ORDER_MIN * 60:.0f}s")
         expect(sub(u)["pendingOrderCode"] == o["orderCode"], "summary phải có pendingOrderCode")
+        EXP["u17_code"] = o["orderCode"]
         expect(pay(o["orderCode"]) is True, "handled")
         paid = order(u, o["orderCode"])
         cyc = paid["cycle"]
@@ -440,10 +441,15 @@ def phase_purchase():
         expect(s["personal"]["planCode"] == "personal-1m" and s["personal"]["usedPercent"] == 0 and s["personal"]["queued"] is None, s["personal"])
         wait_mail(u.email, "Biên nhận thanh toán")
         expect(wait_notif(u, "billing_payment_paid"), "thiếu thông báo billing_payment_paid")
-        payload = one("select payload_json from app.payment_transactions where order_code=%s", o["orderCode"])["payload_json"] or ""
-        expect("orderCode" in payload and "counterAccount" not in payload, f"payload phải lược counterAccount*: {short(payload)}")
         note(f"order {o['orderCode']}")
-        EXP["u17_code"] = o["orderCode"]
+
+    with case("P-sanitize", "webhook ký tay (job không can thiệp): đơn paid, payload lưu có orderCode nhưng đã lược counterAccount*") as note:
+        u = user("usan", age=27)
+        code = buy(u, "personal-1m")["orderCode"]
+        status(webhook(sign_webhook(code, 79000)), 200)
+        expect(order(u, code)["status"] == "paid", "đơn phải paid")
+        payload = one("select payload_json from app.payment_transactions where order_code=%s", code)["payload_json"] or ""
+        expect('"orderCode"' in payload and "counterAccount" not in payload and "NGUYEN VAN A" not in payload, f"payload: {short(payload)}")
 
     with case("P14", "webhook lặp (dev pay + webhook ký tay): 1 kỳ, 1 thư biên nhận") as note:
         u = user("u17")
@@ -455,6 +461,18 @@ def phase_purchase():
         expect(len(cycles(u, "personal")) == 1, f"{len(cycles(u, 'personal'))} kỳ, cần 1")
         expect(mail_n(u.email, "Biên nhận thanh toán") == 1, f"{mail_n(u.email, 'Biên nhận thanh toán')} thư biên nhận, cần 1")
         expect(len(notifs(u, "billing_payment_paid")) == 1, "thông báo billing_payment_paid phải đúng 1")
+
+    with case("P14b", "webhook ký tay, dev pay và dev status PAID (job) đập cùng lúc: đúng 1 kỳ, 1 biên nhận") as note:
+        u = user("urace2", age=26)
+        code = buy(u, "personal-1m")["orderCode"]
+        hits = [lambda: pay(code),
+                lambda: webhook(sign_webhook(code, 79000)).status_code == 200,
+                lambda: ANON.post(f"/api/v1/dev/payos/{code}/status", json={"status": "PAID", "amountPaid": 79000}).status_code == 200]
+        with ThreadPoolExecutor(3) as ex:
+            expect(all(f.result() for f in [ex.submit(h) for h in hits]), "một lời gọi lỗi")
+        settle()
+        expect(order(u, code)["status"] == "paid" and len(cycles(u, "personal")) == 1, f"{len(cycles(u, 'personal'))} kỳ")
+        expect(mail_n(u.email, "Biên nhận thanh toán") == 1 and len(notifs(u, "billing_payment_paid")) == 1, "đúng 1 biên nhận và 1 thông báo")
 
     with case("P2", "HS 15 tuổi mua -> 403 age_restricted") as note:
         par = user("par15", "parent", 40)   # email phụ huynh khai lúc đăng ký (HS dưới 16 bắt buộc)
@@ -482,12 +500,28 @@ def phase_purchase():
         EXP["ub_code"] = b["orderCode"]
         note("P5 và P10 đạt")
 
+    with case("P-own", "đơn của người khác: xem/hủy -> 404 order_not_found, không thấy trong danh sách; admin không vào route khách") as note:
+        other, code = user("u17"), EXP["ub_code"]
+        status(other.get(f"/api/v1/orders/{code}"), 404, "order_not_found")
+        status(other.post(f"/api/v1/orders/{code}/cancel"), 404, "order_not_found")
+        lst = status(other.get("/api/v1/orders", params={"pageSize": 500}), 200)
+        expect(code not in [o["orderCode"] for o in lst["items"]] and lst["pageSize"] == 50, f"pageSize={lst['pageSize']}")
+        for path in ("/api/v1/orders", "/api/v1/subscription", "/api/v1/family"):
+            status(ADMIN().get(path), 403)
+        expect(order(user("ub"), code)["status"] == "pending", "đơn của ub không bị đụng")
+
     with case("P17", "webhook sai chữ ký / sửa số tiền sau khi ký -> 400, đơn không đổi"):
         code = EXP["ub_code"]
         status(webhook(sign_webhook(code, 79000, key="khoa-sai")), 400, "invalid_signature")
         status(webhook(sign_webhook(code, 1000, tamper_amount=79000)), 400, "invalid_signature")
         status(webhook("không phải json"), 400, "invalid_signature")
         expect(order(user("ub"), code)["status"] == "pending", "đơn phải vẫn pending")
+
+    with case("P17c", "webhook ký đúng nhưng báo thất bại (mã trong data hoặc mã ngoài khác 00) -> 200, đơn không kích hoạt"):
+        code = EXP["ub_code"]
+        status(webhook(sign_webhook(code, 79000, inner="01")), 200)
+        status(webhook(sign_webhook(code, 79000, outer="01")), 200)
+        expect(order(user("ub"), code)["status"] == "pending" and len(cycles(user("ub"))) == 0, "đơn phải vẫn pending, không có kỳ")
 
     with case("P18★", "webhook ký đúng cho mã đơn lạ -> 200, không tạo gì") as note:
         code = 9_000_000_000_000 + random.randint(0, 99_999_999)
@@ -660,6 +694,16 @@ def phase_gating():
         locked = r.json().get("locked") if r.status_code == 200 else None
         expect(locked is None, f"Premium bị khóa: {short(r.text)}")
         note(f"status {r.status_code}")
+
+    with case("G9", "Premium hết token mọi pool: nút explain bị khóa premium_required, recommendations vẫn mở (O2)") as note:
+        u = user("ut")   # T8 đã dùng hết kỳ Personal, kỳ còn hạn
+        s = sub(u)
+        expect(s["tier"] == "premium" and s["personal"]["exhausted"] is True and s["chargingPool"] == "free", s)
+        b = status(u.post("/api/v1/advisor/chat", json=chat_body({"type": "explain", "schoolCode": "MIT"})), 200)
+        expect(b.get("locked", {}).get("reason") == "premium_required", f"locked={b.get('locked')}")
+        r = u.post("/api/v1/recommendations", json={})
+        expect(not (r.status_code == 403 and r.json().get("code") == "premium_required"), f"recommendations bị khóa: {short(r.text)}")
+        note(f"recommendations status {r.status_code}")
 
     with case("G8", "Free hết hạn mức tháng (>=120000): chat trả quota_exhausted, resetsAt +07:00 mùng 1, không gọi advisor") as note:
         u = user("g8", age=22)
@@ -979,6 +1023,40 @@ def phase_family():
         sql("update app.family_members set expires_at=now()-interval '1 hour' where invited_email=%s and status='pending'", stu.email)
         expect(eventually(lambda: invite_row(stu.email)["status"] == "expired", 20), f"trạng thái: {invite_row(stu.email)['status']}")
         expect(family(fo1)["seats"]["students"]["used"] == 0 and family(fo1)["invites"] == [], "ghế phải trống, không còn lời mời")
+
+    with case("F7b", "gửi lại sau 60s: 202, token mới (link cũ chết), mail mới; lần thứ 6 trong 24h -> 429") as note:
+        stu = user("fsre", age=20)
+        n0 = mail_n(stu.email, "tham gia gói")
+        status(invite(fo1, stu.email, "student"), 202)
+        old_tok = invite_token(stu.email, n0)
+        inv = invite_row(stu.email)
+        status(fo1.post(f"/api/v1/family/invites/{inv['id']}/resend"), 429, "resend_too_soon")
+        sql("update app.family_members set last_invite_sent_at=now()-interval '2 minutes' where id=%s", inv["id"])
+        status(fo1.post(f"/api/v1/family/invites/{inv['id']}/resend"), 202)
+        new_tok = invite_token(stu.email, n0 + 1)
+        expect(new_tok != old_tok, "token phải đổi")
+        status(ANON.post("/api/v1/family/invites/lookup", json={"token": old_tok}), 404, "invite_invalid")
+        expect(status(ANON.post("/api/v1/family/invites/lookup", json={"token": new_tok}), 200)["status"] == "pending", "token mới dùng được")
+        sql("update app.family_members set invite_sent_count=5, last_invite_sent_at=now()-interval '2 minutes' where id=%s", inv["id"])
+        status(fo1.post(f"/api/v1/family/invites/{inv['id']}/resend"), 429, "resend_too_soon")
+        status(fo1.delete(f"/api/v1/family/invites/{inv['id']}"), 204)
+
+    with case("F38", "đơn Family bị hủy rồi trả muộn khi đã là thành viên (C6, C15): gói riêng chạy, rời nhóm cũ, cả hai được báo") as note:
+        fs4 = user("fs4", age=19)
+        o = buy(fs4, "family-1m")
+        status(fs4.post(f"/api/v1/orders/{o['orderCode']}/cancel"), 200)
+        n0 = mail_n(fs4.email, "tham gia gói")
+        status(invite(fo1, fs4.email, "student"), 202)
+        status(accept(fs4, invite_token(fs4.email, n0)), 200)
+        owner_left = len(notifs(fo1, "family_member_left"))
+        expect(pay(o["orderCode"]), "webhook muộn không được xử lý")
+        f = family(fs4)
+        expect(f["isOwner"] is True and [m["name"] for m in f["members"]] == ["E2E fs4"], f"fs4 phải là chủ nhóm riêng: {f['members']}")
+        expect("E2E fs4" not in [m["name"] for m in family(fo1)["members"]] and family(fo1)["seats"]["students"]["used"] == 0, "fs4 phải rời nhóm cũ")
+        row = one("select status, ended_reason from app.family_members where user_id=%s order by created_at limit 1", fs4.id)
+        expect(row["status"] == "ended" and row["ended_reason"] == "joined_own_family", f"{row}")
+        expect(wait_notif(fo1, "family_member_left", owner_left + 1) and wait_notif(fs4, "family_member_left"), "cả hai phải được báo")
+        expect(sub(fs4)["family"]["role"] == "owner", sub(fs4))
 
     # ---- gói Gia đình thứ hai: F11, F36, F27
     fo2, fs3 = user("fo2", "parent", 41), user("fs3", age=18)
