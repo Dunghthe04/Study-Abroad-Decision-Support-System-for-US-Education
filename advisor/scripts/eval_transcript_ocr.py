@@ -47,7 +47,9 @@ async def run(files: list[Path], models: list[str], out_dir: Path) -> None:
     claude_http = None
     claude = None
     if settings.anthropic_api_key:
-        claude_http = httpx.AsyncClient(base_url=settings.anthropic_base_url, timeout=settings.anthropic_timeout_seconds)
+        claude_http = httpx.AsyncClient(
+            base_url=settings.anthropic_base_url, timeout=settings.anthropic_timeout_seconds
+        )
         claude = ClaudeClient(
             claude_http,
             settings.anthropic_model,
@@ -60,10 +62,12 @@ async def run(files: list[Path], models: list[str], out_dir: Path) -> None:
         async with httpx.AsyncClient(base_url=settings.ollama_base_url) as http:
             for model in models:
                 fallback_parse = settings.transcript_parse_model or settings.llm_model or model
-                model_settings = settings.model_copy(update={
-                    "vision_model": model,
-                    "transcript_parse_model": fallback_parse,
-                })
+                model_settings = settings.model_copy(
+                    update={
+                        "vision_model": model,
+                        "transcript_parse_model": fallback_parse,
+                    }
+                )
                 reader = RecordingReader(
                     http,
                     model_settings,
@@ -86,7 +90,15 @@ async def run(files: list[Path], models: list[str], out_dir: Path) -> None:
                         int(m.group(1)) for w in result.warnings if (m := re.search(r"bỏ (\d+) điểm", w))
                     )
                     rows.append(
-                        (model, path.name, len(result.terms), scores, dropped, elapsed, result.model_used or "")
+                        (
+                            model,
+                            path.name,
+                            len(result.terms),
+                            scores,
+                            dropped,
+                            elapsed,
+                            result.model_used or "",
+                        )
                     )
 
                     stem = f"{re.sub(r'[^a-z0-9]+', '_', model)}__{path.stem}"
