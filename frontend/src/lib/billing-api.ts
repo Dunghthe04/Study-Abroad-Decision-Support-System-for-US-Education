@@ -11,7 +11,7 @@ export const billingApi = {
   /** Chỉ học sinh, phụ huynh. */
   subscription: () => apiFetch<SubscriptionSummaryDto>("/api/v1/subscription"),
 
-  /** 201. Lỗi: age_restricted, role_not_allowed, plan_not_for_sale, pending_order_exists (+orderCode), already_renewed, already_in_family, gateway_unavailable. */
+  /** 201. Lỗi: age_restricted, role_not_allowed, plan_not_for_sale, pending_order_exists (+orderCode), already_in_family, gateway_unavailable. */
   createOrder: (planCode: string) =>
     apiFetch<OrderDto>("/api/v1/orders", { method: "POST", body: JSON.stringify({ planCode }) }),
 

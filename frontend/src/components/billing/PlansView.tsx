@@ -60,12 +60,12 @@ function buildFeatures(plan: PlanDto): ReactNode[] {
     ];
   }
 
-  const students = plan.seats?.students ?? 1;
+  const students = plan.seats?.students ?? 2;
   const parents = plan.seats?.parents ?? 2;
   return [
     quotaBullet,
     "Toàn bộ tính năng của gói USDSS Premium Cá nhân",
-    `Chia sẻ tối đa ${students + parents} tài khoản (${students} Học sinh, ${parents} Phụ huynh) dùng chung hạn mức`,
+    `Chia sẻ tối đa ${students + parents} tài khoản (${students} Học sinh, ${parents} Phụ huynh) dùng chung hạn mức mọi gói Gia đình của bạn`,
     "Quản lý thành viên, gửi lời mời qua email và theo dõi tỷ lệ sử dụng",
     "Tài khoản dưới 16 tuổi vẫn được tham gia khi chủ gói mời",
   ];
@@ -138,7 +138,11 @@ export function PlansView() {
   }
 
   const s = sub.data;
-  const familyMember = s?.family?.role === "member";
+  const cycles = s?.cycles ?? [];
+  // Thành viên: chỉ có kỳ Gia đình chia sẻ từ người khác, không có kỳ Gia đình của chính mình.
+  const familyMember = cycles.some((c) => c.kind === "family") && !cycles.some((c) => c.kind === "family" && c.role === "owner");
+  const familyOwnerName = cycles.find((c) => c.kind === "family" && c.role === "member")?.ownerName;
+  const ownsKind = (kind: PlanKind) => cycles.some((c) => c.kind === kind && c.role === "owner");
 
   const grouped = KIND_ORDER.map((kind) => {
     const items = plans.data!
@@ -147,22 +151,16 @@ export function PlansView() {
     return { kind, items };
   }).filter((g) => g.items.length > 0);
 
-  const activeCodeForKind = (kind: PlanKind): string | undefined => {
-    if (kind === "personal") return s?.personal?.planCode;
-    if (kind === "family") return s?.family?.planCode;
-    return undefined;
-  };
+  // Kỳ sớm hết hạn nhất của loại này (cycles đã sắp theo endsAt) để chọn sẵn thời hạn đang dùng.
+  const activeCodeForKind = (kind: PlanKind): string | undefined => cycles.find((c) => c.kind === kind)?.planCode;
 
   const renderStatusBadge = (plan: PlanDto) => {
     if (!s) return null;
-    if (plan.kind === "free" && s.tier === "free") return <Badge variant="neutral">Đang dùng</Badge>;
-    if (plan.kind === "personal" && s.personal?.planCode === plan.code) return <Badge variant="ok">Gói hiện tại</Badge>;
-    if (plan.kind === "family" && s.family?.planCode === plan.code) {
-      return (
-        <Badge variant="ok">{familyMember ? `Thành viên gói Gia đình của ${s.family.ownerName}` : "Gói hiện tại"}</Badge>
-      );
-    }
-    return null;
+    if (plan.kind === "free") return s.tier === "free" ? <Badge variant="neutral">Đang dùng</Badge> : null;
+    const active = cycles.filter((c) => c.planCode === plan.code);
+    if (active.length === 0) return null;
+    const shared = active.every((c) => c.role === "member");
+    return <Badge variant="ok">{shared ? `Chia sẻ bởi ${active[0].ownerName ?? "chủ gói"}` : "Đang dùng"}</Badge>;
   };
 
   const renderCta = (plan: PlanDto) => {
@@ -199,12 +197,12 @@ export function PlansView() {
     if (plan.kind === "family" && familyMember) {
       return (
         <div className="rounded-xl border border-line bg-ground px-3.5 py-2.5 text-xs leading-relaxed text-ink-2">
-          Bạn đang là thành viên gói Gia đình của <span className="font-medium text-ink">{s?.family?.ownerName}</span>
+          Bạn đang dùng chung gói Gia đình của <span className="font-medium text-ink">{familyOwnerName}</span>
         </div>
       );
     }
 
-    const renew = plan.kind === "personal" ? !!s?.personal : !!s?.family;
+    const more = ownsKind(plan.kind);
     return (
       <Button
         type="button"
@@ -215,7 +213,7 @@ export function PlansView() {
         title={ageBlocked ? AGE_REASON : undefined}
         onClick={() => void buy(plan.code)}
       >
-        {renew ? "Gia hạn" : "Thanh toán"}
+        {more ? "Mua thêm" : "Thanh toán"}
       </Button>
     );
   };

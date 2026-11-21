@@ -151,7 +151,7 @@ export function OrderDetailPanel({ orderCode, onClose, onChanged }: OrderDetailP
             {row("Tạo lúc", formatVnDateTime(order.createdAt))}
             {row("Hết hạn", formatVnDateTime(order.expiresAt))}
             {row("Thanh toán lúc", formatVnDateTime(order.paidAt))}
-            {order.cycle && row("Chu kỳ", `${formatVnDateTime(order.cycle.startsAt)} → ${formatVnDateTime(order.cycle.endsAt)}${order.cycle.queued ? " (xếp hàng)" : ""}`)}
+            {order.cycle && row("Chu kỳ", `${formatVnDateTime(order.cycle.startsAt)} → ${formatVnDateTime(order.cycle.endsAt)}`)}
             {row("Ghi chú admin", order.adminNote)}
             {row("Người xử lý", order.handledBy)}
           </dl>

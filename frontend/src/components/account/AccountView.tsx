@@ -16,8 +16,8 @@ import {
   BookOpenFilledIcon,
   CreditCardFilledIcon,
   HeartHandshakeFilledIcon,
+  GaugeFilledIcon,
   KeyRoundFilledIcon,
-  ReceiptTextFilledIcon,
   SendFilledIcon,
   UserFilledIcon,
   UsersFilledIcon,
@@ -30,7 +30,7 @@ import { PersonalInfoCard } from "@/components/account/PersonalInfoCard";
 import { SentLeadsCard } from "@/components/account/SentLeadsCard";
 import { SubscriptionCard } from "@/components/account/SubscriptionCard";
 import { FamilyCard } from "@/components/account/FamilyCard";
-import { OrdersHistoryView } from "@/components/billing/OrdersHistoryView";
+import { QuotaCard } from "@/components/account/QuotaCard";
 import { billingApi } from "@/lib/billing-api";
 import { useFetched } from "@/lib/use-fetched";
 import type { SubscriptionSummaryDto } from "@/types/billing";
@@ -41,11 +41,11 @@ import {
   BookOpenIcon,
   Building2Icon,
   CreditCardIcon,
+  GaugeIcon,
   GraduationCapIcon,
   HeartHandshakeIcon,
   KeyRoundIcon,
   LogOutIcon,
-  ReceiptTextIcon,
   SendIcon,
   ShieldIcon,
   TriangleAlertIcon,
@@ -55,7 +55,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-type SectionId = "personal" | "subscription" | "family" | "orders" | "academic" | "parent-links" | "sent-leads" | "password";
+type SectionId = "personal" | "subscription" | "quota" | "family" | "academic" | "parent-links" | "sent-leads" | "password";
 
 type NavGroupId = "account" | "billing" | "profile";
 
@@ -81,7 +81,8 @@ const NAV_GROUPS: NavGroupMeta[] = [
 // Mục đang mở lưu trên hash (#password...) để tải lại trang hoặc gửi link vẫn mở đúng mục.
 // Giữ nguyên hash được yêu cầu: mục "family" chỉ có sau khi tải GET subscription, nên mục đang mở được suy ra khi render.
 function readHash(): string {
-  return typeof window === "undefined" ? "" : window.location.hash.slice(1);
+  const hash = typeof window === "undefined" ? "" : window.location.hash.slice(1);
+  return hash === "orders" ? "subscription" : hash; // Lịch sử giao dịch nay nằm trong mục Gói dịch vụ
 }
 
 export function AccountView() {
@@ -91,7 +92,7 @@ export function AccountView() {
 
   const isStudentOrParent = Boolean(user && (user.role === "student" || user.role === "parent"));
 
-  // Mục Gói Gia đình chỉ hiện khi GET subscription có family (chủ hoặc thành viên của gói còn kỳ).
+  // Mục Chia sẻ cho gia đình chỉ hiện khi GET subscription có family hoặc kỳ Gia đình (chủ hoặc thành viên).
   // Đổi gì trong gói Gia đình thì tăng billingVersion để tải lại cả subscription lẫn family.
   const [billingVersion, setBillingVersion] = useState(0);
   const reloadBilling = useCallback(() => setBillingVersion((v) => v + 1), []);
@@ -99,7 +100,8 @@ export function AccountView() {
     isStudentOrParent ? `sub:${user?.id}:${billingVersion}` : "none",
     () => (isStudentOrParent ? billingApi.subscription() : Promise.resolve(null)),
   );
-  const hasFamily = Boolean(sub.data?.family);
+  const familyCycleCount = (sub.data?.cycles ?? []).filter((c) => c.kind === "family").length;
+  const hasFamily = Boolean(sub.data?.family) || familyCycleCount > 0;
 
   const sections: SectionItem[] = [
     { id: "personal", label: "Thông tin cá nhân", icon: UserIcon, filledIcon: UserFilledIcon, group: "account" },
@@ -107,10 +109,10 @@ export function AccountView() {
     ...(isStudentOrParent
       ? [
           { id: "subscription" as const, label: "Gói dịch vụ", icon: CreditCardIcon, filledIcon: CreditCardFilledIcon, group: "billing" as const },
+          { id: "quota" as const, label: "Hạn mức", icon: GaugeIcon, filledIcon: GaugeFilledIcon, group: "billing" as const },
           ...(hasFamily
-            ? [{ id: "family" as const, label: "Gói Gia đình", icon: HeartHandshakeIcon, filledIcon: HeartHandshakeFilledIcon, group: "billing" as const }]
+            ? [{ id: "family" as const, label: "Chia sẻ cho gia đình", icon: HeartHandshakeIcon, filledIcon: HeartHandshakeFilledIcon, group: "billing" as const }]
             : []),
-          { id: "orders" as const, label: "Lịch sử giao dịch", icon: ReceiptTextIcon, filledIcon: ReceiptTextFilledIcon, group: "billing" as const },
           { id: "academic" as const, label: "Hồ sơ học thuật", icon: BookOpenIcon, filledIcon: BookOpenFilledIcon, group: "profile" as const },
           {
             id: "parent-links" as const,
@@ -347,9 +349,9 @@ export function AccountView() {
         {/* NỘI DUNG MỤC ĐANG CHỌN: nền trong suốt, tiêu đề ngoài thẻ, căn thẳng mép phải với thanh đầu trang */}
         <section className="min-w-0">
           {activeSection === "personal" && <PersonalInfoCard />}
-          {activeSection === "subscription" && <SubscriptionCard />}
-          {activeSection === "family" && <FamilyCard version={billingVersion} onChanged={reloadBilling} />}
-          {activeSection === "orders" && <OrdersHistoryView inAccount />}
+          {activeSection === "subscription" && <SubscriptionCard sub={sub} />}
+          {activeSection === "quota" && <QuotaCard sub={sub} />}
+          {activeSection === "family" && <FamilyCard version={billingVersion} onChanged={reloadBilling} familyCycleCount={familyCycleCount} />}
           {activeSection === "academic" &&
             (parentOverview ? (
               <ParentAcademicSection overview={parentOverview} onChanged={reloadProfile} />

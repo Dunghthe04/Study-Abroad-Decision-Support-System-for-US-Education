@@ -146,3 +146,26 @@ export function KeyRoundFilledIcon({ className }: AdminNavIconProps) {
     </svg>
   );
 }
+
+export function GaugeFilledIcon({ className }: AdminNavIconProps) {
+  const maskId = useId().replace(/:/g, "");
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="24"
+      height="24"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <defs>
+        <mask id={maskId}>
+          <rect width="24" height="24" fill="white" />
+          <path d="m12 13.5 3.5-3.5" stroke="black" strokeWidth="2" strokeLinecap="round" />
+          <circle cx="12" cy="13.5" r="1.4" fill="black" />
+        </mask>
+      </defs>
+      <circle cx="12" cy="12" r="10" mask={`url(#${maskId})`} fill="currentColor" />
+    </svg>
+  );
+}

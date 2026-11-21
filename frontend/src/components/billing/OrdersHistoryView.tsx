@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CreditCardIcon } from "lucide-react";
-import { AccountSectionHeader } from "@/components/account/AccountSectionHeader";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -31,20 +30,8 @@ export function OrdersHistoryView({ inAccount = false }: { inAccount?: boolean }
   const orders = useFetched(`orders:${page}`, () => billingApi.listOrders(page, PAGE_SIZE));
   const data = orders.data;
 
-  const header = inAccount ? (
-    <AccountSectionHeader
-      title="Lịch sử giao dịch"
-      description="Danh sách các đơn đăng ký gói dịch vụ và trạng thái thanh toán của bạn."
-      actions={
-        data && data.items.length > 0 ? (
-          <Link href="/plans" className={buttonVariants({ variant: "outline", size: "lg", className: "bg-surface" })}>
-            <CreditCardIcon data-icon="inline-start" aria-hidden />
-            Xem các gói
-          </Link>
-        ) : undefined
-      }
-    />
-  ) : (
+  // Trong trang tài khoản, tiêu đề do mục Gói dịch vụ đặt.
+  const header = inAccount ? null : (
     <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="space-y-1">
         <h1 className="font-heading text-2xl font-semibold tracking-tight text-ink">Lịch sử giao dịch</h1>
@@ -80,7 +67,7 @@ export function OrdersHistoryView({ inAccount = false }: { inAccount?: boolean }
       {header}
 
       {data.items.length === 0 ? (
-        <Empty className="py-16">
+        <Empty className={inAccount ? "py-10" : "py-16"}>
           <EmptyHeader>
             <EmptyTitle className="text-base font-semibold text-ink">
               Bạn chưa có giao dịch nào
@@ -89,12 +76,14 @@ export function OrdersHistoryView({ inAccount = false }: { inAccount?: boolean }
               Các đơn đăng ký gói USDSS Premium Cá nhân hoặc Gia đình sẽ hiển thị tại đây.
             </EmptyDescription>
           </EmptyHeader>
-          <EmptyContent>
-            <Link href="/plans" className={buttonVariants({ size: "lg" })}>
-              <CreditCardIcon data-icon="inline-start" aria-hidden />
-              Xem các gói
-            </Link>
-          </EmptyContent>
+          {!inAccount && (
+            <EmptyContent>
+              <Link href="/plans" className={buttonVariants({ size: "lg" })}>
+                <CreditCardIcon data-icon="inline-start" aria-hidden />
+                Xem các gói
+              </Link>
+            </EmptyContent>
+          )}
         </Empty>
       ) : (
         <div className={cn("space-y-4", orders.loading && "opacity-60")}>

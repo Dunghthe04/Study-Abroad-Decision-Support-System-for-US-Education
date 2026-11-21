@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import {
-  CalendarIcon,
-  ClockIcon,
   LogOutIcon,
   MailIcon,
   SendIcon,
@@ -46,7 +44,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatVnDate, formatVnDateTime } from "@/lib/billing-api";
+import { formatVnDateTime } from "@/lib/billing-api";
 import { familyApi, familyErrorMessage } from "@/lib/family-api";
 import { useFetched } from "@/lib/use-fetched";
 import { cn } from "@/lib/utils";
@@ -75,9 +73,10 @@ function useNow(intervalMs: number): number | null {
   return now;
 }
 
-// [UC-126..131] Mục "Gói Gia đình": chỉ hiện khi GET subscription có family (AccountView quyết định).
+// [UC-126..131] Mục "Chia sẻ cho gia đình": chỉ hiện khi GET subscription có family (AccountView quyết định).
+// Tối đa 4 thành viên (2 Học sinh + 2 Phụ huynh) dùng chung hạn mức của mọi gói Gia đình của chủ gói. Hạn mức xem ở mục "Hạn mức".
 // Chủ gói: thành viên, chỗ trống, lời mời, mời/gửi lại/hủy/xóa. Thành viên: chỉ xem và Rời gói.
-export function FamilyCard({ version, onChanged }: { version: number; onChanged: () => void }) {
+export function FamilyCard({ version, onChanged, familyCycleCount }: { version: number; onChanged: () => void; familyCycleCount: number }) {
   const { user } = useAuth();
   const family = useFetched(`family:${user?.id}:${version}`, familyApi.get);
   const f = family.data;
@@ -125,8 +124,8 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
     return (
       <div>
         <AccountSectionHeader
-          title="Gói Gia đình"
-          description="Quản lý thành viên dùng chung hạn mức và lời mời tham gia gói."
+          title="Chia sẻ cho gia đình"
+          description="Mời tối đa 2 Học sinh và 2 Phụ huynh dùng chung hạn mức các gói Gia đình của bạn."
         />
         {family.error ? (
           <Alert variant="destructive">
@@ -174,11 +173,11 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
   return (
     <div>
       <AccountSectionHeader
-        title="Gói Gia đình"
+        title="Chia sẻ cho gia đình"
         description={
           owner
-            ? "Quản lý thành viên dùng chung hạn mức và lời mời tham gia gói."
-            : `Thành viên gói Gia đình của ${f.ownerName}.`
+            ? "Mời tối đa 2 Học sinh và 2 Phụ huynh dùng chung hạn mức tất cả gói Gia đình của bạn."
+            : `Bạn đang dùng chung hạn mức các gói Gia đình của ${f.ownerName}.`
         }
         actions={
           owner ? (
@@ -215,51 +214,10 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
           </Alert>
         )}
 
-        {f.cycle && (
-          <div className="space-y-4 rounded-xl border border-line bg-surface p-5 sm:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-1">
-                <h2 className="font-heading text-lg font-semibold text-ink">{f.cycle.planName}</h2>
-                {owner && (
-                  <p className="text-xs text-ink-2">
-                    Chỗ đã dùng: Học sinh {f.seats.students.used}/{f.seats.students.max} · Phụ huynh{" "}
-                    {f.seats.parents.used}/{f.seats.parents.max}
-                  </p>
-                )}
-              </div>
-              <div className="text-left sm:text-right">
-                <div className="text-2xl font-semibold text-ink tabular-nums">
-                  {f.cycle.usedPercent}%
-                </div>
-                <div className="text-xs text-ink-3">Cả gói đã dùng</div>
-              </div>
-            </div>
-
-            <Progress
-              value={Math.min(100, f.cycle.usedPercent)}
-              aria-label={`Cả gói đã dùng ${f.cycle.usedPercent}%`}
-            />
-
-            {(f.cycle.quotaResetsAt || f.cycle.endsAt) && (
-              <div className="grid grid-cols-1 gap-2.5 border-t border-line pt-3.5 text-xs text-ink-2 sm:grid-cols-2">
-                {f.cycle.quotaResetsAt && (
-                  <div className="flex items-center gap-2">
-                    <CalendarIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
-                    <span>
-                      Làm mới hạn mức ngày {formatVnDate(f.cycle.quotaResetsAt)}
-                      {f.cycle.quotaPeriodDays ? ` (mỗi ${f.cycle.quotaPeriodDays} ngày)` : ""}
-                    </span>
-                  </div>
-                )}
-                {f.cycle.endsAt && (
-                  <div className="flex items-center gap-2">
-                    <ClockIcon className="size-3.5 shrink-0 text-ink-3" aria-hidden />
-                    <span>Hết hạn ngày {formatVnDate(f.cycle.endsAt)}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+        {familyCycleCount > 0 && (
+          <p className="text-sm text-ink-2">
+            {owner ? "Đang chia sẻ" : "Đang dùng chung"} <span className="font-medium text-ink">{familyCycleCount}</span> gói Gia đình
+          </p>
         )}
 
         {/* Danh sách thành viên */}
@@ -333,7 +291,7 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
                   Chưa có thành viên nào khác
                 </EmptyTitle>
                 <EmptyDescription>
-                  Gói chưa có thành viên. Nếu trước đây bạn đã có gói Gia đình, hãy mời lại thành viên cũ.
+                  Mời người thân để cùng dùng chung hạn mức các gói Gia đình của bạn.
                 </EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
@@ -420,7 +378,7 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
           <DialogHeader>
             <DialogTitle>Mời thành viên vào gói Gia đình</DialogTitle>
             <DialogDescription>
-              Lời mời có hiệu lực 7 ngày. Loại tài khoản của người được mời phải khớp với loại chỗ đã chọn.
+              Lời mời có hiệu lực 7 ngày. Loại tài khoản của người được mời phải khớp với loại chỗ đã chọn. Gói Gia đình có tối đa 2 Học sinh và 2 Phụ huynh.
             </DialogDescription>
           </DialogHeader>
 
@@ -500,8 +458,8 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirm?.kind === "leave"
-                ? "Bạn sẽ không dùng chung lượt hỏi của gói này nữa. Phần đã dùng vẫn được tính vào gói."
-                : "Thành viên này sẽ không dùng chung lượt hỏi của gói nữa và chỗ được giải phóng. Phần đã dùng vẫn được tính vào gói."}
+                ? "Bạn sẽ không dùng chung lượt hỏi của các gói Gia đình này nữa. Phần đã dùng vẫn được tính vào gói."
+                : "Thành viên này sẽ không dùng chung lượt hỏi của các gói Gia đình nữa và chỗ được giải phóng. Phần đã dùng vẫn được tính vào gói."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {error && <p className="text-sm text-risk" role="alert">{error}</p>}

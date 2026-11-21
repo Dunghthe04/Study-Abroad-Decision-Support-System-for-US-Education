@@ -137,10 +137,7 @@ const TERMINAL_META: Record<
 > = {
   paid: {
     title: "Thanh toán thành công",
-    description: (o) =>
-      o.cycle?.queued
-        ? `Gói ${o.planName} đã được ghi nhận và xếp hàng kích hoạt ngay sau kỳ hiện tại.`
-        : `Gói ${o.planName} đã được kích hoạt cho tài khoản của bạn.`,
+    description: (o) => `Gói ${o.planName} đã được kích hoạt cho tài khoản của bạn.`,
     ctaLabel: "Xem gói của tôi",
     ctaHref: "/account#subscription",
     tone: "text-ok",
@@ -479,21 +476,15 @@ export function OrderView({ orderCode }: { orderCode: string }) {
                     <span className="tabular-nums">{formatVnDateTime(order.paidAt)}</span>
                   </Detail>
                 )}
-                {order.cycle?.queued ? (
-                  <Detail label="Kỳ sử dụng" wide>
-                    Đã xếp hàng, bắt đầu khi kỳ hiện tại kết thúc hoặc dùng hết
-                  </Detail>
-                ) : (
-                  order.cycle && (
-                    <>
-                      <Detail label="Bắt đầu">
-                        <span className="tabular-nums">{formatVnDateTime(order.cycle.startsAt)}</span>
-                      </Detail>
-                      <Detail label="Kết thúc">
-                        <span className="tabular-nums">{formatVnDateTime(order.cycle.endsAt)}</span>
-                      </Detail>
-                    </>
-                  )
+                {order.cycle && (
+                  <>
+                    <Detail label="Bắt đầu">
+                      <span className="tabular-nums">{formatVnDateTime(order.cycle.startsAt)}</span>
+                    </Detail>
+                    <Detail label="Kết thúc">
+                      <span className="tabular-nums">{formatVnDateTime(order.cycle.endsAt)}</span>
+                    </Detail>
+                  </>
                 )}
               </dl>
             </section>

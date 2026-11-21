@@ -25,7 +25,6 @@ export interface PoolDto {
   exhausted: boolean;
   lowQuota: boolean;
   expiringSoon: boolean;
-  queued: { planName: string; expectedStartsAt: string | null } | null;
 }
 
 export interface FamilyPoolDto extends PoolDto {
@@ -39,12 +38,33 @@ export interface FreePoolDto {
   quotaPeriodDays?: number | null;
 }
 
+/** Một kỳ gói còn hiệu lực (mỗi lần mua là một kỳ, chạy song song và cộng dồn hạn mức). */
+export interface SubscriptionCycleDto {
+  id: string;
+  kind: "personal" | "family";
+  planCode: string;
+  planName: string;
+  purchasedAt: string;
+  startsAt: string;
+  endsAt: string;
+  usedPercent: number;
+  exhausted: boolean;
+  lowQuota: boolean;
+  expiringSoon: boolean;
+  quotaPeriodDays: number | null;
+  quotaResetsAt: string | null;
+  role: "owner" | "member";
+  ownerName: string | null;
+}
+
 export interface SubscriptionSummaryDto {
   tier: "free" | "premium";
   chargingPool: PlanKind;
   personal: PoolDto | null;
   family: FamilyPoolDto | null;
   free: FreePoolDto;
+  /** Các kỳ còn hiệu lực, sắp theo endsAt tăng dần. Có thể vắng cho tới khi backend bổ sung: dùng `s.cycles ?? []`. */
+  cycles?: SubscriptionCycleDto[];
   pendingOrderCode: number | null;
   lowQuota: boolean;
   expiringSoon: boolean;
@@ -65,7 +85,7 @@ export interface OrderDto {
   paidAt: string | null;
   checkoutUrl: string;
   qrCode: string;
-  cycle: { startsAt: string | null; endsAt: string | null; queued: boolean } | null;
+  cycle: { startsAt: string | null; endsAt: string | null } | null;
 }
 
 /** Lỗi { code, message } của các route gói/đơn/gia đình; orderCode chỉ có ở pending_order_exists. */

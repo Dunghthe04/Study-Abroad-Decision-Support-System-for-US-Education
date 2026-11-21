@@ -66,7 +66,7 @@ export function FamilyInviteForm() {
   const heading = (
     <div className="space-y-1">
       <h1 className="font-heading text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Lời mời gói Gia đình</h1>
-      <p className="text-sm text-ink-2">Dùng chung lượt hỏi của gói USDSS Premium Gia đình.</p>
+      <p className="text-sm text-ink-2">Dùng chung lượt hỏi của các gói USDSS Premium Gia đình của chủ gói.</p>
     </div>
   );
 
@@ -97,11 +97,11 @@ export function FamilyInviteForm() {
         <Alert variant="success" role="status">
           <CheckIcon aria-hidden />
           <AlertTitle>Bạn đã tham gia gói Gia đình của {invite.ownerName}</AlertTitle>
-          <AlertDescription>Từ giờ bạn dùng chung lượt hỏi của gói này.</AlertDescription>
+          <AlertDescription>Từ giờ bạn dùng chung lượt hỏi của các gói Gia đình của họ.</AlertDescription>
         </Alert>
         {/* Thẻ a thường: tải lại trang để AccountView đọc #family và tải subscription mới */}
         <a href="/account#family" className={buttonVariants({ size: "xl", className: "w-full" })}>
-          Xem gói Gia đình
+          Xem chia sẻ gia đình
         </a>
       </div>
     );
