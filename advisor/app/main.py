@@ -26,6 +26,7 @@ from app.services.explainer import Explainer
 from app.services.goal_writer import GoalWriter
 from app.services.knowledge import KnowledgeRetriever
 from app.services.ollama import OllamaClient
+from app.services.recommend_writer import RecommendWriter
 from app.services.scenario_writer import ScenarioWriter
 from app.services.skills import build_handlers
 from app.services.slm_classifier import OllamaSlm, output_format
@@ -92,6 +93,7 @@ async def lifespan(app: FastAPI):
         app.state.explainer = Explainer(claude, settings.anthropic_model)
         app.state.scenario_writer = ScenarioWriter(claude, settings.anthropic_model)
         app.state.goal_writer = GoalWriter(claude, settings.anthropic_model)
+        app.state.recommend_writer = RecommendWriter(claude, settings.anthropic_model)
         app.state.compare_writer = CompareWriter(claude, settings.anthropic_model)
         # Kho kiến thức: không có DB thì None, chat vẫn chạy nhưng chưa trả lời được câu hỏi kiến thức
         app.state.db_pool = await asyncio.to_thread(open_pool, settings.database_url)

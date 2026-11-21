@@ -30,7 +30,7 @@ Mục con dùng `###` (ví dụ từng trường thông tin trong mục 4 của 
 
 | Loại | Skill | Mục 4 |
 |---|---|---|
-| Viết lời | `skill_explain`, `skill_giai_thich_trung_tam`, `skill_goal_seek`, `skill_ho_so_khuon`, `skill_kich_ban`, `skill_neu_doi`, `skill_so_sanh`, `skill_tra_loi`, `viet_tra_loi_ho_so` | NỘI DUNG CẦN NÓI |
+| Viết lời | `skill_explain`, `skill_giai_thich_trung_tam`, `skill_goal_seek`, `skill_goi_y_truong`, `skill_ho_so_khuon`, `skill_kich_ban`, `skill_neu_doi`, `skill_so_sanh`, `skill_tra_loi`, `viet_tra_loi_ho_so` | NỘI DUNG CẦN NÓI |
 | Đọc hiểu | `skill_bac_hoc`, `skill_chon_truong`, `skill_ec`, `skill_ho_so` | CÁCH ĐỌC |
 | Prompt SLM | `slm_intents` | Không đổi khuôn: model đã học đúng chữ này, đổi là phải huấn luyện lại |
 

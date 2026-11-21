@@ -1105,6 +1105,81 @@ public class ChatServiceTests
         Assert.Contains("\"hasResults\":true", Assert.Single(store.Rows).StateJson); // lượt sau skill_explain chạy được
     }
 
+    // Chỉ xin danh sách (advisor đặt action_data.note = true): Claude viết lời cho danh sách thay câu tạm của advisor
+    private static readonly JsonElement NoteFlag = JsonDocument.Parse("""{"note":true}""").RootElement;
+
+    [Fact]
+    public async Task RecommendAction_WithNoteFlag_ClaudeWritesTheListMessage()
+    {
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+        var advisor = new FakeAdvisor("B4") { Action = "recommend", ActionData = NoteFlag, RecommendNote = new("1.0", "claude", "OK", "Mình tìm được 1 trường cho bạn.") };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal("Mình tìm được 1 trường cho bạn.", res.Answer); // lời của Claude thay câu tạm "ok", không nối thêm danh sách
+        Assert.Equal(1, advisor.RecommendNoteCalls);
+        Assert.Equal(["Arizona State University"], advisor.LastRecommendNote!.Schools);
+        Assert.Equal(["Tổng cộng 1 trường phù hợp với hồ sơ của bạn.", "Vừa sức: Arizona State University"], advisor.LastRecommendNote.Facts);
+        Assert.Equal(new Widget(ChatRecommendation.WidgetType), res.Widget);
+        Assert.Null(res.Action);
+    }
+
+    [Fact]
+    public async Task RecommendAction_WithNoteFlag_ClaudeFailing_FallsBackToTheCodeList()
+    {
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+        var advisor = new FakeAdvisor("B4") { Action = "recommend", ActionData = NoteFlag }; // mặc định Claude trả FAILED
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.StartsWith("Mình đã tìm được các trường phù hợp", res.Answer);
+        Assert.Contains("- Vừa sức: Arizona State University", res.Answer);
+        Assert.Equal(1, advisor.RecommendNoteCalls);
+        Assert.Equal(new Widget(ChatRecommendation.WidgetType), res.Widget);
+    }
+
+    [Fact]
+    public async Task RecommendAction_WithNoteFlag_ClaudeUnreachable_FallsBackToTheCodeList()
+    {
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+        var advisor = new FakeAdvisor("B4") { Action = "recommend", ActionData = NoteFlag, RecommendNoteError = new HttpRequestException("advisor sập") };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Contains("- Vừa sức: Arizona State University", res.Answer);
+        Assert.Equal(new Widget(ChatRecommendation.WidgetType), res.Widget);
+    }
+
+    [Fact]
+    public async Task RecommendAction_WithoutNoteFlag_NeverCallsClaudeForTheList()
+    {
+        // Có cả đánh giá hồ sơ: lời đã do Claude viết ở advisor, danh sách chỉ nối thêm
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = OneSchool } };
+        var advisor = new FakeAdvisor("B4") { Action = "recommend", Skills = ["skill_lo_trinh"] };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(0, advisor.RecommendNoteCalls);
+        Assert.StartsWith("ok\n\nMình đã tìm được các trường phù hợp", res.Answer);
+    }
+
+    [Fact]
+    public async Task RecommendAction_WithNoteFlag_ButNoSchools_DoesNotAskClaude()
+    {
+        var runner = new FakeRunner { Result = new Recommendation { ItemsJson = "{}" } };
+        var advisor = new FakeAdvisor("B4") { Action = "recommend", ActionData = NoteFlag };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal(0, advisor.RecommendNoteCalls); // không có trường nào thì không có gì để viết
+        Assert.Equal($"ok\n\n{ChatRecommendation.Empty}", res.Answer);
+    }
+
     [Fact]
     public async Task NoAction_DoesNotRunTheRecommendation()
     {
@@ -3102,6 +3177,21 @@ public class ChatServiceTests
             if (CompareNoteError is not null)
                 throw CompareNoteError;
             return Task.FromResult(CompareNote);
+        }
+
+        // Mặc định Claude lỗi: danh sách trường dùng câu liệt kê ghép bằng code. Test cần lời của Claude thì đặt RecommendNote
+        public RecommendNoteResponseDto RecommendNote { get; init; } = new("1.0", "claude", "FAILED", "");
+        public Exception? RecommendNoteError { get; init; }
+        public RecommendNoteRequestDto? LastRecommendNote { get; private set; }
+        public int RecommendNoteCalls { get; private set; }
+
+        public Task<RecommendNoteResponseDto> WriteRecommendNoteAsync(RecommendNoteRequestDto request, CancellationToken ct = default)
+        {
+            RecommendNoteCalls++;
+            LastRecommendNote = request;
+            if (RecommendNoteError is not null)
+                throw RecommendNoteError;
+            return Task.FromResult(RecommendNote);
         }
 
         public ScenarioNoteResponseDto? Note { get; init; }
