@@ -93,11 +93,12 @@ public class CenterDeletionServiceTests
         }
 
         public List<string> ChatAttachments { get; } = [];
+        public int ChatKept { get; set; }
         public (Guid CenterId, Guid? OwnerId)? ErasedChatFor { get; private set; }
-        public Task<IReadOnlyList<string>> ErasePrivateLeadMessagesAsync(Guid studyCenterId, Guid? ownerUserId, DateTime now, CancellationToken ct = default)
+        public Task<ErasedLeadMessages> ErasePrivateLeadMessagesAsync(Guid studyCenterId, Guid? ownerUserId, DateTime now, CancellationToken ct = default)
         {
             ErasedChatFor = (studyCenterId, ownerUserId);
-            return Task.FromResult<IReadOnlyList<string>>(ChatAttachments.ToList());
+            return Task.FromResult(new ErasedLeadMessages(ChatAttachments.ToList(), ChatKept));
         }
 
         /// <summary>Giống DB thật: sau khi purge, các cột ảnh đã bị xóa trắng nên không còn URL nào để đọc.</summary>
@@ -298,6 +299,23 @@ public class CenterDeletionServiceTests
         // Ảnh đính kèm cùng ảnh hồ sơ được gỡ trên CDN, mỗi URL một lần
         Assert.Equal(2, s.Media.Deleted.Count);
         Assert.Contains("https://res.cloudinary.com/demo/image/upload/v1/usas/chat/a.png", s.Media.Deleted);
+    }
+
+    [Fact]
+    public async Task PurgeDue_MessagesKeptForOpenReport_TellsCenterNotEverythingWasDeleted()
+    {
+        var s = new Setup();
+        s.Work.ChatKept = 2;
+        await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
+        s.Email.CenterDeletionEmails.Clear();
+
+        var due = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(31));
+
+        // Luật 91/2025 Điều 14 khoản 5: không xóa hết được thì phải báo; trung tâm vẫn được coi là đã xóa
+        Assert.Equal(1, due.Purged);
+        Assert.Equal(CenterDeletionRequestStatuses.Completed, s.Request.Status);
+        Assert.NotEmpty(s.Email.CenterDeletionEmails);
+        Assert.All(s.Email.CenterDeletionEmails, e => Assert.Equal("completed_partial", e.Outcome));
     }
 
     [Fact]
