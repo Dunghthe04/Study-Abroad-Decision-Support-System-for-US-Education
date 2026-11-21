@@ -43,7 +43,7 @@ public sealed class MediaController(IServiceProvider services, IOptions<Cloudina
 
         var purposeLimit = ImageUploadPolicy.GetPurposeLimit(request.Purpose);
         if (purposeLimit is null)
-            return BadRequest(new MediaUploadError("Purpose must be school-logo, school-cover, center-logo or center-cover."));
+            return BadRequest(new MediaUploadError("Purpose must be school-logo, school-cover, center-logo, center-cover or center-gallery."));
 
         // Trung tâm chỉ được tải ảnh của chính trung tâm; Admin và Moderator chỉ tải ảnh của trường
         var isCenterPurpose = ImageUploadPolicy.IsCenterPurpose(request.Purpose);

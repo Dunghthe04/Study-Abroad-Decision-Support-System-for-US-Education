@@ -107,7 +107,9 @@ public record UpdateCenterProfileRequest(
     // [UC-92] Fanpage (Moderator kiểm tra như website), khu vực phục vụ và chi nhánh (lưu ngay).
     string? Fanpage = null,
     List<string>? ServiceAreas = null,
-    List<string>? Branches = null);
+    List<string>? Branches = null,
+    // Thư viện ảnh trung tâm (lưu ngay). Null = giữ nguyên; danh sách rỗng = xóa hết.
+    List<string>? GalleryImages = null);
 
 public record CenterVerificationStatusDto(
     string VerificationStatus,
