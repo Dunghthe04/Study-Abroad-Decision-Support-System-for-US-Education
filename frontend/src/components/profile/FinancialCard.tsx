@@ -125,7 +125,7 @@ export function FinancialCard() {
       <CardHeader>
         <CardTitle>1. Khả năng Tài chính Du học</CardTitle>
         <CardDescription>
-          Thông tin giúp hệ thống AI so sánh chi phí trường và gợi ý gói học bổng phù hợp (USAS-364).
+          Thông tin giúp hệ thống AI so sánh chi phí trường và gợi ý gói học bổng phù hợp.
         </CardDescription>
       </CardHeader>
 

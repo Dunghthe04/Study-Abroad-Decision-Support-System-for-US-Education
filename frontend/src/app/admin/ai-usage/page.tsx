@@ -3,7 +3,7 @@ import { AdminSection } from "@/components/admin/AdminSection";
 import { AiUsageView } from "@/components/admin/ai-usage/AiUsageView";
 
 export const metadata: Metadata = {
-  title: "Quản lý token – Quản trị USAS",
+  title: "Quản lý token – Quản trị USDSS",
 };
 
 export default function AdminAiUsagePage() {

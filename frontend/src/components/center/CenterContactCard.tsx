@@ -7,7 +7,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 
 type Kind = "phone" | "email";
 
@@ -160,8 +159,7 @@ function ContactRow({ kind, current, verified, onChanged }: RowProps) {
           )}
         </div>
         {step === "view" && kind === "phone" && current && !verified && (
-          <Button type="button" size="sm" onClick={sendVerifyCode} disabled={busy}>
-            {busy && <Spinner data-icon="inline-start" />}
+          <Button type="button" size="sm" onClick={sendVerifyCode} loading={busy}>
             Xác thực qua SMS
           </Button>
         )}
@@ -184,15 +182,17 @@ function ContactRow({ kind, current, verified, onChanged }: RowProps) {
         <Alert className="relative border-ok/25 bg-ok-wash text-ok pr-9 transition-all duration-300">
           <CheckCircle2Icon className="h-4 w-4" />
           <AlertDescription className="ml-2">{info}</AlertDescription>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-xs"
             onClick={() => setInfo(null)}
-            className="absolute top-2.5 right-2.5 p-1 rounded hover:bg-ok/10 text-ok transition-colors"
+            className="absolute top-2 right-2 hover:bg-ok/10 dark:hover:bg-ok/10 text-ok hover:text-ok"
             title="Đóng thông báo"
             aria-label="Đóng thông báo"
           >
             <XIcon className="h-3.5 w-3.5" />
-          </button>
+          </Button>
         </Alert>
       )}
 
@@ -216,8 +216,7 @@ function ContactRow({ kind, current, verified, onChanged }: RowProps) {
               className="sm:max-w-xs"
             />
             {step === "input" ? (
-              <Button type="button" size="sm" onClick={sendCode} disabled={busy}>
-                {busy && <Spinner data-icon="inline-start" />}
+              <Button type="button" size="sm" onClick={sendCode} loading={busy}>
                 Gửi mã OTP
               </Button>
             ) : (
@@ -226,7 +225,8 @@ function ContactRow({ kind, current, verified, onChanged }: RowProps) {
                 variant="outline"
                 size="sm"
                 onClick={sendCode}
-                disabled={busy || cooldown > 0}
+                loading={busy}
+                disabled={cooldown > 0}
               >
                 {cooldown > 0 ? `Gửi lại sau ${cooldown}s` : "Gửi lại mã"}
               </Button>
@@ -242,7 +242,8 @@ function ContactRow({ kind, current, verified, onChanged }: RowProps) {
                 variant="outline"
                 size="sm"
                 onClick={sendVerifyCode}
-                disabled={busy || cooldown > 0}
+                loading={busy}
+                disabled={cooldown > 0}
               >
                 {cooldown > 0 ? `Gửi lại sau ${cooldown}s` : "Gửi lại mã"}
               </Button>
@@ -263,8 +264,7 @@ function ContactRow({ kind, current, verified, onChanged }: RowProps) {
                   aria-label="Mã OTP"
                   className="sm:max-w-[10rem] font-mono tracking-widest"
                 />
-                <Button type="button" size="sm" onClick={confirm} disabled={busy || code.length < 6}>
-                  {busy && <Spinner data-icon="inline-start" />}
+                <Button type="button" size="sm" onClick={confirm} loading={busy} disabled={code.length < 6}>
                   {step === "verify" ? "Xác thực" : "Xác nhận đổi"}
                 </Button>
               </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { SendIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BUDGET_RATE, DEFAULT_BUDGET_TIERS, FALLBACK_MAX_USD } from "@/lib/profile-flow-options";
 import type { BudgetTierId } from "@/types/profile-flow";
@@ -124,7 +125,7 @@ function TierBudgetInput({ data, onPick }: { data?: Record<string, unknown> | nu
               disabled={!onPick}
               onClick={() => setCurrency(c)}
               className={cn(
-                "cursor-pointer rounded-md px-2.5 py-1 transition-colors disabled:cursor-not-allowed",
+                "cursor-pointer rounded-md px-2.5 py-1 transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                 currency === c ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -144,15 +145,16 @@ function TierBudgetInput({ data, onPick }: { data?: Record<string, unknown> | nu
             `Nhập số tiền gia đình chi được mỗi năm (1 USD = ${rate.toLocaleString("vi-VN")} VNĐ), hoặc bấm chọn khoảng.`
           )}
         </p>
-        <button
+        <Button
           type="button"
+          size="sm"
           disabled={!onPick || !tier}
           onClick={submit}
-          className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-full bg-brand px-3 text-xs font-semibold text-white transition-colors hover:bg-brand-ink disabled:cursor-not-allowed disabled:opacity-50"
+          className="shrink-0 rounded-full bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-ink"
         >
           <SendIcon className="size-3.5" />
           Gửi
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -152,9 +152,9 @@ export function UniversityListView({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
-        <aside className="hidden lg:block lg:col-span-1 sticky top-20">
+    <div className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+      <div className="grid grid-cols-1 items-start gap-8 lg:min-h-0 lg:flex-1 lg:grid-cols-4 lg:items-stretch">
+        <aside className="hidden lg:col-span-1 lg:block lg:h-full lg:overflow-y-auto lg:pr-2 lg:pb-6">
           <UniversityFilters
             options={options}
             values={currentParams}
@@ -163,13 +163,13 @@ export function UniversityListView({
           />
         </aside>
 
-        <div className="lg:col-span-3 space-y-5">
+        <div className="space-y-5 lg:col-span-3 lg:h-full lg:overflow-y-auto lg:pr-1 lg:pb-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="lg:hidden">
                 <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
                   <SheetTrigger
-                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-2 cursor-pointer")}
+                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-2")}
                   >
                     <SlidersHorizontalIcon className="size-4 text-brand" />
                     <span>Bộ lọc ({activeChips.length})</span>
@@ -220,21 +220,23 @@ export function UniversityListView({
                   className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-foreground shadow-xs transition-colors hover:border-brand/40"
                 >
                   <span>{chip.label}</span>
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon-xs"
                     onClick={chip.onRemove}
-                    className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="-mr-1 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
                     aria-label={`Xóa bộ lọc ${chip.label}`}
                   >
                     <XIcon className="size-3.5" />
-                  </button>
+                  </Button>
                 </span>
               ))}
               <Button
                 variant="ghost"
-                size="sm"
+                size="default"
                 onClick={handleResetFilters}
-                className="h-8 px-2.5 text-sm text-muted-foreground hover:text-foreground"
+                className="px-2.5 text-muted-foreground hover:text-foreground"
               >
                 Xóa tất cả
               </Button>

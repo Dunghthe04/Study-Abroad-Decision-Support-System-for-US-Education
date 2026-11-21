@@ -172,7 +172,7 @@ function CenterPicker({
                 type="button"
                 onClick={() => setCity(name)}
                 className={cn(
-                  "rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+                  "cursor-pointer rounded-full border px-2.5 py-0.5 text-xs font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
                   city === name
                     ? "border-brand bg-brand text-white"
                     : "border-line text-ink-2 hover:border-brand/50",
@@ -192,7 +192,7 @@ function CenterPicker({
                   handleOpenChange(false);
                   onPick(c.id);
                 }}
-                className="flex w-full flex-col rounded-md px-2 py-1.5 text-left hover:bg-muted"
+                className="flex w-full cursor-pointer flex-col rounded-md px-2 py-1.5 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
               >
                 <span className="text-sm font-medium text-ink">{c.name}</span>
                 <span className="text-xs text-ink-3">
@@ -246,15 +246,17 @@ function CenterHeader({
             </div>
           }
         />
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={onRemove}
-          className="absolute top-2 right-2 flex size-8 items-center justify-center rounded-full bg-black/55 text-white transition-colors hover:bg-black/75"
+          className="absolute top-2 right-2 rounded-full bg-black/55 text-white hover:bg-black/75 hover:text-white dark:hover:bg-black/75"
           aria-label={`Bỏ ${center.name} khỏi so sánh`}
           title="Bỏ khỏi so sánh"
         >
           <XIcon className="size-4" />
-        </button>
+        </Button>
         <div className="absolute -bottom-6 left-4 flex size-14 items-center justify-center overflow-hidden rounded-xl border-2 border-card bg-white shadow">
           <SafeImg
             src={profile.logoImage}
@@ -328,7 +330,7 @@ export function CenterCompareView({ selected, all }: Props) {
         </Link>
         <h1 className="font-heading text-3xl font-bold text-ink">So sánh trung tâm</h1>
         <p className="text-sm text-ink-3">
-          Chỉ so sánh thông tin trong hồ sơ các trung tâm đã xác minh. USAS không xếp hạng hay khuyên chọn,
+          Chỉ so sánh thông tin trong hồ sơ các trung tâm đã xác minh. USDSS không xếp hạng hay khuyên chọn,
           bạn tự chọn nơi hợp với mình.
         </p>
       </div>
@@ -383,7 +385,7 @@ export function CenterCompareView({ selected, all }: Props) {
                     trigger={
                       <button
                         type="button"
-                        className="flex min-h-64 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed text-ink-3 transition-colors hover:border-brand hover:bg-brand-wash hover:text-brand"
+                        className="flex min-h-64 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed text-ink-3 outline-none transition-colors hover:border-brand hover:bg-brand-wash hover:text-brand focus-visible:ring-3 focus-visible:ring-ring/50"
                       >
                         <span className="flex size-12 items-center justify-center rounded-full bg-muted">
                           <PlusIcon className="size-6" />

@@ -7,7 +7,7 @@ import { buttonVariants } from "@/components/ui/button";
 // 1.5e: nút "Thêm con" trong chat của phụ huynh trỏ tới đây. Mở sẵn hộp thêm con; thêm xong vào làm thay
 // con mới rồi mở khung chat để chat hỏi hồ sơ của con. Đường tĩnh "add" được ưu tiên hơn [studentId].
 export const metadata: Metadata = {
-  title: "Thêm con – USAS",
+  title: "Thêm con – USDSS",
 };
 
 export default function AddChildPage() {

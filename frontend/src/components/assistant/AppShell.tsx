@@ -20,19 +20,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const visible = useAssistantVisible();
   const adminRoute = isAdminRoute(pathname);
   const authRoute = isAuthRoute(pathname);
+  const lockedViewport = pathname === "/universities";
   const showAssistant = !adminRoute && !authRoute;
   const pushed = showAssistant && open && visible;
 
   return (
     <div
-      className="flex min-h-full flex-1 flex-col"
+      className={cn(
+        "flex min-h-full flex-1 flex-col",
+        lockedViewport && "lg:h-dvh lg:max-h-dvh lg:flex-none lg:overflow-hidden",
+      )}
       style={
         {
           "--assistant-w": wide ? "clamp(400px, calc(100vw - 600px), 680px)" : "400px",
         } as React.CSSProperties
       }
     >
-      <div className={cn("flex flex-1 flex-col transition-[padding] duration-200", pushed && "min-[900px]:pr-(--assistant-w)")}>
+      <div
+        className={cn(
+          "flex flex-1 flex-col transition-[padding] duration-200",
+          lockedViewport && "lg:min-h-0 lg:overflow-hidden",
+          pushed && "min-[900px]:pr-(--assistant-w)",
+        )}
+      >
         {!adminRoute && !authRoute && <SiteHeader />}
         {!adminRoute && !authRoute && <ActingAsBanner />}
         <main
@@ -41,13 +51,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             adminRoute || authRoute
               ? "flex flex-col"
               : isFullRoute(pathname)
-                ? "" // trang tự lo khoảng đệm: thanh bên dính mép, phần chính có lề riêng
+                ? lockedViewport
+                  ? "lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden"
+                  : "" // trang tự lo khoảng đệm: thanh bên dính mép, phần chính có lề riêng
                 : cn("mx-auto px-4 py-8", isWideRoute(pathname) ? "max-w-[1560px] px-4 sm:px-8 lg:px-12" : "max-w-5xl"),
           )}
         >
           {children}
         </main>
-        {pathname === "/" && <SiteFooter />}
+        {(pathname === "/" || pathname === "/methodology") && <SiteFooter />}
       </div>
       {showAssistant && <AssistantPanel />}
       {showAssistant && <AssistantLauncher />}

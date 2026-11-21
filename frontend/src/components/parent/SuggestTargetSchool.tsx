@@ -133,7 +133,7 @@ export function SuggestTargetSchool({
                       <button
                         type="button"
                         onClick={() => setPicked(u)}
-                        className="w-full px-3 py-2 text-left hover:bg-muted"
+                        className="w-full cursor-pointer px-3 py-2 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
                       >
                         <span className="block text-sm text-foreground">{u.name}</span>
                         <span className="block text-xs text-muted-foreground">
@@ -163,8 +163,7 @@ export function SuggestTargetSchool({
 
       {picked && (
         <div className="flex gap-2">
-          <Button type="submit" disabled={sending}>
-            {sending && <Spinner />}
+          <Button type="submit" disabled={sending} loading={sending}>
             Gửi gợi ý
           </Button>
           <Button type="button" variant="outline" onClick={reset} disabled={sending}>

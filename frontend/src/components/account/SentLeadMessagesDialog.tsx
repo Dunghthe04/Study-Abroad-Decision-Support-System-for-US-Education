@@ -253,7 +253,7 @@ function ThreadBody({
       <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
         <AlertTriangleIcon className="size-4 text-amber-600 shrink-0 mt-0.5" />
         <span>
-          <strong>Cảnh báo an toàn:</strong> Tuyệt đối không chuyển tiền cọc hoặc thanh toán chi phí qua tài khoản cá nhân được cung cấp trong khung chat khi chưa có hợp đồng pháp lý rõ ràng. USAS không chịu trách nhiệm đối với các giao dịch chuyển khoản cá nhân bên ngoài hệ thống.
+          <strong>Cảnh báo an toàn:</strong> Tuyệt đối không chuyển tiền cọc hoặc thanh toán chi phí qua tài khoản cá nhân được cung cấp trong khung chat khi chưa có hợp đồng pháp lý rõ ràng. USDSS không chịu trách nhiệm đối với các giao dịch chuyển khoản cá nhân bên ngoài hệ thống.
         </span>
       </div>
 
@@ -331,8 +331,8 @@ function ThreadBody({
             <span className="text-xs text-muted-foreground">
               {trimmedDraft.length} / {MAX_LEAD_MESSAGE_LENGTH} ký tự
             </span>
-            <Button type="submit" size="sm" disabled={isSending || (!trimmedDraft && !imageFile)}>
-              {isSending ? <Spinner data-icon="inline-start" /> : <SendIcon data-icon="inline-start" aria-hidden />}
+            <Button type="submit" size="sm" disabled={isSending || (!trimmedDraft && !imageFile)} loading={isSending}>
+              <SendIcon data-icon="inline-start" aria-hidden />
               {isSending ? "Đang gửi..." : "Gửi"}
             </Button>
           </div>

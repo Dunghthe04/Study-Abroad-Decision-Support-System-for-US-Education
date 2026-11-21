@@ -15,9 +15,8 @@ import { centerPortalApi } from "@/lib/api";
 import type { StudyCenter, CenterVerificationStatusDto } from "@/types/api";
 import { Badge } from "@/components/ui/badge";
 import { CenterStatusBadge } from "@/components/centers/CenterBadges";
-import { buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 
 export function CenterDashboardView() {
   const [center, setCenter] = useState<StudyCenter | null>(null);
@@ -95,13 +94,15 @@ export function CenterDashboardView() {
 
           {/* Lối vào duy nhất tới xác minh pháp lý; các mục khác đã có ở thanh tab */}
           {!isVerified && !isSuspended && (
-            <Link
-              href="/center/verification"
-              className={cn(buttonVariants({ size: "sm" }), "gap-1.5")}
+            <Button
+              nativeButton={false}
+              render={<Link href="/center/verification" />}
+              size="sm"
+              className="gap-1.5"
             >
               {isRejected ? "Cập nhật & nộp lại" : isPending ? "Xem tiến độ" : "Xác minh pháp lý"}
               <ArrowRightIcon className="h-3.5 w-3.5" />
-            </Link>
+            </Button>
           )}
         </div>
       </div>

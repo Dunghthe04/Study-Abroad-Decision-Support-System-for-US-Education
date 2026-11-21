@@ -272,7 +272,7 @@ export function AdminCenterListView() {
                   e.stopPropagation();
                   setSelectedCenter((prev) => (prev?.id === c.id ? null : c));
                 }}
-                className="font-medium text-brand underline-offset-2 hover:underline text-left block"
+                className="font-medium text-brand underline-offset-2 hover:underline text-left block cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
               >
                 {c.name}
               </button>
@@ -528,13 +528,6 @@ export function AdminCenterListView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <header className="shrink-0">
-        <h1 className="text-h2">Trung tâm tư vấn</h1>
-        <p className="text-sm text-ink-2 mt-1">
-          Danh sách đơn vị tư vấn du học, hồ sơ pháp lý và kiểm duyệt
-        </p>
-      </header>
-
       <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <DataTable

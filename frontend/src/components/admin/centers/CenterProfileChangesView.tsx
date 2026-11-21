@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
@@ -162,15 +161,6 @@ export function CenterProfileChangesView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-h2">Kiểm tra thay đổi trung tâm</h1>
-        <p className="text-sm text-ink-2">
-          Website và fanpage do trung tâm tự sửa được lưu ngay nhưng cần kiểm tra. Đối chiếu giá trị cũ và mới rồi chọn Đạt hoặc Không đạt
-          (bắt buộc nêu lý do, trung tâm nhận thông báo để sửa lại). Nếu vi phạm, ẩn trung tâm hoặc mở trang trung tâm để thu hồi dấu xác minh.
-          Thay đổi tên pháp lý, mã số doanh nghiệp và tài liệu đi qua hàng đợi duyệt hồ sơ xác minh.
-        </p>
-      </header>
-
       <Segmented label="Lọc thay đổi" value={filter} options={FILTER_OPTIONS} onChange={changeFilter} />
 
       {queue.error ? (
@@ -219,8 +209,8 @@ export function CenterProfileChangesView() {
                     <div className="inline-flex flex-wrap justify-end gap-1.5">
                       {pending ? (
                         <>
-                          <Button type="button" variant="outline" size="sm" disabled={busyId !== null} onClick={() => void pass(item)} className="gap-1">
-                            {busyId === item.id ? <Spinner className="size-3.5" /> : <CheckIcon className="size-3.5" />}
+                          <Button type="button" variant="outline" size="sm" disabled={busyId !== null} loading={busyId === item.id} onClick={() => void pass(item)} className="gap-1">
+                            <CheckIcon className="size-3.5" />
                             Đạt
                           </Button>
                           <Button type="button" variant="outline" size="sm" disabled={busyId !== null} onClick={() => { setFailReason(""); setFailTarget(item); }} className="gap-1 text-risk hover:text-risk">
@@ -295,8 +285,7 @@ export function CenterProfileChangesView() {
           />
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busyId !== null}>Hủy</AlertDialogCancel>
-            <Button type="button" variant="destructive" onClick={() => void confirmFail()} disabled={busyId !== null || !failReason.trim()} className="gap-1.5">
-              {busyId !== null ? <Spinner className="size-3.5" /> : null}
+            <Button type="button" variant="destructive" onClick={() => void confirmFail()} disabled={!failReason.trim()} loading={busyId !== null} className="gap-1.5">
               Xác nhận Không đạt
             </Button>
           </AlertDialogFooter>
@@ -315,8 +304,7 @@ export function CenterProfileChangesView() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busyId !== null}>Hủy</AlertDialogCancel>
-            <Button type="button" variant="destructive" onClick={() => void confirmHide()} disabled={busyId !== null} className="gap-1.5">
-              {busyId !== null ? <Spinner className="size-3.5" /> : null}
+            <Button type="button" variant="destructive" onClick={() => void confirmHide()} loading={busyId !== null} className="gap-1.5">
               Ẩn trung tâm
             </Button>
           </AlertDialogFooter>

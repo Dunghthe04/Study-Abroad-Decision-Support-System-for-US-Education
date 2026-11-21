@@ -82,7 +82,7 @@ function ReviewCard({
             variant="ghost"
             size="sm"
             onClick={onEdit}
-            className="h-7 gap-1 px-2 text-xs font-semibold text-brand hover:bg-brand-wash"
+            className="gap-1 px-2 text-xs font-semibold text-brand hover:bg-brand-wash"
           >
             <Edit3Icon className="size-3.5" />
             Sửa

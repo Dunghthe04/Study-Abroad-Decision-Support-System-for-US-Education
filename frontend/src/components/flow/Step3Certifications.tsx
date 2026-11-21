@@ -179,7 +179,7 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
             type="button"
             onClick={() => startAdd(section)}
             disabled={editing !== null}
-            className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-line px-4 py-3 text-sm font-medium text-brand transition-colors hover:border-brand/50 hover:bg-brand-wash/40 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-line px-4 py-3 text-sm font-medium text-brand transition-colors hover:border-brand/50 hover:bg-brand-wash/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default disabled:opacity-50"
           >
             <PlusIcon className="size-4" />
             {section.addLabel}

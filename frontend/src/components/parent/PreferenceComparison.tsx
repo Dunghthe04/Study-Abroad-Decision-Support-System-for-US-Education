@@ -108,7 +108,7 @@ function Views({
             aria-selected={view === key}
             onClick={() => setView(key)}
             className={cn(
-              "rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors",
+              "cursor-pointer rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
               view === key ? "bg-brand text-white" : "text-ink-2 hover:text-foreground",
             )}
           >
@@ -274,7 +274,7 @@ function ParentList({ data }: { data: PreferenceCompareDto }) {
                         type="button"
                         aria-expanded={isOpen}
                         onClick={() => setOpen((cur) => (cur === s.code ? null : s.code))}
-                        className="flex items-center gap-1 text-sm font-semibold text-brand"
+                        className="flex cursor-pointer items-center gap-1 rounded text-sm font-semibold text-brand focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
                       >
                         <ChevronDownIcon className={cn("size-4 transition-transform", isOpen && "rotate-180")} aria-hidden />
                         {isOpen ? "Ẩn chi tiết" : "Xem chi tiết"}
@@ -416,7 +416,7 @@ function CompareTables({ data, youName, parentName }: { data: PreferenceCompareD
                         <td className="p-3">
                           <button
                             type="button"
-                            className="flex items-center gap-2 text-left font-semibold text-foreground"
+                            className="flex cursor-pointer items-center gap-2 rounded text-left font-semibold text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
                             aria-expanded={isOpen}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -465,7 +465,7 @@ function CompareTables({ data, youName, parentName }: { data: PreferenceCompareD
                 <li key={s.code} className="rounded-2xl border border-line bg-surface">
                   <button
                     type="button"
-                    className="w-full space-y-1.5 p-3 text-left"
+                    className="w-full cursor-pointer space-y-1.5 rounded-2xl p-3 text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
                     aria-expanded={isOpen}
                     onClick={() => toggle(s.code)}
                   >

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ErrorFallback } from "@/components/ui/error-fallback";
 
 export const metadata: Metadata = {
-  title: "Không tìm thấy trang – USAS",
+  title: "Không tìm thấy trang – USDSS",
   description: "Trang bạn đang tìm kiếm không tồn tại hoặc đã bị di chuyển.",
 };
 

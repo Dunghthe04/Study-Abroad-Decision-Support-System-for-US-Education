@@ -4,7 +4,7 @@ import type { PagedResult, StudyCenter } from "@/types/api";
 import { ErrorFallback } from "@/components/ui/error-fallback";
 import { PublicCenterListView } from "@/components/centers/PublicCenterListView";
 
-export const metadata = { title: "Trung tâm tư vấn – USAS" };
+export const metadata = { title: "Trung tâm tư vấn – USDSS" };
 
 export default async function CentersPage() {
   await connection();

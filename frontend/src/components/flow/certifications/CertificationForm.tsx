@@ -148,14 +148,16 @@ export function CertificationForm({
     <div className="space-y-5 rounded-xl border border-brand/40 bg-surface p-5 ">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-foreground">{title}</h3>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-xs"
           onClick={onCancel}
           aria-label="Đóng"
-          className="cursor-pointer rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <XIcon className="size-4" />
-        </button>
+        </Button>
       </div>
 
       <div role="radiogroup" aria-label="Đã thi hay dự định thi" className="inline-flex rounded-lg border border-line p-0.5">
@@ -170,7 +172,7 @@ export function CertificationForm({
             aria-checked={isTarget === opt.target}
             onClick={() => handleModeChange(opt.target)}
             className={cn(
-              "cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              "cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
               isTarget === opt.target ? "bg-brand text-white" : "text-muted-foreground hover:text-foreground"
             )}
           >

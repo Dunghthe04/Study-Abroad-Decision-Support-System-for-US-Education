@@ -3,6 +3,7 @@
 import * as React from "react"
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 export interface MonthValue {
@@ -64,9 +65,9 @@ export function MonthPicker({
         id={id}
         disabled={disabled}
         className={cn(
-          "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs transition-colors outline-none",
-          "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
-          "disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground",
+          "flex h-8 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none select-none",
+          "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+          "disabled:cursor-default disabled:bg-muted disabled:text-muted-foreground disabled:opacity-50",
           !value && !disabled && "text-muted-foreground",
           className
         )}
@@ -76,25 +77,27 @@ export function MonthPicker({
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64">
         <div className="flex items-center justify-between">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-sm"
             aria-label="Năm trước"
             onClick={() => setViewYear((y) => y - 1)}
             disabled={min != null && viewYear <= min.year}
-            className="rounded-md p-1 hover:bg-muted disabled:opacity-30 disabled:pointer-events-none"
           >
-            <ChevronLeftIcon className="size-4" />
-          </button>
+            <ChevronLeftIcon />
+          </Button>
           <span className="text-sm font-semibold">{viewYear}</span>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-sm"
             aria-label="Năm sau"
             onClick={() => setViewYear((y) => y + 1)}
             disabled={max != null && viewYear >= max.year}
-            className="rounded-md p-1 hover:bg-muted disabled:opacity-30 disabled:pointer-events-none"
           >
-            <ChevronRightIcon className="size-4" />
-          </button>
+            <ChevronRightIcon />
+          </Button>
         </div>
         <div className="grid grid-cols-3 gap-1.5">
           {MONTH_LABELS.map((text, i) => {
@@ -104,15 +107,16 @@ export function MonthPicker({
               <button
                 key={text}
                 type="button"
+                aria-pressed={selected}
                 disabled={isOut(m)}
                 onClick={() => {
                   onChange(m)
                   setOpen(false)
                 }}
                 className={cn(
-                  "rounded-md py-1.5 text-xs font-medium transition-colors",
+                  "h-7 cursor-pointer rounded-lg text-xs font-medium outline-none transition-[background-color,color,transform] duration-[var(--cds-dur-fast)] active:not-disabled:scale-[0.975] focus-visible:ring-3 focus-visible:ring-ring/50",
                   selected ? "bg-brand text-white" : "hover:bg-brand-wash hover:text-brand",
-                  "disabled:pointer-events-none disabled:opacity-30"
+                  "disabled:pointer-events-none disabled:cursor-default disabled:opacity-30"
                 )}
               >
                 {text}

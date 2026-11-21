@@ -4,7 +4,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { ADMIN_ROLES } from "@/lib/admin-nav";
 
 export const metadata: Metadata = {
-  title: "Quản trị – USAS",
+  title: "Quản trị – USDSS",
 };
 
 export default function AdminLayout({ children }: LayoutProps<"/admin">) {

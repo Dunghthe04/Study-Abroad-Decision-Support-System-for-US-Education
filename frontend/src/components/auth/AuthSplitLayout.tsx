@@ -32,12 +32,12 @@ export function AuthSplitLayout({ children, containerClassName }: AuthSplitLayou
           overlayClassName="min-[900px]:bg-linear-135"
         />
 
-        {/* Chữ USAS về trang chủ, góc trên bên trái */}
+        {/* Chữ USDSS về trang chủ, góc trên bên trái */}
         <Link
           href="/"
           className="absolute top-4 left-5 z-10 rounded-md font-heading text-xl font-bold tracking-tight text-white outline-none focus-visible:ring-3 focus-visible:ring-white/60 sm:left-6 min-[900px]:top-8 min-[900px]:left-12 lg:min-[900px]:left-16 xl:min-[900px]:left-20"
         >
-          USAS
+          USDSS
         </Link>
 
         <div className="relative z-10 max-w-xl">

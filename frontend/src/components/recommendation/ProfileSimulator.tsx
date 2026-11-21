@@ -293,7 +293,7 @@ function Section({
             type="button"
             onClick={onReset}
             disabled={!changed}
-            className="text-xs text-brand underline-offset-4 hover:underline disabled:cursor-default disabled:text-ink-3 disabled:no-underline"
+            className="cursor-pointer rounded text-xs text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default disabled:text-ink-3 disabled:no-underline"
           >
             Đặt lại phần này
           </button>

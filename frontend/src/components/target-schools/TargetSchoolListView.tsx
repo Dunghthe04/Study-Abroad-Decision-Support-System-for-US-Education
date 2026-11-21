@@ -384,7 +384,7 @@ export function TargetSchoolListView() {
               type="button"
               onClick={() => setSelectedCategory("all")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                "cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                 selectedCategory === "all"
                   ? "bg-surface font-semibold text-foreground "
                   : "text-muted-foreground hover:text-foreground"
@@ -396,7 +396,7 @@ export function TargetSchoolListView() {
               type="button"
               onClick={() => setSelectedCategory("reach")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                "cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                 selectedCategory === "reach"
                   ? "bg-surface font-semibold text-reach"
                   : "text-muted-foreground hover:text-foreground"
@@ -408,7 +408,7 @@ export function TargetSchoolListView() {
               type="button"
               onClick={() => setSelectedCategory("match")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                "cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                 selectedCategory === "match"
                   ? "bg-surface font-semibold text-brand"
                   : "text-muted-foreground hover:text-foreground"
@@ -420,7 +420,7 @@ export function TargetSchoolListView() {
               type="button"
               onClick={() => setSelectedCategory("safety")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                "cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                 selectedCategory === "safety"
                   ? "bg-surface font-semibold text-ok"
                   : "text-muted-foreground hover:text-foreground"
@@ -436,7 +436,7 @@ export function TargetSchoolListView() {
               type="button"
               onClick={() => setViewMode("grid")}
               className={cn(
-                "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                "inline-flex cursor-pointer items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                 viewMode === "grid"
                   ? "bg-surface font-semibold text-brand "
                   : "text-muted-foreground hover:text-foreground"
@@ -449,7 +449,7 @@ export function TargetSchoolListView() {
               type="button"
               onClick={() => setViewMode("timeline")}
               className={cn(
-                "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                "inline-flex cursor-pointer items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                 viewMode === "timeline"
                   ? "bg-surface font-semibold text-brand "
                   : "text-muted-foreground hover:text-foreground"
@@ -621,7 +621,7 @@ export function TargetSchoolListView() {
                   {/* Các nút hành động */}
                   <div className="flex items-center justify-between border-t border-line/60 pt-3">
                     <Link href={`/university/${item.universityCode}`}>
-                      <Button variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs text-brand">
+                      <Button variant="ghost" size="sm" className="gap-1 text-brand">
                         <span>Chi tiết trường</span>
                         <ExternalLinkIcon className="size-3" />
                       </Button>
@@ -631,7 +631,7 @@ export function TargetSchoolListView() {
                       variant="ghost"
                       size="sm"
                       onClick={() => setDeletingSchool(item)}
-                      className="h-8 gap-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      className="gap-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
                     >
                       <Trash2Icon className="size-3.5" />
                       <span>Xóa</span>
@@ -737,7 +737,7 @@ export function TargetSchoolListView() {
 
                       <div className="mt-3 flex items-center justify-end gap-2">
                         <Link href={`/university/${item.universityCode}`}>
-                          <Button variant="outline" size="sm" className="h-7 text-xs">
+                          <Button variant="outline" size="sm">
                             Xem trường
                           </Button>
                         </Link>
@@ -745,7 +745,7 @@ export function TargetSchoolListView() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setDeletingSchool(item)}
-                          className="h-7 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                         >
                           Xóa
                         </Button>
@@ -792,10 +792,9 @@ export function TargetSchoolListView() {
               type="button"
               variant="destructive"
               onClick={handleDeleteConfirm}
-              disabled={isDeleting}
+              loading={isDeleting}
               className="gap-2"
             >
-              {isDeleting && <Loader2 className="size-4 animate-spin" />}
               Xác nhận xóa
             </Button>
           </DialogFooter>

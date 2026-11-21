@@ -810,7 +810,7 @@ export function Step2Transcript({
             aria-checked={mode === opt.value}
             onClick={() => handleModeChange(opt.value)}
             className={cn(
-              "rounded-xl border p-4 text-left transition-colors cursor-pointer",
+              "rounded-xl border p-4 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
               mode === opt.value
                 ? "border-brand bg-brand-wash/40 ring-1 ring-brand"
                 : "border-line bg-surface hover:border-brand/50"
@@ -854,7 +854,6 @@ export function Step2Transcript({
                     size="sm"
                     variant={overallScale === scale ? "default" : "outline"}
                     onClick={() => handleOverallScaleChange(scale)}
-                    className="cursor-pointer"
                   >
                     Thang {scale}
                   </Button>
@@ -896,7 +895,7 @@ export function Step2Transcript({
             <button
               type="button"
               onClick={() => setShowEstimator((v) => !v)}
-              className="text-xs text-brand font-medium hover:underline cursor-pointer flex items-center gap-1.5"
+              className="rounded text-xs text-brand font-medium hover:underline cursor-pointer flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
             >
               <SparklesIcon className="size-3.5" />
               {showEstimator ? "Thu gọn bảng ước tính" : "Tôi chưa rõ GPA (Ước tính giúp tôi)"}
@@ -917,7 +916,7 @@ export function Step2Transcript({
                       key={preset.range}
                       type="button"
                       onClick={() => handleOverallChange(String(preset.midpoint))}
-                      className="flex flex-col items-start p-3 rounded-lg border border-line bg-surface hover:border-brand hover:bg-brand-wash/40 text-left transition-all cursor-pointer group "
+                      className="flex flex-col items-start p-3 rounded-lg border border-line bg-surface hover:border-brand hover:bg-brand-wash/40 text-left transition-all cursor-pointer group focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
                     >
                       <div className="flex items-center justify-between w-full">
                         <span className="text-xs font-bold text-foreground group-hover:text-brand">
@@ -998,7 +997,7 @@ export function Step2Transcript({
                             type="button"
                             onClick={() => handleYearTargetChange(yIdx, String(presetScore))}
                             className={cn(
-                              "text-xs font-semibold px-2 py-0.5 rounded border transition-colors cursor-pointer",
+                              "text-xs font-semibold px-2 py-0.5 rounded border transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                               targetScore === presetScore
                                 ? "bg-brand text-white border-brand"
                                 : "bg-muted/40 hover:bg-brand-wash border-line text-muted-foreground hover:text-brand"
@@ -1158,7 +1157,7 @@ export function Step2Transcript({
               type="button"
               size="sm"
               onClick={triggerFileInput}
-              className="gap-1.5 cursor-pointer bg-brand hover:bg-brand-ink text-xs font-semibold text-white"
+              className="gap-1.5 bg-brand hover:bg-brand-ink text-xs font-semibold text-white"
             >
               <RefreshCwIcon className="size-3.5" />
               Chọn ảnh / tệp khác rõ nét hơn
@@ -1171,7 +1170,7 @@ export function Step2Transcript({
                 setShowManualTable(true);
                 setOcrFailedNotice(null);
               }}
-              className="gap-1.5 cursor-pointer text-xs font-semibold"
+              className="gap-1.5 text-xs font-semibold"
             >
               <Edit3Icon className="size-3.5" />
               Chuyển sang điền điểm bằng tay
@@ -1242,7 +1241,7 @@ export function Step2Transcript({
                   type="button"
                   size="sm"
                   onClick={triggerFileInput}
-                  className="gap-2 cursor-pointer font-semibold text-xs bg-brand hover:bg-brand-ink text-white"
+                  className="gap-2 font-semibold text-xs bg-brand hover:bg-brand-ink text-white"
                 >
                   <FileUpIcon className="size-3.5" />
                   {draftTranscript ? "Tải tệp khác" : "Chọn tệp từ máy"}
@@ -1272,7 +1271,7 @@ export function Step2Transcript({
             <button
               type="button"
               onClick={triggerFileInput}
-              className="text-xs font-semibold text-brand hover:underline cursor-pointer"
+              className="rounded text-xs font-semibold text-brand hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
             >
               Tải tệp khác
             </button>
@@ -1314,14 +1313,17 @@ export function Step2Transcript({
                     </p>
                   </div>
                 </div>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon-xs"
                   onClick={handleDismissPendingTerms}
-                  className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
+                  className="text-muted-foreground hover:text-foreground"
                   title="Bỏ qua"
+                  aria-label="Bỏ qua"
                 >
                   <XIcon className="size-4" />
-                </button>
+                </Button>
               </div>
 
               <div className="flex flex-wrap gap-2 pt-1 border-t border-brand/20">
@@ -1333,7 +1335,7 @@ export function Step2Transcript({
                       size="sm"
                       variant="outline"
                       onClick={() => handleAssignPendingTerm(y.gradeName, 1)}
-                      className="h-7 px-2 text-xs font-medium bg-surface hover:bg-brand hover:text-white cursor-pointer"
+                      className="px-2 text-xs font-medium bg-surface hover:bg-brand hover:text-white"
                     >
                       Học kỳ 1
                     </Button>
@@ -1342,7 +1344,7 @@ export function Step2Transcript({
                       size="sm"
                       variant="outline"
                       onClick={() => handleAssignPendingTerm(y.gradeName, 2)}
-                      className="h-7 px-2 text-xs font-medium bg-surface hover:bg-brand hover:text-white cursor-pointer"
+                      className="px-2 text-xs font-medium bg-surface hover:bg-brand hover:text-white"
                     >
                       Học kỳ 2
                     </Button>
@@ -1351,7 +1353,7 @@ export function Step2Transcript({
                       size="sm"
                       variant="outline"
                       onClick={() => handleAssignPendingTerm(y.gradeName, "all")}
-                      className="h-7 px-2 text-xs font-medium bg-surface hover:bg-brand hover:text-white cursor-pointer"
+                      className="px-2 text-xs font-medium bg-surface hover:bg-brand hover:text-white"
                     >
                       Cả năm
                     </Button>
@@ -1375,7 +1377,7 @@ export function Step2Transcript({
               <button
                 type="button"
                 onClick={triggerFileInput}
-                className="text-xs text-brand font-medium hover:underline cursor-pointer flex items-center gap-1"
+                className="rounded text-xs text-brand font-medium hover:underline cursor-pointer flex items-center gap-1 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
               >
                 <FileUpIcon className="size-3.5" />
                 Tải ảnh khác
@@ -1389,7 +1391,7 @@ export function Step2Transcript({
                   type="button"
                   onClick={() => setActiveYearIndex(idx)}
                   className={cn(
-                    "rounded-lg px-4 py-2 text-xs font-semibold transition-all cursor-pointer",
+                    "rounded-lg px-4 py-2 text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                     activeYearIndex === idx
                       ? "bg-brand text-white "
                       : "bg-surface border border-line text-muted-foreground hover:border-brand/40 hover:text-foreground"
@@ -1407,7 +1409,7 @@ export function Step2Transcript({
                   size="sm"
                   variant="outline"
                   onClick={handleAddGrade9}
-                  className="rounded-lg px-3 py-2 text-xs font-semibold gap-1 border-dashed hover:border-brand cursor-pointer text-muted-foreground hover:text-foreground"
+                  className="rounded-lg px-3 py-2 text-xs font-semibold gap-1 border-dashed hover:border-brand text-muted-foreground hover:text-foreground"
                 >
                   <PlusIcon className="size-3" />
                   Bổ sung Lớp 9 (Chuẩn US)
@@ -1432,7 +1434,7 @@ export function Step2Transcript({
                     .join(", ")}
                   ). Rê chuột vào ô để xem lý do. Sửa ô nào thì ô đó hết tô cam.
                 </p>
-                <Button type="button" size="sm" variant="outline" onClick={handleConfirmReviewed} className="gap-1.5 cursor-pointer">
+                <Button type="button" size="sm" variant="outline" onClick={handleConfirmReviewed} className="gap-1.5">
                   <CheckCircle2Icon className="size-3.5" />
                   Tôi đã kiểm tra bảng điểm
                 </Button>
@@ -1516,14 +1518,17 @@ export function Step2Transcript({
                             {avg !== null ? avg.toFixed(1) : "-"}
                           </td>
                           <td className="py-2 px-2 text-center">
-                            <button
+                            <Button
                               type="button"
+                              variant="ghost"
+                              size="icon-xs"
                               onClick={() => handleRemoveSubject(activeYearIndex, sIdx)}
-                              className="text-muted-foreground hover:text-destructive cursor-pointer p-1 rounded"
+                              className="text-muted-foreground hover:text-destructive"
                               title="Xóa môn"
+                              aria-label={`Xóa môn ${sub.subjectName}`}
                             >
                               <Trash2Icon className="size-3.5" />
-                            </button>
+                            </Button>
                           </td>
                         </tr>
                       );
@@ -1539,7 +1544,7 @@ export function Step2Transcript({
                   variant="outline"
                   size="sm"
                   onClick={() => handleAddSubject(activeYearIndex)}
-                  className="gap-1.5 text-xs cursor-pointer"
+                  className="gap-1.5 text-xs"
                 >
                   <PlusIcon className="size-3.5" />
                   Thêm môn học
@@ -1653,11 +1658,11 @@ export function Step2Transcript({
 
       {/* Bottom Actions */}
       <div className="flex justify-between pt-4 border-t border-line">
-        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5 cursor-pointer">
+        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5">
           <ArrowLeftIcon className="size-4" />
           Quay lại
         </Button>
-        <Button onClick={handleNextClick} size="lg" className="gap-1.5 cursor-pointer">
+        <Button onClick={handleNextClick} size="lg" className="gap-1.5">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>

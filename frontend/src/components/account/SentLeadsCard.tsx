@@ -164,8 +164,7 @@ export function SentLeadsCard() {
                 </ul>
 
                 {page < totalPages && (
-                  <Button type="button" variant="outline" size="sm" disabled={isLoadingMore} onClick={loadMore}>
-                    {isLoadingMore && <Spinner data-icon="inline-start" />}
+                  <Button type="button" variant="outline" size="sm" disabled={isLoadingMore} onClick={loadMore} loading={isLoadingMore}>
                     Xem thêm
                   </Button>
                 )}

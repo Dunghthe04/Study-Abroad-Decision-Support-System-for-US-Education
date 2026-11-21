@@ -4,7 +4,7 @@ import { CenterStatusBanner } from "@/components/center/CenterStatusBanner";
 import { CenterNav } from "@/components/center/CenterNav";
 
 export const metadata: Metadata = {
-  title: "Cổng đối tác Trung tâm tư vấn – USAS",
+  title: "Cổng đối tác Trung tâm tư vấn – USDSS",
   description: "Bảng điều khiển và quản lý hồ sơ đối tác trung tâm tư vấn du học Mỹ",
 };
 

@@ -90,7 +90,7 @@ const CENTER_SERVICES: { icon: IconType; title: string; desc: string }[] = [
 const FAQS = [
   {
     q: "Hệ thống xếp trường vào nhóm như thế nào?",
-    a: "USAS so GPA đã quy đổi, điểm chuẩn hóa, ngoại khóa và ngân sách của bạn với số liệu tuyển sinh từng trường. Kết quả là nhóm tham khảo, không phải xác suất đỗ.",
+    a: "USDSS so GPA đã quy đổi, điểm chuẩn hóa, ngoại khóa và ngân sách của bạn với số liệu tuyển sinh từng trường. Kết quả là nhóm tham khảo, không phải xác suất đỗ.",
     link: { href: "/methodology", label: "Xem ngưỡng phân nhóm" },
   },
   {
@@ -103,7 +103,7 @@ const FAQS = [
   },
   {
     q: "Tỷ lệ nhận của trường có phải là cơ hội đỗ của em không?",
-    a: "Không. Tỷ lệ nhận là con số chung cho mọi hồ sơ nộp vào trường. USAS đặt nhóm của bạn ngay cạnh con số đó để bạn thấy hồ sơ mình đứng ở đâu so với trường, thay vì đoán từ tỷ lệ chung.",
+    a: "Không. Tỷ lệ nhận là con số chung cho mọi hồ sơ nộp vào trường. USDSS đặt nhóm của bạn ngay cạnh con số đó để bạn thấy hồ sơ mình đứng ở đâu so với trường, thay vì đoán từ tỷ lệ chung.",
   },
   {
     q: "Trung tâm tư vấn có trả tiền để được gợi ý trường không?",
@@ -258,7 +258,7 @@ function HomeView() {
       <section className="grid gap-10 lg:grid-cols-12 lg:items-center lg:gap-16">
         <div className="space-y-6 lg:col-span-6">
           <div className="space-y-3">
-            <h2 className="text-display text-balance text-ink">USAS Advisor</h2>
+            <h2 className="text-display text-balance text-ink">USDSS Advisor</h2>
             <p className="text-body text-pretty text-ink-2">
               <span className="font-semibold text-ink">Trợ lý đắc lực của bạn.</span> Hỏi bằng tiếng Việt về điểm chuẩn, học phí, học bổng hay so sánh trường. Advisor trả lời từ số liệu trong hệ thống và gợi ý bước tiếp theo cho hồ sơ của bạn.
             </p>
@@ -287,7 +287,7 @@ function HomeView() {
             className="relative w-full max-w-md pt-1"
           >
             <label htmlFor="landing-advisor-input" className="sr-only">
-              Đặt câu hỏi cho USAS Advisor
+              Đặt câu hỏi cho USDSS Advisor
             </label>
             <input
               id="landing-advisor-input"
@@ -298,14 +298,15 @@ function HomeView() {
               placeholder="Câu hỏi của bạn…"
               className="h-11 w-full rounded-xl border border-line bg-surface pr-12 pl-4 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-ring/20"
             />
-            <button
+            <Button
               type="submit"
+              size="icon"
               aria-label="Gửi câu hỏi"
               disabled={!customQuestion.trim()}
-              className="absolute top-[calc(50%+2px)] right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg bg-brand text-brand-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="absolute top-[calc(50%+2px)] right-1.5 -translate-y-1/2 bg-brand text-brand-foreground hover:bg-brand hover:opacity-90 [&:disabled:not([aria-busy])]:opacity-40"
             >
               <ArrowUpIcon className="size-4" />
-            </button>
+            </Button>
           </form>
         </div>
 
@@ -315,7 +316,7 @@ function HomeView() {
               <PlusIcon className="size-4" />
             </span>
             <span className="min-w-0 flex-1 truncate font-heading text-base font-semibold text-ink">
-              USAS Advisor
+              USDSS Advisor
             </span>
             <div className="flex shrink-0 items-center rounded-lg border border-line p-0.5">
               <span className="inline-flex size-7 items-center justify-center text-ink-2">
@@ -361,7 +362,7 @@ function HomeView() {
           </div>
           <div aria-hidden className="p-3 pt-1 select-none">
             <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface px-3.5 pt-3 pb-2.5">
-              <div className="min-h-11 w-full text-sm text-ink-3">Hỏi USAS Advisor</div>
+              <div className="min-h-11 w-full text-sm text-ink-3">Hỏi USDSS Advisor</div>
               <div className="flex size-9 shrink-0 items-center justify-center self-end rounded-lg bg-brand text-brand-foreground">
                 <ArrowUpIcon className="size-4.5" />
               </div>
@@ -389,15 +390,17 @@ function HomeView() {
 
         <div className="relative group/carousel">
           {/* Nút cuộn trái */}
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-lg"
             aria-label="Cuộn sang trái"
             disabled={!canScrollLeft}
             onClick={() => scrollByCard("left")}
-            className="absolute -left-3 sm:-left-5 top-1/2 z-20 flex size-10 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-surface text-ink shadow-sm transition-all hover:bg-ground active:scale-95 disabled:pointer-events-none disabled:opacity-0"
+            className="absolute -left-3 sm:-left-5 top-1/2 z-20 -translate-y-1/2 rounded-full border-line bg-surface text-ink shadow-sm hover:bg-ground hover:text-ink dark:hover:bg-ground [&:disabled:not([aria-busy])]:opacity-0"
           >
             <ChevronLeftIcon className="size-5" />
-          </button>
+          </Button>
 
           {/* Dải thẻ trường cuộn ngang */}
           <div
@@ -428,15 +431,17 @@ function HomeView() {
           </div>
 
           {/* Nút cuộn phải */}
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-lg"
             aria-label="Cuộn sang phải"
             disabled={!canScrollRight}
             onClick={() => scrollByCard("right")}
-            className="absolute -right-3 sm:-right-5 top-1/2 z-20 flex size-10 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-surface text-ink shadow-sm transition-all hover:bg-ground active:scale-95 disabled:pointer-events-none disabled:opacity-0"
+            className="absolute -right-3 sm:-right-5 top-1/2 z-20 -translate-y-1/2 rounded-full border-line bg-surface text-ink shadow-sm hover:bg-ground hover:text-ink dark:hover:bg-ground [&:disabled:not([aria-busy])]:opacity-0"
           >
             <ChevronRightIcon className="size-5" />
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -463,7 +468,7 @@ function HomeView() {
         <div className="space-y-6 lg:col-span-5">
           <SectionHead
             title="Khi cần người làm cùng"
-            desc="USAS lo phần phân tích và gợi ý trường. Bài luận, hồ sơ, luyện thi và visa do trung tâm tư vấn đảm nhận. Bạn chọn trung tâm và gửi yêu cầu ngay trên hệ thống, trung tâm sẽ liên hệ lại."
+            desc="USDSS lo phần phân tích và gợi ý trường. Bài luận, hồ sơ, luyện thi và visa do trung tâm tư vấn đảm nhận. Bạn chọn trung tâm và gửi yêu cầu ngay trên hệ thống, trung tâm sẽ liên hệ lại."
           />
           <Link href="/centers" className={buttonVariants({ size: "xl" })}>
             Xem các trung tâm

@@ -15,11 +15,11 @@ export async function generateMetadata({ params }: UniversityPageProps): Promise
   try {
     const university = await getUniversityDetail(code);
     return {
-      title: `${university.name} – Thông tin trường | USAS`,
-      description: `Thông tin tuyển sinh, chi phí, hạn nộp và ngành học của ${university.name}, kèm nguồn dữ liệu trên USAS.`,
+      title: `${university.name} – Thông tin trường | USDSS`,
+      description: `Thông tin tuyển sinh, chi phí, hạn nộp và ngành học của ${university.name}, kèm nguồn dữ liệu trên USDSS.`,
     };
   } catch {
-    return { title: "Thông tin trường | USAS" };
+    return { title: "Thông tin trường | USDSS" };
   }
 }
 

@@ -5,7 +5,6 @@ import { ArchiveRestoreIcon, CheckIcon, SaveIcon, SendIcon, Trash2Icon, WrenchIc
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { DetailPanel } from "@/components/admin/shared/DetailPanel";
@@ -217,11 +216,11 @@ function KnowledgeEntryForm({ entry: listed, version, currentUserId, onClose, on
           </TableFrame>
           <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Hủy</Button>
-            <Button type="button" variant="outline" onClick={() => void save(false)} disabled={saving}>
-              {saving ? <Spinner /> : <SaveIcon />} Lưu nháp
+            <Button type="button" variant="outline" onClick={() => void save(false)} loading={saving}>
+              <SaveIcon /> Lưu nháp
             </Button>
-            <Button type="button" onClick={() => void save(true)} disabled={saving}>
-              {saving ? <Spinner /> : <SendIcon />} Gửi duyệt
+            <Button type="button" onClick={() => void save(true)} loading={saving}>
+              <SendIcon /> Gửi duyệt
             </Button>
           </div>
         </form>
@@ -304,8 +303,8 @@ function KnowledgeEntryForm({ entry: listed, version, currentUserId, onClose, on
           ) : (
             <>
               {canSubmit(entry.reviewStatus) && (
-                <Button type="button" size="sm" disabled={busy || !isReady(entry)} title={isReady(entry) ? undefined : "Cần đủ nhãn, bậc học, câu trả lời và nguồn"} onClick={() => void submitExisting()}>
-                  {saving ? <Spinner /> : <SendIcon />} Gửi duyệt
+                <Button type="button" size="sm" disabled={busy || !isReady(entry)} loading={saving} title={isReady(entry) ? undefined : "Cần đủ nhãn, bậc học, câu trả lời và nguồn"} onClick={() => void submitExisting()}>
+                  <SendIcon /> Gửi duyệt
                 </Button>
               )}
               {canReview && (

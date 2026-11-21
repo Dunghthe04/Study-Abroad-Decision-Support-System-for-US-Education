@@ -411,8 +411,7 @@ function StudentTargetSchoolButton({
             </div>
 
             <DialogFooter className="pt-2 sm:justify-stretch">
-              <Button type="submit" disabled={isSubmitting} className="w-full gap-2 font-semibold">
-                {isSubmitting && <Loader2 className="size-4 animate-spin" />}
+              <Button type="submit" loading={isSubmitting} className="w-full gap-2 font-semibold">
                 Lưu
               </Button>
             </DialogFooter>
@@ -507,10 +506,10 @@ function StudentTargetSchoolButton({
                         type="button"
                         size="xs"
                         onClick={() => handleUpdateRound(selectedEditRound)}
-                        disabled={isUpdatingRound || !selectedEditRound}
+                        disabled={!selectedEditRound}
+                        loading={isUpdatingRound}
                         className="h-6 gap-1 text-xs"
                       >
-                        {isUpdatingRound && <Loader2 className="size-3 animate-spin" />}
                         Lưu vòng nộp
                       </Button>
                     </div>
@@ -560,13 +559,13 @@ function StudentTargetSchoolButton({
                     Hủy
                   </Button>
                   <Button
+                    type="button"
                     size="sm"
                     variant="destructive"
                     onClick={handleDeleteTargetSchool}
-                    disabled={isDeleting}
+                    loading={isDeleting}
                     className="gap-1.5"
                   >
-                    {isDeleting && <Loader2 className="size-3.5 animate-spin" />}
                     <Trash2Icon className="size-3.5" />
                     Đồng ý xóa
                   </Button>

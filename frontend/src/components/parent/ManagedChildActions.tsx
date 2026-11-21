@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
@@ -58,14 +57,10 @@ export function ActAsChildButton({
       type="button"
       className={className}
       onClick={start}
-      disabled={starting}
+      loading={starting}
     >
-      {starting ? (
-        <Spinner data-icon="inline-start" />
-      ) : (
-        <UserRoundPen data-icon="inline-start" />
-      )}
-      {starting ? "Đang mở…" : "Nhập hồ sơ cho con"}
+      <UserRoundPen data-icon="inline-start" />
+      Nhập hồ sơ cho con
     </Button>
   );
 }
@@ -188,8 +183,7 @@ export function AddManagedChildButton({
               >
                 Hủy
               </Button>
-              <Button type="submit" disabled={submitting}>
-                {submitting && <Spinner data-icon="inline-start" />}
+              <Button type="submit" disabled={submitting} loading={submitting}>
                 {submitting ? "Đang thêm…" : "Thêm và nhập hồ sơ"}
               </Button>
             </DialogFooter>
