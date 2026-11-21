@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     # Đọc bảng điểm: model ảnh chép ảnh thành chữ (bước A), LLM chữ bóc điểm thành JSON (bước B)
     vision_model: str = "glm-ocr"
     vision_timeout_seconds: float = 240
-    vision_keep_alive: int = 0  # nhả GPU ngay sau bước A để model bước B có chỗ (GPU 4GB)
+    vision_keep_alive: int = 0  # nhả model ngay sau bước A (server 8 GB RAM chỉ chứa một model)
     vision_cpu_fallback: bool = True  # Ollama lỗi 5xx (thường do thiếu VRAM) thì thử lại 1 lần trên CPU
     image_max_side: int = 2000
     # Để trống = dùng chung llm_model. Máy GPU yếu / server chỉ có CPU nên đặt qwen3:4b cho nhanh
