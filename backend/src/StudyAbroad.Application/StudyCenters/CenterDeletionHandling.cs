@@ -129,11 +129,19 @@ public interface ICenterDeletionWorkRepository
     Task<bool> LockCenterIfPurgeableAsync(Guid studyCenterId, CancellationToken ct = default);
 
     /// <summary>
-    /// Ẩn danh hóa tài khoản chủ trung tâm thay vì xóa dòng: tin nhắn trung tâm đã gửi trong các yêu cầu liên hệ
-    /// (khóa ngoại cascade theo người gửi) và nhật ký vẫn còn để truy vết, nhưng không còn thông tin nhận diện.
+    /// Ẩn danh hóa tài khoản chủ trung tâm thay vì xóa dòng: dòng tin nhắn còn tham chiếu được (khóa ngoại cascade theo
+    /// người gửi) và các tin giữ lại theo <see cref="ErasePrivateLeadMessagesAsync"/> không còn gắn với thông tin nhận diện.
     /// Xóa phiên đăng nhập, mã OTP và thông báo của tài khoản.
     /// </summary>
     Task AnonymizeOwnerAccountAsync(Guid userId, DateTime now, CancellationToken ct = default);
+
+    /// <summary>
+    /// Xóa nội dung và ảnh đính kèm các tin nhắn do phía trung tâm gửi trong yêu cầu liên hệ (Luật 91/2025 Điều 14 khoản 1
+    /// điểm b: mục đích xử lý đã xong; Điều 3 khoản 3: chỉ lưu trong thời gian phù hợp mục đích). Chỉ giữ lại tin đang bị
+    /// báo cáo mà Admin chưa xử lý, vì còn cần làm căn cứ xử lý vi phạm (Điều 19 khoản 1 điểm a, b). Tin nhắn của học sinh
+    /// và phụ huynh không bị đụng tới. Trả về URL ảnh đính kèm đã xóa để gỡ tiếp trên CDN sau khi DB đã lưu.
+    /// </summary>
+    Task<IReadOnlyList<string>> ErasePrivateLeadMessagesAsync(Guid studyCenterId, Guid? ownerUserId, DateTime now, CancellationToken ct = default);
 
     /// <summary>
     /// Xóa dữ liệu của trung tâm: hồ sơ xác minh và tài liệu, lịch sử thay đổi hồ sơ, rồi ẩn danh hóa dòng trung tâm
@@ -199,8 +207,8 @@ public interface ICenterDeletionService
 /// Nhận yêu cầu, gia hạn, duyệt, từ chối, không xóa được vì giữ pháp lý và xóa xong đều ghi nhật ký và báo qua email.
 /// Giữ pháp lý (Legal Hold) là ngoại lệ của quyền xóa dữ liệu: khi trung tâm bị nghi lừa đảo, có tranh chấp
 /// hoặc cơ quan có thẩm quyền yêu cầu giữ dữ liệu, yêu cầu xóa không được duyệt và dữ liệu không bị xóa hẳn tới khi gỡ.
-/// Xóa hẳn = xóa hồ sơ, tài liệu và ẩn danh hóa trung tâm cùng tài khoản chủ; nhật ký, tin nhắn và bản ghi yêu cầu
-/// được giữ (không còn thông tin nhận diện) để truy vết về sau.
+/// Xóa hẳn = xóa hồ sơ, tài liệu, ảnh trên CDN và nội dung tin nhắn phía trung tâm, ẩn danh hóa trung tâm cùng tài khoản chủ.
+/// Chỉ giữ tin nhắn đang bị báo cáo chưa xử lý, nhật ký và bản ghi yêu cầu (không còn thông tin nhận diện) để truy vết.
 /// </summary>
 public class CenterDeletionService(
     ICenterDeletionRequestRepository requests,
@@ -438,7 +446,9 @@ public class CenterDeletionService(
                     }
 
                     // Đọc URL ảnh trước khi purge xóa trắng các cột này, để còn xóa được tệp trên CDN sau khi DB đã lưu
-                    mediaUrls = await work.GetCenterMediaUrlsAsync(request.StudyCenterId, txCt);
+                    var centerMedia = await work.GetCenterMediaUrlsAsync(request.StudyCenterId, txCt);
+                    var chatMedia = await work.ErasePrivateLeadMessagesAsync(request.StudyCenterId, ownerId, now, txCt);
+                    mediaUrls = centerMedia.Concat(chatMedia).Distinct(StringComparer.Ordinal).ToList();
                     await work.PurgeCenterDataAsync(request.StudyCenterId, now, txCt);
                     if (ownerId is { } id)
                         await work.AnonymizeOwnerAccountAsync(id, now, txCt);
