@@ -372,5 +372,13 @@ public class MediaControllerTests
                 throw Failure;
             return Task.FromResult(Result);
         }
+
+        public Task<bool> ExistsAsync(
+            string publicIdOrUrl, MediaResourceType? resourceType = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+
+        public Task<bool> DeleteAsync(
+            string publicIdOrUrl, MediaResourceType? resourceType = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
     }
 }

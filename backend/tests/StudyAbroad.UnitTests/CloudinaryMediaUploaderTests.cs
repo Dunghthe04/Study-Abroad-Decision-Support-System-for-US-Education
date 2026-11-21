@@ -1,4 +1,6 @@
+using System.Net;
 using System.Text;
+using CloudinaryDotNet.Actions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -319,6 +321,216 @@ public class CloudinaryMediaUploaderTests
         Assert.True(new CloudinaryOptionsValidator().Validate(null, options).Failed);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Exists_RawPublicId_ForwardsDefaultsAndReturnsProviderAvailability(bool available)
+    {
+        var client = new FakeUploadClient { ExistsResult = available };
+        using var cancellation = new CancellationTokenSource();
+
+        var actual = await CreateUploader(client).ExistsAsync("  usas/lead-chat/asset1  ", cancellationToken: cancellation.Token);
+
+        Assert.Equal(available, actual);
+        Assert.Equal(1, client.Calls);
+        Assert.Equal("usas/lead-chat/asset1", client.PublicId);
+        Assert.Equal(MediaResourceType.Image, client.ResourceType);
+        Assert.Equal("upload", client.DeliveryType);
+        Assert.Equal(cancellation.Token, client.CancellationToken);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Delete_RawPublicIdWithExplicitResourceType_ForwardsAndReturnsResult(bool deleted)
+    {
+        var client = new FakeUploadClient { DeleteResult = deleted };
+        using var cancellation = new CancellationTokenSource();
+
+        var actual = await CreateUploader(client).DeleteAsync("usas/docs/file.pdf", MediaResourceType.Raw, cancellation.Token);
+
+        Assert.Equal(deleted, actual);
+        Assert.Equal(1, client.Calls);
+        Assert.Equal("usas/docs/file.pdf", client.PublicId);
+        Assert.Equal(MediaResourceType.Raw, client.ResourceType);
+        Assert.Equal("upload", client.DeliveryType);
+        Assert.Equal(cancellation.Token, client.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Exists_RawPublicIdWithDot_PreservesExactPublicId()
+    {
+        var client = new FakeUploadClient { ExistsResult = true };
+
+        await CreateUploader(client).ExistsAsync("usas/v1.0/item.name");
+
+        Assert.Equal("usas/v1.0/item.name", client.PublicId);
+    }
+
+    [Theory]
+    [InlineData("https://res.cloudinary.com/test-cloud/image/upload/v1793801559/usdss/universities/100663/UNI_100663_logo.webp",
+        "usdss/universities/100663/UNI_100663_logo", MediaResourceType.Image, "upload")]
+    [InlineData("https://res.cloudinary.com/test-cloud/image/upload/lead_chat/abc123.png",
+        "lead_chat/abc123", MediaResourceType.Image, "upload")]
+    [InlineData("https://res.cloudinary.com/test-cloud/image/upload/s--sig123--/w_200,c_fill/v1793801559/usas/my%20file.png?_a=1",
+        "usas/my file", MediaResourceType.Image, "upload")]
+    [InlineData("https://res.cloudinary.com/test-cloud/image/upload/w_200,c_fill/lead_chat/img.webp",
+        "lead_chat/img", MediaResourceType.Image, "upload")]
+    [InlineData("https://res.cloudinary.com/test-cloud/video/upload/v123/usas/clip.mp4",
+        "usas/clip", MediaResourceType.Video, "upload")]
+    [InlineData("https://res.cloudinary.com/test-cloud/raw/upload/v123/usas/transcript.pdf",
+        "usas/transcript.pdf", MediaResourceType.Raw, "upload")]
+    [InlineData("https://res.cloudinary.com/test-cloud/image/private/v123/usas/id.png",
+        "usas/id", MediaResourceType.Image, "private")]
+    [InlineData("https://RES.CLOUDINARY.COM/TEST-CLOUD/image/authenticated/v123/usas/id.png",
+        "usas/id", MediaResourceType.Image, "authenticated")]
+    public async Task ExistsAndDelete_CloudinaryDeliveryUrl_ExtractsPublicIdTypeAndDelivery(
+        string url, string expectedPublicId, MediaResourceType expectedType, string expectedDeliveryType)
+    {
+        var client = new FakeUploadClient { ExistsResult = true, DeleteResult = true };
+        var uploader = CreateUploader(client);
+
+        Assert.True(await uploader.ExistsAsync(url));
+        Assert.Equal(expectedPublicId, client.PublicId);
+        Assert.Equal(expectedType, client.ResourceType);
+        Assert.Equal(expectedDeliveryType, client.DeliveryType);
+
+        Assert.True(await uploader.DeleteAsync(url));
+        Assert.Equal(2, client.Calls);
+        Assert.Equal(expectedPublicId, client.PublicId);
+        Assert.Equal(expectedType, client.ResourceType);
+        Assert.Equal(expectedDeliveryType, client.DeliveryType);
+    }
+
+    [Theory]
+    [InlineData("https://example.edu/logo.png", null)]
+    [InlineData("file:///private/photo.jpg", null)]
+    [InlineData("https://res.cloudinary.com/other-cloud/image/upload/v1/usas/a.png", null)]
+    [InlineData("https://res.cloudinary.com/test-cloud/image/fetch/https://example.edu/a.png", null)]
+    [InlineData("https://res.cloudinary.com/test-cloud/video/upload/v1/usas/clip.mp4", MediaResourceType.Image)]
+    [InlineData("https://res.cloudinary.com/test-cloud/image/upload/v123/", null)]
+    [InlineData("https://res.cloudinary.com/test-cloud/image/upload/v123/../secret.png", null)]
+    public async Task ExistsAndDelete_ExternalOrMismatchedUrl_ReturnsFalseWithoutCallingClient(
+        string url, MediaResourceType? resourceType)
+    {
+        var client = new FakeUploadClient { ExistsResult = true, DeleteResult = true };
+        var uploader = CreateUploader(client);
+
+        Assert.False(await uploader.ExistsAsync(url, resourceType));
+        Assert.False(await uploader.DeleteAsync(url, resourceType));
+        Assert.Equal(0, client.Calls);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("../secret")]
+    [InlineData("usas/../secret")]
+    [InlineData("usas/a?b=1")]
+    [InlineData("usas/a#frag")]
+    [InlineData("usas\\a")]
+    [InlineData("/usas/a")]
+    [InlineData("https://[invalid")]
+    public async Task ExistsAndDelete_InvalidIdentifier_ThrowsArgumentExceptionBeforeNetwork(string? invalid)
+    {
+        var client = new FakeUploadClient();
+        var uploader = CreateUploader(client);
+
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => uploader.ExistsAsync(invalid!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => uploader.DeleteAsync(invalid!));
+        Assert.Equal(0, client.Calls);
+    }
+
+    [Fact]
+    public async Task ExistsAndDelete_InvalidResourceType_ThrowsArgumentOutOfRangeBeforeNetwork()
+    {
+        var client = new FakeUploadClient();
+        var uploader = CreateUploader(client);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => uploader.ExistsAsync("usas/a", (MediaResourceType)99));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => uploader.DeleteAsync("usas/a", (MediaResourceType)99));
+        Assert.Equal(0, client.Calls);
+    }
+
+    [Fact]
+    public async Task ExistsAndDelete_Cancelled_ThrowsBeforeNetwork()
+    {
+        var client = new FakeUploadClient();
+        var uploader = CreateUploader(client);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => uploader.ExistsAsync("usas/a", cancellationToken: cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => uploader.DeleteAsync("usas/a", cancellationToken: cancellation.Token));
+        Assert.Equal(0, client.Calls);
+    }
+
+    [Fact]
+    public void InterpretExistsResult_MapsOkNotFoundAndErrors()
+    {
+        Assert.True(CloudinaryUploadClient.InterpretExistsResult(new GetResourceResult
+        {
+            StatusCode = HttpStatusCode.OK,
+            PublicId = "usas/a",
+        }));
+        Assert.False(CloudinaryUploadClient.InterpretExistsResult(new GetResourceResult
+        {
+            StatusCode = HttpStatusCode.NotFound,
+            Error = new Error { Message = "Resource not found" },
+        }));
+        Assert.Throws<InvalidOperationException>(() => CloudinaryUploadClient.InterpretExistsResult(new GetResourceResult
+        {
+            StatusCode = HttpStatusCode.OK,
+            PublicId = "",
+        }));
+        Assert.Throws<InvalidOperationException>(() => CloudinaryUploadClient.InterpretExistsResult(new GetResourceResult
+        {
+            StatusCode = HttpStatusCode.OK,
+            PublicId = "usas/a",
+            Error = new Error { Message = "Unexpected" },
+        }));
+        Assert.Throws<InvalidOperationException>(() => CloudinaryUploadClient.InterpretExistsResult(new GetResourceResult
+        {
+            StatusCode = HttpStatusCode.Unauthorized,
+            Error = new Error { Message = "Invalid credentials" },
+        }));
+    }
+
+    [Fact]
+    public void InterpretDeleteResult_MapsOkNotFoundAndErrors()
+    {
+        Assert.True(CloudinaryUploadClient.InterpretDeleteResult(new DeletionResult
+        {
+            StatusCode = HttpStatusCode.OK,
+            Result = "ok",
+        }));
+        Assert.False(CloudinaryUploadClient.InterpretDeleteResult(new DeletionResult
+        {
+            StatusCode = HttpStatusCode.OK,
+            Result = "not found",
+        }));
+        Assert.False(CloudinaryUploadClient.InterpretDeleteResult(new DeletionResult
+        {
+            StatusCode = HttpStatusCode.NotFound,
+        }));
+        Assert.Throws<InvalidOperationException>(() => CloudinaryUploadClient.InterpretDeleteResult(new DeletionResult
+        {
+            StatusCode = HttpStatusCode.OK,
+            Result = "unexpected",
+        }));
+        Assert.Throws<InvalidOperationException>(() => CloudinaryUploadClient.InterpretDeleteResult(new DeletionResult
+        {
+            StatusCode = HttpStatusCode.OK,
+            Result = "ok",
+            Error = new Error { Message = "Unexpected" },
+        }));
+        Assert.Throws<InvalidOperationException>(() => CloudinaryUploadClient.InterpretDeleteResult(new DeletionResult
+        {
+            StatusCode = HttpStatusCode.BadGateway,
+        }));
+    }
+
     private static CloudinaryMediaUploader CreateUploader(FakeUploadClient client, CloudinaryOptions? options = null) =>
         new(client, Options.Create(options ?? ValidOptions()));
 
@@ -344,8 +556,13 @@ public class CloudinaryMediaUploaderTests
         public byte[]? Bytes { get; private set; }
         public string? FileName { get; private set; }
         public string? ContentType { get; private set; }
+        public string? PublicId { get; private set; }
+        public MediaResourceType? ResourceType { get; private set; }
+        public string? DeliveryType { get; private set; }
         public CancellationToken CancellationToken { get; private set; }
         public bool Fail { get; init; }
+        public bool ExistsResult { get; init; }
+        public bool DeleteResult { get; init; }
 
         public async Task<MediaUploadResult> UploadAsync(
             Stream content, string safeFileName, string contentType, string? folderSuffix, bool moderateContent, CancellationToken cancellationToken)
@@ -360,6 +577,32 @@ public class CloudinaryMediaUploaderTests
             await content.CopyToAsync(copy, cancellationToken);
             Bytes = copy.ToArray();
             return new MediaUploadResult("https://res.cloudinary.com/test/image/upload/asset.png", "usas/asset", contentType, Bytes.Length, 2, 2);
+        }
+
+        public Task<bool> ExistsAsync(
+            string publicId, MediaResourceType resourceType, string deliveryType, CancellationToken cancellationToken)
+        {
+            Calls++;
+            PublicId = publicId;
+            ResourceType = resourceType;
+            DeliveryType = deliveryType;
+            CancellationToken = cancellationToken;
+            if (Fail)
+                throw new InvalidOperationException("Exists failed.");
+            return Task.FromResult(ExistsResult);
+        }
+
+        public Task<bool> DeleteAsync(
+            string publicId, MediaResourceType resourceType, string deliveryType, CancellationToken cancellationToken)
+        {
+            Calls++;
+            PublicId = publicId;
+            ResourceType = resourceType;
+            DeliveryType = deliveryType;
+            CancellationToken = cancellationToken;
+            if (Fail)
+                throw new InvalidOperationException("Delete failed.");
+            return Task.FromResult(DeleteResult);
         }
     }
 
