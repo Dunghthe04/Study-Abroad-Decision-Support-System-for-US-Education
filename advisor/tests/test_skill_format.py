@@ -102,5 +102,12 @@ def test_the_principle_block_comes_first_and_is_not_empty(name):
     assert block.strip().count("\n- ") >= 1 or block.strip().startswith("- ")
 
 
+@pytest.mark.parametrize("name", sorted(WRITERS))
+def test_every_writing_skill_says_to_use_only_the_data_sent_and_never_invent(name):
+    block = read(name).split(f"## {PRINCIPLE}", 1)[1].split("\n## ", 1)[0]
+
+    assert "không bịa" in block.lower() and "CÓ TRONG" in block
+
+
 def test_the_slm_prompt_is_left_alone_but_still_has_a_version():
     assert re.search(r"skill_version \d+\.\d+", read("slm_intents.md").splitlines()[0])

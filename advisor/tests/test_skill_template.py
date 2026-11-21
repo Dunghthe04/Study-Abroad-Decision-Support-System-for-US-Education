@@ -10,8 +10,9 @@ from app.schemas.chat import ChatState, GradeScaleRule, ProfileField
 from app.schemas.slm import PROFILE_KEYS
 from app.services.skill_input import skill_request_of
 from app.services.skill_template import build_skill, fill_du_lieu, fill_noi_dung, tasks_of
-from app.services.skills.skill_danh_gia import NUMBER, allowed_numbers, gpa_table_of, read_facts, readings
-from app.services.skills.skill_lo_trinh import choose_route, timeline_numbers
+from app.services.skills.skill_danh_gia import gpa_table_of, read_facts
+from app.services.skills.skill_lo_trinh import choose_route
+from tests.numbers import NUMBER, allowed_numbers, readings, timeline_numbers
 from tests.vef import VEF, VEF_RULES
 
 TODAY = date(2026, 11, 5)
