@@ -221,6 +221,8 @@ namespace StudyAbroad.Infrastructure.Auth
                     $"Yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> đang được xử lý tiếp. Chúng tôi sẽ gửi email khi có kết quả."),
                 "approved" => ("[USAS] Yêu cầu xóa tài khoản trung tâm đã được duyệt", "Yêu cầu xóa đã được duyệt",
                     $"Yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> đã được duyệt. Tài khoản đã bị khóa, trung tâm không còn hiển thị và các yêu cầu liên hệ đang mở đã được đóng. Dữ liệu sẽ được xóa hẳn vào ngày <strong>{purgeDate}</strong>."),
+                "completed_partial" => ("[USAS] Đã xóa tài khoản trung tâm, còn một phần dữ liệu chưa xóa được", "Đã xóa phần lớn dữ liệu trung tâm",
+                    $"Tài khoản và dữ liệu của <strong>{center}</strong> đã được xóa khỏi USAS theo yêu cầu của bạn, trừ một số nội dung trao đổi hiện chưa thể xóa vì USAS cần hoàn thành một số thủ tục xử lý nội bộ theo quy định. Phần này đã được tách khỏi thông tin nhận diện của bạn và sẽ được xóa khi thủ tục hoàn tất."),
                 "completed" => ("[USAS] Đã xóa tài khoản và dữ liệu trung tâm", "Đã xóa dữ liệu trung tâm",
                     $"Tài khoản và dữ liệu của <strong>{center}</strong> đã được xóa khỏi USAS theo yêu cầu của bạn."),
                 _ => ("[USAS] Yêu cầu xóa tài khoản trung tâm chưa được chấp nhận", "Yêu cầu xóa chưa được chấp nhận",

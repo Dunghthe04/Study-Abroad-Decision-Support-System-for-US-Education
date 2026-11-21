@@ -136,12 +136,14 @@ public interface ICenterDeletionWorkRepository
     Task AnonymizeOwnerAccountAsync(Guid userId, DateTime now, CancellationToken ct = default);
 
     /// <summary>
-    /// Xóa nội dung và ảnh đính kèm các tin nhắn do phía trung tâm gửi trong yêu cầu liên hệ (Luật 91/2025 Điều 14 khoản 1
-    /// điểm b: mục đích xử lý đã xong; Điều 3 khoản 3: chỉ lưu trong thời gian phù hợp mục đích). Chỉ giữ lại tin đang bị
-    /// báo cáo mà Admin chưa xử lý, vì còn cần làm căn cứ xử lý vi phạm (Điều 19 khoản 1 điểm a, b). Tin nhắn của học sinh
-    /// và phụ huynh không bị đụng tới. Trả về URL ảnh đính kèm đã xóa để gỡ tiếp trên CDN sau khi DB đã lưu.
+    /// Xóa nội dung và ảnh đính kèm các tin nhắn do phía trung tâm gửi trong yêu cầu liên hệ. Căn cứ Luật 91/2025: Điều 14
+    /// khoản 1 điểm a (chủ thể yêu cầu xóa) và Điều 3 khoản 3 (chỉ lưu trong thời gian phù hợp mục đích). Chỉ giữ lại tin
+    /// đang bị báo cáo mà Admin chưa xử lý, vì còn cần để bảo vệ quyền lợi chính đáng của người báo cáo và phòng, chống vi
+    /// phạm (Điều 14 khoản 2, Điều 4 khoản 3 điểm c, Điều 19 khoản 1 điểm a, b). Tin nhắn của học sinh và phụ huynh không
+    /// bị đụng tới. Trả về URL ảnh đã xóa (để gỡ tiếp trên CDN sau khi DB đã lưu) và số tin còn giữ lại (để báo cho trung
+    /// tâm theo Điều 14 khoản 5).
     /// </summary>
-    Task<IReadOnlyList<string>> ErasePrivateLeadMessagesAsync(Guid studyCenterId, Guid? ownerUserId, DateTime now, CancellationToken ct = default);
+    Task<ErasedLeadMessages> ErasePrivateLeadMessagesAsync(Guid studyCenterId, Guid? ownerUserId, DateTime now, CancellationToken ct = default);
 
     /// <summary>
     /// Xóa dữ liệu của trung tâm: hồ sơ xác minh và tài liệu, lịch sử thay đổi hồ sơ, rồi ẩn danh hóa dòng trung tâm
@@ -158,6 +160,9 @@ public interface ICenterDeletionWorkRepository
     /// </summary>
     Task<IReadOnlyList<string>> GetCenterMediaUrlsAsync(Guid studyCenterId, CancellationToken ct = default);
 }
+
+/// <summary>Kết quả xóa tin nhắn phía trung tâm: URL ảnh đính kèm đã xóa trong DB và số tin phải giữ lại vì đang có báo cáo chưa xử lý.</summary>
+public sealed record ErasedLeadMessages(IReadOnlyList<string> AttachmentUrls, int KeptCount);
 
 /// <summary>[UC-93] Xóa ảnh và tài liệu của trung tâm đã đăng lên CDN (Cloudinary) khi xóa hẳn trung tâm.</summary>
 public interface ICenterMediaCleaner
@@ -436,6 +441,7 @@ public class CenterDeletionService(
 
                 var held = false;
                 IReadOnlyList<string> mediaUrls = [];
+                var keptMessages = 0;
                 await unitOfWork.ExecuteInTransactionAsync(async txCt =>
                 {
                     // Admin có thể vừa bật giữ pháp lý sau lần đọc ở trên: kiểm tra lại và khóa dòng trong transaction
@@ -447,8 +453,9 @@ public class CenterDeletionService(
 
                     // Đọc URL ảnh trước khi purge xóa trắng các cột này, để còn xóa được tệp trên CDN sau khi DB đã lưu
                     var centerMedia = await work.GetCenterMediaUrlsAsync(request.StudyCenterId, txCt);
-                    var chatMedia = await work.ErasePrivateLeadMessagesAsync(request.StudyCenterId, ownerId, now, txCt);
-                    mediaUrls = centerMedia.Concat(chatMedia).Distinct(StringComparer.Ordinal).ToList();
+                    var chat = await work.ErasePrivateLeadMessagesAsync(request.StudyCenterId, ownerId, now, txCt);
+                    keptMessages = chat.KeptCount;
+                    mediaUrls = centerMedia.Concat(chat.AttachmentUrls).Distinct(StringComparer.Ordinal).ToList();
                     await work.PurgeCenterDataAsync(request.StudyCenterId, now, txCt);
                     if (ownerId is { } id)
                         await work.AnonymizeOwnerAccountAsync(id, now, txCt);
@@ -493,8 +500,10 @@ public class CenterDeletionService(
                     failures.Add(new CenterPurgeFailure(request.Id, ex));
                 }
 
+                // Luật 91/2025 Điều 14 khoản 5: còn dữ liệu chưa xóa được vì lý do chính đáng thì phải báo cho chủ thể
+                var outcome = keptMessages > 0 ? "completed_partial" : "completed";
                 foreach (var email in recipients)
-                    await emailSender.SendCenterDeletionOutcomeEmailAsync(email, centerName, "completed", null, null, ct);
+                    await emailSender.SendCenterDeletionOutcomeEmailAsync(email, centerName, outcome, null, null, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

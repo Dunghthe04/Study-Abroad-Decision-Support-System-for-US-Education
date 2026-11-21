@@ -226,17 +226,18 @@ public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<IReadOnlyList<string>> ErasePrivateLeadMessagesAsync(
+    public async Task<ErasedLeadMessages> ErasePrivateLeadMessagesAsync(
         Guid studyCenterId, Guid? ownerUserId, DateTime now, CancellationToken ct = default)
     {
-        if (ownerUserId is not { } owner) return [];
+        if (ownerUserId is not { } owner) return new ErasedLeadMessages([], 0);
 
         // Tin phía trung tâm = tin do chủ tài khoản trung tâm gửi. Giữ tin đang bị báo cáo mà Admin chưa xử lý (UC-58).
-        var erasable = db.LeadMessages.Where(m =>
+        var centerSide = db.LeadMessages.Where(m =>
             m.SenderUserId == owner
             && m.Content != ErasedMessageContent
-            && !(m.ReportedAt != null && m.ReportResolution == null)
             && db.Leads.Any(l => l.Id == m.LeadId && l.StudyCenterId == studyCenterId));
+        var kept = await centerSide.CountAsync(m => m.ReportedAt != null && m.ReportResolution == null, ct);
+        var erasable = centerSide.Where(m => !(m.ReportedAt != null && m.ReportResolution == null));
 
         var attachments = await erasable
             .Where(m => m.AttachmentUrl != null)
@@ -250,7 +251,7 @@ public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env
             .SetProperty(m => m.FlagReason, (string?)null)
             .SetProperty(m => m.UpdatedAt, now), ct);
 
-        return attachments.Distinct(StringComparer.Ordinal).ToList();
+        return new ErasedLeadMessages(attachments.Distinct(StringComparer.Ordinal).ToList(), kept);
     }
 
     public async Task<IReadOnlyList<string>> GetCenterMediaUrlsAsync(Guid studyCenterId, CancellationToken ct = default)
