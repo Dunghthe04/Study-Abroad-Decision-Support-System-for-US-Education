@@ -50,5 +50,6 @@ public class StudyCenterConfiguration : IEntityTypeConfiguration<StudyCenter>
         builder.Property(x => x.ReviewCount).HasDefaultValue(0);
         builder.Property(x => x.IsLegalHold).HasDefaultValue(false).IsRequired();
         builder.Property(x => x.LegalHoldReason).HasMaxLength(500);
+        builder.HasOne<User>().WithMany().HasForeignKey(x => x.LegalHoldByUserId).OnDelete(DeleteBehavior.SetNull);
     }
 }

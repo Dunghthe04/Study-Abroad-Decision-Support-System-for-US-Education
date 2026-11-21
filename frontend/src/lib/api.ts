@@ -63,6 +63,7 @@ import type {
   CenterProfileUpdateResponse,
   AdminCenterDeletionRequestDto,
   CenterDeletionRequestDto,
+  CenterLegalHoldDto,
   CenterDeletionRequestStatus,
 } from "@/types/api";
 
@@ -499,6 +500,31 @@ export const centerDeletionRequestsApi = {
 
   reject: (id: string, reason: string) =>
     apiFetch<AdminCenterDeletionRequestDto>(`/api/v1/admin/center-deletion-requests/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+
+  /** Gia hạn một lần, tối đa 20 ngày; lý do được gửi cho người yêu cầu. */
+  extend: (id: string, reason: string) =>
+    apiFetch<AdminCenterDeletionRequestDto>(`/api/v1/admin/center-deletion-requests/${encodeURIComponent(id)}/extend`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+};
+
+/** [UC-93] Administrator giữ pháp lý dữ liệu trung tâm khi bị nghi lừa đảo, tranh chấp hoặc cơ quan có thẩm quyền yêu cầu. */
+export const centerLegalHoldApi = {
+  get: (centerId: string) =>
+    apiFetch<CenterLegalHoldDto>(`/api/v1/admin/study-centers/${encodeURIComponent(centerId)}/legal-hold`),
+
+  set: (centerId: string, reason: string) =>
+    apiFetch<CenterLegalHoldDto>(`/api/v1/admin/study-centers/${encodeURIComponent(centerId)}/legal-hold`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+
+  release: (centerId: string, reason: string) =>
+    apiFetch<CenterLegalHoldDto>(`/api/v1/admin/study-centers/${encodeURIComponent(centerId)}/legal-hold/release`, {
       method: "POST",
       body: JSON.stringify({ reason }),
     }),

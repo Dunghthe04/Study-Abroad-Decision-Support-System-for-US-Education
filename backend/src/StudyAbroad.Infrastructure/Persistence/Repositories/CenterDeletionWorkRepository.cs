@@ -11,6 +11,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env = null) : ICenterDeletionWorkRepository
 {
     public const string PurgedCenterName = "Trung tâm đã xóa";
+    public const string DeletedAccountName = "Tài khoản đã xóa";
+    public const string ErasedMessageContent = "Tin nhắn này đã được xóa theo yêu cầu xóa dữ liệu của trung tâm.";
 
     /// <summary>Lead còn mở phía trung tâm: chưa đóng, chưa thu hồi. "accepted" là trạng thái của UC-73.</summary>
     private static readonly string[] OpenStatuses = [LeadStatuses.New, LeadStatuses.Contacted, "accepted"];
@@ -48,7 +50,19 @@ public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env
                           join c in db.StudyCenters.AsNoTracking() on r.StudyCenterId equals c.Id
                           join u in db.Users.AsNoTracking() on r.RequestedByUserId equals u.Id into requesters
                           from u in requesters.DefaultIfEmpty()
-                          select new { Request = r, Center = c, RequesterName = u != null ? u.FullName : null, RequesterEmail = u != null ? u.Email : null })
+                          join o in db.Users.AsNoTracking() on c.OwnerUserId equals o.Id into owners
+                          from o in owners.DefaultIfEmpty()
+                          select new
+                          {
+                              Request = r,
+                              Center = c,
+                              RequesterName = u != null ? u.FullName : null,
+                              RequesterEmail = u != null ? u.Email : null,
+                              OwnerHold = o != null && o.IsLegalHold,
+                              OwnerHoldReason = o != null ? o.LegalHoldReason : null,
+                              OpenReports = db.LeadMessages.Count(m => m.ReportedAt != null && m.ReportResolution == null
+                                  && db.Leads.Any(l => l.Id == m.LeadId && l.StudyCenterId == c.Id)),
+                          })
             .ToListAsync(ct);
 
         return rows.Select(x => new AdminCenterDeletionRequestDto(
@@ -69,7 +83,58 @@ public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env
             x.Request.HandledAt,
             x.Request.DecisionNote,
             x.Request.ScheduledPurgeAt,
-            x.Request.CompletedAt)).ToList();
+            x.Request.CompletedAt,
+            x.Center.IsLegalHold || x.OwnerHold,
+            x.Center.LegalHoldReason ?? x.OwnerHoldReason,
+            x.Center.LegalHoldAt,
+            x.OpenReports,
+            CenterDeletionDeadlines.DueAt(x.Request),
+            x.Request.ExtendedAt,
+            x.Request.ExtensionNote)).ToList();
+    }
+
+    /// <summary>Tin nhắn trong các lead của trung tâm bị học sinh/phụ huynh báo cáo mà Admin chưa xử lý (UC-58).</summary>
+    public Task<int> CountOpenReportsAsync(Guid studyCenterId, CancellationToken ct = default) =>
+        db.LeadMessages.CountAsync(m => m.ReportedAt != null && m.ReportResolution == null
+            && db.Leads.Any(l => l.Id == m.LeadId && l.StudyCenterId == studyCenterId), ct);
+
+    public async Task<bool> LockCenterIfPurgeableAsync(Guid studyCenterId, CancellationToken ct = default)
+    {
+        var ids = await db.Database.SqlQuery<Guid>($"""
+            SELECT c.id AS "Value" FROM app.study_centers c
+            LEFT JOIN app.users o ON o.id = c.owner_user_id
+            WHERE c.id = {studyCenterId}
+              AND c.is_legal_hold = FALSE
+              AND COALESCE(o.is_legal_hold, FALSE) = FALSE
+            FOR UPDATE OF c
+            """).ToListAsync(ct);
+        return ids.Count > 0;
+    }
+
+    public async Task AnonymizeOwnerAccountAsync(Guid userId, DateTime now, CancellationToken ct = default)
+    {
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null) return;
+
+        // Không xóa dòng: lead_messages.sender_user_id cascade theo user nên xóa sẽ mất tin nhắn trung tâm đã gửi,
+        // gồm cả tin bị báo cáo. Giữ dòng nhưng bỏ hết thông tin nhận diện và không thể đăng nhập lại.
+        user.Email = $"deleted-{user.Id:N}@deleted.invalid";
+        user.PasswordHash = string.Empty;
+        user.FullName = DeletedAccountName;
+        user.Phone = null;
+        user.DateOfBirth = null;
+        user.Status = UserStatuses.Deleted;
+        user.DeletedAt ??= now;
+        user.FailedLoginAttempts = 0;
+        user.LockoutEnd = null;
+        user.IsLegalHold = false;
+        user.LegalHoldReason = null;
+        user.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+
+        await db.UserSessions.Where(s => s.UserId == userId).ExecuteDeleteAsync(ct);
+        await db.OtpTokens.Where(t => t.UserId == userId).ExecuteDeleteAsync(ct);
+        await db.Notifications.Where(n => n.UserId == userId).ExecuteDeleteAsync(ct);
     }
 
     public async Task<IReadOnlyList<ClosedLeadRecipients>> CloseOpenLeadsAsync(Guid studyCenterId, DateTime now, CancellationToken ct = default)
@@ -102,6 +167,7 @@ public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env
          where r.Status == CenterDeletionRequestStatuses.Approved
             && r.ScheduledPurgeAt != null && r.ScheduledPurgeAt <= now
             && !c.IsLegalHold
+            && !db.Users.Any(o => o.Id == c.OwnerUserId && o.IsLegalHold)
          orderby r.ScheduledPurgeAt
          select r.Id).ToListAsync(ct);
 
@@ -158,6 +224,76 @@ public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env
         center.IsActive = false;
         center.UpdatedAt = now;
         await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<ErasedLeadMessages> ErasePrivateLeadMessagesAsync(
+        Guid studyCenterId, Guid? ownerUserId, DateTime now, CancellationToken ct = default)
+    {
+        if (ownerUserId is not { } owner) return new ErasedLeadMessages([], 0);
+
+        // Tin phía trung tâm = tin do chủ tài khoản trung tâm gửi. Giữ tin đang bị báo cáo mà Admin chưa xử lý (UC-58).
+        var centerSide = db.LeadMessages.Where(m =>
+            m.SenderUserId == owner
+            && m.Content != ErasedMessageContent
+            && db.Leads.Any(l => l.Id == m.LeadId && l.StudyCenterId == studyCenterId));
+        var kept = await centerSide.CountAsync(m => m.ReportedAt != null && m.ReportResolution == null, ct);
+        var erasable = centerSide.Where(m => !(m.ReportedAt != null && m.ReportResolution == null));
+
+        var attachments = await erasable
+            .Where(m => m.AttachmentUrl != null)
+            .Select(m => m.AttachmentUrl!)
+            .ToListAsync(ct);
+
+        await erasable.ExecuteUpdateAsync(s => s
+            .SetProperty(m => m.Content, ErasedMessageContent)
+            .SetProperty(m => m.AttachmentUrl, (string?)null)
+            .SetProperty(m => m.AttachmentPublicId, (string?)null)
+            .SetProperty(m => m.FlagReason, (string?)null)
+            .SetProperty(m => m.UpdatedAt, now), ct);
+
+        return new ErasedLeadMessages(attachments.Distinct(StringComparer.Ordinal).ToList(), kept);
+    }
+
+    public async Task<IReadOnlyList<string>> EraseResolvedCenterMessagesAsync(DateTime now, CancellationToken ct = default)
+    {
+        // Tin do tài khoản chủ đã ẩn danh hóa gửi, trong lead của trung tâm đã xóa hẳn, không còn báo cáo chờ xử lý
+        var erasable = db.LeadMessages.Where(m =>
+            m.Content != ErasedMessageContent
+            && !(m.ReportedAt != null && m.ReportResolution == null)
+            && db.Users.Any(u => u.Id == m.SenderUserId && u.Role == UserRoles.Center && u.Status == UserStatuses.Deleted)
+            && db.Leads.Any(l => l.Id == m.LeadId
+                && db.StudyCenters.Any(c => c.Id == l.StudyCenterId && c.Name == PurgedCenterName)));
+
+        var attachments = await erasable
+            .Where(m => m.AttachmentUrl != null)
+            .Select(m => m.AttachmentUrl!)
+            .ToListAsync(ct);
+
+        await erasable.ExecuteUpdateAsync(s => s
+            .SetProperty(m => m.Content, ErasedMessageContent)
+            .SetProperty(m => m.AttachmentUrl, (string?)null)
+            .SetProperty(m => m.AttachmentPublicId, (string?)null)
+            .SetProperty(m => m.FlagReason, (string?)null)
+            .SetProperty(m => m.UpdatedAt, now), ct);
+
+        return attachments.Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    public async Task<IReadOnlyList<string>> GetCenterMediaUrlsAsync(Guid studyCenterId, CancellationToken ct = default)
+    {
+        var center = await db.StudyCenters.AsNoTracking()
+            .Where(c => c.Id == studyCenterId)
+            .Select(c => new { c.LogoUrl, c.CoverImageUrl, c.GalleryImages, c.LegalDocumentUrls })
+            .FirstOrDefaultAsync(ct);
+        if (center is null) return [];
+
+        return new[] { center.LogoUrl, center.CoverImageUrl }
+            .Concat(center.GalleryImages)
+            .Concat(center.LegalDocumentUrls)
+            .Where(u => !string.IsNullOrWhiteSpace(u))
+            .Select(u => u!.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
     }
 
     public Task DeleteCenterFilesAsync(Guid studyCenterId, CancellationToken ct = default)

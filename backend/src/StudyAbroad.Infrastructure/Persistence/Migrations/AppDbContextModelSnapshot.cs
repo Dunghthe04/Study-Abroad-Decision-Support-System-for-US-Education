@@ -317,6 +317,19 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("decision_note");
 
+                    b.Property<DateTime?>("DueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_at");
+
+                    b.Property<DateTime?>("ExtendedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("extended_at");
+
+                    b.Property<string>("ExtensionNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("extension_note");
+
                     b.Property<DateTime?>("HandledAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("handled_at");
@@ -4007,6 +4020,14 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnName("legal_document_urls")
                         .HasDefaultValueSql("'{}'");
 
+                    b.Property<DateTime?>("LegalHoldAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("legal_hold_at");
+
+                    b.Property<Guid?>("LegalHoldByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_hold_by_user_id");
+
                     b.Property<string>("LegalHoldReason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -4154,6 +4175,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasIndex("Code")
                         .IsUnique()
                         .HasDatabaseName("ix_study_centers_code");
+
+                    b.HasIndex("LegalHoldByUserId")
+                        .HasDatabaseName("ix_study_centers_legal_hold_by_user_id");
 
                     b.HasIndex("OwnerUserId")
                         .HasDatabaseName("ix_study_centers_owner_user_id");
@@ -5913,6 +5937,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.StudyCenter", b =>
                 {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("LegalHoldByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_study_centers_users_legal_hold_by_user_id");
+
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("OwnerUserId")

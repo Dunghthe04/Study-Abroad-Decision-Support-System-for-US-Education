@@ -56,7 +56,8 @@ public class StudyCenterService(
     IEmailSender? emailSender = null,
     StudyAbroad.Application.Notifications.INotificationService? notifications = null,
     ICenterProfileChangeRepository? profileChanges = null,
-    ICenterDeletionRequestRepository? deletionRequests = null) : IStudyCenterService
+    ICenterDeletionRequestRepository? deletionRequests = null,
+    StudyAbroad.Application.Auth.IUserRepository? users = null) : IStudyCenterService
 {
     private const int MaxPageSize = 100;
     public const int MaxNameLength = 200;
@@ -1199,8 +1200,9 @@ public class StudyCenterService(
         }, ct);
     }
 
-    private static CenterDeletionRequestDto ToDeletionDto(CenterDeletionRequest r) =>
-        new(r.Id, r.StudyCenterId, r.Reason, r.Status, r.CreatedAt, r.HandledAt);
+    private static CenterDeletionRequestDto ToDeletionDto(CenterDeletionRequest r, bool underLegalHold = false) =>
+        new(r.Id, r.StudyCenterId, r.Reason, r.Status, r.CreatedAt, r.HandledAt,
+            underLegalHold ? null : r.DueAt, underLegalHold ? null : r.ExtendedAt);
 
     /// <summary>[UC-92] Yêu cầu xóa mới nhất của trung tâm (null nếu chưa gửi).</summary>
     public async Task<CenterDeletionRequestDto?> GetDeletionRequestAsync(Guid userId, CancellationToken ct = default)
@@ -1209,7 +1211,10 @@ public class StudyCenterService(
         var center = await repository.GetByOwnerOrEmailAsync(userId, null, ct);
         if (center is null) return null;
         var latest = await deletionRequests.GetLatestByCenterIdAsync(center.Id, ct);
-        return latest is null ? null : ToDeletionDto(latest);
+        if (latest is null) return null;
+        var underHold = center.IsLegalHold
+            || (users is not null && center.OwnerUserId is { } ownerId && (await users.GetUserById(ownerId, ct))?.IsLegalHold == true);
+        return ToDeletionDto(latest, underHold);
     }
 
     /// <summary>
@@ -1234,12 +1239,16 @@ public class StudyCenterService(
         if (await deletionRequests.GetOpenByCenterIdAsync(center.Id, ct) is not null)
             return CenterDeletionRequestResult.Fail("Trung tâm đã có yêu cầu xóa đang chờ Quản trị viên xử lý.");
 
+        var receivedAt = DateTime.UtcNow;
         var entity = new CenterDeletionRequest
         {
             StudyCenterId = center.Id,
             RequestedByUserId = userId,
             Reason = trimmed,
             Status = CenterDeletionRequestStatuses.Pending,
+            CreatedAt = receivedAt,
+            // Nghị định 356/2025/NĐ-CP Điều 5 khoản 4: thực hiện yêu cầu xóa trong 20 ngày
+            DueAt = receivedAt.AddDays(CenterDeletionDeadlines.ProcessingDays),
         };
         await deletionRequests.AddAsync(entity, ct);
 
@@ -1249,10 +1258,29 @@ public class StudyCenterService(
             Action = "center.deletion_requested",
             EntityType = "StudyCenter",
             EntityId = center.Id.ToString(),
-            DetailJson = JsonSerializer.Serialize(new { centerId = center.Id, requestId = entity.Id })
+            DetailJson = JsonSerializer.Serialize(new { centerId = center.Id, requestId = entity.Id, dueAt = entity.DueAt })
         }, ct);
 
-        return CenterDeletionRequestResult.Ok(ToDeletionDto(entity));
+        // Điều 5 khoản 4: phản hồi trong 02 ngày làm việc. Gửi xác nhận ngay khi nhận; lỗi gửi mail không làm hỏng yêu cầu.
+        // Nếu trung tâm đã bị giữ pháp lý từ trước, yêu cầu không thể thực hiện: báo ngay "chưa thể thực hiện"
+        // (Luật 91/2025 Điều 14 khoản 5) thay vì "đã nhận" kèm hạn 20 ngày mà hệ thống không thể giữ.
+        // Giữ pháp lý đặt trên cả trung tâm lẫn tài khoản chủ; chỉ cần một bên bị giữ là không xóa được.
+        var underHold = center.IsLegalHold
+            || (users is not null && center.OwnerUserId is { } ownerId && (await users.GetUserById(ownerId, ct))?.IsLegalHold == true);
+        if (emailSender is not null && !string.IsNullOrWhiteSpace(center.Email))
+        {
+            try
+            {
+                var outcome = underHold ? "held" : "received";
+                await emailSender.SendCenterDeletionOutcomeEmailAsync(center.Email.Trim(), center.Name, outcome, null, underHold ? null : entity.DueAt, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Yêu cầu đã lưu; người dùng vẫn thấy trạng thái trên trang hồ sơ
+            }
+        }
+
+        return CenterDeletionRequestResult.Ok(ToDeletionDto(entity, underHold));
     }
 
     private static CenterVerificationDto ToVerificationDto(CenterVerificationRequest req, StudyCenter? center) =>

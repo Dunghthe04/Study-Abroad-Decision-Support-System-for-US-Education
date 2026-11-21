@@ -749,7 +749,8 @@ public class CenterRegistrationAndVerificationTests
 
         public Task<CenterDeletionRequest?> GetOpenByCenterIdAsync(Guid studyCenterId, CancellationToken ct = default) =>
             Task.FromResult(Items.FirstOrDefault(x =>
-                x.StudyCenterId == studyCenterId && x.Status == CenterDeletionRequestStatuses.Pending));
+                x.StudyCenterId == studyCenterId
+                && (x.Status == CenterDeletionRequestStatuses.Pending || x.Status == CenterDeletionRequestStatuses.Approved)));
 
         public Task<CenterDeletionRequest?> GetLatestByCenterIdAsync(Guid studyCenterId, CancellationToken ct = default) =>
             Task.FromResult(Items.Where(x => x.StudyCenterId == studyCenterId).OrderByDescending(x => x.CreatedAt).FirstOrDefault());
@@ -963,6 +964,153 @@ public class CenterRegistrationAndVerificationTests
         // Yêu cầu cũ đã được xử lý (UC-93) thì gửi được yêu cầu mới
         s.Deletions.Items[0].Status = CenterDeletionRequestStatuses.Rejected;
         Assert.True((await s.Service.RequestDeletionAsync(owner, "Gửi lại")).Success);
+    }
+
+    [Fact]
+    public async Task RequestDeletion_SetsTwentyDayDeadlineAndEmailsReceipt()
+    {
+        var centers = new FakeStudyCenterRepo();
+        var deletions = new FakeDeletionRepo();
+        var email = new FakeEmailSender();
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = "info@abc.vn",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.Verified,
+        };
+        await centers.AddAsync(center);
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), new FakeVerificationRepo(), emailSender: email,
+            notifications: null, profileChanges: new FakeProfileChangeRepo(), deletionRequests: deletions);
+
+        var result = await service.RequestDeletionAsync(center.OwnerUserId!.Value, "Ngừng hoạt động");
+
+        Assert.True(result.Success);
+        var saved = Assert.Single(deletions.Items);
+        // Nghị định 356/2025/NĐ-CP Điều 5 khoản 4: xử lý trong 20 ngày kể từ khi nhận
+        Assert.Equal(saved.CreatedAt.AddDays(20), saved.DueAt);
+        Assert.Equal(saved.DueAt, result.Request!.DueAt);
+        // Điều 5 khoản 4: phản hồi trong 02 ngày làm việc, gửi xác nhận ngay khi nhận
+        var mail = Assert.Single(email.CenterDeletionEmails);
+        Assert.Equal(("info@abc.vn", "Trung tâm ABC", "received", (string?)null, saved.DueAt), mail);
+    }
+
+    [Fact]
+    public async Task RequestDeletion_WhenCenterAlreadyUnderLegalHold_SendsHeldNoticeInsteadOfReceipt()
+    {
+        var centers = new FakeStudyCenterRepo();
+        var deletions = new FakeDeletionRepo();
+        var email = new FakeEmailSender();
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = "info@abc.vn",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.Verified,
+            IsLegalHold = true,
+            LegalHoldReason = "Khiếu nại",
+        };
+        await centers.AddAsync(center);
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), new FakeVerificationRepo(), emailSender: email,
+            notifications: null, profileChanges: new FakeProfileChangeRepo(), deletionRequests: deletions);
+
+        var result = await service.RequestDeletionAsync(center.OwnerUserId!.Value, "Ngừng hoạt động");
+
+        Assert.True(result.Success);
+        // Luật 91/2025 Điều 14 khoản 5: không xóa được thì phải báo; không hứa hạn, không nêu lý do giữ
+        var mail = Assert.Single(email.CenterDeletionEmails);
+        Assert.Equal(("info@abc.vn", "Trung tâm ABC", "held", (string?)null, (DateTime?)null), mail);
+    }
+
+    [Fact]
+    public async Task RequestDeletion_WhenOnlyOwnerAccountUnderLegalHold_AlsoSendsHeldNotice()
+    {
+        var centers = new FakeStudyCenterRepo();
+        var deletions = new FakeDeletionRepo();
+        var email = new FakeEmailSender();
+        var users = new FakeUserRepository();
+        var owner = new User { Id = Guid.NewGuid(), Email = "owner@abc.vn", FullName = "Chủ", IsLegalHold = true };
+        users.Users.Add(owner);
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = "info@abc.vn",
+            OwnerUserId = owner.Id,
+            VerificationStatus = CenterVerificationStatuses.Verified,
+        };
+        await centers.AddAsync(center);
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), new FakeVerificationRepo(), emailSender: email,
+            notifications: null, profileChanges: new FakeProfileChangeRepo(), deletionRequests: deletions, users: users);
+
+        var result = await service.RequestDeletionAsync(owner.Id, "Ngừng hoạt động");
+
+        Assert.True(result.Success);
+        Assert.Null(result.Request!.DueAt);
+        var mail = Assert.Single(email.CenterDeletionEmails);
+        Assert.Equal("held", mail.Outcome);
+    }
+
+    [Fact]
+    public async Task RequestDeletion_WhenEarlierRequestAlreadyApproved_IsRejected()
+    {
+        var centers = new FakeStudyCenterRepo();
+        var deletions = new FakeDeletionRepo();
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = "info@abc.vn",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.Verified,
+        };
+        await centers.AddAsync(center);
+        deletions.Items.Add(new CenterDeletionRequest
+        {
+            StudyCenterId = center.Id,
+            RequestedByUserId = center.OwnerUserId!.Value,
+            Reason = "Lần trước",
+            Status = CenterDeletionRequestStatuses.Approved,
+        });
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), new FakeVerificationRepo(), emailSender: new FakeEmailSender(),
+            notifications: null, profileChanges: new FakeProfileChangeRepo(), deletionRequests: deletions);
+
+        var result = await service.RequestDeletionAsync(center.OwnerUserId!.Value, "Gửi lại");
+
+        // Đã duyệt và đang chờ xóa hẳn thì vẫn tính là yêu cầu đang mở
+        Assert.False(result.Success);
+        Assert.Single(deletions.Items);
+    }
+
+    [Fact]
+    public async Task GetDeletionRequest_HidesDeadlineWhileCenterUnderLegalHold()
+    {
+        var centers = new FakeStudyCenterRepo();
+        var deletions = new FakeDeletionRepo();
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = "info@abc.vn",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.Verified,
+        };
+        await centers.AddAsync(center);
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), new FakeVerificationRepo(), emailSender: new FakeEmailSender(),
+            notifications: null, profileChanges: new FakeProfileChangeRepo(), deletionRequests: deletions);
+        await service.RequestDeletionAsync(center.OwnerUserId!.Value, "Ngừng hoạt động");
+
+        var normal = await service.GetDeletionRequestAsync(center.OwnerUserId!.Value);
+        Assert.NotNull(normal!.DueAt);
+
+        // Đang giữ: không hứa mốc xử lý và không để lộ việc đang giữ
+        center.IsLegalHold = true;
+        var held = await service.GetDeletionRequestAsync(center.OwnerUserId!.Value);
+        Assert.Null(held!.DueAt);
+        Assert.Null(held.ExtendedAt);
+        Assert.Equal("pending", held.Status);
     }
 
     [Fact]

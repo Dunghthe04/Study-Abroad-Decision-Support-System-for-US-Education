@@ -56,7 +56,7 @@ namespace StudyAbroad.Application.Auth
         /// <summary>Gửi email thông báo tài khoản đã được mở khóa bởi quản trị viên kèm lý do / ghi chú.</summary>
         Task SendAccountUnlockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default);
 
-        /// <summary>[UC-93] Kết quả xử lý yêu cầu xóa trung tâm. outcome: approved (kèm ngày xóa hẳn) | rejected (kèm lý do) | completed.</summary>
+        /// <summary>[UC-93] Kết quả xử lý yêu cầu xóa trung tâm. outcome: received (đã nhận, kèm hạn xử lý) | extended (gia hạn, kèm hạn mới và lý do) | held (chưa thể xóa vì giữ pháp lý, Luật 91/2025 Điều 14 khoản 5) | resumed (gỡ giữ, yêu cầu được xử lý tiếp) | approved (kèm ngày xóa hẳn) | rejected (kèm lý do) | completed | completed_partial (đã xóa, còn một phần chưa xóa được vì lý do chính đáng, Luật 91/2025 Điều 14 khoản 5). Tham số purgeAt mang ngày tương ứng với từng outcome.</summary>
         Task SendCenterDeletionOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? note, DateTime? purgeAt, CancellationToken ct = default);
 
         /// <summary>

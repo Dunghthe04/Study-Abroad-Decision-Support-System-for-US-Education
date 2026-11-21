@@ -211,14 +211,24 @@ namespace StudyAbroad.Infrastructure.Auth
             var purgeDate = purgeAt?.AddHours(7).ToString("dd/MM/yyyy");
             var (subject, title, content) = outcome switch
             {
+                "received" => ("[USAS] Đã nhận yêu cầu xóa tài khoản trung tâm", "Đã nhận yêu cầu xóa",
+                    $"USAS đã nhận yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong>. Yêu cầu sẽ được xử lý chậm nhất vào ngày <strong>{purgeDate}</strong> (20 ngày kể từ khi nhận). Chúng tôi sẽ gửi email khi có kết quả."),
+                "extended" => ("[USAS] Gia hạn thời gian xử lý yêu cầu xóa tài khoản trung tâm", "Đã gia hạn thời gian xử lý",
+                    $"Thời gian xử lý yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> được gia hạn một lần đến ngày <strong>{purgeDate}</strong>."),
+                "held" => ("[USAS] Yêu cầu xóa tài khoản trung tâm chưa thể thực hiện", "Yêu cầu xóa chưa thể thực hiện",
+                    $"Yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> hiện chưa thể hoàn tất do USAS cần hoàn thành một số thủ tục xử lý nội bộ theo quy định. Trong thời gian này, tài khoản và dữ liệu được giữ nguyên. Nếu cần bổ sung thông tin, chúng tôi sẽ liên hệ với bạn."),
+                "resumed" => ("[USAS] Yêu cầu xóa tài khoản trung tâm đang được xử lý tiếp", "Yêu cầu xóa đang được xử lý tiếp",
+                    $"Yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> đang được xử lý tiếp. Chúng tôi sẽ gửi email khi có kết quả."),
                 "approved" => ("[USAS] Yêu cầu xóa tài khoản trung tâm đã được duyệt", "Yêu cầu xóa đã được duyệt",
                     $"Yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> đã được duyệt. Tài khoản đã bị khóa, trung tâm không còn hiển thị và các yêu cầu liên hệ đang mở đã được đóng. Dữ liệu sẽ được xóa hẳn vào ngày <strong>{purgeDate}</strong>."),
+                "completed_partial" => ("[USAS] Đã xóa tài khoản trung tâm, còn một phần dữ liệu chưa xóa được", "Đã xóa phần lớn dữ liệu trung tâm",
+                    $"Tài khoản và dữ liệu của <strong>{center}</strong> đã được xóa khỏi USAS theo yêu cầu của bạn, trừ một số nội dung trao đổi hiện chưa thể xóa vì USAS cần hoàn thành một số thủ tục xử lý nội bộ theo quy định. Phần này đã được tách khỏi thông tin nhận diện của bạn và sẽ được xóa khi thủ tục hoàn tất."),
                 "completed" => ("[USAS] Đã xóa tài khoản và dữ liệu trung tâm", "Đã xóa dữ liệu trung tâm",
                     $"Tài khoản và dữ liệu của <strong>{center}</strong> đã được xóa khỏi USAS theo yêu cầu của bạn."),
                 _ => ("[USAS] Yêu cầu xóa tài khoản trung tâm chưa được chấp nhận", "Yêu cầu xóa chưa được chấp nhận",
                     $"Yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> chưa được chấp nhận. Tài khoản vẫn hoạt động bình thường."),
             };
-            var label = outcome == "rejected" ? "Lý do" : "Ghi chú";
+            var label = outcome switch { "rejected" => "Lý do", "extended" => "Lý do gia hạn", _ => "Ghi chú" };
             var detail = string.IsNullOrWhiteSpace(note) || outcome == "approved"
                 ? string.Empty
                 : $"<p style=\"font-size: 14px; color: #475569; line-height: 1.6;\"><strong>{label}:</strong> {WebUtility.HtmlEncode(note)}</p>";

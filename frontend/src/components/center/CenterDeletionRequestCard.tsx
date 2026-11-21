@@ -101,6 +101,13 @@ export function CenterDeletionRequestCard() {
         </p>
       )}
 
+      {hasOpenRequest && request?.dueAt && (
+        <p className="text-sm text-ink-2">
+          {request.extendedAt ? "Thời hạn xử lý đã được gia hạn đến" : "USAS sẽ xử lý chậm nhất vào"}{" "}
+          <span className="font-medium text-ink">{formatDate(request.dueAt)}</span>.
+        </p>
+      )}
+
       <Button
         type="button"
         variant="destructive"

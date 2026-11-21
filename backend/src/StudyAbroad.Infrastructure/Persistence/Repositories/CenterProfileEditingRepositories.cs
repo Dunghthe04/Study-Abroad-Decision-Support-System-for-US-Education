@@ -66,7 +66,8 @@ public class CenterDeletionRequestRepository(AppDbContext db) : ICenterDeletionR
 {
     public Task<CenterDeletionRequest?> GetOpenByCenterIdAsync(Guid studyCenterId, CancellationToken ct = default) =>
         db.CenterDeletionRequests.FirstOrDefaultAsync(
-            x => x.StudyCenterId == studyCenterId && x.Status == CenterDeletionRequestStatuses.Pending, ct);
+            x => x.StudyCenterId == studyCenterId
+                && (x.Status == CenterDeletionRequestStatuses.Pending || x.Status == CenterDeletionRequestStatuses.Approved), ct);
 
     public Task<CenterDeletionRequest?> GetLatestByCenterIdAsync(Guid studyCenterId, CancellationToken ct = default) =>
         db.CenterDeletionRequests.AsNoTracking()
