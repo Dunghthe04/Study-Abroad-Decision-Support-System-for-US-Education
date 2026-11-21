@@ -45,6 +45,9 @@ export function isPremiumRequired(error: unknown): boolean {
 
 export const formatVnd = (amount: number) => `${amount.toLocaleString("vi-VN")}đ`;
 
+export const formatMultiplier = (n: number): string =>
+  Number(n.toFixed(1)).toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+
 /** Ngày theo giờ Việt Nam (server gửi +07:00); không ép múi giờ thì ở nước ngoài resetsAt hiện lùi một ngày. */
 export const formatVnDate = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) : "";

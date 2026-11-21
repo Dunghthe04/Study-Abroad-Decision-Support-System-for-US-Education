@@ -37,6 +37,12 @@ function PoolRow({ title, pool }: { title: string; pool: PoolDto | FamilyPoolDto
       </div>
       {member && <p className="text-xs text-muted-foreground">Thành viên gói Gia đình của {member}</p>}
       <UsageBar label="Lượt hỏi của kỳ này" percent={pool.usedPercent} />
+      {pool.quotaResetsAt && (
+        <p className="text-xs text-muted-foreground">
+          Làm mới hạn mức ngày {formatVnDate(pool.quotaResetsAt)}
+          {pool.quotaPeriodDays ? ` (mỗi ${pool.quotaPeriodDays} ngày)` : ""}
+        </p>
+      )}
       {pool.endsAt && <p className="text-xs text-muted-foreground">Hết hạn ngày {formatVnDate(pool.endsAt)}</p>}
       {pool.queued && (
         <p className="text-xs text-muted-foreground">
@@ -96,9 +102,14 @@ export function SubscriptionCard() {
             {s.personal && <PoolRow title="Cá nhân" pool={s.personal} />}
             {s.family && <PoolRow title="Gia đình" pool={s.family} />}
             <div className="space-y-2 rounded-lg border border-line p-3">
-              <span className="font-semibold">Lượt miễn phí hằng tháng</span>
+              <span className="font-semibold">
+                {s.free.quotaPeriodDays ? `Lượt miễn phí mỗi ${s.free.quotaPeriodDays} ngày` : "Lượt miễn phí hằng tháng"}
+              </span>
               <p className="text-xs text-muted-foreground">Dùng cho hỏi đáp kiến thức du học khi không còn gói trả phí.</p>
-              <UsageBar label="Lượt miễn phí tháng này" percent={s.free.usedPercent} />
+              <UsageBar
+                label={s.free.quotaPeriodDays ? `Lượt miễn phí (${s.free.quotaPeriodDays} ngày)` : "Lượt miễn phí tháng này"}
+                percent={s.free.usedPercent}
+              />
               <p className="text-xs text-muted-foreground">Làm mới ngày {formatVnDate(s.free.resetsAt)}</p>
             </div>
           </>

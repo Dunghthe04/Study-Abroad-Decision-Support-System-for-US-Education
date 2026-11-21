@@ -17,7 +17,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import { adminBillingApi, adminBillingErrorMessage, PLAN_KIND_LABELS } from "@/lib/admin-billing-api";
-import { formatVnd } from "@/lib/billing-api";
+import { formatMultiplier, formatVnd } from "@/lib/billing-api";
 import type { AdminPlanDto, SavePlanRequest } from "@/types/admin-billing";
 import { DataTable, type DataTableColumn } from "../shared/DataTable";
 import { PlanFormDialog } from "./PlanFormDialog";
@@ -67,7 +67,7 @@ export function PlansTab() {
       priceVnd: plan.priceVnd,
       durationDays: plan.durationDays,
       tokenQuota: plan.tokenQuota,
-      estimatedQuestions: plan.estimatedQuestions,
+      quotaPeriodDays: plan.quotaPeriodDays,
       isActive,
       displayOrder: plan.displayOrder,
     };
@@ -116,9 +116,24 @@ export function PlansTab() {
       ),
     },
     { id: "price", label: "Giá", render: (p) => formatVnd(p.priceVnd) },
-    { id: "duration", label: "Thời hạn", render: (p) => (p.durationDays ? `${p.durationDays} ngày` : "Theo tháng") },
-    { id: "quota", label: "Quota token", render: (p) => p.tokenQuota.toLocaleString("vi-VN") },
-    { id: "estimated", label: "Số câu ước tính", render: (p) => p.estimatedQuestions.toLocaleString("vi-VN") },
+    { id: "duration", label: "Thời hạn", render: (p) => (p.durationDays ? `${p.durationDays} ngày` : "Không giới hạn") },
+    {
+      id: "quota",
+      label: "Cấp token",
+      render: (p) => {
+        const period = p.quotaPeriodDays ?? p.durationDays;
+        const cadence = period ? `${period} ngày` : "tháng";
+        return `${p.tokenQuota.toLocaleString("vi-VN")} / ${cadence}`;
+      },
+    },
+    {
+      id: "multiplier",
+      label: "So với Free",
+      render: (p) => {
+        if (p.kind === "free") return "Mốc chuẩn (1x)";
+        return p.quotaMultiplier != null ? `Gấp ${formatMultiplier(p.quotaMultiplier)}x` : "—";
+      },
+    },
     {
       id: "isActive",
       label: "Mở bán",
@@ -178,7 +193,7 @@ export function PlansTab() {
         <PlanFormDialog
           key={editing.kind === "edit" ? editing.plan.id : "new"}
           plan={editing.kind === "edit" ? editing.plan : null}
-          hasFreePlan={plans.some((p) => p.kind === "free")}
+          freePlan={plans.find((p) => p.kind === "free") ?? null}
           onClose={() => setEditing({ kind: "none" })}
           onSaved={() => {
             toast.add({ type: "success", title: editing.kind === "new" ? "Đã tạo gói" : "Đã lưu gói" });

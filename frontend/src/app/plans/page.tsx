@@ -3,7 +3,7 @@ import { PlansView } from "@/components/billing/PlansView";
 
 export const metadata: Metadata = {
   title: "Gói dịch vụ – USDSS",
-  description: "Các gói USDSS Premium Cá nhân và Gia đình: giá, thời hạn và số câu hỏi ước tính.",
+  description: "Các gói USDSS Miễn phí, Premium Cá nhân và Gia đình: giá, thời hạn và quyền lợi.",
 };
 
 // Trang công khai: khách xem bảng giá, học sinh/phụ huynh đã đăng nhập thấy gói hiện tại và nút mua.

@@ -20,7 +20,7 @@ export interface SavePlanRequest {
   priceVnd: number;
   durationDays: number | null;
   tokenQuota: number;
-  estimatedQuestions: number;
+  quotaPeriodDays: number | null;
   isActive: boolean;
   displayOrder: number;
 }

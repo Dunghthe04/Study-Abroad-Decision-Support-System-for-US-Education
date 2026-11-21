@@ -9,7 +9,8 @@ export interface PlanDto {
   kind: PlanKind;
   priceVnd: number;
   durationDays: number | null;
-  estimatedQuestions: number;
+  quotaPeriodDays: number | null;
+  quotaMultiplier: number | null;
   seats: { students: number; parents: number } | null;
 }
 
@@ -18,6 +19,8 @@ export interface PoolDto {
   planName: string;
   startsAt: string | null;
   endsAt: string | null;
+  quotaPeriodDays?: number | null;
+  quotaResetsAt?: string | null;
   usedPercent: number;
   exhausted: boolean;
   lowQuota: boolean;
@@ -30,12 +33,18 @@ export interface FamilyPoolDto extends PoolDto {
   ownerName: string;
 }
 
+export interface FreePoolDto {
+  usedPercent: number;
+  resetsAt: string;
+  quotaPeriodDays?: number | null;
+}
+
 export interface SubscriptionSummaryDto {
   tier: "free" | "premium";
   chargingPool: PlanKind;
   personal: PoolDto | null;
   family: FamilyPoolDto | null;
-  free: { usedPercent: number; resetsAt: string };
+  free: FreePoolDto;
   pendingOrderCode: number | null;
   lowQuota: boolean;
   expiringSoon: boolean;
@@ -75,7 +84,13 @@ export interface FamilyDto {
   groupId: string;
   isOwner: boolean;
   ownerName: string;
-  cycle: { planName: string; endsAt: string | null; usedPercent: number } | null;
+  cycle: {
+    planName: string;
+    endsAt: string | null;
+    quotaPeriodDays?: number | null;
+    quotaResetsAt?: string | null;
+    usedPercent: number;
+  } | null;
   seats: {
     students: { used: number; max: number };
     parents: { used: number; max: number };

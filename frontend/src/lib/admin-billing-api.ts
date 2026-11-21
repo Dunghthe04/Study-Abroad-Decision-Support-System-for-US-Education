@@ -11,7 +11,8 @@ const ORDERS = "/api/v1/admin/orders";
 const ERROR_MESSAGES: Record<string, string> = {
   code_taken: "Mã gói này đã tồn tại.",
   invalid_code: "Mã gói chỉ gồm chữ thường, số và dấu gạch ngang.",
-  invalid_duration: "Thời hạn chỉ được 30 hoặc 90 ngày.",
+  invalid_duration: "Thời hạn phải từ 1 đến 3650 ngày.",
+  invalid_quota_period: "Chu kỳ cấp token không hợp lệ.",
   free_plan_exists: "Đã có gói Miễn phí, không tạo thêm được.",
   kind_immutable: "Không đổi được loại gói sau khi tạo.",
   free_plan_locked: "Gói Miễn phí luôn giá 0đ, luôn mở bán và không xóa được.",

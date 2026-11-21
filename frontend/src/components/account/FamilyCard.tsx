@@ -127,6 +127,12 @@ export function FamilyCard({ version, onChanged }: { version: number; onChanged:
               <span className="tabular-nums text-muted-foreground">Cả gói đã dùng {f.cycle.usedPercent}%</span>
             </div>
             <Progress value={Math.min(100, f.cycle.usedPercent)} aria-label={`Cả gói đã dùng ${f.cycle.usedPercent}%`} />
+            {f.cycle.quotaResetsAt && (
+              <p className="text-xs text-muted-foreground">
+                Làm mới hạn mức ngày {formatVnDate(f.cycle.quotaResetsAt)}
+                {f.cycle.quotaPeriodDays ? ` (mỗi ${f.cycle.quotaPeriodDays} ngày)` : ""}
+              </p>
+            )}
             {f.cycle.endsAt && <p className="text-xs text-muted-foreground">Hết hạn ngày {formatVnDate(f.cycle.endsAt)}</p>}
           </div>
         )}
