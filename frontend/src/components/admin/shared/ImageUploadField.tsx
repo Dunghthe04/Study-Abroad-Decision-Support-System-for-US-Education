@@ -53,7 +53,7 @@ export function ImageUploadField({ id, value, onChange, purpose, disabled, inval
         aria-invalid={invalid || Boolean(error) || undefined} placeholder="https://res.cloudinary.com/..." disabled={busy} autoFocus={autoFocus} />
       <div className="flex flex-wrap items-center gap-2">
         <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" tabIndex={-1}
-          aria-label={`Chọn ảnh ${purpose.endsWith("-logo") ? "logo" : "bìa"}`} disabled={busy} onChange={handleSelect} />
+          aria-label={`Chọn ảnh ${purpose.endsWith("-logo") ? "logo" : purpose.endsWith("-gallery") ? "thư viện" : "bìa"}`} disabled={busy} onChange={handleSelect} />
         <Button type="button" variant="outline" size="sm" disabled={disabled} loading={isUploading} onClick={() => inputRef.current?.click()}>
           <UploadIcon />
           Tải ảnh lên

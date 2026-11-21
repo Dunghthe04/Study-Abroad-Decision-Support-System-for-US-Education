@@ -169,6 +169,7 @@ export interface UpdateCenterProfileRequest {
   feeDescription?: string | null;
   logoUrl?: string | null;
   coverImageUrl?: string | null;
+  galleryImages?: string[];
   /** Thông tin pháp lý: chỉ gửi khi trung tâm chưa được xác minh. */
   taxCode?: string | null;
   legalRepresentative?: string | null;

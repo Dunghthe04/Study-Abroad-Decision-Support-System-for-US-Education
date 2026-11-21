@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ImageUploadField } from "@/components/admin/shared/ImageUploadField";
+import { CenterGalleryField } from "@/components/center/CenterGalleryField";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
@@ -81,6 +82,7 @@ export function CenterProfileView() {
   const [feeDescription, setFeeDescription] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [coverImageUrl, setCoverImageUrl] = useState("");
 
   // Thông tin pháp lý (khóa khi đã xác minh)
@@ -132,6 +134,7 @@ export function CenterProfileView() {
           setFeeDescription(c.feeDescription || "");
           setLogoUrl(c.logoUrl || "");
           setCoverImageUrl(c.coverImageUrl || "");
+          setGalleryImages(c.galleryImages ?? []);
           setTaxCode(c.taxCode || "");
           setLegalRepresentative(c.legalRepresentative || "");
           setComplianceMode(normalizeComplianceMode(c.legalComplianceMode));
@@ -235,6 +238,7 @@ export function CenterProfileView() {
         feeDescription: feeDescription.trim() || null,
         logoUrl: logoUrl.trim() || null,
         coverImageUrl: coverImageUrl.trim() || null,
+        galleryImages,
       });
 
       setCenter(updated);
@@ -583,6 +587,15 @@ export function CenterProfileView() {
                 />
               </Field>
             </div>
+            <Field>
+              <FieldLabel>Thư viện ảnh trung tâm</FieldLabel>
+              <CenterGalleryField
+                value={galleryImages}
+                onChange={setGalleryImages}
+                disabled={isSubmitting}
+                onUploadingChange={setIsUploadingImage}
+              />
+            </Field>
             <p className="-mt-2 text-xs text-ink-3">
               Ảnh được kiểm duyệt nội dung khi tải lên. Bấm &quot;Lưu hồ sơ trung tâm&quot; để áp dụng.
             </p>
