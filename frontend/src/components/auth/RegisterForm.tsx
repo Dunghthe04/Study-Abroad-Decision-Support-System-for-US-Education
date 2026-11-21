@@ -221,7 +221,7 @@ export function RegisterForm() {
         </Alert>
       )}
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} autoComplete="off">
         <FieldGroup>
           {/* Lựa chọn vai trò: Học sinh, Phụ huynh; Trung tâm (UC-64) có form riêng nên chuyển sang trang đăng ký trung tâm */}
           <Field>
@@ -294,6 +294,7 @@ export function RegisterForm() {
               type="email"
               required
               maxLength={100}
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="example@gmail.com"
@@ -326,6 +327,7 @@ export function RegisterForm() {
               required
               minLength={8}
               maxLength={100}
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Tối thiểu 8 ký tự, tối đa 100"
@@ -341,6 +343,7 @@ export function RegisterForm() {
               id="confirmPassword"
               required
               maxLength={100}
+              autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Nhập lại mật khẩu"
