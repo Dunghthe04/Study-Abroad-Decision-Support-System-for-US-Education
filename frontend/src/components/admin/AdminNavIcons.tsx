@@ -276,6 +276,32 @@ export function CreditCardFilledIcon({ className }: AdminNavIconProps) {
   );
 }
 
+export function ReceiptTextFilledIcon({ className }: AdminNavIconProps) {
+  const maskId = useId().replace(/:/g, "");
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="24"
+      height="24"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <defs>
+        <mask id={maskId}>
+          <rect width="24" height="24" fill="white" />
+          <path d="M8 8h8M8 12h8M8 16h5" stroke="black" strokeWidth="2" strokeLinecap="round" />
+        </mask>
+      </defs>
+      <path
+        mask={`url(#${maskId})`}
+        d="M5 3.5a1 1 0 0 1 1.6-.8L8 3.8l1.4-1.1a1 1 0 0 1 1.2 0L12 3.8l1.4-1.1a1 1 0 0 1 1.2 0L16 3.8l1.4-1.1A1 1 0 0 1 19 3.5v17a1 1 0 0 1-1.6.8L16 20.2l-1.4 1.1a1 1 0 0 1-1.2 0L12 20.2l-1.4 1.1a1 1 0 0 1-1.2 0L8 20.2l-1.4 1.1A1 1 0 0 1 5 20.5z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 export function SlidersHorizontalFilledIcon({ className }: AdminNavIconProps) {
   return (
     <svg
