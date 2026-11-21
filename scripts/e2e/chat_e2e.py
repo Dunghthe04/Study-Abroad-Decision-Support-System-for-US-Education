@@ -5,7 +5,7 @@ Cần API (run-api.sh) và advisor chạy ở 127.0.0.1:8000 (Advisor__BaseUrl m
 import json, os, sys, time
 import httpx
 
-sys.path.insert(0, r"D:\Dev\Capstone-Project-Workspace\wt-billing\scripts\e2e")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault("SINK_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), ".mail"))
 import mailbox  # noqa: E402
 
