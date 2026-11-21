@@ -3,7 +3,7 @@
 import React, { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2Icon, GraduationCapIcon, InfoIcon, UsersIcon } from "lucide-react";
+import { Building2Icon, CheckIcon, GraduationCapIcon, InfoIcon, UsersIcon, XIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
@@ -14,6 +14,44 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { REGISTER_PARENT_EMAIL_KEY } from "@/components/auth/ParentConsentForm";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+
+// Đánh giá độ mạnh mật khẩu (1..4)
+function getPasswordStrength(pass: string): {
+  score: number;
+  label: string;
+  color: string;
+  barColor: string;
+} {
+  if (!pass) {
+    return { score: 0, label: "", color: "", barColor: "" };
+  }
+
+  let score = 0;
+  if (pass.length >= 8) score++;
+  if (pass.length >= 10 && /[A-Z]/.test(pass) && /[a-z]/.test(pass)) score++;
+  if (/\d/.test(pass)) score++;
+  if (/[^a-zA-Z0-9]/.test(pass)) score++;
+
+  const finalScore = Math.min(4, Math.max(1, score));
+
+  switch (finalScore) {
+    case 1:
+      return { score: 1, label: "Yếu", color: "text-destructive", barColor: "bg-destructive" };
+    case 2:
+      return { score: 2, label: "Trung bình", color: "text-amber-500", barColor: "bg-amber-500" };
+    case 3:
+      return { score: 3, label: "Khá mạnh", color: "text-blue-500", barColor: "bg-blue-500" };
+    case 4:
+    default:
+      return {
+        score: 4,
+        label: "Rất mạnh",
+        color: "text-emerald-600 dark:text-emerald-400",
+        barColor: "bg-emerald-600 dark:bg-emerald-500",
+      };
+  }
+}
 
 // [Q11] Ngưỡng tuổi theo luật VN (khớp AgeGroups ở backend; backend tính lại và là nơi quyết định)
 const CHILD_MAX_AGE_EXCLUSIVE = 16;
@@ -91,6 +129,11 @@ export function RegisterForm() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const passwordStrength = getPasswordStrength(password);
+  const isConfirmTouched = confirmPassword.length > 0;
+  const isPasswordMatch = isConfirmTouched && password === confirmPassword;
+  const isPasswordMismatch = isConfirmTouched && password !== confirmPassword;
 
   const clearFieldError = (fieldName: keyof FieldErrors) => {
     if (fieldErrors[fieldName]) {
@@ -405,11 +448,32 @@ export function RegisterForm() {
               }}
               placeholder="Tối thiểu 8 ký tự, tối đa 100"
             />
+            {password.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Độ mạnh mật khẩu:</span>
+                  <span className={cn("font-medium", passwordStrength.color)}>
+                    {passwordStrength.label}
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5" aria-hidden="true">
+                  {[1, 2, 3, 4].map((level) => (
+                    <div
+                      key={level}
+                      className={cn(
+                        "h-1.5 rounded-full transition-all duration-300",
+                        passwordStrength.score >= level ? passwordStrength.barColor : "bg-muted"
+                      )}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
             {fieldErrors.password && <FieldError id="password-error">{fieldErrors.password}</FieldError>}
           </Field>
 
           {/* Xác nhận mật khẩu */}
-          <Field data-invalid={Boolean(fieldErrors.confirmPassword)}>
+          <Field data-invalid={Boolean(fieldErrors.confirmPassword) || isPasswordMismatch}>
             <FieldLabel htmlFor="confirmPassword">
               Xác nhận mật khẩu <span className="text-destructive">*</span>
             </FieldLabel>
@@ -418,16 +482,46 @@ export function RegisterForm() {
               maxLength={100}
               autoComplete="new-password"
               value={confirmPassword}
-              aria-invalid={Boolean(fieldErrors.confirmPassword)}
-              aria-describedby={fieldErrors.confirmPassword ? "confirmPassword-error" : undefined}
+              aria-invalid={Boolean(fieldErrors.confirmPassword) || isPasswordMismatch}
+              aria-describedby={
+                isConfirmTouched
+                  ? isPasswordMatch
+                    ? "confirmPassword-status"
+                    : "confirmPassword-error"
+                  : fieldErrors.confirmPassword
+                  ? "confirmPassword-error"
+                  : undefined
+              }
               onChange={(e) => {
                 setConfirmPassword(e.target.value);
                 clearFieldError("confirmPassword");
               }}
               placeholder="Nhập lại mật khẩu"
             />
-            {fieldErrors.confirmPassword && (
-              <FieldError id="confirmPassword-error">{fieldErrors.confirmPassword}</FieldError>
+            {isConfirmTouched ? (
+              isPasswordMatch ? (
+                <div
+                  id="confirmPassword-status"
+                  role="status"
+                  className="flex items-center gap-1.5 pt-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
+                >
+                  <CheckIcon className="size-4 shrink-0" aria-hidden="true" />
+                  <span>Mật khẩu khớp</span>
+                </div>
+              ) : (
+                <div
+                  id="confirmPassword-error"
+                  role="alert"
+                  className="flex items-center gap-1.5 pt-1 text-xs font-medium text-destructive"
+                >
+                  <XIcon className="size-4 shrink-0" aria-hidden="true" />
+                  <span>Mật khẩu chưa khớp</span>
+                </div>
+              )
+            ) : (
+              fieldErrors.confirmPassword && (
+                <FieldError id="confirmPassword-error">{fieldErrors.confirmPassword}</FieldError>
+              )
             )}
           </Field>
 
