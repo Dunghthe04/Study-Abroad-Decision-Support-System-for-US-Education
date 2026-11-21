@@ -61,6 +61,14 @@ public class BillingAccountHooksTests
             return Task.FromResult<EndedOwnedGroups?>(new EndedOwnedGroups(store.Names[ownerUserId], memberIds));
         }
 
+        public Task<int> BlankMembershipEmailsAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default)
+        {
+            var rows = store.Members.Where(m => m.UserId == userId && m.Status != FamilyMemberStatuses.Pending).ToList();
+            foreach (var m in rows)
+                m.InvitedEmail = string.Empty;
+            return Task.FromResult(rows.Count);
+        }
+
         public Task<int> EndOpenCyclesAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default)
         {
             var open = store.Cycles.Where(c => c.UserId == userId && (c.Status == CycleStatuses.Active || c.Status == CycleStatuses.Queued)).ToList();
@@ -248,6 +256,31 @@ public class BillingAccountHooksTests
         var note = Assert.Single(env.Notes.Sent);   // chỉ thành viên đang active; lời mời chưa nhận chưa có tài khoản để báo
         Assert.Equal((env.Member, NotificationTypes.FamilyEnded), (note.UserId, note.Type));
         Assert.Equal("Gói Gia đình của Chủ Gói đã kết thúc.", note.Body);
+    }
+
+    [Fact]
+    public async Task F8_MemberPurged_TheirMembershipHistoryLosesTheEmail_OthersAreUntouched()
+    {
+        var env = new Env();
+        env.Family();
+        var mine = env.Store.Members.Single();   // dòng thành viên của Member (InvitedEmail = m@x.vn)
+        await env.Hooks.OnAccountSoftDeletedAsync(env.Member, Now);   // xóa mềm trước: tư cách đã kết thúc nhưng còn giữ email
+        Assert.Equal(("m@x.vn", FamilyMemberStatuses.Ended), (mine.InvitedEmail, mine.Status));
+        var otherInvite = new FamilyMember
+        {
+            FamilyGroupId = env.Group.Id, InvitedEmail = "someone@x.vn", SeatRole = FamilySeats.Parent, Status = FamilyMemberStatuses.Pending, TokenHash = "p-hash",
+        };
+        var otherMember = new FamilyMember
+        {
+            FamilyGroupId = env.Group.Id, UserId = Guid.NewGuid(), InvitedEmail = "other@x.vn", SeatRole = FamilySeats.Parent, Status = FamilyMemberStatuses.Ended,
+        };
+        env.Store.Members.AddRange([otherInvite, otherMember]);
+
+        await env.Hooks.OnBeforePurgeAsync(env.Member, Now);
+
+        Assert.Equal(string.Empty, mine.InvitedEmail);
+        Assert.Equal(("someone@x.vn", "other@x.vn"), (otherInvite.InvitedEmail, otherMember.InvitedEmail));   // lời mời gửi cho email khác và người khác giữ nguyên
+        Assert.Equal(FamilyMemberStatuses.Pending, otherInvite.Status);
     }
 
     [Fact]

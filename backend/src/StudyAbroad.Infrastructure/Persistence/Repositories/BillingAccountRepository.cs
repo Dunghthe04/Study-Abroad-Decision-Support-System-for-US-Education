@@ -84,6 +84,13 @@ public class BillingAccountRepository(AppDbContext db) : IBillingAccountReposito
         return new EndedOwnedGroups(ownerName, memberUserIds);
     }
 
+    public Task<int> BlankMembershipEmailsAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) =>
+        // Không đụng dòng pending (index một-lời-mời-pending-mỗi-email dùng cột này; lời mời pending chưa gắn user_id)
+        db.FamilyMembers.Where(m => m.UserId == userId && m.Status != FamilyMemberStatuses.Pending)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(m => m.InvitedEmail, string.Empty)
+                .SetProperty(m => m.UpdatedAt, nowUtc), ct);
+
     public Task<int> EndOpenCyclesAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) =>
         db.UserSubscriptions
             .Where(c => c.UserId == userId && (c.Status == CycleStatuses.Active || c.Status == CycleStatuses.Queued))

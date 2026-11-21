@@ -13,7 +13,7 @@ public interface IBillingAccountHooks
     /// <summary>Xóa mềm (D1, D3): thành viên rời nhóm, đơn đang chờ bị hủy. Nhóm và kỳ của chủ gói chạy tiếp tới hết hạn (O1).</summary>
     Task<Func<CancellationToken, Task>> OnAccountSoftDeletedAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default);
 
-    /// <summary>Ngay trước khi xóa hẳn (D4, D6): nhóm của chủ gói và các kỳ còn mở kết thúc, thành viên được báo.</summary>
+    /// <summary>Ngay trước khi xóa hẳn (D4, D6): nhóm của chủ gói và các kỳ còn mở kết thúc, thành viên được báo; email còn sót trong lịch sử thành viên của chính người này bị xóa.</summary>
     Task<Func<CancellationToken, Task>> OnBeforePurgeAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default);
 }
 
@@ -57,6 +57,8 @@ public sealed class BillingAccountHooks(
         // Nhóm và kỳ sẽ bị cascade xóa cùng dòng users; kết thúc trước để biết ai cần báo và để mọi FK không còn chặn
         var groups = await repository.EndOwnedGroupsAsync(userId, nowUtc, ct);
         await repository.EndOpenCyclesAsync(userId, nowUtc, ct);
+        // Cuối cùng (sau khóa nhóm, cùng thứ tự với FamilyService): xóa email trong lịch sử thành viên của người sắp bị xóa
+        await repository.BlankMembershipEmailsAsync(userId, nowUtc, ct);
         if (groups is null || groups.MemberUserIds.Count == 0)
             return Nothing;
 
