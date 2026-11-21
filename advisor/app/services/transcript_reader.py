@@ -95,9 +95,12 @@ Quy tắc:
 10. "language": "vi" nếu văn bản tiếng Việt, "en" nếu tiếng Anh, "mixed" nếu song ngữ.
 """
 
-PARSE_PROMPT = PARSE_RULES + """
+PARSE_PROMPT = (
+    PARSE_RULES
+    + """
 Văn bản:
 """
+)
 
 PARSE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -662,7 +665,9 @@ class TranscriptReader:
         attempts = 1
         issues = validate_parsed(data, source)
         if issues:
-            logger.info("Bước B lần 1 có %d lỗi (%s): %s", len(issues), file_name, [i.message for i in issues])
+            logger.info(
+                "Bước B lần 1 có %d lỗi (%s): %s", len(issues), file_name, [i.message for i in issues]
+            )
             retry = [{"role": "user", "content": PARSE_RULES + "\n" + retry_message(issues, data, source)}]
             try:
                 with usage_meter.purpose(PURPOSE_PARSE):
@@ -676,7 +681,13 @@ class TranscriptReader:
                 logger.warning("Bước B thử lại lỗi (%s, %s): %s", self._parser_model, file_name, ex)
         warnings: list[str] = []
         if issues:
-            logger.warning("Bước B còn %d lỗi sau %d lần (%s): %s", len(issues), attempts, file_name, [i.message for i in issues])
+            logger.warning(
+                "Bước B còn %d lỗi sau %d lần (%s): %s",
+                len(issues),
+                attempts,
+                file_name,
+                [i.message for i in issues],
+            )
             data = drop_bad_cells(data, issues)
             warnings = self._validation_warnings(issues, file_name)
 
@@ -699,9 +710,13 @@ class TranscriptReader:
                 "bạn xem lại và nhập tay các môn còn thiếu giúp nhé."
             )
         if terms:
-            warnings.append(f"Tệp '{file_name}': {terms} học kỳ không rõ tên kỳ nên đã bỏ, bạn nhập tay giúp nhé.")
+            warnings.append(
+                f"Tệp '{file_name}': {terms} học kỳ không rõ tên kỳ nên đã bỏ, bạn nhập tay giúp nhé."
+            )
         if any(i.rule == "R6" for i in issues):
-            warnings.append(f"Tệp '{file_name}': AI có thể đã bỏ sót một số điểm, bạn đối chiếu lại với bảng điểm giúp nhé.")
+            warnings.append(
+                f"Tệp '{file_name}': AI có thể đã bỏ sót một số điểm, bạn đối chiếu lại với bảng điểm giúp nhé."
+            )
         return warnings
 
     async def _chat(self, payload: dict[str, Any], timeout: float) -> str:

@@ -102,7 +102,10 @@ class _Subjects:
             tail = f' (đúng là "{hint}")' if hint else ""
             return "R4", f'Tên môn "{name}" chưa phải tiếng Việt có dấu, cần dịch / viết lại{tail}.'
         if language == "en" and not original:
-            return "R4", f'Môn "{name}": văn bản gốc tiếng Anh, cần ghi kèm "name_original" là tên trong văn bản.'
+            return (
+                "R4",
+                f'Môn "{name}": văn bản gốc tiếng Anh, cần ghi kèm "name_original" là tên trong văn bản.',
+            )
         if original and _plain(original) not in plain_source:
             return "R4", f'Môn "{name}": "name_original" = "{original}" không có trong văn bản gốc.'
         if lower not in self.vietnamese:
@@ -143,7 +146,7 @@ def validate_parsed(data: Any, source: str) -> list[Issue]:
 
     for ti, term in enumerate(data["terms"]):
         if not isinstance(term, dict) or not isinstance(term.get("subjects"), list):
-            issues.append(Issue("R1", f"Kỳ thứ {ti + 1} sai cấu trúc (thiếu \"subjects\").", ti))
+            issues.append(Issue("R1", f'Kỳ thứ {ti + 1} sai cấu trúc (thiếu "subjects").', ti))
             continue
         grade, term_name = str(term.get("grade") or ""), str(term.get("term") or "")
         resolved = subjects.resolve_term(grade, term_name)
@@ -165,12 +168,19 @@ def validate_parsed(data: Any, source: str) -> list[Issue]:
                 issues.append(Issue(found[0], found[1], ti, si))
             if not 0.0 <= value <= 10.0 or round(value, 2) not in source_numbers:
                 issues.append(
-                    Issue("R5", f'Điểm "{item.get("score")}" môn "{name}" không có nguyên văn trong văn bản hoặc ngoài thang 10.', ti, si)
+                    Issue(
+                        "R5",
+                        f'Điểm "{item.get("score")}" môn "{name}" không có nguyên văn trong văn bản hoặc ngoài thang 10.',
+                        ti,
+                        si,
+                    )
                 )
 
     decimals = sum(1 for n in _DECIMAL_RE.findall(source) if float(n.replace(",", ".")) <= 10)
     if decimals >= MIN_SOURCE_DECIMALS and cells < MIN_CELL_RATIO * decimals:
-        issues.append(Issue("R6", f"Có thể bỏ sót điểm: văn bản có {decimals} số điểm, bạn mới trả {cells} ô."))
+        issues.append(
+            Issue("R6", f"Có thể bỏ sót điểm: văn bản có {decimals} số điểm, bạn mới trả {cells} ô.")
+        )
     return issues
 
 

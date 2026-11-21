@@ -62,10 +62,26 @@ UNIVERSITY_PARSED = {
     "scale": "10",
     "language": "en",
     "terms": [
-        {"grade": "", "term": "Fall2023", "subjects": [{"name": "Toán", "score": "8,2", "name_original": "Mathematics"}]},
-        {"grade": "", "term": "Spring2024", "subjects": [{"name": "Vật lý", "score": "7,0", "name_original": "Physics"}]},
-        {"grade": "", "term": "Summer2024", "subjects": [{"name": "Tiếng Anh", "score": "9,1", "name_original": "English"}]},
-        {"grade": "", "term": "Fall2024", "subjects": [{"name": "Hóa học", "score": "6,5", "name_original": "Chemistry"}]},
+        {
+            "grade": "",
+            "term": "Fall2023",
+            "subjects": [{"name": "Toán", "score": "8,2", "name_original": "Mathematics"}],
+        },
+        {
+            "grade": "",
+            "term": "Spring2024",
+            "subjects": [{"name": "Vật lý", "score": "7,0", "name_original": "Physics"}],
+        },
+        {
+            "grade": "",
+            "term": "Summer2024",
+            "subjects": [{"name": "Tiếng Anh", "score": "9,1", "name_original": "English"}],
+        },
+        {
+            "grade": "",
+            "term": "Fall2024",
+            "subjects": [{"name": "Hóa học", "score": "6,5", "name_original": "Chemistry"}],
+        },
     ],
 }
 

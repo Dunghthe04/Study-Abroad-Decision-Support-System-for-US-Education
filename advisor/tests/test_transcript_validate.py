@@ -8,18 +8,26 @@ SOURCE = """| Môn | Toán | Ngữ văn | Vật lý | Công nghệ |
 
 
 def _data(subjects1=None, subjects2=None, term1="HK1", **extra) -> dict:
-    s1 = subjects1 if subjects1 is not None else [
-        {"name": "Toán", "score": "8,0"},
-        {"name": "Ngữ văn", "score": "7,5"},
-        {"name": "Vật lý", "score": "6,8"},
-        {"name": "Công nghệ", "score": "9,1"},
-    ]
-    s2 = subjects2 if subjects2 is not None else [
-        {"name": "Toán", "score": "8,4"},
-        {"name": "Ngữ văn", "score": "7,9"},
-        {"name": "Vật lý", "score": "7,2"},
-        {"name": "Công nghệ", "score": "9,0"},
-    ]
+    s1 = (
+        subjects1
+        if subjects1 is not None
+        else [
+            {"name": "Toán", "score": "8,0"},
+            {"name": "Ngữ văn", "score": "7,5"},
+            {"name": "Vật lý", "score": "6,8"},
+            {"name": "Công nghệ", "score": "9,1"},
+        ]
+    )
+    s2 = (
+        subjects2
+        if subjects2 is not None
+        else [
+            {"name": "Toán", "score": "8,4"},
+            {"name": "Ngữ văn", "score": "7,9"},
+            {"name": "Vật lý", "score": "7,2"},
+            {"name": "Công nghệ", "score": "9,0"},
+        ]
+    )
     return {
         "scale": "10",
         "level": "thpt",
@@ -84,30 +92,54 @@ def test_r4_ten_tieng_anh_chua_dich():
 def test_r4_nguon_tieng_anh_phai_co_ten_goc_co_trong_van_ban():
     source = "Fall 2023 | Mathematics 8.5 | Data Structures 9.0 | Physics 7.0"
     ok = {
-        "scale": "10", "level": "dai_hoc", "language": "en",
-        "terms": [{"grade": "", "term": "Fall 2023", "subjects": [
-            {"name": "Toán", "score": "8.5", "name_original": "Mathematics"},
-            {"name": "Cấu trúc dữ liệu", "score": "9.0", "name_original": "Data Structures"},
-            {"name": "Vật lý", "score": "7.0", "name_original": "Physics"},
-        ]}],
+        "scale": "10",
+        "level": "dai_hoc",
+        "language": "en",
+        "terms": [
+            {
+                "grade": "",
+                "term": "Fall 2023",
+                "subjects": [
+                    {"name": "Toán", "score": "8.5", "name_original": "Mathematics"},
+                    {"name": "Cấu trúc dữ liệu", "score": "9.0", "name_original": "Data Structures"},
+                    {"name": "Vật lý", "score": "7.0", "name_original": "Physics"},
+                ],
+            }
+        ],
     }
     assert validate_parsed(ok, source) == []
 
-    missing = {**ok, "terms": [{**ok["terms"][0], "subjects": [
-        {"name": "Toán", "score": "8.5"},
-        {"name": "Cấu trúc dữ liệu", "score": "9.0", "name_original": "Algorithms"},
-        {"name": "Vật lý", "score": "7.0", "name_original": "Physics"},
-    ]}]}
+    missing = {
+        **ok,
+        "terms": [
+            {
+                **ok["terms"][0],
+                "subjects": [
+                    {"name": "Toán", "score": "8.5"},
+                    {"name": "Cấu trúc dữ liệu", "score": "9.0", "name_original": "Algorithms"},
+                    {"name": "Vật lý", "score": "7.0", "name_original": "Physics"},
+                ],
+            }
+        ],
+    }
     assert _rules(validate_parsed(missing, source)) == ["R4", "R4"]
 
 
 def test_r4b_dich_sai_nghia_mon_co_san():
     source = "Fall 2023 | Chemistry 8.5"
     data = {
-        "scale": "10", "level": "dai_hoc", "language": "en",
-        "terms": [{"grade": "", "term": "Fall 2023", "subjects": [
-            {"name": "Sinh học", "score": "8.5", "name_original": "Chemistry"},
-        ]}],
+        "scale": "10",
+        "level": "dai_hoc",
+        "language": "en",
+        "terms": [
+            {
+                "grade": "",
+                "term": "Fall 2023",
+                "subjects": [
+                    {"name": "Sinh học", "score": "8.5", "name_original": "Chemistry"},
+                ],
+            }
+        ],
     }
     issues = validate_parsed(data, source)
     assert _rules(issues) == ["R4b"] and "Hóa học" in issues[0].message
