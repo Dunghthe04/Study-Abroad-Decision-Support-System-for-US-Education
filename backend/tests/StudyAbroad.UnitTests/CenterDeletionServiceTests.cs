@@ -92,6 +92,14 @@ public class CenterDeletionServiceTests
             return Task.CompletedTask;
         }
 
+        public List<string> ChatAttachments { get; } = [];
+        public (Guid CenterId, Guid? OwnerId)? ErasedChatFor { get; private set; }
+        public Task<IReadOnlyList<string>> ErasePrivateLeadMessagesAsync(Guid studyCenterId, Guid? ownerUserId, DateTime now, CancellationToken ct = default)
+        {
+            ErasedChatFor = (studyCenterId, ownerUserId);
+            return Task.FromResult<IReadOnlyList<string>>(ChatAttachments.ToList());
+        }
+
         /// <summary>Giống DB thật: sau khi purge, các cột ảnh đã bị xóa trắng nên không còn URL nào để đọc.</summary>
         public Task<IReadOnlyList<string>> GetCenterMediaUrlsAsync(Guid studyCenterId, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<string>>(PurgedCenters.Contains(studyCenterId) ? [] : MediaUrls.ToList());
@@ -272,6 +280,36 @@ public class CenterDeletionServiceTests
         Assert.Empty(due.Failures);
         Assert.Equal(s.Work.MediaUrls, s.Media.Deleted);
         Assert.Equal(1, s.Media.Calls);
+    }
+
+    [Fact]
+    public async Task PurgeDue_ErasesCenterSideChatAndDeletesItsAttachmentsFromCdn()
+    {
+        var s = new Setup();
+        s.Work.MediaUrls.Add("https://res.cloudinary.com/demo/image/upload/v1/usas/logo.png");
+        s.Work.ChatAttachments.AddRange(["https://res.cloudinary.com/demo/image/upload/v1/usas/chat/a.png", "https://res.cloudinary.com/demo/image/upload/v1/usas/logo.png"]);
+        await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
+
+        var due = await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(31));
+
+        Assert.Equal(1, due.Purged);
+        // Xóa tin nhắn phía trung tâm của đúng trung tâm này, theo tài khoản chủ
+        Assert.Equal((s.Center.Id, (Guid?)s.Owner.Id), s.Work.ErasedChatFor);
+        // Ảnh đính kèm cùng ảnh hồ sơ được gỡ trên CDN, mỗi URL một lần
+        Assert.Equal(2, s.Media.Deleted.Count);
+        Assert.Contains("https://res.cloudinary.com/demo/image/upload/v1/usas/chat/a.png", s.Media.Deleted);
+    }
+
+    [Fact]
+    public async Task PurgeDue_HeldAtLock_DoesNotEraseChat()
+    {
+        var s = new Setup();
+        await s.Service.ApproveAsync(Guid.NewGuid(), s.Request.Id, "ok");
+        s.Work.HeldAtLock = true;
+
+        await s.Service.PurgeDueAsync(DateTime.UtcNow.AddDays(31));
+
+        Assert.Null(s.Work.ErasedChatFor);
     }
 
     [Fact]
