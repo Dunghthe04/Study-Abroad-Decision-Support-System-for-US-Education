@@ -3662,6 +3662,9 @@ public class ChatServiceTests
         public Task<StudyAbroad.Application.Billing.SubscriptionSummaryDto> GetSummaryAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
+        public Task<StudyAbroad.Application.Billing.QuotaOverviewDto> GetQuotaOverviewAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<bool> IsPremiumAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default) => throw new NotSupportedException();
 
         public Task<IReadOnlyList<StudyAbroad.Application.Billing.PlanDto>> GetPlansOnSaleAsync(CancellationToken ct = default) =>

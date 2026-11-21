@@ -443,6 +443,7 @@ public class BillingJobTests
         public Task<bool> IsPremiumAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default) => inner.IsPremiumAsync(userId, role, nowUtc, ct);
         public Task<IReadOnlyList<PlanDto>> GetPlansOnSaleAsync(CancellationToken ct = default) => inner.GetPlansOnSaleAsync(ct);
         public Task<IReadOnlyList<ExpiredCycleDto>> GetExpiredCyclesAsync(Guid userId, CancellationToken ct = default) => inner.GetExpiredCyclesAsync(userId, ct);
+        public Task<QuotaOverviewDto> GetQuotaOverviewAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) => inner.GetQuotaOverviewAsync(userId, nowUtc, ct);
     }
 
     // ---- F27: Gia đình hết hạn (không còn kỳ Gia đình nào): thành viên được báo

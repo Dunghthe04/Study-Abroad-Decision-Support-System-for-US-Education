@@ -339,6 +339,33 @@ public class EntitlementServiceTests
     }
 
     [Fact]
+    public async Task QuotaOverview_AddsRemainingOfEveryUsableCycleAndFree()
+    {
+        var repo = new FakeBilling();
+        var personal = repo.AddActive(Me, "personal-1m");                                  // 500.000
+        repo.AddFamily(Me, startsAt: Now.AddDays(-1));                                   // family-1m, 500.000
+        repo.Use(Me, personal, 400_000);
+        repo.UseFree(Me, 12_000, Now.AddHours(-1));
+
+        var overview = await Service(repo).GetQuotaOverviewAsync(Me, Now);
+
+        var quota = 500_000 + 500_000 + 120_000;
+        var usedPercent = (int)((400_000 + 12_000) * 100L / quota);
+        Assert.Equal((100 - usedPercent, usedPercent, false), (overview.RemainingPercent, overview.UsedPercent, overview.LowQuota));
+    }
+
+    [Fact]
+    public async Task QuotaOverview_FreeOnly_IsTheFreeAllowance_AndFullUseIsLow()
+    {
+        var repo = new FakeBilling();
+        repo.UseFree(Me, 120_000, Now.AddHours(-1));
+
+        var overview = await Service(repo).GetQuotaOverviewAsync(Me, Now);
+
+        Assert.Equal((0, 100, true), (overview.RemainingPercent, overview.UsedPercent, overview.LowQuota));
+    }
+
+    [Fact]
     public async Task OnlyClaudeCallsOfChatTurnsAreCounted()
     {
         var repo = new FakeBilling();
