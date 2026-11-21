@@ -3,7 +3,7 @@ import { AdminSection } from "@/components/admin/AdminSection";
 import { CenterProfileChangesView } from "@/components/admin/centers/CenterProfileChangesView";
 
 export const metadata: Metadata = {
-  title: "Kiểm tra thay đổi trung tâm – Quản trị USAS",
+  title: "Kiểm tra thay đổi trung tâm – Quản trị USDSS",
 };
 
 /** [UC-114] Moderator kiểm tra thay đổi website / fanpage do trung tâm tự sửa. */

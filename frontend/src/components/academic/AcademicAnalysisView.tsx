@@ -246,7 +246,7 @@ export function AcademicAnalysisView() {
                     Chưa có dữ liệu bảng điểm học tập
                   </EmptyTitle>
                   <EmptyDescription>
-                    Bạn cần nhập bảng điểm các kỳ học (hoặc tải mẫu học bạ) tại mục <strong>Hồ sơ học thuật</strong> trước khi hệ thống có thể tính toán GPA 4.0 và phân tích đà tăng trưởng.
+                    Bạn cần nhập bảng điểm các kỳ học (hoặc tải mẫu học bạ) tại mục <strong>Học bạ</strong> trước khi hệ thống có thể tính toán GPA 4.0 và phân tích đà tăng trưởng.
                   </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
@@ -254,7 +254,7 @@ export function AcademicAnalysisView() {
                     href="/profile/academic"
                     className={buttonVariants({ size: "lg" })}
                   >
-                    <FileTextIcon aria-hidden="true" /> Nhập bảng điểm tại Hồ sơ học thuật <ArrowRightIcon aria-hidden="true" />
+                    <FileTextIcon aria-hidden="true" /> Nhập bảng điểm tại Học bạ <ArrowRightIcon aria-hidden="true" />
                   </Link>
                 </EmptyContent>
               </Empty>

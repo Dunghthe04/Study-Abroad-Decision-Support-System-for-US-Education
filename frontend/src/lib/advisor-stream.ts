@@ -25,7 +25,8 @@ export async function streamAdvisorChat(
 
   if (!res.ok) {
     const err = await res.json().catch(() => null);
-    throw new ApiError(res.status, err?.detail ?? err?.title ?? err?.error ?? err?.message ?? res.statusText);
+    // Giữ body như apiFetch: 429 chat_busy, 403 age_restricted... đọc code trong body
+    throw new ApiError(res.status, err?.detail ?? err?.title ?? err?.error ?? err?.message ?? res.statusText, err);
   }
   const reader = res.body?.getReader();
   if (!reader) throw new ApiError(502, "Trình duyệt không đọc được luồng trả lời.");

@@ -3,7 +3,7 @@ import { AdminSection } from "@/components/admin/AdminSection";
 import { UniversityListView } from "@/components/admin/universities/UniversityListView";
 
 export const metadata: Metadata = {
-  title: "Dữ liệu trường – Quản trị USAS",
+  title: "Dữ liệu trường – Quản trị USDSS",
 };
 
 export default function AdminUniversitiesPage() {

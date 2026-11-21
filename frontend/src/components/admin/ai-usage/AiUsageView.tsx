@@ -74,13 +74,6 @@ export function AiUsageView() {
 
   return (
     <div className="ai-viz flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-h2">Quản lý token AI</h1>
-        <p className="text-sm text-ink-2">
-          Token, tiền và chất lượng các lần gọi AI. Ngày tính theo UTC. Chỉ có số đo, không có nội dung chat.
-        </p>
-      </header>
-
       {/* Một hàng bộ lọc duy nhất, áp cho mọi thẻ bên dưới */}
       <div className="flex flex-wrap items-end gap-3">
         <Segmented label="Khoảng thời gian" value={preset} options={PRESETS} onChange={setPreset} />

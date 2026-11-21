@@ -44,6 +44,7 @@ from app.services.replies import (
     MENU,
     NEED_MAJOR,
     NOT_READY,
+    PREMIUM_REQUIRED,
 )
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
 from app.services.slm_contract import SlmClassifier
@@ -311,12 +312,17 @@ class ChatFlow:
             if continue_chat and state.pending_advice is None and profile_ready(state):
                 from app.services.skills import skill_ho_so
 
+                if not allows(req, "collect_profile"):
+                    return self._locked(req, state, message, started, profile_before, ["collect_profile"])
                 state.intake_mode = "chat"
                 # Còn dự định thi quá hạn thì hỏi dự định đó trước khi báo hồ sơ đã đủ
                 output = skill_ho_so.ask_overdue_first(state) or SkillOutput(skill_ho_so.FORM_SAVED)
                 log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
                 return self._response(state, output, [], profile_before)
             if continue_chat and state.pending_advice is not None and profile_ready(state):
+                # Khóa trước khi lấy câu tư vấn đang chờ ra, để nâng cấp xong câu đó vẫn còn
+                if not allows(req, "profile_review"):
+                    return self._locked(req, state, message, started, profile_before, ["profile_review"])
                 original = state.pending_advice
                 state.pending_advice = None
                 state.intake_mode = "chat"
@@ -333,12 +339,16 @@ class ChatFlow:
                 )
                 return self._response(state, output, ["profile_review"], profile_before)
             if choice:
+                if not allows(req, "collect_profile"):
+                    return self._locked(req, state, message, started, profile_before, ["collect_profile"])
                 output = begin_intake(state, choice)
                 log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
                 return self._response(state, output, [], profile_before)
 
         # Nút menu "Thử thay đổi hồ sơ": câu chung chung này model chưa đọc được, code trả lời luôn (hỏi thử gì, kèm nút thử nhanh)
         if is_try_menu(message):
+            if not allows(req, "scenario"):
+                return self._locked(req, state, message, started, profile_before, ["scenario"])
             output = self._branches["scenario"].ask_what(state)
             log_turn(
                 state, message, None, ["scenario"], (time.perf_counter() - started) * 1000, req.session_id
@@ -364,8 +374,17 @@ class ChatFlow:
             slm = with_comparison_intent(message, slm)
             slm = contextualize(state, message, slm)
 
+        # Gói của học sinh không cho loại ý nào thì bỏ ý đó; không còn ý nào thì trả câu cần Premium, không chạy nhánh nào
+        intents = intents_to_run(slm)
+        locked = list(dict.fromkeys(y.type for y in intents if not allows(req, y.type)))
+        intents = [y for y in intents if allows(req, y.type)]
+        if not intents:
+            response = self._locked(req, state, message, started, profile_before, locked, slm)
+            response.slm = slm_summary(slm, asked_slm, fell_back, model_intents)
+            return response
+
         # 2. Chạy từng ý theo thứ tự, ghép câu trả lời
-        names, output = await self._run_intents(state, message, slm, emit)
+        names, output = await self._run_intents(state, message, slm, intents, emit)
 
         # 3-4. Học sinh hỏi xen ngang lúc đang hỏi hồ sơ (câu đang chờ chưa được trả lời): nhắc lại câu đang chờ.
         # Không nhắc khi nhánh hồ sơ đã chạy (nó tự hỏi câu kế tiếp) hoặc khi câu đang chờ là câu chào mở đầu
@@ -390,6 +409,25 @@ class ChatFlow:
         log_turn(state, message, slm, names, (time.perf_counter() - started) * 1000, req.session_id)
         response = self._response(state, output, names, profile_before)
         response.slm = slm_summary(slm, asked_slm, fell_back, model_intents)
+        response.locked_intents = locked
+        return response
+
+    # Lượt bị khóa vì gói: câu cần Premium, không chạy nhánh nào (không gọi Claude), state giữ như đang có
+    def _locked(
+        self,
+        req: ChatRequest,
+        state: ChatState,
+        message: str,
+        started: float,
+        profile_before: dict[str, ProfileField],
+        locked: list[str],
+        slm: SlmTinResult | None = None,
+    ) -> ChatResponse:
+        log_turn(state, message, slm, [], (time.perf_counter() - started) * 1000, req.session_id)
+        response = self._response(
+            state, SkillOutput(PREMIUM_REQUIRED, action="premium_required"), [], profile_before
+        )
+        response.locked_intents = locked
         return response
 
     # Mỗi ý chạy nhánh của loại nó. Ý collect_profile chạy TRƯỚC để các ý khác thấy hồ sơ mới, nhưng câu trả lời của nó
@@ -397,9 +435,13 @@ class ChatFlow:
     # Các ý chỉ đọc state (PARALLEL_SAFE) chạy song song (tối đa PARALLEL_LIMIT ý cùng lúc) cho nhanh;
     # Khi stream (emit), mỗi ý xong thì gửi đi ngay, nhưng chỉ khi mọi ý đứng trước nó đã gửi (đúng thứ tự hỏi)
     async def _run_intents(
-        self, state: ChatState, message: str, slm: SlmTinResult, emit: Emit | None = None
+        self,
+        state: ChatState,
+        message: str,
+        slm: SlmTinResult,
+        intents: list[SlmY],
+        emit: Emit | None = None,
     ) -> tuple[list[str], SkillOutput]:
-        intents = intents_to_run(slm)
         results: dict[int, SkillOutput] = {}
         sent = 0  # số ý đầu danh sách đã xét gửi đi
         if emit:
@@ -465,6 +507,11 @@ class ChatFlow:
             action=output.action,
             action_data=output.action_data,
         )
+
+
+# Gói của học sinh cho chạy loại ý này không (allowed_intents None = mọi loại)
+def allows(req: ChatRequest, kind: str) -> bool:
+    return req.allowed_intents is None or kind in req.allowed_intents
 
 
 # Tin nhắn mới nhất của học sinh

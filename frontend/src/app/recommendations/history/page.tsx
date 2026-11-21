@@ -5,7 +5,7 @@ import { RecommendationHistory } from "@/components/recommendation/Recommendatio
 
 // [UC-87] Trang lịch sử gợi ý: các lần chạy trước và so sánh hai lần
 export const metadata: Metadata = {
-  title: "Lịch sử gợi ý – USAS",
+  title: "Lịch sử gợi ý – USDSS",
   description: "Xem lại các lần gợi ý trường trước đây và so sánh hai lần để thấy trường nào đổi nhóm, đổi thứ hạng.",
 };
 

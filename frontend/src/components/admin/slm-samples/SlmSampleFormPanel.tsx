@@ -5,7 +5,6 @@ import { CheckIcon, SaveIcon, SendIcon, Trash2Icon, WrenchIcon, XIcon } from "lu
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { DetailPanel } from "@/components/admin/shared/DetailPanel";
@@ -294,11 +293,11 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
           </TableFrame>
           <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Hủy</Button>
-            <Button type="button" variant="outline" onClick={() => void save(false)} disabled={saving}>
-              {saving ? <Spinner /> : <SaveIcon />} Lưu nháp
+            <Button type="button" variant="outline" onClick={() => void save(false)} loading={saving}>
+              <SaveIcon /> Lưu nháp
             </Button>
-            <Button type="button" onClick={() => void save(true)} disabled={saving}>
-              {saving ? <Spinner /> : <SendIcon />} Gửi duyệt
+            <Button type="button" onClick={() => void save(true)} loading={saving}>
+              <SendIcon /> Gửi duyệt
             </Button>
           </div>
         </form>
@@ -364,8 +363,8 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
 
         <div className="flex flex-wrap gap-2">
           {canSubmit(sample.reviewStatus) && (
-            <Button type="button" size="sm" disabled={busy || !ready} title={ready ? undefined : "Cần có ý định trước khi gửi duyệt"} onClick={() => void submitExisting()}>
-              {saving ? <Spinner /> : <SendIcon />} Gửi duyệt
+            <Button type="button" size="sm" disabled={busy || !ready} loading={saving} title={ready ? undefined : "Cần có ý định trước khi gửi duyệt"} onClick={() => void submitExisting()}>
+              <SendIcon /> Gửi duyệt
             </Button>
           )}
           {canReview && (

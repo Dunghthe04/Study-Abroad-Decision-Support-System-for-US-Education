@@ -336,9 +336,9 @@ export function Step5Extracurricular({
 
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="default"
                       onClick={() => handleDeleteItem(idx)}
-                      className="text-muted-foreground hover:text-destructive h-8 px-2 cursor-pointer"
+                      className="text-muted-foreground hover:text-destructive px-2"
                     >
                       <Trash2Icon className="size-4" />
                       <span className="hidden sm:inline text-xs ml-1">Xóa</span>
@@ -364,7 +364,7 @@ export function Step5Extracurricular({
           type="button"
           variant="outline"
           onClick={() => setShowAddForm(true)}
-          className="w-full py-6 border-dashed border-2 hover:border-brand hover:bg-brand-wash/20 text-brand font-semibold text-sm gap-2 cursor-pointer "
+          className="w-full py-6 border-dashed border-2 hover:border-brand hover:bg-brand-wash/20 text-brand font-semibold text-sm gap-2"
         >
           <PlusIcon className="size-4" />
           Thêm hoạt động hoặc giải thưởng mới
@@ -383,7 +383,7 @@ export function Step5Extracurricular({
                     setFormErrors({});
                   }}
                   className={cn(
-                    "rounded-md px-3 py-1 text-xs font-semibold transition-all cursor-pointer",
+                    "rounded-md px-3 py-1 text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                     category === c ? "bg-brand text-white " : "text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -427,7 +427,7 @@ export function Step5Extracurricular({
                           setFormErrors({});
                         }}
                         className={cn(
-                          "rounded-lg border px-3 py-2 text-xs font-medium transition-all cursor-pointer text-center",
+                          "rounded-lg border px-3 py-2 text-xs font-medium transition-all cursor-pointer text-center focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                           role === r.value
                             ? "border-brand bg-brand-wash text-brand ring-1 ring-brand font-semibold "
                             : "border-line bg-surface text-muted-foreground hover:border-brand/40"
@@ -536,7 +536,7 @@ export function Step5Extracurricular({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="size-7 text-muted-foreground hover:text-foreground cursor-pointer"
+                    className="size-7 text-muted-foreground hover:text-foreground"
                     onClick={handleStepUp}
                     title="Lên nấc cao hơn"
                   >
@@ -546,7 +546,7 @@ export function Step5Extracurricular({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="size-7 text-muted-foreground hover:text-foreground cursor-pointer"
+                    className="size-7 text-muted-foreground hover:text-foreground"
                     onClick={handleStepDown}
                     title="Xuống nấc thấp hơn"
                   >
@@ -580,7 +580,7 @@ export function Step5Extracurricular({
                           setFormErrors({});
                         }}
                         className={cn(
-                          "group relative flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-all duration-150 cursor-pointer border",
+                          "group relative flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-all duration-150 cursor-pointer border focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                           widthClasses[tierIdx],
                           isSelected
                             ? "border-brand bg-brand-wash/80 text-foreground ring-2 ring-brand scale-[1.01]"
@@ -710,7 +710,6 @@ export function Step5Extracurricular({
                 setShowAddForm(false);
                 resetForm();
               }}
-              className="cursor-pointer"
             >
               Hủy
             </Button>
@@ -719,7 +718,7 @@ export function Step5Extracurricular({
               size="sm"
               onClick={handleSaveItem}
               disabled={!canSave}
-              className="cursor-pointer font-semibold"
+              className="font-semibold"
             >
               Thêm vào hồ sơ
             </Button>
@@ -741,11 +740,11 @@ export function Step5Extracurricular({
 
       {/* Bottom Actions */}
       <div className="flex justify-between pt-4 border-t border-line">
-        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5 cursor-pointer">
+        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5">
           <ArrowLeftIcon className="size-4" />
           Quay lại
         </Button>
-        <Button onClick={handleNextClick} size="lg" className="gap-1.5 cursor-pointer">
+        <Button onClick={handleNextClick} size="lg" className="gap-1.5">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>

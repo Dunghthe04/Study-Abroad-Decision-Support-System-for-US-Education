@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { UploadIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { IMAGE_UPLOAD_LIMITS, uploadImage, type ImageUploadPurpose } from "@/lib/media-api";
 
 interface ImageUploadFieldProps {
@@ -55,9 +54,9 @@ export function ImageUploadField({ id, value, onChange, purpose, disabled, inval
       <div className="flex flex-wrap items-center gap-2">
         <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" tabIndex={-1}
           aria-label={`Chọn ảnh ${purpose === "school-logo" ? "logo" : "bìa"}`} disabled={busy} onChange={handleSelect} />
-        <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => inputRef.current?.click()}>
-          {isUploading ? <Spinner /> : <UploadIcon />}
-          {isUploading ? "Đang tải..." : "Tải ảnh lên"}
+        <Button type="button" variant="outline" size="sm" disabled={disabled} loading={isUploading} onClick={() => inputRef.current?.click()}>
+          <UploadIcon />
+          Tải ảnh lên
         </Button>
         <span className="text-xs text-muted-foreground">JPEG, PNG, WebP · tối đa {IMAGE_UPLOAD_LIMITS[purpose] / 1024 / 1024} MB</span>
       </div>

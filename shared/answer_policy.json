@@ -97,6 +97,10 @@
     "school_search": {
       "who": "code",
       "why": "Tìm trường theo điều kiện: danh sách lọc từ cơ sở dữ liệu, không có lời tư vấn nào cần viết."
+    },
+    "premium_required": {
+      "who": "code",
+      "why": "Tài khoản Free hỏi ý định chỉ dành cho Premium: trả câu cố định PREMIUM_REQUIRED (replies.py) kèm thẻ khóa, không gọi Claude."
     }
   }
 }

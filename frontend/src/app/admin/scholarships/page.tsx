@@ -3,7 +3,7 @@ import { AdminSection } from "@/components/admin/AdminSection";
 import { ScholarshipListView } from "@/components/admin/scholarships/ScholarshipListView";
 
 export const metadata: Metadata = {
-  title: "Học bổng – Quản trị USAS",
+  title: "Học bổng – Quản trị USDSS",
 };
 
 export default function AdminScholarshipsPage() {

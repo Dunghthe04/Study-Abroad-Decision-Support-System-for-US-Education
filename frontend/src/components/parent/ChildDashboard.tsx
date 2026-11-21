@@ -280,8 +280,8 @@ function TargetSchoolList({ studentId, childName }: { studentId: string; childNa
                       size="sm"
                       disabled={withdrawing === t.id}
                       onClick={() => withdraw(t)}
+                      loading={withdrawing === t.id}
                     >
-                      {withdrawing === t.id && <Spinner />}
                       Rút lại
                     </Button>
                   </TargetRow>

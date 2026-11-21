@@ -3,7 +3,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { NotificationsView } from "@/components/notifications/NotificationsView";
 
 export const metadata: Metadata = {
-  title: "Thông báo – USAS",
+  title: "Thông báo – USDSS",
   description: "Thông báo của bạn trong hệ thống",
 };
 

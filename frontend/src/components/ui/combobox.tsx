@@ -27,7 +27,7 @@ function ComboboxTrigger({
   return (
     <ComboboxPrimitive.Trigger
       data-slot="combobox-trigger"
-      className={cn("[&_svg:not([class*='size-'])]:size-4", className)}
+      className={cn("cursor-pointer disabled:cursor-default [&_svg:not([class*='size-'])]:size-4", className)}
       {...props}
     >
       {children}

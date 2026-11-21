@@ -121,6 +121,13 @@
   --chart-5: #b98a3e;
   --radius: 0.5rem;
   --header-h: 6.5rem; /* thanh đầu 2 hàng (56px + 48px + viền), để ảnh đầu trang chủ nằm dưới nó */
+  /* Thông số chuyển động & độ mờ nút theo claude-ui (không đổi bảng màu) */
+  --cds-dur-fast: 60ms;
+  --cds-dur-snap: 120ms;
+  --cds-dur-base: 200ms;
+  --cds-dur-slow: 450ms;
+  --cds-btn-spring: linear(0, .2459, .6526, .9468, 1.0764, 1.0915, 1.0585, 1.0219, .9993, .9914, .9921, .9957, .9988, 1.0004, 1);
+  --cds-opacity-disabled: 0.45;
   --sidebar: var(--surface);
   --sidebar-foreground: var(--ink);
   --sidebar-primary: var(--brand);
@@ -248,6 +255,11 @@
 
 
 /* Không hiện scrollbar với phần tử có cấu hình riêng */
+.no-scrollbar,
+[class*="[scrollbar-width:none]"] {
+  scrollbar-width: none !important;
+}
+
 .no-scrollbar::-webkit-scrollbar,
 [class*="[scrollbar-width:none]"]::-webkit-scrollbar {
   display: none !important;

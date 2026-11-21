@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 
 const MAX_REASON_LENGTH = 1000;
@@ -141,10 +140,9 @@ export function CenterDeletionRequestCard() {
               type="button"
               variant="destructive"
               onClick={() => void submit()}
-              disabled={submitting || !reason.trim()}
-              className="gap-1.5"
+              loading={submitting}
+              disabled={!reason.trim()}
             >
-              {submitting ? <Spinner className="size-3.5" /> : null}
               Gửi yêu cầu xóa
             </Button>
           </AlertDialogFooter>

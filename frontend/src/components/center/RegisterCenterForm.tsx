@@ -11,7 +11,6 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
-import { Spinner } from "@/components/ui/spinner";
 
 export function RegisterCenterForm() {
   const router = useRouter();
@@ -85,7 +84,7 @@ export function RegisterCenterForm() {
           Đăng ký đối tác Trung tâm tư vấn
         </h1>
         <p className="text-sm text-ink-2">
-          Gia nhập danh bạ tư vấn du học Mỹ USAS, tiếp cận học sinh tiềm năng và nhận tư vấn trực tiếp.
+          Gia nhập danh bạ tư vấn du học Mỹ USDSS, tiếp cận học sinh tiềm năng và nhận tư vấn trực tiếp.
         </p>
       </div>
 
@@ -236,7 +235,7 @@ export function RegisterCenterForm() {
                 <Link href="/privacy" target="_blank" className="font-medium text-brand hover:underline">
                   Chính sách quyền riêng tư
                 </Link>{" "}
-                của USAS (bao gồm điều khoản lưu trữ dữ liệu định danh và nhật ký giao dịch phục vụ phòng chống gian lận và tuân thủ quy định pháp luật).
+                của USDSS (bao gồm điều khoản lưu trữ dữ liệu định danh và nhật ký giao dịch phục vụ phòng chống gian lận và tuân thủ quy định pháp luật).
               </span>
             </label>
 
@@ -249,13 +248,12 @@ export function RegisterCenterForm() {
                 className="mt-1 h-4 w-4 rounded border-line text-brand focus:ring-brand"
               />
               <span>
-                Tôi cam kết: Các thông tin hồ sơ và mức phí dịch vụ tôi công bố trên USAS là đúng sự thật và tuân thủ các quy định hiện hành.
+                Tôi cam kết: Các thông tin hồ sơ và mức phí dịch vụ tôi công bố trên USDSS là đúng sự thật và tuân thủ các quy định hiện hành.
               </span>
             </label>
           </div>
 
-          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full mt-2">
-            {isSubmitting && <Spinner data-icon="inline-start" />}
+          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full mt-2" loading={isSubmitting}>
             {isSubmitting ? "Đang xử lý đăng ký..." : "Đăng ký tài khoản trung tâm"}
           </Button>
         </FieldGroup>

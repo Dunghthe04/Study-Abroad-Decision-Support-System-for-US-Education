@@ -14,7 +14,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -183,8 +182,8 @@ export function CenterReviewList({
           />
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isRemoving}>Hủy</AlertDialogCancel>
-            <Button type="button" variant="destructive" onClick={() => void confirmRemove()} disabled={isRemoving || removeReason.trim().length === 0} className="gap-1.5">
-              {isRemoving ? <Spinner className="size-3.5" /> : <Trash2Icon className="size-3.5" />}
+            <Button type="button" variant="destructive" onClick={() => void confirmRemove()} disabled={isRemoving || removeReason.trim().length === 0} className="gap-1.5" loading={isRemoving}>
+              <Trash2Icon className="size-3.5" />
               Gỡ đánh giá
             </Button>
           </AlertDialogFooter>

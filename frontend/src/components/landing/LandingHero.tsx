@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowRightIcon, MapPinIcon, PauseIcon, PlayIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { GROUP_LABELS, formatGpa, formatPct, groupVariant } from "@/lib/recommendation-labels";
 import { HERO_SCHOOLS, SAMPLE_PROFILE } from "@/lib/landing-schools";
 import { SchoolPhotoBackdrop, useSchoolPhotoCycle } from "./SchoolPhotoBackdrop";
@@ -26,7 +26,7 @@ export function LandingHero() {
 
   return (
     <section
-      aria-label="Giới thiệu USAS"
+      aria-label="Giới thiệu USDSS"
       className="relative isolate -mt-[var(--header-h)] flex min-h-[min(100svh,960px)] items-end overflow-hidden bg-brand-ink text-white"
     >
       {/* Ảnh nền: mọi ảnh nằm chồng lên nhau, ảnh đang chọn hiện dần */}
@@ -38,10 +38,10 @@ export function LandingHero() {
             Chọn trường Mỹ hợp với điểm số và ngân sách của bạn
           </h1>
           <p className="max-w-[56ch] text-base leading-relaxed text-pretty text-white/85 sm:text-lg">
-            Nhập GPA, điểm thi và ngân sách. USAS so hồ sơ với số liệu tuyển sinh của từng trường, xếp vào bốn nhóm và giải thích lý do cho từng trường.
+            Nhập GPA, điểm thi và ngân sách. USDSS so hồ sơ với số liệu tuyển sinh của từng trường, xếp vào bốn nhóm và giải thích lý do cho từng trường.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Link href="/analysis" className={buttonVariants({ size: "xl", className: "!bg-white !text-brand-ink hover:!bg-white/90 active:translate-y-px" })}>
+            <Link href="/analysis" className={buttonVariants({ size: "xl", className: "!bg-white !text-brand-ink hover:!bg-white/90" })}>
               Phân tích hồ sơ
               <ArrowRightIcon className="transition-transform group-hover/button:translate-x-0.5" />
             </Link>
@@ -50,7 +50,7 @@ export function LandingHero() {
               className={buttonVariants({
                 variant: "outline",
                 size: "xl",
-                className: "!border-white/40 !bg-transparent !text-white hover:!bg-white/10 active:translate-y-px",
+                className: "!border-white/40 !bg-transparent !text-white hover:!bg-white/10",
               })}
             >
               Cách hệ thống xếp trường
@@ -91,7 +91,7 @@ export function LandingHero() {
                     onClick={() => setIndex(i)}
                     aria-pressed={i === index}
                     className={cn(
-                      "flex w-full items-center justify-between gap-3 py-3 text-left outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+                      "flex w-full cursor-pointer items-center justify-between gap-3 py-3 text-left outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
                       i === index ? "text-ink" : "text-ink-2 hover:text-ink",
                     )}
                   >
@@ -120,14 +120,16 @@ export function LandingHero() {
               {current.name} · {current.city}
             </span>
             {count > 1 && (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => setPaused((p) => !p)}
                 aria-label={paused ? "Tiếp tục đổi ảnh" : "Dừng đổi ảnh"}
-                className="inline-flex size-8 items-center justify-center rounded-md text-white/80 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-3 focus-visible:ring-white/50"
+                className="text-white/80 hover:bg-white/10 hover:text-white dark:hover:bg-white/10 focus-visible:border-transparent focus-visible:ring-white/50"
               >
                 {paused ? <PlayIcon className="size-3.5" /> : <PauseIcon className="size-3.5" />}
-              </button>
+              </Button>
             )}
           </div>
         </div>

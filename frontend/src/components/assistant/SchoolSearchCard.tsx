@@ -75,7 +75,7 @@ function Row({
       <div className="pt-1">
         <Link
           href={`/university/${encodeURIComponent(school.code)}`}
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "cursor-pointer")}
+          className={buttonVariants({ variant: "outline", size: "sm" })}
         >
           Xem chi tiết
         </Link>
@@ -107,7 +107,7 @@ export function SchoolSearchCard({ data }: { data: SchoolSearchData }) {
       {more > 0 && (
         <Link
           href={universitiesListHref(data)}
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "cursor-pointer text-xs font-semibold text-brand hover:bg-brand-wash")}
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "text-xs font-semibold text-brand hover:bg-brand-wash")}
         >
           {universitiesListLabel(data)}
         </Link>

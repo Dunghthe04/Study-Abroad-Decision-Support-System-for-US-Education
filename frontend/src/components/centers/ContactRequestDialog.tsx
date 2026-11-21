@@ -93,7 +93,7 @@ export function ContactRequestDialog({ centerId, centerName, isVerified, compact
         className={
           compact
             ? buttonVariants({ variant: "outline", size: "sm" })
-            : buttonVariants({ size: "lg", className: "gap-2 bg-brand text-white hover:bg-brand/90 font-medium" })
+            : buttonVariants({ size: "lg", className: "gap-2 hover:bg-brand/90 font-medium" })
         }
       >
         {!compact && <MessageSquareIcon className="w-4 h-4 text-white" />}
@@ -385,7 +385,7 @@ export function ContactRequestDialog({ centerId, centerName, isVerified, compact
           Liên hệ
         </Button>
       ) : (
-        <Button size="lg" onClick={handleOpen} className="gap-2 bg-brand text-white hover:bg-brand/90 font-medium ">
+        <Button size="lg" onClick={handleOpen} className="gap-2 hover:bg-brand/90 font-medium">
           <MessageSquareIcon className="w-4 h-4 text-white" />
           Gửi yêu cầu liên hệ
         </Button>
