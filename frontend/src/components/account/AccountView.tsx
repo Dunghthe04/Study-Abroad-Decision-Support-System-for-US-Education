@@ -1,17 +1,27 @@
 "use client";
 
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect, type ComponentType } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { profileApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { AcademicProfileResponse, ParentProfileOverviewDto } from "@/types/api";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AcademicSummaryCard, hasCompleteAcademicProfile } from "@/components/account/AcademicSummaryCard";
+import { AccountSectionHeader } from "@/components/account/AccountSectionHeader";
+import {
+  BookOpenFilledIcon,
+  CrownFilledIcon,
+  HeartHandshakeFilledIcon,
+  KeyRoundFilledIcon,
+  SendFilledIcon,
+  UserFilledIcon,
+  UsersFilledIcon,
+} from "@/components/account/AccountNavIcons";
 import { ChangePasswordCard } from "@/components/account/ChangePasswordCard";
 import { DeleteAccountCard } from "@/components/account/DeleteAccountCard";
 import { ParentLinksCard } from "@/components/account/ParentLinksCard";
@@ -25,6 +35,7 @@ import { useFetched } from "@/lib/use-fetched";
 import type { SubscriptionSummaryDto } from "@/types/billing";
 import {
   ArrowRightIcon,
+  ArrowUpRightIcon,
   BookmarkCheckIcon,
   BookOpenIcon,
   Building2Icon,
@@ -44,11 +55,26 @@ import {
 
 type SectionId = "personal" | "subscription" | "family" | "academic" | "parent-links" | "sent-leads" | "password";
 
+type NavGroupId = "account" | "billing" | "profile";
+
 interface SectionItem {
   id: SectionId;
   label: string;
   icon: LucideIcon;
+  filledIcon: ComponentType<{ className?: string }>;
+  group: NavGroupId;
 }
+
+interface NavGroupMeta {
+  id: NavGroupId;
+  title: string;
+}
+
+const NAV_GROUPS: NavGroupMeta[] = [
+  { id: "account", title: "Tài khoản" },
+  { id: "billing", title: "Gói & Thanh toán" },
+  { id: "profile", title: "Hồ sơ & Kết nối" },
+];
 
 // Mục đang mở lưu trên hash (#password...) để tải lại trang hoặc gửi link vẫn mở đúng mục.
 // Giữ nguyên hash được yêu cầu: mục "family" chỉ có sau khi tải GET subscription, nên mục đang mở được suy ra khi render.
@@ -74,23 +100,32 @@ export function AccountView() {
   const hasFamily = Boolean(sub.data?.family);
 
   const sections: SectionItem[] = [
-    { id: "personal", label: "Thông tin cá nhân", icon: UserIcon },
+    { id: "personal", label: "Thông tin cá nhân", icon: UserIcon, filledIcon: UserFilledIcon, group: "account" },
+    { id: "password", label: "Bảo mật tài khoản", icon: KeyRoundIcon, filledIcon: KeyRoundFilledIcon, group: "account" },
     ...(isStudentOrParent
       ? [
-          { id: "subscription" as const, label: "Gói dịch vụ", icon: CrownIcon },
-          ...(hasFamily ? [{ id: "family" as const, label: "Gói Gia đình", icon: HeartHandshakeIcon }] : []),
-          { id: "academic" as const, label: "Hồ sơ học thuật", icon: BookOpenIcon },
+          { id: "subscription" as const, label: "Gói dịch vụ", icon: CrownIcon, filledIcon: CrownFilledIcon, group: "billing" as const },
+          ...(hasFamily
+            ? [{ id: "family" as const, label: "Gói Gia đình", icon: HeartHandshakeIcon, filledIcon: HeartHandshakeFilledIcon, group: "billing" as const }]
+            : []),
+          { id: "academic" as const, label: "Hồ sơ học thuật", icon: BookOpenIcon, filledIcon: BookOpenFilledIcon, group: "profile" as const },
           {
             id: "parent-links" as const,
             label: user?.role === "student" ? "Liên kết phụ huynh" : "Con đã liên kết",
             icon: UsersIcon,
+            filledIcon: UsersFilledIcon,
+            group: "profile" as const,
           },
           // [UC-44] Yêu cầu liên hệ đã gửi
-          { id: "sent-leads" as const, label: "Yêu cầu liên hệ đã gửi", icon: SendIcon },
+          { id: "sent-leads" as const, label: "Yêu cầu liên hệ đã gửi", icon: SendIcon, filledIcon: SendFilledIcon, group: "profile" as const },
         ]
       : []),
-    { id: "password", label: "Bảo mật tài khoản", icon: KeyRoundIcon },
   ];
+
+  const groupedSections = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: sections.filter((s) => s.group === group.id),
+  })).filter((group) => group.items.length > 0);
 
   const [requestedSection, setActiveSection] = useState<string>(readHash);
   const activeSection: SectionId = sections.find((s) => s.id === requestedSection)?.id ?? "personal";
@@ -184,7 +219,6 @@ export function AccountView() {
         }}
       >
         <DialogContent showCloseButton={false}>
-          {/* Nút đóng */}
           <Button
             variant="ghost"
             size="icon-sm"
@@ -219,95 +253,136 @@ export function AccountView() {
         </DialogContent>
       </Dialog>
 
-      <div className="mx-auto w-full max-w-5xl">
-        <h1 className="mb-4 text-h1">Tài khoản của tôi</h1>
+      <div className="grid grid-cols-1 gap-8 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[276px_minmax(0,1fr)] lg:gap-12">
+        {/* THANH BÊN TRÁI: nền trong suốt, danh tính gọn + điều hướng phân nhóm giống AdminShell */}
+        <aside className="md:sticky md:top-28 md:self-start">
+          {/* Thông tin người dùng không nền thẻ */}
+          <div className="flex items-center gap-3.5 border-b border-line pb-5">
+            <Avatar className="size-11 shrink-0">
+              <AvatarFallback className="bg-brand text-sm font-semibold text-white">
+                {user.fullName.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <div className="truncate text-sm font-semibold text-ink" title={user.fullName}>
+                {user.fullName}
+              </div>
+              <div className="truncate text-xs text-ink-2" title={user.email}>
+                {user.email}
+              </div>
+              <div className="flex items-center gap-1.5 pt-0.5 text-xs font-medium text-ink-3">
+                <RoleIcon className="size-3.5 shrink-0" aria-hidden />
+                <span>{roleLabel}</span>
+              </div>
+            </div>
+          </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-[240px_minmax(0,1fr)]">
-          {/* THANH BÊN TRÁI: người dùng + danh sách mục */}
-          <aside className="space-y-3 md:sticky md:top-20 md:self-start">
-            <Card size="sm">
-              <CardContent className="space-y-1">
-                <div className="truncate font-semibold" title={user.fullName}>{user.fullName}</div>
-                <div className="truncate text-body-s" title={user.email}>{user.email}</div>
-                <div className="flex items-center gap-1.5 text-body-s">
-                  <RoleIcon className="size-3.5" aria-hidden />
-                  {roleLabel}
+          {/* Menu điều hướng phân nhóm */}
+          <nav
+            aria-label="Mục tài khoản"
+            className="no-scrollbar mt-3 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] md:flex-col md:gap-0 md:overflow-visible md:pb-0"
+          >
+            {groupedSections.map((group, groupIdx) => (
+              <div key={group.id} className="flex shrink-0 gap-1.5 md:flex-col md:gap-1">
+                <div
+                  className={cn(
+                    "hidden px-3.5 pb-1 text-[13px] leading-4 font-medium text-ink-3/85 md:block",
+                    groupIdx === 0 ? "pt-1" : "pt-4",
+                  )}
+                >
+                  {group.title}
                 </div>
-              </CardContent>
-            </Card>
+                <ul className="flex gap-1.5 md:flex-col md:gap-1">
+                  {group.items.map((item) => {
+                    const active = activeSection === item.id;
+                    const Icon = active ? item.filledIcon : item.icon;
+                    return (
+                      <li key={item.id} className="shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => selectSection(item.id)}
+                          aria-current={active ? "page" : undefined}
+                          className={cn(
+                            "flex min-h-10 w-full shrink-0 cursor-pointer items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm font-medium whitespace-nowrap transition-colors",
+                            "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                            active
+                              ? "bg-brand-wash font-semibold text-brand"
+                              : "text-ink-2 hover:bg-foreground/[0.05] hover:text-ink",
+                          )}
+                        >
+                          <Icon className="size-[18px] shrink-0" aria-hidden />
+                          <span>{item.label}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
 
-            <nav aria-label="Mục tài khoản" className="flex gap-1 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0">
-              {sections.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => selectSection(id)}
-                  aria-current={activeSection === id ? "page" : undefined}
-                  className={cn(
-                    "flex shrink-0 cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm whitespace-nowrap transition-colors disabled:cursor-default",
-                    "hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                    activeSection === id ? "bg-muted font-semibold text-foreground" : "text-muted-foreground"
+                  {group.id === "profile" && isStudentOrParent && (
+                    <li className="shrink-0">
+                      <Link
+                        href="/target-schools"
+                        className={cn(
+                          "flex min-h-10 w-full shrink-0 items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm font-medium whitespace-nowrap text-ink-2 transition-colors",
+                          "hover:bg-foreground/[0.05] hover:text-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                        )}
+                      >
+                        <BookmarkCheckIcon className="size-[18px] shrink-0" aria-hidden />
+                        <span>Trường mục tiêu</span>
+                        <ArrowUpRightIcon className="ml-auto hidden size-3.5 text-ink-3 md:block" aria-hidden />
+                      </Link>
+                    </li>
                   )}
-                >
-                  <Icon className="size-4" aria-hidden />
-                  {label}
-                </button>
-              ))}
+                </ul>
+              </div>
+            ))}
 
-              {isStudentOrParent && (
-                <Link
-                  href="/target-schools"
-                  className={cn(
-                    "flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-left text-sm whitespace-nowrap transition-colors",
-                    "text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                  )}
-                >
-                  <BookmarkCheckIcon className="size-4" aria-hidden />
-                  Trường mục tiêu
-                </Link>
-              )}
-
+            <div className="flex shrink-0 md:mt-3 md:border-t md:border-line md:pt-3">
               <button
                 type="button"
                 onClick={handleLogout}
                 disabled={isLoggingOut}
                 className={cn(
-                  "flex shrink-0 cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm whitespace-nowrap text-destructive transition-colors disabled:cursor-default",
-                  "hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
-                  "md:mt-2 md:border-t md:pt-3"
+                  "flex min-h-10 w-full shrink-0 cursor-pointer items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm font-medium whitespace-nowrap text-risk transition-colors disabled:cursor-default",
+                  "hover:bg-risk-wash/75 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50",
                 )}
               >
-                <LogOutIcon className="size-4" aria-hidden />
-                {isLoggingOut ? "Đang đăng xuất..." : "Đăng xuất"}
+                <LogOutIcon className="size-[18px] shrink-0" aria-hidden />
+                <span>{isLoggingOut ? "Đang đăng xuất..." : "Đăng xuất"}</span>
               </button>
-            </nav>
-          </aside>
+            </div>
+          </nav>
+        </aside>
 
-          {/* NỘI DUNG MỤC ĐANG CHỌN */}
-          <section className="min-w-0">
-            {activeSection === "personal" && <PersonalInfoCard />}
-            {activeSection === "subscription" && <SubscriptionCard />}
-            {activeSection === "family" && <FamilyCard version={billingVersion} onChanged={reloadBilling} />}
-            {activeSection === "academic" &&
-              (parentOverview ? (
-                <ParentAcademicSection overview={parentOverview} onChanged={reloadProfile} />
-              ) : (
-                <div className="space-y-4">
-                  {user.role === "student" && <StudentParentOffers onChanged={reloadProfile} />}
-                  <AcademicSummaryCard profile={profile} isLoading={isLoadingProfile} />
-                </div>
-              ))}
-            {activeSection === "parent-links" && <ParentLinksCard />}
-            {activeSection === "sent-leads" && <SentLeadsCard />}
-            {activeSection === "password" && (
+        {/* NỘI DUNG MỤC ĐANG CHỌN: nền trong suốt, tiêu đề ngoài thẻ, căn thẳng mép phải với thanh đầu trang */}
+        <section className="min-w-0">
+          {activeSection === "personal" && <PersonalInfoCard />}
+          {activeSection === "subscription" && <SubscriptionCard />}
+          {activeSection === "family" && <FamilyCard version={billingVersion} onChanged={reloadBilling} />}
+          {activeSection === "academic" &&
+            (parentOverview ? (
+              <ParentAcademicSection overview={parentOverview} onChanged={reloadProfile} />
+            ) : (
+              <div className="space-y-6">
+                {user.role === "student" && <StudentParentOffers onChanged={reloadProfile} />}
+                <AcademicSummaryCard profile={profile} isLoading={isLoadingProfile} />
+              </div>
+            ))}
+          {activeSection === "parent-links" && <ParentLinksCard />}
+          {activeSection === "sent-leads" && <SentLeadsCard />}
+          {activeSection === "password" && (
+            <div>
+              <AccountSectionHeader
+                title="Bảo mật tài khoản"
+                description="Đổi mật khẩu định kỳ để giữ an toàn cho tài khoản và dữ liệu hồ sơ của bạn."
+              />
               <div className="space-y-6">
                 <ChangePasswordCard />
                 {/* [UC-80] Chỉ học sinh, phụ huynh được tự xóa tài khoản */}
                 {isStudentOrParent && <DeleteAccountCard />}
               </div>
-            )}
-          </section>
-        </div>
+            </div>
+          )}
+        </section>
       </div>
     </>
   );

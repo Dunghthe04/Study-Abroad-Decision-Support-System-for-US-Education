@@ -255,6 +255,11 @@
 
 
 /* Không hiện scrollbar với phần tử có cấu hình riêng */
+.no-scrollbar,
+[class*="[scrollbar-width:none]"] {
+  scrollbar-width: none !important;
+}
+
 .no-scrollbar::-webkit-scrollbar,
 [class*="[scrollbar-width:none]"]::-webkit-scrollbar {
   display: none !important;

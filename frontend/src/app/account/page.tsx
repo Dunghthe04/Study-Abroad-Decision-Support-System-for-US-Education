@@ -9,10 +9,8 @@ export const metadata: Metadata = {
 
 export default function AccountPage() {
   return (
-    <div className="py-6">
-      <ProtectedRoute>
-        <AccountView />
-      </ProtectedRoute>
-    </div>
+    <ProtectedRoute>
+      <AccountView />
+    </ProtectedRoute>
   );
 }
