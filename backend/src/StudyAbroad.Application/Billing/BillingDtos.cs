@@ -37,6 +37,9 @@ public sealed record FamilyPoolDto(
 /// <summary>Hạn mức Free; làm mới 00:00 ngày 1 giờ Việt Nam hoặc mỗi QuotaPeriodDays ngày.</summary>
 public sealed record FreePoolDto(int UsedPercent, DateTimeOffset ResetsAt, int? QuotaPeriodDays = null);
 
+/// <summary>Hạn mức chung còn lại ngay lúc này (GET subscription/quota): token còn lại của mọi kỳ dùng được cộng với Free, chia cho tổng hạn mức. Chỉ phần trăm.</summary>
+public sealed record QuotaOverviewDto(int RemainingPercent, int UsedPercent, bool LowQuota);
+
 /// <summary>Một kỳ đã hết hạn của chính người gọi (GET subscription/expired).</summary>
 public sealed record ExpiredCycleDto(
     Guid Id, string Kind, string PlanCode, string PlanName,

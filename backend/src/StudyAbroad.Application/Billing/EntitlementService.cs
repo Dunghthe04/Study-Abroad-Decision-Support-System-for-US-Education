@@ -61,6 +61,21 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
             await repository.FindPendingOrderCodeAsync(userId, ct), lowQuota, expiringSoon, cycles);
     }
 
+    public async Task<QuotaOverviewDto> GetQuotaOverviewAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default)
+    {
+        var e = await LoadAsync(userId, nowUtc, ct);
+        var freePlan = e.FreePlan;
+        var (freeStart, _) = CycleRules.FreeWindowUtc(nowUtc, freePlan?.QuotaPeriodDays);
+        var freeQuota = freePlan?.TokenQuota ?? 0;
+        var freeUsed = await repository.SumFreeTokensAsync(userId, freeStart, ct);
+
+        // Mỗi nguồn góp tối đa bằng hạn mức của nó (dùng lố không làm âm phần còn lại của nguồn khác)
+        var quota = e.Usable.Sum(c => (long)c.Cycle.TokenQuota) + freeQuota;
+        var used = e.Usable.Sum(c => Math.Min(c.Used, c.Cycle.TokenQuota)) + Math.Min(freeUsed, freeQuota);
+        var usedPercent = CycleRules.UsedPercent(used, quota);
+        return new QuotaOverviewDto(100 - usedPercent, usedPercent, CycleRules.IsLowQuota(usedPercent));
+    }
+
     public async Task<IReadOnlyList<ExpiredCycleDto>> GetExpiredCyclesAsync(Guid userId, CancellationToken ct = default)
     {
         var plans = await repository.GetPlansAsync(ct);

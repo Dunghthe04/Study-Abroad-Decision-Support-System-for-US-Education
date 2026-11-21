@@ -11,6 +11,9 @@ public interface IEntitlementService
     /// <summary>Kết thúc kỳ đến hạn mà người dùng chạm tới rồi tóm tắt. Dùng cho GET subscription.</summary>
     Task<SubscriptionSummaryDto> GetSummaryAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default);
 
+    /// <summary>Hạn mức chung còn lại: cộng token còn lại (cửa sổ hiện tại) của mọi kỳ dùng được và hạn mức Free, chia cho tổng hạn mức (GET subscription/quota).</summary>
+    Task<QuotaOverviewDto> GetQuotaOverviewAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default);
+
     /// <summary>Chọn kỳ trả cho lượt chat kế tiếp: trong các kỳ dùng được còn token ở cửa sổ hiện tại, kỳ hết hạn sớm nhất; không có thì hạn mức Free.</summary>
     Task<ChatCharge> ResolveChatChargeAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default);
 
