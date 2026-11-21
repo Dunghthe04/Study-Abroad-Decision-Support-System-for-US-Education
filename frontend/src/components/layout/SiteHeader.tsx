@@ -9,10 +9,13 @@ import {
   BookmarkCheckIcon,
   Building2Icon,
   CrownIcon,
+  GraduationCapIcon,
+  HomeIcon,
   InboxIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  PlusIcon,
   ReceiptTextIcon,
   SearchIcon,
   ShieldIcon,
@@ -82,27 +85,26 @@ export function SiteHeader() {
   const isParentWithoutChild = user?.role === "parent" && !acting && isLinkedParent === false;
 
   const leftLinks = [
-    { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
-    { href: "/universities", label: "Tìm trường" },
-    { href: isModerator ? "/admin/centers" : "/centers", label: "Trung tâm" },
-    ...(!user ? [{ href: "/plans", label: "Gói dịch vụ" }] : []),
+    { href: "/", label: "Trang chủ", icon: HomeIcon },
+    { href: "/universities", label: "Tìm trường", icon: GraduationCapIcon },
+    { href: "/centers", label: "Trung tâm tư vấn", icon: Building2Icon },
+    ...(!user ? [{ href: "/plans", label: "Gói dịch vụ", icon: CrownIcon }] : []),
   ];
 
   const rightLinks = [
     ...(hasOwnProfile
       ? [
-          { href: "/dashboard", label: "Tổng quan" },
-          { href: "/target-schools", label: "Trường mục tiêu" },
+          { href: "/dashboard", label: "Tổng quan", icon: LayoutDashboardIcon },
+          { href: "/target-schools", label: "Mục tiêu", icon: BookmarkCheckIcon },
         ]
       : []),
-    // 2h-1: đang làm thay con thì ẩn "Con của tôi", muốn quay lại thì bấm thoát làm thay trên băng ActingAsBanner
-    ...(user?.role === "parent" && !acting ? [{ href: "/parent/children", label: "Con của tôi" }] : []),
-    ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ" }] : []),
+    // 2h-1: đang làm thay con thì ẩn "Quản lý con", muốn quay lại thì bấm thoát làm thay trên băng ActingAsBanner
+    ...(user?.role === "parent" && !acting ? [{ href: "/parent/children", label: "Quản lý con", icon: UsersIcon }] : []),
+    ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ", icon: InboxIcon }] : []),
   ];
 
   const isLinkActive = (href: string) => {
-    if (href === "/admin" || href === "/") return pathname === href;
-    if (href === "/admin/centers") return pathname.startsWith("/admin/centers") || pathname.startsWith("/centers");
+    if (href === "/") return pathname === href;
     if (href === "/universities") return pathname.startsWith("/universities") || pathname.startsWith("/university");
     return pathname.startsWith(href);
   };
@@ -360,18 +362,20 @@ export function SiteHeader() {
           <ul className="-ml-3 flex shrink-0 items-center">
             {leftLinks.map((l) => {
               const active = isLinkActive(l.href);
+              const Icon = l.icon;
               return (
                 <li key={l.href}>
                   <Link
                     href={l.href}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "relative inline-flex h-11 items-center whitespace-nowrap px-3 text-sm font-medium transition-colors",
+                      "relative inline-flex h-11 items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium transition-colors",
                       "after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:rounded-full after:transition-transform after:duration-300 hover:after:scale-x-100 motion-reduce:after:transition-none",
                       "after:bg-white",
                       active ? "font-semibold text-white after:scale-x-100" : "text-white/80 hover:text-white",
                     )}
                   >
+                    <Icon className="size-4 shrink-0" aria-hidden />
                     {l.label}
                   </Link>
                 </li>
@@ -381,23 +385,25 @@ export function SiteHeader() {
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             {rightLinks.map((l) => {
               const active = isLinkActive(l.href);
+              const Icon = l.icon;
               return (
                 <Link
                   key={l.href}
                   href={l.href}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "relative inline-flex h-11 items-center whitespace-nowrap px-3 text-sm font-medium transition-colors",
+                    "relative inline-flex h-11 items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium transition-colors",
                     "after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:rounded-full after:transition-transform after:duration-300 hover:after:scale-x-100 motion-reduce:after:transition-none",
                     "after:bg-white",
                     active ? "font-semibold text-white after:scale-x-100" : "text-white/80 hover:text-white",
                   )}
                 >
+                  <Icon className="size-4 shrink-0" aria-hidden />
                   {l.label}
                 </Link>
               );
             })}
-            {/* Phụ huynh đã liên kết đi qua mục menu "Con của tôi", không có nút riêng; chưa có con thì nút "Thêm con" (1.5e) */}
+            {/* Phụ huynh đã liên kết đi qua mục menu "Quản lý con", không có nút riêng; chưa có con thì nút "Thêm con" (1.5e) */}
             {isParentWithoutChild && (
               <Link
                 href="/parent/children/add"
@@ -407,6 +413,7 @@ export function SiteHeader() {
                   className: "ml-1 h-8 shrink-0 px-3 text-xs font-semibold !bg-white !text-brand-ink hover:!bg-white/90",
                 })}
               >
+                <PlusIcon className="size-3.5" aria-hidden />
                 Thêm con
               </Link>
             )}
