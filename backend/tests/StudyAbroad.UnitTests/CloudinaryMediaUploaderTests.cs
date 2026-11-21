@@ -410,6 +410,8 @@ public class CloudinaryMediaUploaderTests
     [InlineData("https://res.cloudinary.com/test-cloud/video/upload/v1/usas/clip.mp4", MediaResourceType.Image)]
     [InlineData("https://res.cloudinary.com/test-cloud/image/upload/v123/", null)]
     [InlineData("https://res.cloudinary.com/test-cloud/image/upload/v123/../secret.png", null)]
+    [InlineData("https://res.cloudinary.com/test-cloud/image/upload/v123/..\\secret.png", null)]
+    [InlineData("https://res.cloudinary.com/test-cloud/image/upload/v123/%2e%2e/secret.png", null)]
     public async Task ExistsAndDelete_ExternalOrMismatchedUrl_ReturnsFalseWithoutCallingClient(
         string url, MediaResourceType? resourceType)
     {

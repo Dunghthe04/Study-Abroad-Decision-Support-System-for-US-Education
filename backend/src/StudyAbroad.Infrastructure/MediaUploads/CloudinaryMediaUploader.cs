@@ -230,9 +230,11 @@ public sealed class CloudinaryMediaUploader : IMediaUploader
             return false;
         var pathEnd = rawUrl.IndexOfAny(['?', '#'], pathStart);
         var rawPath = pathEnd < 0 ? rawUrl[pathStart..] : rawUrl[pathStart..pathEnd];
-        foreach (var segment in rawPath.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var segment in rawPath.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries))
         {
-            if (segment is "." or "..")
+            var decoded = Uri.UnescapeDataString(segment);
+            if (decoded is "." or ".." ||
+                decoded.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries).Any(part => part is "." or ".."))
                 return true;
         }
         return false;
