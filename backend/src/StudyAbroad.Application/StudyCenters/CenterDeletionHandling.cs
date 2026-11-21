@@ -146,6 +146,13 @@ public interface ICenterDeletionWorkRepository
     Task<ErasedLeadMessages> ErasePrivateLeadMessagesAsync(Guid studyCenterId, Guid? ownerUserId, DateTime now, CancellationToken ct = default);
 
     /// <summary>
+    /// Dọn tiếp các tin phía trung tâm đã bị xóa hẳn mà lúc xóa còn phải giữ vì có báo cáo chưa xử lý, nay Admin đã xử lý
+    /// xong (hoặc bác bỏ) báo cáo: căn cứ giữ không còn, nên không được lưu thêm (Luật 91/2025 Điều 3 khoản 3, Điều 14 khoản 1
+    /// điểm b). Chạy mỗi lượt của job xóa hẳn. Trả về URL ảnh đính kèm đã xóa để gỡ tiếp trên CDN.
+    /// </summary>
+    Task<IReadOnlyList<string>> EraseResolvedCenterMessagesAsync(DateTime now, CancellationToken ct = default);
+
+    /// <summary>
     /// Xóa dữ liệu của trung tâm: hồ sơ xác minh và tài liệu, lịch sử thay đổi hồ sơ, rồi ẩn danh hóa dòng trung tâm
     /// (giữ dòng để lead và đánh giá cũ của người dùng không mất, nhưng không còn thông tin nhận diện).
     /// </summary>
@@ -513,6 +520,22 @@ public class CenterDeletionService(
             {
                 failures.Add(new CenterPurgeFailure(requestId, ex));
             }
+        }
+
+        // Tin từng được giữ vì báo cáo chưa xử lý: báo cáo đã xong thì xóa nốt
+        try
+        {
+            var leftovers = await work.EraseResolvedCenterMessagesAsync(now, ct);
+            if (leftovers.Count > 0)
+            {
+                var failedUrls = await mediaCleaner.DeleteAsync(leftovers, ct);
+                if (failedUrls.Count > 0)
+                    failures.Add(new CenterPurgeFailure(Guid.Empty, new CenterMediaCleanupException(failedUrls)));
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            failures.Add(new CenterPurgeFailure(Guid.Empty, ex));
         }
 
         return new CenterPurgeSummary(purged, failures);
