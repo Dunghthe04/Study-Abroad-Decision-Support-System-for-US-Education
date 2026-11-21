@@ -9,8 +9,8 @@ public interface IBillingJobService
     /// <summary>Đối soát mọi đơn đang chờ với payOS: đã trả thì kích hoạt, hủy / hết hạn / thiếu tiền thì cập nhật, quá hạn cộng ân hạn thì hết hạn (P11, P14).</summary>
     Task<int> ReconcilePendingOrdersAsync(DateTime nowUtc, CancellationToken ct = default);
 
-    /// <summary>Chuyển kỳ cho các làn tới hạn (R2); thông báo kỳ mới / hết hạn / nhóm Gia đình kết thúc phát ra trong <see cref="IEntitlementService.AdvanceLaneAsync"/>.</summary>
-    Task<int> AdvanceDueLanesAsync(DateTime nowUtc, CancellationToken ct = default);
+    /// <summary>Kết thúc kỳ hết hạn và nhóm Gia đình không còn kỳ nào (R2); thông báo hết hạn / nhóm Gia đình kết thúc phát ra trong <see cref="IEntitlementService.EndExpiredCyclesAsync"/>.</summary>
+    Task<int> EndExpiredCyclesAsync(DateTime nowUtc, CancellationToken ct = default);
 
     /// <summary>Lời mời Gia đình quá 7 ngày thành expired (F13).</summary>
     Task<int> ExpireFamilyInvitesAsync(DateTime nowUtc, CancellationToken ct = default);

@@ -20,7 +20,7 @@ public record AdminOrderDto(
         return new AdminOrderDto(
             o.OrderCode, r.PlanCode ?? string.Empty, o.PlanName, o.PlanKind, (long)o.AmountVnd, o.Description, o.Status,
             o.CreatedAt, o.ExpiresAt, o.PaidAt, o.CheckoutUrl, o.QrCode,
-            r.Cycle is null ? null : new OrderCycleDto(r.Cycle.StartsAt, r.Cycle.EndsAt, r.Cycle.Status == CycleStatuses.Queued),
+            r.Cycle is null ? null : new OrderCycleDto(r.Cycle.StartsAt, r.Cycle.EndsAt),
             r.BuyerName, r.BuyerEmail, o.AdminNote, r.HandledByName);
     }
 }

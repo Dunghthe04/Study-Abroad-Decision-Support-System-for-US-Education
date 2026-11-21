@@ -18,7 +18,7 @@ public sealed record PlanDto(
 /// <summary>Chỗ ngồi thêm của gói Gia đình (chủ gói không tính).</summary>
 public sealed record PlanSeatsDto(int Students, int Parents);
 
-/// <summary>Kỳ đã mua đang xếp hàng: bắt đầu khi kỳ hiện tại hết hạn hoặc dùng hết, tùy cái nào tới trước.</summary>
+/// <summary>Giữ cho khớp hợp đồng frontend: các gói cộng dồn chạy ngay nên không còn kỳ xếp hàng, trường Queued luôn null.</summary>
 public sealed record QueuedCycleDto(string PlanName, DateTime? ExpectedStartsAt);
 
 /// <param name="PlanCode">Luôn là chuỗi (frontend không nhận null); "" khi dòng gói của kỳ không còn.</param>
@@ -37,10 +37,21 @@ public sealed record FamilyPoolDto(
 /// <summary>Hạn mức Free; làm mới 00:00 ngày 1 giờ Việt Nam hoặc mỗi QuotaPeriodDays ngày.</summary>
 public sealed record FreePoolDto(int UsedPercent, DateTimeOffset ResetsAt, int? QuotaPeriodDays = null);
 
-/// <summary>GET /api/v1/subscription. LowQuota / ExpiringSoon là của pool đang bị trừ.</summary>
+/// <summary>Một kỳ đang chạy mà người gọi dùng được. Role: owner = kỳ của chính họ, member = kỳ Gia đình của người khác (OwnerName là tên chủ gói).</summary>
+public sealed record SubscriptionCycleDto(
+    Guid Id, string Kind, string PlanCode, string PlanName,
+    DateTimeOffset PurchasedAt, DateTimeOffset StartsAt, DateTimeOffset EndsAt,
+    int UsedPercent, bool Exhausted, bool LowQuota, bool ExpiringSoon,
+    int? QuotaPeriodDays, DateTimeOffset? QuotaResetsAt,
+    string Role, string? OwnerName);
+
+/// <summary>
+/// GET /api/v1/subscription. Cycles = mọi kỳ đang chạy dùng được, hết hạn sớm nhất trước. Personal / Family = kỳ hết hạn sớm nhất của từng loại.
+/// ChargingPool, LowQuota, ExpiringSoon là của kỳ đang bị trừ (hoặc hạn mức Free). Queued của Personal / Family luôn null.
+/// </summary>
 public sealed record SubscriptionSummaryDto(
     string Tier, string ChargingPool, PoolDto? Personal, FamilyPoolDto? Family, FreePoolDto Free,
-    long? PendingOrderCode, bool LowQuota, bool ExpiringSoon);
+    long? PendingOrderCode, bool LowQuota, bool ExpiringSoon, IReadOnlyList<SubscriptionCycleDto> Cycles);
 
 public static class AccountTiers
 {

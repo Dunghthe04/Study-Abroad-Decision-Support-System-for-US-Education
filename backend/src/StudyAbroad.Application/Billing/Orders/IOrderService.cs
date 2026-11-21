@@ -4,7 +4,7 @@ namespace StudyAbroad.Application.Billing.Orders;
 
 public interface IOrderService
 {
-    /// <summary>Tạo đơn chờ thanh toán và link payOS (UC-78). Lỗi quy tắc: BillingRuleException (role_not_allowed, age_restricted, plan_not_for_sale, pending_order_exists, already_renewed, already_in_family, gateway_unavailable).</summary>
+    /// <summary>Tạo đơn chờ thanh toán và link payOS (UC-78). Lỗi quy tắc: BillingRuleException (role_not_allowed, age_restricted, plan_not_for_sale, pending_order_exists, already_in_family, gateway_unavailable).</summary>
     Task<OrderDto> CreateAsync(Guid userId, string role, string? planCode, DateTime nowUtc, CancellationToken ct = default);
 
     /// <summary>Đơn của chính người dùng; đơn người khác hoặc không có: 404 order_not_found.</summary>
@@ -18,7 +18,7 @@ public interface IOrderService
 
     /// <summary>
     /// Áp dụng một khoản thanh toán cho đơn (webhook, job đối soát, admin kích hoạt): một transaction, khóa dòng đơn,
-    /// thử lại một lần khi vướng index duy nhất. Gọi lại với đơn đã trả thì trả AlreadyPaid, không đổi gì.
+    /// thử lại một lần khi vướng xung đột đồng thời. Gọi lại với đơn đã trả thì trả AlreadyPaid, không đổi gì.
     /// LƯU Ý cho người gọi (job đối soát, admin): hàm xóa theo dõi của DbContext trong scope (đọc lại dữ liệu mới và không ghi lại phần dang dở),
     /// nên mọi thực thể đã nạp trước đó bị tách ra. Cần sửa tiếp đơn hay kỳ nào thì nạp lại sau khi gọi, nếu không SaveChanges không ghi gì và không báo lỗi.
     /// </summary>
@@ -33,18 +33,14 @@ public sealed record PaymentApplyOptions(bool SkipAmountCheck = false, Guid? Adm
 
 public enum PaymentApplyStatus
 {
-    /// <summary>Kỳ mới chạy ngay.</summary>
+    /// <summary>Kỳ mới chạy ngay (cộng dồn với các kỳ đang chạy, nếu có).</summary>
     Activated,
-    /// <summary>Kỳ mới xếp hàng sau kỳ đang chạy.</summary>
-    Queued,
     /// <summary>Đơn đã trả từ trước, không đổi gì.</summary>
     AlreadyPaid,
     /// <summary>Số tiền không khớp (hoặc người mua không còn): đơn chuyển mismatch chờ admin.</summary>
     Mismatch,
-    /// <summary>Tiền đã nhận nhưng làn đã có kỳ đang chạy và kỳ chờ (P22): đơn mismatch chờ admin.</summary>
-    LaneFull,
     UnknownOrder,
 }
 
-/// <param name="CycleId">Kỳ được tạo (Activated, Queued) hoặc đã tạo từ trước (AlreadyPaid).</param>
+/// <param name="CycleId">Kỳ được tạo (Activated) hoặc đã tạo từ trước (AlreadyPaid).</param>
 public sealed record PaymentApplyResult(PaymentApplyStatus Status, Guid? CycleId = null);

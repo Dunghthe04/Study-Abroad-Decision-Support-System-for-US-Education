@@ -5,8 +5,8 @@ namespace StudyAbroad.Application.Billing.Jobs;
 /// <summary>Đơn đang chờ cần đối soát (chỉ mã và hạn, đọc không theo dõi: mọi thao tác ghi nạp lại đơn sau khi khóa dòng).</summary>
 public sealed record PendingOrderRef(long OrderCode, DateTime ExpiresAt);
 
-/// <summary>Một làn (chủ, loại) cần được đưa tới thời điểm hiện tại.</summary>
-public sealed record LaneRef(Guid OwnerUserId, string Kind);
+/// <summary>Một chủ kỳ và loại gói cần được kết thúc kỳ hết hạn (hoặc kết thúc nhóm Gia đình không còn kỳ).</summary>
+public sealed record CycleOwnerRef(Guid OwnerUserId, string Kind);
 
 /// <summary>
 /// Truy vấn riêng của job nền thanh toán. Truy vấn chỉ đọc không theo dõi; <see cref="FindCyclesDueForReminderAsync"/> và <see cref="FindCycleAsync"/> trả
@@ -27,13 +27,11 @@ public interface IBillingJobRepository
     Task<IReadOnlyList<PendingOrderRef>> ListRecentlyExpiredOrdersAsync(DateTime sinceUtc, CancellationToken ct = default);
 
     /// <summary>
-    /// Các làn cần chuyển kỳ: có kỳ active đã tới hạn (<c>ends_at &lt;= now</c>), hoặc có kỳ queued mà kỳ active của làn đó chuyển được ngay
-    /// (không còn kỳ active, đã tới hạn, hạn mức 0 hoặc đã dùng hết token); kỳ queued đứng sau kỳ active còn token thì làn chưa cần chuyển (lượt sau xét lại),
-    /// hoặc nhóm Gia đình active mà làn family không còn kỳ active (cần kết thúc nhóm).
+    /// Các (chủ, loại) cần kết thúc kỳ: có kỳ active đã tới hạn (<c>ends_at &lt;= now</c>), hoặc nhóm Gia đình active mà chủ không còn kỳ Gia đình active nào (cần kết thúc nhóm).
     /// </summary>
-    Task<IReadOnlyList<LaneRef>> FindDueLanesAsync(DateTime nowUtc, CancellationToken ct = default);
+    Task<IReadOnlyList<CycleOwnerRef>> FindDueCycleOwnersAsync(DateTime nowUtc, CancellationToken ct = default);
 
-    /// <summary>Kỳ active hết hạn trong (now, until], chưa nhắc, và làn không có kỳ queued.</summary>
+    /// <summary>Kỳ active hết hạn trong (now, until] và chưa nhắc.</summary>
     Task<List<UserSubscription>> FindCyclesDueForReminderAsync(DateTime nowUtc, DateTime untilUtc, CancellationToken ct = default);
 
     /// <summary>Kỳ active có hạn mức &gt; 0 mà còn thiếu thông báo 80% hoặc 100%. Đọc KHÔNG theo dõi: kỳ nào cần ghi dấu thì nạp riêng bằng <see cref="FindCycleAsync"/>.</summary>

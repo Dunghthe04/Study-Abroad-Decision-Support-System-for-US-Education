@@ -32,7 +32,6 @@ public static class NotificationTypes
     public const string BillingExpired = "billing_expired";
     public const string BillingUsage80 = "billing_usage_80";
     public const string BillingUsage100 = "billing_usage_100";
-    public const string BillingCycleStarted = "billing_cycle_started";
     public const string FamilyInvite = "family_invite";
     public const string FamilyInviteAccepted = "family_invite_accepted";
     public const string FamilyInviteDeclined = "family_invite_declined";

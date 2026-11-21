@@ -9,7 +9,7 @@ using StudyAbroad.Domain.Entities;
 namespace StudyAbroad.Application.Billing.Jobs;
 
 /// <summary>
-/// Năm bước của job nền thanh toán. Mỗi mục (đơn, làn, kỳ) chạy trong try/catch riêng; mục lỗi bị bỏ tracking để không kéo các mục sau hỏng theo
+/// Năm bước của job nền thanh toán. Mỗi mục (đơn, chủ kỳ, kỳ) chạy trong try/catch riêng; mục lỗi bị bỏ tracking để không kéo các mục sau hỏng theo
 /// (DbContext dùng chung trong một scope giữ lại thay đổi dang dở).
 /// </summary>
 public sealed class BillingJobService(
@@ -41,12 +41,12 @@ public sealed class BillingJobService(
         return handled;
     }
 
-    public async Task<int> AdvanceDueLanesAsync(DateTime nowUtc, CancellationToken ct = default)
+    public async Task<int> EndExpiredCyclesAsync(DateTime nowUtc, CancellationToken ct = default)
     {
         var handled = 0;
-        foreach (var lane in await jobs.FindDueLanesAsync(nowUtc, ct))
+        foreach (var due in await jobs.FindDueCycleOwnersAsync(nowUtc, ct))
         {
-            if (await TryAsync($"chuyển kỳ làn {lane.Kind} của {lane.OwnerUserId}", () => entitlements.AdvanceLaneAsync(lane.OwnerUserId, lane.Kind, nowUtc, ct), ct))
+            if (await TryAsync($"kết thúc kỳ hết hạn loại {due.Kind} của {due.OwnerUserId}", () => entitlements.EndExpiredCyclesAsync(due.OwnerUserId, due.Kind, nowUtc, ct), ct))
                 handled++;
         }
         return handled;

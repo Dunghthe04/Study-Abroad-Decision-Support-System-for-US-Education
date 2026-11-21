@@ -66,13 +66,12 @@ public sealed class AdminOrderService(
         if (result.Status is PaymentApplyStatus.UnknownOrder)
             throw NotFound();
 
-        // Tiền đã được xác nhận, kể cả khi không kích hoạt được (làn đầy, người mua đã xóa): đóng link payOS và để lại dấu vết kiểm toán trước khi báo lỗi
+        // Tiền đã được xác nhận, kể cả khi không kích hoạt được (người mua đã xóa): đóng link payOS và để lại dấu vết kiểm toán trước khi báo lỗi
         // (đã commit, nên không theo token của request: admin đóng trang không làm mất nó)
         if (wasPending)
             await CloseGatewayLinkAsync(orderCode);
         var outcome = result.Status switch
         {
-            PaymentApplyStatus.LaneFull => "lane_full",
             PaymentApplyStatus.Mismatch => "buyer_deleted",
             _ => (string?)null,
         };
@@ -80,8 +79,6 @@ public sealed class AdminOrderService(
             new { orderCode, note, result = result.Status.ToString(), outcome, cycleId = result.CycleId }, CancellationToken.None);
         switch (result.Status)
         {
-            case PaymentApplyStatus.LaneFull:
-                throw Rule("lane_full", 409, "Người mua đã có kỳ đang chạy và một kỳ chờ nên chưa kích hoạt thêm được. Hãy chờ kỳ hiện tại kết thúc hoặc từ chối đơn.");
             case PaymentApplyStatus.Mismatch:
                 throw Rule("buyer_deleted", 409, "Tài khoản người mua đã bị xóa nên không có ai để nhận gói.");
         }

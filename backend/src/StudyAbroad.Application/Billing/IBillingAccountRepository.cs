@@ -30,7 +30,7 @@ public interface IBillingAccountRepository
     /// </summary>
     Task<EndedOwnedGroups?> EndOwnedGroupsAsync(Guid ownerUserId, DateTime nowUtc, CancellationToken ct = default);
 
-    /// <summary>Kết thúc mọi kỳ queued và active của người này (ended, owner_purged). Trả số kỳ.</summary>
+    /// <summary>Kết thúc mọi kỳ active của người này (ended, owner_purged). Trả số kỳ.</summary>
     Task<int> EndOpenCyclesAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default);
 
     /// <summary>Email của người dùng (để xóa dấu vết của email đó trong lịch sử gói Gia đình trước khi dòng user mất). Null = không có người dùng.</summary>

@@ -60,10 +60,10 @@ namespace StudyAbroad.Application.Auth
         Task SendCenterDeletionOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? note, DateTime? purgeAt, CancellationToken ct = default);
 
         /// <summary>
-        /// Biên nhận thanh toán gói. <paramref name="queued"/> = true: gói được xếp hàng (chưa có ngày hiệu lực), ngược lại hiện ngày bắt đầu / kết thúc.
+        /// Biên nhận thanh toán gói, hiện ngày bắt đầu / kết thúc hiệu lực.
         /// Chỉ nhận mã đơn, tên gói và số tiền: hệ thống không lưu thông tin thẻ hay tài khoản ngân hàng.
         /// </summary>
-        Task SendPaymentReceiptEmailAsync(string toEmail, string fullName, long orderCode, string planName, decimal amountVnd, DateTime paidAtUtc, DateTime? startsAtUtc, DateTime? endsAtUtc, bool queued, CancellationToken ct = default);
+        Task SendPaymentReceiptEmailAsync(string toEmail, string fullName, long orderCode, string planName, decimal amountVnd, DateTime paidAtUtc, DateTime? startsAtUtc, DateTime? endsAtUtc, CancellationToken ct = default);
 
         /// <summary>Nhắc gói sắp hết hạn. Gia hạn là thủ công, hệ thống không tự trừ tiền.</summary>
         Task SendSubscriptionExpiringEmailAsync(string toEmail, string fullName, string planName, DateTime endsAtUtc, CancellationToken ct = default);

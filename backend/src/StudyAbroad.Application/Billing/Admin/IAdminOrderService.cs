@@ -4,7 +4,7 @@ namespace StudyAbroad.Application.Billing.Admin;
 
 /// <summary>
 /// Admin xử lý đơn hàng (UC-132..134). Lỗi quy tắc là <see cref="BillingRuleException"/>:
-/// note_required 400, order_not_found 404, already_paid / not_mismatch / lane_full / buyer_deleted 409, gateway_unavailable 502.
+/// note_required 400, order_not_found 404, already_paid / not_mismatch / buyer_deleted 409, gateway_unavailable 502.
 /// </summary>
 public interface IAdminOrderService
 {

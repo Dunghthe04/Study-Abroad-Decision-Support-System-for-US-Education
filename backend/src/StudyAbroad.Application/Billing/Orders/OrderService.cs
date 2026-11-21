@@ -49,18 +49,13 @@ public sealed partial class OrderService(
         if (await billing.FindPendingOrderCodeAsync(userId, ct) is { } pendingCode)
             throw PendingExists(pendingCode);
 
-        // 5. Đã có kỳ gia hạn xếp hàng thì chưa gia hạn thêm (R6)
-        var lane = await entitlements.AdvanceLaneAsync(userId, plan.Kind, nowUtc, ct);
-        if (lane.Queued is not null)
-            throw Rule("already_renewed", 409, "Bạn đã gia hạn rồi, kỳ tiếp theo sẽ tự bắt đầu.");
-
-        // 6. Đang là thành viên của gói Gia đình khác còn hiệu lực thì không mua gói Gia đình riêng (F29, C9)
+        // 5. Đang là thành viên của gói Gia đình khác còn hiệu lực thì không mua gói Gia đình riêng (F29, C9). Mua thêm gói cùng loại thì được: các kỳ cộng dồn
         if (plan.Kind == PlanKinds.Family
             && await billing.FindActiveMemberGroupAsync(userId, ct) is { } other
-            && (await entitlements.AdvanceLaneAsync(other.OwnerUserId, PlanKinds.Family, nowUtc, ct)).Active is not null)
+            && (await entitlements.EndExpiredCyclesAsync(other.OwnerUserId, PlanKinds.Family, nowUtc, ct)).Count > 0)
             throw Rule("already_in_family", 409, "Bạn đang là thành viên của một gói Gia đình khác. Hãy rời nhóm đó trước khi mua gói Gia đình.");
 
-        // 7. Ghi đơn
+        // 6. Ghi đơn
         var order = new PaymentTransaction
         {
             UserId = userId,
@@ -78,7 +73,7 @@ public sealed partial class OrderService(
         };
         await InsertAsync(order, userId, nowUtc, ct);
 
-        // 8. Link thanh toán payOS. Lỗi: hủy đơn để người dùng thử lại ngay (P9)
+        // 7. Link thanh toán payOS. Lỗi: hủy đơn để người dùng thử lại ngay (P9)
         var returnUrl = $"{payOsOptions.ReturnUrlBase.TrimEnd('/')}/orders/{order.OrderCode}";
         GatewayLink link;
         try

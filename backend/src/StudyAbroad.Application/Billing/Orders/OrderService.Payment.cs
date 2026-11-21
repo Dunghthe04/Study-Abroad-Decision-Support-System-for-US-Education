@@ -6,12 +6,10 @@ using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.Billing.Orders;
 
-// Áp dụng thanh toán: đường tiền. Một transaction, khóa dòng đơn, các thay đổi làn / nhóm / đơn lưu theo từng bước
-// (kết thúc kỳ cũ trước khi thêm kỳ mới để index một-active-mỗi-làn không vấp), thử lại một lần khi vướng index duy nhất.
+// Áp dụng thanh toán: đường tiền. Một transaction, khóa dòng đơn, các thay đổi nhóm / kỳ / đơn lưu theo từng bước,
+// thử lại một lần khi vướng xung đột đồng thời. Đơn đã trả luôn tạo một kỳ active chạy ngay, bất kể người mua đang có kỳ nào.
 public sealed partial class OrderService
 {
-    private const string LaneFullNote = "lane_full: đã có kỳ đang chạy và kỳ chờ";
-
     public async Task<bool> HandleWebhookAsync(string rawBody, DateTime nowUtc, CancellationToken ct = default)
     {
         var webhook = await gateway.VerifyWebhookAsync(rawBody, ct);
@@ -99,20 +97,10 @@ public sealed partial class OrderService
             return new PaymentApplyResult(PaymentApplyStatus.Mismatch);
         }
 
-        // 3. Chỗ đặt kỳ mới được quyết định lúc thanh toán (C5)
-        var lane = await entitlements.AdvanceLaneAsync(buyerId, order.PlanKind, now, ct, afterCommit);   // thông báo chuyển kỳ xếp hàng, gửi sau commit
-        if (lane.Queued is not null)
-        {
-            // P22: đã nhận tiền nhưng làn đầy (đang chạy + đang chờ). Admin kích hoạt sau
-            await MarkMismatchAsync(order, payloadJson, LaneFullNote, ct);
-            if (!alreadyMismatch)
-                afterCommit.Add(NotifyMismatch(buyerId, order.OrderCode, "Đã nhận tiền nhưng gói chưa kích hoạt được, quản trị viên sẽ xử lý."));
-            return new PaymentApplyResult(PaymentApplyStatus.LaneFull);
-        }
-        var rollover = lane.Active is not null && lane.ActiveExhausted;   // R4: kỳ cũ đã dùng hết, kỳ mới thay ngay
-        var queued = lane.Active is not null && !rollover;                // R1: kỳ cũ còn token, kỳ mới xếp hàng
+        // 3. Kỳ hết hạn mà job chưa kịp chạy thì kết thúc trước (gói Gia đình: nhóm cũ cũng kết thúc ở đây, kỳ mới không dính vào nhóm cũ với thành viên cũ)
+        await entitlements.EndExpiredCyclesAsync(buyerId, order.PlanKind, now, ct, afterCommit);
 
-        // 4. Gói Gia đình: nhóm của người mua (tạo mới nếu chưa có, cùng transaction với kỳ); C15: đang là thành viên nhóm khác thì rời nhóm đó
+        // Gói Gia đình: nhóm của người mua (tạo mới nếu chưa có, cùng transaction với kỳ); C15: đang là thành viên nhóm khác thì rời nhóm đó
         FamilyGroup? group = null;
         var newGroup = false;
         FamilyMember? leaving = null;
@@ -127,22 +115,22 @@ public sealed partial class OrderService
             }
             if (await billing.FindActiveMemberGroupAsync(buyerId, ct) is { } memberOf)
             {
-                await entitlements.AdvanceLaneAsync(memberOf.OwnerUserId, PlanKinds.Family, now, ct, afterCommit);   // nhóm đã hết kỳ thì kết thúc ở đây, không còn gì để rời
+                await entitlements.EndExpiredCyclesAsync(memberOf.OwnerUserId, PlanKinds.Family, now, ct, afterCommit);   // nhóm đã hết kỳ thì kết thúc ở đây, không còn gì để rời
                 leaving = (await billing.GetOpenMembersAsync(memberOf.Id, ct)).FirstOrDefault(m => m.UserId == buyerId && m.Status == FamilyMemberStatuses.Active);
                 leftOwnerId = memberOf.OwnerUserId;
             }
         }
 
-        // 5. Kỳ mới lấy gói, giá, hạn mức từ ĐƠN (bản chụp lúc đặt), không từ gói hiện tại
+        // 4. Kỳ mới lấy gói, giá, hạn mức từ ĐƠN (bản chụp lúc đặt), không từ gói hiện tại
         var cycle = new UserSubscription
         {
             UserId = buyerId,
             SubscriptionPlanId = order.SubscriptionPlanId,
             Kind = order.PlanKind,
             FamilyGroupId = group?.Id,
-            Status = queued ? CycleStatuses.Queued : CycleStatuses.Active,
-            StartsAt = queued ? null : now,
-            EndsAt = queued ? null : now.AddDays(order.PlanDurationDays),
+            Status = CycleStatuses.Active,
+            StartsAt = now,
+            EndsAt = now.AddDays(order.PlanDurationDays),
             TokenQuota = order.PlanTokenQuota,
             PlanName = order.PlanName,
             PriceVnd = order.AmountVnd,
@@ -152,19 +140,8 @@ public sealed partial class OrderService
             CreatedAt = now,
         };
 
-        // 6. Lưu theo thứ tự: kết thúc kỳ cũ → thêm nhóm và kỳ mới → đánh dấu đơn đã trả
+        // 5. Lưu theo thứ tự: thêm nhóm và kỳ mới → đánh dấu đơn đã trả
         var steps = new List<Action>();
-        if (rollover)
-        {
-            var old = lane.Active!;
-            steps.Add(() =>
-            {
-                old.Status = CycleStatuses.Ended;
-                old.EndedReason = CycleEndReasons.ExhaustedRollover;
-                old.EndedAt = now;
-                old.EndsAt = now;
-            });
-        }
         steps.Add(() =>
         {
             if (newGroup)
@@ -189,16 +166,16 @@ public sealed partial class OrderService
         });
         await billing.SaveStepsAsync(steps, ct);
 
-        // 7. Sau commit: biên nhận, thông báo, và (C15) báo hai bên khi người mua rời nhóm cũ
+        // 6. Sau commit: biên nhận, thông báo, và (C15) báo hai bên khi người mua rời nhóm cũ
         var (code, planName, amount, startsAt, endsAt) = (order.OrderCode, order.PlanName, order.AmountVnd, cycle.StartsAt, cycle.EndsAt);
         afterCommit.Add(async c =>
         {
             if (await users.GetUserById(buyerId, c) is { } buyer)
-                await email.SendPaymentReceiptEmailAsync(buyer.Email, buyer.FullName, code, planName, amount, now, startsAt, endsAt, queued, c);
+                await email.SendPaymentReceiptEmailAsync(buyer.Email, buyer.FullName, code, planName, amount, now, startsAt, endsAt, c);
         });
         afterCommit.Add(c => notifications.NotifyAsync(
             buyerId, NotificationTypes.BillingPaymentPaid, "Thanh toán thành công",
-            queued ? $"Gói {planName} đã thanh toán, kỳ này sẽ bắt đầu khi kỳ hiện tại kết thúc." : $"Gói {planName} đã được kích hoạt.",
+            $"Gói {planName} đã được kích hoạt.",
             $"/orders/{code}", c));
         if (leaving is not null && leftOwnerId is { } ownerId)
         {
@@ -216,7 +193,7 @@ public sealed partial class OrderService
             });
         }
 
-        return new PaymentApplyResult(queued ? PaymentApplyStatus.Queued : PaymentApplyStatus.Activated, cycle.Id);
+        return new PaymentApplyResult(PaymentApplyStatus.Activated, cycle.Id);
     }
 
     private async Task MarkMismatchAsync(PaymentTransaction order, string? payloadJson, string? adminNote, CancellationToken ct)
