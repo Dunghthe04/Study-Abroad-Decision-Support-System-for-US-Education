@@ -78,7 +78,36 @@ public static class DependencyInjection
         // Nhật ký các lần gọi AI (token, thời gian, lỗi): chỉ số đo, không có nội dung chat nên luôn bật, không theo Chat:StoreMessages
         services.AddScoped<IAiCallRepository, AiCallRepository>();
         services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
+        services.AddScoped<StudyAbroad.Application.Billing.IBillingRepository, BillingRepository>();   // gói dịch vụ: kỳ, nhóm gia đình, token đã dùng
+        services.AddScoped<StudyAbroad.Application.Billing.Admin.IPlanAdminRepository, PlanAdminRepository>();   // UC-79: admin quản lý gói
+        services.AddScoped<StudyAbroad.Application.Billing.Family.IFamilyRepository, FamilyRepository>();   // gói Gia đình: lời mời, thành viên, khóa nhóm
         services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
+        services.AddScoped<StudyAbroad.Application.Billing.Orders.IOrderRepository, OrderRepository>();   // đơn hàng thanh toán
+        services.AddScoped<StudyAbroad.Application.Billing.IBillingAccountRepository, BillingAccountRepository>();   // UC-80: gói dịch vụ khi xóa tài khoản
+        services.AddScoped<StudyAbroad.Application.Billing.Jobs.IBillingJobRepository, BillingJobRepository>();   // job nền thanh toán: đơn chờ, làn tới hạn, nhắc hạn
+        services.AddScoped<StudyAbroad.Application.Billing.Admin.IAdminOrderRepository, AdminOrderRepository>();   // UC-132: danh sách đơn cho admin
+
+        // Thanh toán gói qua payOS: khóa từ appsettings "PayOs" hoặc biến môi trường PAYOS_*; "Billing" là các giá trị rút ngắn được ở máy kiểm thử
+        services.Configure<StudyAbroad.Application.Billing.Payments.PayOsOptions>(options =>
+        {
+            configuration.GetSection(StudyAbroad.Application.Billing.Payments.PayOsOptions.SectionName).Bind(options);
+            options.ClientId = NonEmpty(configuration["PAYOS_CLIENT_ID"]) ?? options.ClientId;
+            options.ApiKey = NonEmpty(configuration["PAYOS_API_KEY"]) ?? options.ApiKey;
+            options.ChecksumKey = NonEmpty(configuration["PAYOS_CHECKSUM_KEY"]) ?? options.ChecksumKey;
+            options.ReturnUrlBase = NonEmpty(configuration["PAYOS_RETURN_URL_BASE"]) ?? options.ReturnUrlBase;
+            if (bool.TryParse(configuration["PAYOS_USE_FAKE"], out var useFake)) options.UseFake = useFake;
+        });
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<StudyAbroad.Application.Billing.Payments.PayOsOptions>>().Value);
+        services.Configure<StudyAbroad.Application.Billing.BillingOptions>(configuration.GetSection(StudyAbroad.Application.Billing.BillingOptions.SectionName));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<StudyAbroad.Application.Billing.BillingOptions>>().Value);
+        services.AddSingleton<StudyAbroad.Infrastructure.Payments.FakeGatewayState>();
+        services.AddSingleton<StudyAbroad.Application.Billing.Payments.IPaymentGateway>(sp =>
+        {
+            var options = sp.GetRequiredService<StudyAbroad.Application.Billing.Payments.PayOsOptions>();
+            return options.UseFake
+                ? new StudyAbroad.Infrastructure.Payments.FakePaymentGateway(options, sp.GetRequiredService<StudyAbroad.Infrastructure.Payments.FakeGatewayState>())
+                : new StudyAbroad.Infrastructure.Payments.PayOsGateway(options, sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<StudyAbroad.Infrastructure.Payments.PayOsGateway>>());
+        });
 
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY).
@@ -140,6 +169,7 @@ public static class DependencyInjection
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountUnlockBackgroundService>();
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.OtpCleanupBackgroundService>();
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountPurgeBackgroundService>();   // [UC-80]
+        services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.BillingBackgroundService>();   // đối soát đơn, chuyển kỳ, nhắc hạn, thông báo hạn mức
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.ParentProfileMigrationBackgroundService>();   // [1.5d] chạy 1 lần lúc khởi động
 
         return services;

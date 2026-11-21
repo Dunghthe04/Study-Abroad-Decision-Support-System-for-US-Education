@@ -371,6 +371,13 @@ export interface AdvisorChatResponse {
   profileSaved?: boolean | null; // lượt này vừa lưu hồ sơ chính thức (bấm "Đúng rồi" ở bảng rà soát)
   formStep?: number | null; // trang form (1–6) của câu chat đang hỏi; form chuyển theo
   formGoals?: string[] | null; // việc học sinh đã hỏi khi điền hồ sơ trong chat (danh_gia, lo_trinh, goi_y_truong); form tích sẵn
+  /** Lượt bị khóa theo gói (billing spec mục 5): cần Premium, hoặc hết lượt miễn phí của tháng (resetsAt là ngày làm mới) */
+  locked?: ChatLock | null;
+}
+
+export interface ChatLock {
+  reason: "premium_required" | "quota_exhausted";
+  resetsAt: string | null;
 }
 
 /** Một dòng của POST /api/v1/advisor/chat/stream (mỗi dòng một JSON): trả lời theo từng ý khi xong. */

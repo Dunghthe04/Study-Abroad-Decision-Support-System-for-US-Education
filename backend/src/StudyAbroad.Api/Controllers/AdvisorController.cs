@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Domain.Constants;
@@ -21,7 +23,12 @@ public class AdvisorController(ChatService chat, ILogger<AdvisorController> logg
     private AdvisorChatRequest WithExactBudget(AdvisorChatRequest request) =>
         request with { ExactBudget = ActingSessionGuard.ReadActingParentId(User) is not null };
 
+    // Nhập hộ con: gói và token tính theo phụ huynh (id + vai trò parent), phiên chat vẫn của con
+    private (Guid? ChargeUserId, string? ChargeRole) Payer() =>
+        ActingSessionGuard.ReadActingParentId(User) is { } parentId ? (parentId, UserRoles.Parent) : (null, null);
+
     [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
+    [EnableRateLimiting(ChatConcurrencyRateLimit.PolicyName)]   // một câu hỏi đang chạy mỗi người
     [HttpPost("chat")]
     public async Task<ActionResult<AdvisorChatResponse>> Chat(AdvisorChatRequest request, CancellationToken ct)
     {
@@ -35,7 +42,8 @@ public class AdvisorController(ChatService chat, ILogger<AdvisorController> logg
 
         try
         {
-            return Ok(await chat.ChatAsync(userId.Value, WithExactBudget(request), ct));
+            var (chargeUserId, chargeRole) = Payer();
+            return Ok(await chat.ChatAsync(userId.Value, WithExactBudget(request), ct, role: User.GetRole(), chargeUserId: chargeUserId, chargeRole: chargeRole));
         }
         catch (HttpRequestException ex)
         {
@@ -50,6 +58,7 @@ public class AdvisorController(ChatService chat, ILogger<AdvisorController> logg
     /// Câu hiện cuối cùng lấy từ dòng final, vì gợi ý trường và giải thích trường có thể thay câu trả lời ở bước cuối.
     /// </summary>
     [Authorize(Policy = AgeFeatures.ProcessStudentData)] // [Q11] dưới 16 cần phụ huynh đồng ý
+    [EnableRateLimiting(ChatConcurrencyRateLimit.PolicyName)]   // dùng chung giới hạn với chat
     [HttpPost("chat/stream")]
     public async Task<IActionResult> ChatStream(
         AdvisorChatRequest request, [FromServices] IOptions<Microsoft.AspNetCore.Mvc.JsonOptions> json, CancellationToken ct)
@@ -75,7 +84,8 @@ public class AdvisorController(ChatService chat, ILogger<AdvisorController> logg
 
         try
         {
-            var result = await chat.ChatAsync(userId.Value, WithExactBudget(request), ct, e => Write(e));
+            var (chargeUserId, chargeRole) = Payer();
+            var result = await chat.ChatAsync(userId.Value, WithExactBudget(request), ct, e => Write(e), role: User.GetRole(), chargeUserId: chargeUserId, chargeRole: chargeRole);
             await Write(new { type = "final", response = result });
         }
         catch (HttpRequestException ex)

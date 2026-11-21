@@ -9,7 +9,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 
 export function ForgotPasswordForm() {
   const router = useRouter();
@@ -86,8 +85,7 @@ export function ForgotPasswordForm() {
             />
           </Field>
 
-          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full">
-            {isSubmitting && <Spinner data-icon="inline-start" />}
+          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full" loading={isSubmitting}>
             {isSubmitting ? "Đang gửi mã..." : "Gửi mã OTP xác nhận"}
           </Button>
         </FieldGroup>

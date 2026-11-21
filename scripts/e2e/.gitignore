@@ -1,0 +1,4 @@
+.mail/
+.api-*.pid
+__pycache__/
+last-run.md

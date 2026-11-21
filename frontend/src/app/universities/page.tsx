@@ -7,7 +7,7 @@ import type { UniversityFilterOptions, UniversityListItem, UniversitySearchParam
 import type { PagedResult } from "@/types/api";
 
 export const metadata: Metadata = {
-  title: "Tìm kiếm trường Đại học Mỹ – USAS",
+  title: "Tìm kiếm trường Đại học Mỹ – USDSS",
   description:
     "Tra cứu và khám phá hơn 240 trường đại học tại Mỹ với bộ lọc chi tiết theo bang, học phí, ngành đào tạo, thứ hạng và yêu cầu tiếng Anh.",
 };
@@ -74,7 +74,7 @@ export default async function UniversitiesPage({ searchParams }: UniversitiesPag
   }
 
   return (
-    <section className="py-6 pb-16 space-y-6">
+    <section className="mx-auto w-full max-w-[1560px] px-4 pt-4 pb-8 sm:px-8 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden lg:px-12 lg:pb-0">
       <UniversityListView
         initialData={data}
         options={options}

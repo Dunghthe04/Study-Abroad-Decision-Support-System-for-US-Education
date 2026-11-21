@@ -112,7 +112,7 @@ export function ScholarshipListView() {
         <>
           <button
             type="button"
-            className="text-left font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+            className="cursor-pointer rounded-sm text-left font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             onClick={(event) => {
               event.stopPropagation();
               setSelection({ kind: "existing", scholarship: s, editing: false });

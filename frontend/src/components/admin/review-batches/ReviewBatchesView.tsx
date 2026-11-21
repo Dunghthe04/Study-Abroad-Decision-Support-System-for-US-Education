@@ -28,18 +28,11 @@ export function ReviewBatchesView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex max-w-2xl flex-col gap-1">
-          <h1 className="text-h2">Duyệt mẫu</h1>
-          <p className="text-sm text-ink-2">
-            Hàng đợi &ldquo;Câu cần xem&rdquo; chỉ có các câu hệ thống tự thừa nhận là không làm được. Ở đây bạn bốc ngẫu nhiên một số câu đã trả lời được,
-            đọc và chấm đúng sai, để biết hệ thống sai bao nhiêu kể cả khi nó trả lời trôi chảy.
-          </p>
-        </div>
+      <div className="flex justify-end">
         <Button type="button" onClick={() => setCreating(true)}>
           <PlusIcon /> Tạo đợt
         </Button>
-      </header>
+      </div>
 
       {batches.error ? <Alert variant="destructive"><AlertDescription>{batches.error}</AlertDescription></Alert> : null}
 

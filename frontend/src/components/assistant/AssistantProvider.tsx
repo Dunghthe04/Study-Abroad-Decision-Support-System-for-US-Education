@@ -5,7 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { streamAdvisorChat } from "@/lib/advisor-stream";
+import { billingApi, getBillingError } from "@/lib/billing-api";
 import { rememberChatGoals } from "@/lib/form-goals";
+import { useFetched } from "@/lib/use-fetched";
 import {
   GOAL_SCHOOL_EVENT,
   PROFILE_SAVED_EVENT,
@@ -13,7 +15,8 @@ import {
   resetSimulation,
   showSimulation,
 } from "@/lib/simulation-link";
-import type { AssistantAction, ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
+import type { AssistantAction, ChatLock, ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
+import type { SubscriptionSummaryDto } from "@/types/billing";
 import type { SimulationOverrides } from "@/types/recommendation";
 
 export type AssistantTurn = ChatMessage & {
@@ -23,6 +26,8 @@ export type AssistantTurn = ChatMessage & {
   quickReplies?: QuickReply[] | null;
   /** Widget kèm lượt trợ lý (vd bảng rà soát hồ sơ) */
   widget?: ChatWidget | null;
+  /** Lượt bị khóa theo gói: hiện thẻ "cần Premium" / "hết lượt miễn phí" */
+  locked?: ChatLock | null;
 };
 
 export type AssistantError = { kind: "unavailable" | "auth" | "other"; message: string };
@@ -71,6 +76,8 @@ interface AssistantContextValue {
   setPageContext: (ctx: AssistantPageContext | null) => void;
   setBeforeSend: (fn: BeforeSend | null) => void;
   setOnProfileChanged: (fn: ProfileChanged | null) => void;
+  /** Gói của học sinh/phụ huynh khi khung đang mở (null: chưa tải, khách, nhân viên); tải lại sau mỗi câu trả lời */
+  subscription: SubscriptionSummaryDto | null;
 }
 
 /** fromForm: câu do form gửi ngay sau khi lưu hồ sơ chính thức, advisor bỏ bảng xác nhận đang treo và trả lời luôn */
@@ -119,6 +126,9 @@ function defaultContext(pathname: string): AssistantPageContext {
 function toAssistantError(err: unknown): AssistantError {
   if (err instanceof ApiError) {
     if (err.status === 401) return { kind: "auth", message: "Bạn cần đăng nhập để hỏi trợ lý." };
+    // Mỗi người chỉ hỏi một câu một lúc (429 chat_busy): hiện đúng lời server
+    const billing = getBillingError(err);
+    if (billing?.code === "chat_busy") return { kind: "other", message: billing.message };
     if (err.status === 503 || err.status === 502 || err.status === 504) {
       return { kind: "unavailable", message: "Trợ lý đang tạm ngưng, bạn thử lại sau." };
     }
@@ -141,6 +151,13 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const [streaming, setStreaming] = useState<AssistantStreaming | null>(null);
   const [error, setError] = useState<AssistantError | null>(null);
   const [registered, setRegistered] = useState<AssistantPageContext | null>(null);
+  // Gói chỉ tải khi khung chat đang mở; replyCount tăng sau mỗi câu trả lời để tải lại phần trăm (thanh báo 80% / sắp hết hạn)
+  const [replyCount, setReplyCount] = useState(0);
+  const hasPlan = open && (user?.role === "student" || user?.role === "parent");
+  const { data: subscription } = useFetched<SubscriptionSummaryDto | null>(
+    hasPlan ? `sub:${userId}:${replyCount}` : "sub:none",
+    () => (hasPlan ? billingApi.subscription() : Promise.resolve(null)),
+  );
 
   const turnsRef = useRef<AssistantTurn[]>([]);
   const loadingRef = useRef(false);
@@ -300,8 +317,10 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
             disclaimer: res.disclaimer,
             quickReplies: res.quickReplies,
             widget: res.widget,
+            locked: res.locked ?? null,
           },
         ]);
+        setReplyCount((n) => n + 1);
         // What-if: đang đứng ở trang Gợi ý trường thì cập nhật thanh kéo và danh sách bên cạnh tại chỗ (không tải lại trang).
         // Ở trang khác thì không tự chuyển trang, học sinh bấm nút "Xem trên thanh kéo" trong tin nhắn
         if (res.widget?.type === "simulate" && onRecommendationsPage())
@@ -403,8 +422,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       setPageContext: setRegistered,
       setBeforeSend,
       setOnProfileChanged,
+      subscription,
     }),
-    [open, wide, turns, loading, streaming, error, page, openPanel, newChat, send, sendAction, retry, setBeforeSend, setOnProfileChanged]
+    [open, wide, turns, loading, streaming, error, page, openPanel, newChat, send, sendAction, retry, setBeforeSend, setOnProfileChanged, subscription]
   );
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;

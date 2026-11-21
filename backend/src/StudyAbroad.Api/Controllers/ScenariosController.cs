@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StudyAbroad.Api.Authorization;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Constants;
@@ -25,6 +26,7 @@ public class ScenariosController(ScenarioService scenarios) : ControllerBase
     // Lưu kịch bản đang xem. Chỉ học sinh, và cần đủ điều kiện xử lý dữ liệu như khi chạy giả định.
     [Authorize(Roles = UserRoles.Student)]
     [Authorize(Policy = AgeFeatures.ProcessStudentData)]
+    [Authorize(Policy = PremiumPolicies.Recommendations)] // lưu kịch bản what-if là tính năng Premium; xem, đổi tên, xóa kịch bản đã lưu thì không chặn
     [HttpPost]
     public async Task<IActionResult> Save([FromBody] SaveScenarioRequest request, CancellationToken ct)
     {

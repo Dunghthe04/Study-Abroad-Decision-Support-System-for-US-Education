@@ -1,8 +1,27 @@
 namespace StudyAbroad.Application.MediaUploads;
 
+public enum MediaResourceType
+{
+    Image = 0,
+    Video = 1,
+    Raw = 2,
+}
+
 public interface IMediaUploader
 {
     Task<MediaUploadResult> UploadImageAsync(MediaUploadRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Kiểm tra tài nguyên có tồn tại trên Cloudinary theo public ID hoặc URL giao hàng.</summary>
+    Task<bool> ExistsAsync(
+        string publicIdOrUrl,
+        MediaResourceType? resourceType = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Xóa tài nguyên trên Cloudinary theo public ID hoặc URL giao hàng; trả về false nếu không tồn tại.</summary>
+    Task<bool> DeleteAsync(
+        string publicIdOrUrl,
+        MediaResourceType? resourceType = null,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record MediaUploadRequest(

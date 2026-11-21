@@ -23,6 +23,19 @@ public class AiCallMapperTests
     }
 
     [Fact]
+    public void ChatTurnCall_CarriesThePoolStamp_OtherCallsDoNot()
+    {
+        var usage = new AiUsageDto("claude", "claude-haiku-5-5", "skill_tra_loi", "1.1", 10, 5, 0, true, null, 1);
+        var cycle = Guid.NewGuid();
+
+        var chat = AiCallMapper.ToEntity(usage, User, Message, Pricing, cycle, "personal-1m");
+        var ocr = AiCallMapper.ToEntity(usage, User, null, Pricing);
+
+        Assert.Equal((cycle, "personal-1m"), (chat.UserSubscriptionId!.Value, chat.PlanCode));
+        Assert.Equal(((Guid?)null, (string?)null), (ocr.UserSubscriptionId, ocr.PlanCode));
+    }
+
+    [Fact]
     public void TotalIsInputPlusOutput_CachedTokensAreCountedSeparately()
     {
         var call = AiCallMapper.ToEntity(new AiUsageDto("claude", "m", "p", "1", 100, 20, 50, true, null, 1), User, null, Pricing);

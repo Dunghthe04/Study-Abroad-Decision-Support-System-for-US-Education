@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { centerPortalApi } from "@/lib/api";
 import type { CenterVerificationStatusDto } from "@/types/api";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface BannerTone {
@@ -143,15 +144,17 @@ export function CenterStatusBanner() {
           {detail && <span className="hidden sm:inline text-xs opacity-90 truncate">— {detail}</span>}
         </div>
         {isVerified && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-xs"
             onClick={handleDismiss}
-            className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 text-ok transition-colors ml-auto shrink-0"
+            className="hover:bg-black/5 dark:hover:bg-white/10 text-ok hover:text-ok ml-auto shrink-0"
             title="Đóng thông báo"
             aria-label="Đóng thông báo"
           >
             <XIcon className="h-3.5 w-3.5" />
-          </button>
+          </Button>
         )}
       </div>
     </div>

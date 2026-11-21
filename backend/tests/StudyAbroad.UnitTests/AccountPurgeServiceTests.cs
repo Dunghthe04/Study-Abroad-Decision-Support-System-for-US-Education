@@ -1,4 +1,5 @@
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.Billing;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
 
@@ -70,6 +71,26 @@ public class AccountPurgeServiceTests
         public Task DeleteDraftFilesAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
+    /// <summary>Hook gói dịch vụ giả: ghi bước vào cùng danh sách Steps để kiểm thứ tự so với DeleteUserAsync.</summary>
+    private sealed class FakeBillingHooks(List<string> steps) : IBillingAccountHooks
+    {
+        public HashSet<Guid> FailFor { get; } = [];
+
+        public Task<Func<CancellationToken, Task>> OnAccountSoftDeletedAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<Func<CancellationToken, Task>> OnBeforePurgeAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default)
+        {
+            if (FailFor.Contains(userId)) throw new InvalidOperationException("hook lỗi");
+            steps.Add($"billing:{userId}");
+            return Task.FromResult<Func<CancellationToken, Task>>(_ =>
+            {
+                steps.Add($"billing-after:{userId}");
+                return Task.CompletedTask;
+            });
+        }
+    }
+
     private readonly FakePurgeRepository _repo = new();
     private readonly FakeFileStorage _files;
     private readonly FakeAuditLogRepository _audit = new();
@@ -77,9 +98,16 @@ public class AccountPurgeServiceTests
     private readonly AccountDeletionOptions _options = new() { RetentionPeriod = TimeSpan.FromDays(30) };
     private static readonly DateTime Now = new(2026, 11, 17, 8, 0, 0, DateTimeKind.Utc);
 
-    public AccountPurgeServiceTests() => _files = new FakeFileStorage(_repo.Steps);
+    private readonly FakeBillingHooks _billing;
 
-    private AccountPurgeService CreateService() => new(_repo, _audit, _unitOfWork, _files, _options);
+    public AccountPurgeServiceTests()
+    {
+        _files = new FakeFileStorage(_repo.Steps);
+        _billing = new FakeBillingHooks(_repo.Steps);
+    }
+
+    private AccountPurgeService CreateService(bool withBillingHooks = false) =>
+        new(_repo, _audit, _unitOfWork, _files, _options, withBillingHooks ? _billing : null);
 
     [Fact]
     public async Task Purge_UsesRetentionCutoffAndOnlyStudentParentRoles()
@@ -113,6 +141,53 @@ public class AccountPurgeServiceTests
         Assert.Equal("user", entry.EntityType);
         Assert.Equal(id.ToString(), entry.EntityId);
         Assert.Null(entry.DetailJson);
+    }
+
+    [Fact]
+    public async Task Purge_BillingHook_RunsInsideTheTransactionBeforeDeleteUser_AndAfterCommitWorkRunsBeforeFiles()
+    {
+        var id = Guid.NewGuid();
+        _repo.DueIds.Add(id);
+
+        var summary = await CreateService(withBillingHooks: true).PurgeDueAccountsAsync(Now);
+
+        Assert.Equal(1, summary.Purged);
+        Assert.Equal(1, _unitOfWork.Calls);
+        // Hook ngay trước khi xóa user (cùng transaction); việc sau commit (báo thành viên) chạy sau khi xóa, trước khi dọn tệp
+        Assert.Equal(
+            new[] { $"lock:{id}", $"payments:{id}", $"forum:{id}", $"billing:{id}", $"delete:{id}", $"billing-after:{id}", $"files:{id}" },
+            _repo.Steps);
+    }
+
+    [Fact]
+    public async Task Purge_BillingHookFails_UserNotDeletedAndReported_OthersStillPurged()
+    {
+        var bad = Guid.NewGuid();
+        var good = Guid.NewGuid();
+        _repo.DueIds.AddRange([bad, good]);
+        _billing.FailFor.Add(bad);
+
+        var summary = await CreateService(withBillingHooks: true).PurgeDueAccountsAsync(Now);
+
+        Assert.Equal(1, summary.Purged);
+        Assert.Equal(bad, Assert.Single(summary.Failures).UserId);
+        Assert.DoesNotContain($"delete:{bad}", _repo.Steps);
+        Assert.DoesNotContain($"billing-after:{bad}", _repo.Steps);
+        Assert.DoesNotContain($"files:{bad}", _repo.Steps);
+        Assert.Contains($"delete:{good}", _repo.Steps);
+        Assert.Equal(good.ToString(), Assert.Single(_audit.Entries).EntityId);
+    }
+
+    [Fact]
+    public async Task Purge_UserRestoredMeanwhile_BillingHookNotCalled()
+    {
+        var id = Guid.NewGuid();
+        _repo.DueIds.Add(id);
+        _repo.Restored.Add(id);
+
+        await CreateService(withBillingHooks: true).PurgeDueAccountsAsync(Now);
+
+        Assert.Equal(new[] { $"lock:{id}" }, _repo.Steps);
     }
 
     [Fact]

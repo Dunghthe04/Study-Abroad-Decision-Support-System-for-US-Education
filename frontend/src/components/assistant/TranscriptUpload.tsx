@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { UploadIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useGradeScale } from "@/hooks/use-grade-scale";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import { calculateTranscriptGpa } from "@/lib/profile-flow-options";
@@ -75,15 +76,17 @@ export function TranscriptUpload({ onPick }: { onPick?: (text: string) => void }
         className="hidden"
         onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])}
       />
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
         disabled={!onPick || uploading}
         onClick={() => inputRef.current?.click()}
-        className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-full border border-brand/40 px-3 text-xs font-medium text-brand transition-colors hover:bg-brand-wash disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-full border border-brand/40 px-3 text-xs font-medium text-brand hover:bg-brand-wash hover:text-brand dark:hover:bg-brand-wash"
       >
         <UploadIcon className="size-3.5" />
         {uploading ? "Đang đọc học bạ…" : "Tải học bạ (PDF, PNG, JPG, tối đa 10MB)"}
-      </button>
+      </Button>
       {notice && <p className="text-xs text-warn">{notice}</p>}
     </div>
   );

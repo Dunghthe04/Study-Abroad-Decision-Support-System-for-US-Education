@@ -34,8 +34,9 @@ export function FinancialProfileTabs() {
           return (
             <button
               key={tab.key}
+              type="button"
               onClick={() => setActiveTab(tab.key)}
-              className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+              className={`flex-1 flex cursor-pointer items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default ${
                 isActive
                   ? "bg-surface text-ink ring-1 ring-line"
                   : "text-ink-2 hover:text-ink hover:bg-surface/60"

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { PlusIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { findNotNumbers, numberOrNull, textOrNull } from "@/lib/admin-form";
 import { AdminFormError, createAdminUniversity } from "@/lib/admin-university-api";
@@ -106,8 +105,8 @@ export function CreateUniversityPanel({ onClose, onCreated }: CreateUniversityPa
         </TableFrame>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Hủy</Button>
-          <Button type="submit" disabled={busy}>
-            {isSaving ? <Spinner /> : <PlusIcon />} {duplicateWarning ? "Vẫn tạo trường" : "Tạo trường"}
+          <Button type="submit" loading={isSaving} disabled={busy}>
+            <PlusIcon /> {duplicateWarning ? "Vẫn tạo trường" : "Tạo trường"}
           </Button>
         </div>
       </form>

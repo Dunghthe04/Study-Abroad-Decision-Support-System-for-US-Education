@@ -58,6 +58,8 @@ OUT_OF_SCOPE = {
 # ---------------------------------------------------------------------------------------------------------------------
 # Chưa làm được / chưa đủ điều kiện (chat_flow.py, branches.py)
 # ---------------------------------------------------------------------------------------------------------------------
+# Mọi ý của tin đều cần gói Premium (allowed_intents của .NET): trả câu này, không chạy nhánh nào
+PREMIUM_REQUIRED = "Câu hỏi này cần tài khoản USDSS Premium. Bạn vẫn có thể hỏi kiến thức du học miễn phí."
 NOT_READY = "Phần này mình đang hoàn thiện. Bạn chọn một việc khác dưới đây hoặc quay lại sau nhé."
 NEED_PROFILE = (
     "Mình cần biết thêm về hồ sơ của bạn trước khi làm bước này. Bạn cho mình xin thêm thông tin nhé."

@@ -254,7 +254,7 @@ export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onP
                   onUpdate({ annualBudgetTier: tier.key });
                 }}
                 className={cn(
-                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full",
+                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                   isSelected
                     ? "border-brand bg-brand-wash/40 ring-2 ring-brand text-brand-ink"
                     : "border-line bg-surface hover:border-brand/40 hover:bg-muted/30"
@@ -310,7 +310,7 @@ export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onP
                     applyAmount(amountText, c);
                   }}
                   className={cn(
-                    "cursor-pointer rounded-md px-3 py-1 transition-colors",
+                    "cursor-pointer rounded-md px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                     currency === c ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -370,7 +370,7 @@ export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onP
                   onUpdate({ needFinancialAid: opt.key });
                 }}
                 className={cn(
-                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full",
+                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                   isSelected
                     ? "border-brand bg-brand-wash/40 ring-2 ring-brand text-brand-ink"
                     : "border-line bg-surface hover:border-brand/40 hover:bg-muted/30"
@@ -422,11 +422,11 @@ export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onP
 
       {/* Bottom Actions */}
       <div className="flex justify-between pt-4 border-t border-line">
-        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5 cursor-pointer">
+        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5">
           <ArrowLeftIcon className="size-4" />
           Quay lại
         </Button>
-        <Button onClick={handleNextClick} size="lg" className="gap-1.5 cursor-pointer">
+        <Button onClick={handleNextClick} size="lg" className="gap-1.5">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>

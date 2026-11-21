@@ -5,7 +5,7 @@ import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
 import { LoginForm } from "@/components/auth/LoginForm";
 
 export const metadata: Metadata = {
-  title: "Đăng nhập – USAS",
+  title: "Đăng nhập – USDSS",
   description: "Đăng nhập vào tài khoản học sinh hoặc phụ huynh",
 };
 

@@ -28,7 +28,7 @@ const STEPS: { title: string; desc: string; icon: LucideIcon; color: string }[] 
     color: "bg-warn-wash text-warn",
   },
   {
-    title: "Hỏi USAS Advisor",
+    title: "Hỏi USDSS Advisor",
     desc: "Hỏi so sánh trường, điều kiện tuyển sinh và chính sách học bổng bằng tiếng Việt.",
     icon: MessageSquareTextIcon,
     color: "bg-ok-wash text-ok",

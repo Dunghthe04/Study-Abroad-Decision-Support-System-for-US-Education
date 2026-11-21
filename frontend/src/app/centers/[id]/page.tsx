@@ -14,12 +14,12 @@ export async function generateMetadata({ params }: CenterPageProps): Promise<Met
   try {
     const center = await apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`);
     if (center?.name) {
-      return { title: `${center.name} – Chi tiết Trung tâm USAS` };
+      return { title: `${center.name} – Chi tiết Trung tâm USDSS` };
     }
   } catch {
     // ignore
   }
-  return { title: "Chi tiết Trung tâm tư vấn – USAS" };
+  return { title: "Chi tiết Trung tâm tư vấn – USDSS" };
 }
 
 export default async function CenterDetailPage({ params }: CenterPageProps) {

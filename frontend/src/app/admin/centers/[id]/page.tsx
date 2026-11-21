@@ -20,12 +20,12 @@ export async function generateMetadata({ params }: AdminCenterDetailPageProps): 
   try {
     const center = await apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`);
     if (center?.name) {
-      return { title: `${center.name} – Chi tiết Trung tâm USAS` };
+      return { title: `${center.name} – Chi tiết Trung tâm USDSS` };
     }
   } catch {
     // ignore
   }
-  return { title: "Chi tiết Trung tâm – USAS" };
+  return { title: "Chi tiết Trung tâm – USDSS" };
 }
 
 export default async function AdminCenterDetailPage({ params }: AdminCenterDetailPageProps) {

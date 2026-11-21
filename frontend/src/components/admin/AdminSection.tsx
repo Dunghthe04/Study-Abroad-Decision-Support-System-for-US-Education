@@ -21,15 +21,7 @@ export function AdminSection({ href, children }: AdminSectionProps) {
   }
 
   return (
-    <ProtectedRoute
-      allowedRoles={item.roles}
-      deniedMessage={
-        <>
-          Mục <strong>{item.label}</strong> chỉ dành cho tài khoản quản trị
-          viên.
-        </>
-      }
-    >
+    <ProtectedRoute allowedRoles={item.roles}>
       {children ?? (
         <Card>
           <CardHeader>

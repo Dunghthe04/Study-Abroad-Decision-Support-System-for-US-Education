@@ -8,6 +8,7 @@ import { RankedBars } from "@/components/admin/ai-usage/charts-share";
 import { ChartCard, Segmented, StatTile } from "@/components/admin/ai-usage/parts";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { adminAiUsageApi, type DateRange } from "@/lib/ai-usage-api";
@@ -125,13 +126,13 @@ function Turns({ user, range }: { user: AiUsageUserRank; range: DateRange }) {
                 <Fragment key={turn.messageId}>
                   <TableRow className="cursor-pointer" onClick={() => setOpenId(open ? null : turn.messageId)}>
                     <TableCell>
-                      <button
-                        type="button" aria-expanded={open} aria-label={open ? "Thu gọn lượt này" : "Xem từng lần gọi của lượt này"}
-                        className="rounded outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      <Button
+                        type="button" variant="ghost" size="icon-xs"
+                        aria-expanded={open} aria-label={open ? "Thu gọn lượt này" : "Xem từng lần gọi của lượt này"}
                         onClick={(event) => { event.stopPropagation(); setOpenId(open ? null : turn.messageId); }}
                       >
                         {open ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}
-                      </button>
+                      </Button>
                     </TableCell>
                     <TableCell>
                       <span className="tabular block">{formatDateTime(turn.createdAt)}</span>

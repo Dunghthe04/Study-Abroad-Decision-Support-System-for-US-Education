@@ -3,6 +3,7 @@
 // Trạng thái của trình mô phỏng hồ sơ: giá trị giả định, gọi API có chống rung, kết quả mới nhất.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isPremiumRequired } from "@/lib/billing-api";
 import { recommendationApi } from "@/lib/recommendation-api";
 import { overridesFromValues } from "@/lib/simulation-link";
 import type { Pref, SimulationOverrides, SimulationResponse } from "@/types/recommendation";
@@ -14,6 +15,7 @@ export interface ProfileSimulation {
   overrides: SimulationOverrides;
   loading: boolean;
   error: string | null;
+  locked: boolean; // 403 premium_required: tài khoản Miễn phí không mô phỏng được
   isSimulating: boolean; // có giá trị giả định đang áp dụng
   set: (patch: SimulationOverrides) => void; // đặt hoặc xóa (null) các giá trị giả định
   reset: (keys: (keyof SimulationOverrides)[]) => void; // bỏ giả định của một nhóm thanh kéo
@@ -71,6 +73,7 @@ export function useProfileSimulation(
   const [result, setResult] = useState<SimulationResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [locked, setLocked] = useState(false);
   const seq = useRef(0); // chỉ nhận phản hồi của lần gọi mới nhất
 
   useEffect(() => {
@@ -86,10 +89,12 @@ export function useProfileSimulation(
             if (seq.current !== mine) return;
             setResult(res);
             setError(null);
+            setLocked(false);
           })
           .catch((err: unknown) => {
             if (seq.current !== mine) return;
             setError(err instanceof Error ? err.message : "Chưa mô phỏng được.");
+            setLocked(isPremiumRequired(err));
           })
           .finally(() => {
             if (seq.current === mine) setLoading(false);
@@ -117,5 +122,5 @@ export function useProfileSimulation(
 
   // Chỉ tính các giá trị người dùng đã kéo; ưu tiên mặc định (basePref) không tính
   const isSimulating = Object.values(overrides).some((v) => v !== undefined && v !== null);
-  return { result, overrides, loading, error, isSimulating, set, reset, resetAll, replace };
+  return { result, overrides, loading, error, locked, isSimulating, set, reset, resetAll, replace };
 }

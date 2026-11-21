@@ -14,7 +14,6 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { REGISTER_PARENT_EMAIL_KEY } from "@/components/auth/ParentConsentForm";
 import { Label } from "@/components/ui/label";
-import { Spinner } from "@/components/ui/spinner";
 
 // [Q11] Ngưỡng tuổi theo luật VN (khớp AgeGroups ở backend; backend tính lại và là nơi quyết định)
 const CHILD_MAX_AGE_EXCLUSIVE = 16;
@@ -379,8 +378,7 @@ export function RegisterForm() {
             </>
           )}
 
-          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full">
-            {isSubmitting && <Spinner data-icon="inline-start" />}
+          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full" loading={isSubmitting}>
             {isSubmitting ? "Đang xử lý..." : "Tạo tài khoản"}
           </Button>
         </FieldGroup>
