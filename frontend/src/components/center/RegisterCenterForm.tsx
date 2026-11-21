@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Building2Icon, ShieldCheckIcon } from "lucide-react";
-import { authApi, ApiError } from "@/lib/api";
+import { centerAccountApi, ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,7 @@ export function RegisterCenterForm() {
 
     setIsSubmitting(true);
     try {
-      await authApi.registerCenter({
+      await centerAccountApi.register({
         email: email.trim(),
         password,
         confirmPassword,

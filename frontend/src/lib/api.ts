@@ -149,20 +149,6 @@ export const authApi = {
       body: JSON.stringify(data),
     }),
 
-  // [UC-64] Trung tâm tự đăng ký tài khoản
-  registerCenter: (data: RegisterCenterRequest) =>
-    apiFetch<{ message: string; email: string }>("/api/v1/auth/register-center", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  // [UC-91] Xác thực email trung tâm qua mã OTP 6 số
-  verifyCenterEmail: (data: VerifyCenterEmailRequest) =>
-    apiFetch<AuthResponse>("/api/v1/auth/verify-center-email", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
   // [AC-2] Đăng nhập: Backend thiết lập HttpOnly Cookie "usas_access_token"
   login: (data: LoginRequest) =>
     apiFetch<AuthResponse>("/api/v1/auth/login", {
@@ -667,6 +653,21 @@ export const targetSchoolsApi = {
     if (params.universityId) q.set("universityId", params.universityId);
     return apiFetch<TargetSchoolDto | null>(`/api/v1/target-schools/check?${q.toString()}`);
   },
+};
+
+// [UC-64, UC-91] Tài khoản trung tâm chưa đăng nhập: tự đăng ký và xác thực email bằng OTP
+export const centerAccountApi = {
+  register: (data: RegisterCenterRequest) =>
+    apiFetch<{ message: string; email: string }>("/api/v1/center-accounts/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  verifyEmail: (data: VerifyCenterEmailRequest) =>
+    apiFetch<AuthResponse>("/api/v1/center-accounts/verify-email", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 // [UC-71, UC-91, UC-92] Cổng Trung tâm tư vấn
