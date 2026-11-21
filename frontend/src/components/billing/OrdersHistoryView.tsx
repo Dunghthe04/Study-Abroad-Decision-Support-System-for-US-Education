@@ -34,7 +34,7 @@ export function OrdersHistoryView() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-4">
+    <div className="w-full space-y-4">
       <h1 className="text-h1">Lịch sử giao dịch</h1>
       <Card>
         <CardContent className={cn("space-y-4", orders.loading && "opacity-60")}>

@@ -1,31 +1,85 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
-import { CheckIcon, ClockIcon, ExternalLinkIcon, TriangleAlertIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  CheckCircle2Icon,
+  CheckIcon,
+  ClockIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  FileCheck2Icon,
+  QrCodeIcon,
+  ReceiptTextIcon,
+  ShieldCheckIcon,
+  TriangleAlertIcon,
+  XCircleIcon,
+  ZapIcon,
+} from "lucide-react";
 import { ApiError } from "@/lib/api";
-import { billingApi, formatVnd, formatVnDateTime, getBillingError, ORDER_STATUS_BADGE, ORDER_STATUS_LABEL } from "@/lib/billing-api";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  billingApi,
+  formatVnd,
+  formatVnDateTime,
+  getBillingError,
+} from "@/lib/billing-api";
+import { cn } from "@/lib/utils";
 import { ErrorFallback } from "@/components/ui/error-fallback";
 import { Spinner } from "@/components/ui/spinner";
-import type { OrderDto } from "@/types/billing";
+import type { OrderDto, OrderStatus } from "@/types/billing";
 
 const POLL_MS = 3000;
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+const ACTION_ROW =
+  "flex w-full items-center gap-3 px-5 py-3.5 text-left text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand";
+
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Bỏ qua nếu trình duyệt chặn clipboard
+    }
+  };
+
   return (
-    <div className="flex flex-wrap justify-between gap-2 border-b border-line py-2 text-sm last:border-0">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{children}</span>
+    <button
+      type="button"
+      onClick={copy}
+      aria-label={copied ? `Đã sao chép ${label}` : `Sao chép ${label}`}
+      title={copied ? "Đã sao chép" : `Sao chép ${label}`}
+      className="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-line bg-ground text-ink-2 transition-colors hover:bg-surface hover:text-ink"
+    >
+      {copied ? <CheckIcon className="size-4 text-ok" /> : <CopyIcon className="size-4" />}
+    </button>
+  );
+}
+
+function Detail({ label, wide, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
+  return (
+    <div className={cn("min-w-0 space-y-1.5", wide && "sm:col-span-2")}>
+      <dt className="text-sm font-medium text-ink-2">{label}</dt>
+      <dd className="flex min-w-0 items-center gap-2 text-base font-semibold text-ink sm:text-lg">{children}</dd>
     </div>
   );
 }
 
-function Countdown({ expiresAt }: { expiresAt: string }) {
+function Countdown({ createdAt, expiresAt }: { createdAt: string; expiresAt: string }) {
   // "Bây giờ" chỉ đổi trong callback của interval (không gọi Date.now() khi render)
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
@@ -37,16 +91,138 @@ function Countdown({ expiresAt }: { expiresAt: string }) {
       clearInterval(id);
     };
   }, []);
-  if (now === null) return null;
-  const left = Math.max(0, Math.floor((new Date(expiresAt).getTime() - now) / 1000));
+
+  const end = new Date(expiresAt).getTime();
+  const total = Math.max(1, end - new Date(createdAt).getTime());
+  const leftMs = now === null ? total : Math.max(0, end - now);
+  const left = Math.floor(leftMs / 1000);
+  const pct = Math.min(100, Math.max(0, (leftMs / total) * 100));
   const mm = String(Math.floor(left / 60)).padStart(2, "0");
   const ss = String(left % 60).padStart(2, "0");
+  const urgent = left < 60;
+
   return (
-    <span className="tabular-nums">
-      {left > 0 ? `Còn ${mm}:${ss} để thanh toán` : "Đơn đã quá hạn thanh toán, đang cập nhật trạng thái..."}
-    </span>
+    <div className="space-y-2.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-sm font-medium text-ink-2">Thời gian còn lại</span>
+        <span role="timer" className={cn("text-lg font-bold tabular-nums", urgent ? "text-risk" : "text-ink")}>
+          {now === null ? "--:--" : `${mm}:${ss}`}
+        </span>
+      </div>
+      <div aria-hidden className="h-2 w-full overflow-hidden rounded-full bg-ground">
+        <div
+          className={cn(
+            "h-full rounded-full transition-[width,background-color] duration-1000 ease-linear motion-reduce:transition-none",
+            urgent ? "bg-risk" : left < 300 ? "bg-warn" : "bg-brand",
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
   );
 }
+
+type TerminalStatus = Exclude<OrderStatus, "pending">;
+
+const TERMINAL_META: Record<
+  TerminalStatus,
+  {
+    title: string;
+    description: (order: OrderDto) => string;
+    ctaLabel: string;
+    ctaHref: string;
+    tone: string;
+    iconBg: string;
+  }
+> = {
+  paid: {
+    title: "Thanh toán thành công",
+    description: (o) =>
+      o.cycle?.queued
+        ? `Gói ${o.planName} đã được ghi nhận và xếp hàng kích hoạt ngay sau kỳ hiện tại.`
+        : `Gói ${o.planName} đã được kích hoạt cho tài khoản của bạn.`,
+    ctaLabel: "Xem gói của tôi",
+    ctaHref: "/account#subscription",
+    tone: "text-ok",
+    iconBg: "bg-ok-wash text-ok",
+  },
+  mismatch: {
+    title: "Số tiền chuyển không khớp",
+    description: (o) =>
+      `Hệ thống nhận được giao dịch khác với số tiền ${formatVnd(o.amountVnd)}. Quản trị viên sẽ kiểm tra và xử lý đơn này.`,
+    ctaLabel: "Lịch sử giao dịch",
+    ctaHref: "/orders",
+    tone: "text-warn",
+    iconBg: "bg-warn-wash text-warn",
+  },
+  expired: {
+    title: "Đơn đã hết hạn",
+    description: () =>
+      "Thời gian thanh toán cho đơn hàng này đã kết thúc. Bạn có thể tạo đơn mới bất cứ lúc nào.",
+    ctaLabel: "Quay lại trang gói dịch vụ",
+    ctaHref: "/plans",
+    tone: "text-ink",
+    iconBg: "bg-ground text-ink-2",
+  },
+  cancelled: {
+    title: "Đơn đã bị hủy",
+    description: () =>
+      "Đơn hàng này đã được hủy và không còn hiệu lực thanh toán.",
+    ctaLabel: "Quay lại trang gói dịch vụ",
+    ctaHref: "/plans",
+    tone: "text-ink",
+    iconBg: "bg-ground text-ink-2",
+  },
+};
+
+function TerminalStatusIcon({ status, className }: { status: TerminalStatus; className?: string }) {
+  if (status === "paid") return <CheckCircle2Icon className={className} />;
+  if (status === "mismatch") return <TriangleAlertIcon className={className} />;
+  if (status === "expired") return <ClockIcon className={className} />;
+  return <XCircleIcon className={className} />;
+}
+
+function PlanHeader({ order }: { order: OrderDto }) {
+  const family = order.planKind === "family";
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 border-b border-line pb-6">
+      <div className="flex items-center gap-4">
+        <Image
+          src={family ? "/plans/family_plan.png" : "/plans/personal_plan.png"}
+          alt=""
+          width={56}
+          height={56}
+          className="size-14 shrink-0 object-contain"
+        />
+        <div className="space-y-0.5">
+          <h2 className="font-heading text-2xl font-semibold text-ink">{order.planName}</h2>
+          <p className="text-sm text-ink-2 sm:text-[15px]">
+            {family ? "Gói USDSS Premium Gia đình" : "Gói USDSS Premium Cá nhân"}
+          </p>
+        </div>
+      </div>
+      <p className="text-3xl font-bold tracking-tight text-ink tabular-nums sm:text-4xl">{formatVnd(order.amountVnd)}</p>
+    </div>
+  );
+}
+
+const GUIDE = [
+  {
+    icon: QrCodeIcon,
+    title: "Quét mã QR",
+    text: "Mở ứng dụng ngân hàng và quét mã của đơn này, hoặc mở trang thanh toán payOS.",
+  },
+  {
+    icon: FileCheck2Icon,
+    title: "Giữ nguyên nội dung",
+    text: "Không sửa số tiền và nội dung chuyển khoản để hệ thống tự động đối soát.",
+  },
+  {
+    icon: ZapIcon,
+    title: "Gói được kích hoạt",
+    text: "Gói Premium mở ngay khi ngân hàng xác nhận. Trang này tự cập nhật trạng thái.",
+  },
+];
 
 // [UC-78] Trang đơn hàng. Quay lại từ payOS không tự kích hoạt gói: chỉ webhook (hoặc quản trị viên) mới đổi trạng thái,
 // trang này chỉ hỏi lại máy chủ mỗi 3 giây khi tab đang mở và đơn còn chờ.
@@ -128,122 +304,202 @@ export function OrderView({ orderCode }: { orderCode: string }) {
   }
 
   const qr = order.qrCode;
+  const meta = order.status === "pending" ? null : TERMINAL_META[order.status];
+
   return (
-    <div className="mx-auto w-full max-w-xl space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-h1">Đơn hàng #{order.orderCode}</h1>
-        <Badge variant={ORDER_STATUS_BADGE[order.status]}>
-          {ORDER_STATUS_LABEL[order.status]}
-        </Badge>
-      </div>
+    <div className="w-full space-y-8">
+      <h1 className="font-heading text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+        Thanh toán
+      </h1>
 
-      {order.status === "pending" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Quét mã QR để thanh toán</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-center">
-              {qr.startsWith("http") ? (
-                // eslint-disable-next-line @next/next/no-img-element -- ảnh QR từ payOS, không qua tối ưu ảnh của Next
-                <img src={qr} alt="Mã QR thanh toán" className="size-60" />
-              ) : (
-                <div className="rounded-lg bg-white p-3">
-                  <QRCodeSVG value={qr} size={224} aria-label="Mã QR thanh toán" />
-                </div>
-              )}
-            </div>
-            <div>
-              <Row label="Gói">{order.planName}</Row>
-              <Row label="Số tiền">{formatVnd(order.amountVnd)}</Row>
-              <Row label="Nội dung chuyển khoản">
-                <span className="font-mono">{order.description}</span>
-              </Row>
-            </div>
-            <Alert variant="info" role="status">
-              <ClockIcon />
-              <AlertTitle className="flex items-center gap-2">
-                <Spinner className="size-3.5" />
-                Đang chờ xác nhận thanh toán
-              </AlertTitle>
-              <AlertDescription>
-                <Countdown expiresAt={order.expiresAt} />
-                <span className="block">Gói được kích hoạt khi hệ thống nhận được xác nhận từ ngân hàng, trang này tự cập nhật.</span>
-              </AlertDescription>
-            </Alert>
-            {actionError && <p className="text-sm text-risk">{actionError}</p>}
-            <div className="flex flex-wrap gap-2">
-              <a href={order.checkoutUrl} target="_blank" rel="noopener noreferrer" className={buttonVariants()}>
-                Mở trang thanh toán payOS
-                <ExternalLinkIcon />
+      {order.status === "pending" ? (
+        <div className="grid gap-8 lg:grid-cols-3 lg:items-start">
+          <div className="space-y-4 lg:col-span-1">
+            <section className="space-y-5 rounded-2xl border border-line bg-surface p-6 sm:p-7">
+              <div className="space-y-1.5">
+                <h2 className="font-heading text-xl font-semibold text-ink sm:text-2xl">Quét mã QR để thanh toán</h2>
+                <p className="text-sm leading-relaxed text-ink-2 sm:text-[15px]">
+                  Mở ứng dụng ngân hàng hoặc ví điện tử hỗ trợ VietQR.
+                </p>
+              </div>
+
+              <div className="mx-auto flex w-fit items-center justify-center rounded-2xl border border-line bg-white p-5">
+                {qr.startsWith("http") ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- ảnh QR từ payOS, không qua tối ưu ảnh của Next
+                  <img src={qr} alt="Mã QR thanh toán" className="size-58" />
+                ) : (
+                  <QRCodeSVG value={qr} size={232} aria-label="Mã QR thanh toán" />
+                )}
+              </div>
+
+              <Countdown createdAt={order.createdAt} expiresAt={order.expiresAt} />
+            </section>
+
+            <div className="overflow-hidden rounded-2xl border border-line bg-surface divide-y divide-line">
+              <a
+                href={order.checkoutUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(ACTION_ROW, "font-semibold text-brand hover:bg-brand-wash/50")}
+              >
+                <ExternalLinkIcon className="size-5 shrink-0" aria-hidden />
+                <span>Mở trang thanh toán payOS</span>
               </a>
-              <Button type="button" variant="outline" onClick={cancel} disabled={cancelling}>
-                {cancelling ? "Đang hủy..." : "Hủy đơn"}
-              </Button>
+              <Link
+                href="/orders"
+                className={cn(ACTION_ROW, "font-medium text-ink hover:bg-ground")}
+              >
+                <ReceiptTextIcon className="size-5 shrink-0 text-ink-2" aria-hidden />
+                <span>Lịch sử giao dịch</span>
+              </Link>
+              <button
+                type="button"
+                onClick={cancel}
+                disabled={cancelling}
+                className={cn(
+                  ACTION_ROW,
+                  "cursor-pointer font-medium text-risk hover:bg-risk-wash/60 disabled:cursor-not-allowed disabled:opacity-50",
+                )}
+              >
+                {cancelling ? (
+                  <Spinner className="size-5 shrink-0" />
+                ) : (
+                  <XCircleIcon className="size-5 shrink-0" aria-hidden />
+                )}
+                <span>Hủy đơn hàng</span>
+              </button>
             </div>
-          </CardContent>
-        </Card>
-      )}
+            {actionError && (
+              <p role="alert" className="text-sm text-risk">
+                {actionError}
+              </p>
+            )}
+          </div>
 
-      {order.status === "paid" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-ok">
-              <CheckIcon />
-              Thanh toán thành công
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Row label="Mã đơn">{order.orderCode}</Row>
-              <Row label="Gói">{order.planName}</Row>
-              <Row label="Số tiền">{formatVnd(order.amountVnd)}</Row>
-              <Row label="Thời điểm thanh toán">{formatVnDateTime(order.paidAt)}</Row>
-              {order.cycle?.queued ? (
-                <Row label="Kỳ sử dụng">Đã xếp hàng, bắt đầu khi kỳ hiện tại kết thúc hoặc dùng hết</Row>
-              ) : (
-                order.cycle && (
-                  <>
-                    <Row label="Bắt đầu">{formatVnDateTime(order.cycle.startsAt)}</Row>
-                    <Row label="Kết thúc">{formatVnDateTime(order.cycle.endsAt)}</Row>
-                  </>
-                )
-              )}
+          <div className="space-y-6 lg:col-span-2">
+            <section className="rounded-2xl border border-line bg-surface p-6 sm:p-8">
+              <PlanHeader order={order} />
+              <dl className="grid gap-x-8 gap-y-6 pt-6 sm:grid-cols-2">
+                <Detail label="Mã đơn hàng">
+                  <span className="tabular-nums">#{order.orderCode}</span>
+                </Detail>
+                <Detail label="Hạn thanh toán">
+                  <span className="tabular-nums">{formatVnDateTime(order.expiresAt)}</span>
+                </Detail>
+                <Detail label="Số tiền cần chuyển">
+                  <span className="tabular-nums">{formatVnd(order.amountVnd)}</span>
+                  <CopyButton value={String(order.amountVnd)} label="số tiền" />
+                </Detail>
+                <Detail label="Nội dung chuyển khoản">
+                  <span className="min-w-0 font-mono break-all">{order.description}</span>
+                  <CopyButton value={order.description} label="nội dung chuyển khoản" />
+                </Detail>
+              </dl>
+            </section>
+
+            <section className="rounded-2xl border border-line bg-surface p-6 sm:p-8">
+              <h2 className="font-heading text-xl font-semibold text-ink sm:text-2xl">Hướng dẫn thanh toán</h2>
+              <ol className="mt-6 grid gap-6 sm:grid-cols-3 sm:gap-8">
+                {GUIDE.map(({ icon: Icon, title, text }) => (
+                  <li
+                    key={title}
+                    className="relative space-y-3 sm:not-last:after:absolute sm:not-last:after:top-6 sm:not-last:after:left-16 sm:not-last:after:-right-4 sm:not-last:after:h-px sm:not-last:after:bg-line"
+                  >
+                    <span className="flex size-12 items-center justify-center rounded-full bg-brand-wash text-brand">
+                      <Icon aria-hidden className="size-5" />
+                    </span>
+                    <div className="space-y-1">
+                      <p className="text-base font-semibold text-ink">{title}</p>
+                      <p className="text-sm leading-relaxed text-ink-2 sm:text-[15px]">{text}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-8 flex items-start gap-3 border-t border-line pt-5">
+                <ShieldCheckIcon aria-hidden className="mt-0.5 size-5 shrink-0 text-ok" />
+                <p className="text-sm leading-relaxed text-ink-2 sm:text-[15px]">
+                  Thanh toán qua payOS bằng VietQR. Đơn chỉ được kích hoạt khi ngân hàng xác nhận đúng số tiền và nội dung.
+                </p>
+              </div>
+            </section>
+          </div>
+        </div>
+      ) : (
+        meta && (
+          <div className="grid gap-8 lg:grid-cols-3 lg:items-start">
+            <div className="space-y-4 lg:col-span-1">
+              <section className="space-y-5 rounded-2xl border border-line bg-surface p-6 sm:p-7">
+                <span className={cn("inline-flex size-12 items-center justify-center rounded-xl", meta.iconBg)}>
+                  <TerminalStatusIcon status={order.status} className="size-6" />
+                </span>
+                <div className="space-y-2">
+                  <h2 className={cn("font-heading text-xl font-semibold sm:text-2xl", meta.tone)}>{meta.title}</h2>
+                  <p className="text-sm leading-relaxed text-ink-2 sm:text-[15px]">{meta.description(order)}</p>
+                </div>
+              </section>
+
+              <div className="overflow-hidden rounded-2xl border border-line bg-surface divide-y divide-line">
+                <Link
+                  href={meta.ctaHref}
+                  className={cn(ACTION_ROW, "font-semibold text-brand hover:bg-brand-wash/50")}
+                >
+                  {meta.ctaHref === "/orders" ? (
+                    <ReceiptTextIcon className="size-5 shrink-0" aria-hidden />
+                  ) : (
+                    <ArrowRightIcon className="size-5 shrink-0" aria-hidden />
+                  )}
+                  <span>{meta.ctaLabel}</span>
+                </Link>
+                {meta.ctaHref !== "/orders" && (
+                  <Link
+                    href="/orders"
+                    className={cn(ACTION_ROW, "font-medium text-ink hover:bg-ground")}
+                  >
+                    <ReceiptTextIcon className="size-5 shrink-0 text-ink-2" aria-hidden />
+                    <span>Lịch sử giao dịch</span>
+                  </Link>
+                )}
+              </div>
             </div>
-            <Link href="/account#subscription" className={buttonVariants()}>
-              Xem gói của tôi
-            </Link>
-          </CardContent>
-        </Card>
-      )}
 
-      {order.status === "mismatch" && (
-        <Alert variant="warning">
-          <TriangleAlertIcon />
-          <AlertTitle>Số tiền chuyển không khớp, quản trị viên sẽ xử lý</AlertTitle>
-          <AlertDescription>
-            Đơn {order.orderCode}, gói {order.planName}, số tiền cần chuyển {formatVnd(order.amountVnd)}.
-          </AlertDescription>
-        </Alert>
+            <section className="rounded-2xl border border-line bg-surface p-6 sm:p-8 lg:col-span-2">
+              <PlanHeader order={order} />
+              <dl className="grid gap-x-8 gap-y-6 pt-6 sm:grid-cols-2">
+                <Detail label="Mã đơn hàng">
+                  <span className="tabular-nums">#{order.orderCode}</span>
+                </Detail>
+                <Detail label="Nội dung chuyển khoản">
+                  <span className="min-w-0 font-mono break-all">{order.description}</span>
+                </Detail>
+                <Detail label="Thời điểm tạo">
+                  <span className="tabular-nums">{formatVnDateTime(order.createdAt)}</span>
+                </Detail>
+                {order.paidAt && (
+                  <Detail label="Thời điểm thanh toán">
+                    <span className="tabular-nums">{formatVnDateTime(order.paidAt)}</span>
+                  </Detail>
+                )}
+                {order.cycle?.queued ? (
+                  <Detail label="Kỳ sử dụng" wide>
+                    Đã xếp hàng, bắt đầu khi kỳ hiện tại kết thúc hoặc dùng hết
+                  </Detail>
+                ) : (
+                  order.cycle && (
+                    <>
+                      <Detail label="Bắt đầu">
+                        <span className="tabular-nums">{formatVnDateTime(order.cycle.startsAt)}</span>
+                      </Detail>
+                      <Detail label="Kết thúc">
+                        <span className="tabular-nums">{formatVnDateTime(order.cycle.endsAt)}</span>
+                      </Detail>
+                    </>
+                  )
+                )}
+              </dl>
+            </section>
+          </div>
+        )
       )}
-
-      {(order.status === "expired" || order.status === "cancelled") && (
-        <Card>
-          <CardContent className="space-y-3">
-            <p className="text-sm">
-              Đơn {order.orderCode} (gói {order.planName}, {formatVnd(order.amountVnd)}){" "}
-              {order.status === "expired" ? "đã hết hạn thanh toán." : "đã bị hủy."}
-            </p>
-            <Link href="/plans" className={buttonVariants()}>
-              Quay lại trang gói dịch vụ
-            </Link>
-          </CardContent>
-        </Card>
-      )}
-
-      <Link href="/orders" className="inline-block text-sm text-muted-foreground underline">
-        Lịch sử giao dịch
-      </Link>
     </div>
   );
 }
