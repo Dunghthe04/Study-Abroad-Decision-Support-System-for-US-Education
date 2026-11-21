@@ -225,6 +225,23 @@ public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task<IReadOnlyList<string>> GetCenterMediaUrlsAsync(Guid studyCenterId, CancellationToken ct = default)
+    {
+        var center = await db.StudyCenters.AsNoTracking()
+            .Where(c => c.Id == studyCenterId)
+            .Select(c => new { c.LogoUrl, c.CoverImageUrl, c.GalleryImages, c.LegalDocumentUrls })
+            .FirstOrDefaultAsync(ct);
+        if (center is null) return [];
+
+        return new[] { center.LogoUrl, center.CoverImageUrl }
+            .Concat(center.GalleryImages)
+            .Concat(center.LegalDocumentUrls)
+            .Where(u => !string.IsNullOrWhiteSpace(u))
+            .Select(u => u!.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
     public Task DeleteCenterFilesAsync(Guid studyCenterId, CancellationToken ct = default)
     {
         if (env is null) return Task.CompletedTask;

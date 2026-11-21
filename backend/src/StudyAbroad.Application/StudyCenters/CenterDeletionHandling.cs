@@ -143,6 +143,29 @@ public interface ICenterDeletionWorkRepository
 
     /// <summary>Xóa tệp tài liệu xác minh trên ổ đĩa. Gọi sau khi DB đã lưu.</summary>
     Task DeleteCenterFilesAsync(Guid studyCenterId, CancellationToken ct = default);
+
+    /// <summary>
+    /// URL ảnh và tài liệu của trung tâm (logo, ảnh bìa, thư viện ảnh, tài liệu pháp lý). Phải đọc TRƯỚC
+    /// <see cref="PurgeCenterDataAsync"/> vì bước đó xóa trắng các cột này, sau đó không còn cách tìm lại tệp trên CDN.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetCenterMediaUrlsAsync(Guid studyCenterId, CancellationToken ct = default);
+}
+
+/// <summary>[UC-93] Xóa ảnh và tài liệu của trung tâm đã đăng lên CDN (Cloudinary) khi xóa hẳn trung tâm.</summary>
+public interface ICenterMediaCleaner
+{
+    /// <summary>
+    /// Xóa từng URL trên CDN. Trả về các URL xóa lỗi (CDN lỗi hoặc chưa cấu hình) để người vận hành dọn tay.
+    /// URL không thuộc CDN hoặc tệp đã không còn thì bỏ qua, không tính là lỗi.
+    /// </summary>
+    Task<IReadOnlyList<string>> DeleteAsync(IReadOnlyCollection<string> urls, CancellationToken ct = default);
+}
+
+/// <summary>Dữ liệu trung tâm đã xóa xong trong DB nhưng một số tệp trên CDN chưa xóa được.</summary>
+public sealed class CenterMediaCleanupException(IReadOnlyList<string> failedUrls)
+    : Exception($"Đã xóa trung tâm nhưng chưa xóa được {failedUrls.Count} tệp trên CDN, cần dọn tay: {string.Join(", ", failedUrls)}")
+{
+    public IReadOnlyList<string> FailedUrls { get; } = failedUrls;
 }
 
 public interface ICenterDeletionService
@@ -186,7 +209,8 @@ public class CenterDeletionService(
     IUserRepository users,
     IAuditLogRepository auditLogs,
     IUnitOfWork unitOfWork,
-    IEmailSender emailSender) : ICenterDeletionService
+    IEmailSender emailSender,
+    ICenterMediaCleaner mediaCleaner) : ICenterDeletionService
 {
     public const int MaxNoteLength = 1000;
     public const string NotificationType = "lead_closed_center_deleted";
@@ -403,6 +427,7 @@ public class CenterDeletionService(
                 var recipients = await CollectRecipientsAsync(request, center.Email, ct);
 
                 var held = false;
+                IReadOnlyList<string> mediaUrls = [];
                 await unitOfWork.ExecuteInTransactionAsync(async txCt =>
                 {
                     // Admin có thể vừa bật giữ pháp lý sau lần đọc ở trên: kiểm tra lại và khóa dòng trong transaction
@@ -412,6 +437,8 @@ public class CenterDeletionService(
                         return;
                     }
 
+                    // Đọc URL ảnh trước khi purge xóa trắng các cột này, để còn xóa được tệp trên CDN sau khi DB đã lưu
+                    mediaUrls = await work.GetCenterMediaUrlsAsync(request.StudyCenterId, txCt);
                     await work.PurgeCenterDataAsync(request.StudyCenterId, now, txCt);
                     if (ownerId is { } id)
                         await work.AnonymizeOwnerAccountAsync(id, now, txCt);
@@ -438,6 +465,18 @@ public class CenterDeletionService(
                 try
                 {
                     await work.DeleteCenterFilesAsync(request.StudyCenterId, ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    failures.Add(new CenterPurgeFailure(request.Id, ex));
+                }
+
+                // DB đã lưu: lỗi ở đây không hoàn tác được, chỉ báo lại danh sách URL để dọn tay
+                try
+                {
+                    var failedUrls = await mediaCleaner.DeleteAsync(mediaUrls, ct);
+                    if (failedUrls.Count > 0)
+                        failures.Add(new CenterPurgeFailure(request.Id, new CenterMediaCleanupException(failedUrls)));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
