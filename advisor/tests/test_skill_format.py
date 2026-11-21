@@ -16,6 +16,7 @@ WRITERS = {
     "skill_explain.md",
     "skill_giai_thich_trung_tam.md",
     "skill_goal_seek.md",
+    "skill_goi_y_truong.md",
     "skill_ho_so_khuon.md",
     "skill_kich_ban.md",
     "skill_neu_doi.md",
