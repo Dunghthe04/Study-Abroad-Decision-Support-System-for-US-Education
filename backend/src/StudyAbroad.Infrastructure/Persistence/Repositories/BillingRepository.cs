@@ -15,6 +15,12 @@ public class BillingRepository(AppDbContext db) : IBillingRepository
             .Where(c => c.UserId == ownerUserId && c.Kind == kind && c.Status == CycleStatuses.Active)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<UserSubscription>> ListEndedCyclesAsync(Guid userId, int take, CancellationToken ct = default) =>
+        await db.UserSubscriptions.AsNoTracking()
+            .Where(c => c.UserId == userId && c.Status == CycleStatuses.Ended && c.StartsAt != null)
+            .OrderByDescending(c => c.EndsAt).ThenByDescending(c => c.CreatedAt)
+            .Take(take).ToListAsync(ct);
+
     public Task<FamilyGroup?> FindActiveOwnedGroupAsync(Guid ownerUserId, CancellationToken ct = default) =>
         db.FamilyGroups.FirstOrDefaultAsync(g => g.OwnerUserId == ownerUserId && g.Status == FamilyGroupStatuses.Active, ct);
 

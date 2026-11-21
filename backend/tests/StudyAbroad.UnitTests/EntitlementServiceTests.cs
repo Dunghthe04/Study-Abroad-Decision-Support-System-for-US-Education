@@ -591,6 +591,10 @@ public class EntitlementServiceTests
         public Task<IReadOnlyList<SubscriptionPlan>> GetPlansAsync(CancellationToken ct = default) =>
             Read<IReadOnlyList<SubscriptionPlan>>(Plans.ToList());
 
+        public Task<IReadOnlyList<UserSubscription>> ListEndedCyclesAsync(Guid userId, int take, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<UserSubscription>>(Cycles.Where(c => c.UserId == userId && c.Status == CycleStatuses.Ended && c.StartsAt != null)
+                .OrderByDescending(c => c.EndsAt).Take(take).ToList());
+
         public Task<List<UserSubscription>> GetActiveCyclesAsync(Guid ownerUserId, string kind, CancellationToken ct = default) =>
             Read(Cycles.Where(c => c.UserId == ownerUserId && c.Kind == kind && c.Status == CycleStatuses.Active).ToList());
 

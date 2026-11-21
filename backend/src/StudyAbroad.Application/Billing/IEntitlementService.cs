@@ -17,6 +17,9 @@ public interface IEntitlementService
     /// <summary>True khi có kỳ trả phí còn trong hạn (kỳ Personal của mình, hoặc kỳ Gia đình của mình / của nhóm mình là thành viên active). Nhân viên luôn true.</summary>
     Task<bool> IsPremiumAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default);
 
+    /// <summary>Các kỳ đã hết hạn của chính người dùng (tối đa 100), hết hạn gần nhất trước (GET subscription/expired).</summary>
+    Task<IReadOnlyList<ExpiredCycleDto>> GetExpiredCyclesAsync(Guid userId, CancellationToken ct = default);
+
     /// <summary>Các gói đang bán, theo thứ tự hiển thị (GET plans).</summary>
     Task<IReadOnlyList<PlanDto>> GetPlansOnSaleAsync(CancellationToken ct = default);
 

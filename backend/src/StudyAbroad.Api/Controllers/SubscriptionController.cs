@@ -20,4 +20,14 @@ public class SubscriptionController(IEntitlementService entitlements) : Controll
             return Unauthorized();
         return Ok(await entitlements.GetSummaryAsync(userId, DateTime.UtcNow, ct));
     }
+
+    /// <summary>Các kỳ đã hết hạn của tôi, hết hạn gần nhất trước (tối đa 100).</summary>
+    [HttpGet("expired")]
+    [ProducesResponseType(typeof(IReadOnlyList<ExpiredCycleDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetExpired(CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized();
+        return Ok(await entitlements.GetExpiredCyclesAsync(userId, ct));
+    }
 }

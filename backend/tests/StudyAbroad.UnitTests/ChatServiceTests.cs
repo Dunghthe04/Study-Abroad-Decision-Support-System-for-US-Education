@@ -3656,6 +3656,9 @@ public class ChatServiceTests
             return Task.FromResult(charge);
         }
 
+        public Task<IReadOnlyList<StudyAbroad.Application.Billing.ExpiredCycleDto>> GetExpiredCyclesAsync(Guid userId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<StudyAbroad.Application.Billing.SubscriptionSummaryDto> GetSummaryAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) =>
             throw new NotSupportedException();
 

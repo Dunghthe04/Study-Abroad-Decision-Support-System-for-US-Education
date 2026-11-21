@@ -61,6 +61,16 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
             await repository.FindPendingOrderCodeAsync(userId, ct), lowQuota, expiringSoon, cycles);
     }
 
+    public async Task<IReadOnlyList<ExpiredCycleDto>> GetExpiredCyclesAsync(Guid userId, CancellationToken ct = default)
+    {
+        var plans = await repository.GetPlansAsync(ct);
+        return (await repository.ListEndedCyclesAsync(userId, 100, ct))
+            .Select(c => new ExpiredCycleDto(
+                c.Id, c.Kind, plans.FirstOrDefault(p => p.Id == c.SubscriptionPlanId)?.Code ?? string.Empty, c.PlanName,
+                CycleRules.ToVietnamTime(c.CreatedAt), CycleRules.ToVietnamTime(c.StartsAt!.Value), CycleRules.ToVietnamTime(c.EndsAt ?? c.EndedAt ?? c.StartsAt.Value)))
+            .ToList();
+    }
+
     public async Task<ChatCharge> ResolveChatChargeAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default)
     {
         if (StaffRoles.Contains(role))

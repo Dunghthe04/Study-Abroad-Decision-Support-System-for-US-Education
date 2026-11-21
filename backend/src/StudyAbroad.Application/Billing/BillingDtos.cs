@@ -37,6 +37,11 @@ public sealed record FamilyPoolDto(
 /// <summary>Hạn mức Free; làm mới 00:00 ngày 1 giờ Việt Nam hoặc mỗi QuotaPeriodDays ngày.</summary>
 public sealed record FreePoolDto(int UsedPercent, DateTimeOffset ResetsAt, int? QuotaPeriodDays = null);
 
+/// <summary>Một kỳ đã hết hạn của chính người gọi (GET subscription/expired).</summary>
+public sealed record ExpiredCycleDto(
+    Guid Id, string Kind, string PlanCode, string PlanName,
+    DateTimeOffset PurchasedAt, DateTimeOffset StartsAt, DateTimeOffset EndsAt);
+
 /// <summary>Một kỳ đang chạy mà người gọi dùng được. Role: owner = kỳ của chính họ, member = kỳ Gia đình của người khác (OwnerName là tên chủ gói).</summary>
 public sealed record SubscriptionCycleDto(
     Guid Id, string Kind, string PlanCode, string PlanName,

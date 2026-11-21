@@ -11,6 +11,9 @@ public interface IBillingRepository
     /// <summary>Các kỳ active (chưa kết thúc, kể cả quá hạn mà chưa ai kết thúc) của một chủ ở một loại gói. Đang theo dõi.</summary>
     Task<List<UserSubscription>> GetActiveCyclesAsync(Guid ownerUserId, string kind, CancellationToken ct = default);
 
+    /// <summary>Các kỳ đã kết thúc (có StartsAt) của chính người này, mọi loại, hết hạn gần nhất trước. Không theo dõi.</summary>
+    Task<IReadOnlyList<UserSubscription>> ListEndedCyclesAsync(Guid userId, int take, CancellationToken ct = default);
+
     /// <summary>Nhóm active mà người này làm chủ.</summary>
     Task<FamilyGroup?> FindActiveOwnedGroupAsync(Guid ownerUserId, CancellationToken ct = default);
 

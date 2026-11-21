@@ -442,6 +442,7 @@ public class BillingJobTests
         public Task<ChatCharge> ResolveChatChargeAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default) => inner.ResolveChatChargeAsync(userId, role, nowUtc, ct);
         public Task<bool> IsPremiumAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default) => inner.IsPremiumAsync(userId, role, nowUtc, ct);
         public Task<IReadOnlyList<PlanDto>> GetPlansOnSaleAsync(CancellationToken ct = default) => inner.GetPlansOnSaleAsync(ct);
+        public Task<IReadOnlyList<ExpiredCycleDto>> GetExpiredCyclesAsync(Guid userId, CancellationToken ct = default) => inner.GetExpiredCyclesAsync(userId, ct);
     }
 
     // ---- F27: Gia đình hết hạn (không còn kỳ Gia đình nào): thành viên được báo
