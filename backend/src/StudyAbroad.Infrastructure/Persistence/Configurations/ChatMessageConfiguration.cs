@@ -27,7 +27,9 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
         b.Property(x => x.Outcome).HasMaxLength(16)
             .HasComment(
                 "Kết quả lượt chat, hệ thống tự ghi và KHÔNG đổi sau đó: answered (trả lời được), " +
-                "no_answer (không hiểu hoặc không có dữ liệu), failed (bước AI bị lỗi). Chỉ ở tin trả lời của trợ lý, tin của học sinh để null.");
+                "no_answer (muốn trả lời nhưng không thể: không hiểu câu hỏi hoặc kho kiến thức không có dòng phù hợp), " +
+                "refused (hiểu nhưng cố ý không trả lời: ngoài chuyện du học hoặc chủ đề nhạy cảm), failed (bước AI bị lỗi). " +
+                "Chỉ ở tin trả lời của trợ lý, tin của học sinh để null.");
         b.Property(x => x.MetaJson).HasColumnType("jsonb")
             .HasComment(
                 "Tóm tắt lượt (JSON), mỗi thông tin ở tin nó mô tả. Tin của HỌC SINH: slm = nhãn model gán cho câu hỏi (modelIntents, intents, confidence, fallback). " +

@@ -795,7 +795,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("outcome")
-                        .HasComment("Kết quả lượt chat, hệ thống tự ghi và KHÔNG đổi sau đó: answered (trả lời được), no_answer (không hiểu hoặc không có dữ liệu), failed (bước AI bị lỗi). Chỉ ở tin trả lời của trợ lý, tin của học sinh để null.");
+                        .HasComment("Kết quả lượt chat, hệ thống tự ghi và KHÔNG đổi sau đó: answered (trả lời được), no_answer (muốn trả lời nhưng không thể: không hiểu câu hỏi hoặc kho kiến thức không có dòng phù hợp), refused (hiểu nhưng cố ý không trả lời: ngoài chuyện du học hoặc chủ đề nhạy cảm), failed (bước AI bị lỗi). Chỉ ở tin trả lời của trợ lý, tin của học sinh để null.");
 
                     b.Property<Guid?>("ReplyToMessageId")
                         .HasColumnType("uuid")
