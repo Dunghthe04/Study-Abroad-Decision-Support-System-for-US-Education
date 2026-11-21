@@ -210,9 +210,23 @@ public class AiQualityReportTests
 
         var turn = AiQualityMetaReader.ToTurn(At(1), "failed", reply, question, usedFallback: false);
 
-        Assert.Equal((7300L, "knowledge", true), (turn.TurnMs, turn.Feature, turn.SlmFallback));
+        // SLM hỏng thì loại ý chạy là nhãn dự phòng của hệ thống, nên tính năng là nhóm riêng chứ không phải "knowledge"
+        Assert.Equal((7300L, AiQualityMetaReader.SlmFallbackFeature, true), (turn.TurnMs, turn.Feature, turn.SlmFallback));
         Assert.Equal(["slm_intents"], turn.FailedSteps);
         Assert.Equal("failed", turn.Outcome);
+    }
+
+    [Fact]
+    public void MetaReader_ASlmFallbackTurnIsItsOwnFeature_NotTheOutOfScopeLabelTheSystemSubstituted()
+    {
+        // Model hỏng hai lần: hệ thống gán dự phòng "ngoài phạm vi, mơ hồ". Câu có thể là yêu cầu hợp lệ (xin gặp người thật), nên không
+        // được gom chung với câu mà model thật sự gán là ngoài phạm vi
+        var reply = ChatTurn.ReplyMeta([], null, ["out_of_scope"], 3500);
+        var fallbackQuestion = ChatTurn.UserMeta(new AdvisorSlmDto(Intents: ["out_of_scope"], OutOfScope: "ambiguous", Confidence: 0, Fallback: true));
+        var realQuestion = ChatTurn.UserMeta(new AdvisorSlmDto(Intents: ["out_of_scope"], OutOfScope: "exception", Confidence: 0.9, Fallback: false));
+
+        Assert.Equal(AiQualityMetaReader.SlmFallbackFeature, AiQualityMetaReader.ToTurn(At(1), "no_answer", reply, fallbackQuestion, false).Feature);
+        Assert.Equal("out_of_scope", AiQualityMetaReader.ToTurn(At(1), "refused", reply, realQuestion, false).Feature);
     }
 
     [Fact]

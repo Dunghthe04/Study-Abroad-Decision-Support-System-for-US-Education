@@ -186,6 +186,17 @@ public class AiQualitySampleTests
     }
 
     [Fact]
+    public async Task ASampleWhoseSlmFellBack_IsLabelledAsSuch_NotAsOutOfScope()
+    {
+        var row = Row(1, meta: "{\"turnMs\":3500,\"skills\":[\"out_of_scope\"]}") with { QuestionMetaJson = "{\"slm\":{\"fallback\":true}}" };
+        var service = new AiQualitySampleService(new FakeRepository([Adult(1)], [row]), new FakeAudit(), Now);
+
+        var item = Assert.Single((await Page(service)).Items);
+
+        Assert.Equal(AiQualityMetaReader.SlmFallbackFeature, item.Feature);
+    }
+
+    [Fact]
     public async Task FeatureAndTurnTime_AreReadFromTheRepliesMeta()
     {
         var row = Row(1, meta: "{\"turnMs\":3100,\"skills\":[\"knowledge\"]}");

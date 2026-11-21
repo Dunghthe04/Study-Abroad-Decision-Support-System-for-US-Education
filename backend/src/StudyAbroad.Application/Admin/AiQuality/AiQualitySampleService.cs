@@ -74,7 +74,7 @@ public class AiQualitySampleService(
     private static AiQualitySampleDto ToDto(AiQualitySampleRow row, string requestedOutcome)
     {
         string[] names = row.OwnerFullName is { } name ? [name] : [];
-        var meta = AiQualityMetaReader.ToTurn(row.CreatedAt, row.Outcome, row.ReplyMetaJson, null, false);
+        var meta = AiQualityMetaReader.ToTurn(row.CreatedAt, row.Outcome, row.ReplyMetaJson, row.QuestionMetaJson, false);
         return new AiQualitySampleDto(
             row.CreatedAt,
             row.Outcome ?? requestedOutcome,

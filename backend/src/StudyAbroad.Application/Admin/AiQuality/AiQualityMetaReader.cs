@@ -9,6 +9,12 @@ namespace StudyAbroad.Application.Admin.AiQuality;
 /// </summary>
 public static class AiQualityMetaReader
 {
+    /// <summary>
+    /// Tên nhóm tính năng của lượt mà SLM hỏng hai lần nên hệ thống dùng nhãn dự phòng ("ngoài phạm vi, mơ hồ"). Tách riêng để không lẫn với
+    /// câu mà model thật sự gán là ngoài phạm vi: một bên là học sinh hỏi lạc đề, một bên là model đọc hỏng.
+    /// </summary>
+    public const string SlmFallbackFeature = "slm_fallback";
+
     /// <param name="replyMetaJson">meta_json của tin trả lời của trợ lý.</param>
     /// <param name="questionMetaJson">meta_json của tin hỏi mà tin trả lời đáp lại; null nếu lượt không có tin hỏi.</param>
     /// <param name="usedFallback">Lượt có lần gọi AI nào dùng đường dự phòng (ai_calls.fallback_used), do nơi lấy dữ liệu tính.</param>
@@ -17,14 +23,16 @@ public static class AiQualityMetaReader
     {
         var reply = Parse(replyMetaJson);
         var question = Parse(questionMetaJson);
+        var slmFallback = question is { } q && q.TryGetProperty("slm", out var slm) && slm.ValueKind == JsonValueKind.Object
+            && slm.TryGetProperty("fallback", out var fallback) && fallback.ValueKind == JsonValueKind.True;
         return new AiQualityTurn(
             createdAt,
             outcome,
             reply is { } r ? Long(r, "turnMs") : null,
-            reply is { } r2 ? Strings(r2, "skills").FirstOrDefault() : null,
+            // SLM hỏng thì loại ý chạy là nhãn dự phòng của hệ thống, không phải kết luận của model: không lấy làm tính năng
+            slmFallback ? SlmFallbackFeature : reply is { } r2 ? Strings(r2, "skills").FirstOrDefault() : null,
             reply is { } r3 ? Strings(r3, "failedSteps") : [],
-            question is { } q && q.TryGetProperty("slm", out var slm) && slm.ValueKind == JsonValueKind.Object
-                && slm.TryGetProperty("fallback", out var fallback) && fallback.ValueKind == JsonValueKind.True,
+            slmFallback,
             usedFallback);
     }
 

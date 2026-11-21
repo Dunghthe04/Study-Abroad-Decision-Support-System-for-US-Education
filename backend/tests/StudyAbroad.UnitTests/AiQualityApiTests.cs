@@ -156,7 +156,8 @@ public class AiQualityApiTests
         Assert.Equal((3, 1, 1, 1), (report.Total.Total, report.Total.Answered, report.Total.Refused, report.Total.Failed));
         Assert.Equal((2, 1, 1), (report.Latency.Measured, report.SlmFallbackTurns, report.FallbackTurns));
         Assert.Equal(("slm_intents", 1), (report.FailedSteps[0].Step, report.FailedSteps[0].Turns));
-        Assert.Equal(["knowledge", "other"], report.ByFeature.Select(f => f.Feature));
+        // Lượt thứ hai SLM dùng dự phòng nên thành nhóm riêng, không nằm trong "knowledge"
+        Assert.Equal(["knowledge", "other", AiQualityMetaReader.SlmFallbackFeature], report.ByFeature.Select(f => f.Feature));
         Assert.Equal([1, 2, 0], report.ByDay.Select(d => d.Counts.Total));
     }
 

@@ -17,7 +17,7 @@ public record AiQualitySampleMessage(string Role, string Content);
 /// <summary>Một lượt chat có nội dung THÔ, lấy sau khi đã quyết định cho xem. Chưa che: dịch vụ che trước khi trả ra ngoài.</summary>
 public record AiQualitySampleRow(
     Guid MessageId, DateTime CreatedAt, string? Outcome, string? ReplyMetaJson, string? Question, string Answer,
-    IReadOnlyList<AiQualitySampleMessage> Context, string? OwnerFullName);
+    IReadOnlyList<AiQualitySampleMessage> Context, string? OwnerFullName, string? QuestionMetaJson = null);
 
 /// <summary>
 /// Một lượt mẫu đã che thông tin cá nhân, trả cho admin. Không có mã người dùng, email, mã phiên hay mã tin nhắn.

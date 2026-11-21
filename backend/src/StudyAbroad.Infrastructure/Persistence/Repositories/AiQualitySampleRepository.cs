@@ -17,7 +17,7 @@ public class AiQualitySampleRepository(AppDbContext db) : IAiQualitySampleReposi
     /// <summary>Một dòng của bước hai: nội dung thô của một lượt, tin hỏi của nó và họ tên chủ phiên.</summary>
     public record ReplyRow(
         Guid Id, DateTime CreatedAt, string? Outcome, string? MetaJson, string Content, Guid ChatSessionId,
-        Guid? QuestionId, DateTime? QuestionAt, string? QuestionContent, string? OwnerName);
+        Guid? QuestionId, DateTime? QuestionAt, string? QuestionContent, string? OwnerName, string? QuestionMetaJson);
 
     /// <summary>
     /// Mỗi lượt là dòng của hệ thống (Role khác "user"), như báo cáo. Chủ phiên nối qua chat_sessions; tài khoản đã xóa thì không có dòng users.
@@ -56,7 +56,8 @@ public class AiQualitySampleRepository(AppDbContext db) : IAiQualitySampleReposi
             question == null ? (Guid?)null : question.Id,
             question == null ? (DateTime?)null : question.CreatedAt,
             question == null ? null : question.Content,
-            owner == null ? null : owner.FullName);
+            owner == null ? null : owner.FullName,
+            question == null ? null : question.MetaJson);
 
     public async Task<IReadOnlyList<AiQualityCandidate>> CandidatesAsync(
         DateTime fromUtc, DateTime toUtcExclusive, string outcome, CancellationToken ct = default)
@@ -100,7 +101,7 @@ public class AiQualitySampleRepository(AppDbContext db) : IAiQualitySampleReposi
                 .OrderBy(c => c.CreatedAt).ThenBy(c => c.MessageId)
                 .Select(c => new AiQualitySampleMessage(c.Role, c.Content))
                 .ToList();
-            result.Add(new AiQualitySampleRow(r.Id, r.CreatedAt, r.Outcome, r.MetaJson, r.QuestionContent, r.Content, context, r.OwnerName));
+            result.Add(new AiQualitySampleRow(r.Id, r.CreatedAt, r.Outcome, r.MetaJson, r.QuestionContent, r.Content, context, r.OwnerName, r.QuestionMetaJson));
         }
         return result;
     }
