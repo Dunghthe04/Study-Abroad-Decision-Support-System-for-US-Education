@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpenIcon, GraduationCapIcon, UsersIcon } from "lucide-react";
+import { CheckIcon, GraduationCapIcon, UsersIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -18,11 +18,7 @@ import type { PlanDto, PlanKind, SubscriptionSummaryDto } from "@/types/billing"
 const AGE_REASON = "Tài khoản dưới 16 tuổi chưa thể mua gói";
 const KIND_ORDER: readonly PlanKind[] = ["free", "personal", "family"];
 
-const PLAN_VISUAL: Record<PlanKind, { boxClass: string; icon: ReactNode }> = {
-  free: {
-    boxClass: "bg-ground border border-line text-ink-2",
-    icon: <BookOpenIcon className="size-6" aria-hidden />,
-  },
+const PLAN_VISUAL: Partial<Record<PlanKind, { boxClass: string; icon: ReactNode }>> = {
   personal: {
     boxClass: "bg-brand-wash border border-brand/15 text-brand",
     icon: <GraduationCapIcon className="size-6" aria-hidden />,
@@ -166,21 +162,11 @@ export function PlansView() {
         );
       }
       if (!canBuy) return null;
-      if (s?.tier === "free") {
-        return (
-          <Button type="button" variant="secondary" disabled className={ctaClass}>
-            Đang dùng gói Miễn phí
-          </Button>
-        );
-      }
-      if (s?.tier === "premium") {
-        return (
-          <Button type="button" variant="outline" disabled className={ctaClass}>
-            Đã bao gồm
-          </Button>
-        );
-      }
-      return null;
+      return (
+        <Link href="/account#subscription" className={buttonVariants({ variant: "outline", className: ctaClass })}>
+          Quản lý gói của bạn
+        </Link>
+      );
     }
 
     if (!user) {
@@ -213,7 +199,7 @@ export function PlansView() {
         title={ageBlocked ? AGE_REASON : undefined}
         onClick={() => void buy(plan.code)}
       >
-        {renew ? `Gia hạn ${plan.name}` : `Mua ${plan.name}`}
+        {renew ? "Gia hạn" : "Thanh toán"}
       </Button>
     );
   };
@@ -238,7 +224,7 @@ export function PlansView() {
         </Alert>
       )}
 
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 lg:grid-rows-[auto_auto_auto_1fr] lg:gap-y-0">
         {grouped.map(({ kind, items }) => {
           const explicitCode = selectedByKind[kind];
           const activeCode = activeCodeForKind(kind);
@@ -259,98 +245,86 @@ export function PlansView() {
                 ? "tháng"
                 : `${plan.quotaPeriodDays} ngày`
               : `${plan.durationDays} ngày`;
-          const showRecurringCaption =
-            plan.kind !== "free" &&
-            plan.quotaPeriodDays != null &&
-            plan.durationDays != null &&
-            plan.quotaPeriodDays < plan.durationDays;
           const features = buildFeatures(plan);
 
           return (
             <section
               key={kind}
-              className={cn(
-                "flex flex-col rounded-2xl border bg-surface p-6",
-                kind === "personal" ? "border-brand/35 shadow-sm" : "border-line",
-              )}
+              className="flex flex-col rounded-2xl border border-line bg-surface p-6 lg:row-span-4 lg:grid lg:grid-rows-subgrid"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className={cn("flex size-14 shrink-0 items-center justify-center rounded-2xl", visual.boxClass)}>
-                  {visual.icon}
-                </div>
+              <div className="pb-5">
+                {(visual || items.length > 1) && (
+                  <div className="mb-5 flex items-start justify-between gap-3">
+                    {visual && (
+                      <div className={cn("flex size-14 shrink-0 items-center justify-center rounded-2xl", visual.boxClass)}>
+                        {visual.icon}
+                      </div>
+                    )}
 
-                {items.length > 1 && (
-                  <div
-                    role="tablist"
-                    aria-label={`Chọn thời hạn ${plan.name}`}
-                    className="inline-flex flex-wrap items-center gap-0.5 rounded-xl border border-line bg-ground p-1"
-                  >
-                    {items.map((option) => {
-                      const isSelected = option.code === plan.code;
-                      const tabLabel =
-                        option.durationDays != null
-                          ? hasDuplicateDuration
-                            ? `${option.durationDays}d · ${option.name}`
-                            : `${option.durationDays}d`
-                          : option.name;
-                      return (
-                        <button
-                          key={option.code}
-                          type="button"
-                          role="tab"
-                          aria-selected={isSelected}
-                          aria-label={option.durationDays != null ? `${option.durationDays} ngày` : option.name}
-                          onClick={() => setSelectedByKind((prev) => ({ ...prev, [kind]: option.code }))}
-                          className={cn(
-                            "cursor-pointer rounded-lg px-2.5 py-1 text-xs transition-colors",
-                            isSelected
-                              ? "bg-surface font-semibold text-brand shadow-xs ring-1 ring-brand/15"
-                              : "text-ink-2 hover:text-ink",
-                          )}
-                        >
-                          {tabLabel}
-                        </button>
-                      );
-                    })}
+                    {items.length > 1 && (
+                      <div
+                        role="tablist"
+                        aria-label={`Chọn thời hạn ${plan.name}`}
+                        className="inline-flex flex-wrap items-center gap-0.5 rounded-xl border border-line bg-ground p-1"
+                      >
+                        {items.map((option) => {
+                          const isSelected = option.code === plan.code;
+                          const tabLabel =
+                            option.durationDays != null
+                              ? hasDuplicateDuration
+                                ? `${option.durationDays} ngày · ${option.name}`
+                                : `${option.durationDays} ngày`
+                              : option.name;
+                          return (
+                            <button
+                              key={option.code}
+                              type="button"
+                              role="tab"
+                              aria-selected={isSelected}
+                              aria-label={option.durationDays != null ? `${option.durationDays} ngày` : option.name}
+                              onClick={() => setSelectedByKind((prev) => ({ ...prev, [kind]: option.code }))}
+                              className={cn(
+                                "cursor-pointer rounded-lg px-2.5 py-1 text-xs transition-colors",
+                                isSelected
+                                  ? "bg-surface font-semibold text-brand shadow-xs ring-1 ring-brand/15"
+                                  : "text-ink-2 hover:text-ink",
+                              )}
+                            >
+                              {tabLabel}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
 
-              <div className="mt-5">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="font-heading text-2xl font-semibold tracking-tight text-ink">{plan.name}</h2>
                   {statusBadge}
-                  {!statusBadge && kind === "personal" && <Badge variant="brand">Phổ biến</Badge>}
                 </div>
                 {plan.description && <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{plan.description}</p>}
               </div>
 
-              <div className="mt-5">
+              <div className="pb-5">
                 <div className="flex items-baseline gap-1.5">
                   <span className="text-3xl font-bold tracking-tight text-ink tabular-nums sm:text-4xl">
                     {plan.priceVnd === 0 ? "0 đ" : formatVnd(plan.priceVnd)}
                   </span>
                   <span className="text-sm font-normal text-ink-2">/ {periodUnit}</span>
                 </div>
-                {showRecurringCaption && (
-                  <p className="mt-1 text-xs text-ink-2">
-                    Làm mới hạn mức mỗi {plan.quotaPeriodDays} ngày trong suốt {plan.durationDays} ngày
-                  </p>
-                )}
               </div>
 
-              {cta && <div className="mt-5">{cta}</div>}
-              {messages[plan.code] && <p className="mt-2 text-sm text-risk">{messages[plan.code]}</p>}
-
-              <hr className="my-6 border-t border-line" />
+              <div className="space-y-2">
+                {cta}
+                {messages[plan.code] && <p className="text-sm text-risk">{messages[plan.code]}</p>}
+                <hr className="my-6 border-t border-line" />
+              </div>
 
               <ul className="space-y-3 text-sm leading-relaxed text-ink-2">
                 {features.map((item, idx) => (
                   <li key={idx} className="flex items-start gap-2.5">
-                    <span
-                      className="mt-1.5 size-2 shrink-0 rotate-45 rounded-[2px] border border-brand/50 bg-brand-wash"
-                      aria-hidden
-                    />
+                    <CheckIcon className="mt-0.5 size-4 shrink-0 text-risk" aria-hidden />
                     <span>{item}</span>
                   </li>
                 ))}
