@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { PlansView } from "@/components/billing/PlansView";
 
 export const metadata: Metadata = {
-  title: "Gói dịch vụ – USAS",
+  title: "Gói dịch vụ – USDSS",
   description: "Các gói USDSS Premium Cá nhân và Gia đình: giá, thời hạn và số câu hỏi ước tính.",
 };
 

@@ -3,7 +3,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { OrderView } from "@/components/billing/OrderView";
 
 export const metadata: Metadata = {
-  title: "Đơn hàng – USAS",
+  title: "Đơn hàng – USDSS",
 };
 
 interface Props {
