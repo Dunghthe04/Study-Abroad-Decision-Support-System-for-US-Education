@@ -35,8 +35,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
-import { isAdminRoute } from "@/lib/admin-nav";
-import { isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
 
 /**
@@ -123,21 +121,13 @@ export function SiteHeader() {
         clear ? "border-white/15 bg-brand-ink/55" : "border-brand-ink bg-brand",
       )}
     >
-      <div
-        className={cn(
-          "mx-auto px-4",
-          isAdminRoute(pathname) || pathname.startsWith("/recommendations")
-            ? "max-w-none sm:px-6"
-            : isWideRoute(pathname)
-              ? "max-w-[1560px] sm:px-8 lg:px-12"
-              : "max-w-5xl",
-        )}
-      >
+      <div className="mx-auto max-w-[1560px] px-4 sm:px-8 lg:px-12">
         {/* Hàng trên */}
         <div className="flex h-14 items-center gap-4 lg:gap-8">
           <Link
             href={canOpenAdmin ? "/admin" : "/"}
-            className="flex shrink-0 items-center gap-2.5 font-heading text-xl font-bold tracking-tight text-white transition-opacity hover:opacity-90"
+            aria-label="USDSS"
+            className="flex shrink-0 items-center transition-opacity hover:opacity-90"
           >
             <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-0.5">
               <Image
@@ -149,7 +139,6 @@ export function SiteHeader() {
                 className="size-8 object-contain"
               />
             </span>
-            <span>USDSS</span>
           </Link>
 
           <form role="search" onSubmit={submitSearch} className="relative hidden max-w-2xl flex-1 md:block">

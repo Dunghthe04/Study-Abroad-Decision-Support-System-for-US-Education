@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpenIcon, GraduationCapIcon, ReceiptTextIcon, UsersIcon } from "lucide-react";
+import { BookOpenIcon, GraduationCapIcon, UsersIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -219,21 +219,8 @@ export function PlansView() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 px-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-h1">Gói dịch vụ</h1>
-          <p className="text-sm text-ink-2">
-            USDSS Premium mở khóa tư vấn hồ sơ, gợi ý trường và mô phỏng. Hỏi đáp kiến thức du học luôn miễn phí.
-          </p>
-        </div>
-        {canBuy && (
-          <Link href="/orders" className={buttonVariants({ variant: "outline", size: "sm" })}>
-            <ReceiptTextIcon />
-            Lịch sử giao dịch
-          </Link>
-        )}
-      </div>
+    <div className="w-full space-y-6">
+      <h1 className="text-center text-h1">Chọn gói phù hợp với bạn</h1>
 
       {s?.pendingOrderCode && (
         <Alert variant="info">
