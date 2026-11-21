@@ -149,20 +149,6 @@ export const authApi = {
       body: JSON.stringify(data),
     }),
 
-  // [UC-64] Trung tâm tự đăng ký tài khoản
-  registerCenter: (data: RegisterCenterRequest) =>
-    apiFetch<{ message: string; email: string }>("/api/v1/auth/register-center", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  // [UC-91] Xác thực email trung tâm qua mã OTP 6 số
-  verifyCenterEmail: (data: VerifyCenterEmailRequest) =>
-    apiFetch<AuthResponse>("/api/v1/auth/verify-center-email", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
   // [AC-2] Đăng nhập: Backend thiết lập HttpOnly Cookie "usas_access_token"
   login: (data: LoginRequest) =>
     apiFetch<AuthResponse>("/api/v1/auth/login", {
@@ -669,6 +655,21 @@ export const targetSchoolsApi = {
   },
 };
 
+// [UC-64, UC-91] Tài khoản trung tâm chưa đăng nhập: tự đăng ký và xác thực email bằng OTP
+export const centerAccountApi = {
+  register: (data: RegisterCenterRequest) =>
+    apiFetch<{ message: string; email: string }>("/api/v1/center-accounts/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  verifyEmail: (data: VerifyCenterEmailRequest) =>
+    apiFetch<AuthResponse>("/api/v1/center-accounts/verify-email", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
 // [UC-71, UC-91, UC-92] Cổng Trung tâm tư vấn
 export const centerPortalApi = {
   getProfile: () => apiFetch<StudyCenter>("/api/v1/center/profile"),
@@ -688,25 +689,11 @@ export const centerPortalApi = {
     }),
   getVerificationStatus: () =>
     apiFetch<CenterVerificationStatusDto>("/api/v1/center/verification/status"),
-  /** [UC-91] Gửi OTP qua SMS tới số điện thoại hiện tại để xác thực. */
-  requestPhoneVerification: () =>
-    apiFetch<{ message: string }>("/api/v1/center/contact/phone/verify/request", { method: "POST" }),
-  /** [UC-91] Nhập OTP SMS để ghi nhận số điện thoại đã xác thực. */
-  verifyPhone: (code: string) =>
-    apiFetch<{ message: string }>("/api/v1/center/contact/phone/verify", {
-      method: "POST",
-      body: JSON.stringify({ code }),
-    }),
-  /** [UC-91] Đổi số điện thoại: gửi OTP qua SMS tới số mới rồi xác nhận bằng mã. */
-  requestPhoneChange: (newValue: string) =>
-    apiFetch<{ message: string }>("/api/v1/center/contact/phone/request", {
+  /** [UC-91] Đổi số điện thoại liên lạc, lưu thẳng, không xác thực SMS OTP. */
+  changePhone: (newValue: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/phone", {
       method: "POST",
       body: JSON.stringify({ newValue }),
-    }),
-  confirmPhoneChange: (newValue: string, code: string) =>
-    apiFetch<{ message: string }>("/api/v1/center/contact/phone/confirm", {
-      method: "POST",
-      body: JSON.stringify({ newValue, code }),
     }),
   /** Đổi email liên lạc: gửi OTP tới email mới rồi xác nhận bằng mã. */
   requestEmailChange: (newValue: string) =>

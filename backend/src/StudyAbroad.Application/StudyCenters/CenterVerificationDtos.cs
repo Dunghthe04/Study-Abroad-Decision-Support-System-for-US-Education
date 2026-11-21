@@ -13,13 +13,10 @@ public record RegisterCenterRequest(
 
 public record VerifyCenterEmailRequest(string Email, string Code);
 
-/// <summary>Yêu cầu gửi OTP tới số điện thoại / email liên lạc MỚI của trung tâm.</summary>
+/// <summary>Giá trị liên lạc MỚI của trung tâm: gửi OTP tới email mới, hoặc đổi thẳng số điện thoại.</summary>
 public record RequestContactChangeDto(string NewValue);
 
-/// <summary>[UC-91] Mã OTP người dùng nhập để xác thực số điện thoại hiện tại.</summary>
-public record VerifyContactCodeDto(string? Code);
-
-/// <summary>Xác nhận đổi số điện thoại / email liên lạc bằng OTP đã gửi tới giá trị mới.</summary>
+/// <summary>Xác nhận đổi email liên lạc bằng OTP đã gửi tới email mới.</summary>
 public record ConfirmContactChangeDto(string NewValue, string Code);
 
 public record VerificationDocumentUploadDto(
@@ -70,8 +67,7 @@ public record CenterVerificationDto(
     string? CenterCode = null,
     string? CenterEmail = null,
     string? CenterPhone = null,
-    DateTime? EmailVerifiedAt = null,
-    DateTime? PhoneVerifiedAt = null);
+    DateTime? EmailVerifiedAt = null);
 
 public record ReviewCenterVerificationRequest(
     string Action,
@@ -117,7 +113,5 @@ public record CenterVerificationStatusDto(
     string VerificationStatus,
     bool IsEmailVerified,
     DateTime? EmailVerifiedAt,
-    bool IsPhoneVerified,
-    DateTime? PhoneVerifiedAt,
     CenterVerificationDto? CurrentRequest,
     string? RejectionReason);

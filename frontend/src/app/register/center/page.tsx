@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
-import { RegisterCenterForm } from "@/components/auth/RegisterCenterForm";
+import { RegisterCenterForm } from "@/components/center/RegisterCenterForm";
 
 export const metadata: Metadata = {
   title: "Đăng ký dành cho trung tâm – USAS",

@@ -20,6 +20,8 @@ namespace StudyAbroad.Application.Auth
     public interface IAuthService
     {
         Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken ct = default);
+        /// <summary>Mở phiên đăng nhập cho tài khoản đã được xác thực ở luồng khác (dùng cho trung tâm sau khi xác thực email).</summary>
+        Task<AuthResult> StartSessionAsync(User user, CancellationToken ct = default);
         Task<AuthResult> VerifyEmailAsync(VerifyEmailRequest request, CancellationToken ct = default);
         Task<AuthResult> ResendOtpAsync(ResendOtpRequest request, CancellationToken ct = default);
         Task<AuthResult> LoginAsync(LoginRequest request, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
@@ -45,22 +47,6 @@ namespace StudyAbroad.Application.Auth
         Task<AuthResult> AnonymizeUserAccountAsync(Guid userId, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
         /// <summary>[UC-80] Khôi phục tài khoản đang chờ xóa bằng mã khôi phục, đăng nhập luôn khi thành công.</summary>
         Task<AuthResult> RestoreAccountAsync(RestoreAccountRequest request, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
-        /// <summary>[UC-64] Trung tâm tự đăng ký tài khoản (User role center status unverified + StudyCenter status unverified).</summary>
-        Task<AuthResult> RegisterCenterAsync(RegisterCenterRequest request, CancellationToken ct = default);
-        /// <summary>[UC-91] Xác thực email trung tâm qua OTP 6 số.</summary>
-        Task<AuthResult> VerifyCenterEmailAsync(VerifyCenterEmailRequest request, CancellationToken ct = default);
-        /// <summary>[UC-91] Gửi OTP qua SMS tới số điện thoại MỚI để trung tâm đổi số liên lạc.</summary>
-        Task<AuthResult> RequestCenterPhoneChangeAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default);
-        /// <summary>[UC-91] Xác nhận OTP gửi tới số MỚI và đổi số điện thoại liên lạc của trung tâm (ghi nhận đã xác thực).</summary>
-        Task<AuthResult> ConfirmCenterPhoneChangeAsync(Guid userId, ConfirmContactChangeDto request, CancellationToken ct = default);
-        /// <summary>[UC-91] Gửi OTP qua SMS tới số điện thoại hiện tại của trung tâm để xác thực.</summary>
-        Task<AuthResult> RequestCenterPhoneVerificationAsync(Guid userId, CancellationToken ct = default);
-        /// <summary>[UC-91] Nhập OTP SMS; đúng thì số điện thoại được ghi là đã xác thực.</summary>
-        Task<AuthResult> VerifyCenterPhoneAsync(Guid userId, string? code, CancellationToken ct = default);
-        /// <summary>Gửi OTP tới email MỚI để trung tâm đổi email liên lạc.</summary>
-        Task<AuthResult> RequestCenterEmailChangeAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default);
-        /// <summary>Xác nhận OTP và đổi email liên lạc của trung tâm (email đăng nhập giữ nguyên).</summary>
-        Task<AuthResult> ConfirmCenterEmailChangeAsync(Guid userId, ConfirmContactChangeDto request, CancellationToken ct = default);
     }
 
     public class AuthService(
@@ -74,8 +60,7 @@ namespace StudyAbroad.Application.Auth
         IUnitOfWork unitOfWork,
         StudyAbroad.Application.Leads.ILeadWithdrawalRepository leadWithdrawals,
         IStudyCenterRepository? studyCenters = null,
-        AccountDeletionOptions? accountDeletion = null,
-        ISmsSender? smsSender = null) : IAuthService
+        AccountDeletionOptions? accountDeletion = null) : IAuthService
     {
         private readonly AccountDeletionOptions _accountDeletion = accountDeletion ?? new AccountDeletionOptions();
 
@@ -388,6 +373,10 @@ namespace StudyAbroad.Application.Auth
 
             return AuthResult.Ok(await CreateSessionAsync(user, ipAddress, userAgent, ct));
         }
+
+        /// <summary>Mở phiên đăng nhập cho một tài khoản đã được xác thực ở nơi khác (ví dụ trung tâm vừa xác thực email, UC-91).</summary>
+        public async Task<AuthResult> StartSessionAsync(User user, CancellationToken ct = default) =>
+            AuthResult.Ok(await CreateSessionAsync(user, null, null, ct));
 
         /// <summary>Sinh access token (JWT 15 phút) và refresh token, lưu phiên 7 ngày và trả về thông tin phiên.</summary>
         private async Task<AuthResponse> CreateSessionAsync(User user, string? ipAddress, string? userAgent, CancellationToken ct)
@@ -714,40 +703,12 @@ namespace StudyAbroad.Application.Auth
         /// thì chỉ một request ghi được (Version/xmin), các request còn lại thất bại mà không được so mã.
         /// Đúng mã thì đánh dấu đã dùng (dùng 1 lần); sai đủ 5 lần thì vô hiệu hóa mã.
         /// </summary>
-        private async Task<bool> TryConsumeOtpAsync(Guid userId, string purpose, string? code, CancellationToken ct)
-        {
-            var otp = await users.GetLatestOtpAsync(userId, purpose, ct);
-            if (otp == null || otp.UsedAt != null || DateTime.UtcNow > otp.ExpiresAt || otp.Attempts >= MaxOtpAttempts)
-                return false;
-
-            otp.Attempts++;
-            if (!await TryUpdateOtpAsync(otp, ct))
-                return false;
-
-            if (string.IsNullOrWhiteSpace(code) || otp.CodeHash != HashOtp(code))
-            {
-                if (otp.Attempts >= MaxOtpAttempts)
-                {
-                    otp.UsedAt = DateTime.UtcNow; // Vô hiệu hóa mã sau 5 lần sai
-                    await TryUpdateOtpAsync(otp, ct);
-                }
-                return false;
-            }
-
-            // Đúng mã -> đánh dấu đã dùng; request song song khác dùng cùng mã sẽ bị từ chối
-            otp.UsedAt = DateTime.UtcNow;
-            return await TryUpdateOtpAsync(otp, ct);
-        }
+        private Task<bool> TryConsumeOtpAsync(Guid userId, string purpose, string? code, CancellationToken ct) =>
+            OtpRules.TryConsumeAsync(users, userId, purpose, code, ct);
 
         /// <summary>Kiểm tra cooldown 60 giây giữa 2 lần gửi và giới hạn 5 lần/giờ.</summary>
-        private async Task<bool> CanSendOtpAsync(Guid userId, string purpose, CancellationToken ct)
-        {
-            var latest = await users.GetLatestOtpAsync(userId, purpose, ct);
-            if (latest != null && (DateTime.UtcNow - latest.CreatedAt).TotalSeconds < MinSecondsBetweenOtpRequests)
-                return false;
-
-            return await users.CountOtpRequestsInLastHourAsync(userId, purpose, ct) < MaxOtpRequestsPerHour;
-        }
+        private Task<bool> CanSendOtpAsync(Guid userId, string purpose, CancellationToken ct) =>
+            OtpRules.CanSendAsync(users, userId, purpose, ct);
 
         /// <summary>Vô hiệu hóa các mã cũ cùng mục đích, tạo mã mới và trả về mã gốc để gửi mail.</summary>
         private async Task<string> IssueOtpAsync(Guid userId, string purpose, CancellationToken ct)
@@ -779,18 +740,8 @@ namespace StudyAbroad.Application.Auth
             }
         }
 
-        private async Task<bool> TryUpdateOtpAsync(OtpToken otp, CancellationToken ct)
-        {
-            try
-            {
-                await users.UpdateOtpAsync(otp, ct);
-                return true;
-            }
-            catch (ConcurrencyConflictException)
-            {
-                return false;
-            }
-        }
+        private Task<bool> TryUpdateOtpAsync(OtpToken otp, CancellationToken ct) =>
+            OtpRules.TryUpdateAsync(users, otp, ct);
 
         internal static string NormalizeEmail(string email) => (email ?? string.Empty).Trim().ToLowerInvariant();
 
@@ -1266,422 +1217,6 @@ namespace StudyAbroad.Application.Auth
                 await emailSender.SendParentLinkChangedEmailAsync(notice.ToEmail, notice.StudentName, notice.ParentName, linked: false, ct);
 
             return AuthResult.Ok("Tài khoản đã chuyển sang chờ xóa. Trong 30 ngày bạn có thể đăng nhập để khôi phục.");
-        }
-
-        public async Task<AuthResult> RegisterCenterAsync(RegisterCenterRequest request, CancellationToken ct = default)
-        {
-            if (studyCenters is null)
-                return AuthResult.Fail(AuthError.Validation, "Dịch vụ đăng ký trung tâm tạm thời chưa sẵn sàng.");
-
-            if (!request.AgreeTerms || !request.AgreeTruthfulnessCommitment)
-                return AuthResult.Fail(AuthError.Validation, "Bạn cần đồng ý với Điều khoản sử dụng và cam kết tính trung thực của thông tin.");
-
-            if (string.IsNullOrWhiteSpace(request.Password) || request.Password != request.ConfirmPassword)
-                return AuthResult.Fail(AuthError.Validation, "Mật khẩu xác nhận không khớp.");
-
-            var email = NormalizeEmail(request.Email);
-            if (string.IsNullOrEmpty(email) || email.Length > MaxEmailLength || !IsValidEmail(email))
-                return AuthResult.Fail(AuthError.Validation, $"Email không hợp lệ hoặc vượt quá {MaxEmailLength} ký tự.");
-
-            var passwordError = ValidatePassword(request.Password, "Mật khẩu");
-            if (passwordError != null)
-                return AuthResult.Fail(AuthError.Validation, passwordError);
-
-            var centerName = request.CenterName?.Trim() ?? string.Empty;
-            if (string.IsNullOrEmpty(centerName) || centerName.Length > 200)
-                return AuthResult.Fail(AuthError.Validation, "Tên trung tâm không được để trống và tối đa 200 ký tự.");
-
-            var registrantName = request.RegistrantName?.Trim() ?? string.Empty;
-            if (string.IsNullOrEmpty(registrantName) || registrantName.Length > MaxFullNameLength)
-                return AuthResult.Fail(AuthError.Validation, $"Họ tên người đăng ký không được để trống và tối đa {MaxFullNameLength} ký tự.");
-
-            var rawPhone = request.Phone?.Trim();
-            if (string.IsNullOrEmpty(rawPhone))
-                return AuthResult.Fail(AuthError.Validation, "Số điện thoại không được để trống.");
-
-            if (!TryValidateAndNormalizeVietnamesePhone(rawPhone, out var normalizedPhone))
-                return AuthResult.Fail(AuthError.Validation, "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678 hoặc +84912345678).");
-
-            var existing = await users.GetUserByEmail(email, ct);
-            if (existing != null)
-            {
-                if (existing.Status == UserStatuses.Unverified)
-                    return AuthResult.Fail(AuthError.Validation, "Email này đã được đăng ký nhưng chưa xác thực. Vui lòng kiểm tra hộp thư hoặc yêu cầu gửi lại mã OTP.");
-                return AuthResult.Fail(AuthError.Validation, "Email này đã được sử dụng.");
-            }
-
-            if (await users.PhoneExistAsync(normalizedPhone, ct))
-                return AuthResult.Fail(AuthError.Validation, "Số điện thoại này đã được sử dụng.");
-
-            string code;
-            do
-            {
-                code = $"CTR_{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
-            } while (await studyCenters.ExistsByCodeAsync(code, ct));
-
-            var user = new User
-            {
-                Email = email,
-                PasswordHash = hasher.Hash(request.Password),
-                FullName = registrantName,
-                Role = UserRoles.Center,
-                Status = UserStatuses.Unverified,
-                Phone = normalizedPhone,
-                FailedLoginAttempts = 0,
-                LockoutEnd = null
-            };
-            await users.AddAsync(user, ct);
-
-            var center = new StudyCenter
-            {
-                Code = code,
-                Name = centerName,
-                Email = email,
-                Phone = normalizedPhone,
-                OwnerUserId = user.Id,
-                VerificationStatus = CenterVerificationStatuses.Unverified,
-                TermsAgreedAt = DateTime.UtcNow,
-                CommitmentAgreedAt = DateTime.UtcNow,
-                RegistrantName = registrantName,
-                RegistrantPosition = string.IsNullOrWhiteSpace(request.RegistrantPosition) ? null : request.RegistrantPosition.Trim(),
-                IsActive = true
-            };
-            await studyCenters.AddAsync(center, ct);
-
-            var otpCode = GenerateOtpCode();
-            var otp = new OtpToken
-            {
-                UserId = user.Id,
-                Purpose = OtpPurposes.VerifyEmail,
-                CodeHash = HashOtp(otpCode),
-                ExpiresAt = DateTime.UtcNow.AddMinutes(OtpExpiryMinutes),
-                Attempts = 0
-            };
-            await users.SaveOtpAsync(otp, ct);
-
-            await emailSender.SendVerificationEmailAsync(user.Email, user.FullName, otpCode, OtpExpiryMinutes, ct);
-
-            await auditLogs.AddAsync(new AuditLog
-            {
-                ActorUserId = user.Id,
-                Action = "center.register",
-                EntityType = "StudyCenter",
-                EntityId = center.Id.ToString(),
-                DetailJson = JsonSerializer.Serialize(new { email, centerName, registrantName, code })
-            }, ct);
-
-            return AuthResult.Ok($"Đăng ký thành công. Mã xác thực OTP đã được gửi đến email {email} (hiệu lực {OtpExpiryMinutes} phút).");
-        }
-
-        public async Task<AuthResult> VerifyCenterEmailAsync(VerifyCenterEmailRequest request, CancellationToken ct = default)
-        {
-            var email = NormalizeEmail(request.Email);
-            var user = await users.GetUserByEmail(email, ct);
-            if (user == null || user.Status != UserStatuses.Unverified)
-                return AuthResult.Fail(AuthError.OtpInvalid, OtpFailedMessage);
-
-            if (!await TryConsumeOtpAsync(user.Id, OtpPurposes.VerifyEmail, request.Code, ct))
-                return AuthResult.Fail(AuthError.OtpInvalid, OtpFailedMessage);
-
-            user.Status = UserStatuses.Active;
-            user.FailedLoginAttempts = 0;
-            user.LockoutEnd = null;
-            await users.UpdateUserAsync(user, ct);
-
-            if (studyCenters != null)
-            {
-                var center = await studyCenters.GetByOwnerOrEmailAsync(user.Id, user.Email, ct);
-                if (center != null)
-                {
-                    center.EmailVerifiedAt = DateTime.UtcNow;
-                    await studyCenters.UpdateAsync(center, ct);
-                }
-            }
-
-            await auditLogs.AddAsync(new AuditLog
-            {
-                ActorUserId = user.Id,
-                Action = "center.email_verified",
-                EntityType = "User",
-                EntityId = user.Id.ToString(),
-                DetailJson = JsonSerializer.Serialize(new { email = user.Email })
-            }, ct);
-
-            return AuthResult.Ok(await CreateSessionAsync(user, null, null, ct));
-        }
-
-        // ----- Đổi số điện thoại / email liên lạc của trung tâm (xác thực OTP tại giá trị mới) -----
-
-        /// <summary>Gắn mã OTP với giá trị mới: mã gửi tới số A không dùng được để xác nhận số B.</summary>
-        private static string BindOtp(string code, string target) => $"{code.Trim()}|{target}";
-
-        private const string SmsUnavailableMessage = "Kênh gửi SMS tạm thời chưa sẵn sàng. Vui lòng thử lại sau.";
-        private const string PhoneFormatMessage = "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678 hoặc +84912345678).";
-        private const string OtpRateMessage = "Bạn yêu cầu mã quá nhanh hoặc quá nhiều lần. Vui lòng thử lại sau.";
-
-        /// <summary>
-        /// [UC-91] Tạo OTP mới gắn với số điện thoại rồi gửi SMS. Mã cũ bị vô hiệu; tuân thủ giãn cách giữa hai lần gửi và hạn mức theo giờ.
-        /// </summary>
-        private async Task<AuthResult?> IssueAndSendPhoneOtpAsync(Guid userId, string purpose, string phone, CancellationToken ct)
-        {
-            if (smsSender is null)
-                return AuthResult.Fail(AuthError.Validation, SmsUnavailableMessage);
-
-            if (!await CanSendOtpAsync(userId, purpose, ct))
-                return AuthResult.Fail(AuthError.Validation, OtpRateMessage);
-
-            await users.InvalidateOtpsAsync(userId, purpose, ct);
-            var otpCode = GenerateOtpCode();
-            await users.SaveOtpAsync(new OtpToken
-            {
-                UserId = userId,
-                Purpose = purpose,
-                CodeHash = HashOtp(BindOtp(otpCode, phone)),
-                ExpiresAt = DateTime.UtcNow.AddMinutes(OtpExpiryMinutes),
-                Attempts = 0
-            }, ct);
-
-            try
-            {
-                await smsSender.SendOtpAsync(phone, otpCode, OtpExpiryMinutes, ct);
-            }
-            catch (InvalidOperationException)
-            {
-                // Không giữ lại mã không gửi được tới người dùng
-                await users.InvalidateOtpsAsync(userId, purpose, ct);
-                return AuthResult.Fail(AuthError.Validation, SmsUnavailableMessage);
-            }
-
-            return null;
-        }
-
-        private static string MaskPhone(string phone) =>
-            phone.Length <= 4 ? phone : new string('*', phone.Length - 4) + phone[^4..];
-
-        public async Task<AuthResult> RequestCenterPhoneVerificationAsync(Guid userId, CancellationToken ct = default)
-        {
-            if (studyCenters is null)
-                return AuthResult.Fail(AuthError.Validation, "Dịch vụ trung tâm tạm thời chưa sẵn sàng.");
-
-            var center = await studyCenters.GetByOwnerOrEmailAsync(userId, null, ct);
-            if (center is null)
-                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy thông tin trung tâm cho tài khoản này.");
-
-            if (string.IsNullOrWhiteSpace(center.Phone) || !TryValidateAndNormalizeVietnamesePhone(center.Phone, out var phone))
-                return AuthResult.Fail(AuthError.Validation, "Trung tâm chưa có số điện thoại hợp lệ. Vui lòng cập nhật số điện thoại trước.");
-
-            if (center.PhoneVerifiedAt.HasValue)
-                return AuthResult.Fail(AuthError.Validation, "Số điện thoại này đã được xác thực.");
-
-            var failure = await IssueAndSendPhoneOtpAsync(userId, OtpPurposes.VerifyPhone, phone, ct);
-            if (failure is not null) return failure;
-
-            await auditLogs.AddAsync(new AuditLog
-            {
-                ActorUserId = userId,
-                Action = "center.phone_verification_requested",
-                EntityType = "StudyCenter",
-                EntityId = center.Id.ToString(),
-                DetailJson = JsonSerializer.Serialize(new { phone = MaskPhone(phone) })
-            }, ct);
-
-            return AuthResult.Ok($"Mã OTP đã được gửi qua SMS đến {MaskPhone(phone)} (hiệu lực {OtpExpiryMinutes} phút).");
-        }
-
-        public async Task<AuthResult> VerifyCenterPhoneAsync(Guid userId, string? code, CancellationToken ct = default)
-        {
-            if (studyCenters is null)
-                return AuthResult.Fail(AuthError.Validation, "Dịch vụ trung tâm tạm thời chưa sẵn sàng.");
-
-            if (string.IsNullOrWhiteSpace(code))
-                return AuthResult.Fail(AuthError.Validation, "Vui lòng nhập mã OTP.");
-
-            var center = await studyCenters.GetByOwnerOrEmailAsync(userId, null, ct);
-            if (center is null)
-                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy thông tin trung tâm cho tài khoản này.");
-
-            if (string.IsNullOrWhiteSpace(center.Phone) || !TryValidateAndNormalizeVietnamesePhone(center.Phone, out var phone))
-                return AuthResult.Fail(AuthError.Validation, "Trung tâm chưa có số điện thoại hợp lệ.");
-
-            if (center.PhoneVerifiedAt.HasValue)
-                return AuthResult.Ok("Số điện thoại đã được xác thực.");
-
-            if (!await TryConsumeOtpAsync(userId, OtpPurposes.VerifyPhone, BindOtp(code, phone), ct))
-                return AuthResult.Fail(AuthError.OtpInvalid, OtpFailedMessage);
-
-            center.PhoneVerifiedAt = DateTime.UtcNow;
-            await studyCenters.UpdateAsync(center, ct);
-
-            await auditLogs.AddAsync(new AuditLog
-            {
-                ActorUserId = userId,
-                Action = "center.phone_verified",
-                EntityType = "StudyCenter",
-                EntityId = center.Id.ToString(),
-                DetailJson = JsonSerializer.Serialize(new { phone = MaskPhone(phone) })
-            }, ct);
-
-            return AuthResult.Ok("Đã xác thực số điện thoại.");
-        }
-
-        public async Task<AuthResult> RequestCenterPhoneChangeAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default)
-        {
-            if (studyCenters is null)
-                return AuthResult.Fail(AuthError.Validation, "Dịch vụ trung tâm tạm thời chưa sẵn sàng.");
-
-            if (!TryValidateAndNormalizeVietnamesePhone(request.NewValue, out var normalized))
-                return AuthResult.Fail(AuthError.Validation, PhoneFormatMessage);
-
-            var center = await studyCenters.GetByOwnerOrEmailAsync(userId, null, ct);
-            if (center is null)
-                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy thông tin trung tâm cho tài khoản này.");
-
-            if (normalized == center.Phone)
-                return AuthResult.Fail(AuthError.Validation, "Đây là số điện thoại hiện tại của trung tâm.");
-
-            if (await users.PhoneExistAsync(normalized, ct))
-                return AuthResult.Fail(AuthError.Validation, "Số điện thoại này đã được sử dụng.");
-
-            var failure = await IssueAndSendPhoneOtpAsync(userId, OtpPurposes.ChangePhone, normalized, ct);
-            if (failure is not null) return failure;
-
-            await auditLogs.AddAsync(new AuditLog
-            {
-                ActorUserId = userId,
-                Action = "center.phone_change_requested",
-                EntityType = "StudyCenter",
-                EntityId = center.Id.ToString(),
-                DetailJson = JsonSerializer.Serialize(new { newPhone = MaskPhone(normalized) })
-            }, ct);
-
-            return AuthResult.Ok($"Mã OTP đã được gửi qua SMS đến {MaskPhone(normalized)} (hiệu lực {OtpExpiryMinutes} phút).");
-        }
-
-        public async Task<AuthResult> ConfirmCenterPhoneChangeAsync(Guid userId, ConfirmContactChangeDto request, CancellationToken ct = default)
-        {
-            if (studyCenters is null)
-                return AuthResult.Fail(AuthError.Validation, "Dịch vụ trung tâm tạm thời chưa sẵn sàng.");
-
-            if (!TryValidateAndNormalizeVietnamesePhone(request.NewValue, out var normalized))
-                return AuthResult.Fail(AuthError.Validation, PhoneFormatMessage);
-
-            if (string.IsNullOrWhiteSpace(request.Code))
-                return AuthResult.Fail(AuthError.Validation, "Vui lòng nhập mã OTP.");
-
-            if (!await TryConsumeOtpAsync(userId, OtpPurposes.ChangePhone, BindOtp(request.Code, normalized), ct))
-                return AuthResult.Fail(AuthError.OtpInvalid, OtpFailedMessage);
-
-            var center = await studyCenters.GetByOwnerOrEmailAsync(userId, null, ct);
-            var user = await users.GetUserById(userId, ct);
-            if (center is null || user is null)
-                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy thông tin trung tâm cho tài khoản này.");
-
-            // Số có thể đã bị tài khoản khác dùng trong lúc chờ OTP
-            if (await users.PhoneExistAsync(normalized, ct))
-                return AuthResult.Fail(AuthError.Validation, "Số điện thoại này đã được sử dụng.");
-
-            var oldPhone = center.Phone;
-            center.Phone = normalized;
-            center.PhoneVerifiedAt = DateTime.UtcNow;
-            user.Phone = normalized;
-            await studyCenters.UpdateAsync(center, ct);
-            await users.UpdateUserAsync(user, ct);
-
-            await auditLogs.AddAsync(new AuditLog
-            {
-                ActorUserId = userId,
-                Action = "center.phone_changed",
-                EntityType = "StudyCenter",
-                EntityId = center.Id.ToString(),
-                DetailJson = JsonSerializer.Serialize(new { oldPhone = oldPhone is null ? null : MaskPhone(oldPhone), newPhone = MaskPhone(normalized) })
-            }, ct);
-
-            return AuthResult.Ok("Đã đổi và xác thực số điện thoại liên lạc mới.");
-        }
-
-        public async Task<AuthResult> RequestCenterEmailChangeAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default)
-        {
-            if (studyCenters is null)
-                return AuthResult.Fail(AuthError.Validation, "Dịch vụ trung tâm tạm thời chưa sẵn sàng.");
-
-            var newEmail = NormalizeEmail(request.NewValue);
-            if (string.IsNullOrWhiteSpace(newEmail) || !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(newEmail))
-                return AuthResult.Fail(AuthError.Validation, "Email không hợp lệ.");
-
-            var center = await studyCenters.GetByOwnerOrEmailAsync(userId, null, ct);
-            var user = await users.GetUserById(userId, ct);
-            if (center is null || user is null)
-                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy thông tin trung tâm cho tài khoản này.");
-
-            if (string.Equals(newEmail, center.Email, StringComparison.OrdinalIgnoreCase))
-                return AuthResult.Fail(AuthError.Validation, "Đây là email liên lạc hiện tại của trung tâm.");
-
-            var other = await users.GetUserByEmail(newEmail, ct);
-            if (other is not null && other.Id != userId)
-                return AuthResult.Fail(AuthError.Validation, "Email này đã được sử dụng bởi tài khoản khác.");
-
-            if (!await CanSendOtpAsync(userId, OtpPurposes.ChangeEmail, ct))
-                return AuthResult.Fail(AuthError.Validation, "Bạn yêu cầu mã quá nhanh hoặc quá nhiều lần. Vui lòng thử lại sau.");
-
-            await users.InvalidateOtpsAsync(userId, OtpPurposes.ChangeEmail, ct);
-            var otpCode = GenerateOtpCode();
-            await users.SaveOtpAsync(new OtpToken
-            {
-                UserId = userId,
-                Purpose = OtpPurposes.ChangeEmail,
-                CodeHash = HashOtp(BindOtp(otpCode, newEmail)),
-                ExpiresAt = DateTime.UtcNow.AddMinutes(OtpExpiryMinutes),
-                Attempts = 0
-            }, ct);
-
-            await emailSender.SendVerificationEmailAsync(newEmail, user.FullName, otpCode, OtpExpiryMinutes, ct);
-
-            await auditLogs.AddAsync(new AuditLog
-            {
-                ActorUserId = userId,
-                Action = "center.email_change_requested",
-                EntityType = "StudyCenter",
-                EntityId = center.Id.ToString(),
-                DetailJson = JsonSerializer.Serialize(new { newEmail })
-            }, ct);
-
-            return AuthResult.Ok($"Mã OTP đã được gửi đến {newEmail} (hiệu lực {OtpExpiryMinutes} phút).");
-        }
-
-        public async Task<AuthResult> ConfirmCenterEmailChangeAsync(Guid userId, ConfirmContactChangeDto request, CancellationToken ct = default)
-        {
-            if (studyCenters is null)
-                return AuthResult.Fail(AuthError.Validation, "Dịch vụ trung tâm tạm thời chưa sẵn sàng.");
-
-            var newEmail = NormalizeEmail(request.NewValue);
-            if (string.IsNullOrWhiteSpace(newEmail))
-                return AuthResult.Fail(AuthError.Validation, "Email không hợp lệ.");
-
-            if (string.IsNullOrWhiteSpace(request.Code))
-                return AuthResult.Fail(AuthError.Validation, "Vui lòng nhập mã OTP.");
-
-            if (!await TryConsumeOtpAsync(userId, OtpPurposes.ChangeEmail, BindOtp(request.Code, newEmail), ct))
-                return AuthResult.Fail(AuthError.OtpInvalid, "Mã OTP không đúng hoặc đã hết hạn.");
-
-            var center = await studyCenters.GetByOwnerOrEmailAsync(userId, null, ct);
-            if (center is null)
-                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy thông tin trung tâm cho tài khoản này.");
-
-            var oldEmail = center.Email;
-            center.Email = newEmail;
-            center.EmailVerifiedAt = DateTime.UtcNow;
-            await studyCenters.UpdateAsync(center, ct);
-
-            await auditLogs.AddAsync(new AuditLog
-            {
-                ActorUserId = userId,
-                Action = "center.email_changed",
-                EntityType = "StudyCenter",
-                EntityId = center.Id.ToString(),
-                DetailJson = JsonSerializer.Serialize(new { oldEmail, newEmail })
-            }, ct);
-
-            return AuthResult.Ok("Đã đổi và xác thực email liên lạc mới. Email đăng nhập của bạn không thay đổi.");
         }
     }
 }
