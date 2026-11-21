@@ -8,7 +8,8 @@ namespace StudyAbroad.Application.Billing;
 /// Pool và tier của một tài khoản (kế hoạch billing v2, mục "Pools and tiers"). Thứ tự trừ: Personal của mình → Gia đình → hạn mức Free.
 /// Premium tính theo ngày (kỳ còn hạn, kể cả đã dùng hết token). Đọc là áp dụng chuyển kỳ đến hạn, job chạy trễ vẫn đúng.
 /// Chuyển kỳ nào xảy ra (job hay đọc) thì thông báo phát ngay sau khi lưu: người đọc đầu tiên thấy chuyển kỳ là người phát, các lần sau không còn gì để chuyển.
-/// ponytail: kỳ không có xmin nên hai tiến trình chuyển cùng một kỳ đúng lúc có thể phát thông báo hai lần; khóa dòng làn nếu cần chặt hơn.
+/// Chuyển kỳ chạy dưới khóa dòng làn (<see cref="IBillingRepository.SaveLockedStepsAsync"/>) và tính lại trên dòng đã khóa, nên hai request cùng đọc một làn đến hạn
+/// không cùng chuyển, không ném lỗi xung đột và không phát thông báo hai lần.
 /// </summary>
 public class EntitlementService(IBillingRepository repository, INotificationService? notifications = null) : IEntitlementService
 {
@@ -93,20 +94,21 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
             lane.Queued is null ? null : new QueuedCycleDto(lane.Queued.PlanName, cycle.EndsAt));
     }
 
-    public async Task<LaneState> AdvanceLaneAsync(Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default)
+    public async Task<LaneState> AdvanceLaneAsync(
+        Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default, ICollection<Func<CancellationToken, Task>>? deferredNotifications = null)
     {
-        var lane = await AdvanceCyclesAsync(ownerUserId, kind, nowUtc, ct);
+        var lane = await AdvanceCyclesAsync(ownerUserId, kind, nowUtc, deferredNotifications, ct);
         // Làn family hết kỳ: nhóm của chủ phải kết thúc trước khi ai đó (kể cả chính chủ vừa mua lại) dùng nó (C8, SW9)
         if (kind == PlanKinds.Family && lane.Active is null && lane.Queued is null
-            && await repository.FindActiveOwnedGroupAsync(ownerUserId, ct) is { } dead)
-            await LapseAsync(dead, nowUtc, ct);
+            && await repository.FindActiveOwnedGroupAsync(ownerUserId, ct) is not null)
+            await LapseAsync(ownerUserId, nowUtc, deferredNotifications, ct);
         return new LaneState(lane.Active, lane.Queued, lane.Used, lane.Active is not null && CycleRules.IsExhausted(lane.Used, lane.Active.TokenQuota));
     }
 
     private async Task<Entitlement> LoadAsync(Guid userId, DateTime nowUtc, CancellationToken ct)
     {
         var plans = await repository.GetPlansAsync(ct);
-        var personal = await AdvanceCyclesAsync(userId, PlanKinds.Personal, nowUtc, ct);
+        var personal = await AdvanceCyclesAsync(userId, PlanKinds.Personal, nowUtc, null, ct);
 
         // Gói Gia đình: nhóm mình làm chủ, nếu không thì nhóm mình là thành viên active (C9: tối đa một)
         var group = await repository.FindActiveOwnedGroupAsync(userId, ct);
@@ -126,69 +128,98 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
         return new Entitlement(personal, family, group, isOwner, plans);
     }
 
-    private async Task<Lane> AdvanceCyclesAsync(Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct)
+    private async Task<Lane> ReadLaneAsync(Guid ownerUserId, string kind, CancellationToken ct)
     {
         var cycles = await repository.GetOpenCyclesAsync(ownerUserId, kind, ct);
         var active = cycles.FirstOrDefault(c => c.Status == CycleStatuses.Active);
         var queued = cycles.FirstOrDefault(c => c.Status == CycleStatuses.Queued);
-        var used = active is null ? 0 : await repository.SumCycleTokensAsync(active.Id, ct);
-
-        var changes = CycleRules.Advance(active, queued, used, nowUtc);
-        if (changes.Count == 0)
-            return new Lane(active, queued, used);
-
-        await repository.SaveStepsAsync(changes.Select(c => (Action)c.Apply).ToList(), ct);
-        await NotifyTransitionsAsync(changes, ct);
-        active = cycles.FirstOrDefault(c => c.Status == CycleStatuses.Active);
-        queued = cycles.FirstOrDefault(c => c.Status == CycleStatuses.Queued);
         return new Lane(active, queued, active is null ? 0 : await repository.SumCycleTokensAsync(active.Id, ct));
+    }
+
+    // Đọc không khóa trước: không có gì phải chuyển (đa số lượt đọc) thì không mở transaction. Có thì chuyển dưới khóa dòng làn, tính lại trên dòng đã khóa
+    // và chỉ báo khi CHÍNH lần này đổi dữ liệu: hai request chạm cùng một làn đến hạn thì một bên chuyển và báo, bên kia thấy không còn gì để chuyển
+    private async Task<Lane> AdvanceCyclesAsync(
+        Guid ownerUserId, string kind, DateTime nowUtc, ICollection<Func<CancellationToken, Task>>? deferred, CancellationToken ct)
+    {
+        var lane = await ReadLaneAsync(ownerUserId, kind, ct);
+        if (CycleRules.Advance(lane.Active, lane.Queued, lane.Used, nowUtc).Count == 0)
+            return lane;
+
+        IReadOnlyList<CycleChange> applied = [];
+        var saved = await repository.SaveLockedStepsAsync(ownerUserId, kind, lockGroup: false, async () =>
+        {
+            var fresh = await ReadLaneAsync(ownerUserId, kind, ct);
+            applied = CycleRules.Advance(fresh.Active, fresh.Queued, fresh.Used, nowUtc);
+            return applied.Select(c => (Action)c.Apply).ToList();
+        }, ct);
+        if (saved)
+            await NotifyTransitionsAsync(applied, deferred, ct);
+        return await ReadLaneAsync(ownerUserId, kind, ct);   // thực thể mới nạp (đã theo dõi), người gọi sửa tiếp được
     }
 
     // Kỳ mới bắt đầu → báo chủ kỳ; kỳ cuối của làn hết hạn mà không còn kỳ nào chạy → báo chủ kỳ. Chỉ tính trạng thái cuối của mỗi kỳ trong lượt này
     // (kỳ xếp hàng bắt đầu rồi cũng hết hạn trong cùng lượt, vì job nghỉ rất lâu, thì chỉ báo hết hạn)
-    private async Task NotifyTransitionsAsync(IReadOnlyList<CycleChange> changes, CancellationToken ct)
+    private async Task NotifyTransitionsAsync(IReadOnlyList<CycleChange> changes, ICollection<Func<CancellationToken, Task>>? deferred, CancellationToken ct)
     {
-        if (notifications is null)
-            return;
         var final = changes.GroupBy(c => c.Cycle.Id).Select(g => g.Last()).ToList();
         foreach (var started in final.Where(c => c.Status == CycleStatuses.Active))
-            await notifications.NotifyAsync(started.Cycle.UserId, NotificationTypes.BillingCycleStarted, "Kỳ gói mới đã bắt đầu",
+            await NotifyAsync(deferred, started.Cycle.UserId, NotificationTypes.BillingCycleStarted, "Kỳ gói mới đã bắt đầu",
                 $"Gói {started.Cycle.PlanName} đã bắt đầu.", "/account", ct);
         if (final.All(c => c.Status != CycleStatuses.Active)
             && final.LastOrDefault(c => c.Status == CycleStatuses.Ended && c.EndedReason == CycleEndReasons.Expired) is { } expired)
-            await notifications.NotifyAsync(expired.Cycle.UserId, NotificationTypes.BillingExpired, $"Gói {expired.Cycle.PlanName} đã hết hạn",
+            await NotifyAsync(deferred, expired.Cycle.UserId, NotificationTypes.BillingExpired, $"Gói {expired.Cycle.PlanName} đã hết hạn",
                 "Gia hạn để tiếp tục dùng các tính năng Premium.", "/plans", ct);
     }
 
-    // Gói Gia đình hết hiệu lực (kỳ cuối hết hạn, không có kỳ gia hạn): nhóm kết thúc, lời mời và thành viên kết thúc (C8)
-    private async Task LapseAsync(FamilyGroup group, DateTime nowUtc, CancellationToken ct)
+    // Gói Gia đình hết hiệu lực (kỳ cuối hết hạn, không có kỳ gia hạn): nhóm kết thúc, lời mời và thành viên kết thúc (C8).
+    // Khóa làn và nhóm rồi kiểm lại: nhóm vẫn active và làn vẫn không có kỳ nào (thanh toán chen vào thì không kết thúc nữa)
+    private async Task LapseAsync(Guid ownerUserId, DateTime nowUtc, ICollection<Func<CancellationToken, Task>>? deferred, CancellationToken ct)
     {
-        var members = await repository.GetOpenMembersAsync(group.Id, ct);
-        var activeMembers = members.Where(m => m.Status == FamilyMemberStatuses.Active && m.UserId is not null).Select(m => m.UserId!.Value).ToList();
-        await repository.SaveStepsAsync([() =>
+        var activeMembers = new List<Guid>();
+        var saved = await repository.SaveLockedStepsAsync(ownerUserId, PlanKinds.Family, lockGroup: true, async () =>
         {
-            group.Status = FamilyGroupStatuses.Ended;
-            group.EndedAt = nowUtc;
-            group.EndedReason = CycleEndReasons.FamilyLapsed;
-            foreach (var m in members)
+            if ((await repository.GetOpenCyclesAsync(ownerUserId, PlanKinds.Family, ct)).Count > 0
+                || await repository.FindActiveOwnedGroupAsync(ownerUserId, ct) is not { } group)
+                return [];
+            var members = await repository.GetOpenMembersAsync(group.Id, ct);
+            activeMembers.AddRange(members.Where(m => m.Status == FamilyMemberStatuses.Active && m.UserId is not null).Select(m => m.UserId!.Value));
+            return [() =>
             {
-                m.Status = FamilyMemberStatuses.Ended;
-                m.EndedAt = nowUtc;
-                m.EndedReason = FamilyMemberEndReasons.FamilyLapsed;
-                m.TokenHash = null;   // link mời không dùng được nữa
-            }
-        }], ct);
+                group.Status = FamilyGroupStatuses.Ended;
+                group.EndedAt = nowUtc;
+                group.EndedReason = CycleEndReasons.FamilyLapsed;
+                foreach (var m in members)
+                {
+                    m.Status = FamilyMemberStatuses.Ended;
+                    m.EndedAt = nowUtc;
+                    m.EndedReason = FamilyMemberEndReasons.FamilyLapsed;
+                    m.TokenHash = null;   // link mời không dùng được nữa
+                }
+            }];
+        }, ct);
+        if (!saved)
+            return;
 
         // Báo chủ gói và mọi thành viên đang active (lời mời chưa nhận thì không có ai để báo)
-        if (notifications is null)
-            return;
-        await notifications.NotifyAsync(group.OwnerUserId, NotificationTypes.FamilyEnded, "Gói Gia đình đã kết thúc",
+        await NotifyAsync(deferred, ownerUserId, NotificationTypes.FamilyEnded, "Gói Gia đình đã kết thúc",
             "Gói Gia đình của bạn đã kết thúc, các thành viên không còn dùng chung được nữa.", "/plans", ct);
         if (activeMembers.Count == 0)
             return;
-        var ownerName = await repository.GetUserNameAsync(group.OwnerUserId, ct) ?? string.Empty;
+        var ownerName = await repository.GetUserNameAsync(ownerUserId, ct) ?? string.Empty;
         foreach (var memberId in activeMembers)
-            await notifications.NotifyAsync(memberId, NotificationTypes.FamilyEnded, "Gói Gia đình đã kết thúc",
+            await NotifyAsync(deferred, memberId, NotificationTypes.FamilyEnded, "Gói Gia đình đã kết thúc",
                 $"Gói Gia đình của {ownerName} đã kết thúc.", "/plans", ct);
+    }
+
+    // deferred != null (đang trong transaction thanh toán): xếp hàng để người gọi gửi SAU commit, chỉ cho lần thử đã commit; không thì gửi ngay (đường đọc, đã lưu xong).
+    // Hàng đợi chỉ giữ giá trị thường (id, chữ), không giữ thực thể: theo dõi bị xóa khi thử lại
+    private Task NotifyAsync(ICollection<Func<CancellationToken, Task>>? deferred, Guid userId, string type, string title, string body, string link, CancellationToken ct)
+    {
+        if (notifications is not { } service)
+            return Task.CompletedTask;
+        if (deferred is null)
+            return service.NotifyAsync(userId, type, title, body, link, ct);
+        deferred.Add(c => service.NotifyAsync(userId, type, title, body, link, c));
+        return Task.CompletedTask;
     }
 }

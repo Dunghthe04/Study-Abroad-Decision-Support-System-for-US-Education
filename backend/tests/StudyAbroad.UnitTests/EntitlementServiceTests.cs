@@ -494,6 +494,13 @@ public class EntitlementServiceTests
             return Task.CompletedTask;
         }
 
+        public async Task<bool> SaveLockedStepsAsync(Guid ownerUserId, string kind, bool lockGroup, Func<Task<IReadOnlyList<Action>>> plan, CancellationToken ct = default)
+        {
+            var steps = await plan();
+            await SaveStepsAsync(steps, ct);
+            return steps.Count > 0;
+        }
+
         private Task<T> Read<T>(T value)
         {
             Reads++;

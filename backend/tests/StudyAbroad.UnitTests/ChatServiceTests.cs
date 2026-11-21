@@ -540,6 +540,40 @@ public class ChatServiceTests
         Assert.Equal(InterviewState, t.Session!.StateJson);   // state của DB giữ nguyên
     }
 
+    // L2: câu số liệu một trường mà SLM lỡ xếp vào giải thích / goal-seeking được chuyển sang tra số liệu TRƯỚC lớp chặn Premium: Free được trả lời, không bị khóa
+    [Theory]
+    [InlineData("UCLA xếp hạng bao nhiêu", "explain")]
+    [InlineData("MIT cần IELTS bao nhiêu", "goal_seek")]
+    public async Task L2_FreeAskedAFactQuestionTheSlmFiledAsPremium_IsAnsweredNotLocked(string typed, string action)
+    {
+        var advisor = new FakeAdvisor("B4") { Action = action, ActionData = IowaCode, Answer = "câu tạm của advisor" };
+        var runner = new FakeRunner { Info = InfoOf(), Explanation = Explanation(), GoalResult = GoalOf() };
+        var request = new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", typed)]);
+
+        var t = await GatedChat(FreeCharge(), request, advisor, runner);
+
+        Assert.Null(t.Res.Locked);
+        Assert.NotEqual(ChatPremiumGate.PremiumRequiredAnswer, t.Res.Answer);
+        Assert.Equal("iowa", runner.InfoCode);   // tra số liệu trường
+        Assert.Null(runner.ExplainedCode);
+        Assert.Null(runner.GoalCalledWith);
+    }
+
+    [Theory]
+    [InlineData("vì sao Harvard khó vào", "explain")]
+    [InlineData("MIT cần gì để vào", "goal_seek")]
+    public async Task L2_FreeAskedAGenuinelyPremiumQuestion_IsStillLocked(string typed, string action)
+    {
+        var advisor = new FakeAdvisor("B4") { Action = action, ActionData = IowaCode, Answer = "câu tạm của advisor" };
+        var runner = new FakeRunner { Info = InfoOf(), Explanation = Explanation(), GoalResult = GoalOf() };
+        var request = new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", typed)]);
+
+        var t = await GatedChat(FreeCharge(), request, advisor, runner);
+
+        Assert.Equal(new ChatLock(ChatLockReasons.PremiumRequired, null), t.Res.Locked);
+        AssertNoDispatch(runner);
+    }
+
     [Fact]
     public async Task F2_PremiumWithTokens_StillRunsThePremiumAction()
     {
@@ -3540,7 +3574,8 @@ public class ChatServiceTests
         public Task<IReadOnlyList<StudyAbroad.Application.Billing.PlanDto>> GetPlansOnSaleAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<StudyAbroad.Application.Billing.LaneState> AdvanceLaneAsync(Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default) =>
+        public Task<StudyAbroad.Application.Billing.LaneState> AdvanceLaneAsync(
+            Guid ownerUserId, string kind, DateTime nowUtc, CancellationToken ct = default, ICollection<Func<CancellationToken, Task>>? deferredNotifications = null) =>
             throw new NotSupportedException();
     }
 

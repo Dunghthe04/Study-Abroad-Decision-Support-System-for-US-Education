@@ -408,7 +408,10 @@ public class AdminOrderServiceTests
         Assert.Equal(("lane_full", 409), (error.Code, error.StatusCode));
         Assert.Equal(OrderStatuses.Mismatch, j.H.Order(order.OrderCode).Status);
         Assert.Equal(2, j.Store.Cycles.Count);
-        Assert.Empty(j.Audit.Entries);
+        var audit = Assert.Single(j.Audit.Entries);   // L6: admin đã xác nhận tiền nhưng không kích hoạt được vẫn để lại dấu vết
+        Assert.Equal(("order.activate", admin.Id), (audit.Action, audit.ActorUserId));
+        Assert.Contains("\"outcome\":\"lane_full\"", audit.DetailJson);
+        Assert.Contains("\"result\":\"LaneFull\"", audit.DetailJson);
     }
 
     [Fact]
@@ -452,6 +455,65 @@ public class AdminOrderServiceTests
 
         Assert.Equal(("buyer_deleted", 409), (error.Code, error.StatusCode));
         Assert.Empty(j.Store.Cycles);
+        var audit = Assert.Single(j.Audit.Entries);   // L6
+        Assert.Equal("order.activate", audit.Action);
+        Assert.Contains("\"outcome\":\"buyer_deleted\"", audit.DetailJson);
+    }
+
+    // ---- L6: kích hoạt đơn còn pending thì đóng link payOS
+
+    [Fact]
+    public async Task L6_ActivateAPendingOrder_ClosesItsPayOsLink()
+    {
+        var j = new JobHarness();
+        var (buyer, admin) = (j.AddUser(), j.AddAdmin());
+        var order = await j.H.CreateOrder(buyer, "personal-1m");
+
+        var dto = await j.Admin.ActivateAsync(admin.Id, order.OrderCode, "khách chuyển khoản tay", ActAt);
+
+        Assert.Equal(OrderStatuses.Paid, dto.Status);
+        Assert.Equal(order.OrderCode, Assert.Single(j.H.Gateway.Cancelled).Code);
+    }
+
+    [Fact]
+    public async Task L6_ActivateAPendingOrder_ALinkCancelFailureDoesNotBreakTheActivation()
+    {
+        var j = new JobHarness();
+        var (buyer, admin) = (j.AddUser(), j.AddAdmin());
+        var order = await j.H.CreateOrder(buyer, "personal-1m");
+        j.H.Gateway.FailCancel = true;
+
+        var dto = await j.Admin.ActivateAsync(admin.Id, order.OrderCode, "khách chuyển khoản tay", ActAt);
+
+        Assert.Equal(OrderStatuses.Paid, dto.Status);
+        Assert.Single(j.Store.Cycles);
+        Assert.Equal("order.activate", Assert.Single(j.Audit.Entries).Action);
+    }
+
+    [Fact]
+    public async Task L6_ActivateAMismatchOrder_DoesNotTouchThePayOsLink()
+    {
+        var (j, _, admin, order) = await Mismatched();
+
+        await j.Admin.ActivateAsync(admin.Id, order.OrderCode, "đã đối chiếu", ActAt);
+
+        Assert.Empty(j.H.Gateway.Cancelled);
+    }
+
+    [Fact]
+    public async Task L6_ActivateAPendingOrderWhoseLaneIsFull_StillClosesTheLink_AndAudits_Then409()
+    {
+        var j = new JobHarness();
+        var (buyer, admin) = (j.AddUser(), j.AddAdmin());
+        var order = await j.H.CreateOrder(buyer, "personal-1m");
+        j.Store.AddActive(buyer.Id, "personal-1m", Now.AddDays(-1));
+        j.Store.AddQueued(buyer.Id, "personal-3m");
+
+        var error = await Fails(j.Admin.ActivateAsync(admin.Id, order.OrderCode, "chuyển tay", ActAt));
+
+        Assert.Equal("lane_full", error.Code);
+        Assert.Equal(order.OrderCode, Assert.Single(j.H.Gateway.Cancelled).Code);
+        Assert.Contains("lane_full", Assert.Single(j.Audit.Entries).DetailJson);
     }
 
     [Fact]

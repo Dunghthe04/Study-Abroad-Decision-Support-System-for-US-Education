@@ -16,4 +16,10 @@ public sealed class BillingOptions
 
     /// <summary>Đơn chờ chỉ bị job coi là hết hạn sau ExpiresAt cộng bấy nhiêu phút (chờ webhook tới muộn).</summary>
     public int PendingGraceMinutes { get; set; } = 2;
+
+    /// <summary>
+    /// Không hỏi được payOS (lỗi mạng, cổng sập) thì chưa biết đơn đã được trả chưa: job chỉ coi đơn chờ là hết hạn sau ExpiresAt cộng bấy nhiêu giờ.
+    /// Cũng là cửa sổ job còn hỏi lại payOS về đơn đã hết hạn (khách trả muộn thì vẫn được kích hoạt, C6).
+    /// </summary>
+    public int UnknownStatusExpiryHours { get; set; } = 24;
 }

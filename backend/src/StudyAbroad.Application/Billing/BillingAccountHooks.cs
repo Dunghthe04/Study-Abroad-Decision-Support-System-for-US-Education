@@ -13,7 +13,10 @@ public interface IBillingAccountHooks
     /// <summary>Xóa mềm (D1, D3): thành viên rời nhóm, đơn đang chờ bị hủy. Nhóm và kỳ của chủ gói chạy tiếp tới hết hạn (O1).</summary>
     Task<Func<CancellationToken, Task>> OnAccountSoftDeletedAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default);
 
-    /// <summary>Ngay trước khi xóa hẳn (D4, D6): nhóm của chủ gói và các kỳ còn mở kết thúc, thành viên được báo; email còn sót trong lịch sử thành viên của chính người này bị xóa.</summary>
+    /// <summary>
+    /// Ngay trước khi xóa hẳn (D4, D6): nhóm của chủ gói và các kỳ còn mở kết thúc, thành viên được báo; tư cách thành viên còn active của chính người này trong nhóm
+    /// của người khác kết thúc nốt (lời mời nhận chen vào lúc xóa mềm); email còn sót trong lịch sử thành viên và lời mời gửi tới email của họ bị xóa.
+    /// </summary>
     Task<Func<CancellationToken, Task>> OnBeforePurgeAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default);
 }
 
@@ -57,13 +60,22 @@ public sealed class BillingAccountHooks(
         // Nhóm và kỳ sẽ bị cascade xóa cùng dòng users; kết thúc trước để biết ai cần báo và để mọi FK không còn chặn
         var groups = await repository.EndOwnedGroupsAsync(userId, nowUtc, ct);
         await repository.EndOpenCyclesAsync(userId, nowUtc, ct);
-        // Cuối cùng (sau khóa nhóm, cùng thứ tự với FamilyService): xóa email trong lịch sử thành viên của người sắp bị xóa
-        await repository.BlankMembershipEmailsAsync(userId, nowUtc, ct);
-        if (groups is null || groups.MemberUserIds.Count == 0)
+        // Một lời mời được nhận chen vào lúc xóa mềm có thể để lại tư cách active trong nhóm người khác: kết thúc (idempotent, 0 dòng nếu xóa mềm đã làm)
+        // trước bước xóa email để dòng đó cũng được dọn
+        var membership = await repository.EndActiveMembershipAsync(userId, nowUtc, ct);
+        // Cuối cùng (sau khóa nhóm, cùng thứ tự với FamilyService): xóa email trong lịch sử thành viên và lời mời gửi tới email của người sắp bị xóa
+        var email = (await repository.GetUserEmailAsync(userId, ct))?.Trim().ToLowerInvariant();   // lời mời lưu chữ thường
+        await repository.BlankMembershipEmailsAsync(userId, email, nowUtc, ct);
+        if (membership is null && (groups is null || groups.MemberUserIds.Count == 0))
             return Nothing;
 
         return async after =>
         {
+            if (membership is not null)
+                await notifications.NotifyAsync(membership.OwnerUserId, NotificationTypes.FamilyMemberLeft, "Có thành viên rời gói Gia đình",
+                    $"{membership.MemberName} đã xóa tài khoản và rời gói Gia đình của bạn.", "/account", after);
+            if (groups is null)
+                return;
             foreach (var memberId in groups.MemberUserIds)
                 await notifications.NotifyAsync(memberId, NotificationTypes.FamilyEnded, "Gói Gia đình đã kết thúc",
                     $"Gói Gia đình của {groups.OwnerName} đã kết thúc.", "/plans", after);

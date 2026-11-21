@@ -19,6 +19,8 @@ public class AccountPurgeRepository(AppDbContext db) : IAccountPurgeRepository
             .Select(u => u.Id)
             .ToListAsync(ct);
 
+    // NO KEY UPDATE, không phải UPDATE: vẫn loại trừ purge khác và mọi lần sửa dòng user, nhưng tương thích với KEY SHARE mà khóa ngoại tới users
+    // lấy khi thanh toán thêm kỳ (đơn → kỳ). FOR UPDATE ở đây chờ vòng với thanh toán: purge giữ dòng user rồi ghi đơn, thanh toán giữ dòng đơn rồi chèn kỳ cần KEY SHARE dòng user
     public async Task<bool> LockIfStillDueAsync(Guid userId, DateTime deletedBefore, IReadOnlyCollection<string> roles, CancellationToken ct = default)
     {
         var roleArray = roles.ToArray();
@@ -29,7 +31,7 @@ public class AccountPurgeRepository(AppDbContext db) : IAccountPurgeRepository
               AND deleted_at IS NOT NULL AND deleted_at <= {deletedBefore}
               AND is_legal_hold = FALSE
               AND role = ANY({roleArray})
-            FOR UPDATE
+            FOR NO KEY UPDATE
             """).ToListAsync(ct);
         return ids.Count > 0;
     }

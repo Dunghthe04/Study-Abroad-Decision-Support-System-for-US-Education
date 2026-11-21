@@ -71,7 +71,16 @@ public sealed partial class OrderService
         if (order is null)
             return new PaymentApplyResult(PaymentApplyStatus.UnknownOrder);
         if (order.Status == OrderStatuses.Paid)
+        {
+            // Job đối soát thắng cuộc đua nên đơn đã trả mà chưa có payload: webhook thật tới sau thì lưu payload đã lọc, không đổi gì khác (không thông báo, không kỳ mới).
+            // Người mua đã bị xóa hẳn (UserId null) thì payload đã được xóa theo luật lưu trữ: không lưu lại
+            if (order.PayloadJson is null && payloadJson is not null && order.UserId is not null)
+            {
+                order.PayloadJson = payloadJson;
+                await orders.SaveAsync(ct);
+            }
             return new PaymentApplyResult(PaymentApplyStatus.AlreadyPaid, order.UserSubscriptionId);
+        }
 
         var alreadyMismatch = order.Status == OrderStatuses.Mismatch;
         // Tài khoản người mua đã bị xóa hẳn: có tiền nhưng không có ai để nhận gói, admin xử lý
@@ -91,7 +100,7 @@ public sealed partial class OrderService
         }
 
         // 3. Chỗ đặt kỳ mới được quyết định lúc thanh toán (C5)
-        var lane = await entitlements.AdvanceLaneAsync(buyerId, order.PlanKind, now, ct);
+        var lane = await entitlements.AdvanceLaneAsync(buyerId, order.PlanKind, now, ct, afterCommit);   // thông báo chuyển kỳ xếp hàng, gửi sau commit
         if (lane.Queued is not null)
         {
             // P22: đã nhận tiền nhưng làn đầy (đang chạy + đang chờ). Admin kích hoạt sau
@@ -118,7 +127,7 @@ public sealed partial class OrderService
             }
             if (await billing.FindActiveMemberGroupAsync(buyerId, ct) is { } memberOf)
             {
-                await entitlements.AdvanceLaneAsync(memberOf.OwnerUserId, PlanKinds.Family, now, ct);   // nhóm đã hết kỳ thì kết thúc ở đây, không còn gì để rời
+                await entitlements.AdvanceLaneAsync(memberOf.OwnerUserId, PlanKinds.Family, now, ct, afterCommit);   // nhóm đã hết kỳ thì kết thúc ở đây, không còn gì để rời
                 leaving = (await billing.GetOpenMembersAsync(memberOf.Id, ct)).FirstOrDefault(m => m.UserId == buyerId && m.Status == FamilyMemberStatuses.Active);
                 leftOwnerId = memberOf.OwnerUserId;
             }

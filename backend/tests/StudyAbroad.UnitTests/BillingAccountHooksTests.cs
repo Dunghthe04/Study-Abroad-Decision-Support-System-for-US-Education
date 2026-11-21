@@ -16,8 +16,13 @@ public class BillingAccountHooksTests
     /// <summary>Bản trong bộ nhớ của BillingAccountRepository: cùng luật, cùng giá trị lý do kết thúc.</summary>
     private sealed class StoreAccountRepository(BillingStore store) : IBillingAccountRepository
     {
+        public Dictionary<Guid, string> Emails { get; } = [];
+        public List<string?> EmailsBlanked { get; } = [];
+        public List<string> Calls { get; } = [];
+
         public Task<EndedMembership?> EndActiveMembershipAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default)
         {
+            Calls.Add(nameof(EndActiveMembershipAsync));
             var row = store.Members.FirstOrDefault(m => m.UserId == userId && m.Status == FamilyMemberStatuses.Active);
             if (row is null)
                 return Task.FromResult<EndedMembership?>(null);
@@ -61,12 +66,26 @@ public class BillingAccountHooksTests
             return Task.FromResult<EndedOwnedGroups?>(new EndedOwnedGroups(store.Names[ownerUserId], memberIds));
         }
 
-        public Task<int> BlankMembershipEmailsAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default)
+        public Task<string?> GetUserEmailAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(Emails.TryGetValue(userId, out var email) ? email : null);
+
+        public Task<int> BlankMembershipEmailsAsync(Guid userId, string? email, DateTime nowUtc, CancellationToken ct = default)
         {
-            var rows = store.Members.Where(m => m.UserId == userId && m.Status != FamilyMemberStatuses.Pending).ToList();
+            Calls.Add(nameof(BlankMembershipEmailsAsync));
+            EmailsBlanked.Add(email);
+            var hasEmail = !string.IsNullOrEmpty(email);
+            var pending = hasEmail ? store.Members.Where(m => m.Status == FamilyMemberStatuses.Pending && m.InvitedEmail == email).ToList() : [];
+            foreach (var m in pending)
+            {
+                m.Status = FamilyMemberStatuses.Cancelled;
+                m.EndedAt = nowUtc;
+                m.TokenHash = null;
+                m.InvitedEmail = string.Empty;
+            }
+            var rows = store.Members.Where(m => m.Status != FamilyMemberStatuses.Pending && (m.UserId == userId || (hasEmail && m.InvitedEmail == email))).ToList();
             foreach (var m in rows)
                 m.InvitedEmail = string.Empty;
-            return Task.FromResult(rows.Count);
+            return Task.FromResult(pending.Count + rows.Count);
         }
 
         public Task<int> EndOpenCyclesAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default)
@@ -85,6 +104,7 @@ public class BillingAccountHooksTests
     private sealed class Env
     {
         public BillingStore Store { get; } = new();
+        public StoreAccountRepository Repo { get; }
         public RecordingNotifications Notes { get; } = new();
         public TestGateway Gateway { get; } = new("ck");
         public BillingAccountHooks Hooks { get; }
@@ -95,7 +115,8 @@ public class BillingAccountHooksTests
         {
             Store.Names[Owner] = "Chủ Gói";
             Store.Names[Member] = "Thành Viên";
-            Hooks = new BillingAccountHooks(new StoreAccountRepository(Store), Notes, Gateway);
+            Repo = new StoreAccountRepository(Store);
+            Hooks = new BillingAccountHooks(Repo, Notes, Gateway);
         }
 
         /// <summary>Nhóm của Owner với kỳ family-1m đang chạy và Member là thành viên active.</summary>
@@ -281,6 +302,80 @@ public class BillingAccountHooksTests
         Assert.Equal(string.Empty, mine.InvitedEmail);
         Assert.Equal(("someone@x.vn", "other@x.vn"), (otherInvite.InvitedEmail, otherMember.InvitedEmail));   // lời mời gửi cho email khác và người khác giữ nguyên
         Assert.Equal(FamilyMemberStatuses.Pending, otherInvite.Status);
+    }
+
+    // L3: lời mời bị từ chối / hết hạn / hủy chưa bao giờ có user_id nhưng vẫn giữ email; lời mời đang chờ gửi tới email đó kết thúc luôn
+    [Fact]
+    public async Task L3_Purge_BlanksTheEmailOnNonPendingInvitesSentToIt_AndCancelsPendingOnes()
+    {
+        var env = new Env();
+        env.Family();
+        env.Repo.Emails[env.Member] = "  M@X.vn ";   // email lưu chữ hoa / thừa khoảng trắng: hook chuẩn hóa như lúc lưu lời mời
+        FamilyMember Row(string status, string email, string? hash = null) => new()
+        {
+            FamilyGroupId = env.Group.Id, InvitedEmail = email, SeatRole = FamilySeats.Parent, Status = status, TokenHash = hash,
+        };
+        var declined = Row(FamilyMemberStatuses.Declined, "m@x.vn");
+        var expired = Row(FamilyMemberStatuses.Expired, "m@x.vn");
+        var cancelled = Row(FamilyMemberStatuses.Cancelled, "m@x.vn");
+        var pendingToMe = Row(FamilyMemberStatuses.Pending, "m@x.vn", "h-me");
+        var pendingToOther = Row(FamilyMemberStatuses.Pending, "other@x.vn", "h-other");
+        var declinedOther = Row(FamilyMemberStatuses.Declined, "other@x.vn");
+        env.Store.Members.AddRange([declined, expired, cancelled, pendingToMe, pendingToOther, declinedOther]);
+
+        await env.Hooks.OnBeforePurgeAsync(env.Member, Now);
+
+        Assert.Equal("m@x.vn", Assert.Single(env.Repo.EmailsBlanked));
+        Assert.All(new[] { declined, expired, cancelled }, m => Assert.Equal(string.Empty, m.InvitedEmail));
+        Assert.Equal((FamilyMemberStatuses.Cancelled, null, string.Empty, (DateTime?)Now), (pendingToMe.Status, pendingToMe.TokenHash, pendingToMe.InvitedEmail, pendingToMe.EndedAt));
+        Assert.Equal((FamilyMemberStatuses.Pending, "h-other", "other@x.vn"), (pendingToOther.Status, pendingToOther.TokenHash, pendingToOther.InvitedEmail));
+        Assert.Equal("other@x.vn", declinedOther.InvitedEmail);
+    }
+
+    [Fact]
+    public async Task L3_PurgeOfAnAccountWithoutAnEmailRecord_StillBlanksByUserOnly()
+    {
+        var env = new Env();
+        env.Family();   // không có email trong kho: chỉ theo user_id
+
+        await env.Hooks.OnBeforePurgeAsync(env.Member, Now);
+
+        Assert.Null(Assert.Single(env.Repo.EmailsBlanked));
+        Assert.Equal(string.Empty, env.Store.Members.Single().InvitedEmail);
+    }
+
+    // L4: Accept chen vào lúc xóa mềm để lại tư cách active: xóa hẳn kết thúc nốt TRƯỚC khi dòng user mất, rồi mới xóa email
+    [Fact]
+    public async Task L4_Purge_EndsAStillActiveMembershipInSomeoneElsesGroup_ThenBlanksItsEmail_AndNotifiesTheOwner()
+    {
+        var env = new Env();
+        env.Family();
+        var mine = env.Store.Members.Single();   // Member vẫn active (xóa mềm không kết thúc được vì Accept tới sau)
+
+        var afterCommit = await env.Hooks.OnBeforePurgeAsync(env.Member, Now);
+
+        Assert.Equal((FamilyMemberStatuses.Ended, FamilyMemberEndReasons.MemberDeleted, null, string.Empty), (mine.Status, mine.EndedReason, mine.TokenHash, mine.InvitedEmail));
+        Assert.Equal([nameof(IBillingAccountRepository.EndActiveMembershipAsync), nameof(IBillingAccountRepository.BlankMembershipEmailsAsync)], env.Repo.Calls);   // kết thúc trước, xóa email sau
+        Assert.Empty(env.Notes.Sent);
+
+        await afterCommit(CancellationToken.None);
+
+        var note = Assert.Single(env.Notes.Sent);
+        Assert.Equal((env.Owner, NotificationTypes.FamilyMemberLeft), (note.UserId, note.Type));
+        Assert.Contains("Thành Viên", note.Body);
+    }
+
+    [Fact]
+    public async Task L4_PurgeAfterASoftDeleteAlreadyEndedTheMembership_IsIdempotent_NoSecondNotification()
+    {
+        var env = new Env();
+        env.Family();
+        await env.Hooks.OnAccountSoftDeletedAsync(env.Member, Now);
+
+        var afterCommit = await env.Hooks.OnBeforePurgeAsync(env.Member, Now.AddDays(30));
+        await afterCommit(CancellationToken.None);
+
+        Assert.Empty(env.Notes.Sent);   // xóa mềm đã gửi sau commit của nó (chưa chạy ở đây); xóa hẳn không báo lại
     }
 
     [Fact]

@@ -33,6 +33,11 @@ public sealed class BillingJobService(
             if (await TryAsync($"đối soát đơn {order.OrderCode}", () => reconciler.ReconcileAsync(order.OrderCode, nowUtc, ct), ct))
                 handled++;
         }
+
+        // Đơn đã hết hạn mà ExpiresAt còn trong cửa sổ trả muộn: hỏi lại payOS, PAID thì kích hoạt (C6), còn lại giữ nguyên. Không tính vào số đơn đã xử lý.
+        // ponytail: mỗi lượt một lần gọi payOS cho mỗi đơn mới hết hạn (tối đa 200); nếu payOS giới hạn tốc độ thì chỉ hỏi lại thưa hơn khi đơn đã hết hạn lâu
+        foreach (var order in await jobs.ListRecentlyExpiredOrdersAsync(nowUtc.AddHours(-options.UnknownStatusExpiryHours), ct))
+            await TryAsync($"đối soát lại đơn đã hết hạn {order.OrderCode}", () => reconciler.ReconcileAsync(order.OrderCode, nowUtc, ct), ct);
         return handled;
     }
 
@@ -91,29 +96,39 @@ public sealed class BillingJobService(
             var reached100 = cycle.ExhaustedNotifiedAt is null && CycleRules.IsExhausted(tokens, cycle.TokenQuota);
             if (!reached80 && !reached100)
                 continue;
+            var flagged = false;
             var ok = await TryAsync($"thông báo dùng hạn mức kỳ {cycle.Id}", async () =>
             {
+                // Danh sách đọc không theo dõi: nạp riêng kỳ này (đang theo dõi) rồi mới ghi dấu; kỳ đã được báo trong lúc đó thì thôi
+                if (await jobs.FindCycleAsync(cycle.Id, ct) is not { } tracked)
+                    return;
+                var send80 = reached80 && tracked.Warned80At is null;
+                var send100 = reached100 && tracked.ExhaustedNotifiedAt is null;
+                if (!send80 && !send100)
+                    return;
                 // Ghi dấu trước rồi mới gửi (một lần mỗi kỳ)
-                if (reached80)
-                    cycle.Warned80At = nowUtc;
-                if (reached100)
-                    cycle.ExhaustedNotifiedAt = nowUtc;
+                if (send80)
+                    tracked.Warned80At = nowUtc;
+                if (send100)
+                    tracked.ExhaustedNotifiedAt = nowUtc;
                 await jobs.SaveAsync(ct);
-                foreach (var userId in await RecipientsAsync(cycle, ct))
+                flagged = true;
+                foreach (var userId in await RecipientsAsync(tracked, ct))
                 {
-                    if (reached80)
+                    if (send80)
                         await notifications.NotifyAsync(userId, NotificationTypes.BillingUsage80, "Bạn đã dùng 80% lượt của kỳ này",
-                            $"Gói {cycle.PlanName}: bạn đã dùng 80% lượt hỏi của kỳ này.", "/plans", ct);
-                    if (reached100)
+                            $"Gói {tracked.PlanName}: bạn đã dùng 80% lượt hỏi của kỳ này.", "/plans", ct);
+                    if (send100)
                         await notifications.NotifyAsync(userId, NotificationTypes.BillingUsage100, "Bạn đã dùng hết lượt của kỳ này",
-                            $"Gói {cycle.PlanName}: bạn đã dùng hết lượt hỏi của kỳ này.", "/plans", ct);
+                            $"Gói {tracked.PlanName}: bạn đã dùng hết lượt hỏi của kỳ này.", "/plans", ct);
                 }
             }, ct);
-            // Lỗi thì dừng bước: TryAsync đã bỏ theo dõi mọi kỳ còn lại trong danh sách, nên gán dấu thời gian cho chúng sẽ không được lưu
-            // mà thông báo vẫn gửi (lượt sau gửi lại). Lượt sau mở scope mới, nạp lại và làm tiếp phần còn lại.
+            // Lỗi thì dừng bước: ghi dấu hay gửi lỗi thường là sự cố chung (DB, thông báo), làm tiếp chỉ đốt thêm một lần báo mỗi kỳ sau.
+            // Dấu đã ghi trước khi gửi nên kỳ lỗi mất một lần báo, không bao giờ báo lặp; lượt sau mở scope mới, nạp lại và làm tiếp phần còn lại.
             if (!ok)
                 break;
-            handled++;
+            if (flagged)
+                handled++;
         }
         return handled;
     }

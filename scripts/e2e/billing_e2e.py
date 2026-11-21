@@ -854,6 +854,31 @@ def phase_admin():
         expect(codes == [200, 409], f"mã: {codes} {[short(r.text, 80) for r in rs]}")
         expect(len(cycles(u, "personal")) == 1, f"{len(cycles(u, 'personal'))} kỳ")
 
+    with case("P22★", "làn đầy (kỳ active + kỳ chờ) mà khách vẫn trả đơn khác: mismatch ghi chú lane_full, không thêm kỳ; admin kích hoạt -> 409 lane_full, có audit") as note:
+        u = new_premium("p22", "personal-1m", age=22)           # kỳ active
+        o = buy(u, "personal-1m")                                 # đơn thứ hai còn pending: có kỳ chờ rồi thì POST /orders bị R6 chặn, nên tạo đơn trước
+        code = o["orderCode"]
+        # Kỳ chờ dựng bằng SQL từ chính kỳ active (kỳ queued không có ngày), thay cho đơn gia hạn mà R6 không cho tạo thêm
+        sql("insert into app.user_subscriptions (id,user_id,plan_id,kind,family_group_id,status,starts_at,ends_at,token_quota,plan_name,price_vnd,duration_days,created_at)"
+            " select gen_random_uuid(),user_id,plan_id,kind,null,'queued',null,null,token_quota,plan_name,price_vnd,duration_days,now()"
+            " from app.user_subscriptions where id=%s", active_cycle(u)["id"])
+        before = sorted(r["status"] for r in cycles(u, "personal"))
+        expect(before == ["active", "queued"], f"làn phải đầy: {before}")
+        expect(pay(code) is True, "webhook dev không được xử lý")
+        got = order(u, code)
+        expect(got["status"] == "mismatch" and got["cycle"] is None and got["paidAt"] is None, got)
+        detail = status(admin.get(f"/api/v1/admin/orders/{code}"), 200)
+        expect("lane_full" in (detail["adminNote"] or ""), f"adminNote: {detail['adminNote']}")
+        expect(sorted(r["status"] for r in cycles(u, "personal")) == before, "không được thêm kỳ khi làn đầy")
+        expect(wait_notif(u, "billing_payment_mismatch"), "người mua phải được báo")
+        err = status(admin.post(f"/api/v1/admin/orders/{code}/activate", json={"note": "Khách trả khi làn đầy"}), 409, "lane_full")
+        expect(sorted(r["status"] for r in cycles(u, "personal")) == before, "kích hoạt tay khi làn đầy cũng không thêm kỳ")
+        expect(order(u, code)["status"] == "mismatch", "đơn vẫn mismatch để admin xử lý sau")
+        audit = one("select detail_json from app.audit_logs where action='order.activate' and entity_type='payment_transaction'"
+                    " and entity_id=(select id::text from app.payment_transactions where order_code=%s)", code)
+        expect(audit and "lane_full" in str(audit["detail_json"]), f"thiếu audit order.activate (lane_full): {audit}")
+        note(f"order {code}: {err['code']}")
+
     with case("A11", "học sinh gọi route admin -> 403; chưa đăng nhập -> 401") as note:
         u = user("u17")
         status(u.get("/api/v1/admin/plans"), 403)

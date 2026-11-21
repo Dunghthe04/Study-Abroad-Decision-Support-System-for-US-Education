@@ -84,12 +84,30 @@ public class BillingAccountRepository(AppDbContext db) : IBillingAccountReposito
         return new EndedOwnedGroups(ownerName, memberUserIds);
     }
 
-    public Task<int> BlankMembershipEmailsAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) =>
-        // Không đụng dòng pending (index một-lời-mời-pending-mỗi-email dùng cột này; lời mời pending chưa gắn user_id)
-        db.FamilyMembers.Where(m => m.UserId == userId && m.Status != FamilyMemberStatuses.Pending)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(m => m.InvitedEmail, string.Empty)
-                .SetProperty(m => m.UpdatedAt, nowUtc), ct);
+    public Task<string?> GetUserEmailAsync(Guid userId, CancellationToken ct = default) =>
+        db.Users.Where(u => u.Id == userId).Select(u => (string?)u.Email).FirstOrDefaultAsync(ct);
+
+    public async Task<int> BlankMembershipEmailsAsync(Guid userId, string? email, DateTime nowUtc, CancellationToken ct = default)
+    {
+        var hasEmail = !string.IsNullOrEmpty(email);
+        var ended = 0;
+        if (hasEmail)
+            // Lời mời còn pending gửi tới email này: kết thúc rồi xóa email trong cùng câu lệnh để dòng rời index pending ngay (email lưu chữ thường)
+            ended = await db.FamilyMembers.Where(m => m.Status == FamilyMemberStatuses.Pending && m.InvitedEmail == email)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(m => m.Status, FamilyMemberStatuses.Cancelled)
+                    .SetProperty(m => m.EndedAt, nowUtc)
+                    .SetProperty(m => m.TokenHash, (string?)null)
+                    .SetProperty(m => m.InvitedEmail, string.Empty)
+                    .SetProperty(m => m.UpdatedAt, nowUtc), ct);
+
+        // Không đụng dòng pending còn lại (index một-lời-mời-pending-mỗi-email dùng cột này; lời mời pending gửi cho email khác chưa gắn user_id)
+        var rows = db.FamilyMembers.Where(m => m.Status != FamilyMemberStatuses.Pending);
+        rows = hasEmail ? rows.Where(m => m.UserId == userId || m.InvitedEmail == email) : rows.Where(m => m.UserId == userId);
+        return ended + await rows.ExecuteUpdateAsync(s => s
+            .SetProperty(m => m.InvitedEmail, string.Empty)
+            .SetProperty(m => m.UpdatedAt, nowUtc), ct);
+    }
 
     public Task<int> EndOpenCyclesAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) =>
         db.UserSubscriptions

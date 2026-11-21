@@ -55,23 +55,36 @@ public sealed class AdminOrderService(
         if (row.Order.Status == OrderStatuses.Paid)
             throw AlreadyPaid();
 
+        // Đơn còn pending nghĩa là link payOS vẫn mở: sau khi nhận tiền tay thì đóng link để khách không trả lần nữa
+        var wasPending = row.Order.Status == OrderStatuses.Pending;
+
         // Số tiền lấy từ chính đơn: admin đã xác nhận tiền về, không so khớp với số payOS báo
         var result = await orderService.ApplyPaymentAsync(
             orderCode, (long)row.Order.AmountVnd, null, nowUtc, ct, new PaymentApplyOptions(SkipAmountCheck: true, adminUserId, note));
+        if (result.Status is PaymentApplyStatus.AlreadyPaid)
+            throw AlreadyPaid();
+        if (result.Status is PaymentApplyStatus.UnknownOrder)
+            throw NotFound();
+
+        // Tiền đã được xác nhận, kể cả khi không kích hoạt được (làn đầy, người mua đã xóa): đóng link payOS và để lại dấu vết kiểm toán trước khi báo lỗi
+        // (đã commit, nên không theo token của request: admin đóng trang không làm mất nó)
+        if (wasPending)
+            await CloseGatewayLinkAsync(orderCode);
+        var outcome = result.Status switch
+        {
+            PaymentApplyStatus.LaneFull => "lane_full",
+            PaymentApplyStatus.Mismatch => "buyer_deleted",
+            _ => (string?)null,
+        };
+        await AuditAsync(adminUserId, "order.activate", row.Order,
+            new { orderCode, note, result = result.Status.ToString(), outcome, cycleId = result.CycleId }, CancellationToken.None);
         switch (result.Status)
         {
-            case PaymentApplyStatus.AlreadyPaid:
-                throw AlreadyPaid();
-            case PaymentApplyStatus.UnknownOrder:
-                throw NotFound();
             case PaymentApplyStatus.LaneFull:
                 throw Rule("lane_full", 409, "Người mua đã có kỳ đang chạy và một kỳ chờ nên chưa kích hoạt thêm được. Hãy chờ kỳ hiện tại kết thúc hoặc từ chối đơn.");
             case PaymentApplyStatus.Mismatch:
                 throw Rule("buyer_deleted", 409, "Tài khoản người mua đã bị xóa nên không có ai để nhận gói.");
         }
-
-        // Gói đã kích hoạt (đã commit): dấu vết kiểm toán không theo token của request, để admin đóng trang không làm mất nó
-        await AuditAsync(adminUserId, "order.activate", row.Order, new { orderCode, note, result = result.Status.ToString(), cycleId = result.CycleId }, CancellationToken.None);
         return await LoadDtoAsync(orderCode, ct);
     }
 
@@ -123,6 +136,19 @@ public sealed class AdminOrderService(
     }
 
     // ---- nội bộ
+
+    /// <summary>Hủy link thanh toán ở payOS sau khi đã nhận tiền tay. Lỗi cổng không làm hỏng kết quả (đơn đã chốt), link tự hết hạn.</summary>
+    private async Task CloseGatewayLinkAsync(long orderCode)
+    {
+        try
+        {
+            await gateway.CancelAsync(orderCode, "Quản trị viên đã xác nhận thanh toán", CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            // best-effort
+        }
+    }
 
     /// <summary>Nạp lại sau khi ghi: ApplyPaymentAsync đã xóa theo dõi nên bản trước đó không còn đúng.</summary>
     private async Task<AdminOrderDto> LoadDtoAsync(long orderCode, CancellationToken ct) =>
