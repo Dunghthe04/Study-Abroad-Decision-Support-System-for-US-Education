@@ -7,4 +7,12 @@ public static class ConsentPurposes
 
     /// <summary>Phiên bản nội dung đồng ý hiện hành, lưu vào consents.policy_version. Đổi nội dung thì tăng phiên bản.</summary>
     public const string ChildDataPolicyVersion = "2026-10";
+
+    /// <summary>
+    /// Phiên bản chính sách đồng ý ĐẦU TIÊN có nêu rõ việc quản trị viên có thể đọc hội thoại đã che thông tin cá nhân để đánh giá chất lượng AI (UC-90).
+    /// Hội thoại của người dưới 16 tuổi chỉ hiện cho admin khi phụ huynh đã đồng ý bản từ phiên bản này trở đi. So sánh theo thứ tự chữ (yyyy-MM).
+    /// Phiên bản hiện hành (ChildDataPolicyVersion) còn thấp hơn mốc này cho đến khi chính sách được bổ sung, nên hiện chưa hội thoại nào của trẻ hiện ra.
+    /// Khi bổ sung chính sách thì tăng ChildDataPolicyVersion lên bằng mốc này (hoặc cao hơn).
+    /// </summary>
+    public const string QualityReviewMinPolicyVersion = "2026-11";
 }
