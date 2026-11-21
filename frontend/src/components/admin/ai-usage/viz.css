@@ -4,7 +4,8 @@
 .ai-viz {
   --viz-1: #0a73a6;            /* cloud, token vào, mọi biểu đồ một chuỗi */
   --viz-2: #eb6834;            /* local, token ra */
-  --viz-3: #6250d6;            /* nhóm "khác" khi có nguồn lạ */
+  --viz-3: #6250d6;            /* nhóm "khác" khi có nguồn lạ; từ chối ở trang chất lượng AI */
+  --viz-4: #c0392b;            /* lỗi ở trang chất lượng AI (loại thứ tư của kết quả lượt chat) */
   --viz-surface: var(--surface);
   --viz-grid: #e1e6ea;         /* đường lưới: một bước lệch khỏi nền */
   --viz-axis: #c3ccd4;
@@ -16,6 +17,7 @@
   --viz-1: #3398c2;
   --viz-2: #d95926;
   --viz-3: #9085e9;
+  --viz-4: #e0645a;
   --viz-grid: #2c2c2a;
   --viz-axis: #383835;
   --viz-muted: #898781;
