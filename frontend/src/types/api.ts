@@ -52,7 +52,6 @@ export interface StudyCenter {
   legalDocumentUrls?: string[];
   verificationNote?: string | null;
   emailVerifiedAt?: string | null;
-  phoneVerifiedAt?: string | null;
   feeMin?: number | null;
   feeMax?: number | null;
   feeDescription?: string | null;
@@ -79,10 +78,6 @@ export interface RegisterCenterRequest {
 
 export interface VerifyCenterEmailRequest {
   email: string;
-  code: string;
-}
-
-export interface VerifyPhoneOtpRequest {
   code: string;
 }
 
@@ -138,15 +133,12 @@ export interface CenterVerificationDto {
   centerEmail?: string | null;
   centerPhone?: string | null;
   emailVerifiedAt?: string | null;
-  phoneVerifiedAt?: string | null;
 }
 
 export interface CenterVerificationStatusDto {
   verificationStatus: string;
   isEmailVerified: boolean;
   emailVerifiedAt?: string | null;
-  isPhoneVerified: boolean;
-  phoneVerifiedAt?: string | null;
   currentRequest?: CenterVerificationDto | null;
   rejectionReason?: string | null;
 }
