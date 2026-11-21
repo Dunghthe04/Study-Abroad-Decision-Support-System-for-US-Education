@@ -343,8 +343,13 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
+    /// <summary>Đặt thì thư mời gói Gia đình ném lỗi này (SMTP sập).</summary>
+    public Exception? FamilyInviteError { get; set; }
+
     public Task SendFamilyInviteEmailAsync(string toEmail, string ownerName, string seatRole, string inviteToken, int expiryDays, CancellationToken ct = default)
     {
+        if (FamilyInviteError is not null)
+            throw FamilyInviteError;
         SentEmails.Add((toEmail, "family_invite", inviteToken));
         return Task.CompletedTask;
     }

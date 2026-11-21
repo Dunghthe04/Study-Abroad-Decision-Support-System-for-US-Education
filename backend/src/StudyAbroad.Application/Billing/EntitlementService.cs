@@ -88,7 +88,7 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
         var percent = CycleRules.UsedPercent(lane.Used, cycle.TokenQuota);
         // Đã có kỳ gia hạn xếp hàng thì không cảnh báo sắp hết hạn
         var expiringSoon = lane.Queued is null && CycleRules.IsExpiringSoon(cycle.EndsAt, nowUtc);
-        return new PoolDto(e.CodeOf(cycle), cycle.PlanName, cycle.StartsAt, cycle.EndsAt, percent,
+        return new PoolDto(e.CodeOf(cycle) ?? string.Empty, cycle.PlanName, cycle.StartsAt, cycle.EndsAt, percent,
             CycleRules.IsExhausted(lane.Used, cycle.TokenQuota), CycleRules.IsLowQuota(percent), expiringSoon,
             lane.Queued is null ? null : new QueuedCycleDto(lane.Queued.PlanName, cycle.EndsAt));
     }

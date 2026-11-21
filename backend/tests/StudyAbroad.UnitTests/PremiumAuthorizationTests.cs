@@ -68,12 +68,61 @@ public class PremiumAuthorizationTests
     public async Task Premium_Succeeds_AndTheServiceIsAskedAboutTheTokenUserAndRole()
     {
         var (handler, stub) = HandlerFor(_ => true);
-        var context = Context(UserRoles.Student, Me);   // phiên phụ huynh làm thay cũng vào đây với id và vai trò của con
+        var context = Context(UserRoles.Student, Me);   // không làm thay: id và vai trò trong token
 
         await handler.HandleAsync(context);
 
         Assert.True(context.HasSucceeded);
         Assert.False(context.HasFailed);
+        Assert.Equal([(Me, UserRoles.Student)], stub.Asked);
+    }
+
+    // Claim act (RFC 8693) như token phiên nhập hộ: {"sub":"<id phụ huynh>"}
+    private static AuthorizationHandlerContext ActingContext(Guid childId, Guid parentId) =>
+        new([new PremiumFeatureRequirement("recommendations")], new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new Claim(ClaimTypes.NameIdentifier, childId.ToString()),
+            new Claim(ClaimTypes.Role, UserRoles.Student),
+            new Claim("act", $$"""{"sub":"{{parentId}}"}"""),
+        ], "test")), null);
+
+    [Fact]
+    public async Task ActingParentWithPremium_Succeeds_EvenThoughTheManagedChildIsFree()
+    {
+        var parent = Guid.NewGuid();
+        // Chỉ phụ huynh có Premium: hỏi theo id con hay vai trò student thì Free
+        var (handler, stub) = HandlerFor(role => role == UserRoles.Parent);
+        var context = ActingContext(Me, parent);
+
+        await handler.HandleAsync(context);
+
+        Assert.True(context.HasSucceeded);
+        Assert.Equal([(parent, UserRoles.Parent)], stub.Asked);
+    }
+
+    [Fact]
+    public async Task ActingParentWithoutPremium_Fails_AndTheParentIsTheOneAsked()
+    {
+        var parent = Guid.NewGuid();
+        var (handler, stub) = HandlerFor(_ => false);
+        var context = ActingContext(Me, parent);
+
+        await handler.HandleAsync(context);
+
+        Assert.True(context.HasFailed);
+        Assert.IsType<PremiumRequiredFailureReason>(Assert.Single(context.FailureReasons));
+        Assert.Equal([(parent, UserRoles.Parent)], stub.Asked);
+    }
+
+    [Fact]
+    public async Task NotActing_StillAsksAboutTheTokenUserAndRole()
+    {
+        var (handler, stub) = HandlerFor(_ => true);
+        var context = Context(UserRoles.Student, Me);
+
+        await handler.HandleAsync(context);
+
+        Assert.True(context.HasSucceeded);
         Assert.Equal([(Me, UserRoles.Student)], stub.Asked);
     }
 
@@ -151,6 +200,53 @@ public class PremiumAuthorizationTests
             Assert.Equal(AgeRestrictionResultHandler.ErrorCode, body.GetProperty("code").GetString());
             Assert.True(body.GetProperty("needParentConsent").GetBoolean());
         }
+    }
+
+    // Chạy đúng đường của ASP.NET: yêu cầu vai trò + yêu cầu Premium cùng một lần đánh giá, rồi ghi 403 bằng AgeRestrictionResultHandler
+    private static async Task<(int Status, JsonElement Body)> WriteForRoleAndPremiumAsync(string callerRole, string requiredRole, bool isPremium)
+    {
+        var proxy = DispatchProxy.Create<IEntitlementService, EntitlementStub>();
+        ((EntitlementStub)(object)proxy).IsPremium = _ => isPremium;
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddAuthorization();
+        services.AddSingleton(proxy);
+        services.AddSingleton<IAuthorizationHandler, PremiumFeatureHandler>();
+        var provider = services.BuildServiceProvider();
+
+        var user = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, Me.ToString()), new Claim(ClaimTypes.Role, callerRole)], "test"));
+        var policy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser().RequireRole(requiredRole).AddRequirements(new PremiumFeatureRequirement("recommendations")).Build();
+        var result = await provider.GetRequiredService<IAuthorizationService>().AuthorizeAsync(user, null, policy);
+        Assert.False(result.Succeeded);
+
+        var http = new DefaultHttpContext { RequestServices = provider, User = user };
+        http.Response.Body = new MemoryStream();
+        await new AgeRestrictionResultHandler().HandleAsync(_ => Task.CompletedTask, http, policy, PolicyAuthorizationResult.Forbid(result.Failure));
+        http.Response.Body.Position = 0;
+        using var json = await JsonDocument.ParseAsync(http.Response.Body);
+        return (http.Response.StatusCode, json.RootElement.Clone());
+    }
+
+    [Fact]
+    public async Task F3_FreeParentOnAStudentOnlyRoute_GetsTheWrongRole403_NotPremiumRequired()
+    {
+        var (status, body) = await WriteForRoleAndPremiumAsync(UserRoles.Parent, UserRoles.Student, isPremium: false);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, status);
+        Assert.Equal("Không đúng loại tài khoản", body.GetProperty("title").GetString());
+        Assert.False(body.TryGetProperty("code", out _));
+        Assert.Equal(StudyAbroad.Api.Extensions.DefaultErrorMessages.WrongRole([UserRoles.Student]), body.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task F3_FreeStudentOnAStudentOnlyRoute_StillGetsPremiumRequired()
+    {
+        var (status, body) = await WriteForRoleAndPremiumAsync(UserRoles.Student, UserRoles.Student, isPremium: false);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, status);
+        Assert.Equal("premium_required", body.GetProperty("code").GetString());
     }
 
     // ---- Policy nằm đúng các route

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Billing;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Api.Authorization;
@@ -29,7 +30,8 @@ public sealed class PremiumRequiredFailureReason(IAuthorizationHandler handler, 
 
 /// <summary>
 /// Đọc gói từ DB ở mỗi request (không tin token): có kỳ trả phí còn hạn thì qua, nhân viên luôn qua.
-/// Phiên phụ huynh làm thay mang id và vai trò học sinh của con nên dùng gói của con (phiên đó là tài khoản của con).
+/// Phiên phụ huynh làm thay ("nhập hộ con") mang id và vai trò của con managed (con không có email thật nên không mua được gói):
+/// quyền Premium tính theo gói của PHỤ HUYNH đang làm thay, không theo con.
 /// Chỉ xét tier, không xét còn token hay không: Premium hết token vẫn mở gợi ý trường (O2, không tốn AI).
 /// </summary>
 public sealed class PremiumFeatureHandler(IEntitlementService entitlements) : AuthorizationHandler<PremiumFeatureRequirement>
@@ -39,7 +41,12 @@ public sealed class PremiumFeatureHandler(IEntitlementService entitlements) : Au
         var userId = context.User.GetUserId();
         if (userId is null) return; // chưa đăng nhập: RequireAuthenticatedUser xử lý
 
-        if (await entitlements.IsPremiumAsync(userId.Value, context.User.GetRole() ?? UserRoles.Student, DateTime.UtcNow))
+        var actingParentId = ActingSessionGuard.ReadActingParentId(context.User);
+        var (entitledId, entitledRole) = actingParentId is { } parentId
+            ? (parentId, UserRoles.Parent)
+            : (userId.Value, context.User.GetRole() ?? UserRoles.Student);
+
+        if (await entitlements.IsPremiumAsync(entitledId, entitledRole, DateTime.UtcNow))
             context.Succeed(requirement);
         else
             context.Fail(new PremiumRequiredFailureReason(this, requirement.Feature));

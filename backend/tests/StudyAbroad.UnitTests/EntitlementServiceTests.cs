@@ -150,7 +150,7 @@ public class EntitlementServiceTests
 
         var summary = await Service(repo).GetSummaryAsync(Me, Now);
 
-        Assert.Equal(CycleEndReasons.ExhaustedRollover, old.EndedReason);
+        Assert.Equal((CycleEndReasons.ExhaustedRollover, (DateTime?)Now, (DateTime?)Now), (old.EndedReason, old.EndedAt, old.EndsAt));   // kỳ cũ hết hạn đúng lúc đổi kỳ (như đường thanh toán)
         Assert.Equal((Now, Now.AddDays(30)), (renewal.StartsAt!.Value, renewal.EndsAt!.Value));
         Assert.Equal((0, false, (QueuedCycleDto?)null), (summary.Personal!.UsedPercent, summary.Personal.Exhausted, summary.Personal.Queued));
     }
@@ -355,6 +355,22 @@ public class EntitlementServiceTests
         Assert.DoesNotContain("500000", json);
         Assert.DoesNotContain("123456", json);
         Assert.Contains("\"role\":\"member\"", json);   // khai báo FamilyPoolDto nên vai trò và tên chủ gói không bị mất
+    }
+
+    [Fact]
+    public async Task F5_PlanCodeIsAlwaysAString_EvenWhenThePlanRowOfTheCycleIsGone()
+    {
+        var repo = new FakeBilling();
+        repo.AddFamily(Owner, member: Me);
+        repo.AddActive(Me, "personal-1m");
+        repo.Plans.RemoveAll(p => p.Code is "personal-1m" or "family-1m");   // gói đã bị xóa khỏi bảng gói, kỳ đã mua vẫn còn
+
+        var summary = await Service(repo).GetSummaryAsync(Me, Now);
+        var json = JsonSerializer.Serialize(summary, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.Equal(("", ""), (summary.Personal!.PlanCode, summary.Family!.PlanCode));
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(json, "\"planCode\":\"\"").Count);
+        Assert.DoesNotContain("\"planCode\":null", json);
     }
 
     // ---- fake

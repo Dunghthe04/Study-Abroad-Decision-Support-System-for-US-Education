@@ -32,4 +32,10 @@ public interface IBillingAccountRepository
 
     /// <summary>Kết thúc mọi kỳ queued và active của người này (ended, owner_purged). Trả số kỳ.</summary>
     Task<int> EndOpenCyclesAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default);
+
+    /// <summary>
+    /// Xóa email (đặt "") trên các dòng family_members của người này (lịch sử tư cách thành viên đã kết thúc): user_id sẽ thành null khi dòng users mất,
+    /// nên email là dữ liệu cá nhân còn sót mà không còn ai lần ra. Lời mời pending gửi cho email khác không đụng tới. Trả số dòng.
+    /// </summary>
+    Task<int> BlankMembershipEmailsAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default);
 }

@@ -46,8 +46,9 @@ public sealed class AgeFeatureHandler(IUserRepository users, IParentLinkReposito
 }
 
 /// <summary>Bị chặn theo tuổi → 403 problem+json { code: "age_restricted", feature, needParentConsent }.
-/// Cần Premium (PremiumFeatureHandler) → 403 problem+json { code: "premium_required", feature }; chặn theo tuổi đi trước nếu cả hai cùng chặn.
 /// Sai vai trò → 403 kèm câu nói rõ chức năng dành cho loại tài khoản nào.
+/// Cần Premium (PremiumFeatureHandler) → 403 problem+json { code: "premium_required", feature }.
+/// Thứ tự khi nhiều lý do cùng chặn: tuổi, rồi sai vai trò, rồi Premium.
 /// Các trường hợp khác giữ nguyên hành vi mặc định.</summary>
 public sealed class AgeRestrictionResultHandler : IAuthorizationMiddlewareResultHandler
 {
@@ -61,7 +62,22 @@ public sealed class AgeRestrictionResultHandler : IAuthorizationMiddlewareResult
         var reason = failure?.FailureReasons.OfType<AgeRestrictedFailureReason>().FirstOrDefault();
         if (reason is null)
         {
-            // Tuổi đã xét trước (reason null nghĩa là không bị chặn theo tuổi); chỉ còn thiếu gói Premium thì báo mã premium_required
+            // Sai vai trò (vd. tài khoản trung tâm mở form hồ sơ học sinh, hay phụ huynh Free gọi route chỉ của học sinh): nói rõ chức năng dành cho ai.
+            // Mặc định ASP.NET chỉ trả 403 "Forbidden", người dùng không hiểu vì sao bị chặn. Đi trước premium_required
+            // vì nâng cấp gói không giúp được người sai loại tài khoản
+            // Có handler đã gọi Fail() (như PremiumFeatureHandler) thì ASP.NET bỏ danh sách yêu cầu chưa đạt (FailedRequirements rỗng),
+            // nên ngoài FailedRequirements còn xét lại vai trò của người gọi trên chính policy
+            var wrongRole = authorizeResult.Forbidden
+                ? failure?.FailedRequirements.OfType<RolesAuthorizationRequirement>().FirstOrDefault()
+                    ?? policy.Requirements.OfType<RolesAuthorizationRequirement>().FirstOrDefault(r => !r.AllowedRoles.Any(context.User.IsInRole))
+                : null;
+            if (wrongRole is not null)
+            {
+                await WriteForbiddenAsync(context, "Không đúng loại tài khoản", DefaultErrorMessages.WrongRole(wrongRole.AllowedRoles));
+                return;
+            }
+
+            // Tuổi và vai trò đã xét trước (đến đây không bị chặn theo tuổi, đúng loại tài khoản); chỉ còn thiếu gói Premium thì báo mã premium_required
             if (failure?.FailureReasons.OfType<PremiumRequiredFailureReason>().FirstOrDefault() is { } premium)
             {
                 await WriteForbiddenAsync(context, "Cần tài khoản USDSS Premium", premium.Message, new Dictionary<string, object?>
@@ -69,18 +85,6 @@ public sealed class AgeRestrictionResultHandler : IAuthorizationMiddlewareResult
                     ["code"] = PremiumRequiredFailureReason.ErrorCode,
                     ["feature"] = premium.Feature,
                 });
-                return;
-            }
-
-
-            // Sai vai trò (vd. tài khoản trung tâm mở form hồ sơ học sinh): nói rõ chức năng dành cho ai.
-            // Mặc định ASP.NET chỉ trả 403 "Forbidden", người dùng không hiểu vì sao bị chặn.
-            var wrongRole = authorizeResult.Forbidden
-                ? authorizeResult.AuthorizationFailure?.FailedRequirements.OfType<RolesAuthorizationRequirement>().FirstOrDefault()
-                : null;
-            if (wrongRole is not null)
-            {
-                await WriteForbiddenAsync(context, "Không đúng loại tài khoản", DefaultErrorMessages.WrongRole(wrongRole.AllowedRoles));
                 return;
             }
 

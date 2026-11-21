@@ -63,6 +63,22 @@ public static class ChatPremiumGate
             ? new ChatLock(ChatLockReasons.PremiumRequired, null)
             : null;
 
+    // Hành động .NET chạy sau advisor mà chỉ gói Premium được dùng (gợi ý trường, giải thích, mô phỏng, goal-seeking)
+    private static readonly IReadOnlySet<string> PremiumDispatchActions = new HashSet<string>
+    {
+        ChatRecommendation.Action, ChatExplanation.Action, ChatSimulation.Action, ChatGoalSeek.Action,
+    };
+
+    /// <summary>
+    /// Lớp phòng thủ thứ hai: tài khoản bị giới hạn ý định (allowedIntents khác null) mà advisor vẫn trả hành động Premium
+    /// (advisor bản cũ chưa biết allowedIntents). Trả thẻ khóa như cổng đầu lượt để ChatService bỏ lượt đó, không chạy nhánh nào, state của DB giữ nguyên.
+    /// null thì advisor đã tuân thủ (hoặc tài khoản không bị giới hạn).
+    /// </summary>
+    public static LockedTurn? BlockPremiumAction(ChatCharge? charge, AdvisorChatResponse response, JsonElement? state) =>
+        AllowedIntentsFor(charge) is not null && response.Action is { } action && PremiumDispatchActions.Contains(action)
+            ? Build(PremiumRequiredAnswer, ChatLockReasons.PremiumRequired, null, state)
+            : null;
+
     // Action ghi đúng lý do để meta_json của tin trả lời cho admin thấy lượt này bị khóa; Action không bao giờ tới trình duyệt
     private static LockedTurn Build(string text, string reason, DateTimeOffset? resetsAt, JsonElement? state) =>
         new(new AdvisorChatResponse(text, [], null, state, QuickReplies: [ViewPlans], Action: reason), new ChatLock(reason, resetsAt));

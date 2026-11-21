@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Notifications;
@@ -19,7 +20,8 @@ public class FamilyService(
     IUserRepository users,
     INotificationService notifications,
     IEmailSender emailSender,
-    IUnitOfWork unitOfWork) : IFamilyService
+    IUnitOfWork unitOfWork,
+    ILogger<FamilyService>? logger = null) : IFamilyService
 {
     private const string AccountLink = "/account";
 
@@ -107,7 +109,7 @@ public class FamilyService(
         }, ct);
 
         var ownerName = owner?.FullName ?? string.Empty;
-        await emailSender.SendFamilyInviteEmailAsync(normalized, ownerName, seatRole, token, BillingRules.InviteExpiryDays, ct);
+        await TrySendInviteEmailAsync(normalized, ownerName, seatRole, token, ct);
         // Có tài khoản với email này thì thêm thông báo trong app; phản hồi cho chủ gói vẫn như nhau dù có hay không
         if (await users.GetUserByEmail(normalized, ct) is { } invitee)
             await notifications.NotifyAsync(invitee.Id, NotificationTypes.FamilyInvite, "Lời mời tham gia gói Gia đình",
@@ -134,7 +136,21 @@ public class FamilyService(
         }, ct);
 
         var owner = await users.GetUserById(ownerId, ct);
-        await emailSender.SendFamilyInviteEmailAsync(email, owner?.FullName ?? string.Empty, seatRole, token, BillingRules.InviteExpiryDays, ct);
+        await TrySendInviteEmailAsync(email, owner?.FullName ?? string.Empty, seatRole, token, ct);
+    }
+
+    // Lời mời đã commit trước khi gửi thư: thư lỗi (SMTP sập...) chỉ ghi cảnh báo, không biến lời mời đã lưu thành 500.
+    // Chủ gói vẫn thấy lời mời trong danh sách và bấm gửi lại được; người được mời có tài khoản vẫn nhận thông báo trong app
+    private async Task TrySendInviteEmailAsync(string email, string ownerName, string seatRole, string token, CancellationToken ct)
+    {
+        try
+        {
+            await emailSender.SendFamilyInviteEmailAsync(email, ownerName, seatRole, token, BillingRules.InviteExpiryDays, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger?.LogWarning(ex, "Lời mời gói Gia đình đã lưu nhưng gửi thư thất bại; chủ gói có thể bấm gửi lại");
+        }
     }
 
     public async Task CancelInviteAsync(Guid ownerId, Guid inviteId, DateTime nowUtc, CancellationToken ct = default)

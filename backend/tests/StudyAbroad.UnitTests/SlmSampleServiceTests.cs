@@ -800,6 +800,7 @@ internal class FakeAuditLogs : IAuditLogRepository
 
     public Task AddAsync(AuditLog entry, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();   // như EF: token đã hủy thì không ghi
         Entries.Add(entry);
         return Task.CompletedTask;
     }

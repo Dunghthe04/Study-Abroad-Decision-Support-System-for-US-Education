@@ -86,7 +86,8 @@ public static class CycleRules
             }
             if (queued is not null && IsExhausted(activeUsed, activeQuota))
             {
-                changes.Add(new CycleChange(active, CycleStatuses.Ended, activeStartsAt, activeEndsAt, CycleEndReasons.ExhaustedRollover, nowUtc));
+                // Hết hạn thật của kỳ cũ là lúc đổi kỳ (nowUtc), giống đường thanh toán (OrderService.Payment); không giữ ngày hết hạn ban đầu
+                changes.Add(new CycleChange(active, CycleStatuses.Ended, activeStartsAt, nowUtc, CycleEndReasons.ExhaustedRollover, nowUtc));
                 (active, activeStartsAt, activeEndsAt, activeQuota, activeUsed) = Start(changes, queued, nowUtc);
                 queued = null;
                 continue;

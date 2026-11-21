@@ -136,17 +136,34 @@ public class OrderServiceTests
     }
 
     [Theory]
+    [InlineData(null)]
     [InlineData("free")]
     [InlineData("nope")]
     [InlineData("")]
+    [InlineData("   ")]
     [InlineData("PERSONAL-1M")]
-    public async Task UnknownOrFreePlan_IsNotForSale(string code)
+    public async Task UnknownOrFreePlan_IsNotForSale(string? code)
     {
         var h = new OrderHarness();
 
         var ex = await Fails(h.CreateOrder(h.AddUser(), code));
 
         Assert.Equal(("plan_not_for_sale", 400), (ex.Code, ex.StatusCode));
+    }
+
+    [Fact]
+    public async Task F6_ClientDisconnectsRightAfterTheLinkIsCreated_TheLinkIsStillSaved()
+    {
+        var h = new OrderHarness();
+        using var cts = new CancellationTokenSource();
+        h.Gateway.OnLinkCreated = cts.Cancel;   // khách đóng trang khi payOS vừa trả link
+        var buyer = h.AddUser();
+
+        var dto = await h.Orders.CreateAsync(buyer.Id, buyer.Role, "personal-1m", OrderHarness.Now, cts.Token);   // lưu không theo token nên không ném
+
+        var saved = Assert.Single(h.Store.Orders);
+        Assert.Equal((OrderStatuses.Pending, $"https://pay.test/{saved.OrderCode}", $"link-{saved.OrderCode}"), (saved.Status, saved.CheckoutUrl, saved.GatewayTransactionId));
+        Assert.Equal(saved.CheckoutUrl, dto.CheckoutUrl);
     }
 
     [Fact]
