@@ -2,19 +2,34 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRightIcon, MessageSquareIcon, SendIcon } from "lucide-react";
+import {
+  Building2Icon,
+  LockIcon,
+  MessageSquareIcon,
+  SearchIcon,
+  SendIcon,
+  UsersIcon,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { getLeadRuleError, leadApi } from "@/lib/lead-api";
 import { studyLevelLabel } from "@/lib/study-levels";
 import { cn } from "@/lib/utils";
 import { isLeadAwaitingCenter, LEAD_SHARED_FIELD_INFO, leadStatusLabel, type SentLeadDto } from "@/types/lead";
+import { AccountSectionHeader } from "@/components/account/AccountSectionHeader";
+import { SentLeadMessagesDialog, type SentLeadThreadChange } from "@/components/account/SentLeadMessagesDialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
-import { SentLeadMessagesDialog, type SentLeadThreadChange } from "@/components/account/SentLeadMessagesDialog";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const PAGE_SIZE = 10;
 
@@ -107,27 +122,45 @@ export function SentLeadsCard() {
   if (!user || (user.role !== "student" && user.role !== "parent")) return null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <SendIcon className="size-5" aria-hidden />
-          <h2>Yêu cầu liên hệ đã gửi</h2>
-        </CardTitle>
-        <CardDescription>
-          {isParent
+    <div>
+      <AccountSectionHeader
+        title="Yêu cầu liên hệ đã gửi"
+        description={
+          isParent
             ? "Yêu cầu bạn gửi thay con và yêu cầu con đã liên kết tự gửi tới trung tâm du học."
-            : "Yêu cầu bạn gửi tới trung tâm du học, kể cả yêu cầu phụ huynh gửi thay bạn."}
-        </CardDescription>
-      </CardHeader>
+            : "Yêu cầu bạn gửi tới trung tâm du học, kể cả yêu cầu phụ huynh gửi thay bạn."
+        }
+        actions={
+          !ageBlocked && leads.length > 0 ? (
+            <Link href="/centers" className={buttonVariants({ variant: "outline", size: "lg", className: "bg-surface" })}>
+              <Building2Icon data-icon="inline-start" aria-hidden />
+              Tìm trung tâm
+            </Link>
+          ) : undefined
+        }
+      />
 
-      <CardContent className="space-y-4">
+      <div className="space-y-4">
         {ageBlocked ? (
-          <Alert>
-            <AlertDescription>
-              Học sinh dưới 16 tuổi cần phụ huynh đồng ý trước mới xem và gửi được yêu cầu liên hệ với trung tâm. Phụ huynh đã liên kết
-              có thể xem bằng tài khoản phụ huynh.
-            </AlertDescription>
-          </Alert>
+          <Empty className="border border-line bg-surface py-12">
+            <EmptyHeader>
+              <EmptyMedia variant="icon" className="size-12 rounded-2xl bg-warn-wash text-warn">
+                <LockIcon className="size-6" aria-hidden />
+              </EmptyMedia>
+              <EmptyTitle className="text-base font-semibold text-ink">
+                Cần phụ huynh xác nhận đồng ý
+              </EmptyTitle>
+              <EmptyDescription>
+                Học sinh dưới 16 tuổi cần phụ huynh đồng ý trước mới xem và gửi được yêu cầu liên hệ với trung tâm. Phụ huynh đã liên kết có thể xem bằng tài khoản phụ huynh.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Link href="#parent-links" className={buttonVariants({ variant: "outline", size: "lg" })}>
+                <UsersIcon data-icon="inline-start" aria-hidden />
+                Xem liên kết phụ huynh
+              </Link>
+            </EmptyContent>
+          </Empty>
         ) : (
           <>
             {error && (
@@ -137,25 +170,37 @@ export function SentLeadsCard() {
             )}
 
             {isLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Spinner />
-                Đang tải...
+              <div className="space-y-3">
+                <Skeleton className="h-28 w-full rounded-xl" />
+                <Skeleton className="h-28 w-full rounded-xl" />
               </div>
             ) : leads.length === 0 ? (
               !error && (
-                <div className="space-y-3">
-                  <p className="text-sm italic text-muted-foreground">
-                    {isParent ? "Bạn và con chưa gửi yêu cầu liên hệ nào." : "Bạn chưa gửi yêu cầu liên hệ nào."}
-                  </p>
-                  <Link href="/centers" className={buttonVariants({ variant: "outline", size: "sm" })}>
-                    <span>Tìm trung tâm du học</span>
-                    <ArrowRightIcon aria-hidden />
-                  </Link>
-                </div>
+                <Empty className="border border-line bg-surface py-12">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon" className="size-12 rounded-2xl bg-brand-wash text-brand">
+                      <SendIcon className="size-6" aria-hidden />
+                    </EmptyMedia>
+                    <EmptyTitle className="text-base font-semibold text-ink">
+                      Chưa có yêu cầu liên hệ nào
+                    </EmptyTitle>
+                    <EmptyDescription>
+                      {isParent
+                        ? "Bạn và con chưa gửi yêu cầu liên hệ nào tới trung tâm tư vấn du học."
+                        : "Bạn chưa gửi yêu cầu liên hệ nào tới trung tâm tư vấn du học."}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                  <EmptyContent>
+                    <Link href="/centers" className={buttonVariants({ size: "lg" })}>
+                      <SearchIcon data-icon="inline-start" aria-hidden />
+                      Tìm trung tâm du học
+                    </Link>
+                  </EmptyContent>
+                </Empty>
               )
             ) : (
               <>
-                <ul className="space-y-3">
+                <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
                   {leads.map((lead) => (
                     <li key={lead.id}>
                       <SentLeadItem lead={lead} isParent={isParent} onThreadChange={updateLead} />
@@ -164,16 +209,25 @@ export function SentLeadsCard() {
                 </ul>
 
                 {page < totalPages && (
-                  <Button type="button" variant="outline" size="sm" disabled={isLoadingMore} onClick={loadMore} loading={isLoadingMore}>
-                    Xem thêm
-                  </Button>
+                  <div className="flex justify-center pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="lg"
+                      disabled={isLoadingMore}
+                      onClick={loadMore}
+                      loading={isLoadingMore}
+                    >
+                      Xem thêm
+                    </Button>
+                  </div>
                 )}
               </>
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -202,29 +256,32 @@ function SentLeadItem({
       : null;
 
   return (
-    <Card size="sm">
-      <CardContent className="space-y-2">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <Link href={`/centers/${lead.studyCenterId}`} className="font-semibold hover:underline">
-              {lead.studyCenterName}
-            </Link>
-            <div className="text-body-s">
-              Gửi ngày {new Date(lead.createdAt).toLocaleDateString("vi-VN")}
-              {isParent && <> · Con: {lead.studentName}</>}
-              {sentBy && <> · {sentBy}</>}
-            </div>
-          </div>
-          <Badge
-            variant={lead.status === "new" || lead.status === "contacted" ? "default" : "outline"}
-            className={cn("shrink-0 font-medium", statusClass)}
+    <div className="space-y-3 px-5 py-5 sm:px-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 space-y-0.5">
+          <Link
+            href={`/centers/${lead.studyCenterId}`}
+            className="text-base font-semibold text-ink transition-colors hover:text-brand hover:underline"
           >
-            {leadStatusLabel(lead.status)}
-          </Badge>
+            {lead.studyCenterName}
+          </Link>
+          <div className="text-xs text-ink-2">
+            Gửi ngày {new Date(lead.createdAt).toLocaleDateString("vi-VN")}
+            {isParent && <> · Con: {lead.studentName}</>}
+            {sentBy && <> · {sentBy}</>}
+          </div>
         </div>
+        <Badge
+          variant={lead.status === "new" || lead.status === "contacted" ? "default" : "outline"}
+          className={cn("shrink-0 font-medium", statusClass)}
+        >
+          {leadStatusLabel(lead.status)}
+        </Badge>
+      </div>
 
-        <div className="text-sm">
-          <span className="text-muted-foreground">Đã chia sẻ: </span>
+      <div className="space-y-1 text-sm text-ink">
+        <div>
+          <span className="text-ink-2">Đã chia sẻ: </span>
           {lead.sharedFields.map((field, i) => {
             const info = LEAD_SHARED_FIELD_INFO[field];
             return (
@@ -237,36 +294,39 @@ function SentLeadItem({
         </div>
 
         {(lead.studyLevel || lead.contactPhone) && (
-          <div className="text-sm text-muted-foreground">
+          <div className="text-xs text-ink-2">
             {lead.studyLevel && <>Bậc học: {studyLevelLabel(lead.studyLevel)}</>}
             {lead.studyLevel && lead.contactPhone && " · "}
             {lead.contactPhone && <>SĐT: {lead.contactPhone}</>}
           </div>
         )}
+      </div>
 
-        {lead.message && (
-          <p className="line-clamp-2 text-sm italic text-muted-foreground" title={lead.message}>
-            “{lead.message}”
-          </p>
-        )}
+      {lead.message && (
+        <p
+          className="line-clamp-2 rounded-lg bg-ground px-3.5 py-2.5 text-sm text-ink-2"
+          title={lead.message}
+        >
+          “{lead.message}”
+        </p>
+      )}
 
-        {awaitingCenter ? (
-          <p className="text-body-s">{AWAITING_CENTER_NOTE[lead.status]}</p>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-body-s">
-              <MessageSquareIcon className="size-3.5" aria-hidden />
-              {lead.centerMessageCount > 0
-                ? `Trung tâm đã nhắn ${lead.centerMessageCount} tin`
-                : "Trung tâm chưa nhắn tin"}
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => setMessagesOpen(true)}>
-              <MessageSquareIcon data-icon="inline-start" aria-hidden />
-              Tin nhắn
-            </Button>
+      {awaitingCenter ? (
+        <p className="text-xs text-ink-2">{AWAITING_CENTER_NOTE[lead.status]}</p>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <div className="flex items-center gap-1.5 text-xs text-ink-2">
+            <MessageSquareIcon className="size-3.5 text-ink-3" aria-hidden />
+            {lead.centerMessageCount > 0
+              ? `Trung tâm đã nhắn ${lead.centerMessageCount} tin`
+              : "Trung tâm chưa nhắn tin"}
           </div>
-        )}
-      </CardContent>
+          <Button type="button" variant="outline" size="sm" onClick={() => setMessagesOpen(true)}>
+            <MessageSquareIcon data-icon="inline-start" aria-hidden />
+            Tin nhắn
+          </Button>
+        </div>
+      )}
 
       {!awaitingCenter && (
         <SentLeadMessagesDialog
@@ -276,6 +336,6 @@ function SentLeadItem({
           onThreadChange={handleThreadChange}
         />
       )}
-    </Card>
+    </div>
   );
 }
