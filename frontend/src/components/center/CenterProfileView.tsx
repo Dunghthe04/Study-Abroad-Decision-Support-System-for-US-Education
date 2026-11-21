@@ -327,7 +327,6 @@ export function CenterProfileView() {
         phone={center?.phone}
         email={center?.email}
         emailVerified={Boolean(center?.emailVerifiedAt)}
-        phoneVerified={Boolean(center?.phoneVerifiedAt)}
         onChanged={() => {
           void centerPortalApi.getProfile().then(setCenter).catch(() => undefined);
         }}

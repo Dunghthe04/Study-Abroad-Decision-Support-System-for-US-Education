@@ -3,12 +3,12 @@
 import React, { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { GraduationCapIcon, InfoIcon, UsersIcon } from "lucide-react";
+import { Building2Icon, GraduationCapIcon, InfoIcon, UsersIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
@@ -223,10 +223,10 @@ export function RegisterForm() {
 
       <form onSubmit={handleSubmit}>
         <FieldGroup>
-          {/* Lựa chọn vai trò: Học sinh, Phụ huynh (trung tâm do admin tạo tài khoản) */}
+          {/* Lựa chọn vai trò: Học sinh, Phụ huynh; Trung tâm (UC-64) có form riêng nên chuyển sang trang đăng ký trung tâm */}
           <Field>
             <Label>Bạn là:</Label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <Button
                 type="button"
                 variant={role === "student" ? "default" : "outline"}
@@ -243,6 +243,10 @@ export function RegisterForm() {
                 <UsersIcon aria-hidden="true" />
                 Phụ huynh
               </Button>
+              <Link href="/register/center" className={buttonVariants({ variant: "outline" })}>
+                <Building2Icon aria-hidden="true" />
+                Trung tâm
+              </Link>
             </div>
           </Field>
 

@@ -137,11 +137,6 @@ public static class DependencyInjection
         services.AddSingleton<SmtpEmailSender>();
         services.AddSingleton<EmailQueue>();
         services.AddSingleton<IEmailSender, QueuedEmailSender>();
-        // [UC-91] OTP qua SMS: chưa có nhà cung cấp thật. Ngoài Production chỉ ghi log mã; Production báo kênh chưa sẵn sàng.
-        services.AddSingleton<ISmsSender>(sp =>
-            sp.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>().EnvironmentName == "Production"
-                ? new UnavailableSmsSender()
-                : ActivatorUtilities.CreateInstance<LoggingSmsSender>(sp));
         services.AddHostedService<EmailDispatchBackgroundService>();
 
         // [UC-80] Thời hạn chờ xóa tài khoản và chu kỳ job xóa hẳn (appsettings "AccountDeletion")

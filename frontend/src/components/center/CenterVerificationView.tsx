@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ShieldCheckIcon,
   CheckCircle2Icon,
@@ -40,7 +40,6 @@ export function CenterVerificationView() {
   // Uploaded documents
   const [uploadedDocs, setUploadedDocs] = useState<VerificationDocumentUploadDto[]>([]);
   const [uploadingType, setUploadingType] = useState<string | null>(null);
-  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
@@ -159,9 +158,9 @@ export function CenterVerificationView() {
     setFormError(null);
     setFormSuccess(null);
 
-    // [UC-91] Phải xác thực cả email và số điện thoại trước khi nộp hồ sơ
-    if (!status?.isEmailVerified || !status?.isPhoneVerified) {
-      setFormError("Bạn phải xác thực email và số điện thoại bằng mã OTP trước khi nộp hồ sơ.");
+    // [UC-91] Phải xác thực email bằng mã OTP trước khi nộp hồ sơ
+    if (!status?.isEmailVerified) {
+      setFormError("Bạn phải xác thực email bằng mã OTP trước khi nộp hồ sơ.");
       return;
     }
 
@@ -232,22 +231,20 @@ export function CenterVerificationView() {
           <AlertDescription className="ml-2">
             <strong>Đã xác minh:</strong> Trung tâm của bạn đã hoàn thành đối chiếu pháp lý và được cấp dấu xác minh thông tin đăng ký doanh nghiệp.
           </AlertDescription>
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="icon-xs"
             onClick={() => {
               setDismissedVerified(true);
               try {
                 sessionStorage.setItem("center_verified_banner_dismissed", "true");
               } catch {}
             }}
-            className="absolute top-2.5 right-2.5 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/10 text-emerald-700 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-300"
+            className="absolute top-3 right-3 p-1 rounded hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 transition-colors"
             title="Đóng thông báo"
             aria-label="Đóng thông báo"
           >
             <XIcon className="h-4 w-4" />
-          </Button>
+          </button>
         </Alert>
       )}
 
@@ -295,17 +292,15 @@ export function CenterVerificationView() {
           <Alert className="relative border-emerald-500/30 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200 pr-9 transition-all duration-300">
             <CheckCircle2Icon className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             <AlertDescription className="ml-2">{formSuccess}</AlertDescription>
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              size="icon-xs"
               onClick={() => setFormSuccess(null)}
-              className="absolute top-2.5 right-2.5 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/10 text-emerald-700 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-300"
+              className="absolute top-3 right-3 p-1 rounded hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 transition-colors"
               title="Đóng thông báo"
               aria-label="Đóng thông báo"
             >
               <XIcon className="h-4 w-4" />
-            </Button>
+            </button>
           </Alert>
         )}
 
@@ -316,20 +311,19 @@ export function CenterVerificationView() {
           </Alert>
         )}
 
-        {/* [UC-91] Chưa xác thực đủ email và số điện thoại thì xác thực ngay tại đây trước khi nộp */}
-        {status && (!status.isEmailVerified || !status.isPhoneVerified) && (
+        {/* [UC-91] Chưa xác thực email thì xác thực ngay tại đây trước khi nộp */}
+        {status && !status.isEmailVerified && (
           <div className="space-y-3">
             <Alert>
               <InfoIcon className="h-5 w-5" />
               <AlertDescription className="ml-2">
-                Cần xác thực cả email và số điện thoại bằng mã OTP trước khi nộp hồ sơ. Việc xác thực không tự cấp dấu xác minh.
+                Cần xác thực email bằng mã OTP trước khi nộp hồ sơ. Việc xác thực không tự cấp dấu xác minh.
               </AlertDescription>
             </Alert>
             <CenterContactCard
               phone={center?.phone}
               email={center?.email}
               emailVerified={status.isEmailVerified}
-              phoneVerified={status.isPhoneVerified}
               onChanged={() => {
                 void fetchStatus();
               }}
@@ -446,44 +440,27 @@ export function CenterVerificationView() {
                         ✓ {uploadedDocs.find((d) => d.documentType === "business_registration")?.fileName}
                       </span>
                       {!isPending && !isVerified && (
-                        <Button
+                        <button
                           type="button"
-                          variant="ghost"
-                          size="icon-xs"
                           onClick={() => handleRemoveDoc("business_registration")}
-                          className="text-ink-3 hover:text-rose-600"
-                          aria-label="Xóa tệp đã tải lên"
-                          title="Xóa tệp"
+                          className="p-1 text-ink-3 hover:text-rose-600"
                         >
                           <XIcon className="h-4 w-4" />
-                        </Button>
+                        </button>
                       )}
                     </div>
                   ) : (
-                    <>
+                    <label className={`cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-surface text-xs font-medium text-ink hover:bg-surface-3 transition-colors ${uploadingType === "business_registration" ? "opacity-50 pointer-events-none" : ""}`}>
+                      <UploadCloudIcon className="h-4 w-4 text-ink-2" />
+                      {uploadingType === "business_registration" ? "Đang tải..." : "Tải tệp lên"}
                       <input
-                        ref={(el) => {
-                          fileInputRefs.current["business_registration"] = el;
-                        }}
                         type="file"
                         accept=".pdf,.jpg,.jpeg,.png"
-                        disabled={isPending || isVerified || uploadingType === "business_registration"}
+                        disabled={isPending || isVerified}
                         onChange={(e) => handleFileUpload(e, "business_registration")}
                         className="hidden"
                       />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        loading={uploadingType === "business_registration"}
-                        disabled={isPending || isVerified}
-                        onClick={() => fileInputRefs.current["business_registration"]?.click()}
-                        className="border-line bg-surface text-xs font-medium text-ink hover:bg-surface-3 hover:text-ink dark:border-line dark:bg-surface dark:hover:bg-surface-3"
-                      >
-                        <UploadCloudIcon className="h-4 w-4 text-ink-2" />
-                        Tải tệp lên
-                      </Button>
-                    </>
+                    </label>
                   )}
                 </div>
               </div>
@@ -510,44 +487,27 @@ export function CenterVerificationView() {
                         ✓ {uploadedDocs.find((d) => d.documentType === "power_of_attorney")?.fileName}
                       </span>
                       {!isPending && !isVerified && (
-                        <Button
+                        <button
                           type="button"
-                          variant="ghost"
-                          size="icon-xs"
                           onClick={() => handleRemoveDoc("power_of_attorney")}
-                          className="text-ink-3 hover:text-rose-600"
-                          aria-label="Xóa tệp đã tải lên"
-                          title="Xóa tệp"
+                          className="p-1 text-ink-3 hover:text-rose-600"
                         >
                           <XIcon className="h-4 w-4" />
-                        </Button>
+                        </button>
                       )}
                     </div>
                   ) : (
-                    <>
+                    <label className={`cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-surface text-xs font-medium text-ink hover:bg-surface-3 transition-colors ${uploadingType === "power_of_attorney" ? "opacity-50 pointer-events-none" : ""}`}>
+                      <UploadCloudIcon className="h-4 w-4 text-ink-2" />
+                      {uploadingType === "power_of_attorney" ? "Đang tải..." : "Tải tệp lên"}
                       <input
-                        ref={(el) => {
-                          fileInputRefs.current["power_of_attorney"] = el;
-                        }}
                         type="file"
                         accept=".pdf,.jpg,.jpeg,.png"
-                        disabled={isPending || isVerified || uploadingType === "power_of_attorney"}
+                        disabled={isPending || isVerified}
                         onChange={(e) => handleFileUpload(e, "power_of_attorney")}
                         className="hidden"
                       />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        loading={uploadingType === "power_of_attorney"}
-                        disabled={isPending || isVerified}
-                        onClick={() => fileInputRefs.current["power_of_attorney"]?.click()}
-                        className="border-line bg-surface text-xs font-medium text-ink hover:bg-surface-3 hover:text-ink dark:border-line dark:bg-surface dark:hover:bg-surface-3"
-                      >
-                        <UploadCloudIcon className="h-4 w-4 text-ink-2" />
-                        Tải tệp lên
-                      </Button>
-                    </>
+                    </label>
                   )}
                 </div>
               </div>
@@ -574,44 +534,27 @@ export function CenterVerificationView() {
                         ✓ {uploadedDocs.find((d) => d.documentType === "partnership_contract")?.fileName}
                       </span>
                       {!isPending && !isVerified && (
-                        <Button
+                        <button
                           type="button"
-                          variant="ghost"
-                          size="icon-xs"
                           onClick={() => handleRemoveDoc("partnership_contract")}
-                          className="text-ink-3 hover:text-rose-600"
-                          aria-label="Xóa tệp đã tải lên"
-                          title="Xóa tệp"
+                          className="p-1 text-ink-3 hover:text-rose-600"
                         >
                           <XIcon className="h-4 w-4" />
-                        </Button>
+                        </button>
                       )}
                     </div>
                   ) : (
-                    <>
+                    <label className={`cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-surface text-xs font-medium text-ink hover:bg-surface-3 transition-colors ${uploadingType === "partnership_contract" ? "opacity-50 pointer-events-none" : ""}`}>
+                      <UploadCloudIcon className="h-4 w-4 text-ink-2" />
+                      {uploadingType === "partnership_contract" ? "Đang tải..." : "Tải tệp lên"}
                       <input
-                        ref={(el) => {
-                          fileInputRefs.current["partnership_contract"] = el;
-                        }}
                         type="file"
                         accept=".pdf,.jpg,.jpeg,.png"
-                        disabled={isPending || isVerified || uploadingType === "partnership_contract"}
+                        disabled={isPending || isVerified}
                         onChange={(e) => handleFileUpload(e, "partnership_contract")}
                         className="hidden"
                       />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        loading={uploadingType === "partnership_contract"}
-                        disabled={isPending || isVerified}
-                        onClick={() => fileInputRefs.current["partnership_contract"]?.click()}
-                        className="border-line bg-surface text-xs font-medium text-ink hover:bg-surface-3 hover:text-ink dark:border-line dark:bg-surface dark:hover:bg-surface-3"
-                      >
-                        <UploadCloudIcon className="h-4 w-4 text-ink-2" />
-                        Tải tệp lên
-                      </Button>
-                    </>
+                    </label>
                   )}
                 </div>
               </div>
@@ -638,44 +581,27 @@ export function CenterVerificationView() {
                         ✓ {uploadedDocs.find((d) => d.documentType === "consulting_license")?.fileName}
                       </span>
                       {!isPending && !isVerified && (
-                        <Button
+                        <button
                           type="button"
-                          variant="ghost"
-                          size="icon-xs"
                           onClick={() => handleRemoveDoc("consulting_license")}
-                          className="text-ink-3 hover:text-rose-600"
-                          aria-label="Xóa tệp đã tải lên"
-                          title="Xóa tệp"
+                          className="p-1 text-ink-3 hover:text-rose-600"
                         >
                           <XIcon className="h-4 w-4" />
-                        </Button>
+                        </button>
                       )}
                     </div>
                   ) : (
-                    <>
+                    <label className={`cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-surface text-xs font-medium text-ink hover:bg-surface-3 transition-colors ${uploadingType === "consulting_license" ? "opacity-50 pointer-events-none" : ""}`}>
+                      <UploadCloudIcon className="h-4 w-4 text-ink-2" />
+                      {uploadingType === "consulting_license" ? "Đang tải..." : "Tải tệp lên"}
                       <input
-                        ref={(el) => {
-                          fileInputRefs.current["consulting_license"] = el;
-                        }}
                         type="file"
                         accept=".pdf,.jpg,.jpeg,.png"
-                        disabled={isPending || isVerified || uploadingType === "consulting_license"}
+                        disabled={isPending || isVerified}
                         onChange={(e) => handleFileUpload(e, "consulting_license")}
                         className="hidden"
                       />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        loading={uploadingType === "consulting_license"}
-                        disabled={isPending || isVerified}
-                        onClick={() => fileInputRefs.current["consulting_license"]?.click()}
-                        className="border-line bg-surface text-xs font-medium text-ink hover:bg-surface-3 hover:text-ink dark:border-line dark:bg-surface dark:hover:bg-surface-3"
-                      >
-                        <UploadCloudIcon className="h-4 w-4 text-ink-2" />
-                        Tải tệp lên
-                      </Button>
-                    </>
+                    </label>
                   )}
                 </div>
               </div>
@@ -693,11 +619,11 @@ export function CenterVerificationView() {
               <Button
                 type="submit"
                 size="lg"
-                loading={isSubmitting}
-                disabled={!status?.isEmailVerified || !status?.isPhoneVerified}
+                disabled={isSubmitting || !status?.isEmailVerified}
                 className="w-full sm:w-auto"
               >
-                Nộp hồ sơ xác minh pháp lý
+                {isSubmitting && <Spinner data-icon="inline-start" />}
+                {isSubmitting ? "Đang gửi hồ sơ..." : "Nộp hồ sơ xác minh pháp lý"}
               </Button>
             )}
           </FieldGroup>

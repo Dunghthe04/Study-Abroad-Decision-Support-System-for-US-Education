@@ -3,11 +3,11 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2Icon, ShieldCheckIcon } from "lucide-react";
-import { authApi, ApiError } from "@/lib/api";
+import { Building2Icon, GraduationCapIcon, ShieldCheckIcon, UsersIcon } from "lucide-react";
+import { centerAccountApi, ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
@@ -49,7 +49,7 @@ export function RegisterCenterForm() {
 
     setIsSubmitting(true);
     try {
-      await authApi.registerCenter({
+      await centerAccountApi.register({
         email: email.trim(),
         password,
         confirmPassword,
@@ -86,6 +86,28 @@ export function RegisterCenterForm() {
         <p className="text-sm text-ink-2">
           Gia nhập danh bạ tư vấn du học Mỹ USDSS, tiếp cận học sinh tiềm năng và nhận tư vấn trực tiếp.
         </p>
+      </div>
+
+      {/* Cùng lựa chọn vai trò với trang Đăng ký: quay lại Học sinh / Phụ huynh bằng liên kết, Trung tâm đang chọn */}
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-ink">Bạn là:</p>
+        <div className="grid grid-cols-3 gap-2">
+          <Link href="/register" className={buttonVariants({ variant: "outline" })}>
+            <GraduationCapIcon aria-hidden="true" />
+            Học sinh
+          </Link>
+          <Link href="/register?role=parent" className={buttonVariants({ variant: "outline" })}>
+            <UsersIcon aria-hidden="true" />
+            Phụ huynh
+          </Link>
+          <span
+            aria-current="page"
+            className={`${buttonVariants({ variant: "default" })} pointer-events-none`}
+          >
+            <Building2Icon aria-hidden="true" />
+            Trung tâm
+          </span>
+        </div>
       </div>
 
       {error && (

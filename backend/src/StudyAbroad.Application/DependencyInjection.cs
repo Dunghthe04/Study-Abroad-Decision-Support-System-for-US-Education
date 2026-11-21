@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Universities.IUniversityDetailService, StudyAbroad.Application.Universities.UniversityDetailService>();
         services.AddScoped<StudyAbroad.Application.TargetSchools.ITargetSchoolService, StudyAbroad.Application.TargetSchools.TargetSchoolService>();
         services.AddScoped<IStudyCenterService, StudyCenterService>();
+        services.AddScoped<ICenterAccountService, CenterAccountService>();   // [UC-64 / UC-91] đăng ký, xác thực email, đổi liên lạc của trung tâm
         services.AddScoped<StudyAbroad.Application.Notifications.INotificationService, StudyAbroad.Application.Notifications.NotificationService>();
         services.AddScoped<ICenterProfileChangeReviewService, CenterProfileChangeReviewService>();   // [UC-114] Moderator kiểm tra thay đổi website/fanpage
         services.AddScoped<IAdminUniversityService, AdminUniversityService>();

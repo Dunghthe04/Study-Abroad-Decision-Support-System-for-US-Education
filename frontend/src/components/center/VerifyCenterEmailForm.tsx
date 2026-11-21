@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { MailCheckIcon, ShieldAlertIcon } from "lucide-react";
-import { authApi, ApiError } from "@/lib/api";
+import { authApi, centerAccountApi, ApiError } from "@/lib/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -51,7 +51,7 @@ export function VerifyCenterEmailForm() {
 
     setIsSubmitting(true);
     try {
-      await authApi.verifyCenterEmail({ email: email.trim(), code: cleanOtp });
+      await centerAccountApi.verifyEmail({ email: email.trim(), code: cleanOtp });
       clearPendingEmail();
       setSuccessMessage("Xác thực email thành công! Đang chuyển hướng đến Cổng đối tác...");
       setTimeout(() => {
