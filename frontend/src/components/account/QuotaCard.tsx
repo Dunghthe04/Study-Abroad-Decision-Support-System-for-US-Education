@@ -45,6 +45,8 @@ export function QuotaCard({ sub }: { sub: Fetched<SubscriptionSummaryDto | null>
       ) : (
         <div className="space-y-8">
           {cycles.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="font-heading text-lg font-semibold text-ink">Gói trả phí</h2>
             <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
               {cycles.map((c) => (
                 <li key={c.id} className="space-y-4 px-5 py-5 sm:px-6">
@@ -67,20 +69,25 @@ export function QuotaCard({ sub }: { sub: Fetched<SubscriptionSummaryDto | null>
                 </li>
               ))}
             </ul>
+            </section>
           )}
 
+          <section className="space-y-3">
+            <h2 className="font-heading text-lg font-semibold text-ink">Miễn phí</h2>
           <div className="space-y-4 rounded-xl border border-line bg-surface px-5 py-5 sm:px-6">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
-                <h2 className="text-base font-semibold text-ink">
-                  {s.free.quotaPeriodDays ? `Lượt miễn phí mỗi ${s.free.quotaPeriodDays} ngày` : "Lượt miễn phí hằng tháng"}
-                </h2>
+                <h3 className="text-base font-semibold text-ink">
+                  {s.free.quotaPeriodDays ? `Miễn phí mỗi ${s.free.quotaPeriodDays} ngày` : "Miễn phí hàng tháng"}
+                </h3>
                 <p className="text-sm text-ink-2">Đặt lại vào ngày {formatVnDate(s.free.resetsAt)}</p>
               </div>
               <span className="shrink-0 text-sm text-ink-2 tabular-nums">{s.free.usedPercent}% đã sử dụng</span>
             </div>
-            <UsageBar percent={s.free.usedPercent} label={`Lượt miễn phí: đã dùng ${s.free.usedPercent}%`} />
+            <UsageBar percent={s.free.usedPercent} label={`Miễn phí: đã dùng ${s.free.usedPercent}%`} />
           </div>
+            <p className="text-xs text-ink-2">Hạn mức miễn phí chỉ hỗ trợ hỏi đáp các tính năng giống gói Miễn phí.</p>
+          </section>
         </div>
       )}
     </div>
