@@ -57,13 +57,15 @@ UNIVERSITY_MARKDOWN = """| Term | Course | Score |
 | Fall2024 | Chemistry | 6,5 |
 """
 
+# Bảng điểm tiếng Anh: bước B dịch tên môn sang tiếng Việt và giữ tên gốc trong name_original
 UNIVERSITY_PARSED = {
     "scale": "10",
+    "language": "en",
     "terms": [
-        {"grade": "", "term": "Fall2023", "subjects": [{"name": "Mathematics", "score": "8,2"}]},
-        {"grade": "", "term": "Spring2024", "subjects": [{"name": "Physics", "score": "7,0"}]},
-        {"grade": "", "term": "Summer2024", "subjects": [{"name": "English", "score": "9,1"}]},
-        {"grade": "", "term": "Fall2024", "subjects": [{"name": "Chemistry", "score": "6,5"}]},
+        {"grade": "", "term": "Fall2023", "subjects": [{"name": "Toán", "score": "8,2", "name_original": "Mathematics"}]},
+        {"grade": "", "term": "Spring2024", "subjects": [{"name": "Vật lý", "score": "7,0", "name_original": "Physics"}]},
+        {"grade": "", "term": "Summer2024", "subjects": [{"name": "Tiếng Anh", "score": "9,1", "name_original": "English"}]},
+        {"grade": "", "term": "Fall2024", "subjects": [{"name": "Hóa học", "score": "6,5", "name_original": "Chemistry"}]},
     ],
 }
 

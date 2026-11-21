@@ -36,6 +36,7 @@ from app.services import usage_meter
 from app.services.ollama import OllamaError
 from app.services.pii_mask import mask_personal_info
 from app.services.transcript_text import read_term_tables, tidy_transcription
+from app.services.transcript_validate import Issue, drop_bad_cells, retry_message, validate_parsed
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ TRANSCRIBE_PROMPT = (
     "Do not summarize, compute, translate or explain anything."
 )
 
-PARSE_PROMPT = """Bạn nhận văn bản được chép lại từ ảnh hoặc PDF bảng điểm (học bạ THPT hoặc bảng điểm đại học ở Việt Nam).
+PARSE_RULES = """Bạn nhận văn bản được chép lại từ ảnh hoặc PDF bảng điểm (học bạ THPT hoặc bảng điểm đại học ở Việt Nam).
 Hãy trích điểm tổng kết từng môn theo từng học kỳ.
 
 Quy tắc:
@@ -86,7 +87,15 @@ Quy tắc:
 7. "level": "thpt" nếu là học bạ / kết quả học tập phổ thông (trường THPT, Sở GD&ĐT, Kỳ 1 / Kỳ 2 kèm các môn Toán, Văn, Lý...),
    "dai_hoc" nếu là bảng điểm đại học / cao đẳng, "unknown" nếu không rõ.
 8. Văn bản không phải bảng điểm thì trả {"scale": "other", "level": "unknown", "terms": []}.
+9. "name" luôn là tên môn TIẾNG VIỆT có dấu đúng chính tả:
+   - Văn bản chép từ ảnh hay sai dấu / sai chữ: sửa về tên đúng, VD "Ngũ văn" -> "Ngữ văn", "Công nghề" -> "Công nghệ", "Tiénd Anh" -> "Tiếng Anh".
+   - Môn phổ thông dùng đúng tên chuẩn: Toán, Ngữ văn, Vật lý, Hóa học, Sinh học, Lịch sử, Địa lý, Tiếng Anh, Tin học, Công nghệ, GDCD, GDQP.
+   - Bảng điểm tiếng Anh: dịch tên môn sang tiếng Việt (VD "Mathematics" -> "Toán", "Data Structures" -> "Cấu trúc dữ liệu")
+     và ghi tên đúng như trong văn bản vào "name_original". Tên kỳ ("term") vẫn giữ nguyên văn.
+10. "language": "vi" nếu văn bản tiếng Việt, "en" nếu tiếng Anh, "mixed" nếu song ngữ.
+"""
 
+PARSE_PROMPT = PARSE_RULES + """
 Văn bản:
 """
 
@@ -106,7 +115,11 @@ PARSE_SCHEMA: dict[str, Any] = {
                         "type": "array",
                         "items": {
                             "type": "object",
-                            "properties": {"name": {"type": "string"}, "score": {"type": "string"}},
+                            "properties": {
+                                "name": {"type": "string"},
+                                "score": {"type": "string"},
+                                "name_original": {"type": "string"},
+                            },
                             "required": ["name", "score"],
                         },
                     },
@@ -114,8 +127,9 @@ PARSE_SCHEMA: dict[str, Any] = {
                 "required": ["grade", "term", "subjects"],
             },
         },
+        "language": {"type": "string", "enum": ["vi", "en", "mixed"]},
     },
-    "required": ["scale", "level", "terms"],
+    "required": ["scale", "level", "language", "terms"],
 }
 
 # Văn bản chép từ PDF / ảnh dài quá thì cắt, tránh vượt ngữ cảnh của model bước B
@@ -288,6 +302,9 @@ class _FileResult:
     terms: list[_RawTerm] = field(default_factory=list)
     model: str | None = None
     warnings: list[str] = field(default_factory=list)
+    # Số lần gọi Claude ở bước B (1 = đạt ngay, 2 = phải thử lại) và lỗi kiểm tra còn lại sau lần cuối
+    attempts: int = 0
+    validation_errors: list[str] = field(default_factory=list)
 
 
 class TranscriptReader:
@@ -640,9 +657,52 @@ class TranscriptReader:
         except OllamaError as ex:  # ClaudeError kế thừa OllamaError: hết hạn mức, quá tải, JSON hỏng
             logger.warning("Bước B lỗi (%s, %s): %s", self._parser_model, file_name, ex)
             return _FileResult(model=used, warnings=[f"Tệp '{file_name}': {FRIENDLY_AI_BUSY}"])
+
+        # Kiểm tra tên môn tiếng Việt, điểm nguyên văn, đủ số; sai thì gửi lại Claude một lần kèm danh sách lỗi
+        attempts = 1
+        issues = validate_parsed(data, source)
+        if issues:
+            logger.info("Bước B lần 1 có %d lỗi (%s): %s", len(issues), file_name, [i.message for i in issues])
+            retry = [{"role": "user", "content": PARSE_RULES + "\n" + retry_message(issues, data, source)}]
+            try:
+                with usage_meter.purpose(PURPOSE_PARSE):
+                    second = await self._parser.chat_json(retry, PARSE_SCHEMA, temperature=0.0)
+                attempts = 2
+                second_issues = validate_parsed(second, source)
+                # Lần 2 hỏng cấu trúc thì giữ lần 1 (bỏ ô lỗi) thay vì mất hết
+                if not any(i.rule == "R1" and i.term_index is None for i in second_issues):
+                    data, issues = second, second_issues
+            except OllamaError as ex:
+                logger.warning("Bước B thử lại lỗi (%s, %s): %s", self._parser_model, file_name, ex)
+        warnings: list[str] = []
+        if issues:
+            logger.warning("Bước B còn %d lỗi sau %d lần (%s): %s", len(issues), attempts, file_name, [i.message for i in issues])
+            data = drop_bad_cells(data, issues)
+            warnings = self._validation_warnings(issues, file_name)
+
         result = self._check_parsed(data, source, file_name)
         result.model = used
+        result.attempts = attempts
+        result.validation_errors = [i.message for i in issues]
+        result.warnings = warnings + result.warnings
         return result
+
+    @staticmethod
+    def _validation_warnings(issues: list[Issue], file_name: str) -> list[str]:
+        """Lời báo cho người dùng khi lần thử lại vẫn còn lỗi: ô lỗi đã bỏ, phần đúng vẫn giữ."""
+        warnings: list[str] = []
+        cells = sum(1 for i in issues if i.subject_index is not None)
+        terms = sum(1 for i in issues if i.term_index is not None and i.subject_index is None)
+        if cells:
+            warnings.append(
+                f"Tệp '{file_name}': {cells} ô điểm AI đọc chưa chắc chắn nên đã bỏ, "
+                "bạn xem lại và nhập tay các môn còn thiếu giúp nhé."
+            )
+        if terms:
+            warnings.append(f"Tệp '{file_name}': {terms} học kỳ không rõ tên kỳ nên đã bỏ, bạn nhập tay giúp nhé.")
+        if any(i.rule == "R6" for i in issues):
+            warnings.append(f"Tệp '{file_name}': AI có thể đã bỏ sót một số điểm, bạn đối chiếu lại với bảng điểm giúp nhé.")
+        return warnings
 
     async def _chat(self, payload: dict[str, Any], timeout: float) -> str:
         """POST /api/chat. Lỗi 5xx (thường do thiếu VRAM) thì thử lại 1 lần chạy hoàn toàn trên CPU."""
