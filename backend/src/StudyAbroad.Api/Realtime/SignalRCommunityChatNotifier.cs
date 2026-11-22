@@ -3,10 +3,14 @@ using StudyAbroad.Application.Community;
 
 namespace StudyAbroad.Api.Realtime;
 
-public sealed class SignalRCommunityChatNotifier(IHubContext<LeadChatHub> hub) : ICommunityChatNotifier
+public sealed class SignalRCommunityChatNotifier(IHubContext<LeadChatHub> hub, ChatPresenceTracker presence) : ICommunityChatNotifier
 {
-    public Task NewMessageAsync(CommunityMessageDto message, CancellationToken ct = default) =>
-        hub.Clients.Group(LeadChatHub.CommunityGroup).SendAsync("newCommunityMessage", message, ct);
+    public Task NewMessageAsync(CommunityMessageDto message, CancellationToken ct = default)
+    {
+        if (message.UserId is { } uid)
+            presence.TouchCommunity(uid);
+        return hub.Clients.Group(LeadChatHub.CommunityGroup).SendAsync("newCommunityMessage", message, ct);
+    }
 
     public Task MessageHiddenAsync(Guid messageId, CancellationToken ct = default) =>
         hub.Clients.Group(LeadChatHub.CommunityGroup).SendAsync("communityMessageHidden", new { id = messageId }, ct);

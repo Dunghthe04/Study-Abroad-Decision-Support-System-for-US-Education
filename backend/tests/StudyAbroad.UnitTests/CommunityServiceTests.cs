@@ -109,7 +109,7 @@ public class CommunityServiceTests
         Assert.Equal("Spam liên tục", status.Reason);
         Assert.NotNull(status.RestrictedUntil);
 
-        await env.Service.UnrestrictUserAsync(handlerId, env.User.Id, CancellationToken.None);
+        await env.Service.UnrestrictUserAsync(Guid.NewGuid(), env.User.Id, CancellationToken.None);
 
         Assert.Null(env.User.ForumRestrictedUntil);
         Assert.Null(env.User.ForumRestrictionReason);

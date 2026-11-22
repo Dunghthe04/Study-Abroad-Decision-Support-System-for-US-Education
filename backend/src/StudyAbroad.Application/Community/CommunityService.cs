@@ -183,11 +183,11 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
 
     public async Task UnrestrictUserAsync(Guid handlerId, Guid userId, CancellationToken ct)
     {
+        _ = handlerId;
         var user = await repo.GetUserAsync(userId, ct)
             ?? throw new CommunityRuleException("not_found", 404, "Không tìm thấy tài khoản.");
         user.ForumRestrictedUntil = null;
         user.ForumRestrictionReason = null;
-        user.ForumRestrictedByUserId = handlerId;
         user.UpdatedAt = DateTime.UtcNow;
         await repo.SaveChangesAsync(ct);
 
@@ -202,10 +202,12 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
 
         if (user.ForumRestrictedUntil is { } until && until > DateTime.UtcNow)
         {
+            var vnTime = until.AddHours(7);
+            var timeStr = vnTime.ToString("HH:mm dd/MM/yyyy");
             var reason = user.ForumRestrictionReason;
             var message = !string.IsNullOrWhiteSpace(reason)
-                ? $"Bạn đang bị hạn chế chat đến {until:O}. Lý do: {reason}"
-                : $"Bạn đang bị hạn chế chat đến {until:O}.";
+                ? $"Bạn đang bị hạn chế chat đến {timeStr}. Lý do: {reason}"
+                : $"Bạn đang bị hạn chế chat đến {timeStr}.";
             return new CommunityRestrictionDto(true, until, reason, message);
         }
 
@@ -233,12 +235,16 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
     private static void EnsureNotRestricted(User user)
     {
         if (user.ForumRestrictedUntil is { } until && until > DateTime.UtcNow)
+        {
+            var vnTime = until.AddHours(7);
+            var timeStr = vnTime.ToString("HH:mm dd/MM/yyyy");
             throw new CommunityRuleException(
                 "forum_restricted",
                 403,
                 user.ForumRestrictionReason is { Length: > 0 } reason
-                    ? $"Bạn đang bị hạn chế chat đến {until:O}. Lý do: {reason}"
-                    : $"Bạn đang bị hạn chế chat đến {until:O}.");
+                    ? $"Bạn đang bị hạn chế chat đến {timeStr}. Lý do: {reason}"
+                    : $"Bạn đang bị hạn chế chat đến {timeStr}.");
+        }
     }
 
     private static string Sanitize(string? raw)

@@ -5087,6 +5087,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("forum_restriction_reason");
 
+                    b.Property<Guid?>("ForumRestrictedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("forum_restricted_by_user_id");
+
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(128)
