@@ -113,9 +113,28 @@ public class AiUsageCollectorTests
         Assert.Empty(basket.Snapshot());
     }
 
+    [Fact]
+    public async Task ThePendingQuestionCall_IsForwardedToTheRealClient_NotLeftAtTheEmptyDefault()
+    {
+        // Dựng lại câu hồ sơ đang chờ không có token để gom, nhưng lớp bọc phải chuyển tiếp: bỏ sót thì rơi vào bản mặc định (không có câu nào)
+        var question = new PendingQuestionDto(true, "F1", "Gia đình bạn chi bao nhiêu?", [], new Widget("budget"));
+        var basket = new AiUsageCollector();
+        var advisor = new UsageCollectingAdvisorClient(new StubAdvisor { Pending = question }, basket);
+
+        var result = await advisor.PendingQuestionAsync(new AdvisorPendingQuestionRequest(System.Text.Json.JsonDocument.Parse("{}").RootElement));
+
+        Assert.Same(question, result);
+        Assert.Empty(basket.Snapshot());
+    }
+
     private sealed class StubAdvisor : IAdvisorClient
     {
         public Exception? Error { get; init; }
+        public PendingQuestionDto Pending { get; init; } = PendingQuestionDto.None;
+
+        public Task<PendingQuestionDto> PendingQuestionAsync(AdvisorPendingQuestionRequest request, CancellationToken ct = default) =>
+            Task.FromResult(Pending);
+
         public bool WithoutUsage { get; init; }
         public AdvisorChatResponse? LastChat { get; private set; }
         public AdvisorChatResponse? LastStream { get; private set; }

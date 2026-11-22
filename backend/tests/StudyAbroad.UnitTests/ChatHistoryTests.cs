@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Api.Controllers;
+using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Application.Advisor.History;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -283,12 +285,28 @@ public class ChatHistoryTests
         }
     }
 
-    private static ChatHistoryController ControllerFor(StubHistory history, Guid? userId)
+    private sealed class StubPending(PendingQuestionDto? result = null) : IChatPendingQuestion
+    {
+        public (Guid User, Guid Session, bool ExactBudget)? Asked { get; private set; }
+
+        public Task<PendingQuestionDto?> PendingQuestionAsync(Guid userId, Guid sessionId, bool exactBudget, CancellationToken ct = default)
+        {
+            Asked = (userId, sessionId, exactBudget);
+            return Task.FromResult(result);
+        }
+    }
+
+    private static ChatHistoryController ControllerFor(StubHistory history, Guid? userId, StubPending? pending = null, Guid? actingParent = null)
     {
         var http = new DefaultHttpContext();
         if (userId is { } id)
-            http.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, id.ToString())], "test"));
-        return new ChatHistoryController(history) { ControllerContext = new ControllerContext { HttpContext = http } };
+        {
+            var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, id.ToString()) };
+            if (actingParent is { } parent)
+                claims.Add(new Claim(ActingSessionGuard.ActorClaim, $"{{\"sub\":\"{parent}\"}}"));   // token nhập hộ: act = {"sub": mã phụ huynh}
+            http.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "test"));
+        }
+        return new ChatHistoryController(history, pending ?? new StubPending()) { ControllerContext = new ControllerContext { HttpContext = http } };
     }
 
     [Fact]
@@ -331,5 +349,38 @@ public class ChatHistoryTests
 
         Assert.IsType<NotFoundResult>(notFound.Result);
         Assert.IsType<BadRequestObjectResult>(bad.Result);
+    }
+
+    // ---- câu hồ sơ đang chờ
+
+    [Fact]
+    public async Task Pending_ReturnsTheRebuiltQuestion_ForTheLoggedInUser_NeverCached()
+    {
+        var question = new PendingQuestionDto(true, "F1", "Gia đình bạn chi bao nhiêu?", [new QuickReply("Dưới 20.000 USD", "Dưới 20.000 USD")], new Widget("budget"));
+        var pending = new StubPending(question);
+        var controller = ControllerFor(new StubHistory(), Me, pending);
+
+        var result = await controller.Pending(Id(1));
+
+        Assert.Same(question, Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal((Me, Id(1), false), pending.Asked);
+        Assert.Equal("no-store", controller.Response.Headers.CacheControl.ToString());
+    }
+
+    [Fact]
+    public async Task Pending_AParentEnteringForTheirChild_AsksTheExactBudget_LikeTheChat()
+    {
+        var pending = new StubPending(PendingQuestionDto.None);
+
+        await ControllerFor(new StubHistory(), Me, pending, actingParent: Other).Pending(Id(1));
+
+        Assert.True(pending.Asked!.Value.ExactBudget);
+    }
+
+    [Fact]
+    public async Task Pending_ForAMissingOrForeignSession_IsNotFound_AndWithoutAUserIsUnauthorized()
+    {
+        Assert.IsType<NotFoundResult>((await ControllerFor(new StubHistory(), Me, new StubPending(null)).Pending(Id(1))).Result);
+        Assert.IsType<UnauthorizedResult>((await ControllerFor(new StubHistory(), null).Pending(Id(1))).Result);
     }
 }

@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Advisor.History;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Api.Controllers;
@@ -14,7 +16,7 @@ namespace StudyAbroad.Api.Controllers;
 [ApiController]
 [Authorize(Policy = AgeFeatures.ProcessStudentData)]
 [Route("api/v1/advisor/sessions")]
-public class ChatHistoryController(IChatHistoryService history) : ControllerBase
+public class ChatHistoryController(IChatHistoryService history, IChatPendingQuestion pending) : ControllerBase
 {
     /// <summary>Phiên mới trao đổi nhất trước (limit mặc định 20, tối đa 50). cursor: nextCursor của lần trước.</summary>
     [HttpGet]
@@ -57,5 +59,23 @@ public class ChatHistoryController(IChatHistoryService history) : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// Câu hồ sơ đang chờ của phiên (bậc học, ngành, các câu hồ sơ, bảng rà soát), kèm nút và công cụ dựng lại để giao diện gắn dưới
+    /// tin cuối khi mở lại phiên. pending = false nếu không có câu hồ sơ nào đang chờ. Chỉ đọc: không đổi phiên, không gọi AI, không tính lượt.
+    /// </summary>
+    [HttpGet("{sessionId:guid}/pending")]
+    public async Task<ActionResult<PendingQuestionDto>> Pending(Guid sessionId, CancellationToken ct = default)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized();
+        // Phụ huynh đang nhập hộ con: câu ngân sách hỏi số tiền chính xác như trong chat (cờ đọc từ token, không tin trình duyệt)
+        var exactBudget = ActingSessionGuard.ReadActingParentId(User) is not null;
+        var question = await pending.PendingQuestionAsync(userId, sessionId, exactBudget, ct);
+        if (question is null)
+            return NotFound();
+        Response.Headers.CacheControl = "no-store";
+        return Ok(question);
     }
 }

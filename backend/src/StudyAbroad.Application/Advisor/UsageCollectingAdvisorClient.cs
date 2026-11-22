@@ -50,6 +50,10 @@ public class UsageCollectingAdvisorClient(IAdvisorClient inner, IAiUsageCollecto
         return response;
     }
 
+    // Dựng lại câu đang chờ không gọi AI nên không có số đo để gom; vẫn phải chuyển tiếp, nếu không sẽ rơi vào bản mặc định (không có câu nào)
+    public Task<PendingQuestionDto> PendingQuestionAsync(AdvisorPendingQuestionRequest request, CancellationToken ct = default) =>
+        inner.PendingQuestionAsync(request, ct);
+
     public async Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default)
     {
         var response = await inner.WriteCompareNoteAsync(request, ct);

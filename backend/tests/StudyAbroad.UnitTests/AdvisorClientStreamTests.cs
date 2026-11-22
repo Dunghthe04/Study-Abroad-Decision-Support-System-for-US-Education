@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Infrastructure.Advisor;
 
@@ -86,5 +87,24 @@ public class AdvisorClientStreamTests
         await Assert.ThrowsAsync<HttpRequestException>(() =>
             ClientFor(new Stub("", HttpStatusCode.InternalServerError))
                 .ChatStreamAsync(new AdvisorChatRequest(Hello), _ => Task.CompletedTask));
+    }
+
+    // ---- dựng lại câu hồ sơ đang chờ (lịch sử chat)
+
+    [Fact]
+    public async Task PendingQuestion_PostsToTheAdvisorRoute_InCamelCase_AndReadsTheRebuiltQuestion()
+    {
+        var stub = new Stub("""{"pending":true,"questionId":"F1","question":"Gia đình bạn chi bao nhiêu?","quickReplies":[{"label":"Dưới 20.000 USD","value":"Dưới 20.000 USD","href":null}],"widget":{"type":"budget","data":{}}}""");
+        var state = JsonDocument.Parse("""{"currentStep":"B2","questionId":"F1"}""").RootElement;
+
+        var result = await ClientFor(stub).PendingQuestionAsync(new AdvisorPendingQuestionRequest(state, HasCommittedProfile: true, ExactBudget: false));
+
+        Assert.Equal("http://advisor/api/v1/chat/pending-question", stub.Request!.RequestUri!.ToString());
+        var sent = await stub.Request.Content!.ReadAsStringAsync();
+        Assert.Contains("\"state\":{\"currentStep\":\"B2\"", sent);
+        Assert.Contains("\"hasCommittedProfile\":true", sent);
+        Assert.DoesNotContain("\"profile\"", sent);   // trường rỗng không gửi
+        Assert.Equal((true, "F1", "budget"), (result.Pending, result.QuestionId, result.Widget!.Type));
+        Assert.Equal("Dưới 20.000 USD", Assert.Single(result.QuickReplies).Label);
     }
 }

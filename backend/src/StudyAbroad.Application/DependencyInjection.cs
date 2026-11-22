@@ -55,6 +55,8 @@ public static class DependencyInjection
         // Chat chạy gợi ý trường qua interface, dùng chung RecommendationService đã đăng ký ở trên
         services.AddScoped<IRecommendationRunner>(sp => sp.GetRequiredService<RecommendationService>());
         services.AddScoped<StudyAbroad.Application.Advisor.ChatService>();
+        // Dựng lại câu hồ sơ đang chờ khi mở phiên cũ: cùng một ChatService trong phạm vi yêu cầu
+        services.AddScoped<StudyAbroad.Application.Advisor.History.IChatPendingQuestion>(sp => sp.GetRequiredService<StudyAbroad.Application.Advisor.ChatService>());
         services.AddScoped<RecommendationHistoryService>();   // [UC-87] xem lịch sử gợi ý
         services.AddScoped<ParentChildrenService>();   // khu "Con của tôi": phụ huynh xem con, chỉ đọc
         services.AddScoped<ParentPreferenceService>();   // UC-76: ưu tiên của phụ huynh cho từng con

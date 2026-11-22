@@ -38,7 +38,7 @@ namespace StudyAbroad.Application.Advisor
         IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null,
         IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null, AiPricing? pricing = null,
         StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeBaseService? knowledgeBase = null,
-        StudyAbroad.Application.Billing.IEntitlementService? entitlements = null)
+        StudyAbroad.Application.Billing.IEntitlementService? entitlements = null) : History.IChatPendingQuestion
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
@@ -232,6 +232,38 @@ namespace StudyAbroad.Application.Advisor
                 LockedIntents = null,   // đã đổi thành Locked ở trên; Locked là phần duy nhất của cổng Premium trình duyệt thấy
                 Locked = locked,
             };
+        }
+
+        // Mở lại phiên cũ (lịch sử chat): dựng lại nút và công cụ của câu hồ sơ đang chờ. Chỉ đọc: không đổi state, không lưu tin,
+        // không tính lượt. Gửi advisor cùng thông tin như một lượt chat (BuildAdvisorRequestAsync) để bảng rà soát hiện hồ sơ hiện tại.
+        // Null: không có phiên đó hoặc phiên của người khác. Advisor lỗi thì coi như không có câu nào: lịch sử vẫn dùng được, học sinh gõ tay
+        public async Task<PendingQuestionDto?> PendingQuestionAsync(Guid userId, Guid sessionId, bool exactBudget, CancellationToken ct = default)
+        {
+            var session = await sessions.FindAsync(sessionId, userId, ct);
+            if (session is null)
+                return null;
+            if (string.IsNullOrEmpty(session.StateJson))
+                return PendingQuestionDto.None;
+            // Phụ huynh đã liên kết không có hồ sơ riêng: chat không hỏi hồ sơ của họ (ParentChatGate), nên không có câu hồ sơ nào để dựng lại
+            if (!await profileFlow.CanEditOwnProfileAsync(userId, ct))
+                return PendingQuestionDto.None;
+
+            var state = JsonDocument.Parse(session.StateJson).RootElement.Clone();
+            var inputs = await BuildAdvisorRequestAsync(userId, new AdvisorChatRequest([]), state, null, ct);
+            try
+            {
+                return await advisor.PendingQuestionAsync(
+                    new AdvisorPendingQuestionRequest(
+                        state, inputs.Profile, inputs.Schools, inputs.OtherSchools, inputs.Transcript, inputs.Benchmarks,
+                        inputs.GradeScale, inputs.HasCommittedProfile, exactBudget),
+                    ct);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or JsonException
+                                       || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+            {
+                logger?.LogWarning(ex, "Không dựng lại được câu hồ sơ đang chờ của phiên {SessionId}", sessionId);
+                return PendingQuestionDto.None;
+            }
         }
 
         // Request gửi advisor: hồ sơ, trường, học bạ, mốc, bảng quy đổi đều đọc từ server, không tin giá trị trình duyệt gửi

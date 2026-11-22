@@ -143,6 +143,93 @@ public class ChatServiceTests
         Assert.Null(entry.CreatedByUserId);
     }
 
+    // ---- lịch sử chat: dựng lại câu hồ sơ đang chờ khi mở phiên cũ
+
+    private const string WaitingForBudget = "{\"currentStep\":\"B2\",\"questionId\":\"F1\",\"lastQuestion\":\"Gia đình bạn chi bao nhiêu?\"}";
+
+    private static (FakeSessions Sessions, ChatSession Session) SessionOf(Guid owner, string? state = WaitingForBudget)
+    {
+        var sessions = new FakeSessions();
+        var session = new ChatSession { UserId = owner, StateJson = state };
+        sessions.Rows.Add(session);
+        return (sessions, session);
+    }
+
+    private static readonly PendingQuestionDto BudgetQuestion =
+        new(true, "F1", "Gia đình bạn chi bao nhiêu?", [new QuickReply("Dưới 20.000 USD", "Dưới 20.000 USD")], new Widget("budget"));
+
+    [Fact]
+    public async Task PendingQuestion_SendsTheSessionsStateWithTheCurrentProfile_AndReturnsWhatTheAdvisorRebuilt()
+    {
+        var owner = Guid.NewGuid();
+        var (sessions, session) = SessionOf(owner);
+        var flow = new FakeProfileFlow { Draft = new ProfileFlowDraftDto(Step4: new FlowFinancialDraftDto("tier_35k_50k")) };
+        var advisor = new FakeAdvisor("B0") { Pending = BudgetQuestion };
+
+        var result = await new ChatService(advisor, sessions, flow).PendingQuestionAsync(owner, session.Id, exactBudget: true);
+
+        Assert.Same(BudgetQuestion, result);
+        var sent = advisor.PendingRequest!;
+        Assert.Equal("F1", sent.State.GetProperty("questionId").GetString());                                  // state đã lưu của phiên
+        Assert.Equal("tier_35k_50k", sent.Profile!.Value.GetProperty("budget").GetProperty("value").GetString()); // hồ sơ mới từ nháp
+        Assert.True(sent.ExactBudget);
+    }
+
+    [Fact]
+    public async Task PendingQuestion_IsReadOnly_NoStateChangeNoMessageNoAdvisorChat()
+    {
+        var owner = Guid.NewGuid();
+        var (sessions, session) = SessionOf(owner);
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B4") { Pending = BudgetQuestion };
+
+        await new ChatService(advisor, sessions, new FakeProfileFlow(), messages: saved).PendingQuestionAsync(owner, session.Id, false);
+
+        Assert.Equal(WaitingForBudget, session.StateJson);
+        Assert.Empty(saved.Rows);
+        Assert.Null(advisor.LastRequest);   // không có lượt chat nào được gửi
+    }
+
+    [Fact]
+    public async Task PendingQuestion_OfSomeoneElsesSession_IsNull_AndTheAdvisorIsNotCalled()
+    {
+        var (sessions, session) = SessionOf(Guid.NewGuid());
+        var advisor = new FakeAdvisor("B0") { Pending = BudgetQuestion };
+
+        var result = await new ChatService(advisor, sessions, new FakeProfileFlow()).PendingQuestionAsync(Guid.NewGuid(), session.Id, false);
+
+        Assert.Null(result);
+        Assert.Equal(0, advisor.PendingCalls);
+    }
+
+    [Fact]
+    public async Task PendingQuestion_ASessionWithoutState_OrAParentWithoutAProfile_HasNothingWaiting()
+    {
+        var owner = Guid.NewGuid();
+        var advisor = new FakeAdvisor("B0") { Pending = BudgetQuestion };
+        var (noState, emptySession) = SessionOf(owner, state: null);
+        var (parentSessions, parentSession) = SessionOf(owner);
+
+        var withoutState = await new ChatService(advisor, noState, new FakeProfileFlow()).PendingQuestionAsync(owner, emptySession.Id, false);
+        var parent = await new ChatService(advisor, parentSessions, new FakeProfileFlow { CanEdit = false }).PendingQuestionAsync(owner, parentSession.Id, false);
+
+        Assert.Same(PendingQuestionDto.None, withoutState);
+        Assert.Same(PendingQuestionDto.None, parent);   // chat không hỏi hồ sơ của phụ huynh đã liên kết
+        Assert.Equal(0, advisor.PendingCalls);
+    }
+
+    [Fact]
+    public async Task PendingQuestion_WhenTheAdvisorFails_FallsBackToNothingWaiting_SoTheHistoryStillOpens()
+    {
+        var owner = Guid.NewGuid();
+        var (sessions, session) = SessionOf(owner);
+        var advisor = new FakeAdvisor("B0") { PendingError = new HttpRequestException("advisor tắt") };
+
+        var result = await new ChatService(advisor, sessions, new FakeProfileFlow()).PendingQuestionAsync(owner, session.Id, false);
+
+        Assert.Same(PendingQuestionDto.None, result);
+    }
+
     // ---- tiêu đề phiên trong lịch sử chat
 
     [Fact]
@@ -3690,6 +3777,19 @@ public class ChatServiceTests
             return Task.FromResult(new AdvisorChatResponse(
                 Answer, [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills, Action: Action, ActionData: ActionData,
                 AiUsage: AiUsage, Slm: Slm, FormGoals: FormGoals, LockedIntents: LockedIntents));
+        }
+
+        // Dựng lại câu hồ sơ đang chờ khi mở phiên cũ (lịch sử chat)
+        public PendingQuestionDto Pending { get; init; } = PendingQuestionDto.None;
+        public Exception? PendingError { get; init; }
+        public AdvisorPendingQuestionRequest? PendingRequest { get; private set; }
+        public int PendingCalls { get; private set; }
+
+        public Task<PendingQuestionDto> PendingQuestionAsync(AdvisorPendingQuestionRequest request, CancellationToken ct = default)
+        {
+            PendingCalls++;
+            PendingRequest = request;
+            return PendingError is not null ? throw PendingError : Task.FromResult(Pending);
         }
 
         // Trả lời theo từng ý: gọi onEvent cho từng tin trong Events rồi trả kết quả như ChatAsync
