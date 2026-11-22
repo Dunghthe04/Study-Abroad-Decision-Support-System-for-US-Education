@@ -318,12 +318,7 @@ export function RegisterForm() {
                 variant={role === "student" ? "default" : "outline"}
                 onClick={() => {
                   setRole("student");
-                  setFieldErrors((prev) => {
-                    const next = { ...prev };
-                    delete next.dateOfBirth;
-                    delete next.parentEmail;
-                    return next;
-                  });
+                  setFieldErrors({});
                 }}
               >
                 <GraduationCapIcon aria-hidden="true" />
@@ -334,12 +329,7 @@ export function RegisterForm() {
                 variant={role === "parent" ? "default" : "outline"}
                 onClick={() => {
                   setRole("parent");
-                  setFieldErrors((prev) => {
-                    const next = { ...prev };
-                    delete next.dateOfBirth;
-                    delete next.parentEmail;
-                    return next;
-                  });
+                  setFieldErrors({});
                 }}
               >
                 <UsersIcon aria-hidden="true" />
