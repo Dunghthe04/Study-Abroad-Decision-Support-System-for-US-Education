@@ -147,7 +147,16 @@ function ItemPanel({
         {detail.error ? <Alert variant="destructive"><AlertDescription>{detail.error}</AlertDescription></Alert> : null}
         {!data && !detail.error ? <p className="text-sm text-ink-2">Đang tải...</p> : null}
 
-        {data ? (
+        {/* Học sinh đã xóa cuộc trò chuyện sau khi câu được bốc: ghi rõ lý do, không có gì để đọc hay chấm */}
+        {data?.deletedByUser ? (
+          <Alert>
+            <AlertDescription>
+              Học sinh đã xóa cuộc trò chuyện này khỏi lịch sử nên nội dung không còn hiển thị và câu này không chấm được nữa. Bạn chuyển sang câu khác.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {data && !data.deletedByUser ? (
           <>
             <Block title="Câu hỏi của học sinh">
               {data.question ? (
