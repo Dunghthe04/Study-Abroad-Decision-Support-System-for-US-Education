@@ -13,14 +13,26 @@ namespace StudyAbroad.Application.Admin.AiQuality;
 /// </summary>
 public static class AiQualityContentGate
 {
-    public static bool CanReadContent(AiQualityCandidate candidate, string minPolicyVersion = ConsentPurposes.QualityReviewMinPolicyVersion)
+    public static bool CanReadContent(AiQualityCandidate candidate, string minPolicyVersion = ConsentPurposes.QualityReviewMinPolicyVersion) =>
+        HiddenReason(candidate, minPolicyVersion) is null;
+
+    /// <summary>
+    /// Lý do ẩn nội dung; null là được đọc. Học sinh đã xóa cuộc trò chuyện thì luôn ẩn, xét trước cả tuổi: học sinh đã chọn không để
+    /// cuộc trò chuyện này lại, nên không ai đọc lại được (số liệu vẫn tính).
+    /// </summary>
+    public static AiQualityHiddenReason? HiddenReason(
+        AiQualityCandidate candidate, string minPolicyVersion = ConsentPurposes.QualityReviewMinPolicyVersion)
     {
+        if (candidate.SessionDeleted)
+            return AiQualityHiddenReason.DeletedByUser;
         if (candidate.OwnerIsParentOperated || candidate.OwnerDateOfBirth is not { } birth)
-            return true;
+            return null;
         var onTheDay = AgePolicy.TodayInVietnam(candidate.CreatedAt);
         if (AgePolicy.GetAge(birth, onTheDay) >= AgeGroups.ChildMaxAgeExclusive)
-            return true;
+            return null;
         // Người dưới 16: cần sự đồng ý của phụ huynh với bản chính sách đủ mới
-        return candidate.OwnerConsentVersions.Any(v => v is not null && string.CompareOrdinal(v, minPolicyVersion) >= 0);
+        return candidate.OwnerConsentVersions.Any(v => v is not null && string.CompareOrdinal(v, minPolicyVersion) >= 0)
+            ? null
+            : AiQualityHiddenReason.MinorWithoutConsent;
     }
 }

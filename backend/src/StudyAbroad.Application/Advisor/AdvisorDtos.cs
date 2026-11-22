@@ -72,6 +72,31 @@ public record QuickReply(string Label, string Value, ChatAction? Action = null, 
 /// <summary>Công cụ nhập ngay trong chat. Type: major | review | budget | scholarship; Data tùy loại.</summary>
 public record Widget(string Type, JsonElement? Data = null);
 
+/// <summary>
+/// Gửi advisor (POST api/v1/chat/pending-question) để dựng lại nút và công cụ của câu hồ sơ đang chờ khi mở lại phiên chat cũ.
+/// State là trạng thái đã lưu của phiên; các trường còn lại là thông tin .NET đọc mới từ server, giống hệt một lượt chat
+/// (ChatService.BuildAdvisorRequestAsync), để bảng rà soát hiện đúng hồ sơ hiện tại.
+/// </summary>
+public record AdvisorPendingQuestionRequest(
+    JsonElement State,
+    JsonElement? Profile = null,
+    IReadOnlyList<ChatSchool>? Schools = null,
+    IReadOnlyList<ChatSchool>? OtherSchools = null,
+    JsonElement? Transcript = null,
+    JsonElement? Benchmarks = null,
+    IReadOnlyList<GradeScaleRuleDto>? GradeScale = null,
+    bool? HasCommittedProfile = null,
+    bool? ExactBudget = null);
+
+/// <summary>
+/// Câu hồ sơ đang chờ học sinh trả lời trong một phiên cũ, kèm nút và công cụ dựng lại (tin nhắn lưu chỉ có chữ).
+/// Pending = false: không có câu hồ sơ nào đang chờ (phiên hỏi đáp thường, hoặc câu đang chờ chỉ là câu gợi ý).
+/// </summary>
+public record PendingQuestionDto(bool Pending, string? QuestionId, string Question, IReadOnlyList<QuickReply> QuickReplies, Widget? Widget)
+{
+    public static PendingQuestionDto None { get; } = new(false, null, "", [], null);
+}
+
 /// <param name="Profile">Hồ sơ sau lượt này (nội bộ, .NET dùng để ghi vào bản nháp).</param>
 /// <param name="ProfileChanged">Khóa hồ sơ đổi trong lượt này.</param>
 /// <param name="FormStep">Trang form (1–6) của câu chat đang hỏi; null = câu không thuộc trang nào.</param>

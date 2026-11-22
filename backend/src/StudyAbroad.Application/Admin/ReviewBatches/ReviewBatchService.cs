@@ -148,6 +148,13 @@ public class ReviewBatchService(IReviewBatchRepository repository, IAuditLogRepo
         if (rows is null)
             return null;   // không được giao, không thuộc đợt hoặc tin gốc đã mất: không có gì để xem và cũng không ghi nhật ký
 
+        // Học sinh đã xóa cuộc trò chuyện: không có nội dung nào rời đi nên không ghi nhật ký xem, chỉ báo lý do
+        if (rows.DeletedByUser)
+            return new ReviewItemDetailDto(
+                rows.ItemId, rows.Position, rows.Stratum, null,
+                new ChatReviewMessageDto(rows.Reply.MessageId, "assistant", rows.Reply.CreatedAt, ""),
+                [], rows.MyVerdict is { } kept ? ToDto(kept) : null, DeletedByUser: true);
+
         // Ghi nhật ký TRƯỚC khi trả nội dung. Không bắt lỗi: ghi lỗi thì ném lên, nội dung không rời khỏi hàm này
         await auditLogs.AddAsync(new AuditLog
         {

@@ -290,6 +290,7 @@ public class AiQualityApiTests
         var sql = AiQualitySampleRepository.CandidateRows(db, From, ToExclusive, "no_answer").ToQueryString();
 
         Assert.Contains("date_of_birth", sql);
+        Assert.Contains("deleted_at", sql);   // cờ học sinh đã xóa cuộc trò chuyện
         Assert.Contains("LEFT JOIN", sql);
         Assert.Contains("ORDER BY", sql);
         // Bước một chỉ quyết định ai được xem: không cột nội dung hay meta nào của tin nhắn được chọn
@@ -308,5 +309,17 @@ public class AiQualityApiTests
         Assert.Contains("full_name", sql);
         Assert.Contains("reply_to_message_id", sql);
         Assert.Contains("ANY", sql);   // Npgsql dịch danh sách mã thành = ANY(...): chỉ các mã được hỏi, không đọc cả bảng
+    }
+
+    [Fact]
+    public void PlaceholderQuery_NeverReadsAnyChatText_AndOnlyTestsTheQuestionsMetaInsideTheDatabase()
+    {
+        using var db = SchemaOnlyDb();
+
+        var sql = AiQualitySampleRepository.HiddenRows(db, [Id(1)]).ToQueryString();
+
+        Assert.DoesNotContain("content", sql);   // không cột nội dung nào của tin hỏi lẫn tin trả lời
+        Assert.Contains("@>", sql);             // meta tin hỏi chỉ được so với mẫu trong database, ra một cờ đúng/sai
+        Assert.Contains("ANY", sql);
     }
 }

@@ -79,6 +79,9 @@ public class AdvisorClient(HttpClient http) : IAdvisorClient
     public Task<ScenarioNoteResponseDto> WriteScenarioNoteAsync(ScenarioNoteRequestDto request, CancellationToken ct = default) =>
         PostAsync<ScenarioNoteRequestDto, ScenarioNoteResponseDto>("api/v1/recommend/what-if", request, ct);
 
+    public Task<PendingQuestionDto> PendingQuestionAsync(AdvisorPendingQuestionRequest request, CancellationToken ct = default) =>
+        PostAsync<AdvisorPendingQuestionRequest, PendingQuestionDto>("api/v1/chat/pending-question", request, ct);
+
     private async Task<TResponse> PostAsync<TRequest, TResponse>(string url, TRequest request, CancellationToken ct)
     {
         using var response = await http.PostAsJsonAsync(url, request, AdvisorJson, ct);

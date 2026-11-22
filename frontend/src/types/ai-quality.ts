@@ -60,21 +60,31 @@ export interface AiQualitySampleMessage {
   content: string;
 }
 
-/** Một lượt đã che thông tin cá nhân. Không có mã người dùng, mã phiên hay mã tin nhắn. */
+/** Vì sao một lượt bị ẩn nội dung (khớp AiQualityHiddenReasons ở backend). */
+export type SampleHiddenReason = "deleted_by_user" | "minor_without_consent";
+
+/**
+ * Một lượt đã che thông tin cá nhân. Không có mã người dùng, mã phiên hay mã tin nhắn.
+ * hiddenReason khác null là dòng giữ chỗ của lượt bị ẩn: chỉ có thời điểm, loại kết quả, tính năng, thời gian phản hồi;
+ * question và answer là null, context rỗng.
+ */
 export interface AiQualitySample {
   createdAt: string;
   outcome: string;
   feature: string | null;
   turnMs: number | null;
   question: string | null;
-  answer: string;
+  answer: string | null;
   context: AiQualitySampleMessage[];
+  hiddenReason: SampleHiddenReason | null;
 }
 
 export interface AiQualitySamplePage {
   items: AiQualitySample[];
   page: number;
   pageSize: number;
-  totalCount: number; // số lượt được xem nội dung
-  hiddenCount: number; // số lượt cùng loại bị ẩn nội dung vì lý do riêng tư
+  totalCount: number; // mọi lượt cùng loại trong khoảng, kể cả lượt bị ẩn (khớp số trên thẻ)
+  hiddenCount: number; // tổng số lượt cùng loại bị ẩn nội dung
+  hiddenDeletedCount: number; // trong đó: học sinh đã xóa cuộc trò chuyện
+  hiddenMinorCount: number; // trong đó: học sinh dưới 16 tuổi chưa có đồng ý phù hợp của phụ huynh
 }

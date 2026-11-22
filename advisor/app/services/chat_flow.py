@@ -20,11 +20,13 @@ from app.schemas.chat import (
     ChatResponse,
     ChatState,
     Citation,
+    PendingQuestionResponse,
     ProfileField,
     QuickReply,
     SlmSummary,
     SlmSummaryIntent,
     Step,
+    TurnInputs,
     Widget,
 )
 from app.schemas.slm import SlmTinResult, SlmY
@@ -238,6 +240,66 @@ def recreate_question_output(state: ChatState, question_id: str, question_text: 
     )
 
 
+# Ghép các thông tin .NET gửi mỗi lượt (hồ sơ, học bạ, mốc, bảng quy đổi, danh sách trường...) vào state, sửa trực tiếp state.
+# Dùng chung cho lượt chat (ChatFlow) và cho việc dựng lại câu hồ sơ đang chờ khi mở lại phiên cũ (pending_question),
+# để hai nơi luôn thấy cùng một state
+def apply_turn_inputs(state: ChatState, req: TurnInputs) -> None:
+    if req.study_level:  # .NET gửi bậc học mỗi lượt; không gửi thì giữ bậc đã nhớ
+        state.study_level = req.study_level
+    # Hồ sơ trong nháp (do .NET gửi) là nguồn thật; không gửi thì giữ hồ sơ trong state như cũ
+    if req.profile is not None:
+        state.profile = merge_profile(state.profile, req.profile)
+        # Học bạ đi cùng hồ sơ: lượt .NET gửi hồ sơ thì thay luôn học bạ, kể cả None (đã chuyển sang GPA tổng)
+        state.transcript = req.transcript
+    # Mốc trường đổi theo bậc học; không gửi thì giữ mốc đã nhớ
+    if req.benchmarks is not None:
+        state.benchmarks = req.benchmarks
+    # Bảng quy đổi điểm do moderator sửa; không gửi thì giữ bảng đã nhớ (chưa từng gửi thì dùng bảng WES)
+    if req.grade_scale:
+        state.grade_scale = req.grade_scale
+    # Đã lưu hồ sơ chưa: quyết định hỏi đủ hay chỉ hỏi mục bắt buộc còn thiếu; không gửi thì giữ giá trị cũ
+    if req.has_committed_profile is not None:
+        state.has_committed_profile = req.has_committed_profile
+    # Phụ huynh nhập hộ con managed hay không: F1 hỏi số tiền chính xác (VNĐ) thay cho mức
+    if req.exact_budget is not None:
+        state.exact_budget = req.exact_budget
+    # Danh sách trường gợi ý do .NET gửi mỗi lượt (lấy từ lần gợi ý đã lưu); không gửi thì giữ như cũ.
+    # Có danh sách nghĩa là học sinh đã có kết quả, dù gợi ý ở trang Gợi ý trường chứ không phải trong chat
+    if req.schools is not None:
+        state.schools = req.schools
+        state.has_results = state.has_results or bool(req.schools)
+    if req.other_schools is not None:
+        state.other_schools = req.other_schools
+
+
+# Câu HỒ SƠ có thể dựng lại nút và công cụ khi mở lại phiên cũ: câu bậc học, ngành (B1), các câu hồ sơ (D, E, F, N) và bảng rà soát X1.
+# Không gồm câu mở đầu (B0) và câu gợi ý X2, X3: nút của chúng chỉ là gợi ý, học sinh gõ tay là đủ.
+# Nhập muộn vì các skill nhập chat_flow
+def profile_questions() -> frozenset[str]:
+    from app.services.skills import skill_bac_hoc, skill_ho_so
+
+    return frozenset(skill_bac_hoc.QUESTION_FIELDS) | frozenset(skill_ho_so.QUESTION_FIELDS) | {"X1"}
+
+
+# Mở lại một phiên chat cũ: dựng lại nút và công cụ của câu hồ sơ đang chờ (tin nhắn lưu trong database chỉ có chữ).
+# Chỉ đọc: chạy trên bản sao của state nên state của phiên không đổi, không gọi AI (không tốn token, không trừ lượt).
+# Không có câu hồ sơ nào đang chờ thì pending = False
+def pending_question(state: ChatState, req: TurnInputs) -> PendingQuestionResponse:
+    work = state.model_copy(deep=True)
+    apply_turn_inputs(work, req)
+    question_id = work.question_id
+    if question_id is None or question_id not in profile_questions():
+        return PendingQuestionResponse()
+    output = recreate_question_output(work, question_id, work.last_question)
+    return PendingQuestionResponse(
+        pending=True,
+        question_id=question_id,
+        question=work.last_question or output.answer,
+        quick_replies=output.quick_replies,
+        widget=output.widget,
+    )
+
+
 class ChatFlow:
     # slm: bộ phân loại tin nhắn (OllamaSlm, test dùng FixedSlm). branches: loại câu hỏi -> nhánh (build_branches)
     def __init__(self, slm: SlmClassifier, branches: dict[str, Branch]) -> None:
@@ -261,32 +323,7 @@ class ChatFlow:
             ask(state, "B0.1")
         else:
             state = req.state.model_copy(deep=True)
-        if req.study_level:  # .NET gửi bậc học mỗi lượt; không gửi thì giữ bậc đã nhớ
-            state.study_level = req.study_level
-        # Hồ sơ trong nháp (do .NET gửi) là nguồn thật; không gửi thì giữ hồ sơ trong state như cũ
-        if req.profile is not None:
-            state.profile = merge_profile(state.profile, req.profile)
-            # Học bạ đi cùng hồ sơ: lượt .NET gửi hồ sơ thì thay luôn học bạ, kể cả None (đã chuyển sang GPA tổng)
-            state.transcript = req.transcript
-        # Mốc trường đổi theo bậc học; không gửi thì giữ mốc đã nhớ
-        if req.benchmarks is not None:
-            state.benchmarks = req.benchmarks
-        # Bảng quy đổi điểm do moderator sửa; không gửi thì giữ bảng đã nhớ (chưa từng gửi thì dùng bảng WES)
-        if req.grade_scale:
-            state.grade_scale = req.grade_scale
-        # Đã lưu hồ sơ chưa: quyết định hỏi đủ hay chỉ hỏi mục bắt buộc còn thiếu; không gửi thì giữ giá trị cũ
-        if req.has_committed_profile is not None:
-            state.has_committed_profile = req.has_committed_profile
-        # Phụ huynh nhập hộ con managed hay không: F1 hỏi số tiền chính xác (VNĐ) thay cho mức
-        if req.exact_budget is not None:
-            state.exact_budget = req.exact_budget
-        # Danh sách trường gợi ý do .NET gửi mỗi lượt (lấy từ lần gợi ý đã lưu); không gửi thì giữ như cũ.
-        # Có danh sách nghĩa là học sinh đã có kết quả, dù gợi ý ở trang Gợi ý trường chứ không phải trong chat
-        if req.schools is not None:
-            state.schools = req.schools
-            state.has_results = state.has_results or bool(req.schools)
-        if req.other_schools is not None:
-            state.other_schools = req.other_schools
+        apply_turn_inputs(state, req)
         # Chụp hồ sơ đầu lượt để cuối lượt biết khóa nào đổi (sao chép sâu vì nhánh sửa trực tiếp trên state)
         profile_before = {key: field.model_copy(deep=True) for key, field in state.profile.items()}
         message = last_user_message(req)

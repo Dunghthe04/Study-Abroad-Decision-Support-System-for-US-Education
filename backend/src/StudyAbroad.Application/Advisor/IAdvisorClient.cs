@@ -18,4 +18,11 @@ public interface IAdvisorClient
     Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default);
     Task<RecommendNoteResponseDto> WriteRecommendNoteAsync(RecommendNoteRequestDto request, CancellationToken ct = default);
 
+    /// <summary>
+    /// Dựng lại nút và công cụ của câu hồ sơ đang chờ khi mở lại phiên chat cũ. Chỉ đọc, advisor không gọi AI (không có token để gom).
+    /// Mặc định (bộ giả trong test, bản advisor chưa có API này) là không có câu nào đang chờ.
+    /// </summary>
+    Task<PendingQuestionDto> PendingQuestionAsync(AdvisorPendingQuestionRequest request, CancellationToken ct = default) =>
+        Task.FromResult(PendingQuestionDto.None);
+
 }
