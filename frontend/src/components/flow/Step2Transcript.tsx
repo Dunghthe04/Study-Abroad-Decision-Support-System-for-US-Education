@@ -214,6 +214,7 @@ type PendingAssignStep = "choose_grade" | "choose_semester";
 
 // Bản ghi thông tin vừa gán điểm vào một khối lớp & học kỳ để hiện thông báo vàng xác nhận
 interface AssignmentNotice {
+  id: string;
   sourceTerms: ExtractedTerm[];
   targetGrade: string;
   semester: 1 | 2 | "all";
@@ -456,8 +457,9 @@ export function Step2Transcript({
   // Lớp đã chọn khi gán kỳ (bước 1: chọn lớp; bước 2: chọn kỳ nếu cần)
   const [pendingGrade, setPendingGrade] = useState<string | null>(null);
   const [pendingAssignStep, setPendingAssignStep] = useState<PendingAssignStep>("choose_grade");
-  const [assignmentNotice, setAssignmentNotice] = useState<AssignmentNotice | null>(null);
-  const [isReassignDialogOpen, setIsReassignDialogOpen] = useState(false);
+  const [assignmentNotices, setAssignmentNotices] = useState<AssignmentNotice[]>([]);
+  const [reassignTargetId, setReassignTargetId] = useState<string | null>(null);
+  const reassignNotice = assignmentNotices.find((n) => n.id === reassignTargetId);
   const [showManualTable, setShowManualTable] = useState(
     Boolean(
       data.academicYears &&
@@ -861,12 +863,13 @@ export function Step2Transcript({
       setPendingGrade(null);
       setPendingAssignStep("choose_grade");
       setShowManualTable(true);
-      setAssignmentNotice({
+      setAssignmentNotices((prev) => [...prev, {
+        id: `${normalizeGrade(targetGradeName)}-${Date.now()}`,
         sourceTerms: syntheticTerms,
         targetGrade: targetGradeName,
         semester: "all",
         subjectCount: syntheticTerms[0].scores.length + (syntheticTerms[1]?.scores.length || 0),
-      });
+      }]);
       setOcrSuccessNotice(
         `Đã tự động điền cả 2 học kỳ vào ${targetGradeName}. Vui lòng kiểm tra lại điểm trong bảng bên dưới.`
       );
@@ -900,12 +903,13 @@ export function Step2Transcript({
       setPendingGrade(null);
       setPendingAssignStep("choose_grade");
       setShowManualTable(true);
-      setAssignmentNotice({
+      setAssignmentNotices((prev) => [...prev, {
+        id: `${normalizeGrade(targetGradeName)}-${Date.now()}`,
         sourceTerms: [syntheticTerm],
         targetGrade: targetGradeName,
         semester: resolved.semester,
         subjectCount: singleTerm.scores.length,
-      });
+      }]);
 
       if (resolved.semester !== "all" && isCompletedGrade(targetGradeName)) {
         const afterYear = updatedYears.find((y) => normalizeGrade(y.gradeName) === normalizeGrade(targetGradeName));
@@ -956,12 +960,13 @@ export function Step2Transcript({
     setPendingGrade(null);
     setPendingAssignStep("choose_grade");
     setShowManualTable(true);
-    setAssignmentNotice({
+    setAssignmentNotices((prev) => [...prev, {
+      id: `${normalizeGrade(chosenGrade)}-${Date.now()}`,
       sourceTerms: [syntheticTerm],
       targetGrade: chosenGrade,
       semester: semester,
       subjectCount: termToAssign.scores.length,
-    });
+    }]);
 
     // Nếu lớp đã hoàn thành (past) và vừa gán chỉ 1 kỳ → cảnh báo cần điền HK còn thiếu
     if (semester !== "all" && isCompletedGrade(chosenGrade)) {
@@ -988,15 +993,16 @@ export function Step2Transcript({
     setPendingAssignStep("choose_grade");
   };
 
-  // Chuyển điểm đã nhập từ lớp này sang lớp khác khi người dùng bấm "Chọn nhầm lớp? Đổi sang lớp khác"
-  const handleReassignGrade = (newGradeName: string) => {
-    if (!assignmentNotice || normalizeGrade(newGradeName) === normalizeGrade(assignmentNotice.targetGrade)) {
-      setIsReassignDialogOpen(false);
+  // Chuyển điểm đã nhập từ lớp này sang lớp khác khi người dùng bấm "Sai lớp" trên 1 notice cụ thể
+  const handleReassignGrade = (noticeId: string, newGradeName: string) => {
+    const notice = assignmentNotices.find((n) => n.id === noticeId);
+    if (!notice || normalizeGrade(newGradeName) === normalizeGrade(notice.targetGrade)) {
+      setReassignTargetId(null);
       return;
     }
 
-    const oldGrade = assignmentNotice.targetGrade;
-    const sem = assignmentNotice.semester;
+    const oldGrade = notice.targetGrade;
+    const sem = notice.semester;
 
     // 1. Xóa điểm vừa gán ở khối lớp cũ
     const clearedYears = years.map((y) => {
@@ -1004,7 +1010,7 @@ export function Step2Transcript({
       return {
         ...y,
         subjects: y.subjects.map((s) => {
-          const wasInSource = assignmentNotice.sourceTerms.some((t) =>
+          const wasInSource = notice.sourceTerms.some((t) =>
             t.scores.some((sc) => subjectKey(sc.subjectName) === subjectKey(s.subjectName))
           );
           if (!wasInSource) return s;
@@ -1020,9 +1026,9 @@ export function Step2Transcript({
     });
 
     // 2. Chuyển termName của các sourceTerms sang khối lớp mới
-    const remappedTerms: ExtractedTerm[] = assignmentNotice.sourceTerms.map((t, idx) => {
+    const remappedTerms: ExtractedTerm[] = notice.sourceTerms.map((t, idx) => {
       let suffix = sem === "all" ? "Cả năm" : `HK${sem}`;
-      if (assignmentNotice.sourceTerms.length >= 2) {
+      if (notice.sourceTerms.length >= 2) {
         suffix = idx === 0 ? "HK1" : "HK2";
       }
       return {
@@ -1045,12 +1051,14 @@ export function Step2Transcript({
     });
 
     if (targetIdx !== -1) setActiveYearIndex(targetIdx);
-    setAssignmentNotice({
-      ...assignmentNotice,
-      targetGrade: newGradeName,
-      sourceTerms: remappedTerms,
-    });
-    setIsReassignDialogOpen(false);
+    setAssignmentNotices((prev) =>
+      prev.map((n) =>
+        n.id === noticeId
+          ? { ...n, targetGrade: newGradeName, sourceTerms: remappedTerms }
+          : n
+      )
+    );
+    setReassignTargetId(null);
   };
 
   const triggerFileInput = () => {
@@ -1084,7 +1092,7 @@ export function Step2Transcript({
     setOcrSuccessNotice(null);
     setOcrWarnings([]);
     setPendingTerms(null);
-    setAssignmentNotice(null);
+    setAssignmentNotices([]);
 
     try {
       // BE chỉ nhận 1 file mỗi lần tải
@@ -1128,15 +1136,34 @@ export function Step2Transcript({
           });
           setShowManualTable(true);
 
-          const firstResolved = resolveTerm(knownTerms[0].termName || "");
-          const targetGradeAuto = firstResolved.gradeName || currentYears[0]?.gradeName || "Lớp 10";
-          const totalScores = knownTerms.reduce((sum, t) => sum + (t.scores?.length || 0), 0);
-          setAssignmentNotice({
-            sourceTerms: knownTerms,
-            targetGrade: targetGradeAuto,
-            semester: firstResolved.semester || "all",
-            subjectCount: totalScores,
-          });
+          // Tạo notice cho từng khối lớp riêng biệt (per-grade)
+          const termsByGrade = new Map<string, { terms: ExtractedTerm[]; gradeName: string; semester: 1 | 2 | "all" }>();
+          for (const term of knownTerms) {
+            const resolved = resolveTerm(term.termName || "");
+            const gName = resolved.gradeName || currentYears[0]?.gradeName || "Lớp 10";
+            const key = normalizeGrade(gName);
+            const existing = termsByGrade.get(key);
+            if (existing) {
+              existing.terms.push(term);
+              if (existing.semester !== "all" && resolved.semester !== existing.semester) {
+                existing.semester = "all";
+              }
+            } else {
+              termsByGrade.set(key, { terms: [term], gradeName: gName, semester: resolved.semester || "all" });
+            }
+          }
+          const newNotices: AssignmentNotice[] = [];
+          for (const [, entry] of termsByGrade) {
+            const totalScores = entry.terms.reduce((sum, t) => sum + (t.scores?.length || 0), 0);
+            newNotices.push({
+              id: `${normalizeGrade(entry.gradeName)}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              sourceTerms: entry.terms,
+              targetGrade: entry.gradeName,
+              semester: entry.semester,
+              subjectCount: totalScores,
+            });
+          }
+          setAssignmentNotices((prev) => [...prev, ...newNotices]);
         }
 
         if (ambiguousTerms.length > 0) {
@@ -1974,52 +2001,59 @@ export function Step2Transcript({
           )}
 
           {/* Thông báo màu vàng xác nhận đã điền điểm & Nút đổi sang lớp khác nếu chọn nhầm */}
-          {assignmentNotice && (
-            <div className="rounded-2xl border-2 border-amber-300 bg-amber-50/90 dark:border-amber-700/60 dark:bg-amber-950/40 p-4 space-y-3 animate-in fade-in-50">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300 shrink-0 mt-0.5">
-                    <AlertTriangleIcon className="size-5" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="font-semibold text-sm text-amber-950 dark:text-amber-100">
-                      Xác nhận điểm đã nhập vào {assignmentNotice.targetGrade} (
-                      {assignmentNotice.semester === "all" ? "Cả năm" : `Học kỳ ${assignmentNotice.semester}`})
+          {assignmentNotices.length > 0 && (
+            <div className="space-y-3">
+              {assignmentNotices.map((notice) => (
+                <div
+                  key={notice.id}
+                  className="rounded-2xl border-2 border-amber-300 bg-amber-50/90 dark:border-amber-700/60 dark:bg-amber-950/40 p-4 space-y-3 animate-in fade-in-50"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300 shrink-0 mt-0.5">
+                        <AlertTriangleIcon className="size-5" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="font-semibold text-sm text-amber-950 dark:text-amber-100">
+                          Xác nhận điểm đã nhập vào {notice.targetGrade} (
+                          {notice.semester === "all" ? "Cả năm" : `Học kỳ ${notice.semester}`})
+                        </div>
+                        <div className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                          Hệ thống đã thêm <strong className="font-bold text-amber-950 dark:text-amber-100">{notice.subjectCount} môn học</strong> vào{" "}
+                          <strong>{notice.targetGrade}</strong>. Vui lòng đối chiếu xem đã đúng khối lớp và học kỳ chưa.
+                          {isCompletedGrade(notice.targetGrade) && notice.semester !== "all" && (
+                            <span className="block mt-1 font-semibold text-red-600 dark:text-red-400">
+                              ⚠️ {notice.targetGrade} là năm học đã kết thúc. Bạn cần bổ sung học kỳ còn lại để hồ sơ hợp lệ!
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
-                      Hệ thống đã thêm <strong className="font-bold text-amber-950 dark:text-amber-100">{assignmentNotice.subjectCount} môn học</strong> vào{" "}
-                      <strong>{assignmentNotice.targetGrade}</strong>. Vui lòng đối chiếu xem đã đúng khối lớp và học kỳ chưa.
-                      {isCompletedGrade(assignmentNotice.targetGrade) && assignmentNotice.semester !== "all" && (
-                        <span className="block mt-1 font-semibold text-red-600 dark:text-red-400">
-                          ⚠️ {assignmentNotice.targetGrade} là năm học đã kết thúc. Bạn cần bổ sung học kỳ còn lại để hồ sơ hợp lệ!
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
 
-                <div className="flex flex-wrap items-center gap-2 self-end sm:self-center shrink-0">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsReassignDialogOpen(true)}
-                    className="text-xs font-semibold border-amber-300 bg-white hover:bg-amber-100/80 text-amber-900 dark:border-amber-700 dark:bg-zinc-900 dark:text-amber-200 dark:hover:bg-amber-950"
-                  >
-                    <RefreshCwIcon className="size-3.5 mr-1 text-amber-600 dark:text-amber-400" />
-                    Chọn nhầm lớp? Đổi sang lớp khác
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => setAssignmentNotice(null)}
-                    className="text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-600 dark:hover:bg-amber-700"
-                  >
-                    <CheckCircle2Icon className="size-3.5 mr-1" />
-                    Xác nhận đúng
-                  </Button>
+                    <div className="flex flex-wrap items-center gap-2 self-end sm:self-center shrink-0">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setReassignTargetId(notice.id)}
+                        className="text-xs font-semibold border-amber-300 bg-white hover:bg-amber-100/80 text-amber-900 dark:border-amber-700 dark:bg-zinc-900 dark:text-amber-200 dark:hover:bg-amber-950"
+                      >
+                        <RefreshCwIcon className="size-3.5 mr-1 text-amber-600 dark:text-amber-400" />
+                        Sai lớp
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => setAssignmentNotices((prev) => prev.filter((n) => n.id !== notice.id))}
+                        className="text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-600 dark:hover:bg-amber-700"
+                      >
+                        <CheckCircle2Icon className="size-3.5 mr-1" />
+                        Xác nhận đúng
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
           )}
 
@@ -2485,8 +2519,8 @@ export function Step2Transcript({
         </DialogContent>
       </Dialog>
 
-      {/* Modal chọn lại lớp khi người dùng bấm "Chọn nhầm lớp? Đổi sang lớp khác" */}
-      <Dialog open={isReassignDialogOpen} onOpenChange={setIsReassignDialogOpen}>
+      {/* Modal chọn lại lớp khi người dùng bấm "Sai lớp" */}
+      <Dialog open={reassignTargetId !== null} onOpenChange={(open) => { if (!open) setReassignTargetId(null); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
@@ -2495,14 +2529,14 @@ export function Step2Transcript({
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               Điểm hiện tại đang được điền vào{" "}
-              <strong className="text-foreground">{assignmentNotice?.targetGrade}</strong>. Bạn muốn chuyển toàn bộ điểm này sang khối lớp nào?
+              <strong className="text-foreground">{reassignNotice?.targetGrade}</strong>. Bạn muốn chuyển toàn bộ điểm này sang khối lớp nào?
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-2 gap-2.5 py-3">
             {years.map((y) => {
               const isCurrentTarget =
-                assignmentNotice && normalizeGrade(y.gradeName) === normalizeGrade(assignmentNotice.targetGrade);
+                reassignNotice && normalizeGrade(y.gradeName) === normalizeGrade(reassignNotice.targetGrade);
               return (
                 <Button
                   key={y.gradeName}
@@ -2514,7 +2548,11 @@ export function Step2Transcript({
                       ? "bg-brand text-white"
                       : "bg-surface hover:bg-brand/10 hover:border-brand/40"
                   )}
-                  onClick={() => handleReassignGrade(y.gradeName)}
+                  onClick={() => {
+                    if (reassignTargetId) {
+                      handleReassignGrade(reassignTargetId, y.gradeName);
+                    }
+                  }}
                 >
                   <span>{y.gradeName}</span>
                   {isCurrentTarget && <span className="text-[10px] opacity-80">(đang chọn)</span>}
@@ -2528,7 +2566,7 @@ export function Step2Transcript({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => setIsReassignDialogOpen(false)}
+              onClick={() => setReassignTargetId(null)}
               className="text-xs"
             >
               Đóng
