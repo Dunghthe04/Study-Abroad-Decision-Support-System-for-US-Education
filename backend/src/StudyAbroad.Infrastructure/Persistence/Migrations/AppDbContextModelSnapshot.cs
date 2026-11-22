@@ -888,6 +888,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnName("current_step")
                         .HasComment("Bước hiện tại của hội thoại (B0..B6), cập nhật sau mỗi lượt.");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at")
+                        .HasComment("Học sinh xóa cuộc trò chuyện khỏi lịch sử (xóa mềm): không hiện, không mở lại, không hỏi tiếp. Tin nhắn vẫn giữ cho thống kê. Null là chưa xóa.");
+
                     b.Property<Guid?>("SkillId")
                         .HasColumnType("uuid")
                         .HasColumnName("skill_id");

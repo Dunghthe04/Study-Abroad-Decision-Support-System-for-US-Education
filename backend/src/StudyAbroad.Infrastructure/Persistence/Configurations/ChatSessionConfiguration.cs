@@ -22,6 +22,8 @@ public class ChatSessionConfiguration : IEntityTypeConfiguration<ChatSession>
         b.HasIndex(x => new { x.UserId, x.CreatedAt });
         // Danh sách lịch sử chat xếp theo lần trao đổi gần nhất của từng người
         b.HasIndex(x => new { x.UserId, x.UpdatedAt });
+        b.Property(x => x.DeletedAt).HasComment(
+            "Học sinh xóa cuộc trò chuyện khỏi lịch sử (xóa mềm): không hiện, không mở lại, không hỏi tiếp. Tin nhắn vẫn giữ cho thống kê. Null là chưa xóa.");
         b.Property(x => x.StateJson).HasColumnType("jsonb")
             .HasComment("Trạng thái hội thoại advisor trả về sau mỗi lượt, gửi lại ở lượt sau. Nội bộ, không trả cho trình duyệt.");
     }
