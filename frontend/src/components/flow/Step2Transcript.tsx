@@ -123,50 +123,47 @@ const SUGGESTED_ADDITIONAL_SUBJECTS = [
   "Tâm lý học",
 ];
 
+const normalizeGrade = (g: string) =>
+  g.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/gi, "d").replace(/\s+/g, " ").trim().toLowerCase();
+
 // Sinh danh sách các năm học theo chuẩn tuyển sinh Mỹ (luôn bắt đầu từ Lớp 9 đến lớp/năm hiện tại)
 export function getInitialAcademicYears(level?: CurrentEducationLevel | null, grade?: string | null): AcademicYearDraft[] {
   let gradeNames: string[] = ["Lớp 9", "Lớp 10", "Lớp 11", "Lớp 12"];
+  const g = grade ? normalizeGrade(grade) : "";
 
-  if (level === "middle_school") {
-    if (grade === "Lớp 9") {
-      gradeNames = ["Lớp 9"];
-    } else {
-      // Học sinh THCS (Lớp 6, 7, 8) chuẩn bị lộ trình 4 năm cấp 3
-      gradeNames = ["Lớp 9", "Lớp 10", "Lớp 11", "Lớp 12"];
-    }
-  } else if (level === "high_school") {
-    if (grade === "Lớp 12") {
-      gradeNames = ["Lớp 9", "Lớp 10", "Lớp 11", "Lớp 12"];
-    } else if (grade === "Lớp 11") {
-      gradeNames = ["Lớp 9", "Lớp 10", "Lớp 11"];
-    } else if (grade === "Lớp 10") {
-      // Cấp 3 Việt Nam: Lớp 10 chỉ xét từ Lớp 9 (Freshman Mỹ) đến Lớp 10, loại bỏ Lớp 8 (Middle school)
-      gradeNames = ["Lớp 9", "Lớp 10"];
-    } else {
-      gradeNames = ["Lớp 9", "Lớp 10", "Lớp 11", "Lớp 12"];
-    }
+  if (g === "lop 9") {
+    gradeNames = ["Lớp 9"];
+  } else if (g === "lop 10") {
+    gradeNames = ["Lớp 9", "Lớp 10"];
+  } else if (g === "lop 11") {
+    gradeNames = ["Lớp 9", "Lớp 10", "Lớp 11"];
+  } else if (g === "lop 12") {
+    gradeNames = ["Lớp 9", "Lớp 10", "Lớp 11", "Lớp 12"];
+  } else if (level === "middle_school") {
+    // Học sinh THCS (Lớp 6, 7, 8) chuẩn bị lộ trình 4 năm cấp 3
+    gradeNames = ["Lớp 9", "Lớp 10", "Lớp 11", "Lớp 12"];
   } else if (level === "college_university") {
-    if (grade === "Năm 4" || grade === "Năm cuối" || grade === "Đã tốt nghiệp") {
+    if (g === "nam 4" || g === "nam cuoi" || g.includes("tot nghiep")) {
       gradeNames = ["Năm 1", "Năm 2", "Năm 3", "Năm 4"];
-    } else if (grade === "Năm 3") {
+    } else if (g === "nam 3") {
       gradeNames = ["Năm 1", "Năm 2", "Năm 3"];
-    } else if (grade === "Năm 2") {
+    } else if (g === "nam 2") {
       gradeNames = ["Năm 1", "Năm 2"];
-    } else if (grade === "Năm 1") {
+    } else if (g === "nam 1") {
       gradeNames = ["Năm 1"];
     } else {
       gradeNames = ["Năm 1", "Năm 2", "Năm 3"];
     }
   } else if (level === "master") {
-    if (grade === "Năm 2" || grade === "Đã tốt nghiệp") {
+    if (g === "nam 2" || g.includes("tot nghiep")) {
       gradeNames = ["Năm 1", "Năm 2"];
     } else {
       gradeNames = ["Năm 1"];
     }
   }
 
-  return gradeNames.map((g) => ({
-    gradeName: g,
+  return gradeNames.map((gn) => ({
+    gradeName: gn,
     subjects: DEFAULT_SUBJECTS.map((s) => ({
       subjectName: s,
       semester1Score: null,
@@ -174,9 +171,6 @@ export function getInitialAcademicYears(level?: CurrentEducationLevel | null, gr
     })),
   }));
 }
-
-const normalizeGrade = (g: string) =>
-  g.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/gi, "d").replace(/\s+/g, " ").trim().toLowerCase();
 
 // Tên gọi tắt / đầy đủ của cùng một môn → khóa chung, để "Văn" nhập tay và "Ngữ văn" từ OCR không thành 2 dòng
 const SUBJECT_ALIASES: Record<string, string> = {
@@ -345,8 +339,71 @@ export function Step2Transcript({
 }: Step2TranscriptProps) {
   useGradeScale(); // GPA thang 4 quy đổi theo bảng moderator sửa, vẽ lại khi bảng tải xong
   // Khởi tạo các năm học dựa theo bậc học & lớp hiện tại của người dùng
-  const defaultYears = getInitialAcademicYears(currentEducationLevel, currentGrade);
-  const years = data.academicYears && data.academicYears.length > 0 ? data.academicYears : defaultYears;
+  const defaultYears = useMemo(
+    () => getInitialAcademicYears(currentEducationLevel, currentGrade),
+    [currentEducationLevel, currentGrade]
+  );
+
+  // Khối lớp cao nhất được phép hiển thị dựa trên khai báo ở Bước 1
+  const maxAllowedGradeName = useMemo(() => {
+    if (!defaultYears || defaultYears.length === 0) return null;
+    return defaultYears[defaultYears.length - 1]?.gradeName ?? null;
+  }, [defaultYears]);
+
+  const isGrade9 = Boolean(
+    currentGrade === "Lớp 9" || (currentGrade && normalizeGrade(currentGrade) === "lop 9")
+  );
+
+  const [isGrade9EarlyRoadmap, setIsGrade9EarlyRoadmap] = useState<boolean>(() => {
+    if (!isGrade9) return false;
+    return Boolean(data.academicYears?.some((y) => y.subjects.some((s) => s.subjectName === "GPA Mục Tiêu")));
+  });
+
+  // Học sinh THCS Lớp 8 trở xuống HOẶC học sinh Lớp 9 đã xóa khối Lớp 9 vì chưa có điểm:
+  // Chuyển sang giao diện thiết lập mục tiêu 4 năm cấp 3
+  const isMiddleSchoolEarly = Boolean(
+    (currentEducationLevel === "middle_school" &&
+      (currentGrade === "Lớp 6" ||
+        currentGrade === "Lớp 7" ||
+        currentGrade === "Lớp 8" ||
+        !currentGrade ||
+        currentGrade.includes("6") ||
+        currentGrade.includes("7") ||
+        currentGrade.includes("8"))) ||
+    (isGrade9 && isGrade9EarlyRoadmap)
+  );
+
+  // Lọc academicYears sao cho chỉ chứa các lớp <= maxAllowedGradeName (không được vượt quá lớp hiện tại)
+  const years = useMemo(() => {
+    if (isMiddleSchoolEarly) {
+      if (
+        data.academicYears &&
+        data.academicYears.length > 0 &&
+        data.academicYears.some((y) => y.subjects.some((s) => s.subjectName === "GPA Mục Tiêu"))
+      ) {
+        return data.academicYears;
+      }
+      return ["Lớp 9", "Lớp 10", "Lớp 11", "Lớp 12"].map((g) => ({
+        gradeName: g,
+        subjects: [
+          {
+            subjectName: "GPA Mục Tiêu",
+            semester1Score: null,
+            semester2Score: null,
+          },
+        ],
+      }));
+    }
+
+    if (!data.academicYears || data.academicYears.length === 0) {
+      return defaultYears;
+    }
+
+    if (!maxAllowedGradeName) return data.academicYears;
+    const maxOrder = gradeOrder(maxAllowedGradeName);
+    const filtered = data.academicYears.filter((y) => gradeOrder(y.gradeName) <= maxOrder);
+    return filtered.length > 0 ? filtered : defaultYears;
+  }, [isMiddleSchoolEarly, data.academicYears, defaultYears, maxAllowedGradeName]);
 
   const [activeYearIndex, setActiveYearIndex] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -374,17 +431,6 @@ export function Step2Transcript({
   const [addSubjectError, setAddSubjectError] = useState<string | null>(null);
   const fileInputId = useId();
   const overallInputId = useId();
-
-  // Học sinh THCS Lớp 8 trở xuống: chưa có học bạ cấp 3, chuyển sang giao diện thiết lập mục tiêu 4 năm
-  const isMiddleSchoolEarly =
-    currentEducationLevel === "middle_school" &&
-    (currentGrade === "Lớp 6" ||
-      currentGrade === "Lớp 7" ||
-      currentGrade === "Lớp 8" ||
-      !currentGrade ||
-      currentGrade.includes("6") ||
-      currentGrade.includes("7") ||
-      currentGrade.includes("8"));
 
   const gpaModeOptions = useMemo(() => {
     if (isMiddleSchoolEarly) {
@@ -579,19 +625,55 @@ export function Step2Transcript({
     });
   };
 
-  // Khối lớp cao nhất được phép hiển thị dựa trên khai báo ở Bước 1
-  const maxAllowedGradeName = useMemo(() => {
-    if (!defaultYears || defaultYears.length === 0) return null;
-    return defaultYears[defaultYears.length - 1]?.gradeName ?? null;
-  }, [defaultYears]);
-
   // Xóa khối lớp hiện tại (chỉ lớp hiện tại mới được xóa nếu học sinh chưa có điểm năm nay; lớp cũ không được xóa)
+  // Đặc biệt: Với Lớp 9, nếu chưa có điểm kỳ nào thì xóa sẽ chuyển sang chế độ lộ trình mục tiêu 4 năm (như Lớp 8)
   const handleRemoveCurrentGradeYear = () => {
     if (!maxAllowedGradeName) return;
+
+    // TH: Học sinh Lớp 9 xóa Lớp 9 vì chưa có điểm kỳ nào
+    // -> Chuyển xuống như Lớp 8 (thiết lập lộ trình mục tiêu 4 năm Lớp 9 - 12)
+    if (isGrade9) {
+      const targetYear = years.find((y) => normalizeGrade(y.gradeName) === "lop 9");
+      const hasScores = targetYear?.subjects.some(
+        (s) => s.semester1Score !== null || s.semester2Score !== null
+      );
+      if (
+        hasScores &&
+        !window.confirm(
+          "Khối Lớp 9 đang có điểm. Bạn có chắc muốn xóa và chuyển sang thiết lập lộ trình mục tiêu 4 năm (như Lớp 8) không?"
+        )
+      ) {
+        return;
+      }
+
+      const roadmapYears: AcademicYearDraft[] = ["Lớp 9", "Lớp 10", "Lớp 11", "Lớp 12"].map((g) => ({
+        gradeName: g,
+        subjects: [
+          {
+            subjectName: "GPA Mục Tiêu",
+            semester1Score: null,
+            semester2Score: null,
+          },
+        ],
+      }));
+
+      onUpdate({
+        gpaMode: "transcript",
+        academicYears: roadmapYears,
+        manualGpa10Scale: null,
+        calculatedGpa4Scale: null,
+      });
+      setIsGrade9EarlyRoadmap(true);
+      setActiveYearIndex(0);
+      setValidationError(null);
+      return;
+    }
+
     if (years.length <= 1) {
       setValidationError("Bảng điểm cần giữ lại ít nhất một năm học đã có điểm.");
       return;
     }
+
     const currentGradeNormalized = normalizeGrade(maxAllowedGradeName);
     const targetYear = years.find((y) => normalizeGrade(y.gradeName) === currentGradeNormalized);
     if (!targetYear) return;
@@ -617,6 +699,20 @@ export function Step2Transcript({
       calculatedGpa4Scale: newGpas.gpa4,
     });
     setActiveYearIndex((prev) => Math.max(0, Math.min(prev, updatedYears.length - 1)));
+    setValidationError(null);
+  };
+
+  // Quay lại chế độ nhập bảng điểm Lớp 9 cho học sinh Lớp 9 đang ở chế độ lộ trình mục tiêu
+  const handleSwitchToGrade9Transcript = () => {
+    const initialGrade9 = getInitialAcademicYears(currentEducationLevel, "Lớp 9");
+    onUpdate({
+      gpaMode: "transcript",
+      academicYears: initialGrade9,
+      manualGpa10Scale: null,
+      calculatedGpa4Scale: null,
+    });
+    setIsGrade9EarlyRoadmap(false);
+    setActiveYearIndex(0);
     setValidationError(null);
   };
 
@@ -1231,8 +1327,28 @@ export function Step2Transcript({
         </div>
       ) : isMiddleSchoolEarly ? (
         <div className="space-y-6">
-          {/* Lộ trình mục tiêu 4 năm cho học sinh THCS (Lớp 8 trở xuống) */}
+          {/* Lộ trình mục tiêu 4 năm cho học sinh THCS (Lớp 8 trở xuống hoặc Lớp 9 chưa có điểm) */}
           <div className="space-y-4">
+            {isGrade9 && isGrade9EarlyRoadmap && (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 rounded-xl bg-brand-wash/60 border border-brand/30 text-xs text-foreground animate-in fade-in-50">
+                <div className="flex items-center gap-2">
+                  <SparklesIcon className="size-4 text-brand shrink-0" />
+                  <span>
+                    Bạn đang ở chế độ <strong>Lộ trình mục tiêu 4 năm</strong> (như Lớp 8) do chưa có điểm học bạ Lớp 9.
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSwitchToGrade9Transcript}
+                  className="text-xs font-semibold bg-surface border-brand/50 text-brand hover:bg-brand hover:text-white shrink-0"
+                >
+                  + Quay lại nhập bảng điểm Lớp 9
+                </Button>
+              </div>
+            )}
+
             <div className="rounded-xl border border-brand/30 bg-brand-wash/30 p-4 space-y-1">
               <div className="flex items-center gap-2">
                 <SparklesIcon className="size-4 text-brand" />
@@ -1769,7 +1885,11 @@ export function Step2Transcript({
                           e.stopPropagation();
                           handleRemoveCurrentGradeYear();
                         }}
-                        title={`Chưa có điểm ${y.gradeName}? Bấm để xóa khối này`}
+                        title={
+                          isGrade9
+                            ? "Chưa có điểm Lớp 9? Bấm để xóa và chuyển sang lộ trình mục tiêu 4 năm như Lớp 8"
+                            : `Chưa có điểm ${y.gradeName}? Bấm để xóa khối này`
+                        }
                         aria-label={`Xóa khối ${y.gradeName}`}
                         className="ml-1 p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
                       >
@@ -1796,7 +1916,7 @@ export function Step2Transcript({
                 )}
 
               {/* Nút bổ sung Lớp 9 nếu danh sách năm chưa có */}
-              {!years.some((y) => normalizeGrade(y.gradeName) === "lop 9") && (
+              {!years.some((y) => normalizeGrade(y.gradeName) === "lop 9") && !isGrade9 && (
                 <Button
                   type="button"
                   size="sm"
@@ -1852,8 +1972,10 @@ export function Step2Transcript({
                   <div className="leading-relaxed">
                     💡 <strong>Lưu ý:</strong> Bạn đang học{" "}
                     <span className="font-semibold text-foreground">{years[activeYearIndex].gradeName}</span> nhưng
-                    chưa học xong hoặc chưa có điểm học kỳ nào? Bạn có thể tạm xóa khối này để tiếp tục nộp hồ sơ bằng
-                    điểm các năm trước.
+                    chưa học xong hoặc chưa có điểm học kỳ nào?{" "}
+                    {isGrade9
+                      ? "Bạn có thể xóa khối này để chuyển sang thiết lập lộ trình mục tiêu 4 năm cấp 3 (như Lớp 8)."
+                      : "Bạn có thể tạm xóa khối này để tiếp tục nộp hồ sơ bằng điểm các năm trước."}
                   </div>
                   <Button
                     type="button"
@@ -1863,7 +1985,7 @@ export function Step2Transcript({
                     className="text-destructive hover:bg-destructive/10 border-destructive/30 shrink-0 text-xs font-medium"
                   >
                     <Trash2Icon className="size-3 mr-1" />
-                    Xóa khối {years[activeYearIndex].gradeName}
+                    {isGrade9 ? "Xóa Lớp 9 (Chuyển sang như Lớp 8)" : `Xóa khối ${years[activeYearIndex].gradeName}`}
                   </Button>
                 </div>
               )}
