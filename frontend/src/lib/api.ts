@@ -268,10 +268,10 @@ export const parentLinksApi = {
     }),
 
   // [UC-115] Không cần đăng nhập: link một lần trong mail là xác thực
-  acceptInvite: (token: string, isGuardian: boolean) =>
+  acceptInvite: (token: string, isGuardian: boolean, policyVersion?: string) =>
     apiFetch<ParentLinkResponse<ParentInviteInfo>>("/api/v1/parent-links/invite/accept", {
       method: "POST",
-      body: JSON.stringify({ token, isGuardian }),
+      body: JSON.stringify({ token, isGuardian, policyVersion }),
     }),
 
   rejectInvite: (token: string) =>
