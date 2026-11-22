@@ -2698,6 +2698,133 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("policy_alerts", "app");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.PolicyDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("BasedOnId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("based_on_id")
+                        .HasComment("Bản được chép ra để tạo nháp này; trống nếu soạn từ đầu.");
+
+                    b.Property<string>("ChangeSummary")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("change_summary")
+                        .HasComment("Tóm tắt thay đổi so với bản trước; bắt buộc khi công bố, hiện cho người dùng khi được hỏi đồng ý lại.");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content")
+                        .HasComment("Toàn văn, Markdown đơn giản. Bản đã công bố không sửa.");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id")
+                        .HasComment("Admin tạo bản (nháp). Xóa tài khoản thì để trống.");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind")
+                        .HasComment("Loại: terms_of_use | privacy_policy | child_data_consent | forum_rules.");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at")
+                        .HasComment("Lúc công bố (bắt đầu hiệu lực).");
+
+                    b.Property<Guid?>("PublishedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("published_by_user_id")
+                        .HasComment("Admin công bố. Xóa tài khoản thì để trống.");
+
+                    b.Property<bool>("RequiresReconsent")
+                        .HasColumnType("boolean")
+                        .HasColumnName("requires_reconsent")
+                        .HasComment("Bản này có bắt người dùng đồng ý lại không (UC-104).");
+
+                    b.Property<DateTime?>("RetiredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retired_at")
+                        .HasComment("Lúc hết hiệu lực (có bản mới công bố thay).");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status")
+                        .HasComment("draft (nháp, sửa được) | published (đang hiệu lực, khóa) | retired (hết hiệu lực, giữ để tra cứu).");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title")
+                        .HasComment("Tiêu đề hiển thị.");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("Version")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("version")
+                        .HasComment("Số phiên bản yyyy-MM (thêm -02, -03 nếu một tháng nhiều bản), đặt lúc công bố. Trống khi còn là nháp.");
+
+                    b.HasKey("Id")
+                        .HasName("pk_policy_documents");
+
+                    b.HasIndex("BasedOnId")
+                        .HasDatabaseName("ix_policy_documents_based_on_id");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("ix_policy_documents_created_by_user_id");
+
+                    b.HasIndex("PublishedByUserId")
+                        .HasDatabaseName("ix_policy_documents_published_by_user_id");
+
+                    b.HasIndex("Kind", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("ix_policy_documents_kind_version")
+                        .HasFilter("version IS NOT NULL");
+
+                    b.HasIndex(new[] { "Kind" }, "one_draft")
+                        .IsUnique()
+                        .HasDatabaseName("ux_policy_documents_one_draft")
+                        .HasFilter("status = 'draft'");
+
+                    b.HasIndex(new[] { "Kind" }, "one_published")
+                        .IsUnique()
+                        .HasDatabaseName("ux_policy_documents_one_published")
+                        .HasFilter("status = 'published'");
+
+                    b.ToTable("policy_documents", "app", t =>
+                        {
+                            t.HasComment("[UC-103] Các phiên bản chính sách và điều khoản (toàn văn mỗi bản). Bản đã công bố không sửa được; muốn đổi thì tạo bản mới. Mỗi loại chỉ có một bản đang hiệu lực và tối đa một bản nháp.");
+
+                            t.HasCheckConstraint("ck_policy_documents_draft_shape", "status <> 'draft' OR (version IS NULL AND published_at IS NULL AND retired_at IS NULL)");
+
+                            t.HasCheckConstraint("ck_policy_documents_kind", "kind IN ('terms_of_use', 'privacy_policy', 'child_data_consent', 'forum_rules')");
+
+                            t.HasCheckConstraint("ck_policy_documents_published_shape", "status = 'draft' OR (version IS NOT NULL AND published_at IS NOT NULL AND change_summary IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_policy_documents_retired_shape", "(status = 'retired') = (retired_at IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_policy_documents_status", "status IN ('draft', 'published', 'retired')");
+                        });
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ProfileActivity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5885,6 +6012,27 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserSubscriptionId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_payment_transactions_user_subscriptions_user_subscription_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.PolicyDocument", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.PolicyDocument", null)
+                        .WithMany()
+                        .HasForeignKey("BasedOnId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_policy_documents_policy_documents_based_on_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_policy_documents_users_created_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("PublishedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_policy_documents_users_published_by_user_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ProfileActivity", b =>
