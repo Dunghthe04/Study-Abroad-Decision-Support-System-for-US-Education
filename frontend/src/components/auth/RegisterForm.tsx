@@ -316,7 +316,15 @@ export function RegisterForm() {
               <Button
                 type="button"
                 variant={role === "student" ? "default" : "outline"}
-                onClick={() => setRole("student")}
+                onClick={() => {
+                  setRole("student");
+                  setFieldErrors((prev) => {
+                    const next = { ...prev };
+                    delete next.dateOfBirth;
+                    delete next.parentEmail;
+                    return next;
+                  });
+                }}
               >
                 <GraduationCapIcon aria-hidden="true" />
                 Học sinh
@@ -324,7 +332,15 @@ export function RegisterForm() {
               <Button
                 type="button"
                 variant={role === "parent" ? "default" : "outline"}
-                onClick={() => setRole("parent")}
+                onClick={() => {
+                  setRole("parent");
+                  setFieldErrors((prev) => {
+                    const next = { ...prev };
+                    delete next.dateOfBirth;
+                    delete next.parentEmail;
+                    return next;
+                  });
+                }}
               >
                 <UsersIcon aria-hidden="true" />
                 Phụ huynh
