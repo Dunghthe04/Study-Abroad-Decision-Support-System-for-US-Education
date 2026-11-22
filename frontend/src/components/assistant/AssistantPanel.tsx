@@ -28,6 +28,7 @@ import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { isAuthRoute } from "@/lib/layout-routes";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
 import { BudgetWidget } from "./BudgetWidget";
+import { ChatHistoryPopover } from "./ChatHistoryPopover";
 import { CenterCardsWidget } from "./CenterCardsWidget";
 import { ChatText } from "./ChatText";
 import { MajorWidget } from "./MajorWidget";
@@ -118,6 +119,8 @@ export function AssistantPanel() {
             >
               <PlusIcon className="size-4.5" />
             </Button>
+            {/* Lịch sử: chỉ khi được chat (đã đăng nhập, không bị chặn tuổi). Chọn một phiên để mở lại được nối ở bước tiếp theo */}
+            {canSend ? <ChatHistoryPopover currentSessionId={null} disabled={loading} onSelect={() => undefined} /> : null}
             <h2 className="min-w-0 flex-1 truncate font-heading text-base font-semibold text-ink">USDSS Advisor</h2>
             <div className="flex shrink-0 items-center rounded-lg border border-line p-0.5">
               <IconButton
