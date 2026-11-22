@@ -43,3 +43,9 @@ export interface PendingQuestion {
   quickReplies: QuickReply[];
   widget: ChatWidget | null;
 }
+
+/** Kết quả đổi tên phiên: tên đã chuẩn hóa mà hệ thống lưu. */
+export interface RenamedChatSession {
+  id: string;
+  title: string;
+}

@@ -153,6 +153,10 @@ export function AssistantPanel() {
                 currentSessionId={currentSessionId}
                 disabled={loading || openingSession}
                 onSelect={(id) => void openSession(id)}
+                // Xóa đúng phiên đang mở thì khung chat chuyển sang cuộc trò chuyện mới (phiên đó không hỏi tiếp được nữa)
+                onDeleted={(id) => {
+                  if (id === currentSessionId) newChat();
+                }}
               />
             ) : null}
             <h2 className="min-w-0 flex-1 truncate font-heading text-base font-semibold text-ink">USDSS Advisor</h2>

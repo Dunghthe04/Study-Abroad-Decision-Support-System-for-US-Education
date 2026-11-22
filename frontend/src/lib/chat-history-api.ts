@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api";
-import type { ChatHistoryMessages, ChatSessionPage, PendingQuestion } from "@/types/chat-history";
+import type { ChatHistoryMessages, ChatSessionPage, PendingQuestion, RenamedChatSession } from "@/types/chat-history";
 
 const base = "/api/v1/advisor/sessions";
 
@@ -21,6 +21,13 @@ export const chatHistoryApi = {
 
   /** Câu hồ sơ đang chờ của phiên kèm nút và công cụ dựng lại (chỉ đọc, không tính lượt). */
   pending: (sessionId: string) => apiFetch<PendingQuestion>(`${base}/${encodeURIComponent(sessionId)}/pending`),
+
+  /** Đổi tên phiên (tối đa 100 ký tự, không để trống); trả tên đã chuẩn hóa mà hệ thống lưu. */
+  rename: (sessionId: string, title: string) =>
+    apiFetch<RenamedChatSession>(`${base}/${encodeURIComponent(sessionId)}`, { method: "PATCH", body: JSON.stringify({ title }) }),
+
+  /** Xóa phiên khỏi lịch sử (xóa mềm): không hiện, không mở lại, không hỏi tiếp được nữa. */
+  remove: (sessionId: string) => apiFetch<void>(`${base}/${encodeURIComponent(sessionId)}`, { method: "DELETE" }),
 };
 
 /** "vừa xong", "5 phút", "3 giờ", "2 ngày", quá 30 ngày thì ngày đầy đủ. now truyền vào để test được. */
