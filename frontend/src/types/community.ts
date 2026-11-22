@@ -1,5 +1,12 @@
 import type { UserRole } from "@/types/api";
 
+export interface CommunityReplyToDto {
+  id: string;
+  userId: string | null;
+  authorName: string;
+  contentSnippet: string;
+}
+
 export interface CommunityMessageDto {
   id: string;
   userId: string | null;
@@ -8,6 +15,8 @@ export interface CommunityMessageDto {
   content: string;
   createdAt: string;
   isMine: boolean;
+  imageUrl?: string | null;
+  replyTo?: CommunityReplyToDto | null;
 }
 
 export interface CommunityPresenceDto {

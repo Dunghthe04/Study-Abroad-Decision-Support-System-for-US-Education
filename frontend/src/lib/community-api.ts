@@ -24,11 +24,21 @@ export const communityApi = {
     return apiFetch<CommunityMessageDto[]>(`/api/v1/community/messages${qs ? `?${qs}` : ""}`);
   },
   restriction: () => apiFetch<CommunityRestrictionDto>("/api/v1/community/restriction"),
-  send: (content: string) =>
+  send: (content: string, replyToId?: string) =>
     apiFetch<CommunityMessageDto>("/api/v1/community/messages", {
       method: "POST",
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, replyToId: replyToId || null }),
     }),
+  sendImage: (file: File, content?: string, replyToId?: string) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (content) fd.append("content", content);
+    if (replyToId) fd.append("replyToId", replyToId);
+    return apiFetch<CommunityMessageDto>("/api/v1/community/messages/image", {
+      method: "POST",
+      body: fd,
+    });
+  },
   report: (id: string, reason: string, detail?: string) =>
     apiFetch<null>(`/api/v1/community/messages/${encodeURIComponent(id)}/report`, {
       method: "POST",

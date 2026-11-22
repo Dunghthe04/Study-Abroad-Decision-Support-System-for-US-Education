@@ -1,13 +1,25 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownIcon, EyeOffIcon, MessagesSquareIcon, SendIcon, UsersIcon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  EyeOffIcon,
+  FlagIcon,
+  ImageIcon,
+  MessagesSquareIcon,
+  QuoteIcon,
+  SendIcon,
+  SmileIcon,
+  UsersIcon,
+  XIcon,
+} from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import { ReportMessageControl } from "@/components/lead/LeadMessageParts";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,7 +33,11 @@ import { cn } from "@/lib/utils";
 import type { UserRole } from "@/types/api";
 import type { CommunityMessageDto, CommunityPresenceDto, CommunityRestrictionDto } from "@/types/community";
 
+const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
+
 const MAX_LEN = 2000;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -67,6 +83,7 @@ function roleLabel(role: string) {
 
 /** Tự biến link URL trong văn bản thành thẻ <a> bấm được, loại trừ dấu câu cuối link */
 function renderMessageContent(content: string) {
+  if (!content) return null;
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = content.split(urlRegex);
   return parts.map((part, index) => {
@@ -99,52 +116,55 @@ function MemberList({ members, currentUserId }: { members: CommunityPresenceDto[
   }
   if (members.length === 1 && members[0].userId === currentUserId) {
     return (
-      <div className="p-3">
-        <p className="text-xs text-muted-foreground mb-2">Chỉ có bạn trong phòng.</p>
-        <ul className="space-y-1">
-          <li className="flex items-center gap-2 rounded-lg px-2 py-1.5 bg-muted/40">
-            <span className="relative">
-              <Avatar size="sm">
-                <AvatarFallback className="bg-brand-wash text-[10px] font-semibold text-brand-ink">
-                  {initials(members[0].fullName)}
-                </AvatarFallback>
-              </Avatar>
-              <span className="absolute right-0 bottom-0 size-2 rounded-full bg-ok ring-2 ring-background" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{members[0].fullName} (Bạn)</p>
-              {members[0].role ? <p className="truncate text-[11px] text-muted-foreground">{roleLabel(members[0].role)}</p> : null}
-            </div>
-          </li>
-        </ul>
+      <div className="px-3 py-4 text-xs text-muted-foreground space-y-2">
+        <p className="font-medium text-foreground">Bạn đang ở trong phòng một mình.</p>
+        <p>Khi có người khác tham gia, họ sẽ xuất hiện tại đây.</p>
       </div>
     );
   }
 
   return (
-    <ul className="space-y-1 p-2">
+    <ul className="divide-y text-sm">
       {members.map((m) => {
-        const isMe = m.userId === currentUserId;
-        const lastSeen = m.lastSeenAt ? formatClockTime(m.lastSeenAt) : "Đang online";
+        const isSelf = m.userId === currentUserId;
+        const lastSeen = m.lastSeenAt ? new Date(m.lastSeenAt) : null;
+        let lastSeenText = "Đang online";
+        if (lastSeen && !Number.isNaN(lastSeen.getTime())) {
+          const diffMs = Date.now() - lastSeen.getTime();
+          if (diffMs < 2 * 60 * 1000) {
+            lastSeenText = "Vừa xong";
+          } else if (diffMs < 60 * 60 * 1000) {
+            lastSeenText = `${Math.floor(diffMs / (60 * 1000))} phút trước`;
+          } else {
+            lastSeenText = lastSeen.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+          }
+        }
+
         return (
-          <li key={m.userId} className={cn("flex items-center gap-2 rounded-lg px-2 py-1.5", isMe && "bg-muted/40")}>
-            <span className="relative">
+          <li key={m.userId} className={cn("flex items-center gap-2.5 px-3 py-2", isSelf && "bg-muted/40")}>
+            <div className="relative">
               <Avatar size="sm">
-                <AvatarFallback className="bg-brand-wash text-[10px] font-semibold text-brand-ink">
-                  {initials(m.fullName)}
-                </AvatarFallback>
+                <AvatarFallback className="text-[10px]">{initials(m.fullName)}</AvatarFallback>
               </Avatar>
-              <span className="absolute right-0 bottom-0 size-2 rounded-full bg-ok ring-2 ring-background" />
-            </span>
+              <span
+                className="absolute bottom-0 right-0 size-2 rounded-full bg-emerald-500 ring-2 ring-background"
+                title="Đang hoạt động"
+                aria-hidden
+              />
+            </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">
-                {m.fullName}
-                {isMe ? " (Bạn)" : ""}
-              </p>
-              <p className="truncate text-[11px] text-muted-foreground">
-                {m.role ? `${roleLabel(m.role)} · ` : ""}
-                {lastSeen}
-              </p>
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-xs font-medium leading-none">
+                  {m.fullName}
+                  {isSelf ? " (bạn)" : ""}
+                </p>
+                {m.role ? (
+                  <Badge variant="neutral" className="h-4 px-1 text-[9px]">
+                    {roleLabel(m.role)}
+                  </Badge>
+                ) : null}
+              </div>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">{lastSeenText}</p>
             </div>
           </li>
         );
@@ -168,10 +188,30 @@ export function CommunityChatView() {
   const [confirmingHideId, setConfirmingHideId] = useState<string | null>(null);
   const [newMessagesCount, setNewMessagesCount] = useState(0);
 
+  // Trả lời tin nhắn
+  const [replyingTo, setReplyingTo] = useState<CommunityMessageDto | null>(null);
+
+  // Đính kèm ảnh
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Lightbox xem ảnh lớn
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  // Emoji Popover
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  // Popup Báo cáo tin nhắn
+  const [reportTarget, setReportTarget] = useState<CommunityMessageDto | null>(null);
+  const [reportReason, setReportReason] = useState("");
+  const [reportDetail, setReportDetail] = useState("");
+  const [submittingReport, setSubmittingReport] = useState(false);
+
   const listRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isNearBottomRef = useRef(true);
   const initialLoadedRef = useRef(false);
-  // Bản sao danh sách hiện tại để biết tin nào thật sự mới khi đếm "Có N tin mới"
   const messagesRef = useRef<CommunityMessageDto[]>([]);
 
   useEffect(() => {
@@ -224,8 +264,6 @@ export function CommunityChatView() {
     setHasMore(batch.length >= 50);
   }, [mergeMessages]);
 
-  // Lần tải đầu: lúc tải xong danh sách vẫn đang là vòng xoay, nên chỉ cuộn xuống tin mới nhất
-  // sau khi loading = false và tin nhắn đã thật sự hiện ra
   useEffect(() => {
     if (loading || initialLoadedRef.current) return;
     initialLoadedRef.current = true;
@@ -252,13 +290,14 @@ export function CommunityChatView() {
 
       requestAnimationFrame(() => {
         if (el) {
-          el.scrollTop = el.scrollHeight - prevScrollHeight + prevScrollTop;
+          const heightDiff = el.scrollHeight - prevScrollHeight;
+          el.scrollTop = prevScrollTop + heightDiff;
         }
       });
     } catch (err) {
       toast.add({
         type: "error",
-        title: "Không tải được tin cũ hơn",
+        title: "Không tải được tin cũ",
         description: err instanceof ApiError ? err.message : "Thử lại sau.",
       });
     } finally {
@@ -266,35 +305,33 @@ export function CommunityChatView() {
     }
   }, [messages, loadingOlder, hasMore, mergeMessages]);
 
-  const handleScroll = useCallback(() => {
+  const handleScroll = () => {
     const el = listRef.current;
     if (!el) return;
-    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const isNear = distanceToBottom <= 100;
-    isNearBottomRef.current = isNear;
-    if (isNear) {
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isNearBottomRef.current = distanceFromBottom < 100;
+
+    if (isNearBottomRef.current && newMessagesCount > 0) {
       setNewMessagesCount(0);
     }
-    // Infinite scroll: khi kéo lên sát đỉnh (< 60px) và còn tin cũ
-    if (el.scrollTop < 60 && hasMore && !loadingOlder && !loading) {
+
+    if (el.scrollTop < 60 && !loadingOlder && hasMore) {
       void loadOlder();
     }
-  }, [hasMore, loadingOlder, loading, loadOlder]);
+  };
 
   const resync = useCallback(async () => {
     try {
-      const newest = messages.length > 0 ? messages[messages.length - 1] : null;
-      if (newest) {
-        let lastTime = newest.createdAt;
-        let lastId = newest.id;
-        let fetchedTotal = 0;
+      const currentList = messagesRef.current;
+      const latest = currentList[currentList.length - 1];
+      if (latest) {
         const newMessages: CommunityMessageDto[] = [];
+        let lastTime = latest.createdAt;
+        let lastId: string | undefined = latest.id;
+        let fetchedTotal = 0;
+
         while (fetchedTotal < 200) {
-          const batch = await communityApi.listMessages({
-            after: lastTime,
-            afterId: lastId,
-            take: 50,
-          });
+          const batch = await communityApi.listMessages({ after: lastTime, afterId: lastId, take: 50 });
           if (batch.length === 0) break;
           newMessages.push(...batch);
           fetchedTotal += batch.length;
@@ -304,13 +341,11 @@ export function CommunityChatView() {
         }
 
         if (fetchedTotal >= 200) {
-          // Lỡ quá nhiều tin: thay hẳn danh sách bằng 50 tin mới nhất. Gộp vào danh sách cũ sẽ để lại
-          // một khoảng hổng ở giữa mà loadOlder (chỉ tải từ tin cũ nhất trở về trước) không bao giờ lấp được.
-          const latest = await communityApi.listMessages({ take: 50 });
+          const latestBatch = await communityApi.listMessages({ take: 50 });
           setMessages(
-            [...latest].reverse().map((m) => ({ ...m, isMine: m.userId === user?.id || m.isMine })),
+            [...latestBatch].reverse().map((m) => ({ ...m, isMine: m.userId === user?.id || m.isMine })),
           );
-          setHasMore(latest.length >= 50);
+          setHasMore(latestBatch.length >= 50);
           setNewMessagesCount(0);
           requestAnimationFrame(() => scrollToBottom(false));
         } else if (newMessages.length > 0) {
@@ -324,7 +359,7 @@ export function CommunityChatView() {
     } catch {
       // Background resync error ignored
     }
-  }, [messages, mergeMessages, loadInitial, user?.id, scrollToBottom]);
+  }, [mergeMessages, loadInitial, user?.id, scrollToBottom]);
 
   useEffect(() => {
     let cancelled = false;
@@ -366,7 +401,7 @@ export function CommunityChatView() {
       setRestriction(data.isRestricted ? data : null);
       if (data.isRestricted) {
         toast.add({
-          type: "warning",
+          type: "warn",
           title: "Thông báo hạn chế chat",
           description: data.reason ? `Lý do: ${data.reason}` : "Bạn đã bị hạn chế chat.",
         });
@@ -380,14 +415,87 @@ export function CommunityChatView() {
     },
   });
 
+  const handleStartReply = (msg: CommunityMessageDto) => {
+    setReplyingTo(msg);
+    textareaRef.current?.focus();
+  };
+
+  const handleCancelReply = () => {
+    setReplyingTo(null);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      toast.add({
+        type: "error",
+        title: "Định dạng không hỗ trợ",
+        description: "Chỉ nhận ảnh JPG, PNG hoặc WebP.",
+      });
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast.add({
+        type: "error",
+        title: "Ảnh quá lớn",
+        description: "Vui lòng chọn ảnh dưới 5MB.",
+      });
+      return;
+    }
+
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+
+    setSelectedImage(file);
+    setImagePreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleRemoveSelectedImage = () => {
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+    setSelectedImage(null);
+    setImagePreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleInsertEmoji = (emoji: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setDraft((prev) => (prev + emoji).slice(0, MAX_LEN));
+      return;
+    }
+    const start = textarea.selectionStart ?? draft.length;
+    const end = textarea.selectionEnd ?? draft.length;
+    const next = draft.slice(0, start) + emoji + draft.slice(end);
+    if (next.length > MAX_LEN) return;
+    setDraft(next);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const newPos = start + emoji.length;
+      textarea.setSelectionRange(newPos, newPos);
+    });
+  };
+
   const send = async () => {
     const content = draft.trim();
-    if (!content || sending || restriction?.isRestricted) return;
+    if ((!content && !selectedImage) || sending || restriction?.isRestricted) return;
     setSending(true);
     try {
-      const saved = await communityApi.send(content);
+      let saved: CommunityMessageDto;
+      if (selectedImage) {
+        saved = await communityApi.sendImage(selectedImage, content || undefined, replyingTo?.id);
+        handleRemoveSelectedImage();
+      } else {
+        saved = await communityApi.send(content, replyingTo?.id);
+      }
       mergeMessages([{ ...saved, isMine: true }], { isMine: true });
       setDraft("");
+      setReplyingTo(null);
     } catch (err) {
       toast.add({
         type: "error",
@@ -396,6 +504,41 @@ export function CommunityChatView() {
       });
     } finally {
       setSending(false);
+    }
+  };
+
+  const openReportDialog = (msg: CommunityMessageDto) => {
+    setReportTarget(msg);
+    setReportReason("");
+    setReportDetail("");
+  };
+
+  const handleSendReport = async () => {
+    if (!reportTarget) return;
+    const reason = reportReason.trim();
+    if (reason.length < 3 || reason.length > 64) {
+      toast.add({
+        type: "error",
+        title: "Lý do không hợp lệ",
+        description: "Lý do báo cáo phải từ 3 đến 64 ký tự.",
+      });
+      return;
+    }
+
+    setSubmittingReport(true);
+    try {
+      await communityApi.report(reportTarget.id, reason, reportDetail.trim() || undefined);
+      setReported((prev) => new Set(prev).add(reportTarget.id));
+      toast.add({ type: "success", title: "Đã gửi báo cáo vi phạm" });
+      setReportTarget(null);
+    } catch (err) {
+      toast.add({
+        type: "error",
+        title: "Không gửi được báo cáo",
+        description: err instanceof ApiError ? err.message : "Thử lại sau.",
+      });
+    } finally {
+      setSubmittingReport(false);
     }
   };
 
@@ -457,27 +600,27 @@ export function CommunityChatView() {
 
   return (
     <ProtectedRoute>
-      <section className="space-y-4 pb-4">
-        <div>
-          <h1 className="font-heading text-h2">Hỏi đáp cộng đồng</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Phòng chat chung cho thành viên đã đăng nhập. Hỏi nhanh về du học, hồ sơ, trường — không thay thế trợ lý AI.
-          </p>
-        </div>
-        <Card className="overflow-hidden py-0 h-[calc(100vh-14rem)] min-h-[500px] max-h-[850px] flex flex-col">
-          <CardHeader className="flex-row items-center justify-between gap-3 border-b py-3 shrink-0">
-            <div className="flex items-center gap-2">
-              <MessagesSquareIcon className="size-4 text-brand" aria-hidden />
+      <section className="container mx-auto flex max-w-6xl flex-col gap-4 py-6">
+        <Card className="flex flex-col h-[calc(100vh-14rem)] min-h-[500px] max-h-[850px]">
+          <CardHeader className="flex flex-row items-center justify-between gap-4 border-b pb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-brand-wash text-brand-ink">
+                <MessagesSquareIcon className="size-5" />
+              </div>
               <div>
-                <CardTitle className="text-base">Phòng chung</CardTitle>
-                <CardDescription>Tin nhắn realtime, lưu trên diễn đàn</CardDescription>
+                <CardTitle className="text-lg">Kênh thảo luận chung</CardTitle>
+                <CardDescription>Trò chuyện trực tiếp cùng học sinh và phụ huynh khác.</CardDescription>
               </div>
             </div>
             <Sheet>
-              <SheetTrigger render={<Button variant="outline" size="sm" className="lg:hidden gap-1.5" />}>
-                <UsersIcon className="size-3.5" />
-                {memberCount}
-              </SheetTrigger>
+              <SheetTrigger
+                render={
+                  <Button variant="outline" size="sm" className="lg:hidden cursor-pointer">
+                    <UsersIcon className="size-4" />
+                    <span>{memberCount}</span>
+                  </Button>
+                }
+              />
               <SheetContent side="right" className="w-[280px] p-0">
                 <SheetHeader className="sr-only">
                   <SheetTitle>Đang trong phòng</SheetTitle>
@@ -525,11 +668,53 @@ export function CommunityChatView() {
                               )}
                               <div
                                 className={cn(
-                                  "group flex gap-2.5 rounded-lg px-2 py-1.5 transition-colors",
-                                  m.isMine && "bg-brand-wash/50",
+                                  "group/msg relative flex gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-muted/40",
+                                  m.isMine && "bg-brand-wash/40 hover:bg-brand-wash/60",
                                   isSameAuthor && "mt-0.5 pt-0.5",
                                 )}
                               >
+                                {/* Thanh công cụ hover: Trả lời & Báo cáo & Ẩn tin */}
+                                <div className="absolute right-2 -top-3 hidden group-hover/msg:flex items-center gap-0.5 rounded-md border border-border/70 bg-background px-1 py-0.5 shadow-sm z-10 animate-in fade-in zoom-in-95">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartReply(m)}
+                                    className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors cursor-pointer"
+                                    title="Trả lời tin nhắn này"
+                                    aria-label="Trả lời"
+                                  >
+                                    <QuoteIcon className="size-3.5" />
+                                  </button>
+                                  {!m.isMine && (
+                                    <button
+                                      type="button"
+                                      disabled={reported.has(m.id)}
+                                      onClick={() => openReportDialog(m)}
+                                      className={cn(
+                                        "p-1 rounded transition-colors cursor-pointer",
+                                        reported.has(m.id)
+                                          ? "text-muted-foreground/40 cursor-not-allowed"
+                                          : "text-muted-foreground hover:text-destructive hover:bg-destructive/10",
+                                      )}
+                                      title={reported.has(m.id) ? "Đã gửi báo cáo" : "Báo cáo vi phạm"}
+                                      aria-label="Báo cáo"
+                                    >
+                                      <FlagIcon className="size-3.5" />
+                                    </button>
+                                  )}
+                                  {isStaff && (
+                                    <button
+                                      type="button"
+                                      disabled={hidingId === m.id}
+                                      onClick={() => setConfirmingHideId(m.id)}
+                                      className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors cursor-pointer"
+                                      title="Ẩn tin nhắn này"
+                                      aria-label="Ẩn tin"
+                                    >
+                                      <EyeOffIcon className="size-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+
                                 {isSameAuthor ? (
                                   <div className="w-8 flex-shrink-0" />
                                 ) : (
@@ -551,66 +736,62 @@ export function CommunityChatView() {
                                       <span className="text-[11px] text-muted-foreground">{formatClockTime(m.createdAt)}</span>
                                     </div>
                                   )}
-                                  <p className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-relaxed">
-                                    {renderMessageContent(m.content)}
-                                  </p>
-                                  <div className="mt-1 flex items-center gap-3">
-                                    {!m.isMine && (
-                                      <ReportMessageControl
-                                        isReported={reported.has(m.id)}
-                                        onReport={async (reason) => {
-                                          try {
-                                            await communityApi.report(m.id, reason.trim() || "Vi phạm");
-                                            setReported((prev) => new Set(prev).add(m.id));
-                                            toast.add({ type: "success", title: "Đã gửi báo cáo" });
-                                          } catch (err) {
-                                            toast.add({
-                                              type: "error",
-                                              title: "Không gửi được báo cáo",
-                                              description: err instanceof ApiError ? err.message : "Thử lại sau.",
-                                            });
-                                            throw err;
-                                          }
-                                        }}
+
+                                  {/* Hiển thị trích dẫn trả lời */}
+                                  {m.replyTo && (
+                                    <div className="mt-1 flex items-start gap-1.5 rounded-r bg-muted/60 border-l-2 border-brand/60 px-2 py-1 text-xs text-muted-foreground">
+                                      <QuoteIcon className="size-3 text-brand shrink-0 mt-0.5" />
+                                      <div className="min-w-0">
+                                        <span className="font-medium text-foreground">{m.replyTo.authorName}: </span>
+                                        <span className="truncate inline-block max-w-[340px] align-bottom">
+                                          {m.replyTo.contentSnippet}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Nội dung chữ */}
+                                  {m.content ? (
+                                    <p className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-relaxed">
+                                      {renderMessageContent(m.content)}
+                                    </p>
+                                  ) : null}
+
+                                  {/* Ảnh đính kèm */}
+                                  {m.imageUrl && (
+                                    <div className="mt-1.5">
+                                      <img
+                                        src={m.imageUrl}
+                                        alt="Ảnh đính kèm"
+                                        loading="lazy"
+                                        onClick={() => setLightboxUrl(m.imageUrl || null)}
+                                        className="max-h-64 max-w-sm rounded-lg border border-border/50 object-cover shadow-xs cursor-pointer hover:opacity-95 transition-opacity"
                                       />
-                                    )}
-                                    {isStaff && (
-                                      <>
-                                        {confirmingHideId === m.id ? (
-                                          <div className="flex items-center gap-1.5 bg-destructive/10 px-2 py-0.5 rounded text-[11px]">
-                                            <span className="text-destructive font-medium">Ẩn tin này?</span>
-                                            <button
-                                              type="button"
-                                              disabled={hidingId === m.id}
-                                              onClick={() => void handleModeratorHide(m.id)}
-                                              className="text-destructive font-semibold hover:underline cursor-pointer"
-                                            >
-                                              Có
-                                            </button>
-                                            <span className="text-muted-foreground">·</span>
-                                            <button
-                                              type="button"
-                                              onClick={() => setConfirmingHideId(null)}
-                                              className="text-muted-foreground hover:underline cursor-pointer"
-                                            >
-                                              Hủy
-                                            </button>
-                                          </div>
-                                        ) : (
-                                          <button
-                                            type="button"
-                                            disabled={hidingId === m.id}
-                                            onClick={() => setConfirmingHideId(m.id)}
-                                            className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive focus-visible:outline-none"
-                                            title="Ẩn tin nhắn này"
-                                          >
-                                            <EyeOffIcon className="size-3" aria-hidden />
-                                            Ẩn tin
-                                          </button>
-                                        )}
-                                      </>
-                                    )}
-                                  </div>
+                                    </div>
+                                  )}
+
+                                  {/* Moderator inline confirm hide */}
+                                  {isStaff && confirmingHideId === m.id && (
+                                    <div className="mt-1 flex items-center gap-1.5 bg-destructive/10 px-2 py-0.5 rounded text-[11px] w-fit">
+                                      <span className="text-destructive font-medium">Ẩn tin này?</span>
+                                      <button
+                                        type="button"
+                                        disabled={hidingId === m.id}
+                                        onClick={() => void handleModeratorHide(m.id)}
+                                        className="text-destructive font-semibold hover:underline cursor-pointer"
+                                      >
+                                        Có
+                                      </button>
+                                      <span className="text-muted-foreground">·</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setConfirmingHideId(null)}
+                                        className="text-muted-foreground hover:underline cursor-pointer"
+                                      >
+                                        Hủy
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </React.Fragment>
@@ -630,35 +811,148 @@ export function CommunityChatView() {
                     setNewMessagesCount(0);
                     scrollToBottom(true);
                   }}
-                  className="absolute bottom-16 left-1/2 -translate-x-1/2 shadow-lg bg-brand text-brand-foreground hover:bg-brand/90 px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all animate-in fade-in slide-in-from-bottom-2 z-10 cursor-pointer"
+                  className="absolute bottom-20 left-1/2 -translate-x-1/2 shadow-lg bg-brand text-brand-foreground hover:bg-brand/90 px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all animate-in fade-in slide-in-from-bottom-2 z-10 cursor-pointer"
                 >
                   <ArrowDownIcon className="size-3.5" />
                   <span>Có {newMessagesCount} tin mới</span>
                 </button>
               )}
 
-              <div className="border-t p-3 shrink-0">
+              {/* Vùng soạn thảo tin nhắn */}
+              <div className="border-t p-3 shrink-0 bg-background/50">
                 {restrictionNotice ? (
                   restrictionNotice
                 ) : (
-                  <div className="flex items-end gap-2">
-                    <Textarea
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value.slice(0, MAX_LEN))}
-                      placeholder="Viết tin nhắn công khai..."
-                      rows={2}
-                      disabled={!canSend || sending}
-                      className="min-h-12 resize-none"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          void send();
-                        }
-                      }}
-                    />
-                    <Button type="button" size="icon" disabled={!canSend || sending || !draft.trim()} onClick={() => void send()} aria-label="Gửi">
-                      <SendIcon className="size-4" />
-                    </Button>
+                  <div className="flex flex-col gap-2">
+                    {/* Thanh thông báo đang trả lời */}
+                    {replyingTo && (
+                      <div className="flex items-center justify-between rounded-md bg-muted/80 px-2.5 py-1 text-xs border border-border/50 animate-in fade-in">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <QuoteIcon className="size-3 text-brand shrink-0" />
+                          <span className="font-semibold text-brand truncate max-w-[120px]">{replyingTo.authorName}:</span>
+                          <span className="text-muted-foreground truncate max-w-[320px]">
+                            {replyingTo.content || (replyingTo.imageUrl ? "[Hình ảnh]" : "")}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCancelReply}
+                          className="text-muted-foreground hover:text-foreground p-0.5 rounded cursor-pointer"
+                          title="Hủy trả lời"
+                        >
+                          <XIcon className="size-3.5" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Preview ảnh đính kèm trước khi gửi */}
+                    {imagePreviewUrl && (
+                      <div className="flex items-center gap-2 animate-in fade-in">
+                        <div className="relative group/thumb inline-block">
+                          <img
+                            src={imagePreviewUrl}
+                            alt="Ảnh xem trước"
+                            className="h-16 w-16 object-cover rounded-md border border-border shadow-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleRemoveSelectedImage}
+                            className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full p-0.5 shadow-md hover:bg-destructive/90 cursor-pointer"
+                            title="Bỏ ảnh"
+                          >
+                            <XIcon className="size-3" />
+                          </button>
+                        </div>
+                        <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                          {selectedImage?.name}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-end gap-2">
+                      {/* Nút gửi ảnh */}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={handleFileSelect}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-9 shrink-0 text-muted-foreground hover:text-foreground cursor-pointer"
+                        disabled={!canSend || sending}
+                        onClick={() => fileInputRef.current?.click()}
+                        title="Đính kèm ảnh (tối đa 5MB)"
+                      >
+                        <ImageIcon className="size-4" />
+                      </Button>
+
+                      {/* Nút emoji */}
+                      <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+                        <PopoverTrigger
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-9 shrink-0 text-muted-foreground hover:text-foreground cursor-pointer"
+                              disabled={!canSend || sending}
+                              title="Chọn biểu cảm emoji"
+                            >
+                              <SmileIcon className="size-4" />
+                            </Button>
+                          }
+                        />
+                        <PopoverContent side="top" align="start" className="w-auto p-0 border-none shadow-xl">
+                          <React.Suspense
+                            fallback={
+                              <div className="flex items-center justify-center p-8 text-xs text-muted-foreground gap-2">
+                                <Spinner size="sm" /> Đang tải biểu cảm...
+                              </div>
+                            }
+                          >
+                            <EmojiPicker
+                              onEmojiClick={(emojiData) => handleInsertEmoji(emojiData.emoji)}
+                              autoFocusSearch={false}
+                              previewConfig={{ showPreview: false }}
+                              skinTonesDisabled
+                              lazyLoadEmojis
+                              width={320}
+                              height={380}
+                            />
+                          </React.Suspense>
+                        </PopoverContent>
+                      </Popover>
+
+                      <Textarea
+                        ref={textareaRef}
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value.slice(0, MAX_LEN))}
+                        placeholder={selectedImage ? "Thêm chú thích cho ảnh..." : "Viết tin nhắn công khai..."}
+                        rows={2}
+                        disabled={!canSend || sending}
+                        className="min-h-12 resize-none flex-1"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            void send();
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        disabled={!canSend || sending || (!draft.trim() && !selectedImage)}
+                        onClick={() => void send()}
+                        aria-label="Gửi"
+                        className="size-9 shrink-0 cursor-pointer"
+                      >
+                        {sending ? <Spinner size="sm" /> : <SendIcon className="size-4" />}
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -666,6 +960,98 @@ export function CommunityChatView() {
             <aside className="hidden min-h-0 h-full border-l lg:block">{sidebar}</aside>
           </CardContent>
         </Card>
+
+        {/* Modal Popup Báo cáo tin nhắn */}
+        <Dialog open={!!reportTarget} onOpenChange={(open) => !open && setReportTarget(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Báo cáo tin nhắn vi phạm</DialogTitle>
+              <DialogDescription>
+                Báo cáo sẽ được gửi tới đội ngũ kiểm duyệt viên để xem xét xử lý.
+              </DialogDescription>
+            </DialogHeader>
+
+            {reportTarget && (
+              <div className="rounded-md bg-muted/70 p-2.5 text-xs text-muted-foreground border border-border/40 space-y-1">
+                <p className="font-semibold text-foreground">{reportTarget.authorName}:</p>
+                <p className="line-clamp-2">
+                  {reportTarget.content || (reportTarget.imageUrl ? "[Đính kèm hình ảnh]" : "")}
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-3 py-1">
+              <div className="space-y-1.5">
+                <label htmlFor="report-reason" className="text-xs font-medium">
+                  Lý do báo cáo <span className="text-destructive">*</span>
+                </label>
+                <input
+                  id="report-reason"
+                  type="text"
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value.slice(0, 64))}
+                  placeholder="Ví dụ: Spam quảng cáo, từ ngữ thù địch, xúc phạm..."
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <p className="text-[10px] text-muted-foreground">Từ 3 đến 64 ký tự.</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="report-detail" className="text-xs font-medium">
+                  Chi tiết thêm (tùy chọn)
+                </label>
+                <textarea
+                  id="report-detail"
+                  value={reportDetail}
+                  onChange={(e) => setReportDetail(e.target.value.slice(0, 1000))}
+                  placeholder="Cung cấp thêm ngữ cảnh vi phạm nếu cần..."
+                  rows={2}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setReportTarget(null)}
+                disabled={submittingReport}
+                className="cursor-pointer"
+              >
+                Hủy
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => void handleSendReport()}
+                disabled={submittingReport || reportReason.trim().length < 3}
+                className="cursor-pointer"
+              >
+                {submittingReport ? <Spinner size="sm" /> : "Gửi báo cáo"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal Lightbox xem ảnh lớn */}
+        <Dialog open={!!lightboxUrl} onOpenChange={(open) => !open && setLightboxUrl(null)}>
+          <DialogContent className="max-w-4xl p-2 bg-background/95 backdrop-blur-md border-none flex flex-col items-center">
+            <DialogHeader className="sr-only">
+              <DialogTitle>Xem ảnh đính kèm</DialogTitle>
+              <DialogDescription>Ảnh xem kích thước lớn</DialogDescription>
+            </DialogHeader>
+            {lightboxUrl && (
+              <img
+                src={lightboxUrl}
+                alt="Ảnh phóng to"
+                className="max-h-[80vh] max-w-full rounded-md object-contain shadow-2xl"
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       </section>
     </ProtectedRoute>
   );
