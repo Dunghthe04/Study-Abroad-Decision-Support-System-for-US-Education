@@ -40,7 +40,6 @@ import { profileFlowApi } from "@/lib/profile-flow-api";
 import {
   calculateGradeTrend,
   calculateTranscriptGpa,
-  parseTermName,
   toGpa4,
   yearAverage,
 } from "@/lib/profile-flow-options";
@@ -210,18 +209,49 @@ const gradeOrder = (gradeName: string) => {
   return m ? (m[1] === "nam" ? 100 : 0) + Number(m[2]) : Number.MAX_SAFE_INTEGER;
 };
 
-type TermTarget = { gradeName: string | null; semester: 1 | 2 | "all" };
+type TermTarget = { gradeName: string | null; semester: 1 | 2 | "all" | null };
 
-// "Lớp 12 HK1" → { Lớp 12, 1 }; "Lớp 12 - Cả năm" → { Lớp 12, all }; nếu không có tên khối lớp → { null, 1 }
+// Trạng thái gán kỳ cho các term chưa rõ khối lớp / kỳ học:
+// - Nếu có 2 kỳ: hỏi chọn lớp -> điền cả 2 kỳ luôn
+// - Nếu không rõ lớp lẫn kỳ:
+//     + Bước 1 ("choose_grade"): hỏi chọn lớp
+//     + Bước 2 ("choose_semester"): hỏi chọn kỳ
+type PendingAssignStep = "choose_grade" | "choose_semester";
+
+// "Lớp 12 HK1" → { Lớp 12, 1 }; "Lớp 12 - Cả năm" → { Lớp 12, all }; "HK1" -> { null, 1 }; nếu không có gì -> { null, null }
 function resolveTerm(termName: string): TermTarget {
-  const parsed = parseTermName(termName);
-  if (parsed && parsed.gradeName) return parsed;
-  const allYear = /^(.*?)\s*[-–]?\s*(cả năm|ca nam)\s*$/i.exec(termName.trim());
-  if (allYear && allYear[1].trim()) return { gradeName: allYear[1].trim(), semester: "all" };
-  if (/^(lop|nam)\s*\d+$/i.test(termName.trim())) {
-    return { gradeName: termName.trim(), semester: "all" };
+  if (!termName || !termName.trim()) {
+    return { gradeName: null, semester: null };
   }
-  return { gradeName: null, semester: 1 };
+  const trimmed = termName.trim();
+
+  // 1. Kiểm tra format "Lớp 10 HK1" / "Lớp 11 - Học kỳ 2" / "HK1" / "Kỳ 2"
+  const m = /^(.*?)\s*-?\s*(?:HK|Học kỳ|Kỳ)\s*([12])\s*$/i.exec(trimmed);
+  if (m) {
+    const rawGrade = m[1].trim();
+    const sem: 1 | 2 = m[2] === "2" ? 2 : 1;
+    return {
+      gradeName: rawGrade ? rawGrade : null,
+      semester: sem,
+    };
+  }
+
+  // 2. Kiểm tra "Lớp 10 Cả năm" / "Lớp 12 - Ca nam" / "Cả năm"
+  const allYear = /^(.*?)\s*[-–]?\s*(cả năm|ca nam)\s*$/i.exec(trimmed);
+  if (allYear) {
+    const rawGrade = allYear[1].trim();
+    return {
+      gradeName: rawGrade ? rawGrade : null,
+      semester: "all",
+    };
+  }
+
+  // 3. Chỉ có tên lớp: "Lớp 10", "Lớp 11", "Năm 1"
+  if (/^(lop|nam)\s*\d+$/i.test(trimmed)) {
+    return { gradeName: trimmed, semester: "all" };
+  }
+
+  return { gradeName: null, semester: null };
 }
 
 // [UC-12] Lý do một ô điểm được tô cam, hiện ở tooltip
@@ -325,6 +355,9 @@ export function Step2Transcript({
   const [ocrSuccessNotice, setOcrSuccessNotice] = useState<string | null>(null);
   const [ocrWarnings, setOcrWarnings] = useState<string[]>([]);
   const [pendingTerms, setPendingTerms] = useState<ExtractedTerm[] | null>(null);
+  // Lớp đã chọn khi gán kỳ (bước 1: chọn lớp; bước 2: chọn kỳ nếu cần)
+  const [pendingGrade, setPendingGrade] = useState<string | null>(null);
+  const [pendingAssignStep, setPendingAssignStep] = useState<PendingAssignStep>("choose_grade");
   const [showManualTable, setShowManualTable] = useState(
     Boolean(
       data.academicYears &&
@@ -637,38 +670,161 @@ export function Step2Transcript({
   };
 
   // Gán 1-chạm khi ảnh bảng điểm thiếu thông tin khối lớp hoặc kỳ học
-  const handleAssignPendingTerm = (targetGradeName: string, semester: 1 | 2 | "all") => {
+  // Logic phân nhánh:
+  //   1. Có lớp được đọc ra -> Tự động điền thẳng theo kỳ đã đọc, không hỏi gì cả.
+  //   2. Không có lớp nhưng có 2 kỳ (pendingTerms.length >= 2) -> Hỏi chọn lớp, chọn xong điền cả 2 kỳ luôn.
+  //   3. Không có thông tin lớp lẫn kỳ:
+  //       + Bước 1 ("choose_grade"): hỏi chọn lớp trước.
+  //       + Bước 2 ("choose_semester"): hỏi chọn kỳ nào (HK1, HK2, Cả năm).
+  //       + Nếu chọn lớp đã hoàn thành (past) mà chỉ điền 1 kỳ -> cảnh báo cần hoàn thiện học kỳ còn thiếu!
+  const isCompletedGrade = (gradeName: string): boolean => {
+    if (!maxAllowedGradeName) return false;
+    return normalizeGrade(gradeName) !== normalizeGrade(maxAllowedGradeName);
+  };
+
+  const handleChooseGrade = (targetGradeName: string) => {
     if (!pendingTerms || pendingTerms.length === 0) return;
+
+    // TH 1: Bảng điểm có 2 kỳ -> điền cả 2 kỳ vào lớp được chọn luôn, không hỏi kỳ
+    if (pendingTerms.length >= 2) {
+      const term1 = pendingTerms[0];
+      const term2 = pendingTerms[1];
+      const r1 = resolveTerm(term1.termName || "");
+      const r2 = resolveTerm(term2.termName || "");
+      let sem1Term = term1;
+      let sem2Term = term2;
+      if (r1.semester === 2 && r2.semester === 1) {
+        sem1Term = term2;
+        sem2Term = term1;
+      }
+      const syntheticTerms: ExtractedTerm[] = [
+        { termName: `${targetGradeName} HK1`, scores: sem1Term.scores },
+        { termName: `${targetGradeName} HK2`, scores: sem2Term.scores },
+      ];
+      const targetIdx = years.findIndex((y) => normalizeGrade(y.gradeName) === normalizeGrade(targetGradeName));
+      const fallback = targetIdx !== -1 ? targetIdx : activeYearIndex;
+      const updatedYears = mergeExtractedTerms(years, syntheticTerms, fallback);
+      const newGpas = calculateTranscriptGpa(updatedYears);
+
+      onUpdate({
+        gpaMode: "transcript",
+        academicYears: updatedYears,
+        manualGpa10Scale: newGpas.gpa10,
+        calculatedGpa4Scale: newGpas.gpa4,
+      });
+
+      if (targetIdx !== -1) setActiveYearIndex(targetIdx);
+      setPendingTerms(null);
+      setPendingGrade(null);
+      setPendingAssignStep("choose_grade");
+      setShowManualTable(true);
+      setOcrSuccessNotice(
+        `Đã tự động điền cả 2 học kỳ vào ${targetGradeName}. Vui lòng kiểm tra lại điểm trong bảng bên dưới.`
+      );
+      return;
+    }
+
+    // TH 2: Chỉ có 1 term chưa rõ lớp
+    const singleTerm = pendingTerms[0];
+    const resolved = resolveTerm(singleTerm.termName || "");
+
+    // Nếu term này OCR vốn đã đọc ra được kỳ cụ thể (ví dụ HK1, HK2, Cả năm):
+    if (resolved.semester !== null) {
+      const syntheticTerm: ExtractedTerm = {
+        termName: `${targetGradeName} ${resolved.semester === "all" ? "Cả năm" : `HK${resolved.semester}`}`,
+        scores: singleTerm.scores,
+      };
+      const targetIdx = years.findIndex((y) => normalizeGrade(y.gradeName) === normalizeGrade(targetGradeName));
+      const fallback = targetIdx !== -1 ? targetIdx : activeYearIndex;
+      const updatedYears = mergeExtractedTerms(years, [syntheticTerm], fallback);
+      const newGpas = calculateTranscriptGpa(updatedYears);
+
+      onUpdate({
+        gpaMode: "transcript",
+        academicYears: updatedYears,
+        manualGpa10Scale: newGpas.gpa10,
+        calculatedGpa4Scale: newGpas.gpa4,
+      });
+
+      if (targetIdx !== -1) setActiveYearIndex(targetIdx);
+      setPendingTerms(null);
+      setPendingGrade(null);
+      setPendingAssignStep("choose_grade");
+      setShowManualTable(true);
+
+      if (resolved.semester !== "all" && isCompletedGrade(targetGradeName)) {
+        const afterYear = updatedYears.find((y) => normalizeGrade(y.gradeName) === normalizeGrade(targetGradeName));
+        const hasSem1 = afterYear?.subjects.some((s) => s.semester1Score !== null && s.semester1Score !== undefined);
+        const hasSem2 = afterYear?.subjects.some((s) => s.semester2Score !== null && s.semester2Score !== undefined);
+        if (!hasSem1 || !hasSem2) {
+          const missing = !hasSem1 ? "Học kỳ 1" : "Học kỳ 2";
+          setOcrSuccessNotice(
+            `Đã điền điểm vào ${resolved.semester === 1 ? "Học kỳ 1" : "Học kỳ 2"} của ${targetGradeName}. ` +
+            `⚠️ ${targetGradeName} là năm học đã kết thúc — bạn cần bổ sung thêm điểm ${missing} để hồ sơ hợp lệ trước khi tiếp tục!`
+          );
+          return;
+        }
+      }
+
+      setOcrSuccessNotice(
+        `Đã điền thành công điểm vào ${targetGradeName} (${resolved.semester === "all" ? "Cả năm" : `Học kỳ ${resolved.semester}`}). Vui lòng kiểm tra lại bảng điểm bên dưới.`
+      );
+      return;
+    }
+
+    // Nếu term hoàn toàn không có thông tin kỳ nào -> Chuyển sang bước hỏi kỳ
+    setPendingGrade(targetGradeName);
+    setPendingAssignStep("choose_semester");
+  };
+
+  const handleChooseSemester = (semester: 1 | 2 | "all") => {
+    if (!pendingTerms || pendingTerms.length === 0 || !pendingGrade) return;
     const termToAssign = pendingTerms[0];
     const syntheticTerm: ExtractedTerm = {
-      termName: `${targetGradeName} ${semester === "all" ? "Cả năm" : `HK${semester}`}`,
+      termName: `${pendingGrade} ${semester === "all" ? "Cả năm" : `HK${semester}`}`,
       scores: termToAssign.scores,
     };
-
-    const targetIdx = years.findIndex((y) => normalizeGrade(y.gradeName) === normalizeGrade(targetGradeName));
+    const targetIdx = years.findIndex((y) => normalizeGrade(y.gradeName) === normalizeGrade(pendingGrade));
     const fallback = targetIdx !== -1 ? targetIdx : activeYearIndex;
     const updatedYears = mergeExtractedTerms(years, [syntheticTerm], fallback);
     const newGpas = calculateTranscriptGpa(updatedYears);
-
     onUpdate({
       gpaMode: "transcript",
       academicYears: updatedYears,
       manualGpa10Scale: newGpas.gpa10,
       calculatedGpa4Scale: newGpas.gpa4,
     });
-
     if (targetIdx !== -1) setActiveYearIndex(targetIdx);
-
     const remaining = pendingTerms.slice(1);
     setPendingTerms(remaining.length > 0 ? remaining : null);
+    const chosenGrade = pendingGrade;
+    setPendingGrade(null);
+    setPendingAssignStep("choose_grade");
+    setShowManualTable(true);
 
+    // Nếu lớp đã hoàn thành (past) và vừa gán chỉ 1 kỳ → cảnh báo cần điền HK còn thiếu
+    if (semester !== "all" && isCompletedGrade(chosenGrade)) {
+      const afterYear = updatedYears.find((y) => normalizeGrade(y.gradeName) === normalizeGrade(chosenGrade));
+      const hasSem1 = afterYear?.subjects.some((s) => s.semester1Score !== null && s.semester1Score !== undefined);
+      const hasSem2 = afterYear?.subjects.some((s) => s.semester2Score !== null && s.semester2Score !== undefined);
+      if (!hasSem1 || !hasSem2) {
+        const missing = !hasSem1 ? "Học kỳ 1" : "Học kỳ 2";
+        setOcrSuccessNotice(
+          `Đã điền điểm vào ${semester === 1 ? "Học kỳ 1" : "Học kỳ 2"} của ${chosenGrade}. ` +
+          `⚠️ ${chosenGrade} là năm học đã kết thúc — bạn cần bổ sung thêm điểm ${missing} để hồ sơ hợp lệ trước khi tiếp tục!`
+        );
+        return;
+      }
+    }
     setOcrSuccessNotice(
-      `Đã gán thành công điểm vào ${targetGradeName} (${semester === "all" ? "Cả năm" : `Học kỳ ${semester}`}). Vui lòng kiểm tra lại bảng điểm bên dưới.`
+      `Đã điền thành công điểm vào ${chosenGrade} (${semester === "all" ? "Cả năm" : `Học kỳ ${semester}`}). Vui lòng kiểm tra lại bảng điểm bên dưới.`
     );
   };
 
   const handleDismissPendingTerms = () => {
     setPendingTerms(null);
+    setPendingGrade(null);
+    setPendingAssignStep("choose_grade");
   };
 
   const triggerFileInput = () => {
@@ -1428,9 +1584,9 @@ export function Step2Transcript({
             </div>
           )}
 
-          {/* Quick Assignment Dialog khi bảng điểm thiếu khối lớp / học kỳ */}
+          {/* Quick Assignment khi bảng điểm thiếu khối lớp / học kỳ */}
           {pendingTerms && pendingTerms.length > 0 && (
-            <div className="rounded-xl border-2 border-brand bg-brand-wash/50 p-4 space-y-3 animate-in fade-in-50 ">
+            <div className="rounded-xl border-2 border-brand bg-brand-wash/50 p-4 space-y-3 animate-in fade-in-50">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <div className="p-2 rounded-lg bg-brand text-white shrink-0 mt-0.5">
@@ -1438,10 +1594,20 @@ export function Step2Transcript({
                   </div>
                   <div>
                     <h4 className="text-sm font-semibold text-foreground">
-                      Đã nhận diện bảng điểm ({pendingTerms[0].scores.length} môn học)
+                      {pendingTerms.length >= 2
+                        ? `Đã nhận diện bảng điểm 2 học kỳ (${
+                            pendingTerms[0].scores.length + (pendingTerms[1]?.scores.length || 0)
+                          } môn)`
+                        : pendingAssignStep === "choose_semester"
+                        ? `Chọn học kỳ cho ${pendingGrade}`
+                        : `Đã nhận diện bảng điểm (${pendingTerms[0].scores.length} môn)`}
                     </h4>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Tệp vừa tải chưa ghi rõ khối lớp hoặc kỳ học. Vui lòng bấm chọn 1 kỳ tương ứng bên dưới để tự động điền:
+                      {pendingTerms.length >= 2
+                        ? "Bảng điểm có 2 học kỳ nhưng chưa nhận diện được khối lớp. Vui lòng bấm chọn lớp bên dưới để tự động điền cả 2 kỳ:"
+                        : pendingAssignStep === "choose_semester"
+                        ? `Bạn muốn điền bảng điểm này vào học kỳ nào của ${pendingGrade}?`
+                        : "Bảng điểm chưa có thông tin khối lớp. Vui lòng bấm chọn lớp bạn muốn điền điểm:"}
                     </p>
                   </div>
                 </div>
@@ -1458,16 +1624,59 @@ export function Step2Transcript({
                 </Button>
               </div>
 
-              <div className="flex flex-wrap gap-2 pt-1 border-t border-brand/20">
-                {years.map((y) => (
-                  <div key={y.gradeName} className="flex flex-wrap items-center gap-1 bg-surface/90 p-1 rounded-lg border border-line">
-                    <span className="text-xs font-bold text-foreground px-1.5">{y.gradeName}:</span>
+              {/* TH 1: Bảng điểm có 2 kỳ -> chỉ hỏi lớp, chọn là điền cả 2 kỳ luôn */}
+              {pendingTerms.length >= 2 ? (
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-brand/20">
+                  <span className="text-xs font-semibold text-foreground">Chọn lớp để điền cả 2 kỳ:</span>
+                  {years.map((y) => (
+                    <Button
+                      key={y.gradeName}
+                      type="button"
+                      size="sm"
+                      onClick={() => handleChooseGrade(y.gradeName)}
+                      className="text-xs font-semibold bg-brand hover:bg-brand-ink text-white"
+                    >
+                      Điền vào {y.gradeName} (Cả 2 kỳ)
+                    </Button>
+                  ))}
+                </div>
+              ) : pendingAssignStep === "choose_grade" ? (
+                /* TH 2 - Bước 1: Hỏi lớp trước */
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-brand/20">
+                  <span className="text-xs font-semibold text-foreground">Chọn lớp:</span>
+                  {years.map((y) => (
+                    <Button
+                      key={y.gradeName}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleChooseGrade(y.gradeName)}
+                      className="text-xs font-semibold bg-surface hover:bg-brand hover:text-white"
+                    >
+                      {y.gradeName}
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                /* TH 2 - Bước 2: Đã chọn lớp, hỏi kỳ nào */
+                <div className="space-y-2.5 pt-2 border-t border-brand/20">
+                  {pendingGrade && isCompletedGrade(pendingGrade) && (
+                    <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-2.5 flex items-start gap-2">
+                      <AlertTriangleIcon className="size-4 shrink-0 text-amber-600 mt-0.5" />
+                      <div>
+                        <strong>Lưu ý:</strong> {pendingGrade} là năm học đã kết thúc nên bắt buộc phải có đủ điểm cả 2 học kỳ.
+                        Nếu bạn chọn điền 1 kỳ, sau đó sẽ cần bổ sung tiếp học kỳ còn lại để hồ sơ hợp lệ trước khi tiếp tục.
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold text-foreground">Điền vào {pendingGrade}:</span>
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={() => handleAssignPendingTerm(y.gradeName, 1)}
-                      className="px-2 text-xs font-medium bg-surface hover:bg-brand hover:text-white"
+                      onClick={() => handleChooseSemester(1)}
+                      className="text-xs font-semibold bg-surface hover:bg-brand hover:text-white"
                     >
                       Học kỳ 1
                     </Button>
@@ -1475,8 +1684,8 @@ export function Step2Transcript({
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={() => handleAssignPendingTerm(y.gradeName, 2)}
-                      className="px-2 text-xs font-medium bg-surface hover:bg-brand hover:text-white"
+                      onClick={() => handleChooseSemester(2)}
+                      className="text-xs font-semibold bg-surface hover:bg-brand hover:text-white"
                     >
                       Học kỳ 2
                     </Button>
@@ -1484,14 +1693,26 @@ export function Step2Transcript({
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={() => handleAssignPendingTerm(y.gradeName, "all")}
-                      className="px-2 text-xs font-medium bg-surface hover:bg-brand hover:text-white"
+                      onClick={() => handleChooseSemester("all")}
+                      className="text-xs font-semibold bg-surface hover:bg-brand hover:text-white"
                     >
-                      Cả năm
+                      Cả năm (Điền cả 2 kỳ)
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setPendingGrade(null);
+                        setPendingAssignStep("choose_grade");
+                      }}
+                      className="text-xs text-muted-foreground hover:text-foreground ml-auto"
+                    >
+                      ← Chọn lại lớp khác
                     </Button>
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
