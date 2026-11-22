@@ -12,7 +12,8 @@ public interface IParentLinkService
     Task<ParentLinkResult<ParentInviteInfo>> GetInviteAsync(string token, CancellationToken ct = default);
 
     /// <summary>[UC-115] Phụ huynh đồng ý qua link mời, không cần tài khoản. Bắt buộc tick là cha, mẹ hoặc người giám hộ hợp pháp.</summary>
-    Task<ParentLinkResult<ParentInviteInfo>> AcceptAsync(string token, bool isGuardian, string? ipAddress, CancellationToken ct = default);
+    /// <param name="seenPolicyVersion">Phiên bản văn bản phụ huynh đã đọc; khác phiên bản đang hiệu lực thì không ghi đồng ý (Validation). Null thì bỏ qua kiểm tra.</param>
+    Task<ParentLinkResult<ParentInviteInfo>> AcceptAsync(string token, bool isGuardian, string? ipAddress, CancellationToken ct = default, string? seenPolicyVersion = null);
 
     /// <summary>[UC-115] Phụ huynh từ chối qua link mời: tài khoản học sinh sang Từ chối, học sinh được báo.</summary>
     Task<ParentLinkResult<ParentInviteInfo>> RejectAsync(string token, string? ipAddress, CancellationToken ct = default);
@@ -57,7 +58,9 @@ public class ParentLinkService(
     IAuditLogRepository auditLogs,
     // Chuyển hồ sơ phụ huynh đã nhập sang con khi tài khoản phụ huynh được gắn vào liên kết; null trong test cũ
     IParentProfileShareService? profileShare = null,
-    StudyAbroad.Application.Notifications.INotificationService? notifications = null) : IParentLinkService
+    StudyAbroad.Application.Notifications.INotificationService? notifications = null,
+    // Phiên bản "Đồng ý của phụ huynh" đang hiệu lực (UC-103); null trong test cũ thì dùng hằng số dự phòng
+    StudyAbroad.Application.Admin.Policies.IPolicyVersionLookup? policyVersions = null) : IParentLinkService
 {
     /// <summary>[UC-117] Action ghi audit khi phụ huynh rút đồng ý qua link trong mail.</summary>
     public const string RevokeByEmailAuditAction = "parent_link.revoke_by_email";
@@ -69,6 +72,7 @@ public class ParentLinkService(
     private const string ExpiredInviteMessage = "Link đã hết hạn. Vui lòng nhờ học sinh gửi lại lời mời từ trang Tài khoản.";
     private const string AlreadyAnsweredMessage = "Lời mời này đã được trả lời trước đó. Vui lòng tải lại trang để xem kết quả.";
     private const string GuardianRequiredMessage = "Vui lòng xác nhận bạn là cha, mẹ hoặc người giám hộ hợp pháp của học sinh.";
+    private const string PolicyChangedMessage = "Nội dung đồng ý vừa được cập nhật. Vui lòng tải lại trang và đọc lại trước khi đồng ý.";
     private const string ConflictMessage = "Liên kết vừa được cập nhật bởi một thao tác khác. Vui lòng tải lại trang.";
     private const string NotFoundMessage = "Không tìm thấy liên kết.";
     private const string InvalidRevokeLinkMessage = "Link rút đồng ý không hợp lệ hoặc đã được sử dụng.";
@@ -91,17 +95,18 @@ public class ParentLinkService(
         if (link.Status == ParentLinkStatuses.Rejected && link.ConsentId is { } consentId)
             decidedAt = (await links.GetConsentAsync(consentId, ct))?.CreatedAt;
 
-        var info = ToInviteInfo(link, student, decidedAt);
+        var info = ToInviteInfo(link, student, decidedAt, await CurrentConsentVersionAsync(ct));
         if (info.State == ParentInviteStates.Pending && await NonParentAccountMessageAsync(link.ParentEmail, ct) is { } blocked)
             info = info with { BlockedReason = blocked };
         return ParentLinkResult<ParentInviteInfo>.Ok(info);
     }
 
-    public Task<ParentLinkResult<ParentInviteInfo>> AcceptAsync(string token, bool isGuardian, string? ipAddress, CancellationToken ct = default)
+    public Task<ParentLinkResult<ParentInviteInfo>> AcceptAsync(
+        string token, bool isGuardian, string? ipAddress, CancellationToken ct = default, string? seenPolicyVersion = null)
     {
         if (!isGuardian)
             return Task.FromResult(ParentLinkResult<ParentInviteInfo>.Fail(ParentLinkError.Validation, GuardianRequiredMessage));
-        return DecideAsync(token, accept: true, ipAddress, ct);
+        return DecideAsync(token, accept: true, ipAddress, ct, seenPolicyVersion);
     }
 
     public Task<ParentLinkResult<ParentInviteInfo>> RejectAsync(string token, string? ipAddress, CancellationToken ct = default) =>
@@ -112,7 +117,8 @@ public class ParentLinkService(
     /// bằng chứng là consent: email nhận link, thời điểm, IP, phiên bản văn bản. Link chỉ trả lời được một lần;
     /// giữ TokenHash để mở lại link vẫn thấy kết quả đã ghi nhận.
     /// </summary>
-    private async Task<ParentLinkResult<ParentInviteInfo>> DecideAsync(string token, bool accept, string? ipAddress, CancellationToken ct)
+    private async Task<ParentLinkResult<ParentInviteInfo>> DecideAsync(
+        string token, bool accept, string? ipAddress, CancellationToken ct, string? seenPolicyVersion = null)
     {
         var (link, error) = await FindInviteByTokenAsync(token, ct);
         if (link == null)
@@ -131,13 +137,19 @@ public class ParentLinkService(
         // UC-75: email nhận link đã là tài khoản Phụ huynh thì gắn luôn, phụ huynh thấy con trong trang Tài khoản
         var parentAccount = accept ? await FindParentAccountAsync(link.ParentEmail, ct) : null;
 
+        // Ghi ĐÚNG phiên bản đang hiệu lực. Phụ huynh đã đọc bản khác (admin vừa công bố bản mới) thì không ghi đồng ý,
+        // để bằng chứng luôn khớp với văn bản người đó thực sự đã đọc. Từ chối thì không cần kiểm tra.
+        var policyVersion = await CurrentConsentVersionAsync(ct);
+        if (accept && seenPolicyVersion is not null && !string.Equals(seenPolicyVersion, policyVersion, StringComparison.Ordinal))
+            return ParentLinkResult<ParentInviteInfo>.Fail(ParentLinkError.Validation, PolicyChangedMessage);
+
         var now = DateTime.UtcNow;
         var consent = new Consent
         {
             UserId = student.Id,
             Purpose = ConsentPurposes.ChildDataProcessing,
             Granted = accept,
-            PolicyVersion = ConsentPurposes.ChildDataPolicyVersion,
+            PolicyVersion = policyVersion,
             GrantedByUserId = parentAccount?.Id,
             GrantedByEmail = link.ParentEmail,
             GrantedIp = Truncate(ipAddress, 45),
@@ -187,7 +199,7 @@ public class ParentLinkService(
         }
 
         return ParentLinkResult<ParentInviteInfo>.Ok(
-            ToInviteInfo(link, student, now),
+            ToInviteInfo(link, student, now, policyVersion),
             accept ? "Đã ghi nhận bạn đồng ý." : "Đã ghi nhận bạn từ chối.");
     }
 
@@ -572,7 +584,12 @@ public class ParentLinkService(
     private static ParentLinkResult<ParentInviteInfo> InviteFail(ParentLinkError error) =>
         ParentLinkResult<ParentInviteInfo>.Fail(error, error == ParentLinkError.Expired ? ExpiredInviteMessage : InvalidInviteMessage);
 
-    private static ParentInviteInfo ToInviteInfo(ParentStudentLink link, User student, DateTime? decidedAt)
+    // Phiên bản "Đồng ý của phụ huynh" đang hiệu lực do admin công bố (UC-103); chưa tra được thì dùng hằng số của bản đầu tiên
+    private async Task<string> CurrentConsentVersionAsync(CancellationToken ct) =>
+        (policyVersions is null ? null : await policyVersions.GetPublishedVersionAsync(PolicyKinds.ChildDataConsent, ct))
+        ?? ConsentPurposes.ChildDataPolicyVersion;
+
+    private static ParentInviteInfo ToInviteInfo(ParentStudentLink link, User student, DateTime? decidedAt, string policyVersion)
     {
         var state = link.Status switch
         {
@@ -582,7 +599,7 @@ public class ParentLinkService(
         };
         var pending = state == ParentInviteStates.Pending;
         return new ParentInviteInfo(state, student.FullName, AgeOf(student), link.ParentEmail,
-            pending ? link.TokenExpiresAt : null, pending ? null : decidedAt, ConsentPurposes.ChildDataPolicyVersion,
+            pending ? link.TokenExpiresAt : null, pending ? null : decidedAt, policyVersion,
             HasParentAccount: link.ParentUserId is not null);
     }
 

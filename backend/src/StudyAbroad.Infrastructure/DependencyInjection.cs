@@ -49,6 +49,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Admin.ReviewBatches.IReviewBatchRepository, ReviewBatchRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.Sensitivity.ISensitivityRunRepository, SensitivityRunRepository>();   // [UC-85]
         services.AddScoped<StudyAbroad.Application.Admin.Policies.IPolicyDocumentRepository, PolicyDocumentRepository>();   // [UC-103]
+        services.AddScoped<StudyAbroad.Application.Admin.Policies.IPolicyVersionLookup, PolicyDocumentRepository>();   // phiên bản chính sách đang hiệu lực cho đồng ý của phụ huynh
         services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadWithdrawalRepository, LeadWithdrawalRepository>();   // [UC-80] thu hồi lead khi xóa tài khoản
         services.AddScoped<StudyAbroad.Application.Auth.IAccountPurgeRepository, AccountPurgeRepository>();

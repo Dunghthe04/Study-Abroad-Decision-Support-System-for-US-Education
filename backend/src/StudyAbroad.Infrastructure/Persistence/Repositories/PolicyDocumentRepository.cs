@@ -6,8 +6,14 @@ using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 
-public class PolicyDocumentRepository(AppDbContext db) : IPolicyDocumentRepository
+public class PolicyDocumentRepository(AppDbContext db) : IPolicyDocumentRepository, IPolicyVersionLookup
 {
+    public Task<string?> GetPublishedVersionAsync(string kind, CancellationToken ct = default) =>
+        db.PolicyDocuments.AsNoTracking()
+            .Where(d => d.Kind == kind && d.Status == PolicyStatuses.Published)
+            .Select(d => d.Version)
+            .FirstOrDefaultAsync(ct);
+
     public Task<PolicyDocument?> FindAsync(Guid id, CancellationToken ct = default) =>
         db.PolicyDocuments.FirstOrDefaultAsync(d => d.Id == id, ct);
 
