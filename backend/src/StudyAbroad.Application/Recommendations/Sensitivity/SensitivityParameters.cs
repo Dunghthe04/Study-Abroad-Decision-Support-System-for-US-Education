@@ -1,9 +1,16 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace StudyAbroad.Application.Recommendations.Sensitivity;
 
 // [UC-85] Loại tham số quyết định cách đo:
 // Grouping = tham số xếp nhóm (B7 đến B9): đo % cặp (hồ sơ, trường) đổi nhóm.
 // FitWeight = trọng số điểm phù hợp (B10): không đổi nhóm, chỉ đổi thứ tự, nên đo % trường ra/vào top 4 mỗi khối.
+// Luôn ghi ra JSON dạng chữ "grouping" | "fit_weight" (cả khi lưu DB lẫn khi trả API).
+[JsonConverter(typeof(SensitivityKindJsonConverter))]
 public enum SensitivityKind { Grouping, FitWeight }
+
+public sealed class SensitivityKindJsonConverter() : JsonStringEnumConverter<SensitivityKind>(JsonNamingPolicy.SnakeCaseLower);
 
 // Một tham số được phép nhích. Get đọc giá trị trong một bộ tham số; With trả bộ tham số MỚI với giá trị đã thay
 // (record bất biến nên bộ gốc không đổi).
