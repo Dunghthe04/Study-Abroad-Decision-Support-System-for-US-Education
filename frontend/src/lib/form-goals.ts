@@ -7,8 +7,8 @@ export type FormGoal = "danh_gia" | "lo_trinh" | "goi_y_truong" | "chi_sua";
 export const FORM_GOAL_OPTIONS: { value: FormGoal; label: string; description: string }[] = [
   { value: "danh_gia", label: "Đánh giá hồ sơ", description: "Hồ sơ đang mạnh, yếu ở đâu" },
   { value: "lo_trinh", label: "Lên lộ trình", description: "Cần làm gì, khi nào" },
-  { value: "goi_y_truong", label: "Gợi ý trường", description: "Danh sách trường hợp với bạn" },
-  { value: "chi_sua", label: "Chỉ sửa hồ sơ", description: "Lưu hồ sơ, không làm việc gì khác" },
+  { value: "goi_y_truong", label: "Gợi ý trường", description: "Trường phù hợp với bạn" },
+  { value: "chi_sua", label: "Chỉ sửa hồ sơ", description: "Chỉ cập nhật thông tin" },
 ];
 
 export const EDIT_ONLY: FormGoal = "chi_sua";
