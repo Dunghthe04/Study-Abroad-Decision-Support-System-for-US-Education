@@ -61,6 +61,35 @@ public class ChatHistoryController(IChatHistoryService history, IChatPendingQues
         }
     }
 
+    /// <summary>Đổi tên một phiên (tối đa 100 ký tự, không để trống). Không đổi thứ tự trong lịch sử. 404 nếu không có, của người khác hoặc đã xóa.</summary>
+    [HttpPatch("{sessionId:guid}")]
+    public async Task<ActionResult<RenamedChatSessionDto>> Rename(Guid sessionId, [FromBody] RenameChatSessionRequest request, CancellationToken ct = default)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized();
+        try
+        {
+            var title = await history.RenameAsync(userId, sessionId, request.Title, ct);
+            return title is null ? NotFound() : Ok(new RenamedChatSessionDto(sessionId, title));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Xóa một phiên khỏi lịch sử (xóa mềm): không hiện, không mở lại, không hỏi tiếp được; tin nhắn vẫn giữ cho thống kê.
+    /// 204 khi xóa xong; 404 nếu không có, của người khác hoặc đã xóa trước đó.
+    /// </summary>
+    [HttpDelete("{sessionId:guid}")]
+    public async Task<IActionResult> Delete(Guid sessionId, CancellationToken ct = default)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized();
+        return await history.DeleteAsync(userId, sessionId, ct) ? NoContent() : NotFound();
+    }
+
     /// <summary>
     /// Câu hồ sơ đang chờ của phiên (bậc học, ngành, các câu hồ sơ, bảng rà soát), kèm nút và công cụ dựng lại để giao diện gắn dưới
     /// tin cuối khi mở lại phiên. pending = false nếu không có câu hồ sơ nào đang chờ. Chỉ đọc: không đổi phiên, không gọi AI, không tính lượt.

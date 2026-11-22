@@ -12,12 +12,21 @@ public class ChatHistoryRepository(AppDbContext db) : IChatHistoryRepository
 
     public async Task<(bool Found, string? Title)> SessionTitleAsync(Guid sessionId, Guid userId, CancellationToken ct = default)
     {
-        var match = await db.ChatSessions.AsNoTracking()
-            .Where(s => s.Id == sessionId && s.UserId == userId)
+        var match = await ChatHistoryQuery.Active(db.ChatSessions.AsNoTracking(), sessionId, userId)
             .Select(s => new { s.Title })
             .FirstOrDefaultAsync(ct);
         return match is null ? (false, null) : (true, match.Title);
     }
+
+    // Cập nhật thẳng ở database (một câu UPDATE có điều kiện chủ phiên và chưa xóa): không đọc phiên về rồi mới sửa,
+    // nên hai yêu cầu cùng lúc không ghi đè nhau. Không đổi UpdatedAt: đổi tên hay xóa không phải một lần trao đổi
+    public async Task<bool> RenameAsync(Guid sessionId, Guid userId, string title, CancellationToken ct = default) =>
+        await ChatHistoryQuery.Active(db.ChatSessions, sessionId, userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(s => s.Title, title), ct) > 0;
+
+    public async Task<bool> SoftDeleteAsync(Guid sessionId, Guid userId, DateTime deletedAtUtc, CancellationToken ct = default) =>
+        await ChatHistoryQuery.Active(db.ChatSessions, sessionId, userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(s => s.DeletedAt, deletedAtUtc), ct) > 0;
 
     public async Task<IReadOnlyList<ChatHistoryMessageRow>> MessagesAsync(
         Guid sessionId, ChatHistoryCursor? before, int take, CancellationToken ct = default) =>

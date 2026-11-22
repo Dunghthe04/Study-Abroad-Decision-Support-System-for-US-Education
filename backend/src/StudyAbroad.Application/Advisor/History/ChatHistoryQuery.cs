@@ -12,14 +12,21 @@ namespace StudyAbroad.Application.Advisor.History;
 public static class ChatHistoryQuery
 {
     /// <summary>
-    /// Các phiên của userId có ít nhất một tin đã lưu (phiên không có tin, ví dụ tạo trước khi bật lưu tin, không có gì để xem lại),
+    /// Phiên sessionId của đúng userId và CHƯA bị xóa. Mọi nơi tìm một phiên theo mã (mở lịch sử, gửi tin tiếp, câu đang chờ, đổi tên, xóa)
+    /// đều đi qua đây, để phiên đã xóa không lọt ra ở chỗ nào.
+    /// </summary>
+    public static IQueryable<ChatSession> Active(IQueryable<ChatSession> sessions, Guid sessionId, Guid userId) =>
+        sessions.Where(s => s.Id == sessionId && s.UserId == userId && s.DeletedAt == null);
+
+    /// <summary>
+    /// Các phiên chưa xóa của userId có ít nhất một tin đã lưu (phiên không có tin, ví dụ tạo trước khi bật lưu tin, không có gì để xem lại),
     /// xếp theo lần trao đổi gần nhất giảm dần rồi mã giảm dần. after: chỉ lấy các phiên đứng SAU con trỏ trong thứ tự đó.
     /// Lần trao đổi gần nhất là UpdatedAt (ChatService ghi mỗi lượt), phiên chưa có thì lấy CreatedAt.
     /// </summary>
     public static IQueryable<ChatSessionRow> Sessions(
         IQueryable<ChatSession> sessions, IQueryable<ChatMessageEntity> messages, Guid userId, ChatHistoryCursor? after, int take)
     {
-        var owned = sessions.Where(s => s.UserId == userId && messages.Any(m => m.ChatSessionId == s.Id));
+        var owned = sessions.Where(s => s.UserId == userId && s.DeletedAt == null && messages.Any(m => m.ChatSessionId == s.Id));
         if (after is { } c)
             owned = owned.Where(s =>
                 (s.UpdatedAt ?? s.CreatedAt) < c.At

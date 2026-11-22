@@ -21,6 +21,12 @@ public record ChatHistoryMessageDto(Guid Id, string Role, string Content, DateTi
 /// </summary>
 public record ChatHistoryMessagesDto(Guid SessionId, string Title, IReadOnlyList<ChatHistoryMessageDto> Items, string? OlderCursor);
 
+/// <summary>Đổi tên phiên: Title là tên mới (gom khoảng trắng, tối đa ChatSessionTitle.MaxUserLength ký tự).</summary>
+public record RenameChatSessionRequest(string? Title);
+
+/// <summary>Kết quả đổi tên: tên đã chuẩn hóa mà hệ thống lưu.</summary>
+public record RenamedChatSessionDto(Guid Id, string Title);
+
 // ---- dòng thô từ database
 
 public record ChatSessionRow(Guid Id, string? Title, DateTime CreatedAt, DateTime LastActivityAt, int MessageCount);

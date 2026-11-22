@@ -247,6 +247,22 @@ public class ChatServiceTests
     }
 
     [Fact]
+    public async Task ChattingWithTheIdOfADeletedSession_StartsANewSession_InsteadOfReopeningIt()
+    {
+        var owner = Guid.NewGuid();
+        var sessions = new FakeSessions();
+        var deleted = new ChatSession { UserId = owner, Title = "Đã xóa", StateJson = "{\"currentStep\":\"B2\"}", DeletedAt = DateTime.UtcNow };
+        sessions.Rows.Add(deleted);
+
+        var res = await new ChatService(new FakeAdvisor("B0"), sessions, new FakeProfileFlow())
+            .ChatAsync(owner, new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "hỏi tiếp")], deleted.Id.ToString()));
+
+        Assert.NotEqual(deleted.Id.ToString(), res.SessionId);
+        Assert.Equal(2, sessions.Rows.Count);
+        Assert.Equal("{\"currentStep\":\"B2\"}", deleted.StateJson);   // phiên đã xóa không bị ghi tiếp
+    }
+
+    [Fact]
     public async Task AFirstTurnWithoutAnyText_LeavesTheTitleEmpty_SoTheHistoryShowsTheDefaultName()
     {
         var sessions = new FakeSessions();
@@ -3937,8 +3953,9 @@ public class ChatServiceTests
     {
         public List<ChatSession> Rows { get; } = [];
 
+        // Đúng hợp đồng của kho thật: phiên đã xóa (xóa mềm) coi như không có
         public Task<ChatSession?> FindAsync(Guid id, Guid userId, CancellationToken ct = default) =>
-            Task.FromResult(Rows.FirstOrDefault(s => s.Id == id && s.UserId == userId));
+            Task.FromResult(Rows.FirstOrDefault(s => s.Id == id && s.UserId == userId && s.DeletedAt == null));
 
         public Task AddAsync(ChatSession session, CancellationToken ct = default)
         {

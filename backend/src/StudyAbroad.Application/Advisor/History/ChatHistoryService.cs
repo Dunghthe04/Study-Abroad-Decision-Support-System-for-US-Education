@@ -15,6 +15,12 @@ public interface IChatHistoryRepository
 
     /// <summary>take tin mới nhất của phiên (đứng trước con trỏ before nếu có), mới nhất trước. Bên gọi đã kiểm chủ phiên.</summary>
     Task<IReadOnlyList<ChatHistoryMessageRow>> MessagesAsync(Guid sessionId, ChatHistoryCursor? before, int take, CancellationToken ct = default);
+
+    /// <summary>Đổi tên phiên còn hiệu lực của userId. False nếu không có phiên đó, của người khác, hoặc đã xóa.</summary>
+    Task<bool> RenameAsync(Guid sessionId, Guid userId, string title, CancellationToken ct = default);
+
+    /// <summary>Xóa mềm phiên còn hiệu lực của userId (ghi DeletedAt). False nếu không có phiên đó, của người khác, hoặc đã xóa trước đó.</summary>
+    Task<bool> SoftDeleteAsync(Guid sessionId, Guid userId, DateTime deletedAtUtc, CancellationToken ct = default);
 }
 
 public interface IChatHistoryService
@@ -30,9 +36,22 @@ public interface IChatHistoryService
     /// để lấy tin cũ hơn. Null nếu không có phiên đó hoặc phiên của người khác (bên gọi trả 404, không phân biệt hai trường hợp).
     /// </summary>
     Task<ChatHistoryMessagesDto?> GetMessagesAsync(Guid userId, Guid sessionId, string? before, int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Đổi tên một phiên của chính người dùng. Không đổi thứ tự trong lịch sử (không tính là một lần trao đổi).
+    /// Tên rỗng hoặc dài quá ChatSessionTitle.MaxUserLength thì ném ArgumentException. False nếu không có phiên, của người khác, hoặc đã xóa.
+    /// Trả tên đã chuẩn hóa khi thành công.
+    /// </summary>
+    Task<string?> RenameAsync(Guid userId, Guid sessionId, string? title, CancellationToken ct = default);
+
+    /// <summary>
+    /// Xóa mềm một phiên của chính người dùng: biến khỏi lịch sử, không mở lại hay hỏi tiếp được. Tin nhắn vẫn giữ cho thống kê.
+    /// False nếu không có phiên, của người khác, hoặc đã xóa trước đó.
+    /// </summary>
+    Task<bool> DeleteAsync(Guid userId, Guid sessionId, CancellationToken ct = default);
 }
 
-public class ChatHistoryService(IChatHistoryRepository repository) : IChatHistoryService
+public class ChatHistoryService(IChatHistoryRepository repository, TimeProvider? clock = null) : IChatHistoryService
 {
     public const int DefaultSessions = 20;
     public const int MaxSessions = 50;
@@ -74,6 +93,15 @@ public class ChatHistoryService(IChatHistoryRepository repository) : IChatHistor
             newestFirst.Select(ToDto).ToList(),
             older);
     }
+
+    public async Task<string?> RenameAsync(Guid userId, Guid sessionId, string? title, CancellationToken ct = default)
+    {
+        var clean = ChatSessionTitle.FromUser(title);   // tên sai thì báo lỗi trước, dù phiên có tồn tại hay không
+        return await repository.RenameAsync(sessionId, userId, clean, ct) ? clean : null;
+    }
+
+    public Task<bool> DeleteAsync(Guid userId, Guid sessionId, CancellationToken ct = default) =>
+        repository.SoftDeleteAsync(sessionId, userId, (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime, ct);
 
     private static ChatHistoryMessageDto ToDto(ChatHistoryMessageRow row) =>
         new(row.Id, row.Role, row.Role == "system" ? SystemFailureText : row.Content, row.CreatedAt, Citations(row.SourcesJson));

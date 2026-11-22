@@ -141,12 +141,28 @@ public class ChatHistoryTests
 
         public Task<(bool Found, string? Title)> SessionTitleAsync(Guid sessionId, Guid userId, CancellationToken ct = default)
         {
-            var s = sessions.FirstOrDefault(x => x.Id == sessionId && x.UserId == userId);
+            var s = ChatHistoryQuery.Active(sessions.AsQueryable(), sessionId, userId).FirstOrDefault();
             return Task.FromResult(s is null ? (false, (string?)null) : (true, s.Title));
         }
 
         public Task<IReadOnlyList<ChatHistoryMessageRow>> MessagesAsync(Guid sessionId, ChatHistoryCursor? before, int take, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<ChatHistoryMessageRow>>(ChatHistoryQuery.Messages(messages.AsQueryable(), sessionId, before, take).ToList());
+
+        public Task<bool> RenameAsync(Guid sessionId, Guid userId, string title, CancellationToken ct = default)
+        {
+            var s = ChatHistoryQuery.Active(sessions.AsQueryable(), sessionId, userId).FirstOrDefault();
+            if (s is not null)
+                s.Title = title;
+            return Task.FromResult(s is not null);
+        }
+
+        public Task<bool> SoftDeleteAsync(Guid sessionId, Guid userId, DateTime deletedAtUtc, CancellationToken ct = default)
+        {
+            var s = ChatHistoryQuery.Active(sessions.AsQueryable(), sessionId, userId).FirstOrDefault();
+            if (s is not null)
+                s.DeletedAt = deletedAtUtc;
+            return Task.FromResult(s is not null);
+        }
     }
 
     private static ChatHistoryService Service()
@@ -283,6 +299,21 @@ public class ChatHistoryTests
             AskedUser = userId;
             return fail is not null ? throw fail : Task.FromResult(messages);
         }
+
+        public string? RenameResult { get; init; } = "Tên mới";
+        public bool DeleteResult { get; init; } = true;
+
+        public Task<string?> RenameAsync(Guid userId, Guid sessionId, string? title, CancellationToken ct = default)
+        {
+            AskedUser = userId;
+            return fail is not null ? throw fail : Task.FromResult(RenameResult);
+        }
+
+        public Task<bool> DeleteAsync(Guid userId, Guid sessionId, CancellationToken ct = default)
+        {
+            AskedUser = userId;
+            return Task.FromResult(DeleteResult);
+        }
     }
 
     private sealed class StubPending(PendingQuestionDto? result = null) : IChatPendingQuestion
@@ -382,5 +413,128 @@ public class ChatHistoryTests
     {
         Assert.IsType<NotFoundResult>((await ControllerFor(new StubHistory(), Me, new StubPending(null)).Pending(Id(1))).Result);
         Assert.IsType<UnauthorizedResult>((await ControllerFor(new StubHistory(), null).Pending(Id(1))).Result);
+    }
+
+    // ---- đổi tên
+
+    [Fact]
+    public void UserTitle_IsCleanedButNeverCut_AndAnEmptyOrTooLongNameIsRejected()
+    {
+        Assert.Equal("Du học Mỹ ngành CS", ChatSessionTitle.FromUser("  Du học   Mỹ\nngành CS "));
+        Assert.Equal(100, ChatSessionTitle.FromUser(new string('a', 100)).Length);
+        Assert.Throws<ArgumentException>(() => ChatSessionTitle.FromUser("   "));
+        Assert.Throws<ArgumentException>(() => ChatSessionTitle.FromUser(null));
+        Assert.Throws<ArgumentException>(() => ChatSessionTitle.FromUser(new string('a', 101)));
+    }
+
+    [Fact]
+    public async Task Rename_SavesTheCleanedName_WithoutMovingTheSessionInTheList()
+    {
+        var (sessions, messages) = Data();
+        var service = new ChatHistoryService(new MemoryRepository(sessions, messages));
+        var orderBefore = (await service.ListSessionsAsync(Me, null, 10)).Items.Select(s => s.Id).ToList();
+
+        var saved = await service.RenameAsync(Me, Id(2), "  Ngành   CS ở Texas ");
+
+        Assert.Equal("Ngành CS ở Texas", saved);
+        var after = (await service.ListSessionsAsync(Me, null, 10)).Items;
+        Assert.Equal("Ngành CS ở Texas", after.Single(s => s.Id == Id(2)).Title);
+        Assert.Equal(orderBefore, after.Select(s => s.Id));   // đổi tên không phải một lần trao đổi: thứ tự giữ nguyên
+    }
+
+    [Fact]
+    public async Task Rename_SomeoneElsesOrADeletedSession_IsNotFound_AndABadNameIsRejectedFirst()
+    {
+        var (sessions, messages) = Data();
+        sessions.Single(s => s.Id == Id(2)).DeletedAt = At(10);
+        var service = new ChatHistoryService(new MemoryRepository(sessions, messages));
+
+        Assert.Null(await service.RenameAsync(Me, Id(4), "Lấy phiên người khác"));
+        Assert.Null(await service.RenameAsync(Me, Id(2), "Phiên đã xóa"));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.RenameAsync(Me, Id(999), ""));
+        Assert.Equal("Của người khác", sessions.Single(s => s.Id == Id(4)).Title);
+    }
+
+    // ---- xóa mềm
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    [Fact]
+    public async Task Delete_HidesTheSessionFromTheListAndFromReading_ButKeepsItsMessages()
+    {
+        var (sessions, messages) = Data();
+        var now = new DateTimeOffset(2026, 11, 22, 9, 0, 0, TimeSpan.Zero);
+        var service = new ChatHistoryService(new MemoryRepository(sessions, messages), new FixedClock(now));
+
+        Assert.True(await service.DeleteAsync(Me, Id(1)));
+
+        Assert.DoesNotContain((await service.ListSessionsAsync(Me, null, 10)).Items, s => s.Id == Id(1));
+        Assert.Null(await service.GetMessagesAsync(Me, Id(1), null, 50));          // không mở lại được
+        Assert.Equal(now.UtcDateTime, sessions.Single(s => s.Id == Id(1)).DeletedAt);
+        Assert.Equal(4, messages.Count(m => m.ChatSessionId == Id(1)));              // xóa mềm: tin nhắn còn nguyên
+    }
+
+    [Fact]
+    public async Task Delete_SomeoneElsesSession_OrTheSameOneTwice_IsNotFound()
+    {
+        var (sessions, messages) = Data();
+        var service = new ChatHistoryService(new MemoryRepository(sessions, messages));
+
+        Assert.False(await service.DeleteAsync(Me, Id(4)));
+        Assert.Null(sessions.Single(s => s.Id == Id(4)).DeletedAt);
+        Assert.True(await service.DeleteAsync(Me, Id(1)));
+        Assert.False(await service.DeleteAsync(Me, Id(1)));
+    }
+
+    [Fact]
+    public void ActiveSession_IsOnlyTheOwnersAndNotDeleted_AndTranslatesToSql()
+    {
+        var sessions = new List<ChatSession>
+        {
+            Session(1, Me, At(1)),
+            Session(2, Me, At(1)),
+            Session(3, Other, At(1)),
+        };
+        sessions[1].DeletedAt = At(2);
+
+        Assert.Single(ChatHistoryQuery.Active(sessions.AsQueryable(), Id(1), Me));
+        Assert.Empty(ChatHistoryQuery.Active(sessions.AsQueryable(), Id(2), Me));   // đã xóa
+        Assert.Empty(ChatHistoryQuery.Active(sessions.AsQueryable(), Id(3), Me));   // của người khác
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=usas_schema_check")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        using var db = new AppDbContext(options);
+        var sql = ChatHistoryQuery.Active(db.ChatSessions, Id(1), Me).ToQueryString();
+        Assert.Contains("deleted_at IS NULL", sql);
+        Assert.Contains("user_id", sql);
+    }
+
+    // ---- controller: đổi tên, xóa
+
+    [Fact]
+    public async Task Controller_Rename_ReturnsTheSavedName_NotFound_OrBadRequest()
+    {
+        var ok = await ControllerFor(new StubHistory(), Me).Rename(Id(1), new RenameChatSessionRequest("Tên mới"));
+        var missing = await ControllerFor(new StubHistory { RenameResult = null }, Me).Rename(Id(1), new RenameChatSessionRequest("Tên mới"));
+        var bad = await ControllerFor(new StubHistory(fail: new ArgumentException("rỗng")), Me).Rename(Id(1), new RenameChatSessionRequest(""));
+        var anonymous = await ControllerFor(new StubHistory(), null).Rename(Id(1), new RenameChatSessionRequest("x"));
+
+        Assert.Equal("Tên mới", Assert.IsType<RenamedChatSessionDto>(Assert.IsType<OkObjectResult>(ok.Result).Value).Title);
+        Assert.IsType<NotFoundResult>(missing.Result);
+        Assert.IsType<BadRequestObjectResult>(bad.Result);
+        Assert.IsType<UnauthorizedResult>(anonymous.Result);
+    }
+
+    [Fact]
+    public async Task Controller_Delete_IsNoContent_OrNotFound()
+    {
+        Assert.IsType<NoContentResult>(await ControllerFor(new StubHistory(), Me).Delete(Id(1)));
+        Assert.IsType<NotFoundResult>(await ControllerFor(new StubHistory { DeleteResult = false }, Me).Delete(Id(1)));
+        Assert.IsType<UnauthorizedResult>(await ControllerFor(new StubHistory(), null).Delete(Id(1)));
     }
 }
