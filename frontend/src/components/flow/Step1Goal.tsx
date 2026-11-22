@@ -5,7 +5,6 @@ import {
   ArrowRightIcon,
   CheckIcon,
   ChevronDownIcon,
-  MapPinIcon,
   SearchIcon,
   XIcon,
   AlertCircleIcon,
@@ -13,7 +12,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RequiredMark } from "./RequiredMark";
+import { CHOICE_CARD, CHOICE_PILL, StepHeader, StepNav } from "./StepChrome";
 import { cn } from "@/lib/utils";
 import { normalizeSearch } from "@/lib/certification-utils";
 import {
@@ -23,20 +24,21 @@ import {
   getGradeOptionsForLevel,
 } from "@/lib/profile-flow-options";
 import type { CurrentEducationLevel, EducationSystem, GoalDraft, ProfileMetadataResponse } from "@/types/profile-flow";
-import { EDIT_ONLY, FORM_GOAL_OPTIONS, goalsNeedMajor, toggleGoal as nextGoals, type FormGoal } from "@/lib/form-goals";
+import { goalsNeedMajor, type FormGoal } from "@/lib/form-goals";
 
 interface Step1GoalProps {
   data: GoalDraft;
   metadata: ProfileMetadataResponse | null;
   onUpdate: (updated: Partial<GoalDraft>) => void;
   onNext: () => void;
-  /** Mục tiêu đã tích. Mở từ chat thì lấy theo câu hỏi trong chat và khóa lại */
+  /** Nhu cầu đã chọn (quyết định ngành phải là ngành thật hay được chọn "cần tư vấn") */
   goals: FormGoal[];
-  goalsLocked: boolean;
-  /** Mở từ chat mà chat không gửi mục tiêu: ẩn ô tích, chat tự biết câu đang chờ */
-  showGoals: boolean;
-  onGoalsChange: (goals: FormGoal[]) => void;
+  /** Mở màn sửa nhu cầu; không có khi nhu cầu bị khóa theo chat */
+  onEditNeeds?: () => void;
 }
+
+// Lựa chọn "chưa biết ngành": lưu targetMajor = null kèm majorUndecided, không lưu chữ này vào hồ sơ (BE từ chối ngành lạ)
+const MAJOR_GUIDANCE = "Tôi cần thêm tư vấn về ngành học";
 
 // Năm tốt nghiệp dự kiến: năm nay → 6 năm tới
 const THIS_YEAR = new Date().getFullYear();
@@ -62,9 +64,9 @@ function guessGraduationYear(level: CurrentEducationLevel | null | undefined, gr
 }
 // Kỳ nhập học: chọn kỳ rồi chọn năm, lưu ghép "Fall 2027" — khớp IntakeRegex phía BE và câu B1.4 bên chat
 const INTAKE_TERM_OPTIONS = [
-  { value: "Fall", label: "Kỳ mùa thu (Fall)" },
-  { value: "Spring", label: "Kỳ mùa xuân (Spring)" },
-  { value: "Summer", label: "Kỳ mùa hè (Summer)" },
+  { value: "Fall", label: "Mùa thu (Fall)" },
+  { value: "Spring", label: "Mùa xuân (Spring)" },
+  { value: "Summer", label: "Mùa hè (Summer)" },
 ];
 // Năm nhập học: từ năm tốt nghiệp dự kiến (chưa có thì từ năm nay) tới 5 năm sau
 function intakeYearOptions(graduationYear?: number | null): string[] {
@@ -84,34 +86,16 @@ function parseIntake(intake?: string | null): { term: string; year: string } | n
   return m ? { term: m[1], year: m[2] } : null;
 }
 
-export function Step1Goal({
-  data,
-  metadata,
-  onUpdate,
-  onNext,
-  goals,
-  goalsLocked,
-  showGoals,
-  onGoalsChange,
-}: Step1GoalProps) {
+export function Step1Goal({ data, metadata, onUpdate, onNext, goals, onEditNeeds }: Step1GoalProps) {
   // Chữ đang gõ để tìm ngành; null = không gõ, ô hiện tên Việt của ngành đã chọn
   const [majorQuery, setMajorQuery] = useState<string | null>(null);
   const [showMajorDropdown, setShowMajorDropdown] = useState(false);
   const [majorError, setMajorError] = useState<string | null>(null);
-  // Học sinh chọn "Chưa rõ" (ở form hoặc chat): ngành lưu null kèm cờ majorUndecided, vẫn cho qua bước này
+  // Học sinh chọn "Tôi cần thêm tư vấn về ngành học" (ở form hoặc chat): ngành lưu null kèm cờ majorUndecided
   const majorUnknown = !data.targetMajor && data.majorUndecided === true;
   const [levelError, setLevelError] = useState<string | null>(null);
-  const [goalError, setGoalError] = useState<string | null>(null);
-  const goalSectionId = useId();
-  // Lộ trình, gợi ý trường lọc theo ngành nên không cho "Chưa chọn ngành"
+  // Đánh giá hồ sơ thì cho qua mà không cần ngành; lộ trình, gợi ý trường lọc theo ngành nên cần ngành thật
   const needMajor = goalsNeedMajor(goals);
-  // Chat gửi "Chỉ sửa hồ sơ" (sửa hồ sơ, không có việc chờ): hiện ô đó đã tích và khóa
-  const lockedEdit = goalsLocked && goals.includes(EDIT_ONLY);
-  const toggleGoal = (goal: FormGoal) => {
-    if (goalsLocked) return;
-    onGoalsChange(nextGoals(goals, goal));
-    setGoalError(null);
-  };
   const [degreeError, setDegreeError] = useState<string | null>(null);
   // Mới chọn kỳ hoặc năm thì giữ tạm ở đây; đủ cả hai mới ghi vào nháp
   const [intakePending, setIntakePending] = useState({ term: "", year: "" });
@@ -124,7 +108,7 @@ export function Step1Goal({
   };
 
   const [stateSearch, setStateSearch] = useState("");
-  // Khối "Thu hẹp gợi ý" thu gọn sẵn; đã chọn bang hoặc loại trường thì mở để thấy lựa chọn cũ
+  // Khối "Thu hẹp gợi ý trường" thu gọn sẵn; đã chọn bang hoặc loại trường thì mở để thấy lựa chọn cũ
   const [showNarrow, setShowNarrow] = useState(
     (data.targetStates?.length ?? 0) > 0 || (data.targetSchoolType ?? "all") !== "all"
   );
@@ -167,6 +151,18 @@ export function Step1Goal({
   const gradeOptions = getGradeOptionsForLevel(data.currentEducationLevel);
   const yearOptions = intakeYearOptions(data.expectedGraduationYear);
   const isHighSchool = data.currentEducationLevel === "high_school";
+  // Lớp hoặc năm đã lưu có thể nằm ngoài danh sách (từ chat, đổi cấp học): vẫn hiện để không mất
+  const gradeItems = (data.currentGrade && !gradeOptions.includes(data.currentGrade) ? [data.currentGrade, ...gradeOptions] : gradeOptions).map(
+    (g) => ({ value: g, label: g })
+  );
+  const graduationYearItems = (
+    data.expectedGraduationYear && !GRADUATION_YEAR_OPTIONS.includes(data.expectedGraduationYear)
+      ? [data.expectedGraduationYear, ...GRADUATION_YEAR_OPTIONS]
+      : GRADUATION_YEAR_OPTIONS
+  ).map((y) => ({ value: String(y), label: String(y) }));
+  const intakeYearItems = (intakeYear && !yearOptions.includes(intakeYear) ? [intakeYear, ...yearOptions] : yearOptions).map(
+    (y) => ({ value: y, label: y })
+  );
 
   const handleSelectEducationLevel = (level: CurrentEducationLevel) => {
     // Giữ lớp đã chọn nếu vẫn hợp lệ với cấp học mới, không thì để học sinh chọn lại
@@ -226,6 +222,8 @@ export function Step1Goal({
   const filteredMajors = majorSearch
     ? allMajors.filter((m) => [m.label, m.value, ...m.aliases].some((s) => normalizeSearch(s).includes(majorSearch)))
     : allMajors;
+  // Đã chọn "cần tư vấn" mà nhu cầu lại cần ngành thật (vd vừa thêm Gợi ý trường): báo ngay, kèm đường sang đổi nhu cầu
+  const guidanceConflict = needMajor && majorUnknown;
 
   const handleSelectMajor = (major: string) => {
     setMajorQuery(null);
@@ -235,6 +233,7 @@ export function Step1Goal({
   };
 
   const handleMajorUnknown = () => {
+    if (needMajor) return; // lựa chọn này đang bị khóa, đã có chú thích bên cạnh
     setMajorQuery(null);
     onUpdate({ targetMajor: null, majorUndecided: true });
     setMajorError(null);
@@ -242,20 +241,14 @@ export function Step1Goal({
   };
 
   const handleNextClick = () => {
-    if (showGoals && goals.length === 0) {
-      setGoalError("Vui lòng tích ít nhất một việc bạn muốn hệ thống làm.");
-      document.getElementById(goalSectionId)?.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
-    setGoalError(null);
     if (!data.currentEducationLevel) {
-      setLevelError("Vui lòng chọn cấp học hiện tại.");
+      setLevelError("Chọn cấp học bạn đang theo.");
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
     setLevelError(null);
     if (!data.targetDegreeLevel) {
-      setDegreeError("Vui lòng chọn bậc học muốn theo học ở Mỹ.");
+      setDegreeError("Chọn bậc học bạn muốn theo.");
       document.getElementById(degreeSectionId)?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
@@ -264,12 +257,12 @@ export function Step1Goal({
     if (majorNotInList || (noMajor && (needMajor || !majorUnknown))) {
       setMajorError(
         majorNotInList
-          ? "Ngành đã lưu không còn trong danh sách, vui lòng chọn lại."
+          ? "Ngành đã lưu không còn trong danh sách. Bạn chọn lại nhé."
           : needMajor
-            ? "Lộ trình và gợi ý trường cần biết ngành, vui lòng chọn một ngành trong danh sách."
-            : "Vui lòng chọn một ngành trong danh sách, hoặc bấm \"Chưa chọn ngành\" nếu bạn chưa quyết định."
+            ? "Lộ trình và gợi ý trường cần một ngành cụ thể."
+            : `Chọn một ngành, hoặc chọn “${MAJOR_GUIDANCE}”.`
       );
-      setShowMajorDropdown(true);
+      setShowMajorDropdown(!guidanceConflict);
       const el = document.getElementById(majorInputId);
       if (el) el.focus();
       return;
@@ -313,144 +306,72 @@ export function Step1Goal({
     },
   ];
 
-  return (
-    <div className="space-y-8 animate-in fade-in-50 duration-200">
-      {/* Step Header */}
-      <div className="space-y-2 border-b border-line pb-4">
-        <div className="text-xs font-semibold text-brand">
-          Bước 1/6 · khoảng 1 phút
-        </div>
-        <h1 className="text-h1 text-foreground">
-          Bạn đang ở đâu và muốn đi đến đâu?
-        </h1>
-        <p className="text-body text-muted-foreground">
-          Vài câu hỏi nhanh để chúng tôi gợi ý trường phù hợp nhất với mục tiêu học tập của bạn.
-        </p>
-      </div>
+  const fieldLabel = "text-xs font-medium text-foreground";
+  const selectTrigger = "h-9 w-full bg-surface";
+  const majorErrorText = guidanceConflict
+    ? null
+    : (majorError ?? (majorNotInList ? "Ngành đã lưu không còn trong danh sách. Bạn chọn lại nhé." : null));
 
-      {/* Mục tiêu: quyết định ô nào bắt buộc và nút cuối đi đâu */}
-      {showGoals && (
-        <section id={goalSectionId} className="space-y-4">
-          <div>
-            <Label className="text-sm font-semibold text-foreground">
-              Bạn muốn hệ thống làm gì? <RequiredMark />
-            </Label>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {lockedEdit
-                ? "Bạn đang sửa hồ sơ từ chat. Lưu hồ sơ xong chat sẽ báo đã lưu."
-                : goalsLocked
-                ? "Theo câu bạn hỏi trong chat. Lưu hồ sơ xong chat sẽ trả lời tiếp."
-                : "Tích một hoặc nhiều việc. Chỉ muốn cập nhật thông tin thì chọn Chỉ sửa hồ sơ."}
-            </p>
-          </div>
-          <div className={cn("grid gap-2.5", goalsLocked && !lockedEdit ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
-            {/* Mở từ chat thì việc theo câu đã hỏi; "Chỉ sửa hồ sơ" chỉ hiện khi chat gửi (sửa hồ sơ, không có việc chờ) */}
-            {FORM_GOAL_OPTIONS.filter((opt) => !goalsLocked || lockedEdit || opt.value !== EDIT_ONLY).map((opt) => {
-              const isSelected = goals.includes(opt.value);
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  role="checkbox"
-                  aria-checked={isSelected}
-                  disabled={goalsLocked}
-                  onClick={() => toggleGoal(opt.value)}
-                  className={cn(
-                    "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                    isSelected ? "border-foreground bg-foreground/5" : "border-line bg-surface",
-                    goalsLocked ? "opacity-80" : "cursor-pointer hover:border-foreground/40"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border",
-                      isSelected ? "border-foreground bg-foreground text-background" : "border-line"
-                    )}
-                  >
-                    {isSelected && <CheckIcon className="size-3" />}
-                  </span>
-                  <span>
-                    <span className="block text-sm font-medium text-foreground">{opt.label}</span>
-                    <span className="block text-xs text-muted-foreground">{opt.description}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          {goalError && <p className="text-xs font-medium text-destructive">{goalError}</p>}
-        </section>
-      )}
+  return (
+    <div className="flow-stagger space-y-10">
+      <StepHeader title="Mục tiêu của bạn" />
 
       {/* Question 1: Current Education */}
-      <section className="space-y-4">
-        <div>
-          <Label className="text-sm font-semibold text-foreground">
-            Hiện tại bạn đang học ở đâu? <RequiredMark />
-          </Label>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Chọn bậc học hiện tại để hệ thống điều chỉnh lớp học và năm học tương ứng.
-          </p>
-        </div>
+      <fieldset role="radiogroup" className="min-w-0 space-y-4">
+        <legend className="text-h3 mb-4 text-foreground">
+          Bạn đang học cấp nào? <RequiredMark />
+        </legend>
 
-        {/* Level pills with explicit single-select radio dots */}
         <div className="flex flex-wrap gap-2.5">
-          {EDUCATION_LEVEL_OPTIONS.map((opt) => {
-            const isSelected = data.currentEducationLevel === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => handleSelectEducationLevel(opt.value)}
-                aria-pressed={isSelected}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                  isSelected
-                    ? "border-foreground bg-foreground text-background"
-                    : "border-line bg-surface text-foreground hover:border-foreground/40"
-                )}
-              >
-                {isSelected && <CheckIcon className="size-3.5" />}
-                {opt.label}
-              </button>
-            );
-          })}
+          {EDUCATION_LEVEL_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              role="radio"
+              aria-checked={data.currentEducationLevel === opt.value}
+              onClick={() => handleSelectEducationLevel(opt.value)}
+              className={CHOICE_PILL}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
         {levelError && <p className="text-xs font-medium text-destructive">{levelError}</p>}
 
         {/* Chọn cấp học xong mới hiện lớp, trường, năm tốt nghiệp; cấp 3 thêm hệ chương trình (giống câu D1 bên chat) */}
         {data.currentEducationLevel && (
           <div className={cn("grid gap-4 pt-2", isHighSchool ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
-            {/* Lớp / Năm học (Dropdown động theo bậc học) */}
+            {/* Lớp / Năm học (động theo cấp học) */}
             <div className="space-y-1.5">
-              <Label htmlFor="currentGrade" className="text-xs font-medium text-foreground">
-                Lớp / Năm học hiện tại
+              <Label htmlFor="currentGrade" className={fieldLabel}>
+                Lớp / năm đang học
               </Label>
-              <div className="relative">
-                <select
-                  id="currentGrade"
-                  value={data.currentGrade ?? ""}
-                  onChange={(e) => {
-                    // Chọn lớp thì tự điền năm tốt nghiệp, học sinh vẫn sửa lại được
-                    const grade = e.target.value || null;
-                    const graduationYear = guessGraduationYear(data.currentEducationLevel, grade);
-                    onUpdate({ currentGrade: grade, ...(graduationYear && { expectedGraduationYear: graduationYear }) });
-                  }}
-                  className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
-                >
-                  <option value="">Chọn lớp / năm</option>
-                  {gradeOptions.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
-                    </option>
+              <Select
+                value={data.currentGrade || null}
+                onValueChange={(v) => {
+                  // Chọn lớp thì tự điền năm tốt nghiệp, học sinh vẫn sửa lại được
+                  const grade = v || null;
+                  const graduationYear = guessGraduationYear(data.currentEducationLevel, grade);
+                  onUpdate({ currentGrade: grade, ...(graduationYear && { expectedGraduationYear: graduationYear }) });
+                }}
+                items={gradeItems}
+              >
+                <SelectTrigger id="currentGrade" className={selectTrigger}>
+                  <SelectValue placeholder="Chọn lớp / năm" />
+                </SelectTrigger>
+                <SelectContent>
+                  {gradeItems.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
                   ))}
-                </select>
-                <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
-              </div>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Trường đang học */}
             <div className="space-y-1.5">
-              <Label htmlFor="currentSchool" className="text-xs font-medium text-foreground">
+              <Label htmlFor="currentSchool" className={fieldLabel}>
                 Trường đang học
               </Label>
               <Input
@@ -458,267 +379,259 @@ export function Step1Goal({
                 placeholder="VD: THPT Chuyên Hà Nội – Amsterdam"
                 value={data.currentSchool ?? ""}
                 onChange={(e) => onUpdate({ currentSchool: e.target.value })}
+                className="h-9 w-full bg-surface"
               />
             </div>
 
             {/* Năm tốt nghiệp dự kiến: tự điền khi chọn lớp, năm nay → 6 năm tới */}
             <div className="space-y-1.5">
-              <Label htmlFor="expectedGraduationYear" className="text-xs font-medium text-foreground">
+              <Label htmlFor="expectedGraduationYear" className={fieldLabel}>
                 Năm tốt nghiệp dự kiến
               </Label>
-              <div className="relative">
-                <select
-                  id="expectedGraduationYear"
-                  value={data.expectedGraduationYear ?? ""}
-                  onChange={(e) =>
-                    onUpdate({
-                      expectedGraduationYear: e.target.value
-                        ? Number(e.target.value)
-                        : null,
-                    })
-                  }
-                  className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
-                >
-                  <option value="">Chưa xác định</option>
-                  {GRADUATION_YEAR_OPTIONS.map((yr) => (
-                    <option key={yr} value={yr}>
-                      {yr}
-                    </option>
+              <Select
+                value={data.expectedGraduationYear != null ? String(data.expectedGraduationYear) : null}
+                onValueChange={(v) => onUpdate({ expectedGraduationYear: v ? Number(v) : null })}
+                items={graduationYearItems}
+              >
+                <SelectTrigger id="expectedGraduationYear" className={selectTrigger}>
+                  <SelectValue placeholder="Chưa xác định" />
+                </SelectTrigger>
+                <SelectContent>
+                  {graduationYearItems.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
                   ))}
-                </select>
-                <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
-              </div>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Hệ chương trình chỉ có ở cấp 3 */}
             {isHighSchool && (
               <div className="space-y-1.5">
-                <Label htmlFor="educationSystem" className="text-xs font-medium text-foreground">
-                  Hệ chương trình đang học
+                <Label htmlFor="educationSystem" className={fieldLabel}>
+                  Hệ chương trình
                 </Label>
-                <div className="relative">
-                  <select
-                    id="educationSystem"
-                    value={data.educationSystem ?? ""}
-                    onChange={(e) => onUpdate({ educationSystem: (e.target.value || null) as EducationSystem | null })}
-                    className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
-                  >
-                    <option value="">Chưa chọn</option>
-                    {EDUCATION_SYSTEM_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
+                <Select
+                  value={data.educationSystem || null}
+                  onValueChange={(v) => onUpdate({ educationSystem: (v || null) as EducationSystem | null })}
+                  items={EDUCATION_SYSTEM_OPTIONS}
+                >
+                  <SelectTrigger id="educationSystem" className={selectTrigger}>
+                    <SelectValue placeholder="Chưa chọn" />
+                  </SelectTrigger>
+                  <SelectContent className="w-max min-w-(--anchor-width)">
+                    {EDUCATION_SYSTEM_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
                     ))}
-                  </select>
-                  <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
-                </div>
+                  </SelectContent>
+                </Select>
               </div>
             )}
           </div>
         )}
-      </section>
+      </fieldset>
 
-      {/* Question 2: Target Degree Level */}
-      <section id={degreeSectionId} className="space-y-4 pt-2">
-        <div>
-          <Label className="text-sm font-semibold text-foreground">
+      {/* Question 2: Target Degree Level + kỳ nhập học */}
+      <div id={degreeSectionId} className="space-y-6">
+        <fieldset role="radiogroup" className="min-w-0 space-y-4">
+          <legend className="text-h3 mb-4 text-foreground">
             Bạn muốn học bậc nào ở Mỹ? <RequiredMark />
-          </Label>
-        </div>
+          </legend>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          {studyLevels.map((lvl) => {
-            const isSelected = data.targetDegreeLevel === lvl.key;
-            return (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {studyLevels.map((lvl) => (
               <button
                 key={lvl.key}
                 type="button"
+                role="radio"
+                aria-checked={data.targetDegreeLevel === lvl.key}
                 onClick={() => {
                   onUpdate({ targetDegreeLevel: lvl.key });
                   setDegreeError(null);
                 }}
-                className={cn(
-                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                  isSelected
-                    ? "border-brand bg-brand-wash/40 ring-2 ring-brand text-brand-ink"
-                    : "border-line bg-surface hover:border-brand/40 hover:bg-muted/30"
-                )}
+                className={cn(CHOICE_CARD, "flex h-full flex-col items-start")}
               >
-                <div className="flex items-center justify-between w-full">
-                  <div className="font-semibold text-sm text-foreground">
-                    {lvl.label}
-                  </div>
-                  <div
-                    className={cn(
-                      "size-4 rounded-full border flex items-center justify-center transition-all",
-                      isSelected
-                        ? "border-brand bg-brand"
-                        : "border-muted-foreground/40 bg-surface"
-                    )}
-                  >
-                    {isSelected && <div className="size-1.5 rounded-full bg-white" />}
-                  </div>
-                </div>
-                <div className="text-xs text-muted-foreground mt-2">
-                  {lvl.description}
-                </div>
+                <span className="text-sm font-semibold text-foreground">{lvl.label}</span>
+                <span className="mt-1 text-xs text-ink-2">{lvl.description}</span>
               </button>
-            );
-          })}
-        </div>
-        {degreeError && <p className="text-xs font-medium text-destructive">{degreeError}</p>}
-        {data.targetDegreeLevel === "master" || data.targetDegreeLevel === "phd" ? (
-          <p className="flex items-center gap-1.5 text-xs font-medium text-warn">
-            <AlertCircleIcon className="size-3.5 shrink-0" />
-            Bậc này đang làm sau. Bản hiện tại gợi ý trường cho Cao đẳng và Đại học.
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground">Chưa chắc? Chọn bậc gần nhất, bạn có thể đổi lại sau.</p>
-        )}
+            ))}
+          </div>
+          {degreeError && <p className="text-xs font-medium text-destructive">{degreeError}</p>}
+          {(data.targetDegreeLevel === "master" || data.targetDegreeLevel === "phd") && (
+            <p className="flex items-center gap-1.5 text-xs font-medium text-warn">
+              <AlertCircleIcon className="size-3.5 shrink-0" />
+              Hiện hệ thống mới gợi ý trường cho Cao đẳng và Đại học.
+            </p>
+          )}
+        </fieldset>
 
         {/* Kỳ nhập học — chọn kỳ rồi chọn năm, giống câu B1.4 bên chat */}
-        <div className="space-y-1.5">
-          <Label htmlFor="targetIntakeTerm" className="text-xs font-medium text-foreground">
-            Kỳ muốn nhập học
-          </Label>
+        <fieldset className="min-w-0 space-y-3">
+          <legend className="text-h3 mb-3 text-foreground">Bạn muốn nhập học khi nào?</legend>
           <div className="grid gap-3 sm:max-w-md sm:grid-cols-2">
-            <div className="relative">
-              <select
-                id="targetIntakeTerm"
-                aria-label="Kỳ nhập học"
-                value={intakeTerm}
-                onChange={(e) => updateIntake(e.target.value, intakeYear)}
-                className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
-              >
-                <option value="">Chọn kỳ</option>
-                {INTAKE_TERM_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
-            </div>
-            <div className="relative">
-              <select
-                id="targetIntakeYear"
-                aria-label="Năm nhập học"
-                value={intakeYear}
-                onChange={(e) => updateIntake(intakeTerm, e.target.value)}
-                className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
-              >
-                <option value="">Chọn năm</option>
-                {/* Năm đã lưu từ chat có thể nằm ngoài danh sách — vẫn hiện để không mất */}
-                {intakeYear && !yearOptions.includes(intakeYear) && (
-                  <option value={intakeYear}>{intakeYear}</option>
-                )}
-                {yearOptions.map((yr) => (
-                  <option key={yr} value={yr}>
-                    {yr}
-                  </option>
-                ))}
-              </select>
-              <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Question 3: Ngành học mong muốn (bắt buộc) */}
-      <section className="space-y-4 pt-2">
-        {/* Ngành học mong muốn (BẮT BUỘC & Searchable Dropdown) */}
-        <div ref={majorDropdownRef} className="space-y-1.5 relative">
-          <div className="flex items-center justify-between">
-            <Label
-              htmlFor={majorInputId}
-              className="text-xs font-semibold text-foreground flex items-center gap-1"
+            <Select
+              value={intakeTerm || null}
+              onValueChange={(v) => updateIntake(v ?? "", intakeYear)}
+              items={INTAKE_TERM_OPTIONS}
             >
-              Ngành học mong muốn <RequiredMark />
-              <span className="text-muted-foreground font-normal">
-                ({allMajors.length > 0 ? `${allMajors.length} ngành` : "Đang tải danh sách..."})
-              </span>
-            </Label>
-            {data.targetMajor ? (
-              <span className="text-xs text-brand font-medium">
-                Đã chọn: <strong className="text-foreground">{selectedMajorLabel}</strong>
-              </span>
-            ) : majorUnknown ? (
-              <span className="text-xs text-brand font-medium">
-                Đã chọn: <strong className="text-foreground">Chưa chọn ngành</strong>
-              </span>
-            ) : needMajor ? null : (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={handleMajorUnknown}
-                className="text-xs"
-              >
-                Chưa chọn ngành
-              </Button>
-            )}
+              <SelectTrigger id="targetIntakeTerm" aria-label="Kỳ nhập học" className={selectTrigger}>
+                <SelectValue placeholder="Chọn kỳ" />
+              </SelectTrigger>
+              <SelectContent>
+                {INTAKE_TERM_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={intakeYear || null}
+              onValueChange={(v) => updateIntake(intakeTerm, v ?? "")}
+              items={intakeYearItems}
+            >
+              <SelectTrigger id="targetIntakeYear" aria-label="Năm nhập học" className={selectTrigger}>
+                <SelectValue placeholder="Chọn năm" />
+              </SelectTrigger>
+              <SelectContent>
+                {intakeYearItems.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+        </fieldset>
+      </div>
 
-          <div className="relative">
-            <SearchIcon className="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
-            <Input
-              id={majorInputId}
-              placeholder="Gõ để tìm ngành, ví dụ: máy tính, kinh tế, y..."
-              value={majorQuery ?? selectedMajorLabel}
-              onFocus={() => setShowMajorDropdown(true)}
-              onChange={(e) => {
-                setMajorQuery(e.target.value);
-                if (data.majorUndecided) onUpdate({ majorUndecided: false });
-                setShowMajorDropdown(true);
-                if (majorError) setMajorError(null);
-              }}
-              className={cn(
-                "pl-9 pr-16 bg-surface",
-                majorError && "border-destructive ring-1 ring-destructive"
-              )}
-            />
-            <div className="absolute right-2 top-2 flex items-center gap-1">
-              {(majorQuery || data.targetMajor) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMajorQuery(null);
-                    onUpdate({ targetMajor: null });
-                    setShowMajorDropdown(true);
-                  }}
-                  className="p-0.5 text-muted-foreground hover:text-foreground cursor-pointer rounded focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
-                  title="Xóa lựa chọn"
-                >
-                  <XIcon className="size-4" />
-                </button>
-              )}
+      {/* Question 3: Ngành học mong muốn (bắt buộc, trừ khi chọn cần tư vấn) */}
+      <div ref={majorDropdownRef} className="relative space-y-3">
+        <Label htmlFor={majorInputId} className="text-h3 text-foreground">
+          Bạn muốn học ngành gì? <RequiredMark />
+        </Label>
+
+        <div className="relative">
+          <SearchIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-ink-2" />
+          <Input
+            id={majorInputId}
+            placeholder={allMajors.length > 0 ? "Tìm ngành, ví dụ: máy tính, kinh tế" : "Đang tải danh sách ngành…"}
+            value={majorQuery ?? (majorUnknown ? MAJOR_GUIDANCE : selectedMajorLabel)}
+            onFocus={(e) => {
+              setShowMajorDropdown(true);
+              if (majorUnknown && majorQuery === null) e.target.select(); // gõ là thay luôn lựa chọn "cần tư vấn"
+            }}
+            onChange={(e) => {
+              setMajorQuery(e.target.value);
+              if (data.majorUndecided) onUpdate({ majorUndecided: false });
+              setShowMajorDropdown(true);
+              if (majorError) setMajorError(null);
+            }}
+            aria-invalid={majorErrorText || guidanceConflict ? true : undefined}
+            className="h-9 w-full bg-surface pr-16 pl-9"
+          />
+          <div className="absolute top-1.5 right-2 flex items-center gap-1">
+            {(majorQuery || data.targetMajor || majorUnknown) && (
               <button
                 type="button"
-                onClick={() => setShowMajorDropdown(!showMajorDropdown)}
-                className="p-0.5 text-muted-foreground hover:text-foreground cursor-pointer rounded focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
-                title="Mở danh sách ngành"
+                onClick={() => {
+                  setMajorQuery(null);
+                  onUpdate({ targetMajor: null, majorUndecided: false });
+                  setShowMajorDropdown(true);
+                }}
+                className="cursor-pointer rounded p-0.5 text-ink-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                aria-label="Xóa lựa chọn"
               >
-                <ChevronDownIcon
-                  className={cn(
-                    "size-4 transition-transform",
-                    showMajorDropdown && "rotate-180 text-brand"
-                  )}
-                />
+                <XIcon className="size-4" />
               </button>
-            </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowMajorDropdown(!showMajorDropdown)}
+              className="cursor-pointer rounded p-0.5 text-ink-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              aria-label="Mở danh sách ngành"
+              aria-expanded={showMajorDropdown}
+            >
+              <ChevronDownIcon className={cn("size-4 transition-transform", showMajorDropdown && "rotate-180 text-brand")} />
+            </button>
+          </div>
+        </div>
+
+        {majorErrorText && (
+          <div role="alert" className="flex items-center gap-1 pt-0.5 text-xs text-destructive">
+            <AlertCircleIcon className="size-3.5 shrink-0" />
+            <span>{majorErrorText}</span>
+          </div>
+        )}
+        {guidanceConflict && (
+          <p role="alert" className="flex flex-wrap items-center gap-x-1.5 text-xs text-destructive">
+            <AlertCircleIcon className="size-3.5 shrink-0" />
+            <span>Lộ trình và gợi ý trường cần một ngành cụ thể.</span>
+            {onEditNeeds && (
+              <button
+                type="button"
+                onClick={onEditNeeds}
+                className="cursor-pointer font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                Đổi nhu cầu
+              </button>
+            )}
+          </p>
+        )}
+
+        {/* Ngành phổ biến (cột is_popular trong bảng majors) và lựa chọn "cần tư vấn" */}
+          <div role="radiogroup" aria-label="Ngành phổ biến" className="flex flex-wrap gap-1.5 pt-1">
+            {popularMajors.map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                role="radio"
+                aria-checked={selectedMajor?.value === m.value}
+                onClick={() => handleSelectMajor(m.value)}
+                className={cn(CHOICE_PILL, "px-3 py-1 text-xs")}
+              >
+                {m.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={majorUnknown}
+              aria-disabled={needMajor || undefined}
+              onClick={handleMajorUnknown}
+              className={cn(CHOICE_PILL, "border-dashed px-3 py-1 text-xs aria-disabled:opacity-(--cds-opacity-disabled) aria-checked:border-solid")}
+            >
+              {MAJOR_GUIDANCE}
+            </button>
           </div>
 
-          {(majorError || majorNotInList) && (
-            <div className="flex items-center gap-1 text-xs text-destructive pt-0.5">
-              <AlertCircleIcon className="size-3.5 shrink-0" />
-              <span>{majorError ?? "Ngành đã lưu không còn trong danh sách, vui lòng chọn lại."}</span>
-            </div>
-          )}
-
-          {/* Ngành phổ biến (cột is_popular trong bảng majors), không có thì ẩn */}
-          {popularMajors.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {popularMajors.map((m) => {
+        {/* Searchable Dropdown List */}
+        {showMajorDropdown && (
+          <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-line bg-surface p-1.5 shadow-md">
+            {/* Luôn nằm trên cùng, kể cả khi đang lọc */}
+            <button
+              type="button"
+              aria-disabled={needMajor || undefined}
+              onClick={handleMajorUnknown}
+              className={cn(
+                "sticky top-0 z-10 mb-1 flex w-full cursor-pointer flex-col rounded-lg border-b border-line bg-surface px-3 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                needMajor ? "cursor-default text-ink-2" : "text-foreground hover:bg-brand-wash hover:text-brand",
+                majorUnknown && "font-medium text-brand"
+              )}
+            >
+              <span className="flex items-center justify-between">
+                {MAJOR_GUIDANCE}
+                {majorUnknown && <CheckIcon className="size-3.5 shrink-0" />}
+              </span>
+              {needMajor && <span className="mt-0.5 font-normal">Cần bỏ Lộ trình và Gợi ý trường ở Nhu cầu của bạn</span>}
+            </button>
+            {filteredMajors.length === 0 ? (
+              <div className="p-3 text-center text-xs text-ink-2">Không có ngành khớp “{majorQuery}”.</div>
+            ) : (
+              filteredMajors.map((m) => {
                 const isSelected = selectedMajor?.value === m.value;
                 return (
                   <button
@@ -726,260 +639,173 @@ export function Step1Goal({
                     type="button"
                     onClick={() => handleSelectMajor(m.value)}
                     className={cn(
-                      "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                      isSelected
-                        ? "border-brand bg-brand text-white "
-                        : "border-line bg-surface text-muted-foreground hover:border-brand/40 hover:text-foreground"
+                      "flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                      isSelected ? "bg-brand font-medium text-brand-foreground" : "text-foreground hover:bg-brand-wash hover:text-brand"
                     )}
                   >
-                    {m.label}
+                    <span>{m.label}</span>
+                    {isSelected && <CheckIcon className="size-3.5 shrink-0" />}
                   </button>
                 );
-              })}
-            </div>
-          )}
+              })
+            )}
+          </div>
+        )}
+      </div>
 
-          {/* Searchable Dropdown List */}
-          {showMajorDropdown && (
-            <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-line bg-surface p-1.5 ">
-              <div className="px-2 py-1 text-xs font-semibold text-muted-foreground border-b border-line/60 mb-1">
-                {filteredMajors.length > 0
-                  ? `Tìm thấy ${filteredMajors.length} ngành`
-                  : "Không tìm thấy ngành phù hợp"}
-              </div>
-              {filteredMajors.length === 0 ? (
-                <div className="p-3 text-center text-xs text-muted-foreground">
-                  Không tìm thấy ngành nào khớp với &quot;{majorQuery}&quot;. Thử gõ tên khác hoặc bấm
-                  &quot;Chưa chọn ngành&quot; nếu bạn chưa quyết định.
-                </div>
-              ) : (
-                filteredMajors.map((m) => {
-                  const isSelected = selectedMajor?.value === m.value;
-                  return (
-                    <button
-                      key={m.value}
-                      type="button"
-                      onClick={() => handleSelectMajor(m.value)}
-                      className={cn(
-                        "w-full text-left rounded-lg px-3 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                        isSelected
-                          ? "bg-brand text-white font-medium"
-                          : "text-foreground hover:bg-brand-wash hover:text-brand"
-                      )}
-                    >
-                      <span>{m.label}</span>
-                      {isSelected && <CheckIcon className="size-3.5 shrink-0" />}
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Question 4: Thu hẹp gợi ý — không bắt buộc */}
-      <section className="space-y-5 rounded-2xl border border-line bg-ground/50 p-5">
+      {/* Thu hẹp gợi ý — không bắt buộc */}
+      <section className="space-y-5">
         <button
           type="button"
           onClick={() => setShowNarrow(!showNarrow)}
           aria-expanded={showNarrow}
-          className="flex w-full items-center gap-2 rounded-lg text-left cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
+          className="flex w-full cursor-pointer items-center gap-2 rounded-lg text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
-          <span className="text-sm font-semibold text-foreground">Thu hẹp gợi ý</span>
-          <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-muted-foreground">
-            Không bắt buộc
-          </span>
-          {!showNarrow && (
-            <span className="text-xs text-muted-foreground">Bang mong muốn, loại hình trường</span>
-          )}
+          <span className="text-h3 text-foreground">Thu hẹp gợi ý trường (không bắt buộc)</span>
           <ChevronDownIcon
-            className={cn("ml-auto size-4 text-muted-foreground transition-transform", showNarrow && "rotate-180")}
+            className={cn("ml-auto size-4 shrink-0 text-ink-2 transition-transform", showNarrow && "rotate-180")}
           />
         </button>
 
         {showNarrow && (
-        <>
-        {/* Bang mong muốn (Searchable Dropdown + Popular Chips) */}
-        <div ref={stateDropdownRef} className="space-y-2 relative">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-              <MapPinIcon className="size-3.5 text-brand" />
-              Bang mong muốn (Mỹ) · Chọn được nhiều bang
-            </Label>
-          </div>
+          <>
+            {/* Bang mong muốn (Searchable Dropdown + Popular Chips) */}
+            <div ref={stateDropdownRef} className="relative space-y-2">
+              <Label className="text-xs font-semibold text-foreground">Bang mong muốn</Label>
 
-          {/* Selected chips display */}
-          {selectedStates.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pb-1">
-              {selectedStates.map((code) => {
-                const s = allStates.find((x) => x.code === code);
-                return (
-                  <span
-                    key={code}
-                    className="inline-flex items-center gap-1 rounded-md bg-brand-wash px-2.5 py-1 text-xs font-medium text-brand-ink border border-brand/20 "
+              {/* Selected chips display */}
+              {selectedStates.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pb-1">
+                  {selectedStates.map((code) => {
+                    const s = allStates.find((x) => x.code === code);
+                    return (
+                      <span
+                        key={code}
+                        className="inline-flex items-center gap-1 rounded-md border border-brand/20 bg-brand-wash px-2.5 py-1 text-xs font-medium text-brand-ink"
+                      >
+                        {s?.name ?? code} ({code})
+                        <button
+                          type="button"
+                          onClick={() => removeState(code)}
+                          className="ml-0.5 cursor-pointer rounded hover:text-destructive focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                          aria-label={`Bỏ chọn ${s?.name ?? code}`}
+                        >
+                          <XIcon className="size-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Popular State Chips & Dropdown trigger */}
+              <div role="group" aria-label="Bang phổ biến" className="flex flex-wrap items-center gap-1.5">
+                {popularStates.map((s) => (
+                  <button
+                    key={s.code}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={selectedStates.includes(s.code)}
+                    onClick={() => toggleState(s.code)}
+                    className={cn(CHOICE_PILL, "px-3 py-1 text-xs")}
                   >
-                    {s?.name ?? code} ({code})
-                    <button
-                      type="button"
-                      onClick={() => removeState(code)}
-                      className="rounded hover:text-destructive cursor-pointer ml-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
-                      title="Bỏ chọn"
-                    >
-                      <XIcon className="size-3" />
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-          )}
+                    {s.name}
+                  </button>
+                ))}
 
-          {/* Popular State Chips & Dropdown trigger */}
-          <div className="flex flex-wrap gap-1.5 items-center">
-            {popularStates.map((s) => {
-              const isSelected = selectedStates.includes(s.code);
-              return (
                 <button
-                  key={s.code}
                   type="button"
-                  onClick={() => toggleState(s.code)}
+                  onClick={() => setShowStateDropdown(!showStateDropdown)}
+                  aria-expanded={showStateDropdown}
                   className={cn(
-                    "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                    isSelected
-                      ? "border-brand bg-brand text-white "
-                      : "border-line bg-surface text-muted-foreground hover:border-brand/40 hover:text-foreground"
+                    "flex cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-line bg-surface px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                    showStateDropdown ? "border-brand text-brand" : "text-brand hover:border-brand/60"
                   )}
                 >
-                  {s.name}
+                  Tìm trong 51 bang
+                  <ChevronDownIcon className={cn("size-3.5 transition-transform", showStateDropdown && "rotate-180")} />
                 </button>
-              );
-            })}
-
-            <button
-              type="button"
-              onClick={() => setShowStateDropdown(!showStateDropdown)}
-              className={cn(
-                "rounded-md border border-line bg-surface px-3 py-1 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                showStateDropdown
-                  ? "border-brand text-brand ring-1 ring-brand"
-                  : "text-brand hover:border-brand/60"
-              )}
-            >
-              <span>+ Tìm trong 51 bang</span>
-              <ChevronDownIcon
-                className={cn(
-                  "size-3.5 transition-transform",
-                  showStateDropdown && "rotate-180"
-                )}
-              />
-            </button>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            {selectedStates.length > 0
-              ? `Đã chọn ${selectedStates.length} bang.`
-              : "Chưa chọn bang nào, không lọc theo bang."}
-          </p>
-
-          {/* Searchable State Dropdown List */}
-          {showStateDropdown && (
-            <div className="absolute z-30 mt-1 max-h-60 w-full max-w-md overflow-hidden rounded-xl border border-line bg-surface flex flex-col">
-              <div className="p-2 border-b border-line bg-muted/20">
-                <div className="relative">
-                  <SearchIcon className="absolute left-2.5 top-2 size-3.5 text-muted-foreground pointer-events-none" />
-                  <Input
-                    placeholder="Tìm tên bang hoặc mã viết tắt (VD: CA, Texas)..."
-                    value={stateSearch}
-                    onChange={(e) => setStateSearch(e.target.value)}
-                    className="h-8 text-xs pl-8 pr-2 bg-surface"
-                    autoFocus
-                  />
-                </div>
               </div>
 
-              <div className="overflow-y-auto max-h-48 p-1.5 space-y-2">
-                {stateGroups.map((group) => (
-                  <div key={group.value || "other"}>
-                    <p className="px-2.5 pb-1 text-xs font-semibold text-muted-foreground">
-                      {group.label}
-                    </p>
-                    <div className="grid grid-cols-2 gap-1">
-                      {group.states.map((s) => {
-                        const isSelected = selectedStates.includes(s.code);
-                        return (
-                          <button
-                            key={s.code}
-                            type="button"
-                            onClick={() => toggleState(s.code)}
-                            className={cn(
-                              "flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-left cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                              isSelected
-                                ? "bg-brand text-white font-medium"
-                                : "hover:bg-muted text-foreground"
-                            )}
-                          >
-                            <span className="truncate">{s.name} ({s.code})</span>
-                            {isSelected && <CheckIcon className="size-3.5 shrink-0 ml-1" />}
-                          </button>
-                        );
-                      })}
+              {/* Searchable State Dropdown List */}
+              {showStateDropdown && (
+                <div className="absolute z-30 mt-1 flex max-h-60 w-full max-w-md flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-md">
+                  <div className="border-b border-line p-2">
+                    <div className="relative">
+                      <SearchIcon className="pointer-events-none absolute top-2 left-2.5 size-3.5 text-ink-2" />
+                      <Input
+                        placeholder="Tên bang hoặc mã, ví dụ CA"
+                        value={stateSearch}
+                        onChange={(e) => setStateSearch(e.target.value)}
+                        className="h-8 bg-surface pr-2 pl-8 text-xs"
+                        autoFocus
+                      />
                     </div>
                   </div>
-                ))}
-                {stateGroups.length === 0 && (
-                  <p className="px-2.5 py-2 text-xs text-muted-foreground">Không tìm thấy bang nào.</p>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
 
-        {/* Loại trường (Công lập / Tư thục) */}
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-foreground">Loại hình trường</Label>
-          <div className="flex gap-2">
-            {SCHOOL_TYPE_OPTIONS.map((opt) => {
-              const current = data.targetSchoolType ?? "all";
-              const isSelected = current === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => onUpdate({ targetSchoolType: opt.value })}
-                  className={cn(
-                    "flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                    isSelected
-                      ? "border-brand bg-brand-wash/60 text-brand ring-1 ring-brand font-semibold"
-                      : "border-line bg-surface text-muted-foreground hover:border-brand/40 hover:text-foreground"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "mr-1.5 flex size-3 items-center justify-center rounded-full border transition-all",
-                      isSelected
-                        ? "border-brand bg-brand"
-                        : "border-muted-foreground/50 bg-surface"
+                  <div className="max-h-48 space-y-2 overflow-y-auto p-1.5">
+                    {stateGroups.map((group) => (
+                      <div key={group.value || "other"}>
+                        <p className="px-2.5 pb-1 text-xs font-semibold text-ink-2">{group.label}</p>
+                        <div className="grid grid-cols-2 gap-1">
+                          {group.states.map((s) => {
+                            const isSelected = selectedStates.includes(s.code);
+                            return (
+                              <button
+                                key={s.code}
+                                type="button"
+                                onClick={() => toggleState(s.code)}
+                                className={cn(
+                                  "flex cursor-pointer items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                                  isSelected ? "bg-brand font-medium text-brand-foreground" : "text-foreground hover:bg-muted"
+                                )}
+                              >
+                                <span className="truncate">
+                                  {s.name} ({s.code})
+                                </span>
+                                {isSelected && <CheckIcon className="ml-1 size-3.5 shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                    {stateGroups.length === 0 && (
+                      <p className="px-2.5 py-2 text-xs text-ink-2">Không tìm thấy bang nào.</p>
                     )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Loại trường (Công lập / Tư thục) */}
+            <fieldset role="radiogroup" className="min-w-0 space-y-1.5">
+              <legend className="mb-1.5 text-xs font-semibold text-foreground">Loại hình trường</legend>
+              <div className="flex gap-2">
+                {SCHOOL_TYPE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={(data.targetSchoolType ?? "all") === opt.value}
+                    onClick={() => onUpdate({ targetSchoolType: opt.value })}
+                    className={cn(CHOICE_PILL, "px-3 py-1 text-xs")}
                   >
-                    {isSelected && <span className="size-1 rounded-full bg-white" />}
-                  </span>
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        </>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          </>
         )}
       </section>
 
-      {/* Bottom Actions */}
-      <div className="flex justify-end pt-4 border-t border-line">
+      <StepNav>
         <Button onClick={handleNextClick} size="lg" className="gap-1.5">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>
-      </div>
+      </StepNav>
     </div>
   );
 }
