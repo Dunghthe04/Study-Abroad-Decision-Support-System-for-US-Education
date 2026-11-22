@@ -13,12 +13,52 @@ import { ApiError } from "@/lib/api";
 import { adminForumApi } from "@/lib/community-api";
 import type { CommunityReportDto } from "@/types/community";
 
+function RestrictAuthorForm({
+  disabled,
+  onRestrict,
+}: {
+  disabled: boolean;
+  onRestrict: (days: number, reason: string) => Promise<void>;
+}) {
+  const [days, setDays] = useState("7");
+  const [reason, setReason] = useState("");
+
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+      <Input
+        type="number"
+        min={1}
+        max={90}
+        value={days}
+        onChange={(e) => setDays(e.target.value)}
+        className="sm:w-24"
+        aria-label="Số ngày hạn chế"
+        disabled={disabled}
+      />
+      <Textarea
+        rows={2}
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Lý do hạn chế chat"
+        className="min-h-10"
+        disabled={disabled}
+      />
+      <Button
+        size="sm"
+        variant="destructive"
+        disabled={disabled}
+        onClick={() => void onRestrict(Number(days) || 7, reason.trim() || "Vi phạm cộng đồng")}
+      >
+        Hạn chế tác giả
+      </Button>
+    </div>
+  );
+}
+
 export function AdminForumView() {
   const [items, setItems] = useState<CommunityReportDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [restrictDays, setRestrictDays] = useState("7");
-  const [restrictReason, setRestrictReason] = useState("");
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -37,6 +77,7 @@ export function AdminForumView() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
 
@@ -140,43 +181,16 @@ export function AdminForumView() {
                         </Button>
                       </div>
                     ) : (
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                        <Input
-                          type="number"
-                          min={1}
-                          max={90}
-                          value={restrictDays}
-                          onChange={(e) => setRestrictDays(e.target.value)}
-                          className="sm:w-24"
-                          aria-label="Số ngày hạn chế"
-                        />
-                        <Textarea
-                          rows={2}
-                          value={restrictReason}
-                          onChange={(e) => setRestrictReason(e.target.value)}
-                          placeholder="Lý do hạn chế chat"
-                          className="min-h-10"
-                        />
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={busyId === r.id}
-                          onClick={() =>
-                            void act(
-                              r.id,
-                              () =>
-                                adminForumApi.restrict(
-                                  r.authorUserId!,
-                                  Number(restrictDays) || 7,
-                                  restrictReason.trim() || "Vi phạm cộng đồng",
-                                ),
-                              "Đã hạn chế tài khoản",
-                            )
-                          }
-                        >
-                          Hạn chế tác giả
-                        </Button>
-                      </div>
+                      <RestrictAuthorForm
+                        disabled={busyId === r.id}
+                        onRestrict={(days, reason) =>
+                          act(
+                            r.id,
+                            () => adminForumApi.restrict(r.authorUserId!, days, reason),
+                            "Đã hạn chế tài khoản",
+                          )
+                        }
+                      />
                     )}
                   </div>
                 )}
