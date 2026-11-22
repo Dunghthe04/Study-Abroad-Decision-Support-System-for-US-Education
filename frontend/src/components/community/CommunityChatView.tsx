@@ -171,6 +171,12 @@ export function CommunityChatView() {
   const listRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
   const initialLoadedRef = useRef(false);
+  // Bản sao danh sách hiện tại để biết tin nào thật sự mới khi đếm "Có N tin mới"
+  const messagesRef = useRef<CommunityMessageDto[]>([]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const isStaff = user?.role === "admin" || user?.role === "moderator";
 
@@ -186,6 +192,8 @@ export function CommunityChatView() {
 
   const mergeMessages = useCallback(
     (incoming: CommunityMessageDto[], options?: { isOlder?: boolean; isMine?: boolean }) => {
+      const knownIds = new Set(messagesRef.current.map((m) => m.id));
+      const freshFromOthers = incoming.filter((m) => !knownIds.has(m.id) && m.userId !== user?.id).length;
       setMessages((prev) => {
         const map = new Map(prev.map((m) => [m.id, m]));
         for (const item of incoming) {
@@ -201,8 +209,8 @@ export function CommunityChatView() {
       } else if (!options?.isOlder) {
         if (isNearBottomRef.current) {
           requestAnimationFrame(() => scrollToBottom(true));
-        } else {
-          setNewMessagesCount((prev) => prev + incoming.length);
+        } else if (freshFromOthers > 0) {
+          setNewMessagesCount((prev) => prev + freshFromOthers);
         }
       }
     },
@@ -214,11 +222,15 @@ export function CommunityChatView() {
     const chronological = [...batch].reverse();
     mergeMessages(chronological);
     setHasMore(batch.length >= 50);
-    requestAnimationFrame(() => {
-      scrollToBottom(false);
-      initialLoadedRef.current = true;
-    });
-  }, [mergeMessages, scrollToBottom]);
+  }, [mergeMessages]);
+
+  // Lần tải đầu: lúc tải xong danh sách vẫn đang là vòng xoay, nên chỉ cuộn xuống tin mới nhất
+  // sau khi loading = false và tin nhắn đã thật sự hiện ra
+  useEffect(() => {
+    if (loading || initialLoadedRef.current) return;
+    initialLoadedRef.current = true;
+    scrollToBottom(false);
+  }, [loading, scrollToBottom]);
 
   const loadOlder = useCallback(async () => {
     const oldest = messages[0];
@@ -292,7 +304,15 @@ export function CommunityChatView() {
         }
 
         if (fetchedTotal >= 200) {
-          await loadInitial();
+          // Lỡ quá nhiều tin: thay hẳn danh sách bằng 50 tin mới nhất. Gộp vào danh sách cũ sẽ để lại
+          // một khoảng hổng ở giữa mà loadOlder (chỉ tải từ tin cũ nhất trở về trước) không bao giờ lấp được.
+          const latest = await communityApi.listMessages({ take: 50 });
+          setMessages(
+            [...latest].reverse().map((m) => ({ ...m, isMine: m.userId === user?.id || m.isMine })),
+          );
+          setHasMore(latest.length >= 50);
+          setNewMessagesCount(0);
+          requestAnimationFrame(() => scrollToBottom(false));
         } else if (newMessages.length > 0) {
           mergeMessages(newMessages);
         }
@@ -304,7 +324,7 @@ export function CommunityChatView() {
     } catch {
       // Background resync error ignored
     }
-  }, [messages, mergeMessages, loadInitial]);
+  }, [messages, mergeMessages, loadInitial, user?.id, scrollToBottom]);
 
   useEffect(() => {
     let cancelled = false;
