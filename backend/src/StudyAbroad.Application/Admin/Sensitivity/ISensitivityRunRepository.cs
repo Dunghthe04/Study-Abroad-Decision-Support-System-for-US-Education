@@ -15,4 +15,7 @@ public interface ISensitivityRunRepository
 
     /// <summary>Một lần chạy đầy đủ; null nếu không có.</summary>
     Task<SensitivityRunRecord?> GetAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Mã lần chạy ngay TRƯỚC lần chạy này (theo thời điểm chạy); null nếu không có lần nào trước nó.</summary>
+    Task<Guid?> FindPreviousIdAsync(Guid id, CancellationToken ct = default);
 }

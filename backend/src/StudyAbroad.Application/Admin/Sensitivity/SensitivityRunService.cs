@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Application.Recommendations.Sensitivity;
 using StudyAbroad.Domain.Constants;
@@ -22,21 +22,38 @@ public interface ISensitivityRunService
 
     /// <summary>Chi tiết một lần chạy; null nếu không có.</summary>
     Task<SensitivityRunDetail?> GetAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// So lần chạy id với lần chạy withId; withId null thì so với lần chạy ngay trước nó. Không có lần trước thì trả so sánh rỗng (AF-5).
+    /// Null nếu id hoặc withId không tồn tại. Hai lần khác điều kiện (thuật toán, bộ hồ sơ, dữ liệu trường, ngưỡng nhãn) thì có cảnh báo.
+    /// </summary>
+    Task<SensitivityComparison?> CompareAsync(Guid id, Guid? withId, CancellationToken ct = default);
+
+    /// <summary>Danh mục tham số được phép phân tích, kèm giá trị đang chạy, để giao diện hiện ô chọn.</summary>
+    IReadOnlyList<SensitivityParameterInfo> Parameters();
+
+    /// <summary>File CSV (chỉ số tổng hợp) của một lần chạy; ghi nhật ký người tải TRƯỚC khi trả file. Null nếu không có lần chạy.</summary>
+    Task<SensitivityCsvFile?> ExportCsvAsync(Guid actorUserId, Guid id, CancellationToken ct = default);
 }
 
+public sealed record SensitivityCsvFile(string FileName, byte[] Content);
+
+// [UC-85] Một tham số trong danh mục: mã, tên, loại và giá trị đang chạy thật.
+public sealed record SensitivityParameterInfo(string Key, string Name, SensitivityKind Kind, double Current);
+
 public class SensitivityRunService(
-    ISensitivityRunRepository runs, IRecommendationRepository recommendations, SensitivityProfileSet? profileSet = null)
+    ISensitivityRunRepository runs, IRecommendationRepository recommendations, IAuditLogRepository audits,
+    SensitivityProfileSet? profileSet = null)
     : ISensitivityRunService
 {
     public const string RunAction = "sensitivity.run";
+    public const string ExportAction = "sensitivity.export_csv";
     public const string EntityType = "sensitivity_run";
     public const int DefaultListLimit = 50;
     public const int MaxListLimit = 200;
 
-    internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) }
-    };
+    // Kiểu tham số (SensitivityKind) tự ghi dạng chữ nhờ converter gắn trên enum
+    internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly SensitivityProfileSet _profiles = profileSet ?? SensitivityProfileSet.LoadV1();
 
@@ -94,7 +111,9 @@ public class SensitivityRunService(
         };
         await runs.AddAsync(run, audit, ct);
 
-        return new SensitivityRunDetail(Summary(run, null, request), request, parameters, report);
+        // Đọc lại để có tên người chạy (bảng users); không đọc được thì vẫn trả kết quả vừa tính
+        var name = (await runs.GetAsync(run.Id, ct))?.CreatedByName;
+        return new SensitivityRunDetail(Summary(run, name, request), request, parameters, report);
     }
 
     public async Task<IReadOnlyList<SensitivityRunListRow>> ListAsync(int limit = DefaultListLimit, CancellationToken ct = default)
@@ -115,6 +134,34 @@ public class SensitivityRunService(
         var parameters = JsonSerializer.Deserialize<Dictionary<string, double>>(run.ParametersJson, Json) ?? [];
         return new SensitivityRunDetail(Summary(run, record.CreatedByName, request), request, parameters, report);
     }
+
+    public async Task<SensitivityComparison?> CompareAsync(Guid id, Guid? withId, CancellationToken ct = default)
+    {
+        if (await GetAsync(id, ct) is not { } run) return null;
+        if (withId == id) throw new ArgumentException("Cần chọn hai lần chạy khác nhau để so sánh.");
+
+        var otherId = withId ?? await runs.FindPreviousIdAsync(id, ct);
+        if (otherId is not Guid other) return SensitivityComparer.Alone(run);
+        return await GetAsync(other, ct) is { } otherRun ? SensitivityComparer.Compare(run, otherRun) : null;
+    }
+
+    public async Task<SensitivityCsvFile?> ExportCsvAsync(Guid actorUserId, Guid id, CancellationToken ct = default)
+    {
+        if (await GetAsync(id, ct) is not { } run) return null;
+        // Không bắt lỗi: ghi nhật ký lỗi thì ném lên, file không được trả
+        await audits.AddAsync(new AuditLog
+        {
+            ActorUserId = actorUserId,
+            Action = ExportAction,
+            EntityType = EntityType,
+            EntityId = id.ToString(),
+            DetailJson = JsonSerializer.Serialize(new { parameterKeys = run.Request.ParameterKeys }, Json)
+        }, ct);
+        return new SensitivityCsvFile(SensitivityCsv.FileName(run), SensitivityCsv.Build(run));
+    }
+
+    public IReadOnlyList<SensitivityParameterInfo> Parameters() =>
+        SensitivityParameters.All.Select(p => new SensitivityParameterInfo(p.Key, p.Name, p.Kind, p.Get(RecommendationTuning.Current))).ToList();
 
     private static SensitivityRequest ReadRequest(SensitivityRun run) =>
         JsonSerializer.Deserialize<SensitivityRequest>(run.RequestJson, Json) ?? new SensitivityRequest([], []);

@@ -12,7 +12,7 @@ public class SensitivityRunServiceTests
     private static readonly SensitivityProfileSet Profiles = SensitivityProfileSet.LoadV1();
     private static readonly Guid Admin = Guid.NewGuid();
 
-    private static readonly IReadOnlyList<RecommendSchoolInput> Schools = Enumerable.Range(0, 12).Select(i =>
+    internal static readonly IReadOnlyList<RecommendSchoolInput> Schools = Enumerable.Range(0, 12).Select(i =>
     {
         var university = new University
         {
@@ -32,7 +32,7 @@ public class SensitivityRunServiceTests
     private static (SensitivityRunService Service, FakeRuns Runs) Setup(IReadOnlyList<RecommendSchoolInput>? schools = null, bool failSchools = false)
     {
         var runs = new FakeRuns();
-        return (new SensitivityRunService(runs, new FakeSchools(schools ?? Schools, failSchools), Profiles), runs);
+        return (new SensitivityRunService(runs, new FakeSchools(schools ?? Schools, failSchools), new FakeAudits(), Profiles), runs);
     }
 
     [Fact]
@@ -61,6 +61,18 @@ public class SensitivityRunServiceTests
         using var detailJson = JsonDocument.Parse(audit.DetailJson!);
         Assert.Equal(["upper_cut", "fit_budget"], detailJson.RootElement.GetProperty("parameterKeys").EnumerateArray().Select(x => x.GetString()));
         Assert.Equal(324, Profiles.Profiles.Count);
+    }
+
+    [Fact]
+    public async Task Run_ReturnsTheNameOfWhoRanIt()
+    {
+        var runs = new FakeRuns();
+        runs.NameOnSave = "Admin 2";
+        var service = new SensitivityRunService(runs, new FakeSchools(Schools, false), new FakeAudits(), Profiles);
+
+        var detail = await service.RunAsync(Admin, Request);
+
+        Assert.Equal("Admin 2", detail.Summary.CreatedByName);
     }
 
     [Fact]
@@ -162,15 +174,34 @@ public class SensitivityRunServiceTests
 
     // ------------------------------------------------------------ giả lập
 
-    private sealed class FakeRuns : ISensitivityRunRepository
+    internal sealed class FakeAudits : StudyAbroad.Application.Audit.IAuditLogRepository
+    {
+        public List<AuditLog> Rows { get; } = [];
+        public Exception? Fail { get; set; }
+
+        public Task AddAsync(AuditLog entry, CancellationToken cancellationToken = default)
+        {
+            if (Fail is not null) throw Fail;
+            Rows.Add(entry);
+            return Task.CompletedTask;
+        }
+
+        public Task<string?> GetLatestLockReasonAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
+    }
+
+    internal sealed class FakeRuns : ISensitivityRunRepository
     {
         public List<(SensitivityRun Run, AuditLog Audit)> Saved { get; } = [];
         public Dictionary<Guid, string> Names { get; } = [];
         public int LastLimit { get; private set; }
+        // Giả lập bảng users: tên của người chạy, gắn cho mỗi lần chạy khi lưu
+        public string? NameOnSave { get; set; }
 
         public Task AddAsync(SensitivityRun run, AuditLog audit, CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
+            if (NameOnSave is not null) Names[run.Id] = NameOnSave;
             // Thời điểm tạo tăng dần để "mới nhất trước" xác định được
             run.CreatedAt = DateTime.UtcNow.AddSeconds(Saved.Count);
             Saved.Add((run, audit));
@@ -189,9 +220,18 @@ public class SensitivityRunServiceTests
             Task.FromResult(Saved.Select(s => s.Run).FirstOrDefault(r => r.Id == id) is { } r
                 ? new SensitivityRunRecord(r, Names.GetValueOrDefault(r.Id))
                 : null);
+
+        public Task<Guid?> FindPreviousIdAsync(Guid id, CancellationToken ct = default)
+        {
+            var current = Saved.Select(s => s.Run).FirstOrDefault(r => r.Id == id);
+            return Task.FromResult(current is null
+                ? null
+                : Saved.Select(s => s.Run).Where(r => r.CreatedAt < current.CreatedAt).OrderByDescending(r => r.CreatedAt)
+                    .Select(r => (Guid?)r.Id).FirstOrDefault());
+        }
     }
 
-    private sealed class FakeSchools(IReadOnlyList<RecommendSchoolInput> schools, bool fail) : IRecommendationRepository
+    internal sealed class FakeSchools(IReadOnlyList<RecommendSchoolInput> schools, bool fail) : IRecommendationRepository
     {
         public Task<IReadOnlyList<RecommendSchoolInput>> ListSchoolsAsync(string studyLevel, CancellationToken ct = default)
         {

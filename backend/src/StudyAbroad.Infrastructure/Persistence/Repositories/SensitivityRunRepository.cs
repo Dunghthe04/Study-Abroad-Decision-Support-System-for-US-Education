@@ -53,4 +53,15 @@ public class SensitivityRunRepository(AppDbContext db) : ISensitivityRunReposito
             .FirstOrDefaultAsync(ct);
         return row is null ? null : new SensitivityRunRecord(row.Run, row.Name);
     }
+
+    public async Task<Guid?> FindPreviousIdAsync(Guid id, CancellationToken ct = default)
+    {
+        var current = await db.SensitivityRuns.AsNoTracking().Where(r => r.Id == id).Select(r => (DateTime?)r.CreatedAt).FirstOrDefaultAsync(ct);
+        if (current is not DateTime at) return null;
+        return await db.SensitivityRuns.AsNoTracking()
+            .Where(r => r.CreatedAt < at)
+            .OrderByDescending(r => r.CreatedAt).ThenBy(r => r.Id)
+            .Select(r => (Guid?)r.Id)
+            .FirstOrDefaultAsync(ct);
+    }
 }
