@@ -19,6 +19,7 @@ import {
   KeyRoundIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  MessagesSquareIcon,
   PlusIcon,
   SearchIcon,
   SendIcon,
@@ -105,6 +106,7 @@ export function SiteHeader() {
     { href: "/", label: "Trang chủ", icon: HomeIcon },
     { href: "/universities", label: "Tìm trường", icon: GraduationCapIcon },
     { href: "/centers", label: "Trung tâm tư vấn", icon: Building2Icon },
+    { href: "/community", label: "Cộng đồng", icon: MessagesSquareIcon },
     ...(!user ? [{ href: "/plans", label: "Gói dịch vụ", icon: CrownIcon }] : []),
   ];
 

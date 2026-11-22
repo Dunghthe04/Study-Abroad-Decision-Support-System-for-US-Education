@@ -15,6 +15,7 @@ const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
     title: "Khám phá",
     links: [
       { href: "/centers", label: "Trung tâm tư vấn" },
+      { href: "/community", label: "Cộng đồng" },
       { href: "/methodology", label: "Giới thiệu phương pháp" },
       { href: "/plans", label: "Gói dịch vụ" },
     ],
