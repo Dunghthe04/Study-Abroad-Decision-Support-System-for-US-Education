@@ -42,6 +42,11 @@ export interface SensitivityPoint {
   groupChangeRate: number;
   topChangeRate: number;
   topOverlap: number;
+  /** Số phụ (không dùng gắn nhãn), xét toàn bộ thứ tự trong ba nhóm chính như danh sách "Xem thêm". Null ở lần chạy cũ. */
+  rankedSchools?: number | null;
+  rankShiftTotal?: number | null;
+  /** Trung bình mỗi trường dịch bao nhiêu bậc trong nhóm. */
+  avgRankShift?: number | null;
 }
 
 export interface SensitivityParameterResult {

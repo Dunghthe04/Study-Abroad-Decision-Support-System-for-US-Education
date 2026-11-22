@@ -23,22 +23,27 @@ export const LABELS: Record<SensitivityLabel, { name: string; variant: "ok" | "w
   sensitive: { name: "Nhạy", variant: "risk" },
 };
 
-// measure: câu ngắn cho form chọn tham số. explain: ghi chú đầy đủ dưới tiêu đề bảng kết quả, nói rõ cái gì được đếm và cái gì không.
-export const KIND_TITLES: Record<SensitivityKind, { title: string; measure: string; explain: string }> = {
+// measure: câu ngắn cho form chọn tham số. mainShort: chữ đứng trước con số chính trong ô. explain: chú giải từng dòng trong ô.
+export const KIND_TITLES: Record<SensitivityKind, { title: string; measure: string; mainShort: string; explain: string[] }> = {
   grouping: {
     title: "Tham số xếp nhóm",
     measure: "% cặp (hồ sơ, trường) đổi nhóm Khó vào / Vừa sức / An toàn",
-    explain:
-      "Các tham số này quyết định trường thuộc nhóm nào. Mỗi ô là % cặp (hồ sơ, trường) bị đổi nhóm, ví dụ từ Vừa sức sang An toàn, " +
-      "trên tổng số cặp. Dòng nhỏ là giá trị đã thử.",
+    mainShort: "Đổi nhóm",
+    explain: [
+      "Đổi nhóm: % cặp (hồ sơ, trường) bị chuyển nhóm, ví dụ từ Vừa sức sang An toàn. Dùng để gắn nhãn.",
+      "Thử: giá trị tham số đã dùng ở mức nhích đó.",
+    ],
   },
   fit_weight: {
     title: "Trọng số điểm phù hợp",
     measure: "% trường bị thay trong 4 trường hiện sẵn của mỗi nhóm",
-    explain:
-      "Các trọng số này KHÔNG đổi nhóm của trường, chỉ đổi thứ tự trường trong nhóm. Mỗi ô là % chỗ trong 4 trường hiện sẵn đầu mỗi " +
-      "nhóm bị thay bằng trường khác. Không tính: các trường chỉ đổi chỗ cho nhau trong 4 trường đó, và thay đổi thứ tự ở phần " +
-      "\"Xem thêm\" phía sau. Dòng nhỏ là giá trị đã thử.",
+    mainShort: "Top 4",
+    explain: [
+      "Các trọng số này không đổi nhóm của trường, chỉ đổi thứ tự trường trong nhóm.",
+      "Top 4: % chỗ trong 4 trường hiện sẵn của mỗi nhóm bị thay bằng trường khác (chỉ đổi chỗ cho nhau trong 4 trường thì không tính). Dùng để gắn nhãn.",
+      "Cả nhóm: tính cả danh sách \"Xem thêm\", trung bình mỗi trường lên hoặc xuống bao nhiêu hạng. Chỉ để tham khảo.",
+      "Thử: giá trị trọng số đã dùng ở mức nhích đó.",
+    ],
   },
 };
 
@@ -75,6 +80,12 @@ export function deltaPoints(delta: number | null | undefined): string {
 export function paramValue(value: number | null | undefined): string {
   if (value == null) return "—";
   return (Math.round(value * 10_000) / 10_000).toString().replace(".", ",");
+}
+
+/** 0,7564 → "dịch 0,76 hạng"; null (lần chạy cũ) → null để không hiện. */
+export function rankShiftText(shift: number | null | undefined): string | null {
+  if (shift == null) return null;
+  return `dịch ${(Math.round(shift * 100) / 100).toFixed(2).replace(".", ",")} hạng`;
 }
 
 export function pointAt(result: SensitivityParameterResult, step: number): SensitivityPoint | undefined {

@@ -7,7 +7,7 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatInt } from "@/lib/ai-usage-format";
 import {
-  formatRunTime, KIND_TITLES, LABELS, paramValue, pct, pointAt, rateOf, STEP_COLUMNS, stepLabel,
+  formatRunTime, KIND_TITLES, LABELS, paramValue, pct, pointAt, rankShiftText, rateOf, STEP_COLUMNS, stepLabel,
 } from "@/lib/sensitivity-format";
 import type { SensitivityKind, SensitivityLabel, SensitivityParameterResult, SensitivityRunDetail } from "@/types/sensitivity";
 
@@ -72,7 +72,9 @@ function ResultTable({ kind, rows, columns }: { kind: SensitivityKind; rows: Sen
     <section className="flex flex-col gap-2">
       <div>
         <h3 className="text-sm font-semibold text-ink">{KIND_TITLES[kind].title}</h3>
-        <p className="max-w-4xl text-xs text-ink-3">{KIND_TITLES[kind].explain}</p>
+        <ul className="mt-1 max-w-4xl list-disc space-y-0.5 pl-4 text-xs text-ink-3">
+          {KIND_TITLES[kind].explain.map((line) => <li key={line}>{line}</li>)}
+        </ul>
       </div>
       <div className="overflow-x-auto rounded-md border border-line">
         <Table>
@@ -100,11 +102,16 @@ function ResultTable({ kind, rows, columns }: { kind: SensitivityKind; rows: Sen
                   const direction = kind === "grouping" && point.changedPairs > 0
                     ? `${formatInt(point.movedSafer)} cặp dễ hơn · ${formatInt(point.movedHarder)} cặp khó hơn`
                     : `${formatInt(kind === "grouping" ? point.changedPairs : point.changedSlots)}/${formatInt(kind === "grouping" ? point.pairs : point.slots)}`;
+                  const shift = kind === "fit_weight" ? rankShiftText(point.avgRankShift) : null;
                   return (
                     <TableCell key={step} className="tabular text-right" title={direction}>
-                      <div className="font-medium text-ink">{pct(rateOf(kind, point))}</div>
+                      <div className="font-medium text-ink">
+                        <span className="text-xs font-normal text-ink-3">{KIND_TITLES[kind].mainShort}: </span>
+                        {pct(rateOf(kind, point))}
+                      </div>
+                      {shift ? <div className="text-xs text-ink-2">Cả nhóm: {shift}</div> : null}
                       <div className="text-xs text-ink-3">
-                        {paramValue(point.value)}
+                        Thử: {paramValue(point.value)}
                         {point.clamped ? " (đã kẹp)" : ""}
                       </div>
                     </TableCell>
@@ -112,7 +119,9 @@ function ResultTable({ kind, rows, columns }: { kind: SensitivityKind; rows: Sen
                 })}
                 <TableCell>
                   <LabelBadge label={row.label} />
-                  {row.rate != null ? <div className="mt-0.5 text-xs text-ink-3">{pct(row.rate)}</div> : null}
+                  {row.rate != null ? (
+                    <div className="mt-0.5 text-xs text-ink-3">theo {KIND_TITLES[kind].mainShort.toLowerCase()} {pct(row.rate)}</div>
+                  ) : null}
                 </TableCell>
               </TableRow>
             ))}
