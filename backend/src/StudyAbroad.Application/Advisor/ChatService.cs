@@ -68,7 +68,13 @@ namespace StudyAbroad.Application.Advisor
             //Nếu chưa có phiên -> tạo mới
             if (session is null)
             {
-                session = new ChatSession { UserId = userId, StudyLevel = request.StudyLevel };
+                // Tiêu đề trong lịch sử chat lấy từ câu hỏi đầu tiên (lượt đầu chỉ bấm nút thì không có, lịch sử hiện tên mặc định)
+                session = new ChatSession
+                {
+                    UserId = userId,
+                    StudyLevel = request.StudyLevel,
+                    Title = History.ChatSessionTitle.From(request.Messages.LastOrDefault(m => m.Role == "user")?.Content),
+                };
                 isNew = true;
             }
             JsonElement? state = null;

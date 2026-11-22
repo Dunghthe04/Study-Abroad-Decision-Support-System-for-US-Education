@@ -143,6 +143,33 @@ public class ChatServiceTests
         Assert.Null(entry.CreatedByUserId);
     }
 
+    // ---- tiêu đề phiên trong lịch sử chat
+
+    [Fact]
+    public async Task ANewSession_GetsItsHistoryTitleFromTheFirstQuestion_AndLaterTurnsKeepIt()
+    {
+        var sessions = new FakeSessions();
+        var service = new ChatService(new FakeAdvisor("B0"), sessions, new FakeProfileFlow());
+        var user = Guid.NewGuid();
+
+        var first = await service.ChatAsync(user, new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "  Học phí\nHarvard bao nhiêu?  ")]));
+        Assert.Equal("Học phí Harvard bao nhiêu?", Assert.Single(sessions.Rows).Title);
+
+        await service.ChatAsync(user, new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "còn học bổng thì sao")], first.SessionId));
+        Assert.Equal("Học phí Harvard bao nhiêu?", Assert.Single(sessions.Rows).Title);   // vẫn một phiên, tiêu đề không đổi
+    }
+
+    [Fact]
+    public async Task AFirstTurnWithoutAnyText_LeavesTheTitleEmpty_SoTheHistoryShowsTheDefaultName()
+    {
+        var sessions = new FakeSessions();
+
+        await new ChatService(new FakeAdvisor("B0"), sessions, new FakeProfileFlow())
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest([new Application.Advisor.ChatMessage("user", "   ")]));
+
+        Assert.Null(Assert.Single(sessions.Rows).Title);
+    }
+
     [Fact]
     public async Task AnsweredTurn_OrStoreMessagesOff_CapturesNothing()
     {

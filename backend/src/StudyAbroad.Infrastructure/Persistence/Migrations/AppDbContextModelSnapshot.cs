@@ -906,7 +906,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<string>("Title")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
-                        .HasColumnName("title");
+                        .HasColumnName("title")
+                        .HasComment("Tiêu đề trong lịch sử chat của học sinh: câu hỏi đầu tiên, gom khoảng trắng, dài quá 60 ký tự thì cắt kèm dấu ba chấm. Null nếu lượt đầu chỉ bấm nút.");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -925,6 +926,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId", "CreatedAt")
                         .HasDatabaseName("ix_chat_sessions_user_id_created_at");
+
+                    b.HasIndex("UserId", "UpdatedAt")
+                        .HasDatabaseName("ix_chat_sessions_user_id_updated_at");
 
                     b.ToTable("chat_sessions", "app", t =>
                         {

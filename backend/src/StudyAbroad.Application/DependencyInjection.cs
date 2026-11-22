@@ -26,6 +26,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Admin.AiUsage.IAiUsageReportService, StudyAbroad.Application.Admin.AiUsage.AiUsageReportService>();   // token của các lần gọi AI cho admin
         services.AddScoped<StudyAbroad.Application.Admin.AiQuality.IAiQualityService, StudyAbroad.Application.Admin.AiQuality.AiQualityService>();   // báo cáo chất lượng AI cho admin (UC-90)
         services.AddScoped<StudyAbroad.Application.Admin.AiQuality.IAiQualitySampleService, StudyAbroad.Application.Admin.AiQuality.AiQualitySampleService>();   // mẫu hội thoại đã che cho admin (UC-90)
+        services.AddScoped<StudyAbroad.Application.Advisor.History.IChatHistoryService, StudyAbroad.Application.Advisor.History.ChatHistoryService>();   // lịch sử chat của chính người dùng
         services.AddScoped<StudyAbroad.Application.Admin.SlmSamples.ISlmSampleService, StudyAbroad.Application.Admin.SlmSamples.SlmSampleService>();
         services.AddScoped<StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeBaseService, StudyAbroad.Application.Admin.KnowledgeBase.KnowledgeBaseService>();   // kho tri thức (UC-118..125)
         services.AddScoped<StudyAbroad.Application.Admin.ReviewBatches.IReviewBatchService, StudyAbroad.Application.Admin.ReviewBatches.ReviewBatchService>();   // đợt duyệt mẫu
