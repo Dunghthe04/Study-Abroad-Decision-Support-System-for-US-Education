@@ -34,6 +34,9 @@ public interface IPolicyService
     /// <summary>Một phiên bản kèm toàn văn; null nếu không có.</summary>
     Task<PolicyDocumentDto?> GetAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>Bản đang hiệu lực của một loại, cho người dùng đọc. Null nếu loại đó chưa có bản nào hoặc kind không hợp lệ.</summary>
+    Task<PublicPolicyDto?> GetPublishedAsync(string kind, CancellationToken ct = default);
+
     /// <summary>Lịch sử các phiên bản (không kèm toàn văn), mới nhất trước. kind null là mọi loại; kind sai ném ArgumentException.</summary>
     Task<IReadOnlyList<PolicyDocumentSummaryDto>> ListAsync(string? kind, CancellationToken ct = default);
 }
@@ -169,6 +172,11 @@ public class PolicyService(
 
     public async Task<PolicyDocumentDto?> GetAsync(Guid id, CancellationToken ct = default) =>
         await documents.FindAsync(id, ct) is { } doc ? PolicyMapper.ToDto(doc) : null;
+
+    public async Task<PublicPolicyDto?> GetPublishedAsync(string kind, CancellationToken ct = default) =>
+        PolicyKinds.All.Contains(kind, StringComparer.Ordinal) && await documents.FindPublishedAsync(kind, ct) is { } doc
+            ? PolicyMapper.ToPublic(doc)
+            : null;
 
     public async Task<IReadOnlyList<PolicyDocumentSummaryDto>> ListAsync(string? kind, CancellationToken ct = default)
     {

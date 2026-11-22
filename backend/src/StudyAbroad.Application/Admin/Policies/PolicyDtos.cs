@@ -13,6 +13,10 @@ public sealed record PolicyDocumentSummaryDto(
     Guid Id, string Kind, string? Version, string Status, string Title, string? ChangeSummary,
     bool RequiresReconsent, int ContentLength, DateTime CreatedAt, DateTime? PublishedAt, DateTime? RetiredAt);
 
+// [UC-103] Bản đang hiệu lực cho người dùng đọc (trang công khai, hộp thoại đồng ý của UC-104). Không có mã người tạo hay người công bố.
+public sealed record PublicPolicyDto(
+    string Kind, string Version, string Title, string Content, string? ChangeSummary, bool RequiresReconsent, DateTime PublishedAt);
+
 // Kết quả tạo bản nháp. Created = false: loại này đã có bản nháp nên trả lại bản nháp đó, không tạo thêm (A1).
 public sealed record PolicyDraftResult(PolicyDocumentDto Document, bool Created);
 
@@ -33,6 +37,9 @@ public static class PolicyMapper
     public static PolicyDocumentDto ToDto(PolicyDocument d) => new(
         d.Id, d.Kind, d.Version, d.Status, d.Title, d.Content, d.ChangeSummary, d.RequiresReconsent, d.BasedOnId,
         d.CreatedByUserId, d.CreatedAt, d.PublishedAt, d.PublishedByUserId, d.RetiredAt);
+
+    public static PublicPolicyDto ToPublic(PolicyDocument d) => new(
+        d.Kind, d.Version!, d.Title, d.Content, d.ChangeSummary, d.RequiresReconsent, d.PublishedAt!.Value);
 
     public static PolicyDocumentSummaryDto ToSummary(PolicyDocument d) => new(
         d.Id, d.Kind, d.Version, d.Status, d.Title, d.ChangeSummary, d.RequiresReconsent, d.Content.Length,

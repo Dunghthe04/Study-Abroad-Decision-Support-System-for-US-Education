@@ -429,4 +429,33 @@ public class PolicyServiceTests
         var dto = await service.GetAsync(docs.Rows.Single().Id);
         Assert.Equal("## 1. Giới thiệu\n\nBản cũ.", dto!.Content);
     }
+
+    // ------------------------------------------------------------ trang công khai
+
+    [Fact]
+    public async Task GetPublished_ReturnsOnlyTheVersionInForce_NeverADraftOrAnOldVersion()
+    {
+        var (service, docs, _, _, _) = Setup();
+        var draft = (await service.CreateDraftAsync(Actor, Kind)).Document;
+        await service.UpdateDraftAsync(Actor, draft.Id, Edit("Nội dung nháp chưa công bố", "Tóm tắt"));
+
+        var before = await service.GetPublishedAsync(Kind);
+        Assert.Equal("2026-10", before!.Version);
+        Assert.Contains("Bản cũ", before.Content);
+        Assert.DoesNotContain("nháp chưa công bố", before.Content);   // nháp không lộ ra
+
+        await service.PublishAsync(Actor, draft.Id);
+        var after = await service.GetPublishedAsync(Kind);
+        Assert.Equal("2026-11", after!.Version);
+        Assert.Contains("nháp chưa công bố", after.Content);
+        Assert.True(after.RequiresReconsent);
+    }
+
+    [Fact]
+    public async Task GetPublished_ForAKindWithNoPublishedVersion_OrAnUnknownKind_IsNull()
+    {
+        var (service, _, _, _, _) = Setup();
+        Assert.Null(await service.GetPublishedAsync(PolicyKinds.ForumRules));
+        Assert.Null(await service.GetPublishedAsync("cookie_policy"));
+    }
 }
