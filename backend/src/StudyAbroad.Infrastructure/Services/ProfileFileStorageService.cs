@@ -9,9 +9,10 @@ using System.Threading.Tasks;
 namespace StudyAbroad.Infrastructure.Services;
 
 /// <summary>
-/// [USAS-640] Quản lý lưu trữ tệp bảng điểm nháp (trong thư mục uploads/drafts)
-/// và chuyển sang thư mục uploads/transcripts khi xác nhận lưu chính thức.
-/// Thư mục uploads không được phục vụ công khai: tệp chỉ đọc được qua code phía server.
+/// [USAS-640] Kiểm tra tệp bảng điểm người dùng tải lên. Tệp KHÔNG được lưu xuống ổ đĩa:
+/// bảng điểm chỉ dùng để OCR điền điểm một lần, sau đó không có chức năng nào xem lại tệp,
+/// nên giữ tệp chỉ thêm dữ liệu cá nhân thừa và cần quyền ghi/volume trên server.
+/// Các hàm xoá vẫn giữ để dọn tệp cũ của bản trước (uploads/drafts, uploads/transcripts).
 /// </summary>
 public class ProfileFileStorageService : IProfileFileStorageService
 {
@@ -19,7 +20,7 @@ public class ProfileFileStorageService : IProfileFileStorageService
 
     private readonly string _baseUploadDir;
 
-    /// <summary>Loại tệp được nhận: đuôi tệp, chữ ký đầu tệp (magic bytes) và content type lưu lại</summary>
+    /// <summary>Loại tệp được nhận: đuôi tệp, chữ ký đầu tệp (magic bytes) và content type ghi lại</summary>
     private static readonly (string[] Extensions, byte[] Signature, string ContentType)[] AllowedTypes =
     [
         ([".pdf"], "%PDF"u8.ToArray(), "application/pdf"),
@@ -33,10 +34,9 @@ public class ProfileFileStorageService : IProfileFileStorageService
         _baseUploadDir = Path.Combine(root, "uploads");
     }
 
-    public async Task<DraftTranscriptInfoDto> SaveDraftTranscriptAsync(
-        Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default)
+    public DraftTranscriptInfoDto ValidateTranscriptFile(byte[] fileBytes, string fileName)
     {
-        if (length <= 0 || length > MaxFileSize)
+        if (fileBytes.Length <= 0 || fileBytes.Length > MaxFileSize)
         {
             throw new ArgumentException("Kích thước tệp phải lớn hơn 0 và không vượt quá 10MB.");
         }
@@ -49,55 +49,19 @@ public class ProfileFileStorageService : IProfileFileStorageService
         }
 
         // Không tin đuôi tệp và content type của trình duyệt: đầu tệp phải đúng chữ ký của loại đó
-        var header = new byte[allowed.Signature.Length];
-        var headerLength = await fileStream.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, ct);
-        if (headerLength < header.Length || !header.AsSpan().SequenceEqual(allowed.Signature))
+        if (!fileBytes.AsSpan().StartsWith(allowed.Signature))
         {
             throw new ArgumentException("Nội dung tệp không đúng định dạng PDF, PNG hoặc JPG. Bạn kiểm tra lại tệp giúp nhé.");
         }
 
-        var userDraftDir = Path.Combine(_baseUploadDir, "drafts", userId.ToString());
-        Directory.CreateDirectory(userDraftDir);
-
-        var safeFileName = $"{Guid.NewGuid():N}{ext}";
-        var fullPath = Path.Combine(userDraftDir, safeFileName);
-
-        await using (var outputStream = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-        {
-            await outputStream.WriteAsync(header, ct);
-            await fileStream.CopyToAsync(outputStream, ct);
-        }
-
-        var relativePath = $"/uploads/drafts/{userId}/{safeFileName}";
-
         return new DraftTranscriptInfoDto(
             OriginalFileName: Path.GetFileName(fileName),
-            StoredFileName: safeFileName,
-            RelativePath: relativePath,
-            FileSizeBytes: length,
+            StoredFileName: null,
+            RelativePath: null,
+            FileSizeBytes: fileBytes.Length,
             ContentType: allowed.ContentType,
             UploadedAt: DateTime.UtcNow
         );
-    }
-
-    public Task<string?> CommitDraftTranscriptAsync(Guid userId, string draftRelativePath, CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(draftRelativePath))
-            return Task.FromResult<string?>(null);
-
-        var storedFileName = Path.GetFileName(draftRelativePath);
-        var draftFullPath = Path.Combine(_baseUploadDir, "drafts", userId.ToString(), storedFileName);
-
-        if (!File.Exists(draftFullPath))
-            return Task.FromResult<string?>(null);
-
-        var officialDir = Path.Combine(_baseUploadDir, "transcripts", userId.ToString());
-        Directory.CreateDirectory(officialDir);
-
-        var officialFullPath = Path.Combine(officialDir, storedFileName);
-        File.Move(draftFullPath, officialFullPath, overwrite: true);
-
-        return Task.FromResult<string?>($"/uploads/transcripts/{userId}/{storedFileName}");
     }
 
     public Task DeleteDraftFileAsync(Guid userId, string? draftRelativePath, CancellationToken ct = default)
