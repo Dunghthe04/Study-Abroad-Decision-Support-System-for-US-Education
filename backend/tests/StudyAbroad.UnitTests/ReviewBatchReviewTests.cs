@@ -670,4 +670,22 @@ public class ReviewBatchReviewTests
         Assert.Equal("{batchId:guid}/items/{itemId:guid}/verdict", type.GetMethod(nameof(AdminReviewBatchesController.SaveVerdict))!.GetCustomAttribute<HttpPutAttribute>()!.Template);
         Assert.Equal("{batchId:guid}/report", type.GetMethod(nameof(AdminReviewBatchesController.GetReport))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
     }
+
+    // ---- học sinh đã xóa cuộc trò chuyện sau khi câu được bốc
+
+    [Fact]
+    public async Task Detail_OfAConversationTheStudentDeleted_SaysSo_WithoutContentOrAudit()
+    {
+        var audit = new FakeAudit();
+        var placeholder = new ChatReviewReplyRow(Id(202), Guid.Empty, Guid.Empty, default, "assistant", "", "", "", null, null);
+        var repo = new FakeRepo { Detail = new ReviewItemDetailRows(Item, 3, "scenario", placeholder, null, [], null, DeletedByUser: true) };
+
+        var detail = (await Svc(repo, audit).GetItemDetailAsync(Batch, Item, Me, null, null))!;
+
+        Assert.True(detail.DeletedByUser);
+        Assert.Null(detail.Question);
+        Assert.Equal("", detail.Reply.Content);
+        Assert.Empty(detail.Context);
+        Assert.Empty(audit.Entries);   // không có nội dung nào được xem
+    }
 }
