@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircleIcon, CheckIcon, Loader2Icon, MessageCircleIcon, XIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -11,7 +12,8 @@ import {
   useAssistantPageContext,
   useAssistantProfileChanged,
 } from "@/components/assistant/AssistantProvider";
-import { FLOW_STEPS, ProfileFlowStepper } from "./ProfileFlowStepper";
+import { FLOW_STEPS, ProfileFlowStepper, type NeedsEntry } from "./ProfileFlowStepper";
+import { NeedsIntro } from "./NeedsIntro";
 import { Step1Goal } from "./Step1Goal";
 import { Step2Transcript } from "./Step2Transcript";
 import { Step3Certifications } from "./Step3Certifications";
@@ -23,6 +25,7 @@ import { migrateLegacyStep3 } from "@/lib/certification-utils";
 import { recommendationApi } from "@/lib/recommendation-api";
 import {
   EDIT_ONLY,
+  FORM_GOAL_OPTIONS,
   GOALS_CHANGED_EVENT,
   GOALS_KEY,
   goalsNeedMajor,
@@ -118,12 +121,24 @@ function stepReady(step: number, draft: ProfileFlowDraft, goals: FormGoal[]): bo
 // Phải khớp CONTINUE_CHAT trong advisor/app/services/intake.py
 const CONTINUE_CHAT = "Tiếp tục bằng chat";
 
+function scrollToTop() {
+  if (typeof window === "undefined") return;
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  window.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+}
+
 export function ProfileFlowWizard() {
   const router = useRouter();
   const { user } = useAuth();
   const { open: assistantOpen, openPanel: openAssistant } = useAssistant();
 
   const [currentStep, setCurrentStep] = useState(1);
+  // intro: màn chọn nhu cầu lúc mới vào; flow: sidebar + các bước. editingNeeds: sửa nhu cầu giữa chừng
+  const [phase, setPhase] = useState<"intro" | "flow">("intro");
+  const [editingNeeds, setEditingNeeds] = useState(false);
+  const [hasCommittedProfile, setHasCommittedProfile] = useState(false);
+  // Hướng chuyển bước, để trượt nội dung vào đúng phía
+  const [stepDir, setStepDir] = useState<"forward" | "back">("forward");
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [draft, setDraft] = useState<ProfileFlowDraft>(INITIAL_DRAFT);
   const [draftTranscript, setDraftTranscript] = useState<DraftTranscriptFile | null>(null);
@@ -180,9 +195,12 @@ export function ProfileFlowWizard() {
   const unlockedThrough = Math.min(lastCompletedStep, firstNotReady - 1);
 
   const stepTitle = FLOW_STEPS.find((s) => s.step === currentStep)?.title ?? "";
+  const choosingNeeds = phase === "intro" || editingNeeds;
   useAssistantPageContext({
-    label: `Bước ${currentStep}/6 · ${stepTitle}`,
-    suggestions: ["Bước này điền thế nào?", "Kiểm tra bước này giúp mình", STEP_SUGGESTIONS[currentStep]].filter(Boolean),
+    label: choosingNeeds ? "Nhu cầu của bạn" : `Bước ${currentStep}/6 · ${stepTitle}`,
+    suggestions: choosingNeeds
+      ? ["Nên chọn nhu cầu nào?"]
+      : ["Bước này điền thế nào?", "Kiểm tra bước này giúp mình", STEP_SUGGESTIONS[currentStep]].filter(Boolean),
     studyLevel: draft.step1.targetDegreeLevel ?? null,
   });
 
@@ -213,8 +231,6 @@ export function ProfileFlowWizard() {
         // Link "Sửa hồ sơ" (Tổng quan, Tài khoản...) gửi ?goal=chi_sua: tích sẵn "Chỉ sửa hồ sơ" khi đã có hồ sơ
         const wantEditOnly = !openedFromChat && parseGoals(params.get("goal")).includes(EDIT_ONLY);
         setGoals(startGoals);
-        // Vào form trực tiếp mà chưa tích mục tiêu (nháp cũ đang ở bước sau): mở trang 1 để chọn trước
-        const startStep = (saved: number) => (!openedFromChat && startGoals.length === 0 ? 1 : saved);
         const editing = params.get("edit") === "1" || openedFromChat;
         // Tải metadata động song song với trạng thái nháp
         const [metaData, stateData, latest] = await Promise.all([
@@ -233,11 +249,12 @@ export function ProfileFlowWizard() {
         if (metaData) setMetadata(metaData);
 
         if (stateData) {
+          setHasCommittedProfile(Boolean(stateData.hasCommittedProfile));
           if (wantEditOnly && stateData.hasCommittedProfile) {
             startGoals = [EDIT_ONLY];
             setGoals(startGoals);
           }
-          setCurrentStep(startStep(stateData.currentStep || 1));
+          setCurrentStep(stateData.currentStep || 1);
           setCompletedSteps(stateData.completedSteps ?? []);
           setDraftTranscript(stateData.draftTranscript ?? null);
           setBudgetLockedUsd(stateData.budgetLockedUsd ?? null);
@@ -252,13 +269,15 @@ export function ProfileFlowWizard() {
             try {
               const parsed = JSON.parse(localDraftStr);
               if (parsed?.draft) setDraft(mergeDraft(INITIAL_DRAFT, parsed.draft));
-              if (parsed?.currentStep) setCurrentStep(startStep(parsed.currentStep));
+              if (parsed?.currentStep) setCurrentStep(parsed.currentStep);
               if (Array.isArray(parsed?.completedSteps)) setCompletedSteps(parsed.completedSteps);
             } catch {
               // ignore
             }
           }
         }
+        // Đã có nhu cầu (chat, cùng tab, sửa hồ sơ) thì vào thẳng các bước; không thì hỏi nhu cầu trước
+        setPhase(openedFromChat || startGoals.length > 0 ? "flow" : "intro");
       } catch (err: unknown) {
         console.error("Lỗi khi tải dữ liệu ban đầu cho luồng hồ sơ:", err);
       } finally {
@@ -340,6 +359,7 @@ export function ProfileFlowWizard() {
     const ready = [1, 2, 3, 4, 5].filter((s) => s < to && stepReady(s, nextDraft, goalsRef.current));
     const nextCompleted = [...new Set([...completedStepsRef.current, ...ready])].sort((a, b) => a - b);
     setCompletedSteps(nextCompleted);
+    setStepDir(to < from ? "back" : "forward");
     setCurrentStep(to);
     setSaveStatus("saving");
     persistDraft(to, nextCompleted, nextDraft)
@@ -465,6 +485,7 @@ export function ProfileFlowWizard() {
       : [...completedSteps, currentStep].sort((a, b) => a - b);
 
     setCompletedSteps(nextCompleted);
+    setStepDir("forward");
     setCurrentStep(nextStep);
 
     // Lưu nháp ngay khi đổi bước; huỷ lượt auto-save đang chờ để nó không ghi đè bước cũ
@@ -475,28 +496,43 @@ export function ProfileFlowWizard() {
       .then(() => setSaveStatus("saved"))
       .catch(() => setSaveStatus("error"));
 
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
+    scrollToTop();
   };
 
   // Điều hướng về bước trước
   const handlePrev = () => {
     const prevStep = Math.max(1, currentStep - 1);
+    setStepDir("back");
     setCurrentStep(prevStep);
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
+    scrollToTop();
   };
 
   // Nhảy tới bước cụ thể từ stepper hoặc nút Sửa
   const handleSelectStep = (stepNumber: number) => {
     // Không cho nhảy qua bước còn thiếu: dừng ở bước đó để điền trước
-    setCurrentStep(stepNumber > firstNotReady ? firstNotReady : stepNumber);
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    const to = stepNumber > firstNotReady ? firstNotReady : stepNumber;
+    setStepDir(to < currentStep ? "back" : "forward");
+    setCurrentStep(to);
+    scrollToTop();
+  };
+
+  // Chọn nhu cầu lần đầu (intro) hoặc sửa giữa chừng. Chỉ đổi nhu cầu, không đụng nháp
+  const handleConfirmNeeds = (next: FormGoal[]) => {
+    updateGoals(next);
+    setEditingNeeds(false);
+    setPhase("flow");
+    // Nhu cầu mới cần ngành thật mà chưa có ngành: đưa về bước 1 để chọn
+    if (goalsNeedMajor(next) && !draft.step1.targetMajor && currentStep > 1) {
+      setStepDir("back");
+      setCurrentStep(1);
     }
   };
+
+  // Đổi bước (hoặc vào/ra màn nhu cầu): đưa focus về h1 của bước để trình đọc màn hình đọc tiêu đề mới
+  useEffect(() => {
+    if (isLoading || choosingNeeds) return;
+    formRef.current?.querySelector<HTMLElement>("[data-step-heading]")?.focus({ preventScroll: true });
+  }, [currentStep, isLoading, choosingNeeds]);
 
   // Thoát khỏi luồng
   const handleExit = () => {
@@ -587,73 +623,106 @@ export function ProfileFlowWizard() {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-3">
         <Loader2Icon className="size-8 animate-spin text-brand" />
-        <p className="text-sm text-muted-foreground">Đang khôi phục hồ sơ nháp của bạn...</p>
+        <p className="text-sm text-muted-foreground">Đang mở hồ sơ…</p>
       </div>
     );
   }
 
-  const stepper = (variant: "sidebar" | "strip") => (
-    <ProfileFlowStepper
-      variant={variant}
-      draft={draft}
-      metadata={metadata}
-      currentStep={currentStep}
-      lastCompletedStep={unlockedThrough}
-      onSelectStep={handleSelectStep}
-    />
+  if (choosingNeeds) {
+    return (
+      <NeedsIntro
+        key={editingNeeds ? "edit" : goals.join()}
+        mode={editingNeeds ? "edit" : "start"}
+        initialGoals={goals}
+        draftStep={currentStep > 1 || completedSteps.length > 0 ? currentStep : null}
+        hasCommittedProfile={hasCommittedProfile}
+        onConfirm={handleConfirmNeeds}
+        onCancel={() => setEditingNeeds(false)}
+      />
+    );
+  }
+
+  // Mục "Nhu cầu" ở thanh bước: mở từ chat thì chỉ đọc; chat không gửi nhu cầu thì ẩn
+  const needs: NeedsEntry | null =
+    goalsLocked || showGoals
+      ? {
+          labels: FORM_GOAL_OPTIONS.filter((o) => goals.includes(o.value))
+            .map((o) => o.label)
+            .join(" · "),
+          ...(goalsLocked
+            ? { note: goals.includes(EDIT_ONLY) ? "Bạn đang sửa hồ sơ từ chat" : "Theo câu bạn hỏi trong chat" }
+            : { onEdit: () => setEditingNeeds(true) }),
+        }
+      : null;
+
+  const footer = (
+    <>
+      <SaveStatus status={saveStatus} />
+      {/* Mục 1: chuyển sang trả lời trong chat, chat hỏi tiếp các mục còn thiếu */}
+      {user && (
+        <button
+          type="button"
+          onClick={() => openAssistant(CONTINUE_CHAT)}
+          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md py-1 text-xs font-medium text-brand hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <MessageCircleIcon className="size-3.5" />
+          {CONTINUE_CHAT}
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={handleExit}
+        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md py-1 text-xs text-ink-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        <XIcon className="size-3.5" />
+        Thoát
+      </button>
+    </>
   );
 
+  const stepperProps = {
+    draft,
+    metadata,
+    currentStep,
+    lastCompletedStep: unlockedThrough,
+    onSelectStep: handleSelectStep,
+    needs,
+    footer,
+  };
+
+  // Khung trợ lý đóng: sidebar trái từ 1024px (dưới đó là thanh dính); khung trợ lý mở: luôn là thanh dính
   return (
-    <div className="pb-16">
-      {/* Trạng thái lưu nháp + Thoát */}
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <span className="text-xs font-semibold text-muted-foreground">Hồ sơ chọn trường</span>
-        <div className="flex items-center gap-3 text-xs">
-          <SaveStatus status={saveStatus} />
-          {/* Mục 1: chuyển sang trả lời trong chat, chat hỏi tiếp các mục còn thiếu */}
-          {user && (
-            <button
-              type="button"
-              onClick={() => openAssistant(CONTINUE_CHAT)}
-              className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 font-medium text-brand hover:bg-brand-wash focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
-            >
-              <MessageCircleIcon className="size-3.5" />
-              {CONTINUE_CHAT}
-            </button>
+    <div
+      data-flow-motion
+      className={cn(!assistantOpen && "lg:grid lg:min-h-[calc(100dvh-var(--header-h))] lg:grid-cols-[280px_minmax(0,1fr)]")}
+    >
+      {!assistantOpen && <ProfileFlowStepper variant="sidebar" {...stepperProps} />}
+      <div className="min-w-0 bg-surface">
+        <ProfileFlowStepper
+          variant="compact"
+          {...stepperProps}
+          sheetSide={assistantOpen ? "left" : "bottom"}
+          className={assistantOpen ? undefined : "lg:hidden"}
+        />
+        <div className="mx-auto max-w-[720px] px-4 py-8 sm:px-8 lg:py-14">
+          {savedNotice && (
+            <Alert className="mb-6">
+              <CheckIcon className="size-4" />
+              <AlertTitle>Đã lưu hồ sơ</AlertTitle>
+              <AlertDescription className="text-xs">Đang quay về trang trước...</AlertDescription>
+            </Alert>
           )}
-          <button
-            type="button"
-            onClick={handleExit}
-            className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
-          >
-            <XIcon className="size-3.5" />
-            Thoát
-          </button>
-        </div>
-      </div>
 
-      {savedNotice && (
-        <Alert className="mb-6">
-          <CheckIcon className="size-4" />
-          <AlertTitle>Đã lưu hồ sơ</AlertTitle>
-          <AlertDescription className="text-xs">Đang quay về trang trước...</AlertDescription>
-        </Alert>
-      )}
+          {/* Lỗi khi gửi hồ sơ hiện ở bước 6, cạnh thẻ của từng bước */}
+          {errorMessage && currentStep !== 6 && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertCircleIcon className="size-4" />
+              <AlertTitle>Không thể lưu hồ sơ</AlertTitle>
+              <AlertDescription className="text-xs">{errorMessage}</AlertDescription>
+            </Alert>
+          )}
 
-      {/* Lỗi khi gửi hồ sơ hiện ở bước 6, cạnh thẻ của từng bước */}
-      {errorMessage && currentStep !== 6 && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertCircleIcon className="size-4" />
-          <AlertTitle>Không thể lưu hồ sơ</AlertTitle>
-          <AlertDescription className="text-xs">{errorMessage}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* Khung trợ lý đóng: cột form + thanh bước bên phải; mở: dải bước ngang trên form */}
-      <div className="flex flex-wrap items-start gap-6">
-        <div className="min-w-0 flex-[999_1_560px] space-y-5">
-          {assistantOpen && stepper("strip")}
-          <div ref={formRef} className="rounded-xl border border-line bg-surface p-[18px] sm:p-7">
+          <div ref={formRef} key={currentStep} data-dir={stepDir} className="flow-step">
             {currentStep === 1 && (
               <Step1Goal
                 data={draft.step1}
@@ -661,9 +730,7 @@ export function ProfileFlowWizard() {
                 onUpdate={updateStep1}
                 onNext={handleNext}
                 goals={goals}
-                goalsLocked={goalsLocked}
-                showGoals={showGoals}
-                onGoalsChange={updateGoals}
+                onEditNeeds={goalsLocked ? undefined : () => setEditingNeeds(true)}
               />
             )}
 
@@ -729,10 +796,6 @@ export function ProfileFlowWizard() {
             )}
           </div>
         </div>
-
-        {!assistantOpen && (
-          <div className="min-w-0 flex-[1_1_300px] lg:sticky lg:top-[76px] lg:max-w-[400px]">{stepper("sidebar")}</div>
-        )}
       </div>
     </div>
   );
@@ -741,29 +804,29 @@ export function ProfileFlowWizard() {
 function SaveStatus({ status }: { status: "saved" | "saving" | "error" | "idle" }) {
   if (status === "saving") {
     return (
-      <span className="inline-flex items-center gap-1 text-muted-foreground">
+      <span className="inline-flex items-center gap-1 text-xs text-ink-2">
         <Loader2Icon className="size-3.5 animate-spin text-brand" />
-        Đang lưu nháp...
+        Đang lưu…
       </span>
     );
   }
   if (status === "saved") {
     return (
-      <span className="inline-flex items-center gap-1 font-medium text-ok">
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-ok">
         <CheckIcon className="size-3.5" />
-        Đã lưu nháp
+        Đã lưu
       </span>
     );
   }
   if (status === "error") {
     return (
-      <span className="inline-flex items-center gap-1 font-medium text-warn">
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-warn">
         <AlertCircleIcon className="size-3.5" />
-        Chưa lưu được nháp
+        Chưa lưu được
       </span>
     );
   }
-  return <span className="text-muted-foreground">Tự động lưu nháp</span>;
+  return <span className="text-xs text-ink-2">Tự động lưu</span>;
 }
 
 // Gộp draft nhận về (BE hoặc localStorage) lên khung mặc định để không thiếu field nào
