@@ -163,7 +163,7 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <ReviewCard icon={GraduationCapIcon} eyebrow="Bạn & mục tiêu" onEdit={edit(1)} errors={errorsByStep?.[1]}>
+      <ReviewCard icon={GraduationCapIcon} eyebrow="Mục tiêu của bạn" onEdit={edit(1)} errors={errorsByStep?.[1]}>
         <div className="text-sm font-semibold text-foreground">
           {labelOf(EDUCATION_LEVEL_OPTIONS, step1.currentEducationLevel) || "Chưa chọn"}
           {step1.currentGrade && ` · ${step1.currentGrade}`}
@@ -180,7 +180,7 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
         )}
         <div>
           <strong className="text-foreground">Ngành: </strong>
-          {majorLabel || (step1.majorUndecided ? "Chưa rõ" : "Chưa chọn")}
+          {majorLabel || (step1.majorUndecided ? "Cần tư vấn thêm" : "Chưa chọn")}
         </div>
         <div>
           <strong className="text-foreground">Bang: </strong>

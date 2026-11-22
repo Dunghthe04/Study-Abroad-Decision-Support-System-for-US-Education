@@ -1,8 +1,9 @@
 "use client";
 
-import { AlertCircleIcon, ArrowLeftIcon, Loader2Icon, MessageCircleIcon, SaveIcon, SparklesIcon } from "lucide-react";
+import { AlertCircleIcon, Loader2Icon, MessageCircleIcon, SaveIcon, SparklesIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProfileReviewCards } from "@/components/flow/ProfileReviewCards";
+import { StepHeader, StepNav } from "./StepChrome";
 import type { DraftTranscriptFile, ProfileFlowDraft, ProfileMetadataResponse } from "@/types/profile-flow";
 
 // BE trả lỗi khi gửi hồ sơ thành một chuỗi "Bước 1: ... Bước 3: ..." → tách theo bước để hiện ở thẻ của bước đó
@@ -54,17 +55,8 @@ export function Step6Review({
   const stepErrors = splitStepErrors(submitError);
 
   return (
-    <div className="space-y-8 animate-in fade-in-50 duration-200">
-      {/* Step Header */}
-      <div className="space-y-2 border-b border-line pb-4">
-        <div className="text-xs font-semibold text-brand">
-          Bước 6/6 · khoảng 1 phút
-        </div>
-        <h1 className="text-h1 text-foreground">Xem lại hồ sơ của bạn</h1>
-        <p className="text-body text-muted-foreground">
-          Kiểm tra nhanh một lượt. Bấm &quot;Sửa&quot; ở mục nào bạn muốn chỉnh lại trước khi gửi.
-        </p>
-      </div>
+    <div className="flow-stagger space-y-10">
+      <StepHeader title="Xem lại hồ sơ của bạn" lede="Kiểm tra lại một lượt trước khi gửi." />
 
       <ProfileReviewCards
         draft={draft}
@@ -74,12 +66,11 @@ export function Step6Review({
         errorsByStep={stepErrors.byStep}
       />
 
-      {/* Helpful Hint */}
-      <div className="rounded-xl border border-brand/20 bg-brand-wash/30 p-4 text-xs text-muted-foreground leading-relaxed">
-        💡 <strong className="text-brand-ink">Lưu ý: </strong>
-        Ưu tiên chi phí, học bổng hay danh tiếng bạn sẽ chọn ngay ở trang kết quả gợi ý trường,
-        và có thể đổi lại bao nhiêu lần cũng được!
-      </div>
+      {!backToChat && !editOnly && (
+        <p className="text-body-s text-ink-2">
+          Bạn sẽ chọn ưu tiên (chi phí, học bổng, danh tiếng) ở trang kết quả.
+        </p>
+      )}
 
       {/* Lỗi khi gửi: lỗi theo bước đã hiện ở thẻ bên trên, ở đây nhắc lại và hiện lỗi chung */}
       {submitError && (
@@ -97,17 +88,8 @@ export function Step6Review({
       )}
 
       {/* Bottom Actions */}
-      <div className="flex justify-between pt-4 border-t border-line">
-        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5">
-          <ArrowLeftIcon className="size-4" />
-          Quay lại
-        </Button>
-        <Button
-          onClick={onSubmit}
-          disabled={isSubmitting}
-          size="lg"
-          className="gap-2 bg-brand hover:bg-brand-ink text-white font-semibold px-6"
-        >
+      <StepNav onPrev={onPrev}>
+        <Button onClick={onSubmit} disabled={isSubmitting} size="lg" className="gap-2 px-6 font-semibold">
           {isSubmitting ? (
             <>
               <Loader2Icon className="size-4 animate-spin" />
@@ -130,7 +112,7 @@ export function Step6Review({
             </>
           )}
         </Button>
-      </div>
+      </StepNav>
     </div>
   );
 }

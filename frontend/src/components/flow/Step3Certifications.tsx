@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeftIcon, ArrowRightIcon, PlusIcon } from "lucide-react";
+import { ArrowRightIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,7 @@ import type {
 import { CertificationCard } from "./certifications/CertificationCard";
 import { CertificationForm } from "./certifications/CertificationForm";
 import { RequiredMark } from "./RequiredMark";
+import { StepHeader, StepNav } from "./StepChrome";
 
 interface Step3CertificationsProps {
   data: CertificationDraft;
@@ -118,7 +119,7 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
     return (
       <section className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2 className="text-sm font-semibold text-foreground">
+          <h2 className="text-h3 font-sans text-foreground">
             {section.title} <RequiredMark />
           </h2>
           <span className="text-xs text-muted-foreground">{section.hint}</span>
@@ -191,23 +192,18 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
 
   // Tick "chưa thi và chưa có dự định thi" — chỉ hỏi khi mục chưa có thẻ nào
   const renderNoPlanTick = (checked: boolean, onChange: (value: boolean) => void, label: string) => (
-    <Label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-line/60 bg-ground/50 p-4 text-sm font-medium text-foreground">
+    <Label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-line bg-surface p-4 text-sm font-medium text-foreground transition-colors hover:border-brand/40">
       <Checkbox checked={checked} onCheckedChange={(value) => onChange(Boolean(value))} />
       {label}
     </Label>
   );
 
   return (
-    <div className="space-y-8 animate-in fade-in-50 duration-200">
-      {/* Step Header */}
-      <div className="space-y-2 border-b border-line pb-4">
-        <div className="text-xs font-semibold text-brand">Bước 3/6 · khoảng 1 phút</div>
-        <h1 className="text-h1 text-foreground">Chứng chỉ của bạn</h1>
-        <p className="text-body text-muted-foreground">
-          Mỗi mục thêm chứng chỉ đã thi và các bài định thi (thi lần đầu hoặc thi lại để nâng điểm). Chưa thi và
-          chưa định thi thì tích ô cuối mục.
-        </p>
-      </div>
+    <div className="flow-stagger space-y-10">
+      <StepHeader
+        title="Chứng chỉ của bạn"
+        lede="Thêm chứng chỉ đã có hoặc bài bạn định thi. Chưa có thì tích ô cuối mỗi mục."
+      />
 
       <div className={cn("space-y-4", englishMissing && "rounded-xl border border-destructive p-4")}>
         {renderSection(SECTIONS[0])}
@@ -224,12 +220,7 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
         )}
       </div>
 
-      <div
-        className={cn(
-          "space-y-4",
-          testsMissing ? "rounded-xl border border-destructive p-4" : "border-t border-line pt-6"
-        )}
-      >
+      <div className={cn("space-y-4", testsMissing && "rounded-xl border border-destructive p-4")}>
         {renderSection(SECTIONS[1])}
         {!hasStandardized &&
           renderNoPlanTick(
@@ -245,16 +236,12 @@ export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev
       </div>
 
       {/* Bottom Actions — mỗi mục phải có thẻ hoặc tích "chưa thi và chưa có dự định thi" mới đi tiếp được */}
-      <div className="flex justify-between pt-4 border-t border-line">
-        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5">
-          <ArrowLeftIcon className="size-4" />
-          Quay lại
-        </Button>
+      <StepNav onPrev={onPrev}>
         <Button onClick={handleNextClick} size="lg" className="gap-1.5">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>
-      </div>
+      </StepNav>
     </div>
   );
 }

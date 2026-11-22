@@ -3,7 +3,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   AlertTriangleIcon,
-  ArrowLeftIcon,
   ArrowRightIcon,
   CheckCircle2Icon,
   FileTextIcon,
@@ -33,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RequiredMark } from "./RequiredMark";
+import { CHOICE_CARD, StepHeader, StepNav } from "./StepChrome";
 import { cn } from "@/lib/utils";
 import { GpaConversionNote } from "./GpaConversionNote";
 import { useGradeScale } from "@/hooks/use-grade-scale";
@@ -1356,19 +1356,11 @@ export function Step2Transcript({
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in-50 duration-200">
-      {/* Step Header */}
-      <div className="space-y-2 border-b border-line pb-4">
-        <div className="text-xs font-semibold text-brand">
-          Bước 2/6 · khoảng 1 phút
-        </div>
-        <h1 className="text-h1 text-foreground">
-          Bảng điểm của bạn
-        </h1>
-        <p className="text-body text-muted-foreground">
-          Đã biết GPA thì gõ thẳng. Chưa biết thì tải bảng điểm lên để hệ thống tự tính.
-        </p>
-      </div>
+    <div className="flow-stagger space-y-10">
+      <StepHeader
+        title="Bảng điểm của bạn"
+        lede="Biết GPA thì nhập luôn. Chưa biết thì tải bảng điểm lên, hệ thống sẽ tính giúp."
+      />
 
       {/* Hai cách nhập GPA: GPA tổng hoặc học bạ */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-label="Cách nhập GPA">
@@ -1379,12 +1371,7 @@ export function Step2Transcript({
             role="radio"
             aria-checked={mode === opt.value}
             onClick={() => handleModeChange(opt.value)}
-            className={cn(
-              "rounded-xl border p-4 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-              mode === opt.value
-                ? "border-brand bg-brand-wash/40 ring-1 ring-brand"
-                : "border-line bg-surface hover:border-brand/50"
-            )}
+            className={CHOICE_CARD}
           >
             <div className="font-semibold text-sm text-foreground">{opt.label}</div>
             <div className="text-xs text-muted-foreground mt-0.5">{opt.description}</div>
@@ -1409,8 +1396,8 @@ export function Step2Transcript({
             </div>
             <div className="text-xs text-muted-foreground mt-0.5">
               {isMiddleSchoolEarly
-                ? "Điểm trung bình kỳ vọng chung cho bậc THPT. Nhớ chọn đúng thang điểm."
-                : "Điểm trung bình chung trên học bạ hoặc bảng điểm. Nhớ chọn đúng thang điểm."}
+                ? "Điểm trung bình kỳ vọng chung cho bậc THPT."
+                : "Điểm trung bình chung trên học bạ hoặc bảng điểm."}
             </div>
           </div>
           <div className="flex flex-col sm:flex-row sm:items-end gap-4">
@@ -2577,16 +2564,12 @@ export function Step2Transcript({
       </Dialog>
 
       {/* Bottom Actions */}
-      <div className="flex justify-between pt-4 border-t border-line">
-        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5">
-          <ArrowLeftIcon className="size-4" />
-          Quay lại
-        </Button>
+      <StepNav onPrev={onPrev}>
         <Button onClick={handleNextClick} size="lg" className="gap-1.5">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>
-      </div>
+      </StepNav>
     </div>
   );
 }

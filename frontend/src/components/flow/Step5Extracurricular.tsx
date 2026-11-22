@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-  ArrowLeftIcon,
   ArrowRightIcon,
   AwardIcon,
   CalendarIcon,
@@ -20,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RequiredMark } from "./RequiredMark";
+import { CHOICE_PILL, StepHeader, StepNav } from "./StepChrome";
 import { Textarea } from "@/components/ui/textarea";
 import { MonthPicker, type MonthValue } from "@/components/ui/month-picker";
 import { cn } from "@/lib/utils";
@@ -228,29 +228,16 @@ export function Step5Extracurricular({
   const selectedTierDetail = impactLevel ? IMPACT_TIER_DETAILS[impactLevel] : null;
 
   return (
-    <div className="space-y-8 animate-in fade-in-50 duration-200">
-      {/* Step Header */}
-      <div className="space-y-2 border-b border-line pb-4">
-        <div className="text-xs font-semibold text-brand">
-          Bước 5/6 · khoảng 2 phút
-        </div>
-        <h1 className="text-h1 text-foreground">Bạn đã làm gì ngoài giờ học?</h1>
-        <p className="text-body text-muted-foreground">
-          Thêm lần lượt từng hoạt động, câu lạc bộ hoặc giải thưởng. Đánh giá phạm vi ảnh hưởng theo cấu trúc kim tự tháp và mô tả đóng góp nổi bật của bạn.
-        </p>
-      </div>
+    <div className="flow-stagger space-y-10">
+      <StepHeader
+        title="Bạn đã làm gì ngoài giờ học?"
+        lede="Thêm từng hoạt động, câu lạc bộ hoặc giải thưởng, kèm vai trò và đóng góp của bạn."
+      />
 
       {/* List of Added Items */}
       {activities.length > 0 && (
         <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs font-semibold text-muted-foreground">
-              Đã thêm ({activities.length} mục)
-            </Label>
-            <span className="text-xs text-muted-foreground">
-              Tối đa 10 mục tiêu biểu
-            </span>
-          </div>
+          <p className="text-xs font-semibold text-ink-2">Đã thêm {activities.length}/10</p>
 
           <div className="space-y-3">
             {activities.map((item, idx) => {
@@ -370,9 +357,9 @@ export function Step5Extracurricular({
           Thêm hoạt động hoặc giải thưởng mới
         </Button>
       ) : (
-        <section className="rounded-2xl border border-brand/40 bg-surface p-5 sm:p-6 space-y-6 ">
-          <div className="flex items-center justify-between border-b border-line pb-3">
-            <div className="font-semibold text-sm text-foreground">Bạn muốn thêm gì?</div>
+        <section className="rounded-xl border border-line bg-surface p-5 sm:p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="text-h3 text-foreground">Bạn muốn thêm gì?</div>
             <div className="flex gap-1 rounded-lg bg-ground p-1 border border-line">
               {(["activity", "achievement"] as const).map((c) => (
                 <button
@@ -416,22 +403,19 @@ export function Step5Extracurricular({
             {category === "activity" ? (
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-foreground">Vai trò của bạn · Chọn 1 <RequiredMark /></Label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <Label id="roleLabel" className="text-xs font-medium text-foreground">Vai trò của bạn <RequiredMark /></Label>
+                  <div role="radiogroup" aria-labelledby="roleLabel" className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {ACTIVITY_ROLE_OPTIONS.map((r) => (
                       <button
                         key={r.value}
                         type="button"
+                        role="radio"
+                        aria-checked={role === r.value}
                         onClick={() => {
                           setRole(r.value);
                           setFormErrors({});
                         }}
-                        className={cn(
-                          "rounded-lg border px-3 py-2 text-xs font-medium transition-all cursor-pointer text-center focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                          role === r.value
-                            ? "border-brand bg-brand-wash text-brand ring-1 ring-brand font-semibold "
-                            : "border-line bg-surface text-muted-foreground hover:border-brand/40"
-                        )}
+                        className={cn(CHOICE_PILL, "rounded-lg px-3 py-2 text-center text-xs")}
                       >
                         {r.label}
                       </button>
@@ -522,11 +506,10 @@ export function Step5Extracurricular({
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <span>Kim tự tháp phạm vi ảnh hưởng <RequiredMark /></span>
-                    <span className="text-brand font-normal text-xs">(Mô hình CollegeVine)</span>
+                    <span>Phạm vi ảnh hưởng <RequiredMark /></span>
                   </Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Bấm vào tầng phù hợp nhất với tầm vóc của mục này, hoặc dùng phím mũi tên.
+                    Bấm vào tầng phù hợp nhất với mục này, hoặc dùng nút mũi tên.
                   </p>
                 </div>
 
@@ -538,7 +521,7 @@ export function Step5Extracurricular({
                     size="icon"
                     className="size-7 text-muted-foreground hover:text-foreground"
                     onClick={handleStepUp}
-                    title="Lên nấc cao hơn"
+                    aria-label="Lên nấc cao hơn"
                   >
                     <ChevronUpIcon className="size-4" />
                   </Button>
@@ -548,7 +531,7 @@ export function Step5Extracurricular({
                     size="icon"
                     className="size-7 text-muted-foreground hover:text-foreground"
                     onClick={handleStepDown}
-                    title="Xuống nấc thấp hơn"
+                    aria-label="Xuống nấc thấp hơn"
                   >
                     <ChevronDownIcon className="size-4" />
                   </Button>
@@ -654,7 +637,7 @@ export function Step5Extracurricular({
                   </div>
                 ) : (
                   <div className="rounded-xl border border-dashed border-line bg-surface/50 p-3 text-center text-xs text-muted-foreground">
-                    👆 Hãy bấm chọn một tầng trên kim tự tháp để xem tiêu chí và ví dụ chi tiết.
+                    Bấm chọn một tầng ở trên để xem tiêu chí và ví dụ chi tiết.
                   </div>
                 )}
 
@@ -701,7 +684,7 @@ export function Step5Extracurricular({
           </div>
 
           {/* Form Actions */}
-          <div className="flex justify-end gap-2 border-t border-line pt-4">
+          <div className="flex justify-end gap-2">
             <Button
               type="button"
               variant="outline"
@@ -734,21 +717,17 @@ export function Step5Extracurricular({
 
       {activities.length === 0 && !showAddForm && (
         <p className="text-center text-xs text-muted-foreground">
-          Chưa có gì để điền? Bạn có thể bấm Tiếp tục và bổ sung sau.
+          Chưa có gì? Bạn có thể bỏ qua bước này.
         </p>
       )}
 
       {/* Bottom Actions */}
-      <div className="flex justify-between pt-4 border-t border-line">
-        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5">
-          <ArrowLeftIcon className="size-4" />
-          Quay lại
-        </Button>
+      <StepNav onPrev={onPrev}>
         <Button onClick={handleNextClick} size="lg" className="gap-1.5">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>
-      </div>
+      </StepNav>
     </div>
   );
 }

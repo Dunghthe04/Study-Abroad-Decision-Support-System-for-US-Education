@@ -1,11 +1,13 @@
 "use client";
 
 import { useId, useState } from "react";
-import { ArrowLeftIcon, ArrowRightIcon, ChevronDownIcon, DollarSignIcon, HelpCircleIcon } from "lucide-react";
+import { ArrowRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RequiredMark } from "./RequiredMark";
+import { CHOICE_CARD, StepHeader, StepNav } from "./StepChrome";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { MAX_BUDGET_VND, MIN_BUDGET_VND } from "@/lib/parent-preference-api";
@@ -155,46 +157,38 @@ export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onP
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in-50 duration-200">
-      {/* Step Header */}
-      <div className="space-y-2 border-b border-line pb-4">
-        <div className="text-xs font-semibold text-brand">
-          Bước 4/6 · khoảng 30 giây
-        </div>
-        <h1 className="text-h1 text-foreground">
-          {exactAsk
+    <div className="flow-stagger space-y-10">
+      <StepHeader
+        title={
+          exactAsk
             ? "Gia đình chi trả được tối đa bao nhiêu cho một năm học?"
-            : "Gia đình bạn dự định chi bao nhiêu cho một năm học?"}
-        </h1>
-        <p className="text-body text-muted-foreground">
-          {exactAsk
-            ? "Nhập số tiền tối đa bằng VNĐ. Đây là mức trần chắc chắn: hệ thống chỉ giữ các trường có chi phí trong số tiền này, cả ở hồ sơ của con và tổng quan của phụ huynh."
-            : "Chọn mức gần đúng nhất hoặc nhập số tiền cụ thể. Chúng tôi dùng nó để loại các trường vượt ngân sách của bạn."}
-        </p>
-      </div>
+            : "Gia đình bạn dự định chi bao nhiêu cho một năm học?"
+        }
+        lede={
+          exactAsk
+            ? "Nhập số tiền tối đa bằng VNĐ. Hệ thống chỉ giữ những trường nằm trong mức này."
+            : "Chọn mức gần nhất hoặc nhập số cụ thể. Trường vượt ngân sách sẽ được loại."
+        }
+      />
 
       {lockedUsd != null ? (
       // UC-94: phụ huynh đã nhập số tiền chính xác → cố định theo phụ huynh, chỉ xem
-      <section id={budgetSectionId} className="space-y-2">
-        <Label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-          <DollarSignIcon className="size-4 text-brand" />
-          Số tiền tối đa chi trả được mỗi năm
-        </Label>
+      <section id={budgetSectionId} className="space-y-3">
+        <h2 className="text-h3 font-sans text-foreground">Số tiền tối đa chi trả được mỗi năm</h2>
         <div className="rounded-xl border border-line bg-ground/50 px-4 py-3.5 text-sm">
           <p>
             <strong className="font-semibold text-foreground">{lockedUsd.toLocaleString("vi-VN")} USD/năm</strong>{" "}
             <span className="text-muted-foreground">(≈ {(lockedUsd * RATE).toLocaleString("vi-VN")} VNĐ theo tỷ giá hôm nay)</span>
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Do phụ huynh nhập, cố định theo phụ huynh nên bạn không sửa được. Cần đổi thì nhờ phụ huynh liên hệ.
+            Phụ huynh đã nhập số này nên bạn không sửa được. Cần đổi, hãy nhờ phụ huynh.
           </p>
         </div>
       </section>
       ) : exactAsk && !unsure ? (
       <section id={budgetSectionId} className="space-y-3">
         <div>
-          <Label htmlFor="exactBudgetVnd" className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-            <DollarSignIcon className="size-4 text-brand" />
+          <Label htmlFor="exactBudgetVnd" className="text-h3 text-foreground">
             Số tiền tối đa chi trả được mỗi năm (VNĐ) <RequiredMark />
           </Label>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -208,7 +202,7 @@ export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onP
           value={vndText}
           onChange={(e) => applyExactVnd(e.target.value)}
           aria-invalid={budgetError ? true : undefined}
-          className="max-w-xs bg-surface"
+          className="h-9 max-w-xs bg-surface"
         />
         <p className="text-xs text-muted-foreground">
           {exactVnd != null && !vndOutOfRange(exactVnd) ? (
@@ -230,55 +224,32 @@ export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onP
       </section>
       ) : (
       // Question 1: Annual Budget Tiers
-      <section id={budgetSectionId} className="space-y-4">
-        <div>
-          <Label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-            <DollarSignIcon className="size-4 text-brand" />
-            Mức ngân sách mỗi năm · Chọn 1 mức phù hợp nhất <RequiredMark />
-          </Label>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Gồm học phí và chi phí ăn ở mỗi năm (chưa gồm vé máy bay).
-          </p>
-        </div>
+      <fieldset id={budgetSectionId} role="radiogroup" className="min-w-0 space-y-4">
+        <legend className="text-h3 mb-1 text-foreground">
+          Ngân sách mỗi năm <RequiredMark />
+        </legend>
+        <p className="text-xs text-muted-foreground">
+          Gồm học phí và chi phí ăn ở mỗi năm (chưa gồm vé máy bay).
+        </p>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {budgetTiers.map((tier) => {
-            const isSelected = data.annualBudgetTier === tier.key;
-            return (
-              <button
-                key={tier.key}
-                type="button"
-                onClick={() => {
-                  setBudgetError(null);
-                  setAmountText("");
-                  onUpdate({ annualBudgetTier: tier.key });
-                }}
-                className={cn(
-                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                  isSelected
-                    ? "border-brand bg-brand-wash/40 ring-2 ring-brand text-brand-ink"
-                    : "border-line bg-surface hover:border-brand/40 hover:bg-muted/30"
-                )}
-              >
-                <div className="flex items-center justify-between w-full">
-                  <div className="font-semibold text-sm text-foreground">{tier.label}</div>
-                  <div
-                    className={cn(
-                      "size-4 rounded-full border flex items-center justify-center shrink-0 transition-all ml-2",
-                      isSelected
-                        ? "border-brand bg-brand"
-                        : "border-muted-foreground/40 bg-surface"
-                    )}
-                  >
-                    {isSelected && <div className="size-1.5 rounded-full bg-white" />}
-                  </div>
-                </div>
-                <div className="text-xs text-muted-foreground mt-2 line-clamp-2">
-                  {tier.description}
-                </div>
-              </button>
-            );
-          })}
+          {budgetTiers.map((tier) => (
+            <button
+              key={tier.key}
+              type="button"
+              role="radio"
+              aria-checked={data.annualBudgetTier === tier.key}
+              onClick={() => {
+                setBudgetError(null);
+                setAmountText("");
+                onUpdate({ annualBudgetTier: tier.key });
+              }}
+              className={cn(CHOICE_CARD, "flex h-full flex-col items-start")}
+            >
+              <span className="text-sm font-semibold text-foreground">{tier.label}</span>
+              <span className="mt-1 line-clamp-2 text-xs text-ink-2">{tier.description}</span>
+            </button>
+          ))}
         </div>
         {budgetError && <p className="text-xs font-medium text-destructive">{budgetError}</p>}
 
@@ -311,7 +282,7 @@ export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onP
                   }}
                   className={cn(
                     "cursor-pointer rounded-md px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                    currency === c ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                    currency === c ? "bg-brand text-brand-foreground" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {c === "vnd" ? "VNĐ" : "USD"}
@@ -325,7 +296,7 @@ export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onP
             placeholder={currency === "vnd" ? "VD: 900.000.000" : "VD: 36.000"}
             value={amount > 0 ? amount.toLocaleString("vi-VN") : amountText.replace(/\D/g, "")}
             onChange={(e) => applyAmount(e.target.value, currency)}
-            className="max-w-xs bg-surface"
+            className="h-9 max-w-xs bg-surface"
           />
           <p className="text-xs text-muted-foreground">
             {amount > 0 ? (
@@ -341,96 +312,72 @@ export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onP
                 {selectedTierLabel && <> · đã tự chọn mức {selectedTierLabel}</>}
               </>
             ) : (
-              "Nhập tổng số tiền gia đình có thể chi mỗi năm, hệ thống tự chọn mức gần nhất."
+              "Hệ thống sẽ tự chọn mức gần nhất."
             )}
           </p>
         </div>
         )}
-      </section>
+      </fieldset>
       )}
 
       {/* Question 2: Scholarship Need */}
-      <section id={aidSectionId} className="space-y-4 pt-2">
-        <div>
-          <Label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-            <HelpCircleIcon className="size-4 text-brand" />
-            Bạn có cần học bổng để theo học được không? · Chọn 1 lựa chọn <RequiredMark />
-          </Label>
-        </div>
+      <fieldset id={aidSectionId} role="radiogroup" className="min-w-0 space-y-4">
+        <legend className="text-h3 mb-4 text-foreground">
+          Bạn có cần học bổng không? <RequiredMark />
+        </legend>
 
         <div className="grid gap-3 sm:grid-cols-3">
-          {needOptions.map((opt) => {
-            const isSelected = data.needFinancialAid === opt.key;
-            return (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => {
-                  setAidError(null);
-                  onUpdate({ needFinancialAid: opt.key });
-                }}
-                className={cn(
-                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                  isSelected
-                    ? "border-brand bg-brand-wash/40 ring-2 ring-brand text-brand-ink"
-                    : "border-line bg-surface hover:border-brand/40 hover:bg-muted/30"
-                )}
-              >
-                <div className="flex items-center justify-between w-full">
-                  <div className="font-semibold text-sm text-foreground">{opt.title}</div>
-                  <div
-                    className={cn(
-                      "size-4 rounded-full border flex items-center justify-center shrink-0 transition-all ml-2",
-                      isSelected
-                        ? "border-brand bg-brand"
-                        : "border-muted-foreground/40 bg-surface"
-                    )}
-                  >
-                    {isSelected && <div className="size-1.5 rounded-full bg-white" />}
-                  </div>
-                </div>
-                <div className="text-xs text-muted-foreground mt-2">{opt.description}</div>
-              </button>
-            );
-          })}
+          {needOptions.map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              role="radio"
+              aria-checked={data.needFinancialAid === opt.key}
+              onClick={() => {
+                setAidError(null);
+                onUpdate({ needFinancialAid: opt.key });
+              }}
+              className={cn(CHOICE_CARD, "flex h-full flex-col items-start")}
+            >
+              <span className="text-sm font-semibold text-foreground">{opt.title}</span>
+              <span className="mt-1 text-xs text-ink-2">{opt.description}</span>
+            </button>
+          ))}
         </div>
         {aidError && <p className="text-xs font-medium text-destructive">{aidError}</p>}
-      </section>
+      </fieldset>
 
       {/* Question 3: Funding Source — không bắt buộc, giống câu F3 bên chat */}
-      <section className="space-y-2 pt-2">
-        <Label htmlFor="fundingSource" className="text-sm font-semibold text-foreground">
-          Ai sẽ chi trả chính cho việc du học? · Không bắt buộc
+      <section className="space-y-3">
+        <Label htmlFor="fundingSource" className="text-h3 text-foreground">
+          Ai chi trả chính? (không bắt buộc)
         </Label>
-        <div className="relative sm:max-w-sm">
-          <select
-            id="fundingSource"
-            value={data.fundingSource ?? ""}
-            onChange={(e) => onUpdate({ fundingSource: (e.target.value || null) as FundingSource | null })}
-            className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand cursor-pointer"
+        <div className="sm:max-w-sm">
+          <Select
+            value={data.fundingSource || null}
+            onValueChange={(v) => onUpdate({ fundingSource: (v || null) as FundingSource | null })}
+            items={FUNDING_SOURCE_OPTIONS}
           >
-            <option value="">Chưa chọn</option>
-            {FUNDING_SOURCE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <ChevronDownIcon className="absolute right-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+            <SelectTrigger id="fundingSource" className="h-9 w-full bg-surface">
+              <SelectValue placeholder="Chưa chọn" />
+            </SelectTrigger>
+            <SelectContent className="w-max min-w-(--anchor-width)">
+              {FUNDING_SOURCE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </section>
 
-      {/* Bottom Actions */}
-      <div className="flex justify-between pt-4 border-t border-line">
-        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5">
-          <ArrowLeftIcon className="size-4" />
-          Quay lại
-        </Button>
+      <StepNav onPrev={onPrev}>
         <Button onClick={handleNextClick} size="lg" className="gap-1.5">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>
-      </div>
+      </StepNav>
     </div>
   );
 }
