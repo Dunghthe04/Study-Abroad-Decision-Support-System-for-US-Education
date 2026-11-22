@@ -20,6 +20,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.schemas.transcript_ocr import TranscriptFilePayload, TranscriptOcrRequest
+from app.services.claude import ClaudeClient
 from app.services.transcript_reader import TranscriptReader
 
 EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
@@ -43,48 +44,86 @@ async def run(files: list[Path], models: list[str], out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     rows: list[tuple[str, str, int, int, int, float, str]] = []
 
-    async with httpx.AsyncClient(base_url=settings.ollama_base_url) as http:
-        for model in models:
-            reader = RecordingReader(http, settings.model_copy(update={"vision_model": model}))
-            for path in files:
-                reader.transcripts.clear()
-                payload = TranscriptFilePayload(
-                    image_base64=base64.b64encode(path.read_bytes()).decode(),
-                    file_name=path.name,
-                    content_type="application/pdf" if path.suffix.lower() == ".pdf" else "image/*",
-                )
-                started = time.perf_counter()
-                result = await reader.read_transcript(TranscriptOcrRequest(files=[payload]))
-                elapsed = time.perf_counter() - started
-
-                scores = sum(len(t.scores) for t in result.terms)
-                dropped = sum(
-                    int(m.group(1)) for w in result.warnings if (m := re.search(r"bỏ (\d+) điểm", w))
-                )
-                rows.append(
-                    (model, path.name, len(result.terms), scores, dropped, elapsed, result.model_used or "")
-                )
-
-                stem = f"{re.sub(r'[^a-z0-9]+', '_', model)}__{path.stem}"
-                (out_dir / f"{stem}.md").write_text("\n\n".join(reader.transcripts), encoding="utf-8")
-                (out_dir / f"{stem}.json").write_text(
-                    json.dumps(result.model_dump(by_alias=True), ensure_ascii=False, indent=1),
-                    encoding="utf-8",
-                )
-                print(
-                    f"{model:14} {path.name:42} kỳ={len(result.terms):2} điểm={scores:3} loại={dropped:2} {elapsed:6.1f}s"
-                )
-                for w in result.warnings:
-                    print(f"{'':16}! {w}")
-
-    print("\nTổng hợp theo model:")
-    for model in models:
-        mine = [r for r in rows if r[0] == model]
-        print(
-            f"  {model:14} tệp có điểm={sum(1 for r in mine if r[3]):2}/{len(mine)} "
-            f"điểm={sum(r[3] for r in mine):4} bị loại={sum(r[4] for r in mine):3} "
-            f"thời gian TB={sum(r[5] for r in mine) / max(len(mine), 1):6.1f}s"
+    claude_http = None
+    claude = None
+    if settings.anthropic_api_key:
+        claude_http = httpx.AsyncClient(
+            base_url=settings.anthropic_base_url, timeout=settings.anthropic_timeout_seconds
         )
+        claude = ClaudeClient(
+            claude_http,
+            settings.anthropic_model,
+            settings.anthropic_api_key,
+            max_retries=settings.anthropic_max_retries,
+            fallback_model=settings.anthropic_fallback_model or None,
+        )
+
+    try:
+        async with httpx.AsyncClient(base_url=settings.ollama_base_url) as http:
+            for model in models:
+                fallback_parse = settings.transcript_parse_model or settings.llm_model or model
+                model_settings = settings.model_copy(
+                    update={
+                        "vision_model": model,
+                        "transcript_parse_model": fallback_parse,
+                    }
+                )
+                reader = RecordingReader(
+                    http,
+                    model_settings,
+                    parser=claude,
+                    parser_model=settings.anthropic_model if claude else fallback_parse,
+                )
+                for path in files:
+                    reader.transcripts.clear()
+                    payload = TranscriptFilePayload(
+                        image_base64=base64.b64encode(path.read_bytes()).decode(),
+                        file_name=path.name,
+                        content_type="application/pdf" if path.suffix.lower() == ".pdf" else "image/*",
+                    )
+                    started = time.perf_counter()
+                    result = await reader.read_transcript(TranscriptOcrRequest(files=[payload]))
+                    elapsed = time.perf_counter() - started
+
+                    scores = sum(len(t.scores) for t in result.terms)
+                    dropped = sum(
+                        int(m.group(1)) for w in result.warnings if (m := re.search(r"bỏ (\d+) điểm", w))
+                    )
+                    rows.append(
+                        (
+                            model,
+                            path.name,
+                            len(result.terms),
+                            scores,
+                            dropped,
+                            elapsed,
+                            result.model_used or "",
+                        )
+                    )
+
+                    stem = f"{re.sub(r'[^a-z0-9]+', '_', model)}__{path.stem}"
+                    (out_dir / f"{stem}.md").write_text("\n\n".join(reader.transcripts), encoding="utf-8")
+                    (out_dir / f"{stem}.json").write_text(
+                        json.dumps(result.model_dump(by_alias=True), ensure_ascii=False, indent=1),
+                        encoding="utf-8",
+                    )
+                    print(
+                        f"{model:14} {path.name:42} kỳ={len(result.terms):2} điểm={scores:3} loại={dropped:2} {elapsed:6.1f}s"
+                    )
+                    for w in result.warnings:
+                        print(f"{'':16}! {w}")
+
+        print("\nTổng hợp theo model:")
+        for model in models:
+            mine = [r for r in rows if r[0] == model]
+            print(
+                f"  {model:14} tệp có điểm={sum(1 for r in mine if r[3]):2}/{len(mine)} "
+                f"điểm={sum(r[3] for r in mine):4} bị loại={sum(r[4] for r in mine):3} "
+                f"thời gian TB={sum(r[5] for r in mine) / max(len(mine), 1):6.1f}s"
+            )
+    finally:
+        if claude_http is not None:
+            await claude_http.aclose()
 
 
 def main() -> None:
