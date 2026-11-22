@@ -9,6 +9,7 @@ public static class AgeGroups
     public const string Minor = "minor";
     public const string Adult = "adult";
 
+    public const int StudentMinAge = 13;
     public const int ChildMaxAgeExclusive = 16;
     public const int AdultAge = 18;
 }

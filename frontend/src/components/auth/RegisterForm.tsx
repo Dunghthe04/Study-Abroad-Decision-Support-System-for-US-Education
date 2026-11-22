@@ -54,6 +54,7 @@ function getPasswordStrength(pass: string): {
 }
 
 // [Q11] Ngưỡng tuổi theo luật VN (khớp AgeGroups ở backend; backend tính lại và là nơi quyết định)
+const STUDENT_MIN_AGE = 13;
 const CHILD_MAX_AGE_EXCLUSIVE = 16;
 const ADULT_AGE = 18;
 const MAX_AGE = 100;
@@ -189,6 +190,8 @@ export function RegisterForm() {
       errors.dateOfBirth = "Ngày sinh không hợp lệ.";
     } else if (role === "parent" && age !== null && age < ADULT_AGE) {
       errors.dateOfBirth = `Tài khoản phụ huynh phải từ ${ADULT_AGE} tuổi.`;
+    } else if (role === "student" && age !== null && age < STUDENT_MIN_AGE) {
+      errors.dateOfBirth = `Học sinh phải từ đủ ${STUDENT_MIN_AGE} tuổi để tự đăng ký. Với học sinh nhỏ hơn, vui lòng nhờ Phụ huynh đăng ký và quản lý hồ sơ.`;
     }
 
     if (!email.trim()) {
@@ -368,6 +371,8 @@ export function RegisterForm() {
               aria-describedby={
                 fieldErrors.dateOfBirth
                   ? "dateOfBirth-error"
+                  : role === "student" && age !== null && age < STUDENT_MIN_AGE
+                  ? "dateOfBirth-under-age"
                   : role === "parent"
                   ? "dateOfBirth-desc"
                   : undefined
@@ -379,6 +384,22 @@ export function RegisterForm() {
             />
             {fieldErrors.dateOfBirth ? (
               <FieldError id="dateOfBirth-error">{fieldErrors.dateOfBirth}</FieldError>
+            ) : role === "student" && age !== null && age < STUDENT_MIN_AGE ? (
+              <div
+                id="dateOfBirth-under-age"
+                role="alert"
+                className="flex items-start gap-1.5 pt-1 text-xs font-medium text-amber-600 dark:text-amber-400"
+              >
+                <InfoIcon className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                <span>
+                  Học sinh phải từ đủ {STUDENT_MIN_AGE} tuổi để tự đăng ký. Với học sinh nhỏ hơn,
+                  vui lòng nhờ{" "}
+                  <Link href="/register?role=parent" className="underline underline-offset-2">
+                    Phụ huynh đăng ký tài khoản
+                  </Link>{" "}
+                  và quản lý hồ sơ cho bạn.
+                </span>
+              </div>
             ) : (
               role === "parent" && (
                 <FieldDescription id="dateOfBirth-desc">

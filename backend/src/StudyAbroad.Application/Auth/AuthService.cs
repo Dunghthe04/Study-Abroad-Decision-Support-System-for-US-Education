@@ -653,6 +653,9 @@ namespace StudyAbroad.Application.Auth
             if (request.Role != UserRoles.Student || age >= AgeGroups.AdultAge)
                 return (null, null);
 
+            if (age < AgeGroups.StudentMinAge)
+                return ($"Học sinh phải từ đủ {AgeGroups.StudentMinAge} tuổi (chuẩn bị từ lớp 8) để đăng ký tài khoản. Với học sinh nhỏ hơn, vui lòng nhờ Phụ huynh đăng ký tài khoản để quản lý hồ sơ cho bạn.", null);
+
             var parentEmail = NormalizeEmail(request.ParentEmail ?? string.Empty);
             if (parentEmail.Length == 0)
                 return age < AgeGroups.ChildMaxAgeExclusive
