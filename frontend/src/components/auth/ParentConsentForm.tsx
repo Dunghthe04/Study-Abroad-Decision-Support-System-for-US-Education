@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CheckIcon, ShieldCheckIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { parentLinksApi, ApiError } from "@/lib/api";
+import { getCurrentPolicy } from "@/lib/policy-api";
 import type { ParentInviteInfo } from "@/types/api";
+import type { PublicPolicy } from "@/types/policy";
+import { PolicyContent } from "@/components/policy/PolicyContent";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -37,6 +40,9 @@ export function ParentConsentForm() {
   const [isGuardian, setIsGuardian] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<"accept" | "reject" | null>(null);
+  // [UC-103] Văn bản đồng ý đang hiệu lực do admin soạn. undefined: đang tải; null: chưa có bản nào (dùng nội dung dự phòng bên dưới)
+  const [policy, setPolicy] = useState<PublicPolicy | null | undefined>(undefined);
+  const [policyFailed, setPolicyFailed] = useState(false);
 
   const loadInvite = useCallback(
     () =>
@@ -60,11 +66,26 @@ export function ParentConsentForm() {
     if (token) loadInvite();
   }, [token, loadInvite]);
 
+  const loadPolicy = useCallback(
+    () =>
+      getCurrentPolicy("child_data_consent")
+        .then((p) => {
+          setPolicy(p);
+          setPolicyFailed(false);
+        })
+        .catch(() => setPolicyFailed(true)),
+    [],
+  );
+
+  useEffect(() => {
+    loadPolicy();
+  }, [loadPolicy]);
+
   const decide = async (choice: "accept" | "reject") => {
     setError(null);
     setSubmitting(choice);
     try {
-      const res = choice === "accept" ? await parentLinksApi.acceptInvite(token, isGuardian) : await parentLinksApi.rejectInvite(token);
+      const res = choice === "accept" ? await parentLinksApi.acceptInvite(token, isGuardian, policy?.version ?? invite?.policyVersion) : await parentLinksApi.rejectInvite(token);
       setInvite(res.data);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -73,6 +94,8 @@ export function ParentConsentForm() {
       } else if (err instanceof ApiError && err.status === 410) {
         setLoadError(EXPIRED_MESSAGE);
       } else if (err instanceof ApiError) {
+        // Admin vừa công bố bản mới trong lúc phụ huynh đang đọc: tải lại văn bản để đọc lại rồi mới đồng ý được
+        if (choice === "accept" && err.status === 400) await loadPolicy();
         setError(err.message || "Không thể ghi nhận lúc này. Vui lòng thử lại.");
       } else {
         setError("Có lỗi kết nối máy chủ. Vui lòng thử lại sau.");
@@ -179,12 +202,26 @@ export function ParentConsentForm() {
 
           <Separator />
 
-          {/* Nội dung đồng ý (phiên bản policyVersion được lưu kèm bản ghi đồng ý) */}
+          {/* Nội dung đồng ý: bản đang hiệu lực do admin công bố (UC-103); phiên bản được lưu kèm bản ghi đồng ý */}
           <div className="space-y-3 text-sm">
             <h2 className="flex items-center gap-2 font-semibold text-ink">
               <ShieldCheckIcon className="size-4 text-brand" aria-hidden />
-              Nội dung đồng ý (phiên bản {invite.policyVersion})
+              Nội dung đồng ý (phiên bản {policy?.version ?? invite.policyVersion})
             </h2>
+            {policyFailed && policy === undefined ? (
+              <Alert variant="destructive">
+                <TriangleAlertIcon aria-hidden />
+                <AlertDescription>
+                  Không tải được nội dung đồng ý.{" "}
+                  <button type="button" className="underline" onClick={() => loadPolicy()}>Thử lại</button>
+                </AlertDescription>
+              </Alert>
+            ) : policy === undefined ? (
+              <div className="flex items-center gap-2 text-ink-2"><Spinner />Đang tải nội dung...</div>
+            ) : policy ? (
+              <PolicyContent content={policy.content} />
+            ) : (
+              <>
             <div className="space-y-1">
               <div className="font-medium text-ink">Dữ liệu được xử lý</div>
               <ul className="list-disc pl-5 text-ink-2 space-y-0.5">
@@ -208,6 +245,8 @@ export function ParentConsentForm() {
                 hệ thống ngừng xử lý dữ liệu của con (con dưới 16 tuổi quay về chế độ hạn chế).
               </p>
             </div>
+              </>
+            )}
             <p className="text-body-s text-ink-3">
               Căn cứ: Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15 (Điều 24) và Nghị định 356/2025/NĐ-CP. Hệ thống lưu thời điểm,
               email nhận thư mời và địa chỉ IP khi bạn trả lời.
@@ -250,7 +289,7 @@ export function ParentConsentForm() {
                 type="button"
                 size="xl"
                 className="flex-1"
-                disabled={!isGuardian || submitting !== null}
+                disabled={!isGuardian || submitting !== null || policy === undefined}
                 onClick={() => decide("accept")}
                 loading={submitting === "accept"}
               >

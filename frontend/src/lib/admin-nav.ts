@@ -7,6 +7,7 @@ import {
   BuildingIcon,
   ClipboardCheckIcon,
   CreditCardIcon,
+  FileTextIcon,
   GraduationCapIcon,
   LayoutDashboardIcon,
   LibraryBigIcon,
@@ -27,6 +28,7 @@ import {
   BuildingFilledIcon,
   ClipboardCheckFilledIcon,
   CreditCardFilledIcon,
+  FileTextFilledIcon,
   GraduationCapFilledIcon,
   LayoutDashboardFilledIcon,
   LibraryBigFilledIcon,
@@ -255,6 +257,16 @@ export const ADMIN_NAV: AdminNavItem[] = [
     // Moderator vào để sửa bảng quy đổi điểm (UC-68); admin chỉ xem bảng này. Tham số thuật toán (UC-89, gộp UC-69) chỉ xem.
     roles: ["admin", "moderator"],
     useCases: ["UC-68", "UC-70", "UC-89"],
+  },
+  {
+    href: "/admin/policies",
+    label: "Chính sách & điều khoản",
+    description: "Soạn, xem trước và công bố điều khoản sử dụng, chính sách bảo mật theo phiên bản; bản đã công bố không sửa được",
+    icon: FileTextIcon,
+    filledIcon: FileTextFilledIcon,
+    section: "system",
+    roles: ["admin"],
+    useCases: ["UC-103"],
   },
   {
     href: "/admin/sensitivity",

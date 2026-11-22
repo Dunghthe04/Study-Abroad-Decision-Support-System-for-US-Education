@@ -26,7 +26,7 @@ namespace StudyAbroad.Api.Controllers
         public async Task<IActionResult> AcceptInvite(AcceptInviteRequest request, CancellationToken ct)
         {
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-            return ToResult(await parentLinks.AcceptAsync(request.Token, request.IsGuardian, ip, ct));
+            return ToResult(await parentLinks.AcceptAsync(request.Token, request.IsGuardian, ip, ct, request.PolicyVersion));
         }
 
         [AllowAnonymous]
