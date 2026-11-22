@@ -3442,6 +3442,124 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.SensitivityRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AlgorithmVersion")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("algorithm_version")
+                        .HasComment("Phiên bản thuật toán lúc chạy. Hai lần chạy khác phiên bản thì không so trực tiếp được.");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id")
+                        .HasComment("Admin chạy phân tích. Xóa tài khoản thì để trống, lần chạy vẫn giữ.");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_ms")
+                        .HasComment("Thời gian chạy (mili giây).");
+
+                    b.Property<string>("ParametersJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("parameters_json")
+                        .HasComment("Giá trị mọi tham số trong bộ đang chạy lúc phân tích (mốc để nhích).");
+
+                    b.Property<int>("ProfileCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("profile_count")
+                        .HasComment("Số hồ sơ giả lập đã chạy.");
+
+                    b.Property<string>("ProfileSetHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("profile_set_hash")
+                        .HasComment("SHA-256 của bộ hồ sơ, để chắc bộ hồ sơ không bị sửa.");
+
+                    b.Property<int>("ProfileSetSeed")
+                        .HasColumnType("integer")
+                        .HasColumnName("profile_set_seed")
+                        .HasComment("Seed đã dùng để sinh bộ hồ sơ.");
+
+                    b.Property<string>("ProfileSetVersion")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("profile_set_version")
+                        .HasComment("Phiên bản bộ hồ sơ giả lập (v1...).");
+
+                    b.Property<string>("RequestJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("request_json")
+                        .HasComment("Yêu cầu: các tham số đã chọn, mức nhích (10%/20%), hai ngưỡng nhãn.");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("result_json")
+                        .HasComment("Kết quả từng tham số: giá trị gốc, từng mức nhích, số cặp đổi nhóm, số chỗ top 4 đổi, nhãn.");
+
+                    b.Property<int>("SchoolCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("school_count")
+                        .HasComment("Số trường đưa vào phân tích (đang hoạt động, bậc đại học).");
+
+                    b.Property<string>("SchoolDataHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("school_data_hash")
+                        .HasComment("SHA-256 của các số liệu trường mà thuật toán đọc. Khác nhau nghĩa là dữ liệu trường đã đổi giữa hai lần chạy.");
+
+                    b.Property<int>("SensitiveCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("sensitive_count")
+                        .HasComment("Số tham số nhãn Nhạy.");
+
+                    b.Property<int>("StableCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("stable_count")
+                        .HasComment("Số tham số nhãn Ổn định.");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("WatchCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("watch_count")
+                        .HasComment("Số tham số nhãn Cần theo dõi.");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sensitivity_runs");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_sensitivity_runs_created_at");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("ix_sensitivity_runs_created_by_user_id");
+
+                    b.ToTable("sensitivity_runs", "app", t =>
+                        {
+                            t.HasComment("[UC-85] Mỗi lần admin phân tích độ nhạy tham số của thuật toán gợi ý trường. Chỉ lưu khi chạy xong trọn vẹn. Chạy trên bộ hồ sơ giả lập, không có dữ liệu học sinh thật.");
+
+                            t.HasCheckConstraint("ck_sensitivity_runs_counts", "profile_count > 0 AND school_count >= 0 AND stable_count >= 0 AND watch_count >= 0 AND sensitive_count >= 0 AND duration_ms >= 0");
+                        });
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.Skill", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5895,6 +6013,15 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UniversityId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_scholarships_universities_university_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.SensitivityRun", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_sensitivity_runs_users_created_by_user_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.SlmSampleHistory", b =>

@@ -350,6 +350,21 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             : Compute(profile, pref, schools, filtered, kept, ecTier, tuning);
     }
 
+    /// <summary>
+    /// [UC-85] Dấu nhận biết dữ liệu trường: SHA-256 của ĐÚNG các số mà thuật toán đọc (lọc cứng, xếp nhóm, fit score) của mọi trường,
+    /// xếp theo mã. Dữ liệu trường đổi (tỉ lệ nhận, SAT, học phí...) thì dấu đổi; sửa thứ thuật toán không đọc (mô tả, ảnh) thì không.
+    /// Dùng để biết hai lần phân tích độ nhạy có chạy trên cùng dữ liệu trường không.
+    /// </summary>
+    public static string SchoolDataFingerprint(IReadOnlyList<RecommendSchoolInput> schools)
+    {
+        var rows = schools
+            .OrderBy(s => s.University.Code, StringComparer.Ordinal)
+            .Select(s => new { Filter = ToFilterSchool(s), Academics = ToSchoolAcademics(s), Fit = ToFitSchool(s, null) })
+            .ToList();
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(rows)))
+            .ToLowerInvariant();
+    }
+
     // Lọc cứng rồi chấm: phần thuần dùng chung cho mô phỏng (không đọc ngoại khóa, không lưu).
     private static RecommendationRun Evaluate(
         StudentProfile profile, IReadOnlyList<int>? pref, IReadOnlyList<RecommendSchoolInput> schools, int tier,

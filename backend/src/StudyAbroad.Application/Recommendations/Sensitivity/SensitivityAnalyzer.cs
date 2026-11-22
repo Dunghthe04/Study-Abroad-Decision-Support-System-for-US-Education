@@ -33,9 +33,10 @@ public sealed record SensitivityParameterResult(
     IReadOnlyList<SensitivityPoint> Points, double? Rate, string? Label);
 
 // Kết quả cả lần phân tích, kèm đủ thông tin để biết lần chạy này đo trên điều kiện nào (so sánh hai lần chạy cần cùng điều kiện).
+// SchoolDataHash: dấu nhận biết dữ liệu trường (RecommendationService.SchoolDataFingerprint).
 public sealed record SensitivityReport(
     string AlgorithmVersion, string ProfileSetVersion, string ProfileSetHash, int ProfileCount, int SchoolCount,
-    double StableBelow, double WatchUpTo, IReadOnlyList<SensitivityParameterResult> Parameters);
+    string SchoolDataHash, double StableBelow, double WatchUpTo, IReadOnlyList<SensitivityParameterResult> Parameters);
 
 public static class SensitivityLabels
 {
@@ -85,7 +86,7 @@ public static class SensitivityAnalyzer
 
         return new SensitivityReport(
             RecommendationService.AlgorithmVersion, profileSet.Version, profileSet.Hash, profileSet.Profiles.Count, schools.Count,
-            request.StableBelow, request.WatchUpTo, results);
+            RecommendationService.SchoolDataFingerprint(schools), request.StableBelow, request.WatchUpTo, results);
     }
 
     // Nhãn theo tỉ lệ thay đổi: dưới stableBelow là Ổn định, đến watchUpTo (gồm cả mốc) là Cần theo dõi, trên nữa là Nhạy
