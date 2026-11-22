@@ -64,8 +64,7 @@ public class AccountPurgeServiceTests
             return Task.CompletedTask;
         }
 
-        public Task<DraftTranscriptInfoDto> SaveDraftTranscriptAsync(Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<string?> CommitDraftTranscriptAsync(Guid userId, string draftRelativePath, CancellationToken ct = default) => throw new NotSupportedException();
+        public DraftTranscriptInfoDto ValidateTranscriptFile(byte[] fileBytes, string fileName) => throw new NotSupportedException();
         public Task DeleteDraftFileAsync(Guid userId, string? draftRelativePath, CancellationToken ct = default) => throw new NotSupportedException();
         public Task DeleteTranscriptFileAsync(Guid userId, string? transcriptRelativePath, CancellationToken ct = default) => throw new NotSupportedException();
         public Task DeleteDraftFilesAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();

@@ -144,28 +144,17 @@ public class ProfileFlowServiceTests
 
     private sealed class FakeFileStorageService : IProfileFileStorageService
     {
-        public bool CommitCalled { get; private set; }
         public bool DeleteCalled { get; private set; }
 
-        public Task<DraftTranscriptInfoDto> SaveDraftTranscriptAsync(
-            Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default)
-        {
-            return Task.FromResult(new DraftTranscriptInfoDto(
+        public DraftTranscriptInfoDto ValidateTranscriptFile(byte[] fileBytes, string fileName) =>
+            new(
                 OriginalFileName: fileName,
-                StoredFileName: "safe_" + fileName,
-                RelativePath: $"/uploads/drafts/{userId}/safe_{fileName}",
-                FileSizeBytes: length,
-                ContentType: contentType,
+                StoredFileName: null,
+                RelativePath: null,
+                FileSizeBytes: fileBytes.Length,
+                ContentType: "application/pdf",
                 UploadedAt: DateTime.UtcNow
-            ));
-        }
-
-        public Task<string?> CommitDraftTranscriptAsync(Guid userId, string draftRelativePath, CancellationToken ct = default)
-        {
-            CommitCalled = true;
-            var storedName = Path.GetFileName(draftRelativePath);
-            return Task.FromResult<string?>($"/uploads/transcripts/{userId}/{storedName}");
-        }
+            );
 
         public List<string?> DeletedDraftFiles { get; } = [];
         public List<string?> DeletedTranscriptFiles { get; } = [];
@@ -335,8 +324,18 @@ public class ProfileFlowServiceTests
         Assert.Equal(JsonSerializer.Serialize(draft), JsonSerializer.Serialize(state.Draft));
     }
 
+    /// <summary>Giả lập nháp cũ từ khi còn lưu tệp: gắn đường dẫn tệp nháp vào thông tin tệp đã lưu trong nháp</summary>
+    private static async Task SetLegacyDraftPathAsync(InMemoryProfileFlowRepository repo, Guid userId, string path)
+    {
+        var profile = (await repo.GetProfileByUserIdAsync(userId))!;
+        var json = profile.DraftFlowStateJson!;
+        Assert.Contains("\"relativePath\":null", json);
+        profile.DraftFlowStateJson = json.Replace("\"relativePath\":null", $"\"relativePath\":\"{path}\"");
+        await repo.UpdateProfileAsync(profile);
+    }
+
     [Fact]
-    public async Task UploadDraftTranscriptAsync_SecondUpload_DeletesPreviousDraftFile()
+    public async Task UploadDraftTranscriptAsync_KeepsOnlyFileInfo_NoFileDeletes()
     {
         var repo = new InMemoryProfileFlowRepository();
         var storage = new FakeFileStorageService();
@@ -345,38 +344,79 @@ public class ProfileFlowServiceTests
 
         using (var first = new MemoryStream([1, 2, 3]))
             await service.UploadDraftTranscriptAsync(userId, first, "lan1.pdf", "application/pdf", 3);
-        Assert.Empty(storage.DeletedDraftFiles);
-
         using (var second = new MemoryStream([1, 2, 3]))
             await service.UploadDraftTranscriptAsync(userId, second, "lan2.pdf", "application/pdf", 3);
 
-        Assert.Equal([$"/uploads/drafts/{userId}/safe_lan1.pdf"], storage.DeletedDraftFiles);
+        Assert.Empty(storage.DeletedDraftFiles);
         var state = await service.GetFlowStateAsync(userId);
         Assert.Equal("lan2.pdf", state.DraftTranscript!.OriginalFileName);
+        Assert.Equal(3, state.DraftTranscript.FileSizeBytes);
     }
 
     [Fact]
-    public async Task CommitFlowAsync_NewTranscript_DeletesPreviousOfficialFile()
+    public async Task UploadDraftTranscriptAsync_LegacyDraftFile_IsDeleted()
     {
         var repo = new InMemoryProfileFlowRepository();
         var storage = new FakeFileStorageService();
         var service = new ProfileFlowService(repo, storage);
         var userId = Guid.NewGuid();
+        var legacyPath = $"/uploads/drafts/{userId}/cu.pdf";
 
         using (var first = new MemoryStream([1, 2, 3]))
             await service.UploadDraftTranscriptAsync(userId, first, "cu.pdf", "application/pdf", 3);
-        await service.SaveDraftAsync(userId, new SaveProfileDraftRequest(6, [1, 2, 3, 4, 5], FullDraft()));
-        await service.CommitFlowAsync(userId, null);
-        Assert.Empty(storage.DeletedTranscriptFiles);
+        await SetLegacyDraftPathAsync(repo, userId, legacyPath);
 
         using (var second = new MemoryStream([1, 2, 3]))
             await service.UploadDraftTranscriptAsync(userId, second, "moi.pdf", "application/pdf", 3);
+
+        Assert.Equal([legacyPath], storage.DeletedDraftFiles);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_NewTranscript_ClearsAndDeletesLegacyFiles()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var storage = new FakeFileStorageService();
+        var service = new ProfileFlowService(repo, storage);
+        var userId = Guid.NewGuid();
+        var legacyOfficial = $"/uploads/transcripts/{userId}/cu.pdf";
+        var legacyDraft = $"/uploads/drafts/{userId}/nhap.pdf";
+
+        var profile = await repo.EnsureProfileExistsAsync(userId);
+        profile.TranscriptFileUrl = legacyOfficial;
+        await repo.UpdateProfileAsync(profile);
+
+        using (var stream = new MemoryStream([1, 2, 3]))
+            await service.UploadDraftTranscriptAsync(userId, stream, "moi.pdf", "application/pdf", 3);
+        await service.SaveDraftAsync(userId, new SaveProfileDraftRequest(6, [1, 2, 3, 4, 5], FullDraft()));
+        await SetLegacyDraftPathAsync(repo, userId, legacyDraft);
+        await service.CommitFlowAsync(userId, null);
+
+        Assert.Equal([legacyOfficial], storage.DeletedTranscriptFiles);
+        Assert.Equal([legacyDraft], storage.DeletedDraftFiles);
+        var p = (await repo.GetProfileByUserIdAsync(userId))!;
+        Assert.Null(p.TranscriptFileUrl);
+    }
+
+    [Fact]
+    public async Task CommitFlowAsync_NoNewTranscript_KeepsLegacyOfficialFile()
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var storage = new FakeFileStorageService();
+        var service = new ProfileFlowService(repo, storage);
+        var userId = Guid.NewGuid();
+        var legacyOfficial = $"/uploads/transcripts/{userId}/cu.pdf";
+
+        var profile = await repo.EnsureProfileExistsAsync(userId);
+        profile.TranscriptFileUrl = legacyOfficial;
+        await repo.UpdateProfileAsync(profile);
+
         await service.SaveDraftAsync(userId, new SaveProfileDraftRequest(6, [1, 2, 3, 4, 5], FullDraft()));
         await service.CommitFlowAsync(userId, null);
 
-        Assert.Equal([$"/uploads/transcripts/{userId}/safe_cu.pdf"], storage.DeletedTranscriptFiles);
+        Assert.Empty(storage.DeletedTranscriptFiles);
         var p = (await repo.GetProfileByUserIdAsync(userId))!;
-        Assert.Equal($"/uploads/transcripts/{userId}/safe_moi.pdf", p.TranscriptFileUrl);
+        Assert.Equal(legacyOfficial, p.TranscriptFileUrl);
     }
 
     [Fact]
@@ -395,12 +435,11 @@ public class ProfileFlowServiceTests
 
         Assert.True(response.Succeeded);
         Assert.Equal(1, repo.CommitCount);
-        Assert.True(storage.CommitCalled);
 
         var p = (await repo.GetProfileByUserIdAsync(userId))!;
         Assert.Null(p.DraftFlowStateJson);
         Assert.NotNull(p.FlowSubmittedAt);
-        Assert.Contains("/uploads/transcripts/", p.TranscriptFileUrl);
+        Assert.Null(p.TranscriptFileUrl);
 
         // Bước 1
         Assert.Equal(StudyLevels.Undergraduate, p.TargetLevel);

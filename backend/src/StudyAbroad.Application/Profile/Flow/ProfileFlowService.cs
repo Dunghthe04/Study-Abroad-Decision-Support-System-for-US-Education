@@ -202,14 +202,13 @@ public class ProfileFlowService(
         await EnsureCanEditAsync(userId, ct);
         var profile = await repository.EnsureProfileExistsAsync(userId, ct);
 
-        // Đọc toàn bộ nội dung file ra bộ nhớ để vừa lưu nháp vừa gửi sang OCR
+        // Đọc toàn bộ nội dung file ra bộ nhớ để kiểm tra rồi gửi thẳng sang OCR
         using var ms = new MemoryStream();
         await fileStream.CopyToAsync(ms, ct);
         var fileBytes = ms.ToArray();
 
-        // 1. Lưu file vào thư mục nháp (storage kiểm tra đuôi, nội dung thật và dung lượng)
-        using var saveStream = new MemoryStream(fileBytes);
-        var draftInfo = await fileStorageService.SaveDraftTranscriptAsync(userId, saveStream, fileName, contentType, length, ct);
+        // 1. Kiểm tra đuôi, nội dung thật và dung lượng. Không lưu tệp: bảng điểm chỉ dùng để OCR một lần
+        var draftInfo = fileStorageService.ValidateTranscriptFile(fileBytes, fileName);
 
         // 2. Thử OCR bóc tách điểm bảng điểm qua AI Advisor, dùng content type suy ra từ nội dung file
         TranscriptOcrResponse? ocrResponse = null;
@@ -243,8 +242,8 @@ public class ProfileFlowService(
         profile.DraftFlowStateJson = JsonSerializer.Serialize(stored, JsonOptions);
         await repository.UpdateProfileAsync(profile, ct);
 
-        // Mỗi user chỉ giữ 1 file nháp: xoá file của lần tải trước sau khi đã lưu file mới
-        if (!string.IsNullOrWhiteSpace(previousDraftPath) && previousDraftPath != draftInfo.RelativePath)
+        // Nháp cũ từ khi còn lưu tệp: xoá tệp đó đi, giờ nháp chỉ còn tên tệp
+        if (!string.IsNullOrWhiteSpace(previousDraftPath))
         {
             await fileStorageService.DeleteDraftFileAsync(userId, previousDraftPath, ct);
         }
@@ -281,16 +280,12 @@ public class ProfileFlowService(
         var scale = await GetGradeScaleAsync(ct);
         var (scores, activities, certifications) = ApplyDraftToProfile(profile, draft, budgetTiers, certificationTypes, scale, now);
 
-        // Chuyển file bảng điểm nháp (theo trạng thái trên server) sang thư mục chính thức
+        // Không lưu tệp bảng điểm nữa. Lần này có tải bảng điểm mới thì bỏ đường dẫn tệp chính thức cũ (nếu còn từ bản trước)
         var previousOfficialUrl = profile.TranscriptFileUrl;
-        var draftTranscript = stored?.DraftTranscript;
-        if (draftTranscript is not null && !string.IsNullOrWhiteSpace(draftTranscript.RelativePath))
+        var legacyDraftPath = stored?.DraftTranscript?.RelativePath;
+        if (stored?.DraftTranscript is not null)
         {
-            var officialUrl = await fileStorageService.CommitDraftTranscriptAsync(userId, draftTranscript.RelativePath, ct);
-            if (!string.IsNullOrWhiteSpace(officialUrl))
-            {
-                profile.TranscriptFileUrl = officialUrl;
-            }
+            profile.TranscriptFileUrl = null;
         }
 
         profile.FlowSubmittedAt = DateTimeOffset.UtcNow;
@@ -304,10 +299,14 @@ public class ProfileFlowService(
         // các sửa đổi dở của profile ra ngoài transaction của CommitProfileFlowAsync
         await RecordAiCallsAsync(userId, ct);
 
-        // Đã lưu xong hồ sơ mới thì xoá file bảng điểm chính thức cũ, không giữ dữ liệu cá nhân thừa
+        // Đã lưu xong hồ sơ mới thì xoá tệp cũ còn sót từ bản trước, không giữ dữ liệu cá nhân thừa
         if (!string.IsNullOrWhiteSpace(previousOfficialUrl) && previousOfficialUrl != profile.TranscriptFileUrl)
         {
             await fileStorageService.DeleteTranscriptFileAsync(userId, previousOfficialUrl, ct);
+        }
+        if (!string.IsNullOrWhiteSpace(legacyDraftPath))
+        {
+            await fileStorageService.DeleteDraftFileAsync(userId, legacyDraftPath, ct);
         }
 
         return new CommitProfileFlowResponse(
