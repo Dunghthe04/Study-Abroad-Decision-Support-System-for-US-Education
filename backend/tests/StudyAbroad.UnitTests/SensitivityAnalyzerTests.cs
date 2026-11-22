@@ -86,6 +86,46 @@ public class SensitivityAnalyzerTests
             key => SensitivityAnalyzer.MeasureOne(Profiles, Schools, key, 0.20).ChangedSlots > 0);
     }
 
+    // ------------------------------------------------------------ số phụ: thứ tự đầy đủ trong nhóm ("Xem thêm")
+
+    [Fact]
+    public void NudgingByZero_MovesNoSchoolInTheFullOrder()
+    {
+        foreach (var key in AllKeys)
+        {
+            var point = SensitivityAnalyzer.MeasureOne(Profiles, Schools, key, 0);
+            Assert.True(point.RankedSchools > 0, key);
+            Assert.Equal(0, point.RankShiftTotal);
+            Assert.Equal(0, point.AvgRankShift);
+        }
+    }
+
+    [Fact]
+    public void AFitWeight_ThatChangesTheTop4_AlsoShiftsTheFullOrder_AndKeepsEverySchoolInItsGroup()
+    {
+        foreach (var key in AllKeys.Where(k => k.StartsWith("fit_")))
+        {
+            var baseline = SensitivityAnalyzer.MeasureOne(Profiles, Schools, key, 0);
+            var point = SensitivityAnalyzer.MeasureOne(Profiles, Schools, key, 0.20);
+            // Trọng số không đổi nhóm nên mọi trường vẫn có mặt trong nhóm cũ: đủ số trường để so
+            Assert.Equal(baseline.RankedSchools, point.RankedSchools);
+            // Top 4 đổi trường thì chắc chắn thứ tự đầy đủ cũng đổi
+            if (point.ChangedSlots > 0) Assert.True(point.RankShiftTotal > 0, key);
+            Assert.True(point.AvgRankShift >= 0);
+        }
+    }
+
+    [Fact]
+    public void ARunSavedBeforeTheRankShiftExisted_ShowsNoValue_NotZero()
+    {
+        // JSON của lần chạy cũ không có hai trường mới
+        var old = System.Text.Json.JsonSerializer.Deserialize<SensitivityPoint>(
+            """{"step":0.1,"value":0.825,"clamped":false,"pairs":10,"changedPairs":1,"movedSafer":0,"movedHarder":1,"slots":4,"changedSlots":1}""",
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+        Assert.Null(old.RankedSchools);
+        Assert.Null(old.AvgRankShift);
+    }
+
     [Fact]
     public void ExtracurricularParameters_AreSeen_BecauseTheProfilesHaveTier1And5()
     {

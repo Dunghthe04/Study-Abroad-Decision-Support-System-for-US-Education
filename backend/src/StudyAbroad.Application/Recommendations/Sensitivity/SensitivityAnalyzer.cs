@@ -14,15 +14,21 @@ public sealed record SensitivityRequest(
 // Pairs / ChangedPairs: số cặp (hồ sơ, trường) và số cặp đổi nhóm. MovedSafer: số cặp chuyển sang nhóm DỄ hơn
 // (ví dụ Vừa sức lên An toàn), là chiều nguy hiểm vì học sinh có thể chủ quan; MovedHarder: chiều ngược lại.
 // Slots / ChangedSlots: số chỗ trong top 4 của các khối (Khó vào, Vừa sức, An toàn, Cần học bổng) và số chỗ đổi trường.
+// RankedSchools / RankShiftTotal (số phụ, không dùng gắn nhãn): xét TOÀN BỘ thứ tự trường trong ba nhóm chính, đúng thứ tự
+// học sinh thấy khi bấm "Xem thêm" (điểm phù hợp giảm dần). RankedSchools là số trường có mặt trong cùng nhóm ở cả hai lần,
+// RankShiftTotal là tổng số bậc các trường đó dịch đi. Null ở các lần chạy cũ, trước khi có số này.
 public sealed record SensitivityPoint(
     double Step, double Value, bool Clamped,
     int Pairs, int ChangedPairs, int MovedSafer, int MovedHarder,
-    int Slots, int ChangedSlots)
+    int Slots, int ChangedSlots,
+    int? RankedSchools = null, long? RankShiftTotal = null)
 {
     public double GroupChangeRate => Pairs == 0 ? 0 : (double)ChangedPairs / Pairs;
     public double TopChangeRate => Slots == 0 ? 0 : (double)ChangedSlots / Slots;
     // Tỉ lệ trường top 4 ban đầu còn giữ lại trong top 4 (BA: độ trùng top 4)
     public double TopOverlap => 1 - TopChangeRate;
+    // Trung bình mỗi trường dịch bao nhiêu bậc trong nhóm. Ví dụ 0,4: thứ tự gần như giữ nguyên
+    public double? AvgRankShift => RankedSchools is int n ? (n == 0 ? 0 : (double)(RankShiftTotal ?? 0) / n) : null;
 }
 
 // Kết quả một tham số. Rate: số dùng để gắn nhãn (lớn nhất của +10% và −10%, theo đúng cách đo của loại tham số);
@@ -144,7 +150,8 @@ public static class SensitivityAnalyzer
         return new SensitivityPoint(
             signedStep, value, clamped,
             diffs.Sum(d => d.Pairs), diffs.Sum(d => d.Changed), diffs.Sum(d => d.Safer), diffs.Sum(d => d.Harder),
-            diffs.Sum(d => d.Slots), diffs.Sum(d => d.ChangedSlots));
+            diffs.Sum(d => d.Slots), diffs.Sum(d => d.ChangedSlots),
+            diffs.Sum(d => d.Ranked), diffs.Sum(d => d.RankShift));
     }
 
     private static double? ClassifyRate(SensitivityKind kind, List<SensitivityPoint> points)
@@ -170,14 +177,25 @@ public static class SensitivityAnalyzer
         return list;
     }
 
-    // Phần cần so của một lượt gợi ý: nhóm của từng trường (sau lọc cứng) và danh sách trường trong top 4 từng khối
-    private sealed record Snapshot(Dictionary<string, SchoolGroup> Groups, List<HashSet<string>> Tops)
+    // Ba nhóm chính có nút "Xem thêm" (khối cần học bổng và khối thiếu dữ liệu thì không)
+    private static readonly SchoolGroup[] MainGroups = [SchoolGroup.Reach, SchoolGroup.Match, SchoolGroup.Safety];
+
+    // Phần cần so của một lượt gợi ý: nhóm của từng trường (sau lọc cứng), danh sách trường trong top 4 từng khối,
+    // và thứ tự đầy đủ của từng nhóm chính (như danh sách "Xem thêm": trường trong ngân sách, điểm phù hợp giảm dần, cùng điểm theo mã)
+    private sealed record Snapshot(Dictionary<string, SchoolGroup> Groups, List<HashSet<string>> Tops, List<List<string>> Orders)
     {
         public static Snapshot Of(RecommendationRun run) => new(
             run.Scored.ToDictionary(s => s.School.University.Code, s => s.Grade.Group, StringComparer.OrdinalIgnoreCase),
             run.Picked is { } picked
                 ? Blocks.Select(block => block(picked).Select(r => r.Code).ToHashSet(StringComparer.OrdinalIgnoreCase)).ToList()
-                : Blocks.Select(_ => new HashSet<string>(StringComparer.OrdinalIgnoreCase)).ToList());
+                : Blocks.Select(_ => new HashSet<string>(StringComparer.OrdinalIgnoreCase)).ToList(),
+            MainGroups.Select(group => run.Scored
+                    .Where(s => s.Filter.Outcome == FilterOutcome.Keep && s.Grade.Group == group)
+                    .OrderByDescending(s => s.Fit?.Value ?? 0)
+                    .ThenBy(s => s.School.University.Code, StringComparer.Ordinal)
+                    .Select(s => s.School.University.Code)
+                    .ToList())
+                .ToList());
 
         public Diff Compare(Snapshot before)
         {
@@ -203,9 +221,24 @@ public static class SensitivityAnalyzer
                 slots += before.Tops[i].Count;
                 changedSlots += before.Tops[i].Count(code => !Tops[i].Contains(code));
             }
-            return new Diff(pairs, changed, safer, harder, slots, changedSlots);
+            // Thứ tự đầy đủ: trường nào còn ở cùng nhóm thì cộng số bậc nó dịch đi (trường rời nhóm đã được đếm ở trên)
+            int ranked = 0;
+            long rankShift = 0;
+            for (var i = 0; i < before.Orders.Count; i++)
+            {
+                var now = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (var r = 0; r < Orders[i].Count; r++) now[Orders[i][r]] = r;
+                for (var r = 0; r < before.Orders[i].Count; r++)
+                {
+                    if (!now.TryGetValue(before.Orders[i][r], out var newRank)) continue;
+                    ranked++;
+                    rankShift += Math.Abs(newRank - r);
+                }
+            }
+            return new Diff(pairs, changed, safer, harder, slots, changedSlots, ranked, rankShift);
         }
     }
 
-    private readonly record struct Diff(int Pairs, int Changed, int Safer, int Harder, int Slots, int ChangedSlots);
+    private readonly record struct Diff(
+        int Pairs, int Changed, int Safer, int Harder, int Slots, int ChangedSlots, int Ranked, long RankShift);
 }

@@ -13,7 +13,7 @@ public static class SensitivityCsv
         "run_id", "created_at_utc", "algorithm_version", "profile_set", "profile_count", "school_count", "school_data_hash",
         "parameter_key", "parameter_name", "kind", "baseline", "step", "value_used", "clamped",
         "pairs", "changed_pairs", "group_change_rate", "moved_safer", "moved_harder",
-        "top_slots", "changed_slots", "top_change_rate", "top_overlap",
+        "top_slots", "changed_slots", "top_change_rate", "top_overlap", "ranked_schools", "avg_rank_shift",
         "classified_rate", "label"
     ];
 
@@ -36,6 +36,7 @@ public static class SensitivityCsv
                     point.Clamped ? "true" : "false",
                     N(point.Pairs), N(point.ChangedPairs), N(point.GroupChangeRate), N(point.MovedSafer), N(point.MovedHarder),
                     N(point.Slots), N(point.ChangedSlots), N(point.TopChangeRate), N(point.TopOverlap),
+                    point.RankedSchools is int ranked ? N(ranked) : "", point.AvgRankShift is double shift ? N(shift) : "",
                     p.Rate is double r ? N(r) : "", Text(p.Label ?? "")
                 ];
                 sb.Append(string.Join(',', cells)).Append("\r\n");
