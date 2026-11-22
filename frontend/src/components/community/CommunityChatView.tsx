@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { EyeOffIcon, MessagesSquareIcon, SendIcon, UsersIcon } from "lucide-react";
+import { ArrowDownIcon, EyeOffIcon, MessagesSquareIcon, SendIcon, UsersIcon } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { ReportMessageControl } from "@/components/lead/LeadMessageParts";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -65,22 +65,28 @@ function roleLabel(role: string) {
   return formatUserRole(role as UserRole);
 }
 
-/** Tự biến link URL trong văn bản thành thẻ <a> bấm được */
+/** Tự biến link URL trong văn bản thành thẻ <a> bấm được, loại trừ dấu câu cuối link */
 function renderMessageContent(content: string) {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = content.split(urlRegex);
   return parts.map((part, index) => {
     if (part.match(urlRegex)) {
+      const trailingMatch = part.match(/[.,;:!?)]+$/);
+      const trailing = trailingMatch ? trailingMatch[0] : "";
+      const cleanUrl = trailing ? part.slice(0, -trailing.length) : part;
+
       return (
-        <a
-          key={index}
-          href={part}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-brand underline underline-offset-2 hover:text-brand-dark break-all"
-        >
-          {part}
-        </a>
+        <React.Fragment key={index}>
+          <a
+            href={cleanUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-brand underline underline-offset-2 hover:text-brand-dark break-all"
+          >
+            {cleanUrl}
+          </a>
+          {trailing}
+        </React.Fragment>
       );
     }
     return <React.Fragment key={index}>{part}</React.Fragment>;
@@ -159,42 +165,49 @@ export function CommunityChatView() {
   const [sending, setSending] = useState(false);
   const [reported, setReported] = useState<Set<string>>(() => new Set());
   const [hidingId, setHidingId] = useState<string | null>(null);
+  const [confirmingHideId, setConfirmingHideId] = useState<string | null>(null);
+  const [newMessagesCount, setNewMessagesCount] = useState(0);
 
-  const bottomRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
   const initialLoadedRef = useRef(false);
 
   const isStaff = user?.role === "admin" || user?.role === "moderator";
 
-  const handleScroll = useCallback(() => {
+  const scrollToBottom = useCallback((smooth = false) => {
     const el = listRef.current;
     if (!el) return;
-    const threshold = 120;
-    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    isNearBottomRef.current = distanceToBottom <= threshold;
-  }, []);
-
-  const scrollToBottom = useCallback((smooth = false) => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "end" });
+    if (smooth) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    } else {
+      el.scrollTop = el.scrollHeight;
     }
   }, []);
 
-  const mergeMessages = useCallback((incoming: CommunityMessageDto[], options?: { isOlder?: boolean; isMine?: boolean }) => {
-    setMessages((prev) => {
-      const map = new Map(prev.map((m) => [m.id, m]));
-      for (const item of incoming) {
-        const mine = item.userId === user?.id;
-        map.set(item.id, { ...item, isMine: mine || item.isMine });
+  const mergeMessages = useCallback(
+    (incoming: CommunityMessageDto[], options?: { isOlder?: boolean; isMine?: boolean }) => {
+      setMessages((prev) => {
+        const map = new Map(prev.map((m) => [m.id, m]));
+        for (const item of incoming) {
+          const mine = item.userId === user?.id;
+          map.set(item.id, { ...item, isMine: mine || item.isMine });
+        }
+        return [...map.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+      });
+
+      if (options?.isMine) {
+        setNewMessagesCount(0);
+        requestAnimationFrame(() => scrollToBottom(true));
+      } else if (!options?.isOlder) {
+        if (isNearBottomRef.current) {
+          requestAnimationFrame(() => scrollToBottom(true));
+        } else {
+          setNewMessagesCount((prev) => prev + incoming.length);
+        }
       }
-      return [...map.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-    });
-
-    if (options?.isMine || (!options?.isOlder && isNearBottomRef.current)) {
-      requestAnimationFrame(() => scrollToBottom(true));
-    }
-  }, [user?.id, scrollToBottom]);
+    },
+    [user?.id, scrollToBottom],
+  );
 
   const loadInitial = useCallback(async () => {
     const batch = await communityApi.listMessages({ take: 50 });
@@ -207,7 +220,7 @@ export function CommunityChatView() {
     });
   }, [mergeMessages, scrollToBottom]);
 
-  const loadOlder = async () => {
+  const loadOlder = useCallback(async () => {
     const oldest = messages[0];
     if (!oldest || loadingOlder || !hasMore) return;
     const el = listRef.current;
@@ -230,22 +243,58 @@ export function CommunityChatView() {
           el.scrollTop = el.scrollHeight - prevScrollHeight + prevScrollTop;
         }
       });
+    } catch (err) {
+      toast.add({
+        type: "error",
+        title: "Không tải được tin cũ hơn",
+        description: err instanceof ApiError ? err.message : "Thử lại sau.",
+      });
     } finally {
       setLoadingOlder(false);
     }
-  };
+  }, [messages, loadingOlder, hasMore, mergeMessages]);
+
+  const handleScroll = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const isNear = distanceToBottom <= 100;
+    isNearBottomRef.current = isNear;
+    if (isNear) {
+      setNewMessagesCount(0);
+    }
+    // Infinite scroll: khi kéo lên sát đỉnh (< 60px) và còn tin cũ
+    if (el.scrollTop < 60 && hasMore && !loadingOlder && !loading) {
+      void loadOlder();
+    }
+  }, [hasMore, loadingOlder, loading, loadOlder]);
 
   const resync = useCallback(async () => {
     try {
       const newest = messages.length > 0 ? messages[messages.length - 1] : null;
       if (newest) {
-        const newerBatch = await communityApi.listMessages({
-          after: newest.createdAt,
-          afterId: newest.id,
-          take: 100,
-        });
-        if (newerBatch.length > 0) {
-          mergeMessages(newerBatch);
+        let lastTime = newest.createdAt;
+        let lastId = newest.id;
+        let fetchedTotal = 0;
+        const newMessages: CommunityMessageDto[] = [];
+        while (fetchedTotal < 200) {
+          const batch = await communityApi.listMessages({
+            after: lastTime,
+            afterId: lastId,
+            take: 50,
+          });
+          if (batch.length === 0) break;
+          newMessages.push(...batch);
+          fetchedTotal += batch.length;
+          lastTime = batch[batch.length - 1].createdAt;
+          lastId = batch[batch.length - 1].id;
+          if (batch.length < 50) break;
+        }
+
+        if (fetchedTotal >= 200) {
+          await loadInitial();
+        } else if (newMessages.length > 0) {
+          mergeMessages(newMessages);
         }
       } else {
         await loadInitial();
@@ -253,7 +302,7 @@ export function CommunityChatView() {
       const r = await communityApi.restriction();
       setRestriction(r.isRestricted ? r : null);
     } catch {
-      // Ignored for background resync
+      // Background resync error ignored
     }
   }, [messages, mergeMessages, loadInitial]);
 
@@ -332,6 +381,7 @@ export function CommunityChatView() {
 
   const handleModeratorHide = async (messageId: string) => {
     setHidingId(messageId);
+    setConfirmingHideId(null);
     try {
       await adminForumApi.hideMessage(messageId);
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
@@ -387,15 +437,15 @@ export function CommunityChatView() {
 
   return (
     <ProtectedRoute>
-      <section className="space-y-4 pb-8">
+      <section className="space-y-4 pb-4">
         <div>
           <h1 className="font-heading text-h2">Hỏi đáp cộng đồng</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Phòng chat chung cho thành viên đã đăng nhập. Hỏi nhanh về du học, hồ sơ, trường — không thay thế trợ lý AI.
           </p>
         </div>
-        <Card className="overflow-hidden py-0">
-          <CardHeader className="flex-row items-center justify-between gap-3 border-b py-3">
+        <Card className="overflow-hidden py-0 h-[calc(100vh-14rem)] min-h-[500px] max-h-[850px] flex flex-col">
+          <CardHeader className="flex-row items-center justify-between gap-3 border-b py-3 shrink-0">
             <div className="flex items-center gap-2">
               <MessagesSquareIcon className="size-4 text-brand" aria-hidden />
               <div>
@@ -416,8 +466,8 @@ export function CommunityChatView() {
               </SheetContent>
             </Sheet>
           </CardHeader>
-          <CardContent className="grid p-0 lg:grid-cols-[1fr_260px]">
-            <div className="flex min-h-[min(70vh,640px)] flex-col">
+          <CardContent className="grid min-h-0 flex-1 p-0 lg:grid-cols-[1fr_260px]">
+            <div className="relative flex min-h-0 h-full flex-col">
               <div ref={listRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
                 {loading ? (
                   <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -425,11 +475,9 @@ export function CommunityChatView() {
                   </div>
                 ) : (
                   <>
-                    {hasMore && (
-                      <div className="mb-3 flex justify-center">
-                        <Button variant="ghost" size="sm" disabled={loadingOlder} onClick={() => void loadOlder()}>
-                          {loadingOlder ? "Đang tải..." : "Tin cũ hơn"}
-                        </Button>
+                    {loadingOlder && (
+                      <div className="py-2 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                        <Spinner size="sm" /> Đang tải tin cũ hơn...
                       </div>
                     )}
                     {messages.length === 0 ? (
@@ -507,16 +555,40 @@ export function CommunityChatView() {
                                       />
                                     )}
                                     {isStaff && (
-                                      <button
-                                        type="button"
-                                        disabled={hidingId === m.id}
-                                        onClick={() => void handleModeratorHide(m.id)}
-                                        className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive focus-visible:outline-none"
-                                        title="Ẩn tin nhắn này ngay lập tức"
-                                      >
-                                        <EyeOffIcon className="size-3" aria-hidden />
-                                        Ẩn tin
-                                      </button>
+                                      <>
+                                        {confirmingHideId === m.id ? (
+                                          <div className="flex items-center gap-1.5 bg-destructive/10 px-2 py-0.5 rounded text-[11px]">
+                                            <span className="text-destructive font-medium">Ẩn tin này?</span>
+                                            <button
+                                              type="button"
+                                              disabled={hidingId === m.id}
+                                              onClick={() => void handleModeratorHide(m.id)}
+                                              className="text-destructive font-semibold hover:underline cursor-pointer"
+                                            >
+                                              Có
+                                            </button>
+                                            <span className="text-muted-foreground">·</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => setConfirmingHideId(null)}
+                                              className="text-muted-foreground hover:underline cursor-pointer"
+                                            >
+                                              Hủy
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            disabled={hidingId === m.id}
+                                            onClick={() => setConfirmingHideId(m.id)}
+                                            className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive focus-visible:outline-none"
+                                            title="Ẩn tin nhắn này"
+                                          >
+                                            <EyeOffIcon className="size-3" aria-hidden />
+                                            Ẩn tin
+                                          </button>
+                                        )}
+                                      </>
                                     )}
                                   </div>
                                 </div>
@@ -526,11 +598,26 @@ export function CommunityChatView() {
                         })}
                       </div>
                     )}
-                    <div ref={bottomRef} />
                   </>
                 )}
               </div>
-              <div className="border-t p-3">
+
+              {/* Nút nổi báo có tin mới khi người dùng đang cuộn đọc tin cũ */}
+              {newMessagesCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewMessagesCount(0);
+                    scrollToBottom(true);
+                  }}
+                  className="absolute bottom-16 left-1/2 -translate-x-1/2 shadow-lg bg-brand text-brand-foreground hover:bg-brand/90 px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all animate-in fade-in slide-in-from-bottom-2 z-10 cursor-pointer"
+                >
+                  <ArrowDownIcon className="size-3.5" />
+                  <span>Có {newMessagesCount} tin mới</span>
+                </button>
+              )}
+
+              <div className="border-t p-3 shrink-0">
                 {restrictionNotice ? (
                   restrictionNotice
                 ) : (
@@ -556,7 +643,7 @@ export function CommunityChatView() {
                 )}
               </div>
             </div>
-            <aside className="hidden min-h-0 border-l lg:block">{sidebar}</aside>
+            <aside className="hidden min-h-0 h-full border-l lg:block">{sidebar}</aside>
           </CardContent>
         </Card>
       </section>
