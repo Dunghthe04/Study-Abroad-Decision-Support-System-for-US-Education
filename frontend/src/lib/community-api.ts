@@ -11,21 +11,17 @@ export interface ListMessagesParams {
 }
 
 export const communityApi = {
-  listMessages: (params?: ListMessagesParams | string, take = 50) => {
+  listMessages: (params?: ListMessagesParams) => {
     const sp = new URLSearchParams();
-    if (typeof params === "string") {
-      sp.set("before", params);
-      sp.set("take", String(take));
-    } else if (params) {
+    if (params) {
       if (params.before) sp.set("before", params.before);
       if (params.beforeId) sp.set("beforeId", params.beforeId);
       if (params.after) sp.set("after", params.after);
       if (params.afterId) sp.set("afterId", params.afterId);
-      sp.set("take", String(params.take ?? take));
-    } else {
-      sp.set("take", String(take));
+      if (params.take) sp.set("take", String(params.take));
     }
-    return apiFetch<CommunityMessageDto[]>(`/api/v1/community/messages?${sp}`);
+    const qs = sp.toString();
+    return apiFetch<CommunityMessageDto[]>(`/api/v1/community/messages${qs ? `?${qs}` : ""}`);
   },
   restriction: () => apiFetch<CommunityRestrictionDto>("/api/v1/community/restriction"),
   send: (content: string) =>

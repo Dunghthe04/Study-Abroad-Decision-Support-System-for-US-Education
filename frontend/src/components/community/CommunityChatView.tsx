@@ -197,7 +197,7 @@ export function CommunityChatView() {
   }, [user?.id, scrollToBottom]);
 
   const loadInitial = useCallback(async () => {
-    const batch = await communityApi.listMessages(undefined, 50);
+    const batch = await communityApi.listMessages({ take: 50 });
     const chronological = [...batch].reverse();
     mergeMessages(chronological);
     setHasMore(batch.length >= 50);
