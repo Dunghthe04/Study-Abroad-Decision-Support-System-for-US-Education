@@ -17,3 +17,57 @@ export interface PublicPolicy {
   requiresReconsent: boolean;
   publishedAt: string;
 }
+
+// ---------------------------------------------------------------- phía Administrator (quản lý, UC-103)
+
+/** draft: nháp, sửa được · published: đang hiệu lực, khóa · retired: hết hiệu lực (có bản mới thay), giữ để tra cứu. */
+export type PolicyStatus = "draft" | "published" | "retired";
+
+/** Một phiên bản đầy đủ kèm toàn văn. Khớp PolicyDocumentDto. */
+export interface PolicyDocument {
+  id: string;
+  kind: PolicyKind;
+  /** Trống khi còn là nháp. */
+  version: string | null;
+  status: PolicyStatus;
+  title: string;
+  content: string;
+  changeSummary: string | null;
+  requiresReconsent: boolean;
+  /** Bản được chép ra để tạo nháp này. */
+  basedOnId: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  publishedAt: string | null;
+  publishedByUserId: string | null;
+  retiredAt: string | null;
+}
+
+/** Một dòng lịch sử, không kèm toàn văn. Khớp PolicyDocumentSummaryDto. */
+export interface PolicyDocumentSummary {
+  id: string;
+  kind: PolicyKind;
+  version: string | null;
+  status: PolicyStatus;
+  title: string;
+  changeSummary: string | null;
+  requiresReconsent: boolean;
+  contentLength: number;
+  createdAt: string;
+  publishedAt: string | null;
+  retiredAt: string | null;
+}
+
+/** created = false: loại này đã có nháp nên trả lại nháp đó, không tạo thêm. */
+export interface PolicyDraftResult {
+  document: PolicyDocument;
+  created: boolean;
+}
+
+export interface UpdatePolicyDraftRequest {
+  title: string;
+  content: string;
+  /** Có thể trống khi đang soạn, bắt buộc lúc công bố. */
+  changeSummary: string | null;
+  requiresReconsent: boolean;
+}
