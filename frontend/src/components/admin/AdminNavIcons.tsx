@@ -325,6 +325,28 @@ export function SlidersHorizontalFilledIcon({ className }: AdminNavIconProps) {
   );
 }
 
+// Bản đậm của ActivityIcon (đường nhịp): nét dày hơn khi mục đang được chọn
+export function ActivityFilledIcon({ className }: AdminNavIconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="24"
+      height="24"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <path
+        d="M22 12h-4l-3 9L9 3l-3 9H2"
+        stroke="currentColor"
+        strokeWidth="2.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function MessagesSquareFilledIcon({ className }: AdminNavIconProps) {
   const maskId = useId().replace(/:/g, "");
   const frontBubble =
