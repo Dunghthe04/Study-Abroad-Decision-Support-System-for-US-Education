@@ -1506,6 +1506,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasIndex("StudyLevel", "Status")
                         .HasDatabaseName("ix_forum_posts_study_level_status");
 
+                    b.HasIndex("Category", "Status", "CreatedAt")
+                        .HasDatabaseName("ix_forum_posts_category_status_created_at");
+
                     b.ToTable("forum_posts", "app");
                 });
 

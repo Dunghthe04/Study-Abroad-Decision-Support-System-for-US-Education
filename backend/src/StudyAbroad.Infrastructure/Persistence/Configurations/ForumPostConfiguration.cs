@@ -18,5 +18,6 @@ public class ForumPostConfiguration : IEntityTypeConfiguration<ForumPost>
         b.Property(x => x.Status).HasMaxLength(16).IsRequired();
         b.HasIndex(x => new { x.ParentPostId, x.CreatedAt });
         b.HasIndex(x => new { x.StudyLevel, x.Status });
+        b.HasIndex(x => new { x.Category, x.Status, x.CreatedAt });
     }
 }
