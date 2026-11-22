@@ -1294,6 +1294,101 @@ public class RecommendationServiceTests
         return new RecommendSchoolInput(university, offering, [major], rank is { } r ? [new RankPosition(r.Rank, r.Total)] : null);
     }
 
+    // ---------------------------------------------------------------- UC-85: chạy lại gợi ý với bộ tham số truyền vào
+
+    private static readonly IReadOnlyList<RecommendSchoolInput> TuningSchools =
+    [
+        School("Hard", 40_000m, "none", Major, sat: (1450, 1550), accept: 0.30m, avgGpa: 3.9m),
+        School("Mid", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m),
+        School("Easy", 30_000m, "none", Major, sat: (1000, 1150), accept: 0.80m, avgGpa: 3.0m),
+        School("Pricey", 90_000m, "need_and_merit", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m),   // khối cần học bổng
+    ];
+
+    private static string Letter(SchoolGroup group) => group switch
+    {
+        SchoolGroup.Reach => "R", SchoolGroup.Match => "M", SchoolGroup.Safety => "S", _ => "NA",
+    };
+
+    [Fact]
+    public void TheCurrentTuning_IsExactlyTheDefaultsInCode_TheSameSourceAsTheParameterCatalog()
+    {
+        Assert.Equal(new GroupingOptions(), RecommendationTuning.Current.Grouping);
+        Assert.Equal(new FitWeights(), RecommendationTuning.Current.Fit);
+    }
+
+    [Fact]
+    public async Task EvaluateWith_TheCurrentTuning_GivesTheSameResultAsARealRecommendation()
+    {
+        var (service, _, store) = Setup();
+        var profile = Profile();
+
+        await service.RecommendAsync(profile, TuningSchools);
+        var run = RecommendationService.EvaluateWith(profile, TuningSchools, AcademicBlend.NeutralEcTier, RecommendationTuning.Current);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        var saved = items.RootElement.GetProperty("scored").EnumerateArray()
+            .ToDictionary(e => e.GetProperty("code").GetString()!, e => e.GetProperty("g2").GetString());
+        Assert.Equal(saved, run.Scored.ToDictionary(s => s.School.University.Code, s => (string?)Letter(s.Grade.Group)));
+        foreach (var block in new[] { "reach", "match", "safety", "aid" })
+        {
+            var savedCodes = items.RootElement.GetProperty(block).EnumerateArray().Select(e => e.GetProperty("code").GetString());
+            var picked = block switch
+            {
+                "reach" => run.Picked!.Reach, "match" => run.Picked!.Match, "safety" => run.Picked!.Safety, _ => run.Picked!.Aid,
+            };
+            Assert.Equal(savedCodes, picked.Select(r => r.Code));
+        }
+    }
+
+    [Fact]
+    public void EvaluateWith_ANudgedThreshold_MovesTheSchool_AndTheRunningParametersStayUntouched()
+    {
+        var profile = Profile();
+        var baseline = RecommendationService.EvaluateWith(profile, TuningSchools, AcademicBlend.NeutralEcTier, RecommendationTuning.Current);
+        var mid = baseline.Scored.Single(s => s.School.University.Code == "Mid");
+        Assert.Equal(SchoolGroup.Match, mid.Grade.Group);
+
+        // Hạ ngưỡng An toàn xuống ngay dưới vị trí p' của trường: trường phải sang An toàn
+        var nudged = RecommendationTuning.Current with
+        {
+            Grouping = RecommendationTuning.Current.Grouping with { UpperCut = mid.Grade.PAdjusted!.Value - 0.01 },
+        };
+        var after = RecommendationService.EvaluateWith(profile, TuningSchools, AcademicBlend.NeutralEcTier, nudged);
+
+        Assert.Equal(SchoolGroup.Safety, after.Scored.Single(s => s.School.University.Code == "Mid").Grade.Group);
+        Assert.Equal(0.75, RecommendationTuning.Current.Grouping.UpperCut);   // bộ đang chạy không đổi
+        Assert.Equal(0.75, new GroupingOptions().UpperCut);
+    }
+
+    [Fact]
+    public void EvaluateWith_FitWeights_OnlyReorderWithinAGroup_NeverChangeTheGroup()
+    {
+        var profile = Profile();
+        var cheap = School("Cheap", 15_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m, rank: (90, 100));
+        var famous = School("Famous", 45_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m, rank: (1, 100));
+        IReadOnlyList<RecommendSchoolInput> schools = [cheap, famous];
+        RecommendationTuning Only(FitWeights fit) => RecommendationTuning.Current with { Fit = fit };
+
+        var costFirst = RecommendationService.EvaluateWith(profile, schools, 3, Only(new FitWeights(0, 1, 0, 0, 0)));
+        var qualityFirst = RecommendationService.EvaluateWith(profile, schools, 3, Only(new FitWeights(0, 0, 0, 1, 0)));
+
+        Assert.Equal(["Cheap", "Famous"], costFirst.Picked!.Match.Select(r => r.Code));
+        Assert.Equal(["Famous", "Cheap"], qualityFirst.Picked!.Match.Select(r => r.Code));
+        Assert.Equal(
+            costFirst.Scored.Select(s => (s.School.University.Code, s.Grade.Group)),
+            qualityFirst.Scored.Select(s => (s.School.University.Code, s.Grade.Group)));
+    }
+
+    [Fact]
+    public void ThePrioritySliders_MultiplyTheGivenBaseline_NotAlwaysTheDefaults()
+    {
+        var baseline = new FitWeights(0.2, 0.3, 0.1, 0.3, 0.1);
+
+        Assert.Equal(baseline, SchoolRanker.WeightsFromPriorities([2, 2, 2], baseline));
+        Assert.Equal(baseline with { Budget = 0.6, Quality = 0 }, SchoolRanker.WeightsFromPriorities([4, 2, 0], baseline));
+        Assert.Equal(new FitWeights(), SchoolRanker.WeightsFromPriorities([2, 2, 2]));   // không truyền thì như cũ
+    }
+
     // ---------------------------------------------------------------- goal-seeking
 
     // Hồ sơ yếu: GPA 3,0, SAT 1000, ngoại khóa bậc 1 (chưa khai hoạt động), ngân sách 50.000 (trần 55.000 sau dung sai 10%).
