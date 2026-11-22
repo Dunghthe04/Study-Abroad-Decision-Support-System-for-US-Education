@@ -251,6 +251,9 @@ public class LeadChatHubTests
             throw new NotSupportedException();
         public Task<CommunityMessageDto> SendAsync(Guid userId, SendCommunityMessageRequest request, CancellationToken ct) =>
             throw new NotSupportedException();
+        public Task<CommunityMessageDto> SendImageAsync(
+            Guid userId, string? content, Guid? replyToId, Func<CancellationToken, Task<CommunityAttachment>> attachmentFactory, CancellationToken ct) =>
+            throw new NotSupportedException();
         public Task ReportAsync(Guid reporterId, Guid messageId, ReportCommunityMessageRequest request, CancellationToken ct) =>
             throw new NotSupportedException();
         public Task<IReadOnlyList<CommunityPresenceDto>> DescribeUsersAsync(

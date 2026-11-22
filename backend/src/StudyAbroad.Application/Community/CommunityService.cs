@@ -18,8 +18,19 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
     {
         take = take <= 0 ? DefaultTake : Math.Min(take, MaxTake);
         var posts = await repo.ListVisibleChatAsync(before, beforeId, after, afterId, take, ct);
-        var users = await repo.GetUsersAsync(posts.Select(p => p.UserId).OfType<Guid>(), ct);
-        return posts.Select(p => ToDto(p, users, viewerId)).ToList();
+
+        var replyToIds = posts.Select(p => p.ReplyToPostId).OfType<Guid>().Distinct().ToList();
+        var replyPosts = replyToIds.Count > 0
+            ? (await repo.GetChatPostsAsync(replyToIds, ct)).ToDictionary(p => p.Id)
+            : new Dictionary<Guid, ForumPost>();
+
+        var userIds = posts.Select(p => p.UserId)
+            .Concat(replyPosts.Values.Select(p => p.UserId))
+            .OfType<Guid>()
+            .Distinct();
+
+        var users = await repo.GetUsersAsync(userIds, ct);
+        return posts.Select(p => ToDto(p, users, replyPosts, viewerId)).ToList();
     }
 
     public async Task<CommunityMessageDto> SendAsync(Guid userId, SendCommunityMessageRequest request, CancellationToken ct)
@@ -33,16 +44,86 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
         if (content.Length > MaxContentLength)
             throw new CommunityRuleException("too_long", 400, $"Tin nhắn tối đa {MaxContentLength} ký tự.");
 
+        ForumPost? replyPost = null;
+        if (request.ReplyToId is { } replyId)
+        {
+            replyPost = await repo.GetChatPostAsync(replyId, ct);
+        }
+
         var post = new ForumPost
         {
             UserId = user.Id,
             Category = ForumCategories.CommunityChat,
             Content = content,
+            ReplyToPostId = replyPost?.Id,
             Status = ForumPostStatuses.Visible,
         };
         await repo.AddPostAsync(post, ct);
 
-        var dto = ToDto(post, new Dictionary<Guid, User> { [user.Id] = user }, userId);
+        var users = new Dictionary<Guid, User> { [user.Id] = user };
+        if (replyPost?.UserId is { } replyUserId && !users.ContainsKey(replyUserId))
+        {
+            var replyUser = await repo.GetUserAsync(replyUserId, ct);
+            if (replyUser != null) users[replyUserId] = replyUser;
+        }
+
+        var replyPosts = replyPost != null
+            ? new Dictionary<Guid, ForumPost> { [replyPost.Id] = replyPost }
+            : new Dictionary<Guid, ForumPost>();
+
+        var dto = ToDto(post, users, replyPosts, userId);
+        await notifier.NewMessageAsync(dto with { IsMine = false }, ct);
+        return dto;
+    }
+
+    public async Task<CommunityMessageDto> SendImageAsync(
+        Guid userId,
+        string? content,
+        Guid? replyToId,
+        Func<CancellationToken, Task<CommunityAttachment>> attachmentFactory,
+        CancellationToken ct)
+    {
+        var user = await RequireActiveUserAsync(userId, ct);
+        EnsureNotRestricted(user);
+
+        var sanitizedContent = Sanitize(content);
+        if (sanitizedContent.Length > MaxContentLength)
+            throw new CommunityRuleException("too_long", 400, $"Nội dung tối đa {MaxContentLength} ký tự.");
+
+        var attachment = await attachmentFactory(ct);
+        if (string.IsNullOrWhiteSpace(attachment?.Url))
+            throw new CommunityRuleException("missing_image", 400, "Không có ảnh đính kèm.");
+
+        ForumPost? replyPost = null;
+        if (replyToId is { } replyId)
+        {
+            replyPost = await repo.GetChatPostAsync(replyId, ct);
+        }
+
+        var post = new ForumPost
+        {
+            UserId = user.Id,
+            Category = ForumCategories.CommunityChat,
+            Content = sanitizedContent,
+            AttachmentUrl = attachment.Url,
+            AttachmentPublicId = attachment.PublicId,
+            ReplyToPostId = replyPost?.Id,
+            Status = ForumPostStatuses.Visible,
+        };
+        await repo.AddPostAsync(post, ct);
+
+        var users = new Dictionary<Guid, User> { [user.Id] = user };
+        if (replyPost?.UserId is { } replyUserId && !users.ContainsKey(replyUserId))
+        {
+            var replyUser = await repo.GetUserAsync(replyUserId, ct);
+            if (replyUser != null) users[replyUserId] = replyUser;
+        }
+
+        var replyPosts = replyPost != null
+            ? new Dictionary<Guid, ForumPost> { [replyPost.Id] = replyPost }
+            : new Dictionary<Guid, ForumPost>();
+
+        var dto = ToDto(post, users, replyPosts, userId);
         await notifier.NewMessageAsync(dto with { IsMine = false }, ct);
         return dto;
     }
@@ -253,9 +334,31 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
         return string.Concat(raw.Where(c => c is not '\0' and not '\u200B')).Trim();
     }
 
-    private static CommunityMessageDto ToDto(ForumPost post, IReadOnlyDictionary<Guid, User> users, Guid viewerId)
+    private static CommunityMessageDto ToDto(
+        ForumPost post,
+        IReadOnlyDictionary<Guid, User> users,
+        IReadOnlyDictionary<Guid, ForumPost> replyPosts,
+        Guid viewerId)
     {
         User? author = post.UserId is { } id && users.TryGetValue(id, out var u) ? u : null;
+
+        CommunityReplyToDto? replyDto = null;
+        if (post.ReplyToPostId is { } replyId && replyPosts.TryGetValue(replyId, out var parentPost))
+        {
+            User? replyAuthor = parentPost.UserId is { } parentUid && users.TryGetValue(parentUid, out var pu) ? pu : null;
+            var snippet = parentPost.Status == ForumPostStatuses.Visible
+                ? (string.IsNullOrWhiteSpace(parentPost.Content) && !string.IsNullOrWhiteSpace(parentPost.AttachmentUrl)
+                    ? "[Hình ảnh]"
+                    : (parentPost.Content.Length > 100 ? parentPost.Content[..100] + "..." : parentPost.Content))
+                : "[Tin nhắn đã bị ẩn]";
+
+            replyDto = new CommunityReplyToDto(
+                parentPost.Id,
+                parentPost.UserId,
+                replyAuthor?.FullName ?? "Tài khoản đã xóa",
+                snippet);
+        }
+
         return new CommunityMessageDto(
             post.Id,
             post.UserId,
@@ -263,6 +366,8 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
             author?.Role ?? "",
             post.Content,
             post.CreatedAt,
-            post.UserId == viewerId);
+            post.UserId == viewerId,
+            post.AttachmentUrl,
+            replyDto);
     }
 }

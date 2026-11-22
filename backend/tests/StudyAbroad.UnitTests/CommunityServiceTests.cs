@@ -52,6 +52,85 @@ public class CommunityServiceTests
     }
 
     [Fact]
+    public async Task Send_WithReply_PersistsReplyAndFillsDto()
+    {
+        var env = Env();
+        var origUser = new User { Id = Guid.NewGuid(), FullName = "Bạn A", Email = "a@test.com", Role = UserRoles.Student };
+        env.Repo.Users[origUser.Id] = origUser;
+        var originalPost = new ForumPost
+        {
+            Id = Guid.NewGuid(),
+            UserId = origUser.Id,
+            Category = ForumCategories.CommunityChat,
+            Content = "Nội dung gốc",
+            Status = ForumPostStatuses.Visible,
+        };
+        env.Repo.Posts.Add(originalPost);
+
+        var dto = await env.Service.SendAsync(
+            env.User.Id,
+            new SendCommunityMessageRequest("Trả lời bạn", originalPost.Id),
+            CancellationToken.None);
+
+        var post = Assert.Single(env.Repo.Posts.Where(p => p.Id != originalPost.Id));
+        Assert.Equal(originalPost.Id, post.ReplyToPostId);
+        Assert.NotNull(dto.ReplyTo);
+        Assert.Equal(originalPost.Id, dto.ReplyTo!.Id);
+        Assert.Equal("Bạn A", dto.ReplyTo.AuthorName);
+        Assert.Equal("Nội dung gốc", dto.ReplyTo.ContentSnippet);
+    }
+
+    [Fact]
+    public async Task SendImage_PersistsAttachmentAndNotifies()
+    {
+        var env = Env();
+        var dto = await env.Service.SendImageAsync(
+            env.User.Id,
+            "Ảnh đẹp",
+            null,
+            ct => Task.FromResult(new CommunityAttachment("https://res.cloudinary.com/test/image.jpg", "public-id-123")),
+            CancellationToken.None);
+
+        var post = Assert.Single(env.Repo.Posts);
+        Assert.Equal("https://res.cloudinary.com/test/image.jpg", post.AttachmentUrl);
+        Assert.Equal("public-id-123", post.AttachmentPublicId);
+        Assert.Equal("Ảnh đẹp", post.Content);
+        Assert.Equal("https://res.cloudinary.com/test/image.jpg", dto.ImageUrl);
+        Assert.Single(env.Notifier.Messages);
+    }
+
+    [Fact]
+    public async Task SendImage_Restricted_Throws()
+    {
+        var env = Env();
+        env.User.ForumRestrictedUntil = DateTime.UtcNow.AddDays(1);
+        env.User.ForumRestrictionReason = "Spam";
+
+        var ex = await Assert.ThrowsAsync<CommunityRuleException>(() =>
+            env.Service.SendImageAsync(
+                env.User.Id,
+                "Ảnh",
+                null,
+                ct => Task.FromResult(new CommunityAttachment("https://res.cloudinary.com/test/image.jpg", "id")),
+                CancellationToken.None));
+        Assert.Equal("forum_restricted", ex.Code);
+    }
+
+    [Fact]
+    public async Task SendImage_MissingImage_Throws()
+    {
+        var env = Env();
+        var ex = await Assert.ThrowsAsync<CommunityRuleException>(() =>
+            env.Service.SendImageAsync(
+                env.User.Id,
+                "Ảnh",
+                null,
+                ct => Task.FromResult(new CommunityAttachment("", "")),
+                CancellationToken.None));
+        Assert.Equal("missing_image", ex.Code);
+    }
+
+    [Fact]
     public async Task HideFromReport_HidesPostAndClosesAllOpenReportsAndNotifies()
     {
         var env = Env();

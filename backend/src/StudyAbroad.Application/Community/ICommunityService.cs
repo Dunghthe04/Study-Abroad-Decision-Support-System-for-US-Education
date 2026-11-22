@@ -10,6 +10,12 @@ public interface ICommunityService
         DateTime? after, Guid? afterId,
         int take, CancellationToken ct);
     Task<CommunityMessageDto> SendAsync(Guid userId, SendCommunityMessageRequest request, CancellationToken ct);
+    Task<CommunityMessageDto> SendImageAsync(
+        Guid userId,
+        string? content,
+        Guid? replyToId,
+        Func<CancellationToken, Task<CommunityAttachment>> attachmentFactory,
+        CancellationToken ct);
     Task ReportAsync(Guid reporterId, Guid messageId, ReportCommunityMessageRequest request, CancellationToken ct);
     Task<IReadOnlyList<CommunityPresenceDto>> DescribeUsersAsync(
         IEnumerable<Guid> userIds,

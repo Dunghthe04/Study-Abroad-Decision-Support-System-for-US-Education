@@ -1444,6 +1444,16 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AttachmentPublicId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("attachment_public_id");
+
+                    b.Property<string>("AttachmentUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("attachment_url");
+
                     b.Property<string>("Category")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
@@ -1469,6 +1479,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ParentPostId")
                         .HasColumnType("uuid")
                         .HasColumnName("parent_post_id");
+
+                    b.Property<Guid?>("ReplyToPostId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reply_to_post_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1496,6 +1510,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_forum_posts");
+
+                    b.HasIndex("ReplyToPostId")
+                        .HasDatabaseName("ix_forum_posts_reply_to_post_id");
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_forum_posts_user_id");
@@ -5678,6 +5695,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ParentPostId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .HasConstraintName("fk_forum_posts_forum_posts_parent_post_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.ForumPost", null)
+                        .WithMany()
+                        .HasForeignKey("ReplyToPostId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_forum_posts_forum_posts_reply_to_post_id");
 
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()
