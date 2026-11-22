@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AdminSection } from "@/components/admin/AdminSection";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -36,7 +37,6 @@ export function AdminForumView() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
 
@@ -57,6 +57,19 @@ export function AdminForumView() {
     }
   };
 
+  const formatRestrictedTime = (iso?: string | null) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
+
   return (
     <AdminSection href="/admin/forum">
       <div className="space-y-4">
@@ -74,7 +87,14 @@ export function AdminForumView() {
           items.map((r) => (
             <Card key={r.id}>
               <CardHeader>
-                <CardTitle className="text-base">{r.authorName}</CardTitle>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-base">{r.authorName}</CardTitle>
+                  {r.authorIsRestricted && (
+                    <Badge variant="warn" className="text-xs">
+                      Đang bị hạn chế {r.authorRestrictedUntil ? `đến ${formatRestrictedTime(r.authorRestrictedUntil)}` : ""}
+                    </Badge>
+                  )}
+                </div>
                 <CardDescription>
                   Báo cáo bởi {r.reporterName} · {r.reason}
                   {r.detail ? ` — ${r.detail}` : ""}
@@ -100,37 +120,64 @@ export function AdminForumView() {
                   </Button>
                 </div>
                 {r.authorUserId && (
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                    <Input
-                      type="number"
-                      min={1}
-                      max={90}
-                      value={restrictDays}
-                      onChange={(e) => setRestrictDays(e.target.value)}
-                      className="sm:w-24"
-                      aria-label="Số ngày hạn chế"
-                    />
-                    <Textarea
-                      rows={2}
-                      value={restrictReason}
-                      onChange={(e) => setRestrictReason(e.target.value)}
-                      placeholder="Lý do hạn chế chat"
-                      className="min-h-10"
-                    />
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={busyId === r.id}
-                      onClick={() =>
-                        void act(
-                          r.id,
-                          () => adminForumApi.restrict(r.authorUserId!, Number(restrictDays) || 7, restrictReason.trim() || "Vi phạm cộng đồng"),
-                          "Đã hạn chế tài khoản",
-                        )
-                      }
-                    >
-                      Hạn chế tác giả
-                    </Button>
+                  <div className="pt-2 border-t">
+                    {r.authorIsRestricted ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-muted-foreground">Tài khoản này đang bị khóa quyền chat.</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busyId === r.id}
+                          onClick={() =>
+                            void act(
+                              r.id,
+                              () => adminForumApi.unrestrict(r.authorUserId!),
+                              "Đã gỡ hạn chế cho tác giả",
+                            )
+                          }
+                        >
+                          Gỡ hạn chế chat
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={90}
+                          value={restrictDays}
+                          onChange={(e) => setRestrictDays(e.target.value)}
+                          className="sm:w-24"
+                          aria-label="Số ngày hạn chế"
+                        />
+                        <Textarea
+                          rows={2}
+                          value={restrictReason}
+                          onChange={(e) => setRestrictReason(e.target.value)}
+                          placeholder="Lý do hạn chế chat"
+                          className="min-h-10"
+                        />
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={busyId === r.id}
+                          onClick={() =>
+                            void act(
+                              r.id,
+                              () =>
+                                adminForumApi.restrict(
+                                  r.authorUserId!,
+                                  Number(restrictDays) || 7,
+                                  restrictReason.trim() || "Vi phạm cộng đồng",
+                                ),
+                              "Đã hạn chế tài khoản",
+                            )
+                          }
+                        >
+                          Hạn chế tác giả
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>

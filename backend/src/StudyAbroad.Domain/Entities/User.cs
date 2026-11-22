@@ -41,6 +41,9 @@ namespace StudyAbroad.Domain.Entities
         /// <summary>Lý do hạn chế quyền diễn đàn.</summary>
         public string? ForumRestrictionReason { get; set; }
 
+        /// <summary>Người thực hiện hạn chế quyền diễn đàn gần nhất.</summary>
+        public Guid? ForumRestrictedByUserId { get; set; }
+
         /// <summary>UC-80: thời điểm yêu cầu xóa tài khoản (UTC). Null = chưa yêu cầu. Hết thời hạn xóa mềm thì job xóa hẳn.</summary>
         public DateTime? DeletedAt { get; set; }
 

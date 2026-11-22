@@ -11,10 +11,13 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
     public const int MaxTake = 100;
 
     public async Task<IReadOnlyList<CommunityMessageDto>> ListMessagesAsync(
-        Guid viewerId, DateTime? before, int take, CancellationToken ct)
+        Guid viewerId,
+        DateTime? before, Guid? beforeId,
+        DateTime? after, Guid? afterId,
+        int take, CancellationToken ct)
     {
         take = take <= 0 ? DefaultTake : Math.Min(take, MaxTake);
-        var posts = await repo.ListVisibleChatAsync(before, take, ct);
+        var posts = await repo.ListVisibleChatAsync(before, beforeId, after, afterId, take, ct);
         var users = await repo.GetUsersAsync(posts.Select(p => p.UserId).OfType<Guid>(), ct);
         return posts.Select(p => ToDto(p, users, viewerId)).ToList();
     }
@@ -74,13 +77,20 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
         }, ct);
     }
 
-    public async Task<IReadOnlyList<CommunityPresenceDto>> DescribeUsersAsync(IEnumerable<Guid> userIds, CancellationToken ct)
+    public async Task<IReadOnlyList<CommunityPresenceDto>> DescribeUsersAsync(
+        IEnumerable<Guid> userIds,
+        IReadOnlyDictionary<Guid, DateTime>? userLastSeen = null,
+        CancellationToken ct = default)
     {
         var users = await repo.GetUsersAsync(userIds, ct);
         return users.Values
             .Where(u => u.DeletedAt is null)
             .OrderBy(u => u.FullName)
-            .Select(u => new CommunityPresenceDto(u.Id, u.FullName, u.Role))
+            .Select(u => new CommunityPresenceDto(
+                u.Id,
+                u.FullName,
+                u.Role,
+                userLastSeen != null && userLastSeen.TryGetValue(u.Id, out var seen) ? seen : null))
             .ToList();
     }
 
@@ -102,6 +112,7 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
             var authorId = post?.UserId;
             var author = authorId is { } id && users.TryGetValue(id, out var a) ? a : null;
             var reporter = r.ReporterUserId is { } rid && users.TryGetValue(rid, out var rp) ? rp : null;
+            var isRestricted = author?.ForumRestrictedUntil is { } u && u > DateTime.UtcNow;
             return new CommunityReportDto(
                 r.Id,
                 r.ForumPostId,
@@ -114,7 +125,9 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
                 r.Reason,
                 r.Detail,
                 r.Status,
-                r.CreatedAt);
+                r.CreatedAt,
+                isRestricted,
+                author?.ForumRestrictedUntil);
         }).ToList();
 
         return new PagedResult<CommunityReportDto>(dtos, result.Page, result.PageSize, result.TotalCount);
@@ -123,13 +136,16 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
     public async Task HideFromReportAsync(Guid handlerId, Guid reportId, CancellationToken ct)
     {
         var report = await RequireOpenReportAsync(reportId, ct);
-        var post = await repo.GetChatPostAsync(report.ForumPostId, ct)
+        await HideMessageAsync(handlerId, report.ForumPostId, ct);
+    }
+
+    public async Task HideMessageAsync(Guid handlerId, Guid messageId, CancellationToken ct)
+    {
+        var post = await repo.GetChatPostAsync(messageId, ct)
             ?? throw new CommunityRuleException("not_found", 404, "Không tìm thấy tin nhắn.");
         post.Status = ForumPostStatuses.Hidden;
         post.UpdatedAt = DateTime.UtcNow;
-        report.Status = ForumReportStatuses.Actioned;
-        report.HandledByUserId = handlerId;
-        report.HandledAt = DateTime.UtcNow;
+        await repo.CloseOpenReportsForPostAsync(post.Id, handlerId, ct);
         await repo.SaveChangesAsync(ct);
         await notifier.MessageHiddenAsync(post.Id, ct);
     }
@@ -145,7 +161,6 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
 
     public async Task RestrictUserAsync(Guid handlerId, Guid userId, RestrictCommunityUserRequest request, CancellationToken ct)
     {
-        _ = handlerId;
         var user = await repo.GetUserAsync(userId, ct)
             ?? throw new CommunityRuleException("not_found", 404, "Không tìm thấy tài khoản.");
         if (user.Role is UserRoles.Admin or UserRoles.Moderator)
@@ -156,21 +171,45 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
         if (reason.Length is < 3 or > 500)
             throw new CommunityRuleException("invalid_reason", 400, "Lý do hạn chế từ 3 đến 500 ký tự.");
 
-        user.ForumRestrictedUntil = DateTime.UtcNow.AddDays(request.Days);
+        var until = DateTime.UtcNow.AddDays(request.Days);
+        user.ForumRestrictedUntil = until;
         user.ForumRestrictionReason = reason;
+        user.ForumRestrictedByUserId = handlerId;
         user.UpdatedAt = DateTime.UtcNow;
         await repo.SaveChangesAsync(ct);
+
+        await notifier.UserRestrictionChangedAsync(user.Id, isRestricted: true, until, reason, ct);
     }
 
-    public async Task<string?> RestrictionMessageAsync(Guid userId, CancellationToken ct)
+    public async Task UnrestrictUserAsync(Guid handlerId, Guid userId, CancellationToken ct)
+    {
+        var user = await repo.GetUserAsync(userId, ct)
+            ?? throw new CommunityRuleException("not_found", 404, "Không tìm thấy tài khoản.");
+        user.ForumRestrictedUntil = null;
+        user.ForumRestrictionReason = null;
+        user.ForumRestrictedByUserId = handlerId;
+        user.UpdatedAt = DateTime.UtcNow;
+        await repo.SaveChangesAsync(ct);
+
+        await notifier.UserRestrictionChangedAsync(user.Id, isRestricted: false, null, null, ct);
+    }
+
+    public async Task<CommunityRestrictionDto> RestrictionStatusAsync(Guid userId, CancellationToken ct)
     {
         var user = await repo.GetUserAsync(userId, ct);
-        if (user is null) return null;
+        if (user is null)
+            return new CommunityRestrictionDto(false, null, null, null);
+
         if (user.ForumRestrictedUntil is { } until && until > DateTime.UtcNow)
-            return user.ForumRestrictionReason is { Length: > 0 } reason
-                ? $"Bạn đang bị hạn chế chat đến {until:dd/MM/yyyy HH:mm} UTC. Lý do: {reason}"
-                : $"Bạn đang bị hạn chế chat đến {until:dd/MM/yyyy HH:mm} UTC.";
-        return null;
+        {
+            var reason = user.ForumRestrictionReason;
+            var message = !string.IsNullOrWhiteSpace(reason)
+                ? $"Bạn đang bị hạn chế chat đến {until:O}. Lý do: {reason}"
+                : $"Bạn đang bị hạn chế chat đến {until:O}.";
+            return new CommunityRestrictionDto(true, until, reason, message);
+        }
+
+        return new CommunityRestrictionDto(false, null, null, null);
     }
 
     private async Task<ForumReport> RequireOpenReportAsync(Guid reportId, CancellationToken ct)
@@ -198,8 +237,8 @@ public sealed class CommunityService(ICommunityRepository repo, ICommunityChatNo
                 "forum_restricted",
                 403,
                 user.ForumRestrictionReason is { Length: > 0 } reason
-                    ? $"Bạn đang bị hạn chế chat đến {until:dd/MM/yyyy HH:mm} UTC. Lý do: {reason}"
-                    : $"Bạn đang bị hạn chế chat đến {until:dd/MM/yyyy HH:mm} UTC.");
+                    ? $"Bạn đang bị hạn chế chat đến {until:O}. Lý do: {reason}"
+                    : $"Bạn đang bị hạn chế chat đến {until:O}.");
     }
 
     private static string Sanitize(string? raw)

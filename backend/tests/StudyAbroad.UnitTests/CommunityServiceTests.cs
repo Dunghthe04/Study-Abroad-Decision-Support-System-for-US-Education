@@ -52,9 +52,10 @@ public class CommunityServiceTests
     }
 
     [Fact]
-    public async Task HideFromReport_HidesPostAndNotifies()
+    public async Task HideFromReport_HidesPostAndClosesAllOpenReportsAndNotifies()
     {
         var env = Env();
+        var handlerId = Guid.NewGuid();
         var post = new ForumPost
         {
             UserId = env.User.Id,
@@ -63,19 +64,79 @@ public class CommunityServiceTests
             Status = ForumPostStatuses.Visible,
         };
         env.Repo.Posts.Add(post);
-        var report = new ForumReport
+        var report1 = new ForumReport
         {
             ForumPostId = post.Id,
             ReporterUserId = Guid.NewGuid(),
-            Reason = "abuse",
+            Reason = "abuse 1",
             Status = ForumReportStatuses.Open,
         };
-        env.Repo.Reports.Add(report);
+        var report2 = new ForumReport
+        {
+            ForumPostId = post.Id,
+            ReporterUserId = Guid.NewGuid(),
+            Reason = "abuse 2",
+            Status = ForumReportStatuses.Open,
+        };
+        env.Repo.Reports.Add(report1);
+        env.Repo.Reports.Add(report2);
 
-        await env.Service.HideFromReportAsync(Guid.NewGuid(), report.Id, CancellationToken.None);
+        await env.Service.HideFromReportAsync(handlerId, report1.Id, CancellationToken.None);
 
         Assert.Equal(ForumPostStatuses.Hidden, post.Status);
-        Assert.Equal(ForumReportStatuses.Actioned, report.Status);
+        Assert.Equal(ForumReportStatuses.Actioned, report1.Status);
+        Assert.Equal(ForumReportStatuses.Actioned, report2.Status);
+        Assert.Equal(handlerId, report1.HandledByUserId);
+        Assert.Equal(handlerId, report2.HandledByUserId);
+        Assert.Equal(post.Id, Assert.Single(env.Notifier.Hidden));
+    }
+
+    [Fact]
+    public async Task RestrictAndUnrestrictUser_SavesHandlerIdAndNotifies()
+    {
+        var env = Env();
+        var handlerId = Guid.NewGuid();
+
+        await env.Service.RestrictUserAsync(handlerId, env.User.Id, new RestrictCommunityUserRequest(7, "Spam liên tục"), CancellationToken.None);
+
+        Assert.NotNull(env.User.ForumRestrictedUntil);
+        Assert.Equal("Spam liên tục", env.User.ForumRestrictionReason);
+        Assert.Equal(handlerId, env.User.ForumRestrictedByUserId);
+        Assert.True(env.Notifier.RestrictionChanges.Last().IsRestricted);
+
+        var status = await env.Service.RestrictionStatusAsync(env.User.Id, CancellationToken.None);
+        Assert.True(status.IsRestricted);
+        Assert.Equal("Spam liên tục", status.Reason);
+        Assert.NotNull(status.RestrictedUntil);
+
+        await env.Service.UnrestrictUserAsync(handlerId, env.User.Id, CancellationToken.None);
+
+        Assert.Null(env.User.ForumRestrictedUntil);
+        Assert.Null(env.User.ForumRestrictionReason);
+        Assert.Equal(handlerId, env.User.ForumRestrictedByUserId);
+        Assert.False(env.Notifier.RestrictionChanges.Last().IsRestricted);
+
+        var clearedStatus = await env.Service.RestrictionStatusAsync(env.User.Id, CancellationToken.None);
+        Assert.False(clearedStatus.IsRestricted);
+    }
+
+    [Fact]
+    public async Task DirectHideMessage_ByModerator_HidesAndNotifies()
+    {
+        var env = Env();
+        var handlerId = Guid.NewGuid();
+        var post = new ForumPost
+        {
+            UserId = env.User.Id,
+            Category = ForumCategories.CommunityChat,
+            Content = "quảng cáo",
+            Status = ForumPostStatuses.Visible,
+        };
+        env.Repo.Posts.Add(post);
+
+        await env.Service.HideMessageAsync(handlerId, post.Id, CancellationToken.None);
+
+        Assert.Equal(ForumPostStatuses.Hidden, post.Status);
         Assert.Equal(post.Id, Assert.Single(env.Notifier.Hidden));
     }
 
@@ -97,14 +158,23 @@ public class CommunityServiceTests
     {
         public List<CommunityMessageDto> Messages { get; } = [];
         public List<Guid> Hidden { get; } = [];
+        public List<(Guid UserId, bool IsRestricted, DateTime? Until, string? Reason)> RestrictionChanges { get; } = [];
+
         public Task NewMessageAsync(CommunityMessageDto message, CancellationToken ct = default)
         {
             Messages.Add(message);
             return Task.CompletedTask;
         }
+
         public Task MessageHiddenAsync(Guid messageId, CancellationToken ct = default)
         {
             Hidden.Add(messageId);
+            return Task.CompletedTask;
+        }
+
+        public Task UserRestrictionChangedAsync(Guid userId, bool isRestricted, DateTime? restrictedUntil, string? reason, CancellationToken ct = default)
+        {
+            RestrictionChanges.Add((userId, isRestricted, restrictedUntil, reason));
             return Task.CompletedTask;
         }
     }
@@ -115,13 +185,42 @@ public class CommunityServiceTests
         public List<ForumReport> Reports { get; } = [];
         public Dictionary<Guid, User> Users { get; } = [];
 
-        public Task<IReadOnlyList<ForumPost>> ListVisibleChatAsync(DateTime? before, int take, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<ForumPost>>(Posts
-                .Where(p => p.Status == ForumPostStatuses.Visible && p.Category == ForumCategories.CommunityChat)
-                .Where(p => before is null || p.CreatedAt < before)
+        public Task<IReadOnlyList<ForumPost>> ListVisibleChatAsync(
+            DateTime? before, Guid? beforeId,
+            DateTime? after, Guid? afterId,
+            int take, CancellationToken ct)
+        {
+            var query = Posts
+                .Where(p => p.Status == ForumPostStatuses.Visible && p.Category == ForumCategories.CommunityChat);
+
+            if (after is { } afterAt)
+            {
+                if (afterId is { } aId)
+                    query = query.Where(p => p.CreatedAt > afterAt || (p.CreatedAt == afterAt && p.Id > aId));
+                else
+                    query = query.Where(p => p.CreatedAt > afterAt);
+
+                return Task.FromResult<IReadOnlyList<ForumPost>>(query
+                    .OrderBy(p => p.CreatedAt)
+                    .ThenBy(p => p.Id)
+                    .Take(take)
+                    .ToList());
+            }
+
+            if (before is { } beforeAt)
+            {
+                if (beforeId is { } bId)
+                    query = query.Where(p => p.CreatedAt < beforeAt || (p.CreatedAt == beforeAt && p.Id < bId));
+                else
+                    query = query.Where(p => p.CreatedAt < beforeAt);
+            }
+
+            return Task.FromResult<IReadOnlyList<ForumPost>>(query
                 .OrderByDescending(p => p.CreatedAt)
+                .ThenByDescending(p => p.Id)
                 .Take(take)
                 .ToList());
+        }
 
         public Task<ForumPost?> GetChatPostAsync(Guid id, CancellationToken ct) =>
             Task.FromResult(Posts.FirstOrDefault(p => p.Id == id));
@@ -149,6 +248,17 @@ public class CommunityServiceTests
 
         public Task<ForumReport?> GetReportAsync(Guid id, CancellationToken ct) =>
             Task.FromResult(Reports.FirstOrDefault(r => r.Id == id));
+
+        public Task CloseOpenReportsForPostAsync(Guid postId, Guid handlerId, CancellationToken ct)
+        {
+            foreach (var r in Reports.Where(r => r.ForumPostId == postId && r.Status == ForumReportStatuses.Open))
+            {
+                r.Status = ForumReportStatuses.Actioned;
+                r.HandledByUserId = handlerId;
+                r.HandledAt = DateTime.UtcNow;
+            }
+            return Task.CompletedTask;
+        }
 
         public Task<PagedResult<ForumReport>> ListReportsAsync(string? status, int page, int pageSize, CancellationToken ct)
         {

@@ -10,4 +10,12 @@ public sealed class SignalRCommunityChatNotifier(IHubContext<LeadChatHub> hub) :
 
     public Task MessageHiddenAsync(Guid messageId, CancellationToken ct = default) =>
         hub.Clients.Group(LeadChatHub.CommunityGroup).SendAsync("communityMessageHidden", new { id = messageId }, ct);
+
+    public Task UserRestrictionChangedAsync(Guid userId, bool isRestricted, DateTime? restrictedUntil, string? reason, CancellationToken ct = default) =>
+        hub.Clients.Group(LeadChatHub.UserGroup(userId)).SendAsync("communityRestrictionChanged", new
+        {
+            isRestricted,
+            restrictedUntil,
+            reason,
+        }, ct);
 }

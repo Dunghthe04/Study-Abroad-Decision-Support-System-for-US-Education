@@ -24,6 +24,7 @@ public sealed class ChatPresenceTracker : ILeadChatPresence
     private readonly Dictionary<string, Connection> _connections = [];
     private readonly Dictionary<Guid, int> _connectionsPerUser = [];
     private readonly Dictionary<Guid, int> _communityPerUser = [];
+    private readonly Dictionary<Guid, DateTime> _communityUserLastSeen = [];
 
     /// <summary>Ghi nhận kết nối mới. Trả true nếu đây là kết nối đầu tiên của người dùng (vừa chuyển sang online).</summary>
     public bool Connect(string connectionId, Guid userId)
@@ -135,7 +136,17 @@ public sealed class ChatPresenceTracker : ILeadChatPresence
                 return false;
             connection.InCommunity = true;
             _communityPerUser[connection.UserId] = _communityPerUser.GetValueOrDefault(connection.UserId) + 1;
+            _communityUserLastSeen[connection.UserId] = DateTime.UtcNow;
             return _communityPerUser[connection.UserId] == 1;
+        }
+    }
+
+    public void TouchCommunity(Guid userId)
+    {
+        lock (_gate)
+        {
+            if (_communityPerUser.ContainsKey(userId))
+                _communityUserLastSeen[userId] = DateTime.UtcNow;
         }
     }
 
@@ -160,12 +171,18 @@ public sealed class ChatPresenceTracker : ILeadChatPresence
         lock (_gate) return _communityPerUser.Keys.ToList();
     }
 
+    public IReadOnlyDictionary<Guid, DateTime> CommunityUserLastSeen()
+    {
+        lock (_gate) return new Dictionary<Guid, DateTime>(_communityUserLastSeen);
+    }
+
     private bool DecrementCommunity(Guid userId)
     {
         var remaining = _communityPerUser.GetValueOrDefault(userId) - 1;
         if (remaining <= 0)
         {
             _communityPerUser.Remove(userId);
+            _communityUserLastSeen.Remove(userId);
             return true;
         }
         _communityPerUser[userId] = remaining;

@@ -9,7 +9,11 @@ public sealed record CommunityMessageDto(
     DateTime CreatedAt,
     bool IsMine);
 
-public sealed record CommunityPresenceDto(Guid UserId, string FullName, string Role);
+public sealed record CommunityPresenceDto(
+    Guid UserId,
+    string FullName,
+    string Role,
+    DateTime? LastSeenAt = null);
 
 public sealed record JoinCommunityResult(IReadOnlyList<CommunityPresenceDto> Members);
 
@@ -29,6 +33,14 @@ public sealed record CommunityReportDto(
     string Reason,
     string? Detail,
     string Status,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    bool AuthorIsRestricted = false,
+    DateTime? AuthorRestrictedUntil = null);
 
 public sealed record RestrictCommunityUserRequest(int Days, string Reason);
+
+public sealed record CommunityRestrictionDto(
+    bool IsRestricted,
+    DateTime? RestrictedUntil,
+    string? Reason,
+    string? Message);

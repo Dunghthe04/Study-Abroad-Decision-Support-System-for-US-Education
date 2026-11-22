@@ -14,13 +14,19 @@ public sealed class CommunityController(ICommunityService community) : Controlle
 {
     [HttpGet("messages")]
     [ProducesResponseType(typeof(IReadOnlyList<CommunityMessageDto>), StatusCodes.Status200OK)]
-    public Task<IActionResult> List([FromQuery] DateTime? before, [FromQuery] int take = 50, CancellationToken ct = default) =>
-        RunAsync(async userId => Ok(await community.ListMessagesAsync(userId, before, take, ct)));
+    public Task<IActionResult> List(
+        [FromQuery] DateTime? before,
+        [FromQuery] Guid? beforeId,
+        [FromQuery] DateTime? after,
+        [FromQuery] Guid? afterId,
+        [FromQuery] int take = 50,
+        CancellationToken ct = default) =>
+        RunAsync(async userId => Ok(await community.ListMessagesAsync(userId, before, beforeId, after, afterId, take, ct)));
 
     [HttpGet("restriction")]
-    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CommunityRestrictionDto), StatusCodes.Status200OK)]
     public Task<IActionResult> Restriction(CancellationToken ct) =>
-        RunAsync(async userId => Ok(new { message = await community.RestrictionMessageAsync(userId, ct) }));
+        RunAsync(async userId => Ok(await community.RestrictionStatusAsync(userId, ct)));
 
     [HttpPost("messages")]
     [EnableRateLimiting(CommunityPostRateLimit.PolicyName)]

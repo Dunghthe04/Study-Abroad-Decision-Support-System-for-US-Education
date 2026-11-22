@@ -63,7 +63,7 @@ public sealed class LeadChatHub(ILeadService leadService, ChatPresenceTracker pr
         var firstForUser = presence.JoinCommunity(Context.ConnectionId);
         await Groups.AddToGroupAsync(Context.ConnectionId, CommunityGroup);
 
-        var members = await community.DescribeUsersAsync(presence.CommunityUserIds(), Context.ConnectionAborted);
+        var members = await community.DescribeUsersAsync(presence.CommunityUserIds(), presence.CommunityUserLastSeen(), Context.ConnectionAborted);
         if (firstForUser)
         {
             var me = members.FirstOrDefault(m => m.UserId == userId);
@@ -154,7 +154,7 @@ public sealed class LeadChatHub(ILeadService leadService, ChatPresenceTracker pr
 
     private async Task PushCommunityPresenceAsync(Guid userId, bool joined)
     {
-        var members = await community.DescribeUsersAsync([userId], Context.ConnectionAborted);
+        var members = await community.DescribeUsersAsync([userId], ct: Context.ConnectionAborted);
         var member = members.FirstOrDefault() ?? new CommunityPresenceDto(userId, "Thành viên", "");
         await Clients.Group(CommunityGroup).SendAsync("communityPresence", new { joined, member });
     }

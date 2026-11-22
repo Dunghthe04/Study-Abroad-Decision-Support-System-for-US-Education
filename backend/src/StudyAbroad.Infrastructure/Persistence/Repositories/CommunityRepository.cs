@@ -8,14 +8,37 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 
 public sealed class CommunityRepository(AppDbContext db) : ICommunityRepository
 {
-    public async Task<IReadOnlyList<ForumPost>> ListVisibleChatAsync(DateTime? before, int take, CancellationToken ct)
+    public async Task<IReadOnlyList<ForumPost>> ListVisibleChatAsync(
+        DateTime? before, Guid? beforeId,
+        DateTime? after, Guid? afterId,
+        int take, CancellationToken ct)
     {
         var query = db.ForumPosts.AsNoTracking()
             .Where(p => p.Category == ForumCategories.CommunityChat
                         && p.ParentPostId == null
                         && p.Status == ForumPostStatuses.Visible);
-        if (before is { } at)
-            query = query.Where(p => p.CreatedAt < at);
+
+        if (after is { } afterAt)
+        {
+            if (afterId is { } aId)
+                query = query.Where(p => p.CreatedAt > afterAt || (p.CreatedAt == afterAt && p.Id > aId));
+            else
+                query = query.Where(p => p.CreatedAt > afterAt);
+
+            return await query
+                .OrderBy(p => p.CreatedAt)
+                .ThenBy(p => p.Id)
+                .Take(take)
+                .ToListAsync(ct);
+        }
+
+        if (before is { } beforeAt)
+        {
+            if (beforeId is { } bId)
+                query = query.Where(p => p.CreatedAt < beforeAt || (p.CreatedAt == beforeAt && p.Id < bId));
+            else
+                query = query.Where(p => p.CreatedAt < beforeAt);
+        }
 
         return await query
             .OrderByDescending(p => p.CreatedAt)
@@ -55,6 +78,21 @@ public sealed class CommunityRepository(AppDbContext db) : ICommunityRepository
 
     public Task<ForumReport?> GetReportAsync(Guid id, CancellationToken ct) =>
         db.ForumReports.FirstOrDefaultAsync(r => r.Id == id, ct);
+
+    public async Task CloseOpenReportsForPostAsync(Guid postId, Guid handlerId, CancellationToken ct)
+    {
+        var openReports = await db.ForumReports
+            .Where(r => r.ForumPostId == postId && r.Status == ForumReportStatuses.Open)
+            .ToListAsync(ct);
+
+        var now = DateTime.UtcNow;
+        foreach (var r in openReports)
+        {
+            r.Status = ForumReportStatuses.Actioned;
+            r.HandledByUserId = handlerId;
+            r.HandledAt = now;
+        }
+    }
 
     public async Task<PagedResult<ForumReport>> ListReportsAsync(string? status, int page, int pageSize, CancellationToken ct)
     {

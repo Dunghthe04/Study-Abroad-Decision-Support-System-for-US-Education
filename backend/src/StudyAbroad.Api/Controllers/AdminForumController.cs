@@ -29,6 +29,14 @@ public sealed class AdminForumController(ICommunityService community) : Controll
             return Ok(new { message = "Đã ẩn tin nhắn." });
         });
 
+    [HttpPost("messages/{id:guid}/hide")]
+    public Task<IActionResult> HideMessage(Guid id, CancellationToken ct) =>
+        RunAsync(async handlerId =>
+        {
+            await community.HideMessageAsync(handlerId, id, ct);
+            return Ok(new { message = "Đã ẩn tin nhắn." });
+        });
+
     [HttpPost("reports/{id:guid}/dismiss")]
     public Task<IActionResult> Dismiss(Guid id, CancellationToken ct) =>
         RunAsync(async handlerId =>
@@ -43,6 +51,14 @@ public sealed class AdminForumController(ICommunityService community) : Controll
         {
             await community.RestrictUserAsync(handlerId, userId, request, ct);
             return Ok(new { message = "Đã hạn chế quyền chat." });
+        });
+
+    [HttpPost("users/{userId:guid}/unrestrict")]
+    public Task<IActionResult> Unrestrict(Guid userId, CancellationToken ct) =>
+        RunAsync(async handlerId =>
+        {
+            await community.UnrestrictUserAsync(handlerId, userId, ct);
+            return Ok(new { message = "Đã gỡ hạn chế quyền chat." });
         });
 
     private async Task<IActionResult> RunAsync(Func<Guid, Task<IActionResult>> action)

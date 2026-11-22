@@ -2,15 +2,9 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { invokeRealtime, isRealtimeConnected, onRealtime, subscribeRealtimeState } from "@/lib/realtime";
-import type { CommunityMessageDto, CommunityPresenceDto, JoinCommunityResult } from "@/types/community";
+import type { CommunityMessageDto, CommunityPresenceDto, CommunityRestrictionDto, JoinCommunityResult } from "@/types/community";
 
 const FALLBACK_POLL_MS = 20_000;
-
-const subscribeVisibility = (callback: () => void) => {
-  document.addEventListener("visibilitychange", callback);
-  return () => document.removeEventListener("visibilitychange", callback);
-};
-const getVisible = () => document.visibilityState === "visible";
 
 interface HiddenPayload {
   id: string;
@@ -28,6 +22,7 @@ export function useCommunityChat(options: {
   onResync: () => void;
   onMembers: (members: CommunityPresenceDto[]) => void;
   onMemberChange: (joined: boolean, member: CommunityPresenceDto) => void;
+  onRestrictionChanged?: (payload: CommunityRestrictionDto) => void;
 }) {
   const { enabled = true } = options;
   const callbacks = useRef(options);
@@ -36,11 +31,22 @@ export function useCommunityChat(options: {
   });
 
   const connected = useSyncExternalStore(subscribeRealtimeState, isRealtimeConnected, () => false);
-  const visible = useSyncExternalStore(subscribeVisibility, getVisible, () => true);
-  const active = enabled && visible;
+  const active = enabled;
   const joined = useRef(false);
 
   const [roomConnected, setRoomConnected] = useState(false);
+
+  // Khi chuyển tab quay lại, gọi onResync để tải bù tin nhắn mới nhất
+  useEffect(() => {
+    if (!active) return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        callbacks.current.onResync();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [active]);
 
   useEffect(() => {
     if (!active) return;
@@ -77,6 +83,11 @@ export function useCommunityChat(options: {
     const offPresence = onRealtime<PresencePayload>("communityPresence", (payload) => {
       if (payload?.member) callbacks.current.onMemberChange(payload.joined, payload.member);
     });
+    const offRestriction = onRealtime<CommunityRestrictionDto>("communityRestrictionChanged", (payload) => {
+      if (payload && callbacks.current.onRestrictionChanged) {
+        callbacks.current.onRestrictionChanged(payload);
+      }
+    });
 
     return () => {
       offConnected();
@@ -85,6 +96,7 @@ export function useCommunityChat(options: {
       offNew();
       offHidden();
       offPresence();
+      offRestriction();
       if (joined.current) void invokeRealtime("LeaveCommunity").catch(() => undefined);
       joined.current = false;
     };

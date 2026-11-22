@@ -246,21 +246,26 @@ public class LeadChatHubTests
 
     private sealed class StubCommunityService : ICommunityService
     {
-        public Task<IReadOnlyList<CommunityMessageDto>> ListMessagesAsync(Guid viewerId, DateTime? before, int take, CancellationToken ct) =>
+        public Task<IReadOnlyList<CommunityMessageDto>> ListMessagesAsync(
+            Guid viewerId, DateTime? before, Guid? beforeId, DateTime? after, Guid? afterId, int take, CancellationToken ct) =>
             throw new NotSupportedException();
         public Task<CommunityMessageDto> SendAsync(Guid userId, SendCommunityMessageRequest request, CancellationToken ct) =>
             throw new NotSupportedException();
         public Task ReportAsync(Guid reporterId, Guid messageId, ReportCommunityMessageRequest request, CancellationToken ct) =>
             throw new NotSupportedException();
-        public Task<IReadOnlyList<CommunityPresenceDto>> DescribeUsersAsync(IEnumerable<Guid> userIds, CancellationToken ct) =>
+        public Task<IReadOnlyList<CommunityPresenceDto>> DescribeUsersAsync(
+            IEnumerable<Guid> userIds, IReadOnlyDictionary<Guid, DateTime>? userLastSeen = null, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<CommunityPresenceDto>>([]);
         public Task<StudyAbroad.Application.Common.PagedResult<CommunityReportDto>> ListReportsAsync(string? status, int page, int pageSize, CancellationToken ct) =>
             throw new NotSupportedException();
         public Task HideFromReportAsync(Guid handlerId, Guid reportId, CancellationToken ct) => throw new NotSupportedException();
+        public Task HideMessageAsync(Guid handlerId, Guid messageId, CancellationToken ct) => throw new NotSupportedException();
         public Task DismissReportAsync(Guid handlerId, Guid reportId, CancellationToken ct) => throw new NotSupportedException();
         public Task RestrictUserAsync(Guid handlerId, Guid userId, RestrictCommunityUserRequest request, CancellationToken ct) =>
             throw new NotSupportedException();
-        public Task<string?> RestrictionMessageAsync(Guid userId, CancellationToken ct) => throw new NotSupportedException();
+        public Task UnrestrictUserAsync(Guid handlerId, Guid userId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<CommunityRestrictionDto> RestrictionStatusAsync(Guid userId, CancellationToken ct) =>
+            Task.FromResult(new CommunityRestrictionDto(false, null, null, null));
     }
 
     /// <summary>Giả ILeadService bằng DispatchProxy: chỉ hai hàm chat được dùng, gọi hàm khác là lỗi test.</summary>

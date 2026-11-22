@@ -17,6 +17,7 @@ export type RealtimeEvent =
   | "newCommunityMessage"
   | "communityMessageHidden"
   | "communityPresence"
+  | "communityRestrictionChanged"
   | "connected"
   | "reconnected"
   | "disconnected";
@@ -30,6 +31,7 @@ const SERVER_EVENTS: RealtimeEvent[] = [
   "newCommunityMessage",
   "communityMessageHidden",
   "communityPresence",
+  "communityRestrictionChanged",
 ];
 
 /** Thử nối lại: kết nối rớt thì SignalR tự thử theo các mốc này, hết mốc thì module tự thử tiếp với giãn cách tăng dần. */

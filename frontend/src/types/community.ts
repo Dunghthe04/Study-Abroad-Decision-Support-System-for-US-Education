@@ -14,10 +14,18 @@ export interface CommunityPresenceDto {
   userId: string;
   fullName: string;
   role: UserRole | "";
+  lastSeenAt?: string | null;
 }
 
 export interface JoinCommunityResult {
   members: CommunityPresenceDto[];
+}
+
+export interface CommunityRestrictionDto {
+  isRestricted: boolean;
+  restrictedUntil: string | null;
+  reason: string | null;
+  message: string | null;
 }
 
 export interface CommunityReportDto {
@@ -33,4 +41,6 @@ export interface CommunityReportDto {
   detail: string | null;
   status: string;
   createdAt: string;
+  authorIsRestricted?: boolean;
+  authorRestrictedUntil?: string | null;
 }
