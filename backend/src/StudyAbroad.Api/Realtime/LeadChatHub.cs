@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Application.Community;
 using StudyAbroad.Application.Leads;
 
 namespace StudyAbroad.Api.Realtime;
@@ -16,9 +17,10 @@ public sealed record JoinLeadResult(string Side, bool PeerOnline);
 /// Xác thực bằng cookie HttpOnly như các API khác.
 /// </summary>
 [Authorize]
-public sealed class LeadChatHub(ILeadService leadService, ChatPresenceTracker presence) : Hub
+public sealed class LeadChatHub(ILeadService leadService, ChatPresenceTracker presence, ICommunityService community) : Hub
 {
     public const string Path = "/api/v1/hubs/lead-chat";
+    public const string CommunityGroup = "community";
 
     public static string UserGroup(Guid userId) => $"user:{userId}";
 
@@ -44,10 +46,39 @@ public sealed class LeadChatHub(ILeadService leadService, ChatPresenceTracker pr
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        if (presence.LeaveCommunity(Context.ConnectionId, out var communityUserId, out var lastInCommunity) && lastInCommunity)
+            await PushCommunityPresenceAsync(communityUserId, joined: false);
+
         if (presence.Disconnect(Context.ConnectionId, out var userId, out var wentOffline) && wentOffline)
             await PushPresenceAsync(userId, online: false);
 
         await base.OnDisconnectedAsync(exception);
+    }
+
+    public async Task<JoinCommunityResult> JoinCommunity()
+    {
+        var userId = Context.User?.GetUserId()
+            ?? throw new HubException("Không vào được phòng cộng đồng.");
+
+        var firstForUser = presence.JoinCommunity(Context.ConnectionId);
+        await Groups.AddToGroupAsync(Context.ConnectionId, CommunityGroup);
+
+        var members = await community.DescribeUsersAsync(presence.CommunityUserIds(), Context.ConnectionAborted);
+        if (firstForUser)
+        {
+            var me = members.FirstOrDefault(m => m.UserId == userId);
+            if (me is not null)
+                await Clients.OthersInGroup(CommunityGroup).SendAsync("communityPresence", new { joined = true, member = me });
+        }
+
+        return new JoinCommunityResult(members);
+    }
+
+    public async Task LeaveCommunity()
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, CommunityGroup);
+        if (presence.LeaveCommunity(Context.ConnectionId, out var userId, out var lastForUser) && lastForUser)
+            await PushCommunityPresenceAsync(userId, joined: false);
     }
 
     /// <summary>Vào phòng chat của một lead. Không có quyền thì báo lỗi chung, không lộ lead có tồn tại hay không.</summary>
@@ -119,5 +150,12 @@ public sealed class LeadChatHub(ILeadService leadService, ChatPresenceTracker pr
             var peerOnline = online || presence.AnyOnline(watcher.Peers);
             await Clients.Client(watcher.ConnectionId).SendAsync("presence", new { leadId = watcher.LeadId, online = peerOnline });
         }
+    }
+
+    private async Task PushCommunityPresenceAsync(Guid userId, bool joined)
+    {
+        var members = await community.DescribeUsersAsync([userId], Context.ConnectionAborted);
+        var member = members.FirstOrDefault() ?? new CommunityPresenceDto(userId, "Thành viên", "");
+        await Clients.Group(CommunityGroup).SendAsync("communityPresence", new { joined, member });
     }
 }

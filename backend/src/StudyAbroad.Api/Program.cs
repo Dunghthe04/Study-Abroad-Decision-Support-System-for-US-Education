@@ -151,6 +151,7 @@ builder.Services.AddTranscriptUploadRateLimiter();
 builder.Services.AddAuthRateLimiter();
 builder.Services.AddMediaUploadRateLimiter();
 builder.Services.AddChatConcurrencyRateLimiter();   // một câu hỏi chat mỗi người cùng lúc (429 chat_busy)
+builder.Services.AddCommunityPostRateLimiter();   // 10 tin cộng đồng / phút / người
 
 // Lỗi thanh toán / gói (BillingRuleException) trả { code, message, ... } với mã HTTP của lỗi, dùng chung mọi controller
 builder.Services.AddControllers(o => o.Filters.Add<BillingRuleExceptionFilter>());
@@ -197,6 +198,7 @@ builder.Services.AddSingleton<StudyAbroad.Api.Realtime.ChatPresenceTracker>();
 builder.Services.AddSingleton<StudyAbroad.Application.Leads.ILeadChatPresence>(
     sp => sp.GetRequiredService<StudyAbroad.Api.Realtime.ChatPresenceTracker>());
 builder.Services.AddSingleton<StudyAbroad.Application.Leads.ILeadChatNotifier, StudyAbroad.Api.Realtime.SignalRLeadChatNotifier>();
+builder.Services.AddSingleton<StudyAbroad.Application.Community.ICommunityChatNotifier, StudyAbroad.Api.Realtime.SignalRCommunityChatNotifier>();
 builder.Services.AddSingleton<StudyAbroad.Application.Notifications.INotificationPusher, StudyAbroad.Api.Realtime.SignalRNotificationPusher>();
 
 builder.Services.AddHealthChecks()
