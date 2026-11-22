@@ -6,6 +6,7 @@ using StudyAbroad.Api.Extensions;
 using StudyAbroad.Api.MediaUploads;
 using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application.MediaUploads;
+using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Infrastructure.MediaUploads;
 
@@ -70,8 +71,9 @@ public sealed class MediaController(IServiceProvider services, IOptions<Cloudina
             var result = await uploader.UploadImageAsync(
                 new MediaUploadRequest(
                     stream, request.File.FileName, request.File.ContentType, maxSizeBytes,
-                    // Ảnh trung tâm do người dùng tự đăng: gom vào thư mục riêng và kiểm duyệt nội dung như ảnh chat
-                    FolderSuffix: isCenterPurpose ? "centers" : null,
+                    // Ảnh trung tâm do người dùng tự đăng: mỗi tài khoản một thư mục riêng (để chỉ xóa được ảnh của chính mình)
+                    // và kiểm duyệt nội dung như ảnh chat
+                    FolderSuffix: isCenterPurpose ? CenterMediaFolders.For(User.GetUserId()!.Value) : null,
                     ModerateContent: isCenterPurpose), ct);
             return Ok(result);
         }
