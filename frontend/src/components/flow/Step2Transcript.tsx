@@ -397,7 +397,7 @@ export function Step2Transcript({
 
   // Luôn bắt đầu từ defaultYears (chứa đầy đủ các lớp từ Lớp 9 đến currentGrade).
   // Nếu người dùng chủ động xóa khối lớp nào ở Bước 2 thì loại ra; đồng thời giữ nguyên điểm đã có trong data.academicYears.
-  const years = useMemo(() => {
+  const years = useMemo<AcademicYearDraft[]>(() => {
     if (isMiddleSchoolEarly) {
       if (
         data.academicYears &&
@@ -458,8 +458,8 @@ export function Step2Transcript({
   const [pendingGrade, setPendingGrade] = useState<string | null>(null);
   const [pendingAssignStep, setPendingAssignStep] = useState<PendingAssignStep>("choose_grade");
   const [assignmentNotices, setAssignmentNotices] = useState<AssignmentNotice[]>([]);
+  // Lớp đang bấm "Sai lớp" (mở hộp chọn lớp đúng)
   const [reassignTargetId, setReassignTargetId] = useState<string | null>(null);
-  const reassignNotice = assignmentNotices.find((n) => n.id === reassignTargetId);
   const [showManualTable, setShowManualTable] = useState(
     Boolean(
       data.academicYears &&
@@ -579,17 +579,6 @@ export function Step2Transcript({
     } else {
       onUpdate({ gpaMode: "overall", manualGpa10Scale: null, calculatedGpa4Scale: val });
     }
-  };
-
-  // [UC-12] Người dùng xác nhận đã rà toàn bộ bảng điểm → bỏ mọi cờ (cờ lưu trong nháp, BE không cho commit khi còn cờ)
-  const handleConfirmReviewed = () => {
-    onUpdate({
-      academicYears: years.map((y) => ({
-        ...y,
-        subjects: y.subjects.map((s) => ({ ...s, semester1Review: null, semester2Review: null })),
-      })),
-    });
-    setValidationError(null);
   };
 
   const handleScoreChange = (
@@ -903,11 +892,12 @@ export function Step2Transcript({
       setPendingGrade(null);
       setPendingAssignStep("choose_grade");
       setShowManualTable(true);
+      const resolvedSemester = resolved.semester;
       setAssignmentNotices((prev) => [...prev, {
         id: `${normalizeGrade(targetGradeName)}-${Date.now()}`,
         sourceTerms: [syntheticTerm],
         targetGrade: targetGradeName,
-        semester: resolved.semester,
+        semester: resolvedSemester,
         subjectCount: singleTerm.scores.length,
       }]);
 
@@ -993,54 +983,52 @@ export function Step2Transcript({
     setPendingAssignStep("choose_grade");
   };
 
-  // Chuyển điểm đã nhập từ lớp này sang lớp khác khi người dùng bấm "Sai lớp" trên 1 notice cụ thể
-  const handleReassignGrade = (noticeId: string, newGradeName: string) => {
-    const notice = assignmentNotices.find((n) => n.id === noticeId);
-    if (!notice || normalizeGrade(newGradeName) === normalizeGrade(notice.targetGrade)) {
+  // "Sai lớp" trên thông báo của 1 lớp → chuyển toàn bộ điểm của lớp đó (giữ nguyên HK1/HK2 và cờ cam) sang lớp khác
+  const handleReassignGrade = (oldGrade: string, newGradeName: string) => {
+    const oldKey = normalizeGrade(oldGrade);
+    const oldYear = years.find((y) => normalizeGrade(y.gradeName) === oldKey);
+    if (!oldYear || normalizeGrade(newGradeName) === oldKey) {
       setReassignTargetId(null);
       return;
     }
 
-    const oldGrade = notice.targetGrade;
-    const sem = notice.semester;
+    // 1. Gom điểm lớp cũ thành 2 kỳ để gộp sang lớp mới (cờ cam đi theo ô)
+    const toScores = (field: "semester1Score" | "semester2Score") =>
+      oldYear.subjects
+        .filter((s) => typeof s[field] === "number")
+        .map((s) => {
+          const review = s[REVIEW_FIELD[field]];
+          return {
+            subject: s.subjectName,
+            score: s[field] as number,
+            needsReview: Boolean(review),
+            reviewReason: review ?? null,
+          };
+        });
+    const movedTerms: ExtractedTerm[] = [
+      { termName: `${newGradeName} HK1`, scores: toScores("semester1Score") },
+      { termName: `${newGradeName} HK2`, scores: toScores("semester2Score") },
+    ].filter((t) => t.scores.length > 0);
 
-    // 1. Xóa điểm vừa gán ở khối lớp cũ
-    const clearedYears = years.map((y) => {
-      if (normalizeGrade(y.gradeName) !== normalizeGrade(oldGrade)) return y;
-      return {
-        ...y,
-        subjects: y.subjects.map((s) => {
-          const wasInSource = notice.sourceTerms.some((t) =>
-            t.scores.some((sc) => subjectKey(sc.subjectName) === subjectKey(s.subjectName))
-          );
-          if (!wasInSource) return s;
-          if (sem === 1) {
-            return { ...s, semester1Score: null, semester1Review: null };
-          } else if (sem === 2) {
-            return { ...s, semester2Score: null, semester2Review: null };
-          } else {
-            return { ...s, semester1Score: null, semester2Score: null, semester1Review: null, semester2Review: null };
+    // 2. Xóa điểm ở lớp cũ (giữ danh sách môn)
+    const clearedYears = years.map((y) =>
+      normalizeGrade(y.gradeName) !== oldKey
+        ? y
+        : {
+            ...y,
+            subjects: y.subjects.map((s) => ({
+              ...s,
+              semester1Score: null,
+              semester2Score: null,
+              semester1Review: null,
+              semester2Review: null,
+            })),
           }
-        }),
-      };
-    });
+    );
 
-    // 2. Chuyển termName của các sourceTerms sang khối lớp mới
-    const remappedTerms: ExtractedTerm[] = notice.sourceTerms.map((t, idx) => {
-      let suffix = sem === "all" ? "Cả năm" : `HK${sem}`;
-      if (notice.sourceTerms.length >= 2) {
-        suffix = idx === 0 ? "HK1" : "HK2";
-      }
-      return {
-        termName: `${newGradeName} ${suffix}`,
-        scores: t.scores,
-      };
-    });
-
-    // 3. Merge điểm vào khối lớp mới
+    // 3. Gộp vào lớp mới
     const targetIdx = clearedYears.findIndex((y) => normalizeGrade(y.gradeName) === normalizeGrade(newGradeName));
-    const fallback = targetIdx !== -1 ? targetIdx : 0;
-    const finalYears = mergeExtractedTerms(clearedYears, remappedTerms, fallback);
+    const finalYears = mergeExtractedTerms(clearedYears, movedTerms, targetIdx !== -1 ? targetIdx : 0);
     const newGpas = calculateTranscriptGpa(finalYears);
 
     onUpdate({
@@ -1050,16 +1038,43 @@ export function Step2Transcript({
       calculatedGpa4Scale: newGpas.gpa4,
     });
 
-    if (targetIdx !== -1) setActiveYearIndex(targetIdx);
+    const newIdx = finalYears.findIndex((y) => normalizeGrade(y.gradeName) === normalizeGrade(newGradeName));
+    if (newIdx !== -1) setActiveYearIndex(newIdx);
+    // Thông báo của lớp cũ chuyển sang lớp mới, gộp với thông báo sẵn có của lớp mới (nếu có)
     setAssignmentNotices((prev) =>
-      prev.map((n) =>
-        n.id === noticeId
-          ? { ...n, targetGrade: newGradeName, sourceTerms: remappedTerms }
-          : n
-      )
+      prev.map((n) => (normalizeGrade(n.targetGrade) === oldKey ? { ...n, targetGrade: newGradeName } : n))
     );
     setReassignTargetId(null);
   };
+
+  // "Xác nhận đúng hết" trên thông báo của 1 lớp → bỏ cờ cam của riêng lớp đó và đóng thông báo
+  const handleConfirmGrade = (gradeName: string) => {
+    const key = normalizeGrade(gradeName);
+    onUpdate({
+      academicYears: years.map((y) =>
+        normalizeGrade(y.gradeName) !== key
+          ? y
+          : { ...y, subjects: y.subjects.map((s) => ({ ...s, semester1Review: null, semester2Review: null })) }
+      ),
+    });
+    setAssignmentNotices((prev) => prev.filter((n) => normalizeGrade(n.targetGrade) !== key));
+    setValidationError(null);
+  };
+
+  // Mỗi lớp đúng 1 thông báo: lớp vừa được điền điểm hoặc còn ô tô cam
+  const gradeNotices = years
+    .map((y) => {
+      const key = normalizeGrade(y.gradeName);
+      const reviewCells = countReviewCells([y]);
+      const assigned = assignmentNotices.some((n) => normalizeGrade(n.targetGrade) === key);
+      const hasSem1 = y.subjects.some((s) => typeof s.semester1Score === "number");
+      const hasSem2 = y.subjects.some((s) => typeof s.semester2Score === "number");
+      const subjectCount = y.subjects.filter(
+        (s) => typeof s.semester1Score === "number" || typeof s.semester2Score === "number"
+      ).length;
+      return { gradeName: y.gradeName, reviewCells, assigned, hasSem1, hasSem2, subjectCount };
+    })
+    .filter((g) => (g.assigned || g.reviewCells > 0) && g.subjectCount > 0);
 
   const triggerFileInput = () => {
     const el = document.getElementById(fileInputId) as HTMLInputElement | null;
@@ -1257,7 +1272,10 @@ export function Step2Transcript({
 
     if (reviewCount > 0) {
       setValidationError(
-        `Bảng điểm còn ${reviewCount} ô tô cam cần kiểm tra. Hãy đối chiếu với bảng điểm gốc rồi bấm "Tôi đã kiểm tra bảng điểm".`
+        `Bảng điểm còn ${reviewCount} ô tô cam cần kiểm tra (${years
+          .filter((y) => y.subjects.some((s) => s.semester1Review || s.semester2Review))
+          .map((y) => y.gradeName)
+          .join(", ")}). Hãy đối chiếu với bảng điểm gốc rồi bấm "Xác nhận đúng hết" ở thông báo của từng lớp.`
       );
       setShowManualTable(true);
       const firstFlaggedIdx = years.findIndex((y) => y.subjects.some((s) => s.semester1Review || s.semester2Review));
@@ -2001,11 +2019,11 @@ export function Step2Transcript({
           )}
 
           {/* Thông báo màu vàng xác nhận đã điền điểm & Nút đổi sang lớp khác nếu chọn nhầm */}
-          {assignmentNotices.length > 0 && (
+          {gradeNotices.length > 0 && (
             <div className="space-y-3">
-              {assignmentNotices.map((notice) => (
+              {gradeNotices.map((g) => (
                 <div
-                  key={notice.id}
+                  key={g.gradeName}
                   className="rounded-2xl border-2 border-amber-300 bg-amber-50/90 dark:border-amber-700/60 dark:bg-amber-950/40 p-4 space-y-3 animate-in fade-in-50"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -2015,15 +2033,22 @@ export function Step2Transcript({
                       </div>
                       <div className="space-y-1">
                         <div className="font-semibold text-sm text-amber-950 dark:text-amber-100">
-                          Xác nhận điểm đã nhập vào {notice.targetGrade} (
-                          {notice.semester === "all" ? "Cả năm" : `Học kỳ ${notice.semester}`})
+                          {g.hasSem1 && g.hasSem2
+                            ? `Đã nhập đủ ${g.gradeName}`
+                            : `Đã nhập ${g.gradeName} (${g.hasSem1 ? "Học kỳ 1" : "Học kỳ 2"})`}
                         </div>
                         <div className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
-                          Hệ thống đã thêm <strong className="font-bold text-amber-950 dark:text-amber-100">{notice.subjectCount} môn học</strong> vào{" "}
-                          <strong>{notice.targetGrade}</strong>. Vui lòng đối chiếu xem đã đúng khối lớp và học kỳ chưa.
-                          {isCompletedGrade(notice.targetGrade) && notice.semester !== "all" && (
+                          <strong className="font-bold text-amber-950 dark:text-amber-100">{g.subjectCount} môn học</strong>{" "}
+                          đang ở <strong>{g.gradeName}</strong>. Đối chiếu với bảng điểm gốc xem đúng lớp và học kỳ chưa.
+                          {g.reviewCells > 0 && (
+                            <span className="block mt-1">
+                              Có {g.reviewCells} ô tô cam (điểm đọc từ ảnh, chênh lệch bất thường hoặc bị ghi đè / trùng
+                              môn) — rê chuột vào ô để xem lý do.
+                            </span>
+                          )}
+                          {isCompletedGrade(g.gradeName) && !(g.hasSem1 && g.hasSem2) && (
                             <span className="block mt-1 font-semibold text-red-600 dark:text-red-400">
-                              ⚠️ {notice.targetGrade} là năm học đã kết thúc. Bạn cần bổ sung học kỳ còn lại để hồ sơ hợp lệ!
+                              ⚠️ {g.gradeName} là năm học đã kết thúc. Bạn cần bổ sung học kỳ còn lại để hồ sơ hợp lệ!
                             </span>
                           )}
                         </div>
@@ -2035,7 +2060,7 @@ export function Step2Transcript({
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => setReassignTargetId(notice.id)}
+                        onClick={() => setReassignTargetId(g.gradeName)}
                         className="text-xs font-semibold border-amber-300 bg-white hover:bg-amber-100/80 text-amber-900 dark:border-amber-700 dark:bg-zinc-900 dark:text-amber-200 dark:hover:bg-amber-950"
                       >
                         <RefreshCwIcon className="size-3.5 mr-1 text-amber-600 dark:text-amber-400" />
@@ -2044,11 +2069,11 @@ export function Step2Transcript({
                       <Button
                         type="button"
                         size="sm"
-                        onClick={() => setAssignmentNotices((prev) => prev.filter((n) => n.id !== notice.id))}
+                        onClick={() => handleConfirmGrade(g.gradeName)}
                         className="text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-600 dark:hover:bg-amber-700"
                       >
                         <CheckCircle2Icon className="size-3.5 mr-1" />
-                        Xác nhận đúng
+                        Xác nhận đúng hết
                       </Button>
                     </div>
                   </div>
@@ -2155,30 +2180,6 @@ export function Step2Transcript({
               )}
             </div>
           </div>
-
-          {/* [UC-12] Nhắc kiểm tra các ô tô cam */}
-          {reviewCount > 0 && (
-            <Alert className="border-warn/40 bg-warn-wash/40">
-              <AlertTriangleIcon className="size-4 text-warn" />
-              <AlertTitle className="text-sm font-semibold text-warn">
-                Bảng điểm có {reviewCount} ô cần kiểm tra
-              </AlertTitle>
-              <AlertDescription className="text-xs leading-relaxed space-y-2">
-                <p>
-                  Các ô tô cam là điểm đọc từ ảnh, điểm chênh lệch bất thường hoặc bị ghi đè / trùng môn (
-                  {years
-                    .filter((y) => y.subjects.some((s) => s.semester1Review || s.semester2Review))
-                    .map((y) => y.gradeName)
-                    .join(", ")}
-                  ). Rê chuột vào ô để xem lý do. Sửa ô nào thì ô đó hết tô cam.
-                </p>
-                <Button type="button" size="sm" variant="outline" onClick={handleConfirmReviewed} className="gap-1.5">
-                  <CheckCircle2Icon className="size-3.5" />
-                  Tôi đã kiểm tra bảng điểm
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
 
           {/* Subjects Table */}
           {years[activeYearIndex] && (
@@ -2529,14 +2530,14 @@ export function Step2Transcript({
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               Điểm hiện tại đang được điền vào{" "}
-              <strong className="text-foreground">{reassignNotice?.targetGrade}</strong>. Bạn muốn chuyển toàn bộ điểm này sang khối lớp nào?
+              <strong className="text-foreground">{reassignTargetId}</strong>. Bạn muốn chuyển toàn bộ điểm này sang khối lớp nào?
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-2 gap-2.5 py-3">
             {years.map((y) => {
               const isCurrentTarget =
-                reassignNotice && normalizeGrade(y.gradeName) === normalizeGrade(reassignNotice.targetGrade);
+                reassignTargetId !== null && normalizeGrade(y.gradeName) === normalizeGrade(reassignTargetId);
               return (
                 <Button
                   key={y.gradeName}
