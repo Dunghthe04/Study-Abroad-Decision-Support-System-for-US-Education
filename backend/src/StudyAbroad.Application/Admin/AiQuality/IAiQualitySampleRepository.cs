@@ -19,4 +19,10 @@ public interface IAiQualitySampleRepository
     /// </summary>
     Task<IReadOnlyList<AiQualitySampleRow>> RowsAsync(
         IReadOnlyCollection<Guid> messageIds, int contextMessages, CancellationToken ct = default);
+
+    /// <summary>
+    /// Thông tin cho dòng giữ chỗ của các lượt bị ẩn: chỉ thời điểm, loại kết quả, meta của tin trả lời và cờ SLM dự phòng.
+    /// KHÔNG đọc cột nội dung nào và không tải meta của tin hỏi (có đoạn chữ học sinh viết). Thứ tự kết quả không quan trọng.
+    /// </summary>
+    Task<IReadOnlyList<AiQualityHiddenRow>> HiddenRowsAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken ct = default);
 }

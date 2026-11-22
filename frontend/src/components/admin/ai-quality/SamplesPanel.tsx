@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ShieldCheckIcon } from "lucide-react";
+import { LockIcon, ShieldCheckIcon, Trash2Icon } from "lucide-react";
 import { cn } from "cn";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,12 +13,43 @@ import { formatDateTime, formatInt, formatMs } from "@/lib/ai-usage-format";
 import { adminAiQualityApi } from "@/lib/ai-quality-api";
 import { featureLabel, SAMPLE_OUTCOMES } from "@/lib/ai-quality-format";
 import { useFetched } from "@/lib/use-fetched";
-import type { AiQualitySample, OutcomeCounts, SampleOutcome } from "@/types/ai-quality";
+import type { AiQualitySample, OutcomeCounts, SampleHiddenReason, SampleOutcome } from "@/types/ai-quality";
 
 const PAGE_SIZE = 10;
 const LONG_TEXT = 320; // dài hơn thì thu gọn, bấm để xem hết (danh sách trung tâm, câu trả lời dài)
 
 const ROLE_LABELS: Record<string, string> = { user: "Học sinh", assistant: "Trợ lý", system: "Hệ thống" };
+
+/** Nhãn của dòng giữ chỗ: ghi rõ lý do cụ thể, không gộp thành "riêng tư" chung chung. */
+const HIDDEN_LABELS: Record<SampleHiddenReason, { icon: typeof LockIcon; text: string }> = {
+  deleted_by_user: { icon: Trash2Icon, text: "Học sinh đã xóa cuộc trò chuyện này. Nội dung không hiển thị." },
+  minor_without_consent: { icon: LockIcon, text: "Học sinh dưới 16 tuổi chưa có đồng ý của phụ huynh. Nội dung không hiển thị." },
+};
+
+/** Dòng đầu của một lượt: thời điểm, tính năng, thời gian phản hồi (dùng chung cho lượt đọc được và dòng giữ chỗ). */
+function SampleMeta({ sample }: { sample: AiQualitySample }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-2">
+      <span className="tabular font-medium text-ink">{formatDateTime(sample.createdAt)}</span>
+      {sample.feature ? <Badge variant="outline">{featureLabel(sample.feature)}</Badge> : null}
+      {sample.turnMs !== null ? <span className="ml-auto">phản hồi sau {formatMs(sample.turnMs)}</span> : null}
+    </div>
+  );
+}
+
+/** Dòng giữ chỗ của lượt bị ẩn: vẫn đúng vị trí thời gian và có số liệu, nhưng không có chữ nào của cuộc trò chuyện. */
+function HiddenSampleCard({ sample, reason }: { sample: AiQualitySample; reason: SampleHiddenReason }) {
+  const { icon: Icon, text } = HIDDEN_LABELS[reason];
+  return (
+    <li className="flex flex-col gap-2 rounded-lg border border-dashed border-line bg-ground p-4">
+      <SampleMeta sample={sample} />
+      <p className="flex items-center gap-2 text-sm text-ink-2">
+        <Icon aria-hidden className="size-4 shrink-0 text-ink-3" />
+        {text}
+      </p>
+    </li>
+  );
+}
 
 /** Một bong bóng hội thoại: học sinh bên phải (màu thương hiệu), trợ lý và hệ thống bên trái (nền trung tính). */
 function Bubble({ who, label, text }: { who: "student" | "reply"; label: string; text: string }) {
@@ -45,14 +76,11 @@ function Bubble({ who, label, text }: { who: "student" | "reply"; label: string;
 }
 
 function SampleCard({ sample }: { sample: AiQualitySample }) {
+  if (sample.hiddenReason) return <HiddenSampleCard sample={sample} reason={sample.hiddenReason} />;
   const replyLabel = sample.outcome === "failed" ? "Phản hồi của hệ thống" : "Trợ lý trả lời";
   return (
     <li className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-4">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-2">
-        <span className="tabular font-medium text-ink">{formatDateTime(sample.createdAt)}</span>
-        {sample.feature ? <Badge variant="outline">{featureLabel(sample.feature)}</Badge> : null}
-        {sample.turnMs !== null ? <span className="ml-auto">phản hồi sau {formatMs(sample.turnMs)}</span> : null}
-      </div>
+      <SampleMeta sample={sample} />
 
       <div className="flex flex-col gap-3 rounded-md bg-ground p-3">
         {sample.context.length > 0 ? (
@@ -73,15 +101,15 @@ function SampleCard({ sample }: { sample: AiQualitySample }) {
           </details>
         ) : null}
         {sample.question !== null ? <Bubble who="student" label="Học sinh hỏi" text={sample.question} /> : null}
-        <Bubble who="reply" label={replyLabel} text={sample.answer} />
+        <Bubble who="reply" label={replyLabel} text={sample.answer ?? ""} />
       </div>
     </li>
   );
 }
 
 /**
- * Hội thoại mẫu của nhóm có vấn đề (UC-90): không trả lời được, lỗi, từ chối. Nội dung do backend che thông tin cá nhân,
- * ẩn hội thoại của người dưới 16 tuổi chưa có đồng ý phù hợp, và ghi nhật ký mỗi lần xem. Nhóm trả lời được dùng Duyệt mẫu.
+ * Hội thoại mẫu của nhóm có vấn đề (UC-90): không trả lời được, lỗi, từ chối. Nội dung do backend che thông tin cá nhân và ghi nhật ký
+ * mỗi lần xem; lượt bị ẩn (học sinh đã xóa, dưới 16 tuổi chưa có đồng ý phù hợp) thành dòng giữ chỗ. Nhóm trả lời được dùng Duyệt mẫu.
  * counts: số lượt của từng loại trong khoảng (từ báo cáo) để hiện trên ba thẻ chọn loại. Gắn `key` theo khoảng ngày ở nơi dùng
  * để đổi khoảng thì về trang đầu.
  */
@@ -107,7 +135,8 @@ export function SamplesPanel({ range, counts }: { range: DateRange; counts: Outc
           <ShieldCheckIcon />
           <AlertDescription>
             Nội dung đã che thông tin cá nhân (họ tên, email, số điện thoại, ngày sinh...) nhưng việc che theo quy tắc không đảm bảo tuyệt đối.
-            Mỗi lần xem được ghi nhật ký. Hội thoại của học sinh dưới 16 tuổi chưa có đồng ý phù hợp của phụ huynh không hiện nội dung.
+            Mỗi lần xem được ghi nhật ký. Lượt thuộc cuộc trò chuyện học sinh đã xóa, hoặc của học sinh dưới 16 tuổi chưa có đồng ý phù hợp
+            của phụ huynh, chỉ hiện thời điểm và số liệu, không hiện nội dung.
           </AlertDescription>
         </Alert>
 
@@ -140,6 +169,7 @@ export function SamplesPanel({ range, counts }: { range: DateRange; counts: Outc
 
         {samples.error ? <Alert variant="destructive"><AlertDescription>{samples.error}</AlertDescription></Alert> : null}
 
+        {/* Lượt bị ẩn hiện thành dòng giữ chỗ ở đúng vị trí, nên số dòng khớp số trên thẻ */}
         <div data-loading={samples.loading ? "true" : "false"} className="flex flex-col gap-3">
           {data && data.items.length > 0 ? (
             <ul className="flex flex-col gap-4">
@@ -148,23 +178,15 @@ export function SamplesPanel({ range, counts }: { range: DateRange; counts: Outc
           ) : null}
           {data && data.items.length === 0 ? (
             <p className="rounded-md bg-ground px-3 py-8 text-center text-sm text-ink-2">
-              {data.hiddenCount > 0
-                ? `Không có lượt nào được xem nội dung. ${formatInt(data.hiddenCount)} lượt bị ẩn vì lý do riêng tư.`
-                : "Không có lượt nào thuộc loại này trong khoảng đã chọn."}
+              Không có lượt nào thuộc loại này trong khoảng đã chọn.
             </p>
           ) : null}
           {!data && !samples.error ? <p className="rounded-md bg-ground px-3 py-8 text-center text-sm text-ink-2">Đang tải...</p> : null}
         </div>
 
-        {data && data.hiddenCount > 0 && data.items.length > 0 ? (
-          <p className="text-xs text-ink-3">
-            Đã ẩn nội dung {formatInt(data.hiddenCount)} lượt cùng loại vì lý do riêng tư. Số liệu của các lượt này vẫn nằm trong báo cáo ở trên.
-          </p>
-        ) : null}
-
         {data ? (
           <TablePagination
-            page={data.page} totalPages={totalPages} totalCount={data.totalCount} itemLabel="lượt xem được"
+            page={data.page} totalPages={totalPages} totalCount={data.totalCount} itemLabel="lượt"
             disabled={samples.loading} onPageChange={setPage}
           />
         ) : null}

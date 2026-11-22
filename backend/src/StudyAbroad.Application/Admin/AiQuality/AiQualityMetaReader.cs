@@ -21,10 +21,16 @@ public static class AiQualityMetaReader
     public static AiQualityTurn ToTurn(
         DateTime createdAt, string? outcome, string? replyMetaJson, string? questionMetaJson, bool usedFallback)
     {
-        var reply = Parse(replyMetaJson);
         var question = Parse(questionMetaJson);
         var slmFallback = question is { } q && q.TryGetProperty("slm", out var slm) && slm.ValueKind == JsonValueKind.Object
             && slm.TryGetProperty("fallback", out var fallback) && fallback.ValueKind == JsonValueKind.True;
+        return ToTurn(createdAt, outcome, replyMetaJson, slmFallback, usedFallback);
+    }
+
+    /// <summary>Như trên nhưng cờ SLM dự phòng đã biết sẵn (tính trong database), dùng khi không được tải meta tin hỏi (lượt bị ẩn nội dung).</summary>
+    public static AiQualityTurn ToTurn(DateTime createdAt, string? outcome, string? replyMetaJson, bool slmFallback, bool usedFallback)
+    {
+        var reply = Parse(replyMetaJson);
         return new AiQualityTurn(
             createdAt,
             outcome,

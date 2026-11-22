@@ -12,7 +12,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 public class AiQualitySampleRepository(AppDbContext db) : IAiQualitySampleRepository
 {
     /// <summary>Một dòng của bước một: chỉ mã, thời điểm và thông tin chủ phiên, KHÔNG có cột nội dung nào.</summary>
-    public record CandidateRow(Guid Id, DateTime CreatedAt, Guid OwnerId, DateOnly? Birth, bool Managed);
+    public record CandidateRow(Guid Id, DateTime CreatedAt, Guid OwnerId, DateOnly? Birth, bool Managed, bool SessionDeleted);
 
     /// <summary>Một dòng của bước hai: nội dung thô của một lượt, tin hỏi của nó và họ tên chủ phiên.</summary>
     public record ReplyRow(
@@ -35,7 +35,8 @@ public class AiQualitySampleRepository(AppDbContext db) : IAiQualitySampleReposi
             reply.CreatedAt,
             session.UserId,
             owner == null ? (DateOnly?)null : owner.DateOfBirth,
-            owner != null && owner.Status == UserStatuses.Managed);
+            owner != null && owner.Status == UserStatuses.Managed,
+            session.DeletedAt != null);
 
     /// <summary>Nội dung thô của đúng các lượt được hỏi, kèm tin hỏi (nối qua reply_to_message_id) và họ tên chủ phiên.</summary>
     public static IQueryable<ReplyRow> ReplyRows(AppDbContext db, IReadOnlyCollection<Guid> messageIds) =>
@@ -59,6 +60,28 @@ public class AiQualitySampleRepository(AppDbContext db) : IAiQualitySampleReposi
             owner == null ? null : owner.FullName,
             question == null ? null : question.MetaJson);
 
+    /// <summary>Mẫu meta tin hỏi khi SLM hỏng hai lần (ChatTurn.UserMeta ghi slm.fallback = true).</summary>
+    private const string SlmFallbackMeta = "{\"slm\":{\"fallback\":true}}";
+
+    /// <summary>
+    /// Dòng giữ chỗ của lượt bị ẩn: chỉ cột của tin trả lời không phải nội dung. Meta tin hỏi chỉ được DATABASE so với mẫu (toán tử jsonb @>)
+    /// để ra một cờ đúng/sai, không bao giờ được chọn ra nên đoạn chữ học sinh trong đó không rời database.
+    /// </summary>
+    public static IQueryable<AiQualityHiddenRow> HiddenRows(AppDbContext db, IReadOnlyCollection<Guid> messageIds) =>
+        from reply in db.ChatMessages.AsNoTracking()
+        where messageIds.Contains(reply.Id)
+        join asked in db.ChatMessages.AsNoTracking() on reply.ReplyToMessageId equals (Guid?)asked.Id into questions
+        from question in questions.DefaultIfEmpty()
+        select new AiQualityHiddenRow(
+            reply.Id,
+            reply.CreatedAt,
+            reply.Outcome,
+            reply.MetaJson,
+            question != null && question.MetaJson != null && EF.Functions.JsonContains(question.MetaJson, SlmFallbackMeta));
+
+    public async Task<IReadOnlyList<AiQualityHiddenRow>> HiddenRowsAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken ct = default) =>
+        messageIds.Count == 0 ? [] : await HiddenRows(db, messageIds).ToListAsync(ct);
+
     public async Task<IReadOnlyList<AiQualityCandidate>> CandidatesAsync(
         DateTime fromUtc, DateTime toUtcExclusive, string outcome, CancellationToken ct = default)
     {
@@ -77,7 +100,7 @@ public class AiQualitySampleRepository(AppDbContext db) : IAiQualitySampleReposi
             .ToLookup(c => c.UserId, c => c.PolicyVersion);
 
         return rows
-            .Select(r => new AiQualityCandidate(r.Id, r.CreatedAt, r.Birth, consents[r.OwnerId].ToList(), r.Managed))
+            .Select(r => new AiQualityCandidate(r.Id, r.CreatedAt, r.Birth, consents[r.OwnerId].ToList(), r.Managed, r.SessionDeleted))
             .ToList();
     }
 
