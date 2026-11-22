@@ -3,19 +3,58 @@
 import React, { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2Icon, GraduationCapIcon, InfoIcon, UsersIcon } from "lucide-react";
+import { Building2Icon, CheckIcon, GraduationCapIcon, InfoIcon, UsersIcon, XIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { REGISTER_PARENT_EMAIL_KEY } from "@/components/auth/ParentConsentForm";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+
+// Đánh giá độ mạnh mật khẩu (1..4)
+function getPasswordStrength(pass: string): {
+  score: number;
+  label: string;
+  color: string;
+  barColor: string;
+} {
+  if (!pass) {
+    return { score: 0, label: "", color: "", barColor: "" };
+  }
+
+  let score = 0;
+  if (pass.length >= 8) score++;
+  if (pass.length >= 10 && /[A-Z]/.test(pass) && /[a-z]/.test(pass)) score++;
+  if (/\d/.test(pass)) score++;
+  if (/[^a-zA-Z0-9]/.test(pass)) score++;
+
+  const finalScore = Math.min(4, Math.max(1, score));
+
+  switch (finalScore) {
+    case 1:
+      return { score: 1, label: "Yếu", color: "text-destructive", barColor: "bg-destructive" };
+    case 2:
+      return { score: 2, label: "Trung bình", color: "text-amber-500", barColor: "bg-amber-500" };
+    case 3:
+      return { score: 3, label: "Khá mạnh", color: "text-blue-500", barColor: "bg-blue-500" };
+    case 4:
+    default:
+      return {
+        score: 4,
+        label: "Rất mạnh",
+        color: "text-emerald-600 dark:text-emerald-400",
+        barColor: "bg-emerald-600 dark:bg-emerald-500",
+      };
+  }
+}
 
 // [Q11] Ngưỡng tuổi theo luật VN (khớp AgeGroups ở backend; backend tính lại và là nơi quyết định)
+const STUDENT_MIN_AGE = 13;
 const CHILD_MAX_AGE_EXCLUSIVE = 16;
 const ADULT_AGE = 18;
 const MAX_AGE = 100;
@@ -59,6 +98,17 @@ function clearPrefillParentEmail() {
   }
 }
 
+interface FieldErrors {
+  fullName?: string;
+  dateOfBirth?: string;
+  email?: string;
+  phone?: string;
+  password?: string;
+  confirmPassword?: string;
+  parentEmail?: string;
+  agreeTerms?: string;
+}
+
 export function RegisterForm() {
   const router = useRouter();
   const { register } = useAuth();
@@ -77,10 +127,26 @@ export function RegisterForm() {
   const [parentEmail, setParentEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [agreeTerms, setAgreeTerms] = useState(false);
 
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const passwordStrength = getPasswordStrength(password);
+  const isConfirmTouched = confirmPassword.length > 0;
+  const isPasswordMatch = isConfirmTouched && password === confirmPassword;
+  const isPasswordMismatch = isConfirmTouched && password !== confirmPassword;
+
+  const clearFieldError = (fieldName: keyof FieldErrors) => {
+    if (fieldErrors[fieldName]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[fieldName];
+        return next;
+      });
+    }
+  };
 
   const age = ageFrom(dateOfBirth);
   const isMinorStudent = role === "student" && age !== null && age >= 0 && age < ADULT_AGE;
@@ -107,78 +173,93 @@ export function RegisterForm() {
     e.preventDefault();
     setError(null);
 
-    // 1. Kiểm tra tính hợp lệ cơ bản ở phía client
+    const errors: FieldErrors = {};
+
+    // 1. Kiểm tra tính hợp lệ cơ bản ở phía client dưới từng ô
     if (!fullName.trim()) {
-      setError("Vui lòng nhập họ và tên.");
-      return;
-    }
-    if (fullName.trim().length > 100) {
-      setError("Họ và tên không được vượt quá 100 ký tự.");
-      return;
-    }
-    if (!email.trim()) {
-      setError("Vui lòng nhập email.");
-      return;
-    }
-    if (email.trim().length > 100) {
-      setError("Email không được vượt quá 100 ký tự.");
-      return;
-    }
-    if (password.length < 8) {
-      setError("Mật khẩu phải có tối thiểu 8 ký tự.");
-      return;
-    }
-    if (password.length > 100) {
-      setError("Mật khẩu không được vượt quá 100 ký tự.");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError("Mật khẩu xác nhận không khớp.");
-      return;
-    }
-    if (age === null) {
-      setError("Vui lòng nhập ngày sinh.");
-      return;
-    }
-    if (dateOfBirth > todayInVietnam()) {
-      setError("Ngày sinh không được ở tương lai.");
-      return;
-    }
-    if (age > MAX_AGE) {
-      setError("Ngày sinh không hợp lệ.");
-      return;
-    }
-    if (role === "parent" && age < ADULT_AGE) {
-      setError(`Tài khoản phụ huynh phải từ ${ADULT_AGE} tuổi.`);
-      return;
-    }
-    if (parentEmailRequired && !parentEmail.trim()) {
-      setError(`Học sinh dưới ${CHILD_MAX_AGE_EXCLUSIVE} tuổi cần nhập email phụ huynh để phụ huynh đồng ý.`);
-      return;
-    }
-    if (isMinorStudent && parentEmail.trim().toLowerCase() === email.trim().toLowerCase()) {
-      setError("Email phụ huynh phải khác email của học sinh.");
-      return;
+      errors.fullName = "Vui lòng nhập họ và tên.";
+    } else if (fullName.trim().length > 100) {
+      errors.fullName = "Họ và tên không được vượt quá 100 ký tự.";
     }
 
-    // 2. Validate số điện thoại Việt Nam nếu có nhập
+    if (!dateOfBirth) {
+      errors.dateOfBirth = "Vui lòng chọn ngày sinh.";
+    } else if (dateOfBirth > todayInVietnam()) {
+      errors.dateOfBirth = "Ngày sinh không được ở tương lai.";
+    } else if (age !== null && age > MAX_AGE) {
+      errors.dateOfBirth = "Ngày sinh không hợp lệ.";
+    } else if (role === "parent" && age !== null && age < ADULT_AGE) {
+      errors.dateOfBirth = `Tài khoản phụ huynh phải từ ${ADULT_AGE} tuổi.`;
+    } else if (role === "student" && age !== null && age < STUDENT_MIN_AGE) {
+      errors.dateOfBirth = `Học sinh phải từ đủ ${STUDENT_MIN_AGE} tuổi để tự đăng ký. Với học sinh nhỏ hơn, vui lòng nhờ Phụ huynh đăng ký và quản lý hồ sơ.`;
+    }
+
+    if (!email.trim()) {
+      errors.email = "Vui lòng nhập email.";
+    } else if (email.trim().length > 100) {
+      errors.email = "Email không được vượt quá 100 ký tự.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      errors.email = "Email không đúng định dạng.";
+    }
+
     let normalizedPhone: string | null = null;
     if (phone.trim()) {
       if (phone.trim().length > 20) {
-        setError("Số điện thoại không được vượt quá 20 ký tự.");
-        return;
+        errors.phone = "Số điện thoại không được vượt quá 20 ký tự.";
+      } else {
+        const phoneValidation = validateVietnamesePhone(phone);
+        if (!phoneValidation.valid) {
+          errors.phone = "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912 345 678 hoặc +84912345678).";
+        } else {
+          normalizedPhone = phoneValidation.normalized!;
+        }
       }
-      const phoneValidation = validateVietnamesePhone(phone);
-      if (!phoneValidation.valid) {
-        setError("Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678 hoặc +84912345678).");
-        return;
-      }
-      normalizedPhone = phoneValidation.normalized!;
     }
 
+    if (!password) {
+      errors.password = "Vui lòng nhập mật khẩu.";
+    } else if (password.length < 8) {
+      errors.password = "Mật khẩu phải có tối thiểu 8 ký tự.";
+    } else if (password.length > 100) {
+      errors.password = "Mật khẩu không được vượt quá 100 ký tự.";
+    }
+
+    if (!confirmPassword) {
+      errors.confirmPassword = "Vui lòng xác nhận mật khẩu.";
+    } else if (password && confirmPassword !== password) {
+      errors.confirmPassword = "Mật khẩu xác nhận không khớp.";
+    }
+
+    if (parentEmailRequired && !parentEmail.trim()) {
+      errors.parentEmail = `Học sinh dưới ${CHILD_MAX_AGE_EXCLUSIVE} tuổi cần nhập email phụ huynh để phụ huynh đồng ý.`;
+    } else if (parentEmail.trim()) {
+      if (parentEmail.trim().length > 100) {
+        errors.parentEmail = "Email phụ huynh không được vượt quá 100 ký tự.";
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail.trim())) {
+        errors.parentEmail = "Email phụ huynh không đúng định dạng.";
+      } else if (isMinorStudent && parentEmail.trim().toLowerCase() === email.trim().toLowerCase()) {
+        errors.parentEmail = "Email phụ huynh phải khác email của học sinh.";
+      }
+    }
+
+    if (!agreeTerms) {
+      errors.agreeTerms = "Vui lòng đồng ý với Điều khoản sử dụng và Chính sách bảo mật để tiếp tục.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      const firstFieldId = Object.keys(errors)[0];
+      const targetElement = document.getElementById(firstFieldId);
+      if (targetElement) {
+        targetElement.focus();
+      }
+      return;
+    }
+
+    setFieldErrors({});
     setIsSubmitting(true);
     try {
-      // 3. Gọi API đăng ký
+      // 2. Gọi API đăng ký
       await register({
         fullName: fullName.trim(),
         email: email.trim(),
@@ -189,13 +270,18 @@ export function RegisterForm() {
         password,
       });
 
-      // 4. Đăng ký thành công -> Chuyển sang màn hình xác thực mã OTP gửi về email
+      // 3. Đăng ký thành công -> Chuyển sang màn hình xác thực mã OTP gửi về email
       setPendingEmail(email.trim());
       clearPrefillParentEmail();
       router.push("/verify-email");
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message || "Đăng ký không thành công. Vui lòng thử lại.");
+        const msg = err.message || "Đăng ký không thành công. Vui lòng thử lại.";
+        if (msg.toLowerCase().includes("email đã được sử dụng") || msg.toLowerCase().includes("email already in use")) {
+          setFieldErrors((prev) => ({ ...prev, email: msg }));
+        } else {
+          setError(msg);
+        }
       } else {
         setError("Có lỗi kết nối máy chủ. Vui lòng thử lại sau.");
       }
@@ -221,7 +307,7 @@ export function RegisterForm() {
         </Alert>
       )}
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} autoComplete="off" noValidate>
         <FieldGroup>
           {/* Lựa chọn vai trò: Học sinh, Phụ huynh; Trung tâm (UC-64) có form riêng nên chuyển sang trang đăng ký trung tâm */}
           <Field>
@@ -230,7 +316,10 @@ export function RegisterForm() {
               <Button
                 type="button"
                 variant={role === "student" ? "default" : "outline"}
-                onClick={() => setRole("student")}
+                onClick={() => {
+                  setRole("student");
+                  setFieldErrors({});
+                }}
               >
                 <GraduationCapIcon aria-hidden="true" />
                 Học sinh
@@ -238,7 +327,10 @@ export function RegisterForm() {
               <Button
                 type="button"
                 variant={role === "parent" ? "default" : "outline"}
-                onClick={() => setRole("parent")}
+                onClick={() => {
+                  setRole("parent");
+                  setFieldErrors({});
+                }}
               >
                 <UsersIcon aria-hidden="true" />
                 Phụ huynh
@@ -251,100 +343,219 @@ export function RegisterForm() {
           </Field>
 
           {/* Họ và tên */}
-          <Field>
+          <Field data-invalid={Boolean(fieldErrors.fullName)}>
             <FieldLabel htmlFor="fullName">
               Họ và tên <span className="text-destructive">*</span>
             </FieldLabel>
             <Input
               id="fullName"
               type="text"
-              required
               maxLength={100}
               value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.fullName)}
+              aria-describedby={fieldErrors.fullName ? "fullName-error" : undefined}
+              onChange={(e) => {
+                setFullName(e.target.value);
+                clearFieldError("fullName");
+              }}
               placeholder="Nguyễn Văn A"
             />
+            {fieldErrors.fullName && <FieldError id="fullName-error">{fieldErrors.fullName}</FieldError>}
           </Field>
 
           {/* Ngày sinh: dùng để tính nhóm tuổi */}
-          <Field>
+          <Field data-invalid={Boolean(fieldErrors.dateOfBirth)}>
             <FieldLabel htmlFor="dateOfBirth">
               Ngày sinh <span className="text-destructive">*</span>
             </FieldLabel>
             <Input
               id="dateOfBirth"
               type="date"
-              required
               max={todayInVietnam()}
               value={dateOfBirth}
-              onChange={(e) => setDateOfBirth(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.dateOfBirth)}
+              aria-describedby={
+                fieldErrors.dateOfBirth
+                  ? "dateOfBirth-error"
+                  : role === "student" && age !== null && age < STUDENT_MIN_AGE
+                  ? "dateOfBirth-under-age"
+                  : role === "parent"
+                  ? "dateOfBirth-desc"
+                  : undefined
+              }
+              onChange={(e) => {
+                setDateOfBirth(e.target.value);
+                clearFieldError("dateOfBirth");
+              }}
             />
-            {role === "parent" && (
-              <FieldDescription>Tài khoản phụ huynh dành cho người từ {ADULT_AGE} tuổi.</FieldDescription>
+            {fieldErrors.dateOfBirth ? (
+              <FieldError id="dateOfBirth-error">{fieldErrors.dateOfBirth}</FieldError>
+            ) : role === "student" && age !== null && age < STUDENT_MIN_AGE ? (
+              <div
+                id="dateOfBirth-under-age"
+                role="alert"
+                className="flex items-start gap-1.5 pt-1 text-xs font-medium text-amber-600 dark:text-amber-400"
+              >
+                <InfoIcon className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                <span>
+                  Học sinh phải từ đủ {STUDENT_MIN_AGE} tuổi để tự đăng ký. Với học sinh nhỏ hơn,
+                  vui lòng nhờ{" "}
+                  <Link href="/register?role=parent" className="underline underline-offset-2">
+                    Phụ huynh đăng ký tài khoản
+                  </Link>{" "}
+                  và quản lý hồ sơ cho bạn.
+                </span>
+              </div>
+            ) : (
+              role === "parent" && (
+                <FieldDescription id="dateOfBirth-desc">
+                  Tài khoản phụ huynh dành cho người từ {ADULT_AGE} tuổi.
+                </FieldDescription>
+              )
             )}
           </Field>
 
           {/* Email đăng nhập */}
-          <Field>
+          <Field data-invalid={Boolean(fieldErrors.email)}>
             <FieldLabel htmlFor="email">
               Email <span className="text-destructive">*</span>
             </FieldLabel>
             <Input
               id="email"
               type="email"
-              required
               maxLength={100}
+              autoComplete="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.email)}
+              aria-describedby={fieldErrors.email ? "email-error" : undefined}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                clearFieldError("email");
+              }}
               placeholder="example@gmail.com"
             />
+            {fieldErrors.email && <FieldError id="email-error">{fieldErrors.email}</FieldError>}
           </Field>
 
           {/* Số điện thoại Việt Nam */}
-          <Field>
+          <Field data-invalid={Boolean(fieldErrors.phone)}>
             <FieldLabel htmlFor="phone">Số điện thoại liên hệ (Việt Nam)</FieldLabel>
             <Input
               id="phone"
               type="tel"
               maxLength={20}
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.phone)}
+              aria-describedby={fieldErrors.phone ? "phone-error" : "phone-desc"}
+              onChange={(e) => {
+                setPhone(e.target.value);
+                clearFieldError("phone");
+              }}
               placeholder="0912 345 678 hoặc +84912345678"
             />
-            <FieldDescription>
-              Chỉ chấp nhận số điện thoại di động Việt Nam (10 chữ số, đầu số 03, 05, 07, 08, 09).
-            </FieldDescription>
+            {fieldErrors.phone ? (
+              <FieldError id="phone-error">{fieldErrors.phone}</FieldError>
+            ) : (
+              <FieldDescription id="phone-desc">
+                Chỉ chấp nhận số điện thoại di động Việt Nam (10 chữ số, đầu số 03, 05, 07, 08, 09).
+              </FieldDescription>
+            )}
           </Field>
 
           {/* Mật khẩu */}
-          <Field>
+          <Field data-invalid={Boolean(fieldErrors.password)}>
             <FieldLabel htmlFor="password">
               Mật khẩu <span className="text-destructive">*</span>
             </FieldLabel>
             <PasswordInput
               id="password"
-              required
               minLength={8}
               maxLength={100}
+              autoComplete="new-password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.password)}
+              aria-describedby={fieldErrors.password ? "password-error" : undefined}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                clearFieldError("password");
+              }}
               placeholder="Tối thiểu 8 ký tự, tối đa 100"
             />
+            {password.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Độ mạnh mật khẩu:</span>
+                  <span className={cn("font-medium", passwordStrength.color)}>
+                    {passwordStrength.label}
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5" aria-hidden="true">
+                  {[1, 2, 3, 4].map((level) => (
+                    <div
+                      key={level}
+                      className={cn(
+                        "h-1.5 rounded-full transition-all duration-300",
+                        passwordStrength.score >= level ? passwordStrength.barColor : "bg-muted"
+                      )}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            {fieldErrors.password && <FieldError id="password-error">{fieldErrors.password}</FieldError>}
           </Field>
 
           {/* Xác nhận mật khẩu */}
-          <Field>
+          <Field data-invalid={Boolean(fieldErrors.confirmPassword) || isPasswordMismatch}>
             <FieldLabel htmlFor="confirmPassword">
               Xác nhận mật khẩu <span className="text-destructive">*</span>
             </FieldLabel>
             <PasswordInput
               id="confirmPassword"
-              required
               maxLength={100}
+              autoComplete="new-password"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.confirmPassword) || isPasswordMismatch}
+              aria-describedby={
+                isConfirmTouched
+                  ? isPasswordMatch
+                    ? "confirmPassword-status"
+                    : "confirmPassword-error"
+                  : fieldErrors.confirmPassword
+                  ? "confirmPassword-error"
+                  : undefined
+              }
+              onChange={(e) => {
+                setConfirmPassword(e.target.value);
+                clearFieldError("confirmPassword");
+              }}
               placeholder="Nhập lại mật khẩu"
             />
+            {isConfirmTouched ? (
+              isPasswordMatch ? (
+                <div
+                  id="confirmPassword-status"
+                  role="status"
+                  className="flex items-center gap-1.5 pt-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
+                >
+                  <CheckIcon className="size-4 shrink-0" aria-hidden="true" />
+                  <span>Mật khẩu khớp</span>
+                </div>
+              ) : (
+                <div
+                  id="confirmPassword-error"
+                  role="alert"
+                  className="flex items-center gap-1.5 pt-1 text-xs font-medium text-destructive"
+                >
+                  <XIcon className="size-4 shrink-0" aria-hidden="true" />
+                  <span>Mật khẩu chưa khớp</span>
+                </div>
+              )
+            ) : (
+              fieldErrors.confirmPassword && (
+                <FieldError id="confirmPassword-error">{fieldErrors.confirmPassword}</FieldError>
+              )
+            )}
           </Field>
 
           {/* Email phụ huynh: học sinh dưới 18 (bắt buộc khi dưới 16) */}
@@ -358,25 +569,70 @@ export function RegisterForm() {
                     : `Bạn chưa đủ ${ADULT_AGE} tuổi: có thể nhập email phụ huynh để mời liên kết tài khoản (không bắt buộc). Một số chức năng như chia sẻ hồ sơ cho trung tâm chỉ dành cho người từ ${ADULT_AGE} tuổi.`}
                 </AlertDescription>
               </Alert>
-              <Field>
+              <Field data-invalid={Boolean(fieldErrors.parentEmail)}>
                 <FieldLabel htmlFor="parentEmail">
                   Email phụ huynh {parentEmailRequired && <span className="text-destructive">*</span>}
                 </FieldLabel>
                 <Input
                   id="parentEmail"
                   type="email"
-                  required={parentEmailRequired}
                   maxLength={100}
                   value={parentEmail}
-                  onChange={(e) => setParentEmail(e.target.value)}
+                  aria-invalid={Boolean(fieldErrors.parentEmail)}
+                  aria-describedby={fieldErrors.parentEmail ? "parentEmail-error" : "parentEmail-desc"}
+                  onChange={(e) => {
+                    setParentEmail(e.target.value);
+                    clearFieldError("parentEmail");
+                  }}
                   placeholder="phuhuynh@gmail.com"
                 />
-                <FieldDescription>
-                  Lời mời được gửi tới email này sau khi bạn xác thực email của mình.
-                </FieldDescription>
+                {fieldErrors.parentEmail ? (
+                  <FieldError id="parentEmail-error">{fieldErrors.parentEmail}</FieldError>
+                ) : (
+                  <FieldDescription id="parentEmail-desc">
+                    Lời mời được gửi tới email này sau khi bạn xác thực email của mình.
+                  </FieldDescription>
+                )}
               </Field>
             </>
           )}
+
+          {/* Đồng ý điều khoản và chính sách bảo mật */}
+          <Field data-invalid={Boolean(fieldErrors.agreeTerms)} className="pt-1">
+            <div className="flex items-start gap-2.5">
+              <input
+                id="agreeTerms"
+                type="checkbox"
+                checked={agreeTerms}
+                aria-invalid={Boolean(fieldErrors.agreeTerms)}
+                aria-describedby={fieldErrors.agreeTerms ? "agreeTerms-error" : undefined}
+                onChange={(e) => {
+                  setAgreeTerms(e.target.checked);
+                  clearFieldError("agreeTerms");
+                }}
+                className={cn(
+                  "mt-0.5 size-4 rounded border-line text-brand focus:ring-brand cursor-pointer",
+                  fieldErrors.agreeTerms && "border-destructive ring-2 ring-destructive/20"
+                )}
+              />
+              <label htmlFor="agreeTerms" className="text-sm leading-snug text-ink-2 cursor-pointer select-none">
+                Tôi đồng ý với{" "}
+                <Link href="/terms" target="_blank" className="font-medium text-brand hover:underline">
+                  Điều khoản sử dụng
+                </Link>{" "}
+                và{" "}
+                <Link href="/privacy" target="_blank" className="font-medium text-brand hover:underline">
+                  Chính sách bảo mật
+                </Link>{" "}
+                của USDSS.
+              </label>
+            </div>
+            {fieldErrors.agreeTerms && (
+              <FieldError id="agreeTerms-error" className="pl-6.5">
+                {fieldErrors.agreeTerms}
+              </FieldError>
+            )}
+          </Field>
 
           <Button type="submit" size="xl" disabled={isSubmitting} className="w-full" loading={isSubmitting}>
             {isSubmitting ? "Đang xử lý..." : "Tạo tài khoản"}
