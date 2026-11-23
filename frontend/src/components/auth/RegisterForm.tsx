@@ -7,6 +7,7 @@ import { Building2Icon, CheckIcon, GraduationCapIcon, InfoIcon, UsersIcon, XIcon
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
+import { useAccountPolicies } from "@/lib/use-account-policies";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -128,6 +129,8 @@ export function RegisterForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
+  // [UC-104] Bản Điều khoản và Chính sách bảo mật đang hiển thị; gửi kèm khi đăng ký để ghi bằng chứng đồng ý
+  const accountPolicies = useAccountPolicies();
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
@@ -268,6 +271,7 @@ export function RegisterForm() {
         dateOfBirth,
         parentEmail: isMinorStudent && parentEmail.trim() ? parentEmail.trim() : null,
         password,
+        acceptedPolicies: accountPolicies.acceptedPolicies,
       });
 
       // 3. Đăng ký thành công -> Chuyển sang màn hình xác thực mã OTP gửi về email
@@ -276,6 +280,8 @@ export function RegisterForm() {
       router.push("/verify-email");
     } catch (err) {
       if (err instanceof ApiError) {
+        // Admin có thể vừa công bố bản mới: tải lại để người dùng đọc đúng bản trước khi đồng ý
+        if (err.status === 400) accountPolicies.reload();
         const msg = err.message || "Đăng ký không thành công. Vui lòng thử lại.";
         if (msg.toLowerCase().includes("email đã được sử dụng") || msg.toLowerCase().includes("email already in use")) {
           setFieldErrors((prev) => ({ ...prev, email: msg }));
@@ -625,8 +631,24 @@ export function RegisterForm() {
                   Chính sách bảo mật
                 </Link>{" "}
                 của USDSS.
+                {accountPolicies.ready && (accountPolicies.policies?.terms || accountPolicies.policies?.privacy) && (
+                  <span className="block text-body-s text-ink-3">
+                    Phiên bản hiện hành:
+                    {accountPolicies.policies?.terms && ` Điều khoản ${accountPolicies.policies.terms.version}`}
+                    {accountPolicies.policies?.terms && accountPolicies.policies?.privacy && ","}
+                    {accountPolicies.policies?.privacy && ` Chính sách bảo mật ${accountPolicies.policies.privacy.version}`}.
+                  </span>
+                )}
               </label>
             </div>
+            {accountPolicies.error && (
+              <FieldError className="pl-6.5">
+                Không tải được nội dung điều khoản.{" "}
+                <button type="button" className="underline" onClick={accountPolicies.reload}>
+                  Thử lại
+                </button>
+              </FieldError>
+            )}
             {fieldErrors.agreeTerms && (
               <FieldError id="agreeTerms-error" className="pl-6.5">
                 {fieldErrors.agreeTerms}
@@ -634,7 +656,7 @@ export function RegisterForm() {
             )}
           </Field>
 
-          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full" loading={isSubmitting}>
+          <Button type="submit" size="xl" disabled={isSubmitting || !accountPolicies.ready} className="w-full" loading={isSubmitting}>
             {isSubmitting ? "Đang xử lý..." : "Tạo tài khoản"}
           </Button>
         </FieldGroup>

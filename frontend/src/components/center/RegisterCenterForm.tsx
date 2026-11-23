@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Building2Icon, GraduationCapIcon, ShieldCheckIcon, UsersIcon } from "lucide-react";
 import { centerAccountApi, ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
+import { useAccountPolicies } from "@/lib/use-account-policies";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -24,6 +25,8 @@ export function RegisterCenterForm() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeCommitment, setAgreeCommitment] = useState(false);
+  // [UC-104] Bản Điều khoản và Chính sách bảo mật đang hiển thị; gửi kèm khi đăng ký để ghi bằng chứng đồng ý
+  const accountPolicies = useAccountPolicies();
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,12 +62,15 @@ export function RegisterCenterForm() {
         registrantPosition: registrantPosition.trim() || undefined,
         agreeTerms,
         agreeTruthfulnessCommitment: agreeCommitment,
+        acceptedPolicies: accountPolicies.acceptedPolicies,
       });
 
       setPendingEmail(email.trim());
       router.push(`/register/center/verify-email?email=${encodeURIComponent(email.trim())}`);
     } catch (err) {
       if (err instanceof ApiError) {
+        // Admin có thể vừa công bố bản mới: tải lại để người dùng đọc đúng bản trước khi đồng ý
+        if (err.status === 400) accountPolicies.reload();
         setError(err.message);
       } else {
         setError("Đăng ký không thành công. Vui lòng kiểm tra lại thông tin và thử lại.");
@@ -253,7 +259,18 @@ export function RegisterCenterForm() {
             </label>
           </div>
 
-          <Button type="submit" size="xl" disabled={isSubmitting} className="w-full mt-2" loading={isSubmitting}>
+          {accountPolicies.error && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                Không tải được nội dung điều khoản.{" "}
+                <button type="button" className="underline" onClick={accountPolicies.reload}>
+                  Thử lại
+                </button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <Button type="submit" size="xl" disabled={isSubmitting || !accountPolicies.ready} className="w-full mt-2" loading={isSubmitting}>
             {isSubmitting ? "Đang xử lý đăng ký..." : "Đăng ký tài khoản trung tâm"}
           </Button>
         </FieldGroup>

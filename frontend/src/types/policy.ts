@@ -71,3 +71,11 @@ export interface UpdatePolicyDraftRequest {
   changeSummary: string | null;
   requiresReconsent: boolean;
 }
+
+// ---------------------------------------------------------------- đồng ý lúc đăng ký (UC-104)
+
+/** Một tài liệu người dùng đã đọc và đồng ý, kèm ĐÚNG phiên bản được hiển thị. Khớp AcceptPolicyItem của backend. */
+export interface AcceptedPolicy {
+  kind: "terms_of_use" | "privacy_policy";
+  version: string;
+}

@@ -1,4 +1,5 @@
 import type { ProfileFlowDraft } from "@/types/profile-flow";
+import type { AcceptedPolicy } from "@/types/policy";
 export * from "@/types/dashboard";
 
 // Mirrors the DTOs of the ASP.NET Core API (StudyAbroad.Application).
@@ -74,6 +75,8 @@ export interface RegisterCenterRequest {
   registrantPosition?: string;
   agreeTerms: boolean;
   agreeTruthfulnessCommitment: boolean;
+  /** [UC-104] Điều khoản và Chính sách bảo mật đã đọc, kèm đúng phiên bản được hiển thị. */
+  acceptedPolicies?: AcceptedPolicy[];
 }
 
 export interface VerifyCenterEmailRequest {
@@ -510,6 +513,8 @@ export interface RegisterRequest {
   /** Bắt buộc với học sinh dưới 16, không bắt buộc với 16–17 */
   parentEmail?: string | null;
   phone?: string | null;
+  /** [UC-104] Điều khoản và Chính sách bảo mật đã đọc, kèm đúng phiên bản được hiển thị. */
+  acceptedPolicies?: AcceptedPolicy[];
 }
 
 export interface LoginRequest {
