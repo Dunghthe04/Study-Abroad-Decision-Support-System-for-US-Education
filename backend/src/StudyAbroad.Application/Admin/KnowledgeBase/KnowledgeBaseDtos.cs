@@ -55,5 +55,10 @@ public record KnowledgeImportErrorDto(int RowNumber, string Message);
 public record KnowledgeImportPreviewDto(
     int TotalRows, IReadOnlyList<KnowledgeImportRow> Rows, IReadOnlyList<KnowledgeImportErrorDto> Errors, int Pending = 0);
 
+/// <summary>
+/// VectorsStarted: advisor đã bắt đầu tạo vector cho dòng thiếu vector. VectorWarning: không nhờ được advisor (tắt, lỗi),
+/// các dòng đã lưu nhưng chat chưa thấy cho tới khi vector được tạo.
+/// </summary>
 public record KnowledgeImportResultDto(
-    int TotalRows, int Created, int Updated, int Unchanged, IReadOnlyList<KnowledgeImportErrorDto> Errors, int Pending = 0);
+    int TotalRows, int Created, int Updated, int Unchanged, IReadOnlyList<KnowledgeImportErrorDto> Errors, int Pending = 0,
+    bool VectorsStarted = false, string? VectorWarning = null);

@@ -54,6 +54,10 @@ public class UsageCollectingAdvisorClient(IAdvisorClient inner, IAiUsageCollecto
     public Task<PendingQuestionDto> PendingQuestionAsync(AdvisorPendingQuestionRequest request, CancellationToken ct = default) =>
         inner.PendingQuestionAsync(request, ct);
 
+    // Tạo vector gọi dịch vụ embedding, không có aiUsage trong phản hồi; vẫn phải chuyển tiếp, nếu không sẽ rơi vào bản mặc định (ném lỗi)
+    public Task<KnowledgeEmbedDto> EmbedKnowledgeAsync(CancellationToken ct = default) =>
+        inner.EmbedKnowledgeAsync(ct);
+
     public async Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default)
     {
         var response = await inner.WriteCompareNoteAsync(request, ct);

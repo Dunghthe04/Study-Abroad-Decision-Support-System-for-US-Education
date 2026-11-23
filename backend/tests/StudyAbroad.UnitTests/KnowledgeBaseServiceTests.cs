@@ -1,6 +1,8 @@
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using StudyAbroad.Application.Admin.KnowledgeBase;
+using StudyAbroad.Application.Advisor;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using StudyAbroad.Infrastructure.Persistence.Repositories;
@@ -11,7 +13,10 @@ namespace StudyAbroad.UnitTests;
 public class KnowledgeBaseServiceTests
 {
     private static KnowledgeBaseService Svc(FakeKnowledgeRepository repo, params KnowledgeImportRow[] rows) =>
-        new(repo, new FakeKnowledgeReader(rows));
+        Svc(repo, new FakeKnowledgeAdvisor(), rows);
+
+    private static KnowledgeBaseService Svc(FakeKnowledgeRepository repo, FakeKnowledgeAdvisor advisor, params KnowledgeImportRow[] rows) =>
+        new(repo, new FakeKnowledgeReader(rows), advisor, NullLogger<KnowledgeBaseService>.Instance);
 
     private static SaveKnowledgeEntryRequest Full(string question = "OPT là gì?", int? entryNo = null) =>
         new(entryNo, "faq", "LABEL_VISA_F1", question, "OPT là thời gian thực tập sau tốt nghiệp.", "Study in the States", null,
@@ -243,11 +248,148 @@ public class KnowledgeBaseServiceTests
         Assert.Empty(repo.Items);
     }
 
+    // --- tạo vector sau khi lưu: chat chỉ thấy dòng đã có vector ---
+
+    [Fact]
+    public async Task ImportAsync_AsksAdvisorForVectorsOnce_AfterTheRowsAreSaved()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var advisor = new FakeKnowledgeAdvisor { OnCall = () => repo.Items.Count };
+        var rows = new[] { Row(2, "1"), Row(3, "2", "Câu hai?") };
+
+        var result = await Svc(repo, advisor, rows).ImportAsync(new MemoryStream());
+
+        Assert.Equal(1, advisor.Calls);
+        Assert.Equal(2, advisor.RowsSavedWhenCalled);   // gọi SAU khi lưu, không phải trước
+        Assert.True(result.VectorsStarted);
+        Assert.Null(result.VectorWarning);
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenAdvisorIsDown_StillSavesRowsAndOnlyWarns()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var advisor = new FakeKnowledgeAdvisor { Error = new HttpRequestException("advisor tắt") };
+
+        var result = await Svc(repo, advisor, Row(2, "1")).ImportAsync(new MemoryStream());
+
+        Assert.Equal(1, result.Created);
+        Assert.Single(repo.Items);
+        Assert.False(result.VectorsStarted);
+        Assert.Equal(KnowledgeBaseService.EmbedWarning, result.VectorWarning);
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenAdvisorHasNoSuchApi_StillSavesRowsAndOnlyWarns()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var advisor = new FakeKnowledgeAdvisor { Error = new NotSupportedException() };   // bản mặc định của IAdvisorClient
+
+        var result = await Svc(repo, advisor, Row(2, "1")).ImportAsync(new MemoryStream());
+
+        Assert.Single(repo.Items);
+        Assert.NotNull(result.VectorWarning);
+    }
+
+    [Fact]
+    public async Task ImportAsync_WithNoValidRow_DoesNotBotherAdvisor()
+    {
+        var advisor = new FakeKnowledgeAdvisor();
+        var rows = new[] { Row(2, null), Row(3, "x") };
+
+        var result = await Svc(new FakeKnowledgeRepository(), advisor, rows).ImportAsync(new MemoryStream());
+
+        Assert.Equal(0, advisor.Calls);
+        Assert.False(result.VectorsStarted);
+        Assert.Null(result.VectorWarning);
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenNothingChanged_StillAsksSoRowsMissedByAnEarlierFailureGetVectors()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var same = repo.Add(entryNo: 1, question: "OPT là gì?");
+        same.Label = "LABEL_VISA_F1";
+        same.Answer = "Câu trả lời.";
+        same.Source = null;
+        same.SourceUrl = "https://studyinthestates.dhs.gov";
+        var advisor = new FakeKnowledgeAdvisor();
+
+        var result = await Svc(repo, advisor, Row(2, "1")).ImportAsync(new MemoryStream());
+
+        Assert.Equal(1, result.Unchanged);
+        Assert.Equal(1, advisor.Calls);
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenTheRequestIsCancelled_DoesNotSwallowIt()
+    {
+        using var cts = new CancellationTokenSource();
+        var advisor = new FakeKnowledgeAdvisor { OnCall = () => { cts.Cancel(); cts.Token.ThrowIfCancellationRequested(); return 0; } };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => Svc(new FakeKnowledgeRepository(), advisor, Row(2, "1")).ImportAsync(new MemoryStream(), cts.Token));
+    }
+
+    [Fact]
+    public async Task CreateAsync_AsksAdvisor_AndAdvisorFailureDoesNotFailTheCreate()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var advisor = new FakeKnowledgeAdvisor { Error = new HttpRequestException() };
+
+        var created = await Svc(repo, advisor).CreateAsync(Full());
+
+        Assert.Equal(1, advisor.Calls);
+        Assert.Equal("OPT là gì?", created.Question);
+        Assert.Single(repo.Items);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_AsksAdvisorOnlyWhenTheQuestionChanged()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var document = repo.Add();
+        var advisor = new FakeKnowledgeAdvisor();
+        var svc = Svc(repo, advisor);
+
+        await svc.UpdateAsync(document.Id, Full(question: document.Question));   // chỉ đổi chỗ khác: vector còn đúng
+        Assert.Equal(0, advisor.Calls);
+
+        await svc.UpdateAsync(document.Id, Full(question: "Câu hỏi mới?"));
+        Assert.Equal(1, advisor.Calls);
+    }
+
     [Fact]
     public async Task ImportAsync_EmptySheet_Throws()
     {
         await Assert.ThrowsAsync<InvalidDataException>(() => Svc(new FakeKnowledgeRepository()).ImportAsync(new MemoryStream()));
     }
+}
+
+// Advisor giả chỉ biết tạo vector; mọi việc khác không được gọi
+internal sealed class FakeKnowledgeAdvisor : IAdvisorClient
+{
+    public int Calls { get; private set; }
+    public Exception? Error { get; init; }
+    public Func<int>? OnCall { get; init; }   // chạy khi được gọi; kết quả ghi vào RowsSavedWhenCalled
+    public int RowsSavedWhenCalled { get; private set; }
+
+    public Task<KnowledgeEmbedDto> EmbedKnowledgeAsync(CancellationToken ct = default)
+    {
+        Calls++;
+        if (OnCall is not null)
+            RowsSavedWhenCalled = OnCall();
+        if (Error is not null)
+            throw Error;
+        return Task.FromResult(new KnowledgeEmbedDto(2, true, 0, null, true));
+    }
+
+    public Task<AdvisorChatResponse> ChatAsync(AdvisorChatRequest request, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<GoalNoteResponseDto> WriteGoalNoteAsync(GoalNoteRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ScenarioNoteResponseDto> WriteScenarioNoteAsync(ScenarioNoteRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<RecommendNoteResponseDto> WriteRecommendNoteAsync(RecommendNoteRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
 }
 
 internal class FakeKnowledgeReader(params KnowledgeImportRow[] rows) : IKnowledgeWorkbookReader

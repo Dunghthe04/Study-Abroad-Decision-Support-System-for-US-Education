@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using StudyAbroad.Application.Admin.KnowledgeBase;
 using StudyAbroad.Infrastructure.Import;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace StudyAbroad.UnitTests;
@@ -75,7 +76,7 @@ public class KnowledgeWorkbookReaderTests
         var rows = new KnowledgeWorkbookReader().Read(template);
         template.Position = 0;
 
-        var preview = await new KnowledgeBaseService(new FakeKnowledgeRepository(), new KnowledgeWorkbookReader()).PreviewAsync(template);
+        var preview = await new KnowledgeBaseService(new FakeKnowledgeRepository(), new KnowledgeWorkbookReader(), new FakeKnowledgeAdvisor(), NullLogger<KnowledgeBaseService>.Instance).PreviewAsync(template);
 
         Assert.Equal(2, rows.Count);
         Assert.Empty(preview.Errors);
