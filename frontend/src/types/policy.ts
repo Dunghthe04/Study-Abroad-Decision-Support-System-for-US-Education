@@ -104,3 +104,18 @@ export interface PolicyAcceptanceStatus {
   hasUpdates: boolean;
   items: PolicyAcceptanceItem[];
 }
+
+/** Một lần đồng ý hoặc từ chối trong lịch sử của chính người dùng. Khớp PolicyConsentRecordDto. */
+export interface PolicyConsentRecord {
+  kind: PolicyKind;
+  version: string;
+  /** true: đồng ý; false: từ chối. */
+  granted: boolean;
+  acceptedAt: string;
+  /** Lần gần nhất của loại này, tức tình trạng hiện tại. */
+  isLatest: boolean;
+}
+
+export interface PolicyAcceptanceHistory {
+  items: PolicyConsentRecord[];
+}
