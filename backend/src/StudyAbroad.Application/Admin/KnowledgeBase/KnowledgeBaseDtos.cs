@@ -49,6 +49,15 @@ public record KnowledgeImportRow(
     int RowNumber, string? Id, string? DocType, string? Label, string? Question, string? Answer, string? Source,
     string? SourceUrl, string? RetrievedAt, string? TopicCode, string? ImageUrl, string? Note);
 
+/// <summary>
+/// Tiến độ tạo vector cho trang admin. Available: false khi không hỏi được advisor (tắt, chưa có API, sai khóa); khi đó các số còn lại là 0.
+/// Pending: số dòng chưa có vector, tức chat chưa thấy. Started: chỉ có nghĩa với lần bấm tạo (false nếu không có gì để làm hoặc đang chạy).
+/// </summary>
+public record KnowledgeEmbedStatusDto(bool Available, int Pending, bool Running, int Done, string? Error, bool Started)
+{
+    public static KnowledgeEmbedStatusDto Unavailable { get; } = new(false, 0, false, 0, null, false);
+}
+
 public record KnowledgeImportErrorDto(int RowNumber, string Message);
 
 /// <summary>Pending: số dòng có note bắt đầu bằng "CHỜ DUYỆT", import bỏ qua, không kiểm tra, không lưu.</summary>

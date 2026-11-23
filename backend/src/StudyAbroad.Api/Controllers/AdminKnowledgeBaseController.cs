@@ -117,6 +117,16 @@ public class AdminKnowledgeBaseController(IKnowledgeBaseService knowledgeBase, I
         }
     }
 
+    /// <summary>Tiến độ tạo vector: pending là số dòng chat chưa thấy. Advisor tắt thì available = false (vẫn 200).</summary>
+    [HttpGet("embed-status")]
+    public async Task<ActionResult<KnowledgeEmbedStatusDto>> EmbedStatus(CancellationToken ct) =>
+        Ok(await knowledgeBase.GetEmbedStatusAsync(ct));
+
+    /// <summary>Nhờ advisor tạo vector cho dòng còn thiếu (nút "Thử lại" khi lần nhập trước chưa nhờ được).</summary>
+    [HttpPost("embed")]
+    public async Task<ActionResult<KnowledgeEmbedStatusDto>> StartEmbed(CancellationToken ct) =>
+        Ok(await knowledgeBase.StartEmbedAsync(ct));
+
     [HttpGet("template")]
     public IActionResult Template() =>
         File(templateWriter.Build(), XlsxContentType, "knowledge-base-template.xlsx");

@@ -85,4 +85,18 @@ export interface KnowledgeImportResult {
   unchanged: number;
   errors: KnowledgeImportError[];
   pending: number;
+  /** Advisor đã bắt đầu tạo vector cho dòng thiếu vector. */
+  vectorsStarted: boolean;
+  /** Có chữ khi không nhờ được advisor: dòng đã lưu nhưng chat chưa thấy. */
+  vectorWarning: string | null;
+}
+
+/** Tiến độ tạo vector. pending: số dòng chat chưa thấy. available=false: không hỏi được advisor. */
+export interface KnowledgeEmbedStatus {
+  available: boolean;
+  pending: number;
+  running: boolean;
+  done: number;
+  error: string | null;
+  started: boolean;
 }

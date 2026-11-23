@@ -359,6 +359,63 @@ public class KnowledgeBaseServiceTests
         Assert.Equal(1, advisor.Calls);
     }
 
+    // --- tiến độ tạo vector cho trang admin ---
+
+    [Fact]
+    public async Task GetEmbedStatus_MapsTheAdvisorAnswer_WithoutStartingAnything()
+    {
+        var advisor = new FakeKnowledgeAdvisor { Status = new KnowledgeEmbedDto(494, true, 12, null, false) };
+
+        var status = await Svc(new FakeKnowledgeRepository(), advisor).GetEmbedStatusAsync();
+
+        Assert.Equal(new KnowledgeEmbedStatusDto(true, 494, true, 12, null, false), status);
+        Assert.Equal(1, advisor.StatusCalls);
+        Assert.Equal(0, advisor.Calls);   // chỉ hỏi, không bắt đầu tạo
+    }
+
+    [Fact]
+    public async Task GetEmbedStatus_WhenAdvisorIsDown_ReportsUnavailableInsteadOfThrowing()
+    {
+        var advisor = new FakeKnowledgeAdvisor { Error = new HttpRequestException("advisor tắt") };
+
+        var status = await Svc(new FakeKnowledgeRepository(), advisor).GetEmbedStatusAsync();
+
+        Assert.False(status.Available);
+        Assert.Equal((0, false), (status.Pending, status.Running));
+    }
+
+    [Fact]
+    public async Task StartEmbed_AsksAdvisorToStart_AndReportsItsAnswer()
+    {
+        var advisor = new FakeKnowledgeAdvisor();   // trả Started = true
+
+        var status = await Svc(new FakeKnowledgeRepository(), advisor).StartEmbedAsync();
+
+        Assert.Equal(1, advisor.Calls);
+        Assert.True(status.Available && status.Started);
+    }
+
+    [Fact]
+    public async Task StartEmbed_WhenAdvisorHasNoSuchApi_ReportsUnavailable()
+    {
+        var advisor = new FakeKnowledgeAdvisor { Error = new NotSupportedException() };
+
+        var status = await Svc(new FakeKnowledgeRepository(), advisor).StartEmbedAsync();
+
+        Assert.False(status.Available);
+    }
+
+    [Fact]
+    public async Task GetEmbedStatus_WhenTheRequestIsCancelled_DoesNotSwallowIt()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var advisor = new FakeKnowledgeAdvisor { Error = new OperationCanceledException(cts.Token) };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => Svc(new FakeKnowledgeRepository(), advisor).GetEmbedStatusAsync(cts.Token));
+    }
+
     [Fact]
     public async Task ImportAsync_EmptySheet_Throws()
     {
@@ -373,6 +430,16 @@ internal sealed class FakeKnowledgeAdvisor : IAdvisorClient
     public Exception? Error { get; init; }
     public Func<int>? OnCall { get; init; }   // chạy khi được gọi; kết quả ghi vào RowsSavedWhenCalled
     public int RowsSavedWhenCalled { get; private set; }
+    public KnowledgeEmbedDto Status { get; init; } = new(494, true, 12, null, false);
+    public int StatusCalls { get; private set; }
+
+    public Task<KnowledgeEmbedDto> GetKnowledgeEmbedStatusAsync(CancellationToken ct = default)
+    {
+        StatusCalls++;
+        if (Error is not null)
+            throw Error;
+        return Task.FromResult(Status);
+    }
 
     public Task<KnowledgeEmbedDto> EmbedKnowledgeAsync(CancellationToken ct = default)
     {

@@ -78,6 +78,30 @@ public partial class KnowledgeBaseService(
 
     public Task<bool> DeleteAsync(Guid id, CancellationToken ct = default) => repository.DeleteAsync(id, ct);
 
+    public async Task<KnowledgeEmbedStatusDto> GetEmbedStatusAsync(CancellationToken ct = default) =>
+        await AskAdvisorAsync(advisor.GetKnowledgeEmbedStatusAsync, ct);
+
+    public async Task<KnowledgeEmbedStatusDto> StartEmbedAsync(CancellationToken ct = default) =>
+        await AskAdvisorAsync(advisor.EmbedKnowledgeAsync, ct);
+
+    private async Task<KnowledgeEmbedStatusDto> AskAdvisorAsync(Func<CancellationToken, Task<KnowledgeEmbedDto>> ask, CancellationToken ct)
+    {
+        try
+        {
+            var r = await ask(ct);
+            return new KnowledgeEmbedStatusDto(true, r.Pending, r.Running, r.Done, r.Error, r.Started);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Không hỏi được advisor về tiến độ tạo vector");
+            return KnowledgeEmbedStatusDto.Unavailable;
+        }
+    }
+
     public const string EmbedWarning =
         "Đã lưu nhưng chưa tạo được vector (advisor chưa chạy hoặc lỗi). Chat chưa thấy các dòng mới cho tới khi vector được tạo.";
 

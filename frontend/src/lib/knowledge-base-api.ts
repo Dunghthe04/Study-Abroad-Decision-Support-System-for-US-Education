@@ -1,6 +1,7 @@
 import { ApiError, apiFetch } from "@/lib/api";
 import type {
   KnowledgeDocType,
+  KnowledgeEmbedStatus,
   KnowledgeEntry,
   KnowledgeImportPreview,
   KnowledgeImportResult,
@@ -74,6 +75,10 @@ export const adminKnowledgeBaseApi = {
   previewXlsx: (file: File, signal?: AbortSignal) => postXlsx<KnowledgeImportPreview>("preview", file, signal),
 
   importXlsx: (file: File) => postXlsx<KnowledgeImportResult>("import", file),
+
+  embedStatus: () => apiFetch<KnowledgeEmbedStatus>(`${base}/embed-status`),
+
+  startEmbed: () => apiFetch<KnowledgeEmbedStatus>(`${base}/embed`, { method: "POST" }),
 
   downloadTemplate: () => download(`${base}/template`, TEMPLATE_FILE_NAME),
 };

@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { KnowledgeEmbedProgress } from "@/components/admin/knowledge-base/KnowledgeEmbedProgress";
 import type { KnowledgeImportResult } from "@/types/knowledge-base";
 
 export function KnowledgeImportResultDialog({ result, onClose }: { result: KnowledgeImportResult | null; onClose: () => void }) {
@@ -16,6 +17,7 @@ export function KnowledgeImportResultDialog({ result, onClose }: { result: Knowl
                 {result.totalRows} dòng: thêm mới {result.created}, cập nhật {result.updated}, không đổi {result.unchanged}, bỏ qua chờ duyệt {result.pending}, lỗi {result.errors.length}.
               </DialogDescription>
             </DialogHeader>
+            <KnowledgeEmbedProgress />
             {result.errors.length > 0 && (
               <ul className="max-h-80 space-y-1 overflow-y-auto rounded-md border border-border p-3 text-sm">
                 {result.errors.map((item, index) => (
