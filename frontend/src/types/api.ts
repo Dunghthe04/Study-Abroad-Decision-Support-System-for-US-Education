@@ -144,7 +144,7 @@ export interface CenterVerificationStatusDto {
 }
 
 export interface ReviewCenterVerificationRequest {
-  action: "approve" | "reject" | "changes_requested" | "revoke";
+  action: "approve" | "reject" | "revoke";
   isNationalRegistryMatched?: boolean;
   isBusinessOperating?: boolean;
   isRepresentativeValid?: boolean;
