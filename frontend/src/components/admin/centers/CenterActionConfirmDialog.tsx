@@ -23,7 +23,7 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 
-export type CenterConfirmAction = "verify" | "unverify" | "hide" | "show";
+export type CenterConfirmAction = "verify" | "revoke" | "hide" | "show";
 
 interface CenterActionConfirmDialogProps {
   center: StudyCenter | null;
@@ -76,9 +76,9 @@ function CenterActionConfirmContent({
   onClose,
   onConfirm,
 }: CenterActionConfirmContentProps) {
-  const [note, setNote] = useState(center.verificationNote || "");
+  const [note, setNote] = useState(action === "verify" ? center.verificationNote || "" : "");
 
-  const isVerificationAction = action === "verify" || action === "unverify";
+  const isVerificationAction = action === "verify" || action === "revoke";
   const missingChecklist =
     action === "verify" ? getCenterLegalMissingChecklist(center) : [];
 
@@ -90,10 +90,10 @@ function CenterActionConfirmContent({
             <>
               <ShieldCheckIcon className="w-5 h-5 text-ok" />
             </>
-          ) : action === "unverify" ? (
+          ) : action === "revoke" ? (
             <>
               <ShieldAlertIcon className="w-5 h-5 text-risk" />
-              <span>Hủy xác minh trung tâm tư vấn</span>
+              <span>Thu hồi dấu xác minh</span>
             </>
           ) : action === "hide" ? (
             <>
@@ -115,12 +115,12 @@ function CenterActionConfirmContent({
               <br />
               Sau khi xác minh, trung tâm sẽ được gắn huy hiệu &quot;Đã xác minh&quot; và đủ điều kiện xuất hiện trong danh bạ đề xuất cho học sinh, phụ huynh.
             </>
-          ) : action === "unverify" ? (
+          ) : action === "revoke" ? (
             <>
-              Bạn có chắc chắn muốn hủy trạng thái xác minh của trung tâm{" "}
+              Bạn có chắc chắn muốn thu hồi dấu xác minh của trung tâm{" "}
               <strong className="text-foreground">{center.name}</strong>?
               <br />
-              Trung tâm sẽ chuyển về trạng thái Chưa xác minh (&quot;unverified&quot;) và không còn hiển thị huy hiệu xác minh trên toàn hệ thống.
+              Trung tâm chuyển sang Tạm ngừng: không còn hiện công khai, không nhận yêu cầu liên hệ mới và nhận email kèm lý do. Các yêu cầu và tin nhắn đã có vẫn được giữ.
             </>
           ) : action === "hide" ? (
             <>
@@ -155,7 +155,7 @@ function CenterActionConfirmContent({
           <FieldLabel htmlFor="verify-center-note" className="text-xs">
             {action === "verify"
               ? "Ghi chú xác minh / đối chiếu hồ sơ (tùy chọn)"
-              : "Lý do hủy xác minh / ghi chú pháp lý (tùy chọn)"}
+              : "Lý do thu hồi dấu xác minh (bắt buộc)"}
           </FieldLabel>
           <Textarea
             id="verify-center-note"
@@ -163,7 +163,7 @@ function CenterActionConfirmContent({
             placeholder={
               action === "verify"
                 ? "Ví dụ: Đã đối chiếu GCN ĐKDN, giấy phép Sở GD&ĐT bản gốc..."
-                : "Ví dụ: Chưa bổ sung giấy phép đào tạo hoặc giấy tờ hết hiệu lực..."
+                : "Ví dụ: Giấy chứng nhận đăng ký doanh nghiệp đã hết hiệu lực..."
             }
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -182,6 +182,7 @@ function CenterActionConfirmContent({
           variant={action === "verify" || action === "show" ? "default" : "destructive"}
           onClick={() => onConfirm(isVerificationAction ? note.trim() : undefined)}
           loading={isSubmitting}
+          disabled={action === "revoke" && note.trim().length === 0}
           className={
             action === "verify" || action === "show"
               ? "bg-ok hover:bg-ok/90 text-white"
@@ -193,10 +194,10 @@ function CenterActionConfirmContent({
               <CheckCircle2Icon className="w-4 h-4 mr-1.5" />
               Xác nhận xác minh
             </>
-          ) : action === "unverify" ? (
+          ) : action === "revoke" ? (
             <>
               <ShieldAlertIcon className="w-4 h-4 mr-1.5" />
-              Xác nhận hủy xác minh
+              Xác nhận thu hồi
             </>
           ) : action === "hide" ? (
             <>
