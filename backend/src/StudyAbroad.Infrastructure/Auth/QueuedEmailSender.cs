@@ -38,6 +38,9 @@ namespace StudyAbroad.Infrastructure.Auth
         public Task SendPasswordResetEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 5, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendPasswordResetEmailAsync(toEmail, fullName, otpCode, expiryMinutes, t));
 
+        public Task SendModeratorInvitationEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 5, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendModeratorInvitationEmailAsync(toEmail, fullName, otpCode, expiryMinutes, t));
+
         public Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 0, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendAccountTempLockedNotificationAsync(toEmail, fullName, lockoutMinutes, t));
 

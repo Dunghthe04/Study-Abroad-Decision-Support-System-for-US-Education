@@ -11,6 +11,13 @@ namespace StudyAbroad.Application.Auth
         /// <summary>Gửi mã OTP 6 số để đặt lại mật khẩu khi người dùng quên mật khẩu (hiệu lực 5 phút).</summary>
         Task SendPasswordResetEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 5, CancellationToken ct = default);
 
+        /// <summary>
+        /// [UC-63] Gửi cho Moderator mới mã OTP 6 số để đặt mật khẩu lần đầu (Administrator không biết mật khẩu).
+        /// Mặc định dùng mẫu đặt lại mật khẩu nếu nơi gửi chưa có mẫu riêng.
+        /// </summary>
+        Task SendModeratorInvitationEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 5, CancellationToken ct = default) =>
+            SendPasswordResetEmailAsync(toEmail, fullName, otpCode, expiryMinutes, ct);
+
         /// <summary>Gửi email thông báo tài khoản bị khóa do nhập sai mật khẩu liên tiếp 5 lần (yêu cầu Admin mở khóa).</summary>
         Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 0, CancellationToken ct = default);
 

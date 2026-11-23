@@ -57,6 +57,27 @@ namespace StudyAbroad.Infrastructure.Auth
             await SendEmailAsync(toEmail, subject, body, ct);
         }
 
+        public async Task SendModeratorInvitationEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 5, CancellationToken ct = default)
+        {
+            var subject = "[USAS] Tài khoản Kiểm duyệt viên của bạn đã được tạo";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
+                    <h2 style="color: #1d4ed8; margin-bottom: 16px;">Chào mừng bạn đến với USAS</h2>
+                    <p style="font-size: 15px; color: #334155;">Xin chào <strong>{WebUtility.HtmlEncode(fullName)}</strong>,</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Quản trị viên đã tạo tài khoản Kiểm duyệt viên cho bạn (email đăng nhập: <strong>{WebUtility.HtmlEncode(toEmail)}</strong>). Để đặt mật khẩu lần đầu, hãy vào trang <strong>Quên mật khẩu</strong>, nhập email này và dùng mã bên dưới.</p>
+                    <div style="background-color: #eff6ff; border: 2px dashed #3b82f6; border-radius: 8px; text-align: center; padding: 18px; margin: 24px 0;">
+                        <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #1d4ed8;">{otpCode}</span>
+                        <p style="margin: 8px 0 0; font-size: 13px; color: #64748b;">Mã có hiệu lực trong vòng <strong>{expiryMinutes} phút</strong>. Nếu mã hết hạn, vào trang Quên mật khẩu để nhận mã mới.</p>
+                    </div>
+                    <p style="font-size: 13px; color: #64748b; line-height: 1.5;">Nếu bạn không mong đợi email này, hãy bỏ qua; tài khoản chưa dùng được khi chưa đặt mật khẩu.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
         public async Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 0, CancellationToken ct = default)
         {
             var subject = "[USAS] Cảnh báo bảo mật: Tài khoản đã bị khóa do nhập sai mật khẩu";
