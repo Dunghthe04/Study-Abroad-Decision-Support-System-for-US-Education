@@ -395,7 +395,7 @@ public class StudyCenterServiceTests
         var service = new StudyCenterService(repo, _auditLogs);
         var actorId = Guid.NewGuid();
 
-        var result = await service.SetCenterActiveAsync(center.Id, false, actorId);
+        var result = await service.SetCenterActiveAsync(center.Id, false, actorId, "  Quảng cáo sai sự thật  ");
 
         Assert.True(result.Success);
         Assert.NotNull(result.Center);
@@ -403,6 +403,8 @@ public class StudyCenterServiceTests
 
         var log = Assert.Single(_auditLogs.Entries);
         Assert.Equal("study_center.hide", log.Action);
+        using var detail = System.Text.Json.JsonDocument.Parse(log.DetailJson!);
+        Assert.Equal("Quảng cáo sai sự thật", detail.RootElement.GetProperty("reason").GetString());
         Assert.Equal("study_center", log.EntityType);
         Assert.Equal(center.Id.ToString(), log.EntityId);
         Assert.Equal(actorId, log.ActorUserId);
@@ -416,7 +418,7 @@ public class StudyCenterServiceTests
         var service = new StudyCenterService(repo, _auditLogs);
         var actorId = Guid.NewGuid();
 
-        var result = await service.SetCenterActiveAsync(center.Id, true, actorId);
+        var result = await service.SetCenterActiveAsync(center.Id, true, actorId, "Đã sửa nội dung vi phạm");
 
         Assert.True(result.Success);
         Assert.NotNull(result.Center);
@@ -429,13 +431,43 @@ public class StudyCenterServiceTests
         Assert.Equal(actorId, log.ActorUserId);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SetCenterActiveAsync_WithoutReason_IsRejectedAndChangesNothing(string? reason)
+    {
+        var center = new StudyCenter { Code = "CTY_REASON", Name = "Cần Lý Do", IsActive = true };
+        var repo = new FakeRepository(center);
+        var service = new StudyCenterService(repo, _auditLogs);
+
+        var result = await service.SetCenterActiveAsync(center.Id, false, Guid.NewGuid(), reason);
+
+        Assert.False(result.Success);
+        Assert.Contains("Lý do", result.ErrorMessage);
+        Assert.True(center.IsActive);
+        Assert.Empty(_auditLogs.Entries);
+    }
+
+    [Fact]
+    public async Task SetCenterActiveAsync_ReasonTooLong_IsRejected()
+    {
+        var center = new StudyCenter { Code = "CTY_LONG", Name = "Lý Do Dài", IsActive = true };
+        var service = new StudyCenterService(new FakeRepository(center), _auditLogs);
+
+        var result = await service.SetCenterActiveAsync(center.Id, false, Guid.NewGuid(), new string('a', StudyCenterService.MaxVisibilityReasonLength + 1));
+
+        Assert.False(result.Success);
+        Assert.True(center.IsActive);
+    }
+
     [Fact]
     public async Task SetCenterActiveAsync_NonExistentCenter_ReturnsFail()
     {
         var repo = new FakeRepository();
         var service = new StudyCenterService(repo, _auditLogs);
 
-        var result = await service.SetCenterActiveAsync(Guid.NewGuid(), false, Guid.NewGuid());
+        var result = await service.SetCenterActiveAsync(Guid.NewGuid(), false, Guid.NewGuid(), "Lý do");
 
         Assert.False(result.Success);
         Assert.Contains("Không tìm thấy", result.ErrorMessage);
