@@ -279,6 +279,8 @@ export function CenterProfileView() {
   const isVerified = center?.verificationStatus === "verified";
   const legalLocked = isPendingReview;
   const legalChanged =
+  // [UC-71] Tên pháp lý, MST, người đại diện của trung tâm chưa xác minh / bị từ chối chỉ sửa ở trang Xác minh pháp lý
+  const verificationFieldsLocked = !isVerified;
     !!center &&
     (name.trim() !== (center.name ?? "") ||
       centerType !== (center.centerType ?? "study_abroad") ||
@@ -369,7 +371,7 @@ export function CenterProfileView() {
                 maxLength={200}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                disabled={legalLocked}
+                disabled={verificationFieldsLocked}
                 placeholder="Tên thương hiệu trung tâm..."
               />
               {legalLocked && (
@@ -391,11 +393,18 @@ export function CenterProfileView() {
                   <LockIcon className="h-4 w-4 text-ink-3" />
                   <h3 className="text-sm font-semibold text-ink">Thông tin pháp lý</h3>
                 </div>
-                <Link href="/center/verification" className="text-xs font-semibold text-brand hover:underline">
-                  Thay tài liệu pháp lý: nộp lại hồ sơ xác minh
-                </Link>
+                {!isVerified && (
+                  <Link href="/center/verification" className="text-xs font-semibold text-brand hover:underline">
+                    Cập nhật ở trang Xác minh pháp lý
+                  </Link>
+                )}
               </div>
               {legalLocked && (
+              {!isVerified && !isPendingReview && (
+                <p className="text-xs text-ink-3">
+                  Tên pháp lý, mã số thuế và người đại diện được cập nhật cùng tài liệu ở trang Xác minh pháp lý, nên không sửa tại đây.
+                </p>
+              )}
                 <p className="text-xs text-ink-3">
                   Hồ sơ đang chờ duyệt: thông tin pháp lý (tên, mã số thuế...) tạm khóa cho tới khi có kết quả. Bạn vẫn sửa được các thông tin hiển thị bên dưới.
                 </p>
@@ -416,7 +425,7 @@ export function CenterProfileView() {
                     maxLength={14}
                     value={taxCode}
                     onChange={(e) => setTaxCode(e.target.value)}
-                    disabled={legalLocked}
+                    disabled={verificationFieldsLocked}
                     placeholder="10 hoặc 13 chữ số"
                     className="font-mono"
                   />
@@ -428,7 +437,7 @@ export function CenterProfileView() {
                     maxLength={150}
                     value={legalRepresentative}
                     onChange={(e) => setLegalRepresentative(e.target.value)}
-                    disabled={legalLocked}
+                    disabled={verificationFieldsLocked}
                   />
                 </Field>
               </div>
