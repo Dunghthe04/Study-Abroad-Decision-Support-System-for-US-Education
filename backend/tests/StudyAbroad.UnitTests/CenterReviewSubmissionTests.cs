@@ -20,15 +20,25 @@ public class CenterReviewSubmissionTests
         public List<Lead> Leads { get; } = [];
         public List<CenterReview> Reviews { get; } = [];
 
+        private static readonly string[] AcceptedStatuses = [LeadStatuses.Accepted, LeadStatuses.Contacted, LeadStatuses.Closed];
+
         public Task<Lead?> FindLatestLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default) =>
             Task.FromResult(Leads
                 .Where(l => l.StudyCenterId == centerId && (l.UserId == userId || l.SubmittedByUserId == userId))
                 .OrderByDescending(l => l.CreatedAt)
                 .FirstOrDefault());
 
+        public Task<Lead?> FindLatestAcceptedLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default) =>
+            Task.FromResult(Leads
+                .Where(l => l.StudyCenterId == centerId && (l.UserId == userId || l.SubmittedByUserId == userId))
+                .Where(l => AcceptedStatuses.Contains(l.Status))
+                .OrderByDescending(l => l.CreatedAt)
+                .FirstOrDefault());
+
         public Task<Lead?> FindLatestUnreviewedLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default) =>
             Task.FromResult(Leads
                 .Where(l => l.StudyCenterId == centerId && (l.UserId == userId || l.SubmittedByUserId == userId))
+                .Where(l => AcceptedStatuses.Contains(l.Status))
                 .Where(l => !Reviews.Any(r => r.LeadId == l.Id))
                 .OrderByDescending(l => l.CreatedAt)
                 .FirstOrDefault());
@@ -96,9 +106,9 @@ public class CenterReviewSubmissionTests
             return user;
         }
 
-        public Lead AddLead(Guid studentId, Guid? submitterId = null)
+        public Lead AddLead(Guid studentId, Guid? submitterId = null, string status = LeadStatuses.Accepted)
         {
-            var lead = new Lead { UserId = studentId, SubmittedByUserId = submitterId ?? studentId, StudyCenterId = Center.Id };
+            var lead = new Lead { UserId = studentId, SubmittedByUserId = submitterId ?? studentId, StudyCenterId = Center.Id, Status = status };
             Repo.Leads.Add(lead);
             return lead;
         }
@@ -248,6 +258,22 @@ public class CenterReviewSubmissionTests
 
         Assert.False(eligibility.CanReview);
         Assert.True(eligibility.HasReviewed);
+    }
+
+    [Fact]
+    public async Task Create_LeadNotAccepted_CannotReview()
+    {
+        var s = new Setup();
+        var student = s.AddUser();
+        s.AddLead(student.Id, status: LeadStatuses.New);
+
+        var eligibility = await s.Service.GetEligibilityAsync(student.Id, s.Center.Id);
+        Assert.False(eligibility.CanReview);
+        Assert.False(eligibility.HasReviewed);
+        Assert.Contains("tiếp nhận", eligibility.Reason);
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => s.Service.CreateAsync(student.Id, s.Center.Id, new CreateCenterReviewRequest(5)));
+        Assert.Contains("tiếp nhận", ex.Message);
     }
 
     [Fact]
