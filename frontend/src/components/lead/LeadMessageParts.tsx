@@ -36,6 +36,10 @@ export function ImageAttachPicker({
   onError: (message: string | null) => void;
   disabled?: boolean;
 }) {
+  // [SC-40] Tắt gửi ảnh trong nhắn tin với trung tâm bằng cấu hình
+  const allowImage = process.env.NEXT_PUBLIC_ALLOW_CHAT_IMAGE_UPLOAD === "true";
+  if (!allowImage) return null;
+
   const inputRef = useRef<HTMLInputElement | null>(null);
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
 
