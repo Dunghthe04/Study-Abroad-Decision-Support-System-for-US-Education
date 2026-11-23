@@ -446,8 +446,8 @@ export const studyCentersApi = {
       ),
     }),
   /** [UC-72] Ẩn hoặc hiện trung tâm tư vấn khỏi danh bạ và luồng gợi ý (vai trò: Moderator / Admin) */
-  setActiveStatus: (id: string, isActive: boolean) => {
-    const payload: SetStudyCenterActiveRequest = { isActive };
+  setActiveStatus: (id: string, isActive: boolean, reason: string) => {
+    const payload: SetStudyCenterActiveRequest = { isActive, reason };
     return apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/status`, {
       method: "PUT",
       body: JSON.stringify(payload),

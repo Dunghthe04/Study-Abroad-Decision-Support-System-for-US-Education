@@ -341,6 +341,8 @@ export interface UpdateStudyCenterRequest {
 
 export interface SetStudyCenterActiveRequest {
   isActive: boolean;
+  /** [UC-72] Lý do ẩn hoặc hiện (bắt buộc, ghi nhật ký). */
+  reason: string;
 }
 
 export type ChatRole = "user" | "assistant";
