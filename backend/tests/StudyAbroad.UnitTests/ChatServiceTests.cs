@@ -103,6 +103,56 @@ public class ChatServiceTests
         Assert.True(saved.Rows[0].CreatedAt <= saved.Rows[1].CreatedAt);   // tin hỏi đứng trước tin trả lời
     }
 
+    // ---- ảnh minh họa của câu trả lời
+
+    private static readonly MediaItem I20Image = new("image", "https://travel.state.gov/mau-i20.png", "Mẫu I-20");
+
+    [Fact]
+    public async Task Media_FromAdvisor_ReachesTheBrowser_AndIsSavedWithTheAssistantsReplyOnly()
+    {
+        var saved = new FakeMessages();
+
+        var res = await new ChatService(new FakeAdvisor("B5") { Media = [I20Image] }, new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal([I20Image], res.Media);
+        Assert.Null(saved.Rows[0].MediaJson);                                   // tin của học sinh không có ảnh
+        Assert.Equal([I20Image], ChatMedia.FromJson(saved.Rows[1].MediaJson));   // ảnh nằm ở tin trả lời
+    }
+
+    [Fact]
+    public async Task Media_IsCheckedOnce_OnlyHttpsLinksAreSavedAndReturned()
+    {
+        var saved = new FakeMessages();
+        var advisor = new FakeAdvisor("B5")
+        {
+            Media = [
+                new("image", "http://a.org/x.png", "http không an toàn"),
+                new("image", "javascript:alert(1)", "mã độc"),
+                I20Image,
+                I20Image,   // trùng
+            ],
+        };
+
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Equal([I20Image], res.Media);
+        Assert.Equal([I20Image], ChatMedia.FromJson(saved.Rows[1].MediaJson));   // cái lưu và cái trả trình duyệt là cùng một danh sách
+    }
+
+    [Fact]
+    public async Task NoMedia_MeansNothingSavedAndNullForTheBrowser()
+    {
+        var saved = new FakeMessages();
+
+        var res = await new ChatService(new FakeAdvisor("B5"), new FakeSessions(), new FakeProfileFlow(), messages: saved)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Null(res.Media);
+        Assert.Null(saved.Rows[1].MediaJson);
+    }
+
     [Fact]
     public async Task OutcomeAndMeta_AreOnlyOnTheAssistantsReply()
     {
@@ -3579,6 +3629,7 @@ public class ChatServiceTests
         public AdvisorSlmDto? Slm { get; init; }
         public IReadOnlyList<string>? FormGoals { get; init; }
         public IReadOnlyList<string>? LockedIntents { get; init; }   // ý advisor bỏ vì gói không cho (allowedIntents)
+        public IReadOnlyList<MediaItem>? Media { get; init; }   // ảnh minh họa advisor gửi kèm câu trả lời
 
         public Exception? ChatError { get; init; }   // advisor sập hẳn: ChatAsync ném lỗi này
 
@@ -3592,7 +3643,7 @@ public class ChatServiceTests
             var state = JsonDocument.Parse($"{{\"currentStep\":\"{nextStep}\"{question}{editing}}}").RootElement;
             return Task.FromResult(new AdvisorChatResponse(
                 Answer, [], null, state, QuickReplies: replies, Widget: widget, Profile: Profile, ProfileChanged: Changed, Skills: Skills, Action: Action, ActionData: ActionData,
-                AiUsage: AiUsage, Slm: Slm, FormGoals: FormGoals, LockedIntents: LockedIntents));
+                AiUsage: AiUsage, Slm: Slm, FormGoals: FormGoals, LockedIntents: LockedIntents, Media: Media));
         }
 
         // Dựng lại câu hồ sơ đang chờ khi mở phiên cũ (lịch sử chat)

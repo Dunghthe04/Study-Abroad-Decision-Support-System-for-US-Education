@@ -806,6 +806,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("MediaJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("media_json")
+                        .HasComment("Ảnh minh họa của câu trả lời: [{kind, url, alt}]. Link https tới ảnh, lấy từ cột image_url của dòng kho tri thức được dùng; trình duyệt tải ảnh thẳng từ link. Null nếu không có ảnh.");
+
                     b.Property<string>("MetaJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("meta_json")

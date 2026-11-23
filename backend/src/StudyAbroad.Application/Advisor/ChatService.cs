@@ -205,6 +205,8 @@ namespace StudyAbroad.Application.Advisor
             // Phiên đã lưu (khóa ngoại của tin nhắn cần phiên có sẵn): ghi tin hỏi và tin trả lời cho admin xem
             // Đến đây mọi lần gọi advisor của lượt đã xong: lấy cả giỏ số đo (không chỉ lần gọi chat đầu) để outcome, meta_json và ai_calls đủ
             var turnSignals = advisorSignals with { Usage = TurnUsage(advisorSignals.Usage) };
+            // Ảnh chỉ đi tiếp khi link hợp lệ (https): kiểm một lần ở đây rồi cùng giá trị đó được lưu và trả trình duyệt
+            response = response with { Media = ChatMedia.Clean(response.Media) };
             var replyId = await RecordTurnAsync(session, request, response, turnSignals, turnClock.ElapsedMilliseconds, ct);
             // Token ghi sau tin trả lời để nối được (chat_message_id). Tin không lưu (tắt công tắc hoặc lỗi) thì vẫn ghi token, chỉ không có liên kết
             // ai_calls.user_id là người trả (hạn mức Free đếm theo user_id), không phải chủ phiên chat
@@ -335,6 +337,7 @@ namespace StudyAbroad.Application.Advisor
                     SourcesJson = response.Citations is { Count: > 0 } cites
                         ? JsonSerializer.Serialize(cites.Select(c => new { title = c.Title, url = c.Url, retrievedAt = c.RetrievedAt }))
                         : null,
+                    MediaJson = ChatMedia.ToJson(response.Media),
                     Outcome = outcome,
                     ReviewStatus = ChatTurn.ReviewStatus(outcome),
                     MetaJson = ChatTurn.ReplyMeta(signals.Usage, signals.Action, signals.Skills, turnMs),
@@ -786,6 +789,7 @@ namespace StudyAbroad.Application.Advisor
             {
                 Answer = answer,
                 Citations = clearKb ? [] : response.Citations,
+                Media = clearKb ? null : response.Media,   // số liệu từ cơ sở dữ liệu thay câu của kho: ảnh của dòng kho không còn hợp
                 Disclaimer = clearKb ? null : response.Disclaimer,
                 QuickReplies = null,
             };
