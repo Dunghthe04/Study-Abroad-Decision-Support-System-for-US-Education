@@ -93,10 +93,6 @@ export function sampleToRequest(sample: SlmSample): SaveSlmSampleRequest {
   };
 }
 
-export const CHAT_UNANSWERED_SOURCE = "chat-unanswered";
-
-export const isFromChat = (sample: SlmSample) => sample.source === CHAT_UNANSWERED_SOURCE;
-
 export const canSubmit = (status: SlmReviewStatus) => status === "draft" || status === "rejected" || status === "needs_fix";
 
 /** Giống quy tắc backend: intents là mảng không rỗng. */
@@ -109,33 +105,7 @@ export function isReady(intents: string | null | undefined): boolean {
   }
 }
 
-const HISTORY_ACTIONS: Record<string, string> = {
-  create: "Tạo mẫu",
-  edit: "Sửa",
-  submit: "Gửi duyệt",
-  review: "Duyệt",
-  delete: "Xóa",
-  capture: "Lấy từ chat",
-};
-
-export const historyActionLabel = (action: string) => HISTORY_ACTIONS[action] ?? action;
-
-const FIELD_LABELS: Record<string, string> = {
-  sampleType: "loại mẫu",
-  question: "câu hỏi",
-  source: "nguồn",
-  profile: "hồ sơ",
-  pendingQuestion: "câu hệ thống đã hỏi",
-  intents: "ý định",
-  context: "ngữ cảnh",
-  split: "tập dữ liệu",
-  sourceReview: "nhãn rà soát",
-};
-
-export const fieldLabels = (fields: string[]) => fields.map((field) => FIELD_LABELS[field] ?? field).join(", ");
-
 export const SOURCE_LABELS: Record<string, string> = {
   manual: "Nhập tay",
   excel: "File Excel",
-  [CHAT_UNANSWERED_SOURCE]: "Chat chưa trả lời",
 };

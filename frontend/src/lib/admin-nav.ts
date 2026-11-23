@@ -5,7 +5,6 @@ import {
   BuildingIcon,
   ClipboardCheckIcon,
   CreditCardIcon,
-  GraduationCapIcon,
   LayoutDashboardIcon,
   LibraryBigIcon,
   MailWarningIcon,
@@ -55,15 +54,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: SchoolIcon,
     // Quyết định D2 bản 14/11: dữ liệu trường do Moderator quản lý, Admin chỉ xem
     roles: ["admin", "moderator"],
-    useCases: ["UC-65", "UC-66", "UC-67", "UC-84"],
-  },
-  {
-    href: "/admin/scholarships",
-    label: "Học bổng",
-    description: "Moderator nhập, sửa, ẩn hoặc hiện học bổng; Admin chỉ xem danh sách và chi tiết",
-    icon: GraduationCapIcon,
-    roles: ["admin", "moderator"],
-    useCases: ["UC-109"],
+    useCases: ["UC-65", "UC-66", "UC-67", "UC-84", "UC-109"],
   },
   {
     href: "/admin/slm-samples",
@@ -76,10 +67,10 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/knowledge-base",
     label: "Kho tri thức",
-    description: "Quản lý câu hỏi – câu trả lời đã kiểm chứng: thêm, sửa, duyệt và nhập từ Excel",
+    description: "Quản lý câu hỏi – câu trả lời đã kiểm chứng: thêm, sửa, xóa và nhập từ Excel",
     icon: LibraryBigIcon,
     roles: ["admin", "moderator"],
-    useCases: ["UC-118", "UC-119", "UC-120", "UC-121", "UC-122", "UC-123", "UC-124", "UC-125", "UC-53"],
+    useCases: ["UC-118", "UC-119", "UC-120", "UC-121", "UC-122", "UC-123"],
   },
   {
     href: "/admin/centers",
