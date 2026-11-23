@@ -213,9 +213,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: ClipboardCheckFilledIcon,
     section: "ai",
     roles: ["admin"],
-    useCases: [],
-    // Ẩn khỏi menu; trang Chất lượng AI (UC-90) có liên kết sang đây cho nhóm câu đã trả lời được
-    hidden: true,
+    useCases: ["UC-155", "UC-156", "UC-157"],
   },
   {
     href: "/admin/users",
