@@ -51,7 +51,9 @@ public record KnowledgeImportRow(
 
 public record KnowledgeImportErrorDto(int RowNumber, string Message);
 
-public record KnowledgeImportPreviewDto(int TotalRows, IReadOnlyList<KnowledgeImportRow> Rows, IReadOnlyList<KnowledgeImportErrorDto> Errors);
+/// <summary>Pending: số dòng có note bắt đầu bằng "CHỜ DUYỆT", import bỏ qua, không kiểm tra, không lưu.</summary>
+public record KnowledgeImportPreviewDto(
+    int TotalRows, IReadOnlyList<KnowledgeImportRow> Rows, IReadOnlyList<KnowledgeImportErrorDto> Errors, int Pending = 0);
 
 public record KnowledgeImportResultDto(
-    int TotalRows, int Created, int Updated, int Unchanged, IReadOnlyList<KnowledgeImportErrorDto> Errors);
+    int TotalRows, int Created, int Updated, int Unchanged, IReadOnlyList<KnowledgeImportErrorDto> Errors, int Pending = 0);

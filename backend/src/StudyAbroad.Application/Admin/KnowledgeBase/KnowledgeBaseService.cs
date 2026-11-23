@@ -17,6 +17,12 @@ public partial class KnowledgeBaseService(
     public const int MaxTopicCodeLength = 64;
     public const int MaxNoteLength = 4000;
     public const int MaxEntryNo = 1_000_000;
+    /// <summary>Dòng chưa chốt nguồn hoặc nội dung ghi "CHỜ DUYỆT" ở đầu cột note. Kho không còn cột trạng thái nên dòng này không được vào kho, nếu vào chat sẽ trả lời bằng dữ liệu chưa duyệt.</summary>
+    public const string PendingNotePrefix = "CHỜ DUYỆT";
+
+    public static bool IsPending(string? note) =>
+        Clean(note)?.Normalize(NormalizationForm.FormC).StartsWith(PendingNotePrefix, StringComparison.OrdinalIgnoreCase) == true;
+
     private static readonly string[] Sorts = ["newest", "oldest", "entryNo", "updated"];
 
     public async Task<PagedResult<KnowledgeEntryDto>> GetPageAsync(
@@ -128,6 +134,8 @@ public partial class KnowledgeBaseService(
             throw new ArgumentException("image_url phải là đường dẫn http(s).");
 
         var note = CleanText(request.Note);
+        if (IsPending(note))
+            throw new ArgumentException($"Dòng có note bắt đầu bằng \"{PendingNotePrefix}\" chưa được duyệt nên không lưu vào kho. Xóa chữ này khỏi note khi đã chốt.");
         if (note is { Length: > MaxNoteLength })
             throw new ArgumentException($"note tối đa {MaxNoteLength} ký tự.");
 

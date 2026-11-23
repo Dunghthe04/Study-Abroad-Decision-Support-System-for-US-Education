@@ -13,9 +13,15 @@ public partial class KnowledgeBaseService
 
         var errors = new List<KnowledgeImportErrorDto>();
         var seen = new HashSet<int>();
+        var pending = 0;
         foreach (var row in rows)
         {
             ct.ThrowIfCancellationRequested();
+            if (IsPending(row.Note))
+            {
+                pending++;
+                continue;
+            }
             try
             {
                 var (_, entryNo) = ValidateRow(row);
@@ -28,7 +34,7 @@ public partial class KnowledgeBaseService
             }
         }
 
-        return Task.FromResult(new KnowledgeImportPreviewDto(rows.Count, rows.Take(MaxPreviewRows).ToList(), errors));
+        return Task.FromResult(new KnowledgeImportPreviewDto(rows.Count, rows.Take(MaxPreviewRows).ToList(), errors, pending));
     }
 
     public async Task<KnowledgeImportResultDto> ImportAsync(Stream workbook, CancellationToken ct = default)
@@ -38,9 +44,15 @@ public partial class KnowledgeBaseService
         var errors = new List<KnowledgeImportErrorDto>();
         var valid = new List<(int EntryNo, ValidDocument Document)>();
         var seen = new HashSet<int>();
+        var pending = 0;
         foreach (var row in rows)
         {
             ct.ThrowIfCancellationRequested();
+            if (IsPending(row.Note))
+            {
+                pending++;
+                continue;
+            }
             try
             {
                 var (document, entryNo) = ValidateRow(row);
@@ -86,7 +98,7 @@ public partial class KnowledgeBaseService
         if (reembed.Count > 0)
             await repository.ClearEmbeddingsAsync(reembed, ct);
 
-        return new KnowledgeImportResultDto(rows.Count, added.Count, updated, unchanged, errors);
+        return new KnowledgeImportResultDto(rows.Count, added.Count, updated, unchanged, errors, pending);
     }
 
     private IReadOnlyList<KnowledgeImportRow> ReadRows(Stream workbook, CancellationToken ct)
