@@ -7,6 +7,9 @@ public class ForumPost : BaseEntity
 {
     public Guid? UserId { get; set; }
     public Guid? ParentPostId { get; set; }
+    public Guid? ReplyToPostId { get; set; }
+    public string? AttachmentUrl { get; set; }
+    public string? AttachmentPublicId { get; set; }
     public string? Title { get; set; }
     public string? StudyLevel { get; set; }
     public string? Category { get; set; }

@@ -11,16 +11,13 @@ interface NotificationPush {
   linkUrl?: string | null;
 }
 
-/** Chỉ các vai trò tham gia chat yêu cầu liên hệ mới cần kết nối realtime. */
-const CHAT_ROLES = new Set(["student", "parent", "center"]);
-
 /**
  * [Chat realtime] Giữ kết nối realtime khi người dùng đã đăng nhập (đóng khi đăng xuất) và báo ngay khi có thông báo mới:
  * hiện toast và làm mới chuông thông báo. Không hiển thị gì.
  */
 export function RealtimeProvider() {
   const { user } = useAuth();
-  const eligible = !!user && CHAT_ROLES.has(user.role);
+  const eligible = !!user;
   const userId = user?.id;
 
   useEffect(() => {

@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.SignalR;
 using StudyAbroad.Api.Realtime;
+using StudyAbroad.Application.Community;
 using StudyAbroad.Application.Leads;
 using StudyAbroad.Domain.Constants;
 using Xunit;
@@ -75,6 +76,29 @@ public class LeadChatHubTests
         var w = Assert.Single(watchers);
         Assert.Equal("center-tab", w.ConnectionId);
         Assert.Equal(LeadId, w.LeadId);
+    }
+
+    [Fact]
+    public void Tracker_Community_JoinLeave_TracksUniqueUsers()
+    {
+        var t = new ChatPresenceTracker();
+        t.Connect("a1", StudentId);
+        t.Connect("a2", StudentId);
+        t.Connect("b1", CenterOwnerId);
+
+        Assert.True(t.JoinCommunity("a1"));
+        Assert.False(t.JoinCommunity("a2"));
+        Assert.Equal(StudentId, Assert.Single(t.CommunityUserIds()));
+
+        Assert.True(t.JoinCommunity("b1"));
+        Assert.Equal(2, t.CommunityUserIds().Count);
+
+        Assert.True(t.LeaveCommunity("a1", out var id, out var last));
+        Assert.Equal(StudentId, id);
+        Assert.False(last);
+        Assert.True(t.LeaveCommunity("a2", out _, out var lastTab));
+        Assert.True(lastTab);
+        Assert.Equal(CenterOwnerId, Assert.Single(t.CommunityUserIds()));
     }
 
     [Fact]
@@ -211,13 +235,40 @@ public class LeadChatHubTests
         var service = new StubLeadService { Deny = denyAccess };
         var groups = new FakeGroups();
         var clients = new FakeClients();
-        var hub = new LeadChatHub(service.Create(), presence)
+        var hub = new LeadChatHub(service.Create(), presence, new StubCommunityService())
         {
             Context = new FakeContext(connectionId, userId),
             Groups = groups,
             Clients = clients,
         };
         return new HubHarness(hub, connectionId, groups, clients, service);
+    }
+
+    private sealed class StubCommunityService : ICommunityService
+    {
+        public Task<IReadOnlyList<CommunityMessageDto>> ListMessagesAsync(
+            Guid viewerId, DateTime? before, Guid? beforeId, DateTime? after, Guid? afterId, int take, CancellationToken ct) =>
+            throw new NotSupportedException();
+        public Task<CommunityMessageDto> SendAsync(Guid userId, SendCommunityMessageRequest request, CancellationToken ct) =>
+            throw new NotSupportedException();
+        public Task<CommunityMessageDto> SendImageAsync(
+            Guid userId, string? content, Guid? replyToId, Func<CancellationToken, Task<CommunityAttachment>> attachmentFactory, CancellationToken ct) =>
+            throw new NotSupportedException();
+        public Task ReportAsync(Guid reporterId, Guid messageId, ReportCommunityMessageRequest request, CancellationToken ct) =>
+            throw new NotSupportedException();
+        public Task<IReadOnlyList<CommunityPresenceDto>> DescribeUsersAsync(
+            IEnumerable<Guid> userIds, IReadOnlyDictionary<Guid, DateTime>? userLastSeen = null, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<CommunityPresenceDto>>([]);
+        public Task<StudyAbroad.Application.Common.PagedResult<CommunityReportDto>> ListReportsAsync(string? status, int page, int pageSize, CancellationToken ct) =>
+            throw new NotSupportedException();
+        public Task HideFromReportAsync(Guid handlerId, Guid reportId, CancellationToken ct) => throw new NotSupportedException();
+        public Task HideMessageAsync(Guid handlerId, Guid messageId, CancellationToken ct) => throw new NotSupportedException();
+        public Task DismissReportAsync(Guid handlerId, Guid reportId, CancellationToken ct) => throw new NotSupportedException();
+        public Task RestrictUserAsync(Guid handlerId, Guid userId, RestrictCommunityUserRequest request, CancellationToken ct) =>
+            throw new NotSupportedException();
+        public Task UnrestrictUserAsync(Guid handlerId, Guid userId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<CommunityRestrictionDto> RestrictionStatusAsync(Guid userId, CancellationToken ct) =>
+            Task.FromResult(new CommunityRestrictionDto(false, null, null, null));
     }
 
     /// <summary>Giả ILeadService bằng DispatchProxy: chỉ hai hàm chat được dùng, gọi hàm khác là lỗi test.</summary>
@@ -320,7 +371,7 @@ public class LeadChatHubTests
         public IClientProxy Clients(IReadOnlyList<string> connectionIds) => throw new NotSupportedException();
         public IClientProxy GroupExcept(string groupName, IReadOnlyList<string> excludedConnectionIds) => throw new NotSupportedException();
         public IClientProxy Groups(IReadOnlyList<string> groupNames) => throw new NotSupportedException();
-        public IClientProxy OthersInGroup(string groupName) => throw new NotSupportedException();
+        public IClientProxy OthersInGroup(string groupName) => new Proxy((m, a) => SentToGroups.Add((groupName, m, a)));
         public IClientProxy User(string userId) => throw new NotSupportedException();
         public IClientProxy Users(IReadOnlyList<string> userIds) => throw new NotSupportedException();
     }

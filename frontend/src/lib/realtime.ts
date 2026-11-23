@@ -14,11 +14,25 @@ export type RealtimeEvent =
   | "typing"
   | "presence"
   | "notification"
+  | "newCommunityMessage"
+  | "communityMessageHidden"
+  | "communityPresence"
+  | "communityRestrictionChanged"
   | "connected"
   | "reconnected"
   | "disconnected";
 
-const SERVER_EVENTS: RealtimeEvent[] = ["newMessage", "messagesRead", "typing", "presence", "notification"];
+const SERVER_EVENTS: RealtimeEvent[] = [
+  "newMessage",
+  "messagesRead",
+  "typing",
+  "presence",
+  "notification",
+  "newCommunityMessage",
+  "communityMessageHidden",
+  "communityPresence",
+  "communityRestrictionChanged",
+];
 
 /** Thử nối lại: kết nối rớt thì SignalR tự thử theo các mốc này, hết mốc thì module tự thử tiếp với giãn cách tăng dần. */
 const AUTO_RECONNECT_DELAYS_MS = [0, 2_000, 5_000, 10_000, 30_000];
