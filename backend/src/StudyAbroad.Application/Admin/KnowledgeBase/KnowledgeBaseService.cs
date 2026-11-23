@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
+using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -7,7 +9,8 @@ using StudyAbroad.Domain.Entities;
 namespace StudyAbroad.Application.Admin.KnowledgeBase;
 
 public partial class KnowledgeBaseService(
-    IKnowledgeBaseRepository repository, IKnowledgeWorkbookReader workbookReader) : IKnowledgeBaseService
+    IKnowledgeBaseRepository repository, IKnowledgeWorkbookReader workbookReader,
+    IAdvisorClient advisor, ILogger<KnowledgeBaseService> logger) : IKnowledgeBaseService
 {
     public const int MaxPageSize = 100;
     public const int MaxQuestionLength = 500;
@@ -49,6 +52,7 @@ public partial class KnowledgeBaseService(
         var document = new KnowledgeDocument { EntryNo = entryNo };
         Apply(document, valid);
         await repository.AddAsync(document, ct);
+        await StartEmbeddingAsync(ct);
         return ToDto(document);
     }
 
@@ -65,11 +69,39 @@ public partial class KnowledgeBaseService(
         if (!found)
             return null;
         if (questionChanged)
+        {
             await repository.ClearEmbeddingsAsync([id], ct);
+            await StartEmbeddingAsync(ct);
+        }
         return await GetAsync(id, ct);
     }
 
     public Task<bool> DeleteAsync(Guid id, CancellationToken ct = default) => repository.DeleteAsync(id, ct);
+
+    public const string EmbedWarning =
+        "Đã lưu nhưng chưa tạo được vector (advisor chưa chạy hoặc lỗi). Chat chưa thấy các dòng mới cho tới khi vector được tạo.";
+
+    /// <summary>
+    /// Nhờ advisor tạo vector cho dòng thiếu vector, chạy nền. Gọi SAU khi đã lưu: advisor tắt hay lỗi thì dữ liệu vẫn nằm trong kho,
+    /// chỉ trả cảnh báo. Người dùng hủy yêu cầu thì ném tiếp.
+    /// </summary>
+    private async Task<(bool Started, string? Warning)> StartEmbeddingAsync(CancellationToken ct)
+    {
+        try
+        {
+            var result = await advisor.EmbedKnowledgeAsync(ct);
+            return (result.Started, null);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Không nhờ được advisor tạo vector cho kho tri thức");
+            return (false, EmbedWarning);
+        }
+    }
 
     private record ValidDocument(
         string DocType, string Label, string Question, string Answer, string? Source, string? SourceUrl,

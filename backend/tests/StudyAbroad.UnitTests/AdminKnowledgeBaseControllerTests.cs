@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using StudyAbroad.Api.Controllers;
 using StudyAbroad.Application.Admin.KnowledgeBase;
 using StudyAbroad.Domain.Constants;
@@ -15,7 +16,7 @@ public class AdminKnowledgeBaseControllerTests
         new(7, "faq", "LABEL_VISA_F1", "OPT là gì?", "Trả lời", "Nguồn", null, new DateOnly(2026, 11, 1), null, null, null);
 
     private static AdminKnowledgeBaseController Controller(FakeKnowledgeRepository repo) =>
-        new(new KnowledgeBaseService(repo, new FakeKnowledgeReader()), new KnowledgeTemplateWriter());
+        new(new KnowledgeBaseService(repo, new FakeKnowledgeReader(), new FakeKnowledgeAdvisor(), NullLogger<KnowledgeBaseService>.Instance), new KnowledgeTemplateWriter());
 
     private static IFormFile File(string name, int length) =>
         new FormFile(new MemoryStream(new byte[length]), 0, length, "file", name);

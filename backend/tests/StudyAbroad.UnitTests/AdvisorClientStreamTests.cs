@@ -107,4 +107,26 @@ public class AdvisorClientStreamTests
         Assert.Equal((true, "F1", "budget"), (result.Pending, result.QuestionId, result.Widget!.Type));
         Assert.Equal("Dưới 20.000 USD", Assert.Single(result.QuickReplies).Label);
     }
+
+    // ---- tạo vector cho kho tri thức (backend gọi sau khi moderator nhập file)
+
+    [Fact]
+    public async Task EmbedKnowledge_PostsToTheAdvisorRoute_WithoutBody_AndReadsTheCamelCaseAnswer()
+    {
+        var stub = new Stub("""{"pending":494,"running":true,"done":0,"error":null,"started":true}""");
+
+        var result = await ClientFor(stub).EmbedKnowledgeAsync();
+
+        Assert.Equal(HttpMethod.Post, stub.Request!.Method);
+        Assert.Equal("http://advisor/api/v1/knowledge/embed-missing", stub.Request.RequestUri!.ToString());
+        Assert.Equal(new KnowledgeEmbedDto(494, true, 0, null, true), result);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]   // advisor chạy nhưng không có database
+    [InlineData(HttpStatusCode.Unauthorized)]         // sai khóa API
+    public async Task EmbedKnowledge_AFailingStatusIsAnAdvisorFailure(HttpStatusCode status)
+    {
+        await Assert.ThrowsAsync<HttpRequestException>(() => ClientFor(new Stub("", status)).EmbedKnowledgeAsync());
+    }
 }

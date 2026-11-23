@@ -98,7 +98,9 @@ public partial class KnowledgeBaseService
         if (reembed.Count > 0)
             await repository.ClearEmbeddingsAsync(reembed, ct);
 
-        return new KnowledgeImportResultDto(rows.Count, added.Count, updated, unchanged, errors, pending);
+        // Gọi cả khi lần nhập này không đổi gì: dòng thiếu vector từ lần nhập trước (advisor tắt) cũng được tạo bù
+        var (started, warning) = valid.Count > 0 ? await StartEmbeddingAsync(ct) : (false, null);
+        return new KnowledgeImportResultDto(rows.Count, added.Count, updated, unchanged, errors, pending, started, warning);
     }
 
     private IReadOnlyList<KnowledgeImportRow> ReadRows(Stream workbook, CancellationToken ct)
