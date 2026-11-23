@@ -454,16 +454,16 @@ public class CenterRegistrationAndVerificationTests
     }
 
     [Fact]
-    public async Task Review_ChangesRequested_ListsAnUnverifiedEmailAsUnmet()
+    public async Task Review_Reject_ListsAnUnverifiedEmailAsUnmet()
     {
         var (service, email, req, _) = NotificationSetup(emailVerified: false);
 
         await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(
-            Action: "changes_requested", IsNationalRegistryMatched: true, IsBusinessOperating: true, IsRepresentativeValid: true,
-            RejectionReason: "Bổ sung giấy ủy quyền"), Guid.NewGuid());
+            Action: "reject", IsNationalRegistryMatched: true, IsBusinessOperating: true, IsRepresentativeValid: true,
+            RejectionReason: "Thiếu giấy ủy quyền"), Guid.NewGuid());
 
         var sent = Assert.Single(email.CenterVerificationEmails);
-        Assert.Equal("changes_requested", sent.Outcome);
+        Assert.Equal("reject", sent.Outcome);
         Assert.Contains("Email trung tâm", Assert.Single(sent.Unmet!));
     }
 
