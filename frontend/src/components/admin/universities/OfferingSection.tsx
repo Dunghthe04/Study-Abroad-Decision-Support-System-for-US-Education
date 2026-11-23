@@ -12,6 +12,7 @@ import { toast } from "@/components/ui/toast";
 import { findNotNumbers, numberOrNull, textOrNull, toInputValue, todayIso } from "@/lib/admin-form";
 import { AdminFormError, getAdminMajors, updateAdminOffering } from "@/lib/admin-university-api";
 import {
+  ACT_POLICY_OPTIONS,
   SAT_POLICY_OPTIONS,
   SOURCE_RELIABILITY_OPTIONS,
   formatLastEdited,
@@ -19,6 +20,7 @@ import {
   formatRetrievedAt,
   formatSatRange,
   formatUsd,
+  actPolicyLabel,
   parseDeadlines,
   satPolicyLabel,
   sourceReliabilityLabel,
@@ -52,6 +54,10 @@ const NUMBER_FIELDS = [
   "livingUsd",
   "feesUsd",
   "otherExpensesUsd",
+  "healthInsuranceUsd",
+  "applicationFeeUsd",
+  "tuitionInStateUsd",
+  "actSubmitPct",
   "minGpa4",
   "avgGpa4",
   "minIelts",
@@ -70,6 +76,10 @@ const NUMBER_LABELS: Record<NumberField, string> = {
   livingUsd: "Sinh hoạt (USD/năm)",
   feesUsd: "Các khoản phí (USD/năm)",
   otherExpensesUsd: "Chi phí khác (USD/năm)",
+  healthInsuranceUsd: "Bảo hiểm y tế (USD/năm)",
+  applicationFeeUsd: "Phí nộp hồ sơ (USD, một lần)",
+  tuitionInStateUsd: "Học phí in-state (USD/năm, chỉ tham khảo)",
+  actSubmitPct: "Tỉ lệ nộp ACT (0–1)",
   minGpa4: "GPA tối thiểu (thang 4)",
   avgGpa4: "GPA TB trúng tuyển",
   minIelts: "IELTS tối thiểu",
@@ -81,14 +91,23 @@ const NUMBER_LABELS: Record<NumberField, string> = {
   act75: "ACT mốc 75%",
 };
 
-const COST_FIELDS: NumberField[] = ["tuitionUsd", "livingUsd", "feesUsd", "otherExpensesUsd"];
+const COST_FIELDS: NumberField[] = [
+  "tuitionUsd",
+  "livingUsd",
+  "feesUsd",
+  "otherExpensesUsd",
+  "healthInsuranceUsd",
+  "applicationFeeUsd",
+  "tuitionInStateUsd",
+];
 const REQUIREMENT_FIELDS: NumberField[] = ["minGpa4", "avgGpa4", "minIelts", "minToefl", "minDuolingo"];
-const TEST_FIELDS: NumberField[] = ["sat25", "sat75", "act25", "act75"];
+const TEST_FIELDS: NumberField[] = ["sat25", "sat75", "act25", "act75", "actSubmitPct"];
 
 interface FormState {
   numbers: Record<NumberField, string>;
   academicYear: string;
   satPolicy: string;
+  actPolicy: string;
   sourceUrl: string;
   retrievedAt: string;
   sourceReliability: string;
@@ -110,6 +129,7 @@ function toFormState(offering: AdminUniversityOffering): FormState {
     numbers,
     academicYear: toInputValue(offering.academicYear),
     satPolicy: toInputValue(offering.satPolicy),
+    actPolicy: toInputValue(offering.actPolicy),
     sourceUrl: toInputValue(offering.sourceUrl),
     retrievedAt: toInputValue(offering.retrievedAt),
     sourceReliability: toInputValue(offering.sourceReliability),
@@ -218,6 +238,7 @@ export function OfferingSection({
         ...numbers,
         academicYear: textOrNull(form.academicYear),
         satPolicy: textOrNull(form.satPolicy),
+        actPolicy: textOrNull(form.actPolicy),
         sourceUrl: textOrNull(form.sourceUrl),
         retrievedAt: textOrNull(form.retrievedAt),
         sourceReliability: textOrNull(form.sourceReliability),
@@ -286,6 +307,9 @@ export function OfferingSection({
         { label: "Sinh hoạt", value: formatUsd(offering.livingUsd) },
         { label: "Các khoản phí", value: formatUsd(offering.feesUsd) },
         { label: "Chi phí khác", value: formatUsd(offering.otherExpensesUsd) },
+        { label: "Bảo hiểm y tế", value: formatUsd(offering.healthInsuranceUsd) },
+        { label: "Phí nộp hồ sơ (một lần)", value: formatUsd(offering.applicationFeeUsd) },
+        { label: "Học phí in-state (tham khảo)", value: formatUsd(offering.tuitionInStateUsd) },
         { label: "Tổng", value: hasCost ? formatUsd(totalCost) : "—" },
       ];
     }
@@ -325,6 +349,8 @@ export function OfferingSection({
         { label: "SAT 25% – 75%", value: formatSatRange(offering.sat25, offering.sat75) },
         { label: "ACT 25% – 75%", value: formatSatRange(offering.act25, offering.act75) },
         { label: "Chính sách SAT", value: satPolicyLabel(offering.satPolicy) },
+        { label: "Chính sách ACT", value: actPolicyLabel(offering.actPolicy) },
+        { label: "Tỉ lệ nộp ACT", value: formatNumber(offering.actSubmitPct) },
       ];
     }
 
@@ -337,7 +363,7 @@ export function OfferingSection({
     }
     const policyInputId = `offering-${offering.id}-sat-policy`;
     rows.push({
-      label: "Chính sách SAT/ACT",
+      label: "Chính sách SAT",
       inputId: policyInputId,
       error: fieldErrors.satPolicy,
       value: (
@@ -347,6 +373,22 @@ export function OfferingSection({
           options={SAT_POLICY_OPTIONS}
           onChange={(value) => setForm({ ...form, satPolicy: value })}
           invalid={Boolean(fieldErrors.satPolicy)}
+          disabled={isSaving}
+        />
+      ),
+    });
+    const actPolicyInputId = `offering-${offering.id}-act-policy`;
+    rows.push({
+      label: "Chính sách ACT",
+      inputId: actPolicyInputId,
+      error: fieldErrors.actPolicy,
+      value: (
+        <OptionSelect
+          id={actPolicyInputId}
+          value={form.actPolicy}
+          options={ACT_POLICY_OPTIONS}
+          onChange={(value) => setForm({ ...form, actPolicy: value })}
+          invalid={Boolean(fieldErrors.actPolicy)}
           disabled={isSaving}
         />
       ),

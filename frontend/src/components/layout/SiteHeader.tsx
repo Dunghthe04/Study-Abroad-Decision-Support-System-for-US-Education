@@ -66,6 +66,7 @@ export function SiteHeader() {
   const navLinks = [
     { href: canOpenAdmin ? "/admin" : "/", label: isModerator ? "Kiểm duyệt" : isAdmin ? "Quản trị" : "Trang chủ" },
     { href: "/universities", label: "Tìm trường" },
+    { href: "/scholarships", label: "Học bổng" },
     { href: isModerator ? "/admin/centers" : "/centers", label: "Trung tâm" },
     { href: "/methodology", label: "Phương pháp của chúng tôi" },
     ...(hasOwnProfile ? [{ href: "/target-schools", label: "Trường mục tiêu" }] : []),

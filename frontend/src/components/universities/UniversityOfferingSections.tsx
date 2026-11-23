@@ -31,7 +31,7 @@ import {
   universityMoney,
   universityNumber,
 } from "@/lib/university-display";
-import { satPolicyLabel } from "@/lib/admin-university-display";
+import { actPolicyLabel, satPolicyLabel } from "@/lib/admin-university-display";
 import {
   DetailRows,
   DetailSection,
@@ -99,6 +99,9 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
 
   const breakdownSum = costBreakdown.reduce((sum, item) => sum + item.amount, 0);
   const displayTotal = total ?? (breakdownSum > 0 ? breakdownSum : null);
+
+  // [USAS-2067] Phí nộp hồ sơ là khoản một lần, không nằm trong tổng chi phí hằng năm; in-state chỉ để tham khảo
+  const hasExtraFees = offering.applicationFeeUsd != null || offering.tuitionInStateUsd != null;
 
   const hasAid = Boolean(
     offering.intlAidPolicy ||
@@ -201,6 +204,27 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
           </div>
         )}
 
+        {hasExtraFees && (
+          <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
+              {offering.applicationFeeUsd != null && (
+                <GridDataItem
+                  icon={FileTextIcon}
+                  label="Phí nộp hồ sơ (một lần, chưa tính vào tổng/năm)"
+                  value={<SourceTooltip source={findFieldSource(sources, "application_fee_usd")}>{universityMoney(offering.applicationFeeUsd)}</SourceTooltip>}
+                />
+              )}
+              {offering.tuitionInStateUsd != null && (
+                <GridDataItem
+                  icon={GraduationCapIcon}
+                  label="Học phí in-state (chỉ tham khảo, sinh viên quốc tế đóng mức nonresident)"
+                  value={<SourceTooltip source={findFieldSource(sources, "tuition_in_state_usd")}>{`${universityMoney(offering.tuitionInStateUsd)} / năm`}</SourceTooltip>}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
         {hasAid && (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">Hỗ trợ cho sinh viên quốc tế</h3>
@@ -270,6 +294,8 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
   const hasAnyScore = hasSat || hasAct || hasGpa4 || hasGpaWeighted;
 
   const isSatRequired = offering.satPolicy === "required";
+  // ACT có chính sách riêng; dữ liệu cũ chưa có thì theo chính sách SAT như trước
+  const isActRequired = (offering.actPolicy ?? offering.satPolicy) === "required";
 
   const englishRequirements = [
     {
@@ -315,12 +341,17 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
 
   // Chính sách nộp SAT/ACT và mức coi trọng là hai thông tin riêng của dữ liệu trường: hiện cạnh nhau để không trông như mâu thuẫn
   // ("Không bắt buộc" mà "Rất quan trọng"). Chỉ nêu đúng dữ liệu, không giải thích thêm
+  const policyParts = [
+    offering.satPolicy ? `SAT: ${satPolicyLabel(offering.satPolicy)}` : null,
+    offering.actPolicy ? `ACT: ${actPolicyLabel(offering.actPolicy)}` : null,
+  ].filter(Boolean);
+  const policyNote = policyParts.length > 0 ? `Chính sách nộp: ${policyParts.join(" · ")}` : undefined;
   const importanceFactors: { label: string; value: string | null; note?: string }[] = [
     { label: "Điểm trung bình (GPA)", value: offering.c7GpaImportance },
     {
       label: "Điểm thi chuẩn hóa (SAT/ACT)",
       value: offering.c7TestImportance,
-      note: offering.satPolicy ? `Chính sách nộp: ${satPolicyLabel(offering.satPolicy)}` : undefined,
+      note: policyNote,
     },
     { label: "Hoạt động ngoại khóa", value: offering.c7EcImportance },
   ].filter((item) => item.value != null);
@@ -366,7 +397,7 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
                 <div className="rounded-xl border border-line bg-surface p-4 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold text-ink-2 truncate">ACT (khoảng 25% – 75%)</span>
-                    {isSatRequired && (
+                    {isActRequired && (
                       <Badge className="border-transparent bg-risk-wash text-risk text-[11px] font-medium py-0.5 px-2 shrink-0">
                         Bắt buộc
                       </Badge>
@@ -697,6 +728,13 @@ export function UniversityStatistics({
       label: "Tỷ lệ nộp điểm SAT",
       value: offering.satSubmitPct,
       subtitle: "Tân sinh viên nộp SAT",
+    },
+    {
+      key: "actSubmit",
+      sourceField: "act_submit_pct",
+      label: "Tỷ lệ nộp điểm ACT",
+      value: offering.actSubmitPct,
+      subtitle: "Tân sinh viên nộp ACT",
     },
     {
       key: "gpaSubmit",

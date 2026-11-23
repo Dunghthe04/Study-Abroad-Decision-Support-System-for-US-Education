@@ -212,7 +212,7 @@ export const UNIVERSITY_FIELD_LABELS: Record<string, string> = {
   name: "Tên trường", city: "Thành phố", state: "Bang", website: "Website", control: "Loại trường", is_ivy: "Ivy League",
   acceptance_rate: "Tỷ lệ nhận", international_student_count: "Số sinh viên quốc tế", tuition_usd: "Học phí", living_usd: "Sinh hoạt phí", fees_usd: "Phí bắt buộc", other_expenses_usd: "Chi phí khác", cost_year: "Năm chi phí", academic_year: "Năm học",
   min_gpa4: "GPA tối thiểu", avg_gpa4: "GPA trung bình", min_ielts: "IELTS", min_toefl: "TOEFL", min_duolingo: "Duolingo",
-  sat25: "SAT mốc 25%", sat75: "SAT mốc 75%", act25: "ACT mốc 25%", act75: "ACT mốc 75%", sat_policy: "Chính sách SAT/ACT", sat_submit_pct: "Tỷ lệ nộp SAT", gpa_submit_pct: "Tỷ lệ nộp GPA",
+  sat25: "SAT mốc 25%", sat75: "SAT mốc 75%", act25: "ACT mốc 25%", act75: "ACT mốc 75%", sat_policy: "Chính sách SAT/ACT", sat_submit_pct: "Tỷ lệ nộp SAT", act_policy: "Chính sách ACT", act_submit_pct: "Tỷ lệ nộp ACT", application_fee_usd: "Phí nộp hồ sơ", tuition_in_state_usd: "Học phí in-state", gpa_submit_pct: "Tỷ lệ nộp GPA",
   applicants_total: "Số hồ sơ nộp", admitted_total: "Số hồ sơ được nhận", intl_applicants: "Hồ sơ quốc tế", intl_admitted: "Hồ sơ quốc tế được nhận", intl_acceptance_rate: "Tỷ lệ nhận quốc tế",
   c7_gpa_importance: "Mức coi trọng GPA", c7_test_importance: "Mức coi trọng điểm thi", c7_ec_importance: "Mức coi trọng ngoại khóa",
   intl_aid_policy: "Chính sách hỗ trợ tài chính", intl_aid_avg_usd: "Hỗ trợ tài chính trung bình", intl_aid_recipients: "Số người nhận hỗ trợ", vn_aid_scope: "Phạm vi hỗ trợ sinh viên Việt Nam",

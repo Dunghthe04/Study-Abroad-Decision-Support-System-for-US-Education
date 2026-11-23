@@ -96,6 +96,13 @@ export function universityColumns(
       ),
     },
     {
+      id: "scholarshipCount",
+      label: "Học bổng",
+      headerClassName: "text-right",
+      cellClassName: "text-right",
+      render: (university) => university.scholarshipCount ?? 0,
+    },
+    {
       id: "isActive",
       label: "Hiển thị",
       render: (university) => (

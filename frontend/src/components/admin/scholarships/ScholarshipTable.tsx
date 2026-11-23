@@ -6,17 +6,29 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { createAdminScholarship, updateAdminScholarship } from "@/lib/admin-scholarship-api";
-import { COVERAGE_OPTIONS, scholarshipValueText } from "@/lib/admin-scholarship-display";
+import {
+  AMOUNT_TYPE_LABELS,
+  AMOUNT_TYPE_OPTIONS,
+  APPLICATION_METHOD_LABELS,
+  APPLICATION_METHOD_OPTIONS,
+  COVERAGE_OPTIONS,
+  KIND_LABELS,
+  KIND_OPTIONS,
+  scholarshipValueText,
+  TRI_STATE_OPTIONS,
+  triStateLabel,
+} from "@/lib/admin-scholarship-display";
 import { findNotNumbers, numberOrNull, textOrNull, toInputValue, todayIso } from "@/lib/admin-form";
 import { AdminFormError } from "@/lib/admin-university-api";
 import {
   formatNumber,
   formatRetrievedAt,
+  formatUsd,
   SOURCE_RELIABILITY_OPTIONS,
   sourceReliabilityLabel,
 } from "@/lib/admin-university-display";
 import { STUDY_LEVELS, studyLevelLabel } from "@/lib/study-levels";
-import type { AdminScholarship } from "@/types/admin-scholarship";
+import type { AdminScholarship, SaveScholarshipRequest } from "@/types/admin-scholarship";
 import type { AdminFieldErrors } from "@/types/admin-university";
 import { EditableTable, type TableRow } from "../universities/EditableTable";
 import { OptionSelect } from "../universities/OptionSelect";
@@ -24,6 +36,31 @@ import { ScholarshipVisibilityToggle } from "./ScholarshipVisibilityToggle";
 import { UniversityPicker } from "./UniversityPicker";
 
 const LEVEL_OPTIONS = STUDY_LEVELS.map((level) => ({ value: level, label: studyLevelLabel(level) }));
+
+// [USAS-2067] Cột bộ dữ liệu học bổng: ô số, ô Có/Không/Chưa rõ, ô chọn, ô chữ
+const DATASET_NUMBER_LABELS = {
+  amountMinUsd: "Giá trị thấp nhất (USD)",
+  amountMaxUsd: "Giá trị cao nhất (USD)",
+  durationYears: "Thời hạn (năm)",
+  minSat: "SAT tối thiểu",
+  minAct: "ACT tối thiểu",
+  minToefl: "TOEFL iBT tối thiểu",
+} as const;
+type DatasetNumberKey = keyof typeof DATASET_NUMBER_LABELS;
+const DATASET_NUMBER_KEYS = Object.keys(DATASET_NUMBER_LABELS) as DatasetNumberKey[];
+
+const TRI_STATE_LABELS = {
+  renewable: "Được gia hạn",
+  intlEligible: "Mở cho du học sinh",
+  vnEligible: "Mở cho người Việt Nam",
+  needBased: "Xét theo hoàn cảnh tài chính",
+  meritBased: "Xét theo thành tích",
+} as const;
+type TriStateKey = keyof typeof TRI_STATE_LABELS;
+const TRI_STATE_KEYS = Object.keys(TRI_STATE_LABELS) as TriStateKey[];
+
+const triToBool = (value: string): boolean | null => (value === "" ? null : value === "true");
+const boolToTri = (value: boolean | null | undefined): string => (value == null ? "" : String(value));
 
 interface FormState {
   universityId: string;
@@ -40,6 +77,14 @@ interface FormState {
   sourceUrl: string;
   retrievedAt: string;
   sourceReliability: string;
+  kind: string;
+  amountType: string;
+  applicationMethod: string;
+  renewalCriteria: string;
+  majorRestriction: string;
+  applyUrl: string;
+  numbers: Record<DatasetNumberKey, string>;
+  flags: Record<TriStateKey, string>;
 }
 
 function toForm(s: AdminScholarship | null): FormState {
@@ -58,6 +103,14 @@ function toForm(s: AdminScholarship | null): FormState {
     sourceUrl: toInputValue(s?.sourceUrl),
     retrievedAt: toInputValue(s?.retrievedAt),
     sourceReliability: toInputValue(s?.sourceReliability),
+    kind: toInputValue(s?.kind),
+    amountType: toInputValue(s?.amountType),
+    applicationMethod: toInputValue(s?.applicationMethod),
+    renewalCriteria: toInputValue(s?.renewalCriteria),
+    majorRestriction: toInputValue(s?.majorRestriction),
+    applyUrl: toInputValue(s?.applyUrl),
+    numbers: Object.fromEntries(DATASET_NUMBER_KEYS.map((key) => [key, toInputValue(s?.[key])])) as Record<DatasetNumberKey, string>,
+    flags: Object.fromEntries(TRI_STATE_KEYS.map((key) => [key, boolToTri(s?.[key])])) as Record<TriStateKey, string>,
   };
 }
 
@@ -74,13 +127,18 @@ interface ScholarshipTableProps {
   onVisibilityChanged: (scholarship: AdminScholarship) => void;
 }
 
-function sourceLink(url: string | null) {
+function sourceLink(url: string | null, text = "Mở nguồn") {
   if (!url) return "—";
   return (
     <a href={url} target="_blank" rel="noreferrer" className="text-brand underline-offset-2 hover:underline">
-      Mở nguồn
+      {text}
     </a>
   );
+}
+
+function rangeText(min: number | null, max: number | null): string {
+  if (min === null && max === null) return "—";
+  return `${min === null ? "?" : formatUsd(min)} – ${max === null ? "?" : formatUsd(max)}`;
 }
 
 export function ScholarshipTable({
@@ -118,14 +176,25 @@ export function ScholarshipTable({
     const amountUsd = numberOrNull(form.amountUsd);
     const minGpa4 = numberOrNull(form.minGpa4);
     const minIelts = numberOrNull(form.minIelts);
-    const notNumbers = findNotNumbers({ amountUsd, minGpa4, minIelts });
+    const datasetNumbers = Object.fromEntries(
+      DATASET_NUMBER_KEYS.map((key) => [key, numberOrNull(form.numbers[key])]),
+    ) as Record<DatasetNumberKey, number | null>;
+    const notNumbers = findNotNumbers({ amountUsd, minGpa4, minIelts, ...datasetNumbers });
     if (notNumbers.length > 0) {
       setFieldErrors(Object.fromEntries(notNumbers.map((field) => [field, "Vui lòng nhập số."])));
       setError("Dữ liệu chưa hợp lệ, xem các ô được đánh dấu.");
       return;
     }
 
-    const body = {
+    const body: SaveScholarshipRequest = {
+      ...datasetNumbers,
+      ...(Object.fromEntries(TRI_STATE_KEYS.map((key) => [key, triToBool(form.flags[key])])) as Record<TriStateKey, boolean | null>),
+      kind: textOrNull(form.kind),
+      amountType: textOrNull(form.amountType),
+      applicationMethod: textOrNull(form.applicationMethod),
+      renewalCriteria: textOrNull(form.renewalCriteria),
+      majorRestriction: textOrNull(form.majorRestriction),
+      applyUrl: textOrNull(form.applyUrl),
       universityId: lockedUniversityId ?? textOrNull(form.universityId),
       name: textOrNull(form.name),
       provider: textOrNull(form.provider),
@@ -179,8 +248,24 @@ export function ScholarshipTable({
       { label: "Đơn vị cấp", value: scholarship.provider ?? "—" },
       { label: "Bậc học", value: studyLevelLabel(scholarship.studyLevel) },
       { label: "Giá trị", value: scholarshipValueText(scholarship) },
+      { label: "Phân loại", value: scholarship.kind ? (KIND_LABELS[scholarship.kind] ?? scholarship.kind) : "—" },
+      { label: "Kiểu giá trị", value: scholarship.amountType ? (AMOUNT_TYPE_LABELS[scholarship.amountType] ?? scholarship.amountType) : "—" },
+      { label: "Khoảng giá trị", value: rangeText(scholarship.amountMinUsd, scholarship.amountMaxUsd) },
+      { label: "Thời hạn (năm)", value: formatNumber(scholarship.durationYears) },
+      { label: "Được gia hạn", value: triStateLabel(scholarship.renewable) },
+      { label: "Điều kiện gia hạn", value: scholarship.renewalCriteria ?? "—" },
       { label: "GPA tối thiểu (thang 4)", value: formatNumber(scholarship.minGpa4) },
       { label: "IELTS tối thiểu", value: formatNumber(scholarship.minIelts) },
+      { label: "TOEFL iBT tối thiểu", value: formatNumber(scholarship.minToefl) },
+      { label: "SAT tối thiểu", value: formatNumber(scholarship.minSat) },
+      { label: "ACT tối thiểu", value: formatNumber(scholarship.minAct) },
+      { label: "Mở cho du học sinh", value: triStateLabel(scholarship.intlEligible) },
+      { label: "Mở cho người Việt Nam", value: triStateLabel(scholarship.vnEligible) },
+      { label: "Xét theo hoàn cảnh tài chính", value: triStateLabel(scholarship.needBased) },
+      { label: "Xét theo thành tích", value: triStateLabel(scholarship.meritBased) },
+      { label: "Giới hạn ngành", value: scholarship.majorRestriction ?? "—" },
+      { label: "Cách nộp", value: scholarship.applicationMethod ? (APPLICATION_METHOD_LABELS[scholarship.applicationMethod] ?? scholarship.applicationMethod) : "—" },
+      { label: "Link nộp", value: sourceLink(scholarship.applyUrl, "Mở link nộp") },
       { label: "Hạn nộp", value: formatRetrievedAt(scholarship.deadline) },
       { label: "Điều kiện", value: scholarship.eligibilityNotes ?? "—" },
       { label: "Nguồn", value: sourceLink(scholarship.sourceUrl) },
@@ -193,6 +278,77 @@ export function ScholarshipTable({
     ];
     return <EditableTable title={title} rows={rows} edit={edit} />;
   }
+
+  const numberRow = (key: DatasetNumberKey): TableRow => ({
+    label: DATASET_NUMBER_LABELS[key],
+    inputId: `${idPrefix}-${key}`,
+    error: fieldErrors[key],
+    value: (
+      <Input
+        id={`${idPrefix}-${key}`}
+        inputMode="decimal"
+        value={form.numbers[key]}
+        onChange={(e) => setForm((prev) => ({ ...prev, numbers: { ...prev.numbers, [key]: e.target.value } }))}
+        aria-invalid={Boolean(fieldErrors[key]) || undefined}
+        disabled={isSaving}
+      />
+    ),
+  });
+  const triRow = (key: TriStateKey): TableRow => ({
+    label: TRI_STATE_LABELS[key],
+    inputId: `${idPrefix}-${key}`,
+    error: fieldErrors[key],
+    value: (
+      <OptionSelect
+        id={`${idPrefix}-${key}`}
+        value={form.flags[key]}
+        options={TRI_STATE_OPTIONS}
+        onChange={(value) => setForm((prev) => ({ ...prev, flags: { ...prev.flags, [key]: value } }))}
+        invalid={Boolean(fieldErrors[key])}
+        disabled={isSaving}
+      />
+    ),
+  });
+  const selectRow = (
+    key: "kind" | "amountType" | "applicationMethod",
+    label: string,
+    options: { value: string; label: string }[],
+  ): TableRow => ({
+    label,
+    inputId: `${idPrefix}-${key}`,
+    error: fieldErrors[key],
+    value: (
+      <OptionSelect
+        id={`${idPrefix}-${key}`}
+        value={form[key]}
+        options={options}
+        onChange={(value) => setField(key, value)}
+        invalid={Boolean(fieldErrors[key])}
+        disabled={isSaving}
+      />
+    ),
+  });
+  const textRow = (
+    key: "renewalCriteria" | "majorRestriction" | "applyUrl",
+    label: string,
+    maxLength: number,
+    placeholder?: string,
+  ): TableRow => ({
+    label,
+    inputId: `${idPrefix}-${key}`,
+    error: fieldErrors[key],
+    value: (
+      <Input
+        id={`${idPrefix}-${key}`}
+        value={form[key]}
+        onChange={(e) => setField(key, e.target.value)}
+        aria-invalid={Boolean(fieldErrors[key]) || undefined}
+        maxLength={maxLength}
+        placeholder={placeholder}
+        disabled={isSaving}
+      />
+    ),
+  });
 
   const rows: TableRow[] = [
     {
@@ -290,6 +446,13 @@ export function ScholarshipTable({
         />
       ),
     },
+    selectRow("kind", "Phân loại", KIND_OPTIONS),
+    selectRow("amountType", "Kiểu giá trị", AMOUNT_TYPE_OPTIONS),
+    numberRow("amountMinUsd"),
+    numberRow("amountMaxUsd"),
+    numberRow("durationYears"),
+    triRow("renewable"),
+    textRow("renewalCriteria", "Điều kiện gia hạn", 1000),
     {
       label: "GPA tối thiểu (thang 4)",
       inputId: `${idPrefix}-gpa`,
@@ -320,6 +483,16 @@ export function ScholarshipTable({
         />
       ),
     },
+    numberRow("minToefl"),
+    numberRow("minSat"),
+    numberRow("minAct"),
+    triRow("intlEligible"),
+    triRow("vnEligible"),
+    triRow("needBased"),
+    triRow("meritBased"),
+    textRow("majorRestriction", "Giới hạn ngành", 500),
+    selectRow("applicationMethod", "Cách nộp", APPLICATION_METHOD_OPTIONS),
+    textRow("applyUrl", "Link nộp", 512, "https://"),
     {
       label: "Hạn nộp",
       inputId: `${idPrefix}-deadline`,
