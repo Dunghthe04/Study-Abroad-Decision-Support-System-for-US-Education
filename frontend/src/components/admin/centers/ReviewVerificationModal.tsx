@@ -124,6 +124,8 @@ export function ReviewVerificationModal({
     }
   };
 
+  // Đơn đã xử lý (đã duyệt, từ chối...) chỉ để xem, không thao tác lại
+  const readOnly = data !== null && data.status !== "pending_review";
   const isEmailVerified = !!data?.emailVerifiedAt;
   const allConditionsMet =
     isEmailVerified &&
@@ -297,11 +299,12 @@ export function ReviewVerificationModal({
                   </div>
 
                   {/* Moderator Condition 2 */}
-                  <label className="flex items-center gap-2.5 p-2 rounded bg-surface-2 cursor-pointer hover:bg-surface-3 transition-colors">
+                  <label className="flex items-center gap-2.5 p-2 rounded bg-surface-2 cursor-pointer hover:bg-surface-3 transition-colors has-[:disabled]:cursor-default has-[:disabled]:opacity-70 has-[:disabled]:hover:bg-surface-2">
                     <input
                       type="checkbox"
                       checked={isNationalRegistryMatched}
                       onChange={(e) => setIsNationalRegistryMatched(e.target.checked)}
+                      disabled={readOnly}
                       className="h-4 w-4 rounded border-line text-brand focus:ring-brand"
                     />
                     <span className="text-ink font-medium">
@@ -310,11 +313,12 @@ export function ReviewVerificationModal({
                   </label>
 
                   {/* Moderator Condition 3 */}
-                  <label className="flex items-center gap-2.5 p-2 rounded bg-surface-2 cursor-pointer hover:bg-surface-3 transition-colors">
+                  <label className="flex items-center gap-2.5 p-2 rounded bg-surface-2 cursor-pointer hover:bg-surface-3 transition-colors has-[:disabled]:cursor-default has-[:disabled]:opacity-70 has-[:disabled]:hover:bg-surface-2">
                     <input
                       type="checkbox"
                       checked={isBusinessOperating}
                       onChange={(e) => setIsBusinessOperating(e.target.checked)}
+                      disabled={readOnly}
                       className="h-4 w-4 rounded border-line text-brand focus:ring-brand"
                     />
                     <span className="text-ink font-medium">
@@ -323,11 +327,12 @@ export function ReviewVerificationModal({
                   </label>
 
                   {/* Moderator Condition 4 */}
-                  <label className="flex items-center gap-2.5 p-2 rounded bg-surface-2 cursor-pointer hover:bg-surface-3 transition-colors">
+                  <label className="flex items-center gap-2.5 p-2 rounded bg-surface-2 cursor-pointer hover:bg-surface-3 transition-colors has-[:disabled]:cursor-default has-[:disabled]:opacity-70 has-[:disabled]:hover:bg-surface-2">
                     <input
                       type="checkbox"
                       checked={isRepresentativeValid}
                       onChange={(e) => setIsRepresentativeValid(e.target.checked)}
+                      disabled={readOnly}
                       className="h-4 w-4 rounded border-line text-brand focus:ring-brand"
                     />
                     <span className="text-ink font-medium">
@@ -348,6 +353,7 @@ export function ReviewVerificationModal({
                     placeholder="Ghi chú đối chiếu của Moderator (lưu trữ audit)..."
                     value={reviewNotes}
                     onChange={(e) => setReviewNotes(e.target.value)}
+                    disabled={readOnly}
                   />
                 </div>
 
@@ -360,6 +366,7 @@ export function ReviewVerificationModal({
                     placeholder="Nêu rõ lý do để gửi thông báo cho trung tâm cập nhật..."
                     value={rejectionReason}
                     onChange={(e) => setRejectionReason(e.target.value)}
+                    disabled={readOnly}
                   />
                 </div>
               </div>
@@ -374,17 +381,9 @@ export function ReviewVerificationModal({
           </Button>
 
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={submitting}
-              onClick={() => handleAction("changes_requested")}
-              className="text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
-            >
-              Yêu cầu bổ sung
-            </Button>
-
+            {readOnly && <span className="text-xs text-ink-3">Đơn đã được xử lý, chỉ xem.</span>}
+            {!readOnly && (
+              <>
             <Button
               type="button"
               variant="outline"
@@ -406,6 +405,8 @@ export function ReviewVerificationModal({
             >
               Duyệt & Cấp tick xanh
             </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
