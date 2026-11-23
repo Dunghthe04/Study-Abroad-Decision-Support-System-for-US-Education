@@ -84,7 +84,7 @@ export function ReviewVerificationModal({
 
   if (!isOpen) return null;
 
-  const handleAction = async (action: "approve" | "reject" | "changes_requested" | "revoke") => {
+  const handleAction = async (action: "approve" | "reject" | "revoke") => {
     if (!requestId) return;
     setError(null);
 
@@ -353,7 +353,7 @@ export function ReviewVerificationModal({
 
                 <div>
                   <label className="text-xs font-semibold text-ink block mb-1">
-                    Lý do từ chối / Nội dung yêu cầu bổ sung (Bắt buộc nếu Từ chối hoặc Yêu cầu bổ sung)
+                    Lý do từ chối (Bắt buộc nếu Từ chối hồ sơ)
                   </label>
                   <Textarea
                     rows={2}
