@@ -29,6 +29,7 @@ import { CenterGalleryField } from "@/components/center/CenterGalleryField";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
+import { CenterLegalDocumentsReplace } from "@/components/center/CenterLegalDocumentsReplace";
 import { CenterContactCard } from "@/components/center/CenterContactCard";
 import { CenterDeletionRequestCard } from "@/components/center/CenterDeletionRequestCard";
 import {
@@ -107,8 +108,8 @@ export function CenterProfileView() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
   const [confirmLegalOpen, setConfirmLegalOpen] = useState(false);
+
   // Tự động xóa thông báo thành công sau 5 giây
   useEffect(() => {
     if (!success) return;
@@ -210,7 +211,6 @@ export function CenterProfileView() {
       setConfirmLegalOpen(true);
       return;
     }
-    const legalPayload = legalLocked
     await saveProfile();
   };
 
@@ -218,6 +218,7 @@ export function CenterProfileView() {
     const fMin = feeMin ? Number(feeMin) : null;
     const fMax = feeMax ? Number(feeMax) : null;
     const fCertified = certifiedCount.trim() ? Number(certifiedCount) : null;
+    const legalPayload = legalLocked
       ? {}
       : {
           name: name.trim(),
@@ -278,9 +279,9 @@ export function CenterProfileView() {
   const isPendingReview = center?.verificationStatus === "pending_review";
   const isVerified = center?.verificationStatus === "verified";
   const legalLocked = isPendingReview;
-  const legalChanged =
   // [UC-71] Tên pháp lý, MST, người đại diện của trung tâm chưa xác minh / bị từ chối chỉ sửa ở trang Xác minh pháp lý
   const verificationFieldsLocked = !isVerified;
+  const legalChanged =
     !!center &&
     (name.trim() !== (center.name ?? "") ||
       centerType !== (center.centerType ?? "study_abroad") ||
@@ -399,12 +400,12 @@ export function CenterProfileView() {
                   </Link>
                 )}
               </div>
-              {legalLocked && (
               {!isVerified && !isPendingReview && (
                 <p className="text-xs text-ink-3">
                   Tên pháp lý, mã số thuế và người đại diện được cập nhật cùng tài liệu ở trang Xác minh pháp lý, nên không sửa tại đây.
                 </p>
               )}
+              {legalLocked && (
                 <p className="text-xs text-ink-3">
                   Hồ sơ đang chờ duyệt: thông tin pháp lý (tên, mã số thuế...) tạm khóa cho tới khi có kết quả. Bạn vẫn sửa được các thông tin hiển thị bên dưới.
                 </p>
@@ -414,6 +415,12 @@ export function CenterProfileView() {
                   Trung tâm đã được xác minh: đổi bất kỳ thông tin pháp lý nào sẽ đưa hồ sơ về Chờ duyệt và tạm ẩn dấu xác minh cho tới khi
                   Moderator duyệt lại. Các thông tin hiển thị bên dưới lưu ngay.
                 </p>
+              )}
+              {isVerified && center && (
+                <CenterLegalDocumentsReplace
+                  center={center}
+                  onSubmitted={() => void centerPortalApi.getProfile().then(setCenter).catch(() => undefined)}
+                />
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -783,9 +790,6 @@ export function CenterProfileView() {
       </div>
 
       <CenterDeletionRequestCard />
-    </div>
-  );
-}
 
       {/* [UC-92] Xác nhận trước khi đổi thông tin pháp lý của trung tâm đã xác minh */}
       <AlertDialog open={confirmLegalOpen} onOpenChange={setConfirmLegalOpen}>
@@ -810,3 +814,6 @@ export function CenterProfileView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
