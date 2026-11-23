@@ -32,7 +32,7 @@ namespace StudyAbroad.Application.Auth
         Task<bool> LogoutAsync(string rawToken, CancellationToken ct = default);
         Task<UserDto?> GetMeAsync(Guid userId, CancellationToken ct = default);
         Task<List<UserDto>> GetAllUsersAsync(CancellationToken ct = default);
-        Task<AuthResult> CreateModeratorAccountAsync(CreateModeratorAccountRequest request, CancellationToken ct = default);
+        Task<AuthResult> CreateModeratorAccountAsync(CreateModeratorAccountRequest request, Guid actorAdminId, CancellationToken ct = default);
         /// <summary>[Q11 / UC-71 Phụ trợ] Tạo tài khoản người dùng cho Trung tâm tư vấn (role center) — active ngay.</summary>
         Task<AuthResult> CreateCenterAccountAsync(CreateCenterAccountRequest request, CancellationToken ct = default);
         /// <summary>[UC-60] Xem danh sách tài khoản — tìm, lọc, phân trang.</summary>
@@ -839,8 +839,8 @@ namespace StudyAbroad.Application.Auth
                 page.TotalCount);
         }
 
-        /// <summary>[UC-63] Administrator tạo tài khoản moderator — trạng thái active, không qua OTP đăng ký công khai.</summary>
-        public async Task<AuthResult> CreateModeratorAccountAsync(CreateModeratorAccountRequest request, CancellationToken ct = default)
+        /// <summary>[UC-63] Administrator tạo tài khoản moderator (active); Moderator tự đặt mật khẩu bằng mã OTP gửi email, thao tác ghi nhật ký.</summary>
+        public async Task<AuthResult> CreateModeratorAccountAsync(CreateModeratorAccountRequest request, Guid actorAdminId, CancellationToken ct = default)
         {
             var email = NormalizeEmail(request.Email);
             var fullName = request.FullName?.Trim() ?? string.Empty;
@@ -849,10 +849,6 @@ namespace StudyAbroad.Application.Auth
 
             if (string.IsNullOrEmpty(email) || email.Length > MaxEmailLength || !IsValidEmail(email))
                 return AuthResult.Fail(AuthError.Validation, $"Email không hợp lệ hoặc vượt quá {MaxEmailLength} ký tự.");
-
-            var passwordError = ValidatePassword(request.Password, "Mật khẩu");
-            if (passwordError != null)
-                return AuthResult.Fail(AuthError.Validation, passwordError);
 
             if (fullName.Length == 0 || fullName.Length > MaxFullNameLength)
                 return AuthResult.Fail(AuthError.Validation, $"Họ tên không được để trống và tối đa {MaxFullNameLength} ký tự.");
@@ -874,10 +870,12 @@ namespace StudyAbroad.Application.Auth
             if (!string.IsNullOrEmpty(normalizedPhone) && await users.PhoneExistAsync(normalizedPhone, ct))
                 return AuthResult.Fail(AuthError.Validation, "Số điện thoại đã được sử dụng.");
 
+            // [UC-63] Administrator không đặt mật khẩu: tài khoản dùng mật khẩu ngẫu nhiên không ai biết cho tới khi Moderator
+            // tự đặt qua mã OTP gửi email (cùng luồng "Quên mật khẩu").
             var user = new User
             {
                 Email = email,
-                PasswordHash = hasher.Hash(request.Password),
+                PasswordHash = hasher.Hash(Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))),
                 FullName = fullName,
                 Role = UserRoles.Moderator,
                 Status = UserStatuses.Active,
@@ -887,7 +885,19 @@ namespace StudyAbroad.Application.Auth
             };
             await users.AddAsync(user, ct);
 
-            return AuthResult.Ok(ToDto(user), "Đã tạo tài khoản moderator.");
+            var otpCode = await IssueOtpAsync(user.Id, OtpPurposes.ResetPassword, ct);
+            await emailSender.SendModeratorInvitationEmailAsync(user.Email, user.FullName, otpCode, OtpExpiryMinutes, ct);
+
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = actorAdminId,
+                Action = "user.create_moderator",
+                EntityType = "user",
+                EntityId = user.Id.ToString(),
+                DetailJson = JsonSerializer.Serialize(new { targetEmail = user.Email, fullName = user.FullName }),
+            }, ct);
+
+            return AuthResult.Ok(ToDto(user), "Đã tạo tài khoản moderator và gửi email đặt mật khẩu.");
         }
 
         /// <summary>[Q11 / UC-71 Phụ trợ] Tạo tài khoản người dùng cho Trung tâm tư vấn (role center) — trạng thái active, không qua OTP đăng ký công khai.</summary>

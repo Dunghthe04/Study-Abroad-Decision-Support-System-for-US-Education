@@ -11,7 +11,8 @@ namespace StudyAbroad.Application.Auth
     public record RegisterRequest(string Email, string Password, string FullName, string Role, DateOnly? DateOfBirth = null, string? ParentEmail = null, string? Phone = null);
 
     // [UC-63] Admin tạo tài khoản moderator (khách không tự đăng ký role này).
-    public record CreateModeratorAccountRequest(string Email, string Password, string FullName, string? Phone = null);
+    /// <summary>[UC-63] Administrator nhập email và thông tin Moderator mới; Moderator tự đặt mật khẩu qua email.</summary>
+    public record CreateModeratorAccountRequest(string Email, string FullName, string? Phone = null);
 
     // [Q11 / UC-71 Phụ trợ] Admin/Moderator tạo tài khoản người dùng cho Trung tâm tư vấn (role center).
     public record CreateCenterAccountRequest(string Email, string Password, string? FullName = null, string? Phone = null);

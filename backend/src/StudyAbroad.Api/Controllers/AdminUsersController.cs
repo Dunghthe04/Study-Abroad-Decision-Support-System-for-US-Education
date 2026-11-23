@@ -43,7 +43,10 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
     [Authorize(Roles = UserRoles.Admin)]
     public async Task<ActionResult<UserDto>> CreateModerator(CreateModeratorAccountRequest request, CancellationToken ct)
     {
-        var result = await auth.CreateModeratorAccountAsync(request, ct);
+        if (User.GetUserId() is not { } actorId)
+            return Unauthorized();
+
+        var result = await auth.CreateModeratorAccountAsync(request, actorId, ct);
         if (result.Error != AuthError.None || result.User is null)
             return ValidationProblem(result.Message);
 
