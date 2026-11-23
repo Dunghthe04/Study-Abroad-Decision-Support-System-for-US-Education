@@ -1,4 +1,5 @@
 using StudyAbroad.Application.Audit;
+using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Application.TargetSchools;
 using StudyAbroad.Domain.Entities;
 using Xunit;
@@ -66,6 +67,29 @@ public class TargetSchoolServiceTests
         Assert.Equal("target_school.add", audit.Action);
         Assert.Equal("target_school", audit.EntityType);
         Assert.Equal(_userId, audit.ActorUserId);
+    }
+
+    [Fact]
+    public async Task AddTargetSchool_WhenCategoryNull_DefaultsFromLatestRecommendationHistory()
+    {
+        var fakeRecRepo = new FakeRecommendationHistoryRepository();
+        fakeRecRepo.Rows.Add(new Recommendation
+        {
+            UserId = _userId,
+            ItemsJson = """{"reach":[{"code":"MIT"}],"match":[],"safety":[]}"""
+        });
+        var serviceWithRec = new TargetSchoolService(_repo, _auditLogs, fakeRecRepo);
+
+        var request = new AddTargetSchoolRequest(
+            UniversityId: _uniId,
+            Category: null
+        );
+
+        var result = await serviceWithRec.AddTargetSchoolAsync(_userId, request);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.TargetSchool);
+        Assert.Equal("reach", result.TargetSchool.Category);
     }
 
     [Fact]
@@ -578,5 +602,16 @@ public class TargetSchoolServiceTests
 
         public Task<string?> GetUniversityDeadlinesJsonAsync(Guid universityId, CancellationToken ct = default) =>
             Task.FromResult(DeadlinesJsonMap.TryGetValue(universityId, out var json) ? json : null);
+    }
+
+    private sealed class FakeRecommendationHistoryRepository : IRecommendationHistoryRepository
+    {
+        public List<Recommendation> Rows { get; } = new();
+
+        public Task<List<Recommendation>> ListByUserAsync(Guid userId, int take, CancellationToken ct = default) =>
+            Task.FromResult(Rows.Where(r => r.UserId == userId).Take(take).ToList());
+
+        public Task<Recommendation?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+            Task.FromResult(Rows.FirstOrDefault(r => r.Id == id));
     }
 }
