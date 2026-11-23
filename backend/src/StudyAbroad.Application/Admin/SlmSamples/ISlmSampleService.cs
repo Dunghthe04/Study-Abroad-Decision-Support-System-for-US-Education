@@ -22,7 +22,7 @@ public interface ISlmSampleService
     Task<SlmSampleDto> CreateAsync(SaveSlmSampleRequest request, Guid actorUserId, CancellationToken ct = default);
 
     /// <summary>
-    /// Sửa một dòng và ghi lịch sử. Dòng approved đổi nội dung thì về pending; Submit đưa draft, rejected, needs_fix sang pending.
+    /// Sửa một dòng. Dòng approved đổi nội dung thì về pending; Submit đưa draft, rejected, needs_fix sang pending.
     /// Null nếu không có dòng. Lỗi như CreateAsync.
     /// </summary>
     Task<SlmSampleDto?> UpdateAsync(Guid id, SaveSlmSampleRequest request, Guid actorUserId, CancellationToken ct = default);
@@ -32,7 +32,7 @@ public interface ISlmSampleService
 
     /// <summary>
     /// Duyệt một hoặc nhiều dòng sang approved, rejected hoặc needs_fix. Từ chối và yêu cầu sửa phải có ghi chú.
-    /// Bỏ qua dòng do chính người duyệt tạo, sửa hoặc gửi duyệt, và dòng approved chưa có câu trả lời lẫn intents.
+    /// Bỏ qua dòng do chính người duyệt tạo, và dòng approved chưa có câu trả lời lẫn intents.
     /// </summary>
     Task<ReviewSlmSamplesResultDto> ReviewAsync(ReviewSlmSamplesRequest request, Guid actorUserId, CancellationToken ct = default);
 

@@ -71,15 +71,10 @@ public class SlmSampleService(
 
         var userIds = new[] { sample.CreatedByUserId, sample.ReviewedByUserId }.OfType<Guid>().Distinct().ToList();
         var names = userIds.Count == 0 ? new Dictionary<Guid, string>() : await repository.UserNamesAsync(userIds, ct);
-        var history = await repository.HistoryAsync(id, ct);
 
         return new SlmSampleDetailDto(
             ToDto(sample, NameOf(names, sample.CreatedByUserId)),
-            NameOf(names, sample.ReviewedByUserId),
-            history.Select(row => new SlmSampleHistoryDto(
-                row.History.Id, row.History.Action, row.History.FromStatus, row.History.ToStatus, row.History.Note,
-                string.IsNullOrEmpty(row.History.ChangedFields) ? [] : row.History.ChangedFields.Split(','),
-                row.History.ActorUserId, row.ActorName, row.History.CreatedAt)).ToList());
+            NameOf(names, sample.ReviewedByUserId));
     }
 
     public Task<IReadOnlyList<SlmSampleCreatorDto>> GetCreatorsAsync(CancellationToken ct = default) =>
@@ -101,7 +96,7 @@ public class SlmSampleService(
 
         var sample = NewSample(valid, status, actorUserId);
         sample.Source = valid.Source ?? SlmSampleSources.Manual;
-        await repository.AddAsync(sample, History(SlmSampleHistoryActions.Create, actorUserId, null, status, sample.Id), ct);
+        await repository.AddAsync(sample, ct);
         return ToDto(sample, null);
     }
 
@@ -125,7 +120,7 @@ public class SlmSampleService(
                 to = SlmReviewStatuses.Pending;
 
             if (changed.Count == 0 && to == from)
-                return null;
+                return false;
             if (to == SlmReviewStatuses.Pending)
                 EnsureReady(valid.Intents);
 
@@ -147,10 +142,7 @@ public class SlmSampleService(
                 sample.ReviewedAt = null;
             }
 
-            var action = changed.Count > 0 ? SlmSampleHistoryActions.Edit : SlmSampleHistoryActions.Submit;
-            var history = History(action, actorUserId, from, to, sample.Id);
-            history.ChangedFields = changed.Count > 0 ? string.Join(",", changed) : null;
-            return history;
+            return true;
         }, ct);
 
         return found == 0 ? null : await GetAsync(id, ct);
@@ -162,7 +154,7 @@ public class SlmSampleService(
         {
             sample.DeletedAt = DateTime.UtcNow;
             sample.DeletedByUserId = actorUserId;
-            return History(SlmSampleHistoryActions.Delete, actorUserId, sample.ReviewStatus, null, sample.Id);
+            return true;
         }, ct);
         return found > 0;
     }
@@ -187,39 +179,32 @@ public class SlmSampleService(
         if (note is null && status != SlmReviewStatuses.Approved)
             throw new ArgumentException("Cần ghi lý do khi từ chối hoặc yêu cầu sửa.");
 
-        var contributed = (await repository.ContributorsAsync(ids, ct))
-            .Where(x => x.ActorUserId == actorUserId)
-            .Select(x => x.SampleId)
-            .ToHashSet();
-
         int skippedOwn = 0, skippedNotReady = 0, skippedNotPending = 0, updated = 0;
         var now = DateTime.UtcNow;
         var found = await repository.UpdateManyAsync(ids, sample =>
         {
-            if (sample.CreatedByUserId == actorUserId || contributed.Contains(sample.Id))
+            if (sample.CreatedByUserId == actorUserId)
             {
                 skippedOwn++;
-                return null;
+                return false;
             }
             if (sample.ReviewStatus != SlmReviewStatuses.Pending)
             {
                 skippedNotPending++;
-                return null;
+                return false;
             }
             if (status == SlmReviewStatuses.Approved && !IsReady(sample.Intents))
             {
                 skippedNotReady++;
-                return null;
+                return false;
             }
 
-            var history = History(SlmSampleHistoryActions.Review, actorUserId, sample.ReviewStatus, status, sample.Id);
-            history.Note = note;
             sample.ReviewStatus = status;
             sample.ReviewNote = note;
             sample.ReviewedByUserId = actorUserId;
             sample.ReviewedAt = now;
             updated++;
-            return history;
+            return true;
         }, ct);
 
         return new ReviewSlmSamplesResultDto(updated, ids.Count - found, skippedOwn, skippedNotReady, skippedNotPending);
@@ -265,12 +250,7 @@ public class SlmSampleService(
         }
 
         if (toInsert.Count > 0)
-        {
-            var history = toInsert
-                .Select(s => History(SlmSampleHistoryActions.Create, actorUserId, null, s.ReviewStatus, s.Id))
-                .ToList();
-            await repository.AddRangeAsync(toInsert, history, ct);
-        }
+            await repository.AddRangeAsync(toInsert, ct);
 
         return new SlmImportResultDto(rows.Count, toInsert.Count, duplicates, errors);
     }
@@ -462,15 +442,6 @@ public class SlmSampleService(
         SourceReview = valid.SourceReview,
         ReviewStatus = status,
         CreatedByUserId = actorUserId,
-    };
-
-    private static SlmSampleHistory History(string action, Guid? actor, string? from, string? to, Guid sampleId) => new()
-    {
-        SampleId = sampleId,
-        ActorUserId = actor,
-        Action = action,
-        FromStatus = from,
-        ToStatus = to,
     };
 
     private static SlmSampleFilter NormalizeFilter(SlmSampleFilter? filter)
