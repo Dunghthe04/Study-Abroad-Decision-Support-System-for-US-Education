@@ -19,7 +19,7 @@ public class KnowledgeBaseServiceTests
 
     private static KnowledgeImportRow Row(int rowNumber, string? id, string question = "OPT là gì?") =>
         new(rowNumber, id, "faq", "label_visa_f1", question, "Câu trả lời.", null, "https://studyinthestates.dhs.gov",
-            "2026-11-01", null, null, "CHỜ DUYỆT: chưa rà");
+            "2026-11-01", null, null, null);
 
     [Fact]
     public async Task CreateAsync_WithoutEntryNo_TakesMaxPlusOne_AndNormalizesText()
@@ -143,7 +143,7 @@ public class KnowledgeBaseServiceTests
         same.Answer = "Câu trả lời.";
         same.Source = null;
         same.SourceUrl = "https://studyinthestates.dhs.gov";
-        same.Note = "CHỜ DUYỆT: chưa rà";
+        same.Note = null;
         var changed = repo.Add(entryNo: 2, question: "Câu cũ?");
         changed.EmbeddingHash = "abc";
         var rows = new[] { Row(2, "1"), Row(3, "2", "Câu mới?"), Row(4, "3", "Dòng thêm?") };
@@ -156,7 +156,6 @@ public class KnowledgeBaseServiceTests
         Assert.Equal("Câu mới?", changed.Question);
         Assert.Null(changed.EmbeddingHash);
         Assert.Equal([changed.Id], repo.ClearedEmbeddings);
-        Assert.Equal("CHỜ DUYỆT: chưa rà", repo.Items.Single(x => x.EntryNo == 3).Note);
     }
 
     [Fact]
@@ -200,6 +199,48 @@ public class KnowledgeBaseServiceTests
 
         Assert.Contains("ILIKE", sql);
         Assert.Contains("ORDER BY", sql);
+    }
+
+    [Fact]
+    public async Task ImportAsync_SkipsPendingRows_WithoutValidatingOrSaving_AndCountsThem()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var rows = new[]
+        {
+            Row(2, "1"),
+            Row(3, "2", "Dòng đỏ?") with { Note = "CHỜ DUYỆT: chưa có nguồn thật", Source = null, SourceUrl = null },   // thiếu nguồn mà không báo lỗi
+            Row(4, "3", "Viết thường?") with { Note = "  chờ duyệt: đã đổi nội dung" },
+            Row(5, "abc") with { Note = "CHỜ DUYỆT" },                                                                  // id sai cũng chỉ bị bỏ qua
+        };
+
+        var result = await Svc(repo, rows).ImportAsync(new MemoryStream());
+        var preview = await Svc(repo, rows).PreviewAsync(new MemoryStream());
+
+        Assert.Equal((4, 1, 3), (result.TotalRows, result.Created, result.Pending));
+        Assert.Empty(result.Errors);
+        Assert.Equal([1], repo.Items.Select(x => x.EntryNo));
+        Assert.Equal(3, preview.Pending);
+        Assert.Empty(preview.Errors);
+    }
+
+    [Theory]
+    [InlineData("CHỜ DUYỆT: thiếu nguồn", true)]
+    [InlineData("chờ duyệt", true)]
+    [InlineData("Đã duyệt, trước đây ghi CHỜ DUYỆT", false)]   // chỉ tính khi nằm ở đầu note
+    [InlineData("Ghi chú thường", false)]
+    [InlineData(null, false)]
+    public void IsPending_OnlyWhenNoteStartsWithPendingMark(string? note, bool expected) =>
+        Assert.Equal(expected, KnowledgeBaseService.IsPending(note));
+
+    [Fact]
+    public async Task CreateAsync_RejectsPendingNote_SoSingleEditCannotBypassTheRule()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var request = Full() with { Note = "CHỜ DUYỆT: chưa rà" };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo).CreateAsync(request));
+
+        Assert.Empty(repo.Items);
     }
 
     [Fact]

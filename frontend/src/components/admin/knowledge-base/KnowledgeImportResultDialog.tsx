@@ -13,7 +13,7 @@ export function KnowledgeImportResultDialog({ result, onClose }: { result: Knowl
             <DialogHeader>
               <DialogTitle>Kết quả nhập file</DialogTitle>
               <DialogDescription>
-                {result.totalRows} dòng: thêm mới {result.created}, cập nhật {result.updated}, không đổi {result.unchanged}, lỗi {result.errors.length}.
+                {result.totalRows} dòng: thêm mới {result.created}, cập nhật {result.updated}, không đổi {result.unchanged}, bỏ qua chờ duyệt {result.pending}, lỗi {result.errors.length}.
               </DialogDescription>
             </DialogHeader>
             {result.errors.length > 0 && (

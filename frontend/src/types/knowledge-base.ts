@@ -74,6 +74,8 @@ export interface KnowledgeImportPreview {
   totalRows: number;
   rows: KnowledgeImportRow[];
   errors: KnowledgeImportError[];
+  /** Dòng có note bắt đầu bằng "CHỜ DUYỆT": bị bỏ qua, không vào kho. */
+  pending: number;
 }
 
 export interface KnowledgeImportResult {
@@ -82,4 +84,5 @@ export interface KnowledgeImportResult {
   updated: number;
   unchanged: number;
   errors: KnowledgeImportError[];
+  pending: number;
 }
