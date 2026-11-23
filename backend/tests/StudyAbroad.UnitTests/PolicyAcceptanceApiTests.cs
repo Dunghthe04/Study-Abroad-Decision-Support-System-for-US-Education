@@ -32,6 +32,13 @@ public class PolicyAcceptanceApiTests
 
         public Task<bool> MustAcceptAsync(Guid userId, string role, CancellationToken ct = default) => Task.FromResult(false);
 
+        public PolicyAcceptanceHistoryDto History { get; } = new([]);
+        public Task<PolicyAcceptanceHistoryDto> GetHistoryAsync(Guid userId, string role, CancellationToken ct = default)
+        {
+            LastUser = userId; LastRole = role;
+            return Task.FromResult(History);
+        }
+
         public Task<PolicyAcceptanceStatusDto> AcceptAsync(Guid userId, string role, AcceptPoliciesRequest request, string? ipAddress, CancellationToken ct = default)
         {
             WriteCalls++;
@@ -80,6 +87,23 @@ public class PolicyAcceptanceApiTests
         Assert.IsType<UnauthorizedResult>((await c.GetStatus(default)).Result);
         Assert.IsType<UnauthorizedResult>((await c.Accept(Body, default)).Result);
         Assert.Null(stub.LastUser);
+    }
+
+    [Fact]
+    public async Task GetHistory_IsUnauthorizedWithoutALoggedInUser_AndOtherwiseReturnsTheCallersOwnHistory()
+    {
+        var stub = new StubAcceptance();
+        Assert.IsType<UnauthorizedResult>((await For(stub, null).GetHistory(default)).Result);
+        Assert.Null(stub.LastUser);
+
+        var c = For(stub, User, UserRoles.Student);
+        var result = await c.GetHistory(default);
+
+        Assert.Same(stub.History, Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(User, stub.LastUser);                                  // luôn là người đang đăng nhập, không có tham số chọn người khác
+        Assert.Equal("no-store", c.Response.Headers.CacheControl.ToString());
+        Assert.Empty(typeof(PolicyAcceptanceController).GetMethod(nameof(PolicyAcceptanceController.GetHistory))!.GetParameters()
+            .Where(p => p.ParameterType == typeof(Guid)));
     }
 
     [Fact]

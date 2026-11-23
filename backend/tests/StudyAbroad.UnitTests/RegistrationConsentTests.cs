@@ -28,6 +28,10 @@ internal sealed class FakeConsentStore : IConsentRepository
     public Task<Consent?> GetLatestAsync(Guid userId, string purpose, CancellationToken ct = default) =>
         Task.FromResult(Rows.Where(c => c.UserId == userId && c.Purpose == purpose).OrderByDescending(c => c.CreatedAt).FirstOrDefault());
 
+    public Task<IReadOnlyList<Consent>> ListAsync(Guid userId, IReadOnlyCollection<string> purposes, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Consent>>(
+            Rows.Where(c => c.UserId == userId && purposes.Contains(c.Purpose)).OrderByDescending(c => c.CreatedAt).ToList());
+
     public Task AddAsync(Consent consent, CancellationToken ct = default)
     {
         Rows.Add(consent);

@@ -27,6 +27,7 @@ public class PolicyAcceptanceMiddlewareTests
         }
 
         public Task<PolicyAcceptanceStatusDto> GetStatusAsync(Guid userId, string role, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<PolicyAcceptanceHistoryDto> GetHistoryAsync(Guid userId, string role, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<PolicyAcceptanceStatusDto> AcceptAsync(Guid userId, string role, AcceptPoliciesRequest request, string? ipAddress, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }

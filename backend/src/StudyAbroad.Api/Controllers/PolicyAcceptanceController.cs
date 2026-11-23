@@ -26,6 +26,16 @@ public class PolicyAcceptanceController(IPolicyAcceptanceService acceptance) : C
         return Ok(await acceptance.GetStatusAsync(userId, User.GetRole() ?? string.Empty, ct));
     }
 
+    /// <summary>Lịch sử các lần mình đồng ý (hoặc từ chối) Điều khoản và Chính sách bảo mật, mới nhất trước. Chỉ của chính mình.</summary>
+    [HttpGet("history")]
+    [ProducesResponseType(typeof(PolicyAcceptanceHistoryDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PolicyAcceptanceHistoryDto>> GetHistory(CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } userId) return Unauthorized();
+        Response.Headers.CacheControl = "no-store";
+        return Ok(await acceptance.GetHistoryAsync(userId, User.GetRole() ?? string.Empty, ct));
+    }
+
     /// <summary>
     /// Đồng ý các tài liệu gửi lên, mỗi mục kèm phiên bản đã đọc. Học sinh, phụ huynh, trung tâm mới gọi được (người khác nhận 403).
     /// 400 nếu dữ liệu sai; 409 policy_changed nếu admin vừa công bố bản khác, khi đó không ghi gì cả.

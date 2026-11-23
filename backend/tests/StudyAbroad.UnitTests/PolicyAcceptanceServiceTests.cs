@@ -32,6 +32,9 @@ public class PolicyAcceptanceServiceTests
         private int _clock;
         public Task<Consent?> GetLatestAsync(Guid userId, string purpose, CancellationToken ct = default) =>
             Task.FromResult(Rows.Where(c => c.UserId == userId && c.Purpose == purpose).OrderByDescending(c => c.CreatedAt).FirstOrDefault());
+        public Task<IReadOnlyList<Consent>> ListAsync(Guid userId, IReadOnlyCollection<string> purposes, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Consent>>(
+                Rows.Where(c => c.UserId == userId && purposes.Contains(c.Purpose)).OrderByDescending(c => c.CreatedAt).ToList());
         public Task AddAsync(Consent consent, CancellationToken ct = default)
         {
             consent.CreatedAt = new DateTime(2026, 11, 23, 0, 0, 0, DateTimeKind.Utc).AddSeconds(_clock++);   // mỗi dòng sau muộn hơn dòng trước
@@ -53,6 +56,83 @@ public class PolicyAcceptanceServiceTests
     {
         _published.Add(Terms, version).Add(Privacy, version);
         return Create();
+    }
+
+    // ------------------------------------------------------------ [UC-104] lịch sử đồng ý của chính mình
+
+    [Fact]
+    public async Task History_lists_every_consent_newest_first_and_marks_the_latest_of_each_kind()
+    {
+        var service = WithBoth();
+        await service.AcceptAsync(User, UserRoles.Student, Req((Terms, "2026-11"), (Privacy, "2026-11")), null);
+        _published.Add(Terms, "2026-11-02", required: true);
+        await service.AcceptAsync(User, UserRoles.Student, Req((Terms, "2026-11-02")), null);
+
+        var items = (await service.GetHistoryAsync(User, UserRoles.Student)).Items;
+
+        Assert.Equal([(Terms, "2026-11-02"), (Privacy, "2026-11"), (Terms, "2026-11")], items.Select(i => (i.Kind, i.Version)));
+        Assert.Equal([true, true, false], items.Select(i => i.IsLatest));   // điều khoản 2026-11 đã được bản 2026-11-02 thay
+        Assert.All(items, i => Assert.True(i.Granted));
+    }
+
+    [Fact]
+    public async Task History_shows_only_my_own_records()
+    {
+        var service = WithBoth();
+        await service.AcceptAsync(Guid.NewGuid(), UserRoles.Student, Req((Terms, "2026-11"), (Privacy, "2026-11")), null);
+
+        Assert.Empty((await service.GetHistoryAsync(User, UserRoles.Student)).Items);
+    }
+
+    [Fact]
+    public async Task History_leaves_out_other_purposes_such_as_the_parent_consent_for_a_child()
+    {
+        var service = WithBoth();
+        _consents.Rows.Add(new Consent
+        {
+            UserId = User, Purpose = ConsentPurposes.ChildDataProcessing, Granted = true, PolicyVersion = "2026-10", CreatedAt = DateTime.UtcNow,
+        });
+        await service.AcceptAsync(User, UserRoles.Parent, Req((Terms, "2026-11")), null);
+
+        var items = (await service.GetHistoryAsync(User, UserRoles.Parent)).Items;
+
+        Assert.Equal([Terms], items.Select(i => i.Kind));
+    }
+
+    [Fact]
+    public async Task History_keeps_a_refusal_row_and_it_is_the_latest()
+    {
+        var service = WithBoth();
+        await service.AcceptAsync(User, UserRoles.Student, Req((Terms, "2026-11")), null);
+        await _consents.AddAsync(new Consent { UserId = User, Purpose = Terms, Granted = false, PolicyVersion = "2026-11" });
+
+        var items = (await service.GetHistoryAsync(User, UserRoles.Student)).Items;
+
+        Assert.Equal([false, true], items.Select(i => i.Granted));
+        Assert.Equal([true, false], items.Select(i => i.IsLatest));
+    }
+
+    [Theory]
+    [InlineData(UserRoles.Admin)]
+    [InlineData(UserRoles.Moderator)]
+    public async Task History_is_empty_for_internal_roles(string role)
+    {
+        var service = WithBoth();
+        _consents.Rows.Add(new Consent { UserId = User, Purpose = Terms, Granted = true, PolicyVersion = "2026-11", CreatedAt = DateTime.UtcNow });
+
+        Assert.Empty((await service.GetHistoryAsync(User, role)).Items);
+    }
+
+    [Fact]
+    public async Task History_does_not_expose_the_ip_or_internal_ids()
+    {
+        var service = WithBoth();
+        await service.AcceptAsync(User, UserRoles.Student, Req((Terms, "2026-11")), "203.0.113.9");
+
+        var json = System.Text.Json.JsonSerializer.Serialize(await service.GetHistoryAsync(User, UserRoles.Student));
+
+        Assert.DoesNotContain("203.0.113.9", json);
+        Assert.DoesNotContain(User.ToString(), json);
     }
 
     // ------------------------------------------------------------ [UC-104] chặn ở server

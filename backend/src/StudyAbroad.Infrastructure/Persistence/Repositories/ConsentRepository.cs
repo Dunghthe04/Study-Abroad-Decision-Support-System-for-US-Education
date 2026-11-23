@@ -14,6 +14,13 @@ public class ConsentRepository(AppDbContext db) : IConsentRepository
             .ThenByDescending(c => c.Id)
             .FirstOrDefaultAsync(ct);
 
+    public async Task<IReadOnlyList<Consent>> ListAsync(Guid userId, IReadOnlyCollection<string> purposes, CancellationToken ct = default) =>
+        await db.Consents.AsNoTracking()
+            .Where(c => c.UserId == userId && purposes.Contains(c.Purpose))
+            .OrderByDescending(c => c.CreatedAt)
+            .ThenByDescending(c => c.Id)
+            .ToListAsync(ct);
+
     public async Task AddAsync(Consent consent, CancellationToken ct = default)
     {
         db.Consents.Add(consent);

@@ -23,6 +23,9 @@ public interface IPolicyAcceptanceService
     /// kết quả "ổn" được nhớ 60 giây, kết quả "bị chặn" không bao giờ được nhớ (đồng ý xong là hết chặn ngay).
     /// </summary>
     Task<bool> MustAcceptAsync(Guid userId, string role, CancellationToken ct = default);
+
+    /// <summary>Lịch sử các lần người dùng này đồng ý (hoặc từ chối) Điều khoản và Chính sách bảo mật, mới nhất trước. Chỉ của chính họ.</summary>
+    Task<PolicyAcceptanceHistoryDto> GetHistoryAsync(Guid userId, string role, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -57,6 +60,21 @@ public class PolicyAcceptanceService(
         var must = (await GetStatusAsync(userId, role, ct)).MustAccept;
         if (!must) cache?.Set(OkKey(userId), true, TimeSpan.FromSeconds(OkCacheSeconds));
         return must;
+    }
+
+    public async Task<PolicyAcceptanceHistoryDto> GetHistoryAsync(Guid userId, string role, CancellationToken ct = default)
+    {
+        if (!AppliesTo(role))
+            return new PolicyAcceptanceHistoryDto([]);
+
+        var rows = await consents.ListAsync(userId, PolicyAcceptanceRules.AccountKinds, ct);
+        // Dòng đầu tiên của mỗi loại (danh sách đã mới nhất trước) là tình trạng hiện tại
+        var latestOfKind = rows.GroupBy(c => c.Purpose).ToDictionary(g => g.Key, g => g.First());
+
+        return new PolicyAcceptanceHistoryDto(rows
+            .Where(c => c.PolicyVersion is not null)
+            .Select(c => new PolicyConsentRecordDto(c.Purpose, c.PolicyVersion!, c.Granted, c.CreatedAt, ReferenceEquals(latestOfKind[c.Purpose], c)))
+            .ToList());
     }
 
     public async Task<PolicyAcceptanceStatusDto> GetStatusAsync(Guid userId, string role, CancellationToken ct = default)

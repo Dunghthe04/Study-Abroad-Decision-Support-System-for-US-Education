@@ -18,6 +18,9 @@ public interface IConsentRepository
     Task<Consent?> GetLatestAsync(Guid userId, string purpose, CancellationToken ct = default);
 
     Task AddAsync(Consent consent, CancellationToken ct = default);
+
+    /// <summary>Mọi lần đồng ý hoặc từ chối của người dùng với các mục đích này, MỚI NHẤT TRƯỚC.</summary>
+    Task<IReadOnlyList<Consent>> ListAsync(Guid userId, IReadOnlyCollection<string> purposes, CancellationToken ct = default);
 }
 
 // ---------------------------------------------------------------- dữ liệu trả về / nhận vào
@@ -45,5 +48,17 @@ public sealed record PolicyAcceptanceStatusDto(
 
 /// <summary>Một mục người dùng đồng ý: loại tài liệu và đúng phiên bản họ đã đọc trên màn hình.</summary>
 public sealed record AcceptPolicyItem(string Kind, string Version);
+
+/// <summary>Một lần đồng ý hoặc từ chối trong lịch sử của người dùng. Không kèm IP hay thông tin kỹ thuật.</summary>
+public sealed record PolicyConsentRecordDto(
+    string Kind,
+    string Version,
+    /// <summary>true: đồng ý; false: từ chối.</summary>
+    bool Granted,
+    DateTime AcceptedAt,
+    /// <summary>Đây là lần gần nhất của loại này, tức tình trạng hiện tại của người dùng.</summary>
+    bool IsLatest);
+
+public sealed record PolicyAcceptanceHistoryDto(IReadOnlyList<PolicyConsentRecordDto> Items);
 
 public sealed record AcceptPoliciesRequest(IReadOnlyList<AcceptPolicyItem>? Items);
