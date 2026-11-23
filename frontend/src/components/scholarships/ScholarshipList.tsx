@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { AMOUNT_TYPE_LABELS, APPLICATION_METHOD_LABELS, coverageLabel, KIND_LABELS } from "@/lib/admin-scholarship-display";
 import { formatUsd } from "@/lib/admin-university-display";
+import { httpLink } from "@/lib/university-display";
 import type { ScholarshipItem } from "@/types/scholarship";
 
 const LEVEL_LABELS: Record<string, string> = { undergraduate: "Đại học", graduate: "Sau đại học" };
@@ -61,14 +62,20 @@ export function ScholarshipList({ items }: { items: ScholarshipItem[] }) {
             {s.applicationMethod && (
               <div><dt className="inline text-muted-foreground">Cách nộp: </dt><dd className="inline">{APPLICATION_METHOD_LABELS[s.applicationMethod] ?? s.applicationMethod}</dd></div>
             )}
-            {s.applyUrl && (
-              <div><dt className="inline text-muted-foreground">Nộp hồ sơ: </dt><dd className="inline"><a href={s.applyUrl} target="_blank" rel="noopener noreferrer" className="underline">{new URL(s.applyUrl).hostname}</a></dd></div>
-            )}
+            {(() => {
+              const applyLink = httpLink(s.applyUrl);
+              return applyLink ? (
+                <div><dt className="inline text-muted-foreground">Nộp hồ sơ: </dt><dd className="inline"><a href={applyLink.href} target="_blank" rel="noopener noreferrer" className="underline">{applyLink.host}</a></dd></div>
+              ) : null;
+            })()}
           </dl>
           {s.eligibilityNotes && <p className="mt-2 text-sm">{s.eligibilityNotes}</p>}
           <p className="mt-2 text-xs text-muted-foreground">
             Nguồn:{" "}
-            {s.sourceUrl ? <a href={s.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">{new URL(s.sourceUrl).hostname}</a> : "chưa có liên kết"}
+            {(() => {
+              const sourceLink = httpLink(s.sourceUrl);
+              return sourceLink ? <a href={sourceLink.href} target="_blank" rel="noopener noreferrer" className="underline">{sourceLink.host}</a> : "chưa có liên kết";
+            })()}
             {s.retrievedAt && ` · lấy ngày ${formatDate(s.retrievedAt)}`}
           </p>
         </li>

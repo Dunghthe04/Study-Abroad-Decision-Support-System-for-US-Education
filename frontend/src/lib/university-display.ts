@@ -40,6 +40,16 @@ export function universityHost(value: string): string {
   try { return new URL(value).hostname.replace(/^www\./, ""); } catch { return value; }
 }
 
+export function httpLink(value: string | null | undefined): { href: string; host: string } | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? { href: url.href, host: url.hostname } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function schoolControlLabel(value: string | null): string {
   return ({ public: "Công lập", private: "Tư thục" } as Record<string, string>)[value ?? ""] ?? MISSING_UNIVERSITY_DATA;
 }

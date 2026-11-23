@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { httpLink } from "@/lib/university-display";
 import type { StateLivingCost } from "@/types/cost";
 
 const MAX = 6;
@@ -71,7 +72,10 @@ export function StateLivingCostCompare({ states }: { states: StateLivingCost[] }
                   <td className="px-3 py-2 tabular-nums">{s.housingRentsIndex ?? "—"}</td>
                   <td className="px-3 py-2">{s.year ?? "—"}</td>
                   <td className="px-3 py-2 text-xs">
-                    {s.sourceUrl ? <a href={s.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">{new URL(s.sourceUrl).hostname}</a> : "—"}
+                    {(() => {
+                      const sourceLink = httpLink(s.sourceUrl);
+                      return sourceLink ? <a href={sourceLink.href} target="_blank" rel="noopener noreferrer" className="underline">{sourceLink.host}</a> : "—";
+                    })()}
                     {s.retrievedAt && <div className="text-muted-foreground">Lấy ngày {new Date(s.retrievedAt).toLocaleDateString("vi-VN")}</div>}
                   </td>
                 </tr>

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { getCostEstimate } from "@/lib/cost-api";
 import { COST_LABELS, gapText, TUITION_MISSING_TEXT, tuitionMissing, usd, vnd } from "@/lib/cost-format";
+import { httpLink } from "@/lib/university-display";
 import type { CostEstimate, SchoolCost } from "@/types/cost";
 
 const LINE_KEYS = ["tuition", "living", "fees", "other", "insurance", "visa", "sevis"];
@@ -149,13 +150,16 @@ export function CostEstimateView({ codes, studyLevel }: { codes: string[]; study
           <li>Dòng «Chưa có» là khoản chưa có dữ liệu, không được tính vào tổng. Tổng thật có thể cao hơn.</li>
         )}
         <li>Tổng cả khóa nhân chi phí năm hiện tại, chưa tính học phí tăng qua các năm.</li>
-        {schools.map((s) => (
-          <li key={s.code}>
-            {s.name}: nguồn{" "}
-            {s.sourceUrl ? <a href={s.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">{new URL(s.sourceUrl).hostname}</a> : "chưa có liên kết"}
-            {s.retrievedAt && `, lấy ngày ${new Date(s.retrievedAt).toLocaleDateString("vi-VN")}`}
-          </li>
-        ))}
+        {schools.map((s) => {
+          const sourceLink = httpLink(s.sourceUrl);
+          return (
+            <li key={s.code}>
+              {s.name}: nguồn{" "}
+              {sourceLink ? <a href={sourceLink.href} target="_blank" rel="noopener noreferrer" className="underline">{sourceLink.host}</a> : "chưa có liên kết"}
+              {s.retrievedAt && `, lấy ngày ${new Date(s.retrievedAt).toLocaleDateString("vi-VN")}`}
+            </li>
+          );
+        })}
       </ul>
 
       {parentMode && budgetCap && (
