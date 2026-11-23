@@ -18,8 +18,11 @@ public interface ICenterReviewSubmissionRepository
     /// <summary>Yêu cầu liên hệ gần nhất mà người này gửi tới trung tâm, hoặc yêu cầu của chính học sinh này (phụ huynh gửi thay).</summary>
     Task<Lead?> FindLatestLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default);
 
+    /// <summary>Yêu cầu liên hệ gần nhất đã được trung tâm tiếp nhận (accepted/contacted/closed).</summary>
+    Task<Lead?> FindLatestAcceptedLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default);
+
     /// <summary>
-    /// Yêu cầu liên hệ gần nhất của người này tới trung tâm mà CHƯA có đánh giá nào (mọi trạng thái, kể cả đã gỡ).
+    /// Yêu cầu liên hệ gần nhất đã được tiếp nhận của người này tới trung tâm mà CHƯA có đánh giá nào.
     /// Mỗi yêu cầu chỉ được một đánh giá, dù do học sinh hay phụ huynh gửi.
     /// </summary>
     Task<Lead?> FindLatestUnreviewedLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default);
@@ -116,13 +119,18 @@ public class CenterReviewService(
         if (user.Role is not (UserRoles.Student or UserRoles.Parent))
             return (new CenterReviewEligibilityDto(false, false, "Chỉ học sinh hoặc phụ huynh được đánh giá trung tâm."), null);
 
-        // Mỗi yêu cầu liên hệ một đánh giá: gửi yêu cầu mới tới trung tâm thì được đánh giá thêm một lần
+        // Mỗi yêu cầu liên hệ một đánh giá: chỉ đánh giá khi yêu cầu liên hệ đã được trung tâm tiếp nhận (SC-41 / UC-45)
         var lead = await reviews.FindLatestUnreviewedLeadAsync(userId, centerId, ct);
         if (lead is not null)
             return (new CenterReviewEligibilityDto(true, false, null), lead);
 
-        if (await reviews.FindLatestLeadAsync(userId, centerId, ct) is not null)
+        var acceptedLead = await reviews.FindLatestAcceptedLeadAsync(userId, centerId, ct);
+        if (acceptedLead is not null)
             return (new CenterReviewEligibilityDto(false, true, AlreadyReviewedMessage), null);
+
+        var anyLead = await reviews.FindLatestLeadAsync(userId, centerId, ct);
+        if (anyLead is not null)
+            return (new CenterReviewEligibilityDto(false, false, "Yêu cầu tư vấn của bạn cần được trung tâm tiếp nhận trước khi đánh giá."), null);
 
         return (new CenterReviewEligibilityDto(false, false, "Bạn cần gửi yêu cầu liên hệ tới trung tâm trước khi đánh giá."), null);
     }
