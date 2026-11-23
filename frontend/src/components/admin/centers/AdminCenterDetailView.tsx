@@ -18,6 +18,7 @@ import {
   FlameIcon,
   EyeIcon,
   EyeOffIcon,
+  ShieldAlertIcon,
 } from "lucide-react";
 import type { StudyCenter } from "@/types/api";
 import { studyCentersApi, ApiError } from "@/lib/api";
@@ -69,23 +70,34 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
     setIsSubmitting(true);
 
     try {
-      if (confirmAction === "verify" || confirmAction === "unverify") {
-        const targetVerified = confirmAction === "verify";
-        const updated = await studyCentersApi.verify(center.id, targetVerified, verificationNote);
+      if (confirmAction === "verify") {
+        const updated = await studyCentersApi.verify(center.id, true, verificationNote);
         setUpdatedCenter({
           ...center,
           ...updated,
-          verificationStatus: targetVerified ? "verified" : "unverified",
-          verifiedAt: targetVerified ? (updated.verifiedAt ?? new Date().toISOString()) : null,
-          verifiedByUserId: targetVerified ? updated.verifiedByUserId : null,
+          verificationStatus: "verified",
+          verifiedAt: updated.verifiedAt ?? new Date().toISOString(),
+          verifiedByUserId: updated.verifiedByUserId,
         });
 
         toast.add({
           type: "success",
-          title: targetVerified ? "Đã xác minh trung tâm" : "Đã hủy xác minh trung tâm",
-          description: targetVerified
-            ? `Trung tâm ${center.name} đã được xác minh thành công.`
-            : `Đã hủy trạng thái xác minh của ${center.name}.`,
+          title: "Đã xác minh trung tâm",
+          description: `Trung tâm ${center.name} đã được xác minh thành công.`,
+        });
+      } else if (confirmAction === "revoke") {
+        // [UC-59] Thu hồi dấu xác minh: trung tâm Tạm ngừng, lý do bắt buộc, trung tâm nhận email
+        const updated = await studyCentersApi.revokeVerification(center.id, verificationNote ?? "");
+        setUpdatedCenter({
+          ...center,
+          ...updated,
+          verificationStatus: "suspended",
+        });
+
+        toast.add({
+          type: "success",
+          title: "Đã thu hồi dấu xác minh",
+          description: `${center.name} chuyển sang Tạm ngừng: không còn hiện công khai và không nhận yêu cầu mới.`,
         });
       } else if (confirmAction === "hide" || confirmAction === "show") {
         const targetActive = confirmAction === "show";
@@ -168,7 +180,20 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
             </Button>
           )}
 
-          {/* Trạng thái xác minh (UC-59): chỉ duyệt qua hàng đợi hồ sơ ở danh sách trung tâm */}
+          {/* Thu hồi dấu xác minh (UC-59): chỉ với trung tâm Đã xác minh */}
+          {isVerified && (
+            <Button
+              variant="outline"
+              onClick={() => setConfirmAction("revoke")}
+              className="gap-1.5 text-xs text-ink-2 hover:text-risk hover:border-risk/30 hover:bg-risk-wash"
+              title="Thu hồi dấu xác minh, trung tâm chuyển sang Tạm ngừng"
+            >
+              <ShieldAlertIcon className="w-3.5 h-3.5" />
+              Thu hồi dấu xác minh
+            </Button>
+          )}
+
+          {/* Trạng thái xác minh (UC-59): duyệt qua hàng đợi hồ sơ ở danh sách trung tâm */}
           <div className="flex items-center gap-2">
             <CenterStatusBadge status={center.verificationStatus} />
             {isVerified && center.verifiedAt && (
