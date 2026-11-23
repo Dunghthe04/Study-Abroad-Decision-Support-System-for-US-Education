@@ -792,6 +792,10 @@ public class StudyCenterService(
 
         var action = request.Action?.Trim().ToLowerInvariant() ?? string.Empty;
 
+        // Đơn đã được xử lý (duyệt, từ chối...) thì không duyệt hay từ chối lại; thu hồi dấu xác minh là thao tác riêng.
+        if (action != "revoke" && req.Status != CenterVerificationStatuses.PendingReview)
+            return VerifyStudyCenterResult.Fail("Yêu cầu xác minh này đã được xử lý, không thể duyệt hoặc từ chối lại.");
+
         if (action == "approve")
         {
             if (!center.EmailVerifiedAt.HasValue)
