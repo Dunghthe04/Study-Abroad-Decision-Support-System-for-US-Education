@@ -262,9 +262,7 @@ export function CenterVerificationView() {
           <AlertCircleIcon className="h-5 w-5" />
           <AlertDescription className="ml-2">
             <strong>
-              {status?.currentRequest?.status === "changes_requested"
-                ? "Moderator yêu cầu bổ sung hồ sơ"
-                : "Hồ sơ bị từ chối duyệt"}
+              Hồ sơ bị từ chối duyệt
               {status?.rejectionReason ? ":" : "."}
             </strong>{" "}
             {/* Nội dung phản hồi do moderator nhập, không tự đặt sẵn */}

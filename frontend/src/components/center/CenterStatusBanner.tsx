@@ -42,12 +42,11 @@ function toneFor(status: CenterVerificationStatusDto): BannerTone {
         iconClassName: "text-brand",
       };
     case "rejected": {
-      const needsChanges = status.currentRequest?.status === "changes_requested";
       return {
         icon: XCircleIcon,
-        title: needsChanges ? "Hồ sơ cần bổ sung" : "Hồ sơ xác minh chưa được duyệt",
+        title: "Hồ sơ xác minh chưa được duyệt",
         // Lý do do moderator nhập; không tự thêm nội dung mặc định
-        detail: status.rejectionReason ? `${needsChanges ? "Yêu cầu" : "Lý do"}: ${status.rejectionReason}` : undefined,
+        detail: status.rejectionReason ? `Lý do: ${status.rejectionReason}` : undefined,
         className: "border-risk/25 bg-risk-wash text-risk",
         iconClassName: "text-risk",
       };
