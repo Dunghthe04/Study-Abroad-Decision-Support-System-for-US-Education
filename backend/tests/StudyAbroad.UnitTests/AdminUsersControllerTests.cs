@@ -79,7 +79,7 @@ public class AdminUsersControllerTests
 
         public CreateModeratorAccountRequest? LastCreateModeratorRequest { get; private set; }
 
-        public Task<AuthResult> CreateModeratorAccountAsync(CreateModeratorAccountRequest request, CancellationToken ct = default)
+        public Task<AuthResult> CreateModeratorAccountAsync(CreateModeratorAccountRequest request, Guid actorAdminId, CancellationToken ct = default)
         {
             LastCreateModeratorRequest = request;
             var user = new UserDto(Guid.NewGuid(), request.Email, request.FullName, UserRoles.Moderator, UserStatuses.Active, request.Phone);
@@ -276,8 +276,20 @@ public class AdminUsersControllerTests
     public async Task CreateModerator_WhenValid_ReturnsCreatedAtRoute()
     {
         var fakeAuth = new FakeAuthService();
-        var controller = new AdminUsersController(fakeAuth);
-        var request = new CreateModeratorAccountRequest("mod@test.com", "Password1!", "Moderator User", "0912345678");
+        var controller = new AdminUsersController(fakeAuth)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [
+                        new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+                    ], authenticationType: "test")),
+                },
+            },
+        };
+        var request = new CreateModeratorAccountRequest("mod@test.com", "Moderator User", "0912345678");
 
         var result = await controller.CreateModerator(request, CancellationToken.None);
 
