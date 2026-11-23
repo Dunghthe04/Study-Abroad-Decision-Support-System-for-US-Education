@@ -232,12 +232,13 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
 
         var academicYear = Clean(request.AcademicYear);
         var satPolicy = Clean(request.SatPolicy)?.ToLowerInvariant();
+        var actPolicy = Clean(request.ActPolicy)?.ToLowerInvariant();
         var sourceUrl = Clean(request.SourceUrl);
         var sourceReliability = Clean(request.SourceReliability)?.ToLowerInvariant();
         var notes = Clean(request.Notes);
         var requestedMajors = request.Majors;
 
-        var errors = ValidateOffering(request, academicYear, satPolicy, notes);
+        var errors = ValidateOffering(request, academicYear, satPolicy, actPolicy, notes);
         ValidateSource(sourceUrl, request.RetrievedAt, sourceReliability, errors);
         var knownMajors = await repository.ListMajorsAsync(ct);
         var knownMajorIds = knownMajors.Select(m => m.Id).ToHashSet();
@@ -257,6 +258,9 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         AddChange(changes, "livingUsd", offering.LivingUsd, request.LivingUsd);
         AddChange(changes, "feesUsd", offering.FeesUsd, request.FeesUsd);
         AddChange(changes, "otherExpensesUsd", offering.OtherExpensesUsd, request.OtherExpensesUsd);
+        AddChange(changes, "healthInsuranceUsd", offering.HealthInsuranceUsd, request.HealthInsuranceUsd);
+        AddChange(changes, "applicationFeeUsd", offering.ApplicationFeeUsd, request.ApplicationFeeUsd);
+        AddChange(changes, "tuitionInStateUsd", offering.TuitionInStateUsd, request.TuitionInStateUsd);
         AddChange(changes, "minGpa4", offering.MinGpa4, request.MinGpa4);
         AddChange(changes, "minIelts", offering.MinIelts, request.MinIelts);
         AddChange(changes, "minToefl", offering.MinToefl, request.MinToefl);
@@ -267,6 +271,8 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         AddChange(changes, "act25", offering.Act25, request.Act25);
         AddChange(changes, "act75", offering.Act75, request.Act75);
         AddChange(changes, "satPolicy", offering.SatPolicy, satPolicy);
+        AddChange(changes, "actPolicy", offering.ActPolicy, actPolicy);
+        AddChange(changes, "actSubmitPct", offering.ActSubmitPct, request.ActSubmitPct);
         AddChange(changes, "sourceUrl", offering.SourceUrl, sourceUrl);
         AddChange(changes, "retrievedAt", offering.RetrievedAt, request.RetrievedAt);
         AddChange(changes, "sourceReliability", offering.SourceReliability, sourceReliability);
@@ -277,6 +283,9 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         offering.LivingUsd = request.LivingUsd;
         offering.FeesUsd = request.FeesUsd;
         offering.OtherExpensesUsd = request.OtherExpensesUsd;
+        offering.HealthInsuranceUsd = request.HealthInsuranceUsd;
+        offering.ApplicationFeeUsd = request.ApplicationFeeUsd;
+        offering.TuitionInStateUsd = request.TuitionInStateUsd;
         offering.MinGpa4 = request.MinGpa4;
         offering.MinIelts = request.MinIelts;
         offering.MinToefl = request.MinToefl;
@@ -287,6 +296,8 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         offering.Act25 = request.Act25;
         offering.Act75 = request.Act75;
         offering.SatPolicy = satPolicy;
+        offering.ActPolicy = actPolicy;
+        offering.ActSubmitPct = request.ActSubmitPct;
         offering.SourceUrl = sourceUrl;
         offering.RetrievedAt = request.RetrievedAt;
         offering.SourceReliability = sourceReliability;
@@ -364,7 +375,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
     }
 
     private static Dictionary<string, string> ValidateOffering(
-        UpdateOfferingRequest request, string? academicYear, string? satPolicy, string? notes)
+        UpdateOfferingRequest request, string? academicYear, string? satPolicy, string? actPolicy, string? notes)
     {
         var errors = new Dictionary<string, string>();
 
@@ -374,6 +385,10 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         if (request.LivingUsd is < 0) errors["livingUsd"] = "Chi phí sinh hoạt không được âm.";
         if (request.FeesUsd is < 0) errors["feesUsd"] = "Phí bắt buộc không được âm.";
         if (request.OtherExpensesUsd is < 0) errors["otherExpensesUsd"] = "Chi phí khác không được âm.";
+        if (request.HealthInsuranceUsd is < 0) errors["healthInsuranceUsd"] = "Bảo hiểm y tế không được âm.";
+        if (request.ApplicationFeeUsd is < 0) errors["applicationFeeUsd"] = "Phí nộp hồ sơ không được âm.";
+        if (request.TuitionInStateUsd is < 0) errors["tuitionInStateUsd"] = "Học phí in-state không được âm.";
+        if (request.ActSubmitPct is < 0 or > 1) errors["actSubmitPct"] = "Tỉ lệ nộp ACT phải trong khoảng 0–1.";
 
         if (request.MinGpa4 is < 0 or > 4) errors["minGpa4"] = "GPA tối thiểu phải trong thang 0–4.";
         if (request.AvgGpa4 is < 0 or > 4) errors["avgGpa4"] = "GPA trung bình phải trong thang 0–4.";
@@ -396,6 +411,8 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
 
         if (satPolicy is not null && !SatPolicies.Contains(satPolicy))
             errors["satPolicy"] = "Chính sách SAT chỉ nhận required, optional hoặc not_accepted.";
+        if (actPolicy is not null && !SatPolicies.Contains(actPolicy))
+            errors["actPolicy"] = "Chính sách ACT chỉ nhận required, optional hoặc not_accepted.";
         if (notes is not null && notes.Length > 2000)
             errors["notes"] = "Ghi chú tối đa 2000 ký tự.";
 
@@ -472,6 +489,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
             o.Id, o.StudyLevel, o.AcademicYear, o.TuitionUsd, o.LivingUsd, o.FeesUsd, o.OtherExpensesUsd,
             o.MinGpa4, o.MinIelts, o.MinToefl, o.MinDuolingo, o.AvgGpa4, o.Sat25, o.Sat75, o.Act25, o.Act75,
             o.SatPolicy, majors, stemMajors, items, o.DeadlinesJson, o.Notes, o.SourceUrl, o.RetrievedAt,
-            o.SourceReliability, o.UpdatedAt, lastEditedBy);
+            o.SourceReliability, o.UpdatedAt, lastEditedBy, o.HealthInsuranceUsd,
+            o.ApplicationFeeUsd, o.TuitionInStateUsd, o.ActPolicy, o.ActSubmitPct);
     }
 }

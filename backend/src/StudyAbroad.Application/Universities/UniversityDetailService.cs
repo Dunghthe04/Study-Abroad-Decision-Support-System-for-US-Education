@@ -31,7 +31,7 @@ public class UniversityDetailService(IUniversityDetailRepository repository) : I
             PublicUrl(o.SourceUrl), o.RetrievedAt, o.SourceReliability,
             o.AvgGpaWeighted, o.GpaScaleType, o.FyOnCampusPct, o.UgOnCampusPct, o.HousingTypes,
             o.IntlHousing, o.HousingOnlyUsd, o.HousingDepositUsd, o.StudentFacultyRatio,
-            o.Activities, o.CampusSetting)).ToList();
+            o.Activities, o.CampusSetting, o.ActPolicy, o.ActSubmitPct, o.ApplicationFeeUsd, o.TuitionInStateUsd)).ToList();
         var sources = data.Evidence.OrderByDescending(e => e.CreatedAt).ThenBy(e => e.FieldName).ThenBy(e => e.Id)
             .Select(MapSource).Where(s => s.SourceUrl is not null)
             .DistinctBy(s => new { s.FieldName, s.SourceUrl, s.FieldValue, s.Status, s.DataYear, s.AppliedToSnapshot, s.Normalization })
