@@ -21,7 +21,6 @@ WRITERS = {
     "skill_kich_ban.md",
     "skill_neu_doi.md",
     "skill_so_sanh.md",
-    "skill_tra_loi.md",
     "viet_tra_loi_ho_so.md",
 }
 # Skill đọc hiểu (đọc câu của học sinh ra JSON, hoặc chọn một mục trong danh sách): mục 4 là CÁCH ĐỌC
@@ -30,6 +29,7 @@ READERS = {
     "skill_chon_truong.md",
     "skill_ec.md",
     "skill_ho_so.md",
+    "skill_tra_loi.md",  # chỉ CHỌN một ứng viên trong danh sách, không viết lời
 }
 # Prompt của SLM: model đã học đúng chữ này nên không đổi khuôn (xem slm/README.md)
 EXEMPT = {"slm_intents.md"}

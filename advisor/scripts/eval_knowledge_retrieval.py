@@ -259,7 +259,7 @@ def summarize_full(results: list[FullResult], min_score: float) -> dict[str, int
 
 
 class _FallbackCounter:
-    """Đếm lần TraLoiHandler lùi về câu chuẩn vì Claude sai định dạng hai lần, và ghi dòng Claude chọn khác dòng đầu (qua log)."""
+    """Đếm lần TraLoiHandler dùng dòng đầu vì Claude lỗi hoặc chọn sai khuôn hai lần, và ghi dòng Claude chọn khác dòng đầu (qua log)."""
 
     def __init__(self) -> None:
         import logging
@@ -274,7 +274,7 @@ class _FallbackCounter:
         class Handler(logging.Handler):
             def emit(self, record: logging.LogRecord) -> None:
                 message = record.getMessage()
-                if "không trả được câu hợp lệ" in message:
+                if "không chọn được sau 2 lần" in message:
                     counter.count += 1
                 match = re.match(r"knowledge_answer entry=(\d+)", message)
                 if match:
@@ -361,7 +361,7 @@ def print_full_report(results: list[FullResult], min_score: float) -> None:
     ]
     for key, label in labels:
         print(f"  {counts.get(key, 0):3d}  {label}")
-    print(f"  {counts['fallback']:3d}  (trong đó lùi về câu chuẩn vì Claude sai định dạng hai lần)")
+    print(f"  {counts['fallback']:3d}  (trong đó dùng dòng đầu vì Claude lỗi hoặc chọn sai khuôn hai lần)")
 
     print("\nChi tiết các câu không phải 'đúng' hoặc 'từ chối đúng':")
     for r in results:
@@ -370,7 +370,7 @@ def print_full_report(results: list[FullResult], min_score: float) -> None:
             continue
         top = "không có" if r.top is None else f"id {r.top[0]} điểm {r.top[1]:.2f}"
         want = "từ chối" if not r.case.expect else f"id {sorted(r.case.expect)}"
-        note = " [lùi về câu chuẩn]" if r.fallback else ""
+        note = " [dùng dòng đầu]" if r.fallback else ""
         used = f"; dòng được dùng: id {r.used}" if r.used is not None else ""
         print(
             f"  [{verdict}] ({r.case.kind}) {r.case.question}{note}\n      dòng đầu: {top}{used}; mong đợi: {want}"
