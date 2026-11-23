@@ -38,16 +38,18 @@ export function ImageAttachPicker({
 }) {
   // [SC-40] Tắt gửi ảnh trong nhắn tin với trung tâm bằng cấu hình
   const allowImage = process.env.NEXT_PUBLIC_ALLOW_CHAT_IMAGE_UPLOAD === "true";
-  if (!allowImage) return null;
 
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+  const previewUrl = useMemo(() => (allowImage && file ? URL.createObjectURL(file) : null), [allowImage, file]);
 
   useEffect(() => {
     return () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
+
+  // Gọi hooks trước, rồi mới ẩn nút (React yêu cầu hooks chạy cùng thứ tự mỗi lần render)
+  if (!allowImage) return null;
 
   const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = e.target.files?.[0] ?? null;
