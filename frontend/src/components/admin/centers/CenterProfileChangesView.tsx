@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CheckIcon, EyeOffIcon, ExternalLinkIcon, ShieldOffIcon, XIcon } from "lucide-react";
+import { CheckIcon, EyeOffIcon, ExternalLinkIcon, XIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -189,7 +189,13 @@ export function CenterProfileChangesView() {
                 <TableRow key={item.id}>
                   <TableCell className="tabular whitespace-nowrap">{formatDateTime(item.createdAt)}</TableCell>
                   <TableCell>
-                    <span className="block font-medium">{item.studyCenterName}</span>
+                    <Link
+                      href={`/admin/centers/${encodeURIComponent(item.studyCenterId)}`}
+                      className="block font-medium hover:underline text-brand hover:text-brand/80"
+                      title="Xem chi tiết trung tâm"
+                    >
+                      {item.studyCenterName}
+                    </Link>
                     <span className="mt-1 flex flex-wrap gap-1">
                       <CenterStatusBadge status={item.centerVerificationStatus} />
                       <CenterVisibilityBadge active={item.centerIsActive} />
@@ -225,13 +231,6 @@ export function CenterProfileChangesView() {
                           Ẩn trung tâm
                         </Button>
                       ) : null}
-                      <Link
-                        href={`/admin/centers/${encodeURIComponent(item.studyCenterId)}`}
-                        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1")}
-                      >
-                        <ShieldOffIcon className="size-3.5" />
-                        Mở trung tâm (thu hồi xác minh)
-                      </Link>
                     </div>
                   </TableCell>
                 </TableRow>
