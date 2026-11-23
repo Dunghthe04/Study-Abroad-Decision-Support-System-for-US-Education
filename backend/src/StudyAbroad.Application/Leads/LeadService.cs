@@ -353,13 +353,30 @@ public class LeadService(
             throw SentLeadsRoleNotAllowed();
 
         var lead = await leads.GetByIdAsync(leadId, ct);
-        var canView = lead is not null && user.Role switch
+        if (lead is null)
+            throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
+
+        var canView = false;
+        if (user.Role == UserRoles.Student)
         {
-            UserRoles.Student => lead.UserId == user.Id,
-            // Phụ huynh: lead mình bấm gửi (kể cả khi liên kết đã hủy), hoặc lead của con đang liên kết
-            _ => lead.SubmittedByUserId == user.Id
-                 || (await parentLinks.GetActiveByParentAsync(user.Id, ct)).Any(l => l.StudentUserId == lead.UserId),
-        };
+            canView = lead.UserId == user.Id;
+        }
+        else
+        {
+            // Phụ huynh: lead mình bấm gửi (kể cả khi liên kết đã hủy), hoặc lead của con đang liên kết khi con dưới 18 tuổi (SC-44 / UC-44)
+            if (lead.SubmittedByUserId == user.Id)
+            {
+                canView = true;
+            }
+            else if ((await parentLinks.GetActiveByParentAsync(user.Id, ct)).Any(l => l.StudentUserId == lead.UserId))
+            {
+                var student = await users.GetUserById(lead.UserId, ct);
+                var today = AgePolicy.TodayInVietnam(DateTime.UtcNow);
+                var isUnder18 = student?.DateOfBirth is not { } dob || AgePolicy.GetAge(dob, today) < AgeGroups.AdultAge;
+                canView = isUnder18;
+            }
+        }
+
         if (!canView)
             throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
 
