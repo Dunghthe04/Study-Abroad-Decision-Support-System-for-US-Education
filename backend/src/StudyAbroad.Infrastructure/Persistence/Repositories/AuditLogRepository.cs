@@ -50,6 +50,18 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
         return null;
     }
 
+    public async Task<string?> GetLatestLockDetailJsonAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var idStr = userId.ToString();
+        var idUpper = idStr.ToUpperInvariant();
+        return await db.AuditLogs
+            .AsNoTracking()
+            .Where(x => x.Action == "user.lock" && (x.EntityId == idStr || x.EntityId == idUpper))
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(x => x.DetailJson)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<PagedResult<AccessLogDto>> GetAccessLogsAsync(AccessLogFilter filter, CancellationToken cancellationToken = default)
     {
         var baseQuery = from log in db.AuditLogs.AsNoTracking()
