@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { BookmarkIcon, BookmarkCheckIcon, Loader2, Trash2Icon, CalendarIcon, AlertCircleIcon } from "lucide-react";
 import { targetSchoolsApi, ApiError } from "@/lib/api";
 import type { AddTargetSchoolRequest, TargetSchoolDto } from "@/types/api";
@@ -36,6 +36,8 @@ export interface AddTargetSchoolButtonProps {
   universityName: string;
   universityCity?: string | null;
   universityState?: string | null;
+  deadlinesJson?: string | null;
+  supportedRounds?: string[] | null;
   defaultCategory?: "reach" | "match" | "safety" | string;
   className?: string;
   variant?: "default" | "outline" | "secondary" | "ghost";
@@ -90,6 +92,8 @@ function StudentTargetSchoolButton({
   universityName,
   universityCity,
   universityState,
+  deadlinesJson,
+  supportedRounds,
   defaultCategory = "match",
   className,
   variant = "outline",
@@ -109,6 +113,37 @@ function StudentTargetSchoolButton({
   const [round, setRound] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  // [SC-33 / UC-32] Chỉ hiển thị các vòng nộp trường hỗ trợ
+  const availableRounds: { value: string; label: string }[] = useMemo(() => {
+    let supported: string[] = [];
+    if (supportedRounds && supportedRounds.length > 0) {
+      supported = supportedRounds.map((s) => s.toLowerCase());
+    } else if (deadlinesJson) {
+      try {
+        const parsed = JSON.parse(deadlinesJson);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          supported = Object.keys(parsed).map((k) => k.toLowerCase());
+        }
+      } catch {}
+    }
+
+    if (supported.length === 0) return APPLICATION_ROUNDS;
+
+    return APPLICATION_ROUNDS.filter(
+      (r) =>
+        r.value === "none" ||
+        supported.some(
+          (s) =>
+            s === r.value.toLowerCase() ||
+            (s.includes("ea") && r.value.includes("Early Action")) ||
+            (s.includes("ed") && r.value.includes("Early Decision")) ||
+            (s.includes("rd") && r.value.includes("Regular Decision")) ||
+            (s.includes("roll") && r.value.includes("Rolling")) ||
+            r.label.toLowerCase().includes(s)
+        )
+    );
+  }, [deadlinesJson, supportedRounds]);
 
   // [UC-32] State chọn và đổi vòng nộp hồ sơ
   const [isEditingRound, setIsEditingRound] = useState(false);
@@ -382,13 +417,13 @@ function StudentTargetSchoolButton({
                   onValueChange={(val) => {
                     if (val !== null) setRound(val === "none" ? "" : String(val));
                   }}
-                  items={APPLICATION_ROUNDS}
+                  items={availableRounds}
                 >
                   <SelectTrigger className="w-full text-sm">
                     <SelectValue placeholder="-- Chưa chọn vòng nộp --" />
                   </SelectTrigger>
                   <SelectContent>
-                    {APPLICATION_ROUNDS.map((r) => (
+                    {availableRounds.map((r) => (
                       <SelectItem key={r.value} value={r.value}>
                         {r.label}
                       </SelectItem>
@@ -477,7 +512,7 @@ function StudentTargetSchoolButton({
                       Chọn vòng nộp hồ sơ
                     </span>
                     <div className="grid grid-cols-2 gap-1.5">
-                      {APPLICATION_ROUNDS.filter((r) => r.value !== "none").map((r) => (
+                      {availableRounds.filter((r) => r.value !== "none").map((r) => (
                         <Button
                           key={r.value}
                           type="button"
