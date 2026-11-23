@@ -64,7 +64,9 @@ namespace StudyAbroad.Application.Auth
         AccountDeletionOptions? accountDeletion = null,
         StudyAbroad.Application.Billing.IBillingAccountHooks? billingHooks = null,
         // [UC-104] Đồng ý Điều khoản và Chính sách bảo mật lúc đăng ký; null trong test cũ thì bỏ qua
-        StudyAbroad.Application.Policies.IRegistrationConsent? registrationConsent = null) : IAuthService
+        StudyAbroad.Application.Policies.IRegistrationConsent? registrationConsent = null,
+        // [SC-10 / UC-113] Gửi thông báo khi Admin cập nhật ngày sinh
+        StudyAbroad.Application.Notifications.INotificationService? notifications = null) : IAuthService
     {
         private readonly AccountDeletionOptions _accountDeletion = accountDeletion ?? new AccountDeletionOptions();
 
@@ -1091,6 +1093,25 @@ namespace StudyAbroad.Application.Auth
                     newAge,
                 }),
             }, ct);
+
+            // [SC-10 / UC-113] Gửi thông báo trong hệ thống cho người dùng khi Administrator cập nhật ngày sinh
+            if (notifications is not null)
+            {
+                try
+                {
+                    await notifications.NotifyAsync(
+                        user.Id,
+                        "user_birth_date_updated",
+                        "Ngày sinh của bạn đã được cập nhật",
+                        $"Administrator đã cập nhật ngày sinh của bạn thành {newDob:dd/MM/yyyy}. Lý do: {reason}",
+                        "/account",
+                        ct);
+                }
+                catch
+                {
+                    // Nuốt lỗi thông báo để không chặn luồng chính
+                }
+            }
 
             return AuthResult.Ok(await ToDtoAsync(user, ct), $"Đã sửa ngày sinh. Tuổi hiện tại: {newAge}.");
         }
