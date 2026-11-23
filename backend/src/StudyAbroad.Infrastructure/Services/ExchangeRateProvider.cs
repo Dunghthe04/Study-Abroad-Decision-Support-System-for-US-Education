@@ -20,6 +20,7 @@ public class ExchangeRateProvider(HttpClient http, IMemoryCache cache, ILogger<E
 {
     public const string RateUrl = "https://open.er-api.com/v6/latest/USD";
     public const decimal FallbackVndPerUsd = 25_000m;
+    public const string SourceName = "open.er-api.com";
     private const string CacheKey = "exchange_rate_vnd_per_usd";
     private const string LastGoodKey = "exchange_rate_vnd_per_usd_last_good";
     private static readonly TimeSpan MaxAge = TimeSpan.FromDays(1);
@@ -27,30 +28,40 @@ public class ExchangeRateProvider(HttpClient http, IMemoryCache cache, ILogger<E
     // Tỷ giá ngoài khoảng này coi là dữ liệu hỏng, không dùng
     private const decimal MinSane = 10_000m, MaxSane = 100_000m;
 
-    public async Task<decimal> GetVndPerUsdAsync(CancellationToken ct = default)
+    public async Task<decimal> GetVndPerUsdAsync(CancellationToken ct = default) =>
+        (await GetQuoteAsync(ct)).VndPerUsd;
+
+    public async Task<ExchangeRateQuote> GetQuoteAsync(CancellationToken ct = default)
     {
-        if (cache.TryGetValue(CacheKey, out decimal rate))
-            return rate;
+        if (cache.TryGetValue(CacheKey, out ExchangeRateQuote? quote) && quote is not null)
+            return quote;
         try
         {
             using var doc = await http.GetFromJsonAsync<JsonDocument>(RateUrl, ct)
                 ?? throw new JsonException("không có dữ liệu");
-            rate = doc.RootElement.GetProperty("rates").GetProperty("VND").GetDecimal();
+            var rate = doc.RootElement.GetProperty("rates").GetProperty("VND").GetDecimal();
             if (rate is <= MinSane or >= MaxSane)
                 throw new JsonException($"tỷ giá lạ: {rate}");
+            DateTimeOffset? asOf = doc.RootElement.TryGetProperty("time_last_update_unix", out var unix)
+                && unix.TryGetInt64(out var seconds)
+                    ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+                    : null;
+            quote = new ExchangeRateQuote(rate, asOf, SourceName, false);
         }
         // Hết giờ chờ (TaskCanceled) cũng coi là lỗi mạng, trừ khi chính request bị hủy
         catch (Exception ex) when (!ct.IsCancellationRequested
                                    && ex is HttpRequestException or JsonException or KeyNotFoundException
                                        or InvalidOperationException or FormatException or TaskCanceledException)
         {
-            var old = cache.TryGetValue(LastGoodKey, out decimal lastGood) ? lastGood : FallbackVndPerUsd;
-            logger.LogWarning("exchange_rate: không lấy được tỷ giá ({Error}), dùng {Rate}", ex.Message, old);
+            var old = cache.TryGetValue(LastGoodKey, out ExchangeRateQuote? lastGood) && lastGood is not null
+                ? lastGood
+                : new ExchangeRateQuote(FallbackVndPerUsd, null, SourceName, true);
+            logger.LogWarning("exchange_rate: không lấy được tỷ giá ({Error}), dùng {Rate}", ex.Message, old.VndPerUsd);
             cache.Set(CacheKey, old, RetryAfter);
             return old;
         }
-        cache.Set(CacheKey, rate, MaxAge);
-        cache.Set(LastGoodKey, rate);
-        return rate;
+        cache.Set(CacheKey, quote, MaxAge);
+        cache.Set(LastGoodKey, quote);
+        return quote;
     }
 }

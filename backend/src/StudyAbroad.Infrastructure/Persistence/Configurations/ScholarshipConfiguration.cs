@@ -27,6 +27,15 @@ public class ScholarshipConfiguration : IEntityTypeConfiguration<Scholarship>
         b.Property(x => x.EligibilityNotes).HasMaxLength(2000);
         b.Property(x => x.SourceUrl).HasMaxLength(512);
         b.Property(x => x.SourceReliability).HasMaxLength(16);
+        b.Property(x => x.Kind).HasMaxLength(32);
+        b.Property(x => x.AmountType).HasMaxLength(32);
+        b.Property(x => x.AmountMinUsd).HasPrecision(12, 2);
+        b.Property(x => x.AmountMaxUsd).HasPrecision(12, 2);
+        b.Property(x => x.RenewalCriteria).HasMaxLength(1000);
+        b.Property(x => x.MinToefl).HasPrecision(5, 1);
+        b.Property(x => x.MajorRestriction).HasMaxLength(500);
+        b.Property(x => x.ApplicationMethod).HasMaxLength(32);
+        b.Property(x => x.ApplyUrl).HasMaxLength(512);
         b.HasIndex(x => x.StudyLevel);
         b.HasIndex(x => new { x.UniversityId, x.IsActive });
     }
