@@ -61,7 +61,8 @@ namespace StudyAbroad.Application.Auth
         StudyAbroad.Application.Leads.ILeadWithdrawalRepository leadWithdrawals,
         IStudyCenterRepository? studyCenters = null,
         AccountDeletionOptions? accountDeletion = null,
-        StudyAbroad.Application.Billing.IBillingAccountHooks? billingHooks = null) : IAuthService
+        StudyAbroad.Application.Billing.IBillingAccountHooks? billingHooks = null,
+        ICenterDeletionWorkRepository? centerWork = null) : IAuthService
     {
         private readonly AccountDeletionOptions _accountDeletion = accountDeletion ?? new AccountDeletionOptions();
 
@@ -69,6 +70,9 @@ namespace StudyAbroad.Application.Auth
         public const int RestoreTokenExpiryMinutes = 10;
 
         public const string RestoreTokenInvalidMessage = "Phiên khôi phục không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại để khôi phục tài khoản.";
+
+        /// <summary>[UC-61] Loại thông báo gửi người dùng khi yêu cầu liên hệ bị đóng vì trung tâm Tạm ngừng.</summary>
+        public const string CenterSuspendedLeadClosedNotificationType = "lead_closed_center_suspended";
 
         public const int MinPasswordLength = 8;
         public const int MaxPasswordLength = 100;
@@ -990,11 +994,16 @@ namespace StudyAbroad.Application.Auth
             await users.UpdateUserAsync(user, ct);
             await users.RevokeAllSessionsAsync(user.Id, ct);
 
+            // [UC-61] Khóa tài khoản trung tâm: trung tâm về Tạm ngừng, yêu cầu đang mở chuyển Đã đóng và người dùng liên quan được báo
+            var (centerPreviousStatus, closedLeads) = await SuspendCenterOfLockedUserAsync(user, ct);
+
             var detailJson = JsonSerializer.Serialize(new
             {
                 reason,
                 previousStatus,
                 targetEmail = user.Email,
+                centerPreviousStatus,
+                closedLeads,
             });
             await auditLogs.AddAsync(new AuditLog
             {
@@ -1009,6 +1018,98 @@ namespace StudyAbroad.Application.Auth
             _ = emailSender.SendAccountLockedEmailAsync(user.Email, user.FullName, reason, ct);
 
             return AuthResult.Ok(ToDto(user) with { LockReason = reason }, "Đã khóa tài khoản.");
+        }
+
+        /// <summary>
+        /// [UC-61] Khóa tài khoản chủ trung tâm: trung tâm về Tạm ngừng (không hiện công khai, không nhận yêu cầu mới), mọi yêu cầu liên hệ
+        /// đang mở chuyển Đã đóng và học sinh, phụ huynh liên quan nhận thông báo. Trả về trạng thái trung tâm trước khi khóa
+        /// (null nếu đã Tạm ngừng sẵn do thu hồi dấu, để mở khóa không tự bật lại) và số yêu cầu đã đóng.
+        /// </summary>
+        private async Task<(string? PreviousCenterStatus, int ClosedLeads)> SuspendCenterOfLockedUserAsync(User user, CancellationToken ct)
+        {
+            if (user.Role != UserRoles.Center || studyCenters is null)
+                return (null, 0);
+
+            var found = await studyCenters.GetByOwnerOrEmailAsync(user.Id, user.Email, ct);
+            if (found is null)
+                return (null, 0);
+
+            string? previous = null;
+            var closedCount = 0;
+            await unitOfWork.ExecuteInTransactionAsync(async txCt =>
+            {
+                var center = await studyCenters.GetByIdForUpdateAsync(found.Id, txCt);
+                if (center is null)
+                    return;
+
+                if (center.VerificationStatus != CenterVerificationStatuses.Suspended)
+                {
+                    previous = center.VerificationStatus;
+                    center.VerificationStatus = CenterVerificationStatuses.Suspended;
+                    await studyCenters.UpdateAsync(center, txCt);
+                }
+
+                if (centerWork is null)
+                    return;
+
+                var closed = await centerWork.CloseOpenLeadsAsync(center.Id, DateTime.UtcNow, txCt);
+                closedCount = closed.Count;
+                var notifications = closed
+                    .SelectMany(c => c.SubmittedByUserId is { } submitter ? new[] { c.StudentUserId, submitter } : new[] { c.StudentUserId })
+                    .Distinct()
+                    .Select(id => new Notification
+                    {
+                        UserId = id,
+                        Type = CenterSuspendedLeadClosedNotificationType,
+                        Title = "Yêu cầu liên hệ đã đóng",
+                        Body = $"{center.Name} tạm ngừng hoạt động trên USAS nên yêu cầu liên hệ của bạn với trung tâm này đã được đóng.",
+                        LinkUrl = "/account",
+                    })
+                    .ToList();
+                if (notifications.Count > 0)
+                    await centerWork.AddNotificationsAsync(notifications, txCt);
+            }, ct);
+
+            return (previous, closedCount);
+        }
+
+        /// <summary>
+        /// [UC-62] Mở khóa tài khoản chủ trung tâm: nếu trung tâm đang Tạm ngừng do chính lần khóa tài khoản gần nhất thì khôi phục
+        /// trạng thái trước đó. Trung tâm Tạm ngừng do thu hồi dấu xác minh (UC-59) giữ nguyên. Các yêu cầu đã đóng không tự mở lại.
+        /// </summary>
+        private async Task<string?> RestoreCenterOfUnlockedUserAsync(User user, CancellationToken ct)
+        {
+            if (user.Role != UserRoles.Center || studyCenters is null)
+                return null;
+
+            var detail = await auditLogs.GetLatestLockDetailJsonAsync(user.Id, ct);
+            if (string.IsNullOrEmpty(detail))
+                return null;
+
+            string? previous = null;
+            try
+            {
+                using var doc = JsonDocument.Parse(detail);
+                if (doc.RootElement.TryGetProperty("centerPreviousStatus", out var e) && e.ValueKind == JsonValueKind.String)
+                    previous = e.GetString();
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+            if (string.IsNullOrWhiteSpace(previous))
+                return null;
+
+            var found = await studyCenters.GetByOwnerOrEmailAsync(user.Id, user.Email, ct);
+            if (found is null)
+                return null;
+            var center = await studyCenters.GetByIdForUpdateAsync(found.Id, ct);
+            if (center is null || center.VerificationStatus != CenterVerificationStatuses.Suspended)
+                return null;
+
+            center.VerificationStatus = previous;
+            await studyCenters.UpdateAsync(center, ct);
+            return previous;
         }
 
         /// <summary>
@@ -1118,11 +1219,17 @@ namespace StudyAbroad.Application.Auth
             user.FailedLoginAttempts = 0;
             await users.UpdateUserAsync(user, ct);
 
+            // [UC-62] Mở khóa tài khoản trung tâm: khôi phục trạng thái trung tâm trước khi Tạm ngừng
+            var restoredCenterStatus = previousStatus == UserStatuses.Locked
+                ? await RestoreCenterOfUnlockedUserAsync(user, ct)
+                : null;
+
             var detailJson = JsonSerializer.Serialize(new
             {
                 reason,
                 previousStatus,
                 targetEmail = user.Email,
+                restoredCenterStatus,
             });
             await auditLogs.AddAsync(new AuditLog
             {
