@@ -280,7 +280,7 @@ export function ReviewVerificationModal({
               <div className="space-y-3 rounded-lg border border-line bg-surface p-4">
                 <h4 className="font-semibold text-ink flex items-center gap-2">
                   <CheckSquareIcon className="h-4 w-4 text-brand" />
-                  Đối chiếu 5 điều kiện bắt buộc cấp tick xanh (BR-C3)
+                  Đối chiếu 4 điều kiện bắt buộc cấp tick xanh (BR-C3)
                 </h4>
 
                 <div className="space-y-2.5 text-xs">
