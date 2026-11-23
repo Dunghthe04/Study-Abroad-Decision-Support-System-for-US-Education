@@ -30,7 +30,7 @@ interface CenterActionConfirmDialogProps {
   action: CenterConfirmAction | null;
   isSubmitting: boolean;
   onClose: () => void;
-  onConfirm: (verificationNote?: string) => void;
+  onConfirm: (noteOrReason?: string) => void;
 }
 
 export function CenterActionConfirmDialog({
@@ -66,7 +66,7 @@ interface CenterActionConfirmContentProps {
   action: CenterConfirmAction;
   isSubmitting: boolean;
   onClose: () => void;
-  onConfirm: (verificationNote?: string) => void;
+  onConfirm: (noteOrReason?: string) => void;
 }
 
 function CenterActionConfirmContent({
@@ -77,6 +77,9 @@ function CenterActionConfirmContent({
   onConfirm,
 }: CenterActionConfirmContentProps) {
   const [note, setNote] = useState(center.verificationNote || "");
+  // [UC-72] Ẩn hoặc hiện trung tâm: lý do bắt buộc (ghi nhật ký)
+  const [reason, setReason] = useState("");
+  const isVisibilityAction = action === "hide" || action === "show";
 
   const isVerificationAction = action === "verify" || action === "unverify";
   const missingChecklist =
@@ -174,14 +177,37 @@ function CenterActionConfirmContent({
         </Field>
       )}
 
+      {isVisibilityAction && (
+        <Field className="pt-1">
+          <FieldLabel htmlFor="center-visibility-reason" className="text-xs">
+            Lý do {action === "hide" ? "ẩn" : "hiện lại"} trung tâm (bắt buộc)
+          </FieldLabel>
+          <Textarea
+            id="center-visibility-reason"
+            rows={2}
+            placeholder={
+              action === "hide"
+                ? "Ví dụ: Nhận được nhiều phản ánh về quảng cáo sai sự thật..."
+                : "Ví dụ: Trung tâm đã sửa nội dung vi phạm..."
+            }
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            disabled={isSubmitting}
+            maxLength={500}
+            className="text-xs"
+          />
+        </Field>
+      )}
+
       <DialogFooter className="mt-4 gap-2 sm:gap-0">
         <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
           Hủy bỏ
         </Button>
         <Button
           variant={action === "verify" || action === "show" ? "default" : "destructive"}
-          onClick={() => onConfirm(isVerificationAction ? note.trim() : undefined)}
+          onClick={() => onConfirm(isVerificationAction ? note.trim() : isVisibilityAction ? reason.trim() : undefined)}
           loading={isSubmitting}
+          disabled={isVisibilityAction && reason.trim().length === 0}
           className={
             action === "verify" || action === "show"
               ? "bg-ok hover:bg-ok/90 text-white"
