@@ -1,3 +1,4 @@
+import { POLICY_REQUIRED_CODE, POLICY_REQUIRED_EVENT } from "@/lib/policy-events";
 import { authFetch } from "@/lib/auth-refresh";
 import type {
   AccessLogDto,
@@ -124,6 +125,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       if (errorList) {
         message = `${message} (${errorList})`;
       }
+    }
+    // [UC-104] Chưa đồng ý bản điều khoản bắt buộc: báo cho PolicyGate hiện màn đồng ý
+    if (res.status === 403 && body?.code === POLICY_REQUIRED_CODE && typeof window !== "undefined") {
+      window.dispatchEvent(new Event(POLICY_REQUIRED_EVENT));
     }
     throw new ApiError(res.status, message, body);
   }

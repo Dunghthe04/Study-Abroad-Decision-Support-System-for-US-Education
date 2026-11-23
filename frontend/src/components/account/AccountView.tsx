@@ -22,6 +22,8 @@ import {
   UsersFilledIcon,
 } from "@/components/account/AccountNavIcons";
 import { ChangePasswordCard } from "@/components/account/ChangePasswordCard";
+import { PolicyConsentsCard } from "@/components/account/PolicyConsentsCard";
+import { FileTextFilledIcon } from "@/components/admin/AdminNavIcons";
 import { DeleteAccountCard } from "@/components/account/DeleteAccountCard";
 import { ParentLinksCard } from "@/components/account/ParentLinksCard";
 import { ParentAcademicSection, StudentParentOffers } from "@/components/account/ParentProfileShareCards";
@@ -40,6 +42,7 @@ import {
   BookmarkCheckIcon,
   BookOpenIcon,
   CreditCardIcon,
+  FileTextIcon,
   GaugeIcon,
   HeartHandshakeIcon,
   KeyRoundIcon,
@@ -52,7 +55,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-type SectionId = "personal" | "subscription" | "quota" | "family" | "academic" | "parent-links" | "sent-leads" | "password";
+type SectionId = "personal" | "subscription" | "quota" | "family" | "academic" | "parent-links" | "sent-leads" | "password" | "policies";
 
 type NavGroupId = "account" | "billing" | "profile";
 
@@ -107,6 +110,10 @@ export function AccountView() {
   const sections: SectionItem[] = [
     { id: "personal", label: "Thông tin cá nhân", icon: UserIcon, filledIcon: UserFilledIcon, group: "account" },
     { id: "password", label: "Bảo mật tài khoản", icon: KeyRoundIcon, filledIcon: KeyRoundFilledIcon, group: "account" },
+    // [UC-104] Lịch sử đồng ý Điều khoản và Chính sách bảo mật; admin, moderator không phải đồng ý nên không có mục này
+    ...(user && ["student", "parent", "center"].includes(user.role)
+      ? [{ id: "policies" as const, label: "Điều khoản đã đồng ý", icon: FileTextIcon, filledIcon: FileTextFilledIcon, group: "account" as const }]
+      : []),
     ...(isStudentOrParent
       ? [
           { id: "subscription" as const, label: "Gói dịch vụ", icon: CreditCardIcon, filledIcon: CreditCardFilledIcon, group: "billing" as const },
@@ -346,6 +353,7 @@ export function AccountView() {
             ))}
           {activeSection === "parent-links" && <ParentLinksCard />}
           {activeSection === "sent-leads" && <SentLeadsCard />}
+          {activeSection === "policies" && <PolicyConsentsCard />}
           {activeSection === "password" && (
             <div>
               <AccountSectionHeader

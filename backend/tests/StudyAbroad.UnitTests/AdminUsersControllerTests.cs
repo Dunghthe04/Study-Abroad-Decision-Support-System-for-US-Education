@@ -18,7 +18,7 @@ public class AdminUsersControllerTests
     {
         public List<UserDto> Users { get; set; } = [];
 
-        public Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken ct = default) =>
+        public Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken ct = default, string? ipAddress = null) =>
             throw new NotImplementedException();
 
         public Task<AuthResult> LoginAsync(LoginRequest request, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default) =>

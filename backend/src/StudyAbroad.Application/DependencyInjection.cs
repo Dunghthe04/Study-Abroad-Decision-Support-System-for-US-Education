@@ -32,6 +32,8 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Admin.ReviewBatches.IReviewBatchService, StudyAbroad.Application.Admin.ReviewBatches.ReviewBatchService>();   // đợt duyệt mẫu
         services.AddScoped<StudyAbroad.Application.Admin.Sensitivity.ISensitivityRunService, StudyAbroad.Application.Admin.Sensitivity.SensitivityRunService>();   // phân tích độ nhạy tham số (UC-85)
         services.AddScoped<StudyAbroad.Application.Admin.Policies.IPolicyService, StudyAbroad.Application.Admin.Policies.PolicyService>();   // quản lý chính sách và điều khoản (UC-103)
+        services.AddScoped<StudyAbroad.Application.Policies.IPolicyAcceptanceService, StudyAbroad.Application.Policies.PolicyAcceptanceService>();   // xác nhận chính sách và điều khoản (UC-104)
+        services.AddScoped<StudyAbroad.Application.Policies.IRegistrationConsent, StudyAbroad.Application.Policies.RegistrationConsent>();   // đồng ý điều khoản lúc đăng ký (UC-104)
         services.AddScoped<StudyAbroad.Application.Leads.ILeadService, StudyAbroad.Application.Leads.LeadService>();
         services.AddScoped<StudyAbroad.Application.Community.ICommunityService, StudyAbroad.Application.Community.CommunityService>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadParentConfirmService, StudyAbroad.Application.Leads.LeadParentConfirmService>();   // [UC-116] phụ huynh xác nhận lead qua mail

@@ -232,6 +232,7 @@ app.UseCors();
 app.UseAuthentication();
 app.UseMiddleware<ActingIdentityMiddleware>();   // 1.5b: đang nhập cho con thì chỉ API hồ sơ chạy dưới tên con
 app.UseAuthorization();
+app.UseMiddleware<PolicyAcceptanceMiddleware>();   // UC-104: chưa đồng ý bản bắt buộc thì API cần đăng nhập trả 403 policy_acceptance_required
 app.UseRateLimiter();
 
 app.MapControllers();

@@ -1,6 +1,8 @@
 using System.Text.Json;
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.Common;
+using StudyAbroad.Application.Policies;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using static StudyAbroad.Application.Auth.AuthService;
@@ -15,7 +17,8 @@ namespace StudyAbroad.Application.StudyCenters;
 public interface ICenterAccountService
 {
     /// <summary>[UC-64] Trung tâm tự đăng ký: tạo tài khoản và trung tâm ở trạng thái chưa xác minh, gửi OTP tới email.</summary>
-    Task<AuthResult> RegisterAsync(RegisterCenterRequest request, CancellationToken ct = default);
+    /// <param name="ipAddress">IP người đăng ký, ghi kèm bằng chứng đồng ý điều khoản (UC-104).</param>
+    Task<AuthResult> RegisterAsync(RegisterCenterRequest request, CancellationToken ct = default, string? ipAddress = null);
     /// <summary>[UC-91] Xác thực email đăng ký bằng OTP 6 số; đúng thì kích hoạt tài khoản và đăng nhập luôn.</summary>
     Task<AuthResult> VerifyEmailAsync(VerifyCenterEmailRequest request, CancellationToken ct = default);
     /// <summary>[UC-91] Gửi OTP tới email MỚI để đổi email liên lạc.</summary>
@@ -32,9 +35,12 @@ public class CenterAccountService(
     IEmailSender emailSender,
     IAuditLogRepository auditLogs,
     IStudyCenterRepository studyCenters,
-    IAuthService auth) : ICenterAccountService
+    IAuthService auth,
+    // [UC-104] Đồng ý Điều khoản và Chính sách bảo mật lúc đăng ký, cùng giao dịch với việc tạo tài khoản; null trong test cũ thì bỏ qua
+    IRegistrationConsent? registrationConsent = null,
+    IUnitOfWork? unitOfWork = null) : ICenterAccountService
 {
-        public async Task<AuthResult> RegisterAsync(RegisterCenterRequest request, CancellationToken ct = default)
+        public async Task<AuthResult> RegisterAsync(RegisterCenterRequest request, CancellationToken ct = default, string? ipAddress = null)
         {
             if (studyCenters is null)
                 return AuthResult.Fail(AuthError.Validation, "Dịch vụ đăng ký trung tâm tạm thời chưa sẵn sàng.");
@@ -52,6 +58,10 @@ public class CenterAccountService(
             var passwordError = ValidatePassword(request.Password, "Mật khẩu");
             if (passwordError != null)
                 return AuthResult.Fail(AuthError.Validation, passwordError);
+
+            // [UC-104] Phải đồng ý đúng bản Điều khoản và Chính sách bảo mật đang hiệu lực (kèm phiên bản đã đọc)
+            if (registrationConsent != null && await registrationConsent.ValidateAsync(request.AcceptedPolicies, ct) is { } consentError)
+                return AuthResult.Fail(AuthError.Validation, consentError);
 
             var centerName = request.CenterName?.Trim() ?? string.Empty;
             if (string.IsNullOrEmpty(centerName) || centerName.Length > 200)
@@ -96,8 +106,6 @@ public class CenterAccountService(
                 FailedLoginAttempts = 0,
                 LockoutEnd = null
             };
-            await users.AddAsync(user, ct);
-
             var center = new StudyCenter
             {
                 Code = code,
@@ -112,7 +120,6 @@ public class CenterAccountService(
                 RegistrantPosition = string.IsNullOrWhiteSpace(request.RegistrantPosition) ? null : request.RegistrantPosition.Trim(),
                 IsActive = true
             };
-            await studyCenters.AddAsync(center, ct);
 
             var otpCode = GenerateOtpCode();
             var otp = new OtpToken
@@ -123,7 +130,19 @@ public class CenterAccountService(
                 ExpiresAt = DateTime.UtcNow.AddMinutes(OtpExpiryMinutes),
                 Attempts = 0
             };
-            await users.SaveOtpAsync(otp, ct);
+
+            // Tài khoản, trung tâm, bằng chứng đồng ý điều khoản và OTP cùng một giao dịch: lỗi giữa chừng thì không còn tài khoản
+            // thiếu bằng chứng. Không có kho giao dịch (test cũ) thì chạy tuần tự như trước.
+            async Task SaveAllAsync(CancellationToken token)
+            {
+                await users.AddAsync(user, token);
+                await studyCenters.AddAsync(center, token);
+                if (registrationConsent != null)
+                    await registrationConsent.RecordAsync(user.Id, request.AcceptedPolicies, ipAddress, token);
+                await users.SaveOtpAsync(otp, token);
+            }
+            if (unitOfWork != null) await unitOfWork.ExecuteInTransactionAsync(SaveAllAsync, ct);
+            else await SaveAllAsync(ct);
 
             await emailSender.SendVerificationEmailAsync(user.Email, user.FullName, otpCode, OtpExpiryMinutes, ct);
 

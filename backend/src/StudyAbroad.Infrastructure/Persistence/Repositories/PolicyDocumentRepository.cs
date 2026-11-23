@@ -1,13 +1,22 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using StudyAbroad.Application.Admin.Policies;
+using StudyAbroad.Application.Policies;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 
-public class PolicyDocumentRepository(AppDbContext db) : IPolicyDocumentRepository, IPolicyVersionLookup
+public class PolicyDocumentRepository(AppDbContext db)
+    : IPolicyDocumentRepository, IPolicyVersionLookup, IPublishedPolicyReader
 {
+    // [UC-104] Mọi bản đã công bố (đang hiệu lực và hết hiệu lực), chỉ lấy phần đầu, không kéo toàn văn
+    public async Task<IReadOnlyList<PublishedPolicyHeader>> ListPublishedAsync(string kind, CancellationToken ct = default) =>
+        await db.PolicyDocuments.AsNoTracking()
+            .Where(d => d.Kind == kind && d.Version != null && (d.Status == PolicyStatuses.Published || d.Status == PolicyStatuses.Retired))
+            .Select(d => new PublishedPolicyHeader(d.Version!, d.RequiresReconsent, d.Title, d.ChangeSummary))
+            .ToListAsync(ct);
+
     public Task<string?> GetPublishedVersionAsync(string kind, CancellationToken ct = default) =>
         db.PolicyDocuments.AsNoTracking()
             .Where(d => d.Kind == kind && d.Status == PolicyStatuses.Published)

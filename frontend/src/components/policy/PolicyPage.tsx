@@ -28,8 +28,8 @@ export async function PolicyPage({ kind, fallbackTitle }: PolicyPageProps) {
   return (
     <main className="min-h-screen bg-surface px-4 py-12 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl space-y-8">
-        <Link href="/register" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-          <ArrowLeftIcon className="mr-1.5 size-4" /> Quay lại đăng ký
+        <Link href="/" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+          <ArrowLeftIcon className="mr-1.5 size-4" /> Về trang chủ
         </Link>
 
         <div className="space-y-3">

@@ -22,7 +22,7 @@ public class CenterAccountController(ICenterAccountService accounts) : Controlle
     [EnableRateLimiting(AuthRateLimit.PolicyName)]
     public async Task<IActionResult> Register(RegisterCenterRequest request, CancellationToken ct)
     {
-        var result = await accounts.RegisterAsync(request, ct);
+        var result = await accounts.RegisterAsync(request, ct, HttpContext.Connection.RemoteIpAddress?.ToString());
         return result.Error switch
         {
             AuthError.None => StatusCode(StatusCodes.Status201Created, new { message = result.Message, email = request.Email }),
