@@ -12,6 +12,15 @@ import {
 } from "lucide-react";
 import { centerPortalApi, ApiError } from "@/lib/api";
 import type { StudyCenter } from "@/types/api";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -99,6 +108,7 @@ export function CenterProfileView() {
   const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [confirmLegalOpen, setConfirmLegalOpen] = useState(false);
   // Tự động xóa thông báo thành công sau 5 giây
   useEffect(() => {
     if (!success) return;
@@ -197,12 +207,17 @@ export function CenterProfileView() {
     // [UC-92] Đang chờ duyệt: không gửi tên, loại hình và các trường pháp lý (server cũng chặn).
     // Đã xác minh vẫn gửi; server chỉ đưa hồ sơ về Chờ duyệt khi giá trị pháp lý thực sự đổi.
     if (isVerified && legalChanged) {
-      const ok = window.confirm(
-        "Bạn đang đổi thông tin pháp lý của trung tâm đã xác minh. Hồ sơ sẽ chuyển về Chờ duyệt và tạm ẩn dấu xác minh cho tới khi Moderator duyệt lại. Tiếp tục?"
-      );
-      if (!ok) return;
+      setConfirmLegalOpen(true);
+      return;
     }
     const legalPayload = legalLocked
+    await saveProfile();
+  };
+
+  const saveProfile = async () => {
+    const fMin = feeMin ? Number(feeMin) : null;
+    const fMax = feeMax ? Number(feeMax) : null;
+    const fCertified = certifiedCount.trim() ? Number(certifiedCount) : null;
       ? {}
       : {
           name: name.trim(),
@@ -762,3 +777,27 @@ export function CenterProfileView() {
     </div>
   );
 }
+
+      {/* [UC-92] Xác nhận trước khi đổi thông tin pháp lý của trung tâm đã xác minh */}
+      <AlertDialog open={confirmLegalOpen} onOpenChange={setConfirmLegalOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Đổi thông tin pháp lý?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Trung tâm của bạn đang được xác minh. Nếu đổi thông tin pháp lý, hồ sơ sẽ chuyển về Chờ duyệt và dấu xác minh tạm ẩn cho tới khi Moderator duyệt lại.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <Button
+              type="button"
+              onClick={() => {
+                setConfirmLegalOpen(false);
+                void saveProfile();
+              }}
+            >
+              Tiếp tục lưu
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
