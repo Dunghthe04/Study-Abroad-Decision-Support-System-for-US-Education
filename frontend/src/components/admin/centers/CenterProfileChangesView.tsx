@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
@@ -24,7 +24,6 @@ import { CenterStatusBadge, CenterVisibilityBadge } from "@/components/centers/C
 import { ApiError, centerProfileChangesApi, studyCentersApi } from "@/lib/api";
 import { formatDateTime } from "@/lib/ai-usage-format";
 import { useFetched } from "@/lib/use-fetched";
-import { cn } from "cn";
 import type { CenterProfileChangeDto, CenterProfileChangeFilter } from "@/types/api";
 
 const PAGE_SIZE = 20;
