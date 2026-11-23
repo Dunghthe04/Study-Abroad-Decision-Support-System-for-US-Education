@@ -11,7 +11,6 @@ Mỗi lô ghi trong một giao dịch riêng nên chạy lại tiếp tục từ
 
 import argparse
 import asyncio
-import hashlib
 import sys
 import time
 from collections.abc import Callable
@@ -20,33 +19,15 @@ from typing import Any
 
 from pgvector import Vector
 
-BATCH = 16  # số câu hỏi gửi dịch vụ embedding mỗi lần
-RETRIES = 8
-RETRY_WAIT_SECONDS = 20
-
-SELECT_SQL = """
-SELECT id, question, embedding_hash, (embedding IS NOT NULL) AS has_vector
-FROM app.knowledge_documents ORDER BY entry_no
-"""
-
-UPDATE_SQL = """
-UPDATE app.knowledge_documents
-SET embedding = %(embedding)s, embedding_hash = %(hash)s, ingested_at = %(now)s
-WHERE id = %(id)s AND question = %(question)s
-"""
-
-
-def question_hash(question: str) -> str:
-    return hashlib.sha256(question.strip().encode("utf-8")).hexdigest()
-
-
-def needs_embedding(question: str, embedding_hash: str | None, has_vector: bool) -> bool:
-    return not has_vector or embedding_hash != question_hash(question)
-
-
-def pending(conn: Any, limit: int | None = None) -> list[tuple[Any, str]]:
-    rows = [(r[0], r[1]) for r in conn.execute(SELECT_SQL).fetchall() if needs_embedding(r[1], r[2], r[3])]
-    return rows[:limit]
+from app.services.knowledge_embedding import (  # noqa: F401  (BATCH, needs_embedding, question_hash được test dùng)
+    BATCH,
+    RETRIES,
+    RETRY_WAIT_SECONDS,
+    UPDATE_SQL,
+    needs_embedding,
+    pending,
+    question_hash,
+)
 
 
 # Tạo vector cho các dòng còn thiếu; trả về số dòng đã (hoặc, khi dry_run, sẽ) được tạo vector
