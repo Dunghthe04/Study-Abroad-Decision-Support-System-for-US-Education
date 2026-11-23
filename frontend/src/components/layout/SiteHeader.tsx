@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  AwardIcon,
   BookOpenIcon,
   BookmarkCheckIcon,
   Building2Icon,
@@ -106,7 +105,6 @@ export function SiteHeader() {
   const leftLinks = [
     { href: "/", label: "Trang chủ", icon: HomeIcon },
     { href: "/universities", label: "Tìm trường", icon: GraduationCapIcon },
-    { href: "/scholarships", label: "Học bổng", icon: AwardIcon },
     { href: "/centers", label: "Trung tâm tư vấn", icon: Building2Icon },
     { href: "/community", label: "Cộng đồng", icon: MessagesSquareIcon },
     ...(!user ? [{ href: "/plans", label: "Gói dịch vụ", icon: CrownIcon }] : []),
@@ -485,7 +483,8 @@ export function SiteHeader() {
                 Thêm con
               </Link>
             )}
-            {!canOpenAdmin && (acting !== null || (user?.role !== "parent" && isLinkedParent === false)) && (
+            {/* Trung tâm và quản trị không có hồ sơ để phân tích */}
+            {isStudentOrParent && (acting !== null || (user?.role !== "parent" && isLinkedParent === false)) && (
               <Link
                 href="/analysis"
                 className={buttonVariants({
