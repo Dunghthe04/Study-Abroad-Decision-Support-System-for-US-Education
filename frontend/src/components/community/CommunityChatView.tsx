@@ -111,6 +111,13 @@ function renderMessageContent(content: string) {
 }
 
 function MemberList({ members, currentUserId }: { members: CommunityPresenceDto[]; currentUserId?: string }) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
   if (members.length === 0) {
     return <p className="px-3 py-6 text-sm text-muted-foreground">Chưa có ai trong phòng.</p>;
   }
@@ -130,7 +137,7 @@ function MemberList({ members, currentUserId }: { members: CommunityPresenceDto[
         const lastSeen = m.lastSeenAt ? new Date(m.lastSeenAt) : null;
         let lastSeenText = "Đang online";
         if (lastSeen && !Number.isNaN(lastSeen.getTime())) {
-          const diffMs = Date.now() - lastSeen.getTime();
+          const diffMs = nowMs - lastSeen.getTime();
           if (diffMs < 2 * 60 * 1000) {
             lastSeenText = "Vừa xong";
           } else if (diffMs < 60 * 60 * 1000) {
