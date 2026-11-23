@@ -22,6 +22,7 @@ import type {
   AdminUserAccountListQuery,
   PagedResult,
   CreateModeratorAccountRequest,
+  RevokeCenterVerificationRequest,
   CreateCenterAccountRequest,
   LockUserAccountRequest,
   UnlockUserAccountRequest,
@@ -431,6 +432,14 @@ export const studyCentersApi = {
   createReview: (id: string, rating: number, comment?: string) => {
     const payload: CreateCenterReviewRequest = { rating, comment: comment?.trim() || null };
     return apiFetch<CenterReviewDto>(`/api/v1/study-centers/${encodeURIComponent(id)}/reviews`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  /** [UC-59] Thu hồi dấu xác minh trung tâm Đã xác minh: chuyển Tạm ngừng, lý do bắt buộc (vai trò: Moderator) */
+  revokeVerification: (id: string, reason: string) => {
+    const payload: RevokeCenterVerificationRequest = { reason };
+    return apiFetch<StudyCenter>(`/api/v1/study-centers/${encodeURIComponent(id)}/revoke-verification`, {
       method: "POST",
       body: JSON.stringify(payload),
     });

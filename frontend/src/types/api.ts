@@ -271,6 +271,11 @@ export interface VerifyStudyCenterRequest {
   verificationNote?: string | null;
 }
 
+/** [UC-59] Thu hồi dấu xác minh: lý do bắt buộc. */
+export interface RevokeCenterVerificationRequest {
+  reason: string;
+}
+
 export interface CreateStudyCenterRequest {
   code: string;
   name: string;
