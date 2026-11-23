@@ -2,8 +2,9 @@
 
 from datetime import date
 from typing import Any, Literal
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.study_levels import StudyLevel
 from app.schemas.common import CamelModel
@@ -105,6 +106,22 @@ class Citation(CamelModel):
     url: str | None = None
     snippet: str | None = None
     retrieved_at: date | None = None  # ngày thu thập thông tin của nguồn (UC-37); None là kho chưa ghi ngày
+
+
+# Ảnh minh họa kèm câu trả lời (ví dụ ảnh mẫu form I-20). url lấy từ cột image_url của dòng kho được dùng, chỉ nhận https;
+# frontend vẽ ảnh bằng thẻ img và tự chuyển sang link khi ảnh không tải được
+class Media(CamelModel):
+    kind: Literal["image"]
+    url: str
+    alt: str  # chữ thay thế khi ảnh lỗi và cho người đọc màn hình
+
+    @field_validator("url")
+    @classmethod
+    def _https_only(cls, value: str) -> str:
+        parsed = urlparse(value)
+        if parsed.scheme != "https" or not parsed.netloc or any(c.isspace() for c in value):
+            raise ValueError("url phải là link https hợp lệ")
+        return value
 
 
 # Nút gợi ý: label là chữ trên nút, value là chữ gửi đi như tin nhắn của học sinh khi bấm
@@ -222,6 +239,7 @@ class AiUsageMixin(BaseModel):
 class ChatResponse(CamelModel):
     answer: str
     citations: list[Citation] = []
+    media: list[Media] = []  # ảnh minh họa của câu trả lời (từ dòng kho được dùng), rỗng nếu không có
     disclaimer: str | None = None  # Lời lưu ý
     state: ChatState
     skills: list[str] = []  # skill đã chạy ở lượt này, để ghi log

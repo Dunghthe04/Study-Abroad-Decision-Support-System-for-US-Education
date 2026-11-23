@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from app.schemas.chat import ChatState, Citation, QuickReply
+from app.schemas.chat import ChatState, Citation, Media, QuickReply
 from app.services.chat_flow import SkillOutput
 from app.services.knowledge import KnowledgeHit, KnowledgeRetriever
 from app.services.pii_mask import mask_personal_info
@@ -129,6 +129,24 @@ def check_answer(raw: dict[str, Any], question: str, candidates: list[KnowledgeH
     if len(answer) < MIN_KEEP_RATIO * len(hit.answer):
         raise ValueError("câu viết lại ngắn hơn nhiều so với câu chuẩn, có thể đã bỏ ý")
     return Composed(hit, answer)
+
+
+# Số ảnh tối đa kèm một câu trả lời
+MAX_MEDIA = 3
+
+
+# Ảnh minh họa của dòng kho được dùng. Link CHỈ lấy từ cột image_url (người thu thập dán, có thể nhiều link cách nhau bằng ";"),
+# không bao giờ từ lời Claude viết; chỉ nhận https, bỏ link trùng và link hỏng
+def media_of(hit: KnowledgeHit) -> list[Media]:
+    media: list[Media] = []
+    for link in (hit.image_url or "").split(";"):
+        try:
+            item = Media(kind="image", url=link.strip(), alt=hit.question)
+        except ValueError:
+            continue
+        if item not in media:
+            media.append(item)
+    return media[:MAX_MEDIA]
 
 
 # lấy thông tin của một đoạn kiến thức và chuyển nó thành một đối tượng trích dẫn (Citation) để đính kèm vào câu trả lời cho người dùng.
@@ -281,5 +299,6 @@ class TraLoiHandler:
             answer,
             quick_replies=after_answer(hits, best, message, self._min_score),
             citations=[citation_of(best)],
+            media=media_of(best),
             disclaimer=DISCLAIMER,
         )

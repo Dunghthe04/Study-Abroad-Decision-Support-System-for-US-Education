@@ -33,9 +33,10 @@ def hit(
     url=None,
     retrieved=None,
     question="câu hỏi mẫu",
+    image=None,
 ):
     return KnowledgeHit(
-        entry_no, question, content, source, url, None, "faq", "LABEL_X", None, retrieved, score
+        entry_no, question, content, source, url, image, "faq", "LABEL_X", None, retrieved, score
     )
 
 
@@ -655,3 +656,80 @@ async def test_without_a_restorer_the_old_behaviour_is_unchanged():
     )
 
     assert out.answer == NO_BASIS
+
+
+# ---------- ảnh minh họa: link lấy từ dòng được chọn, không bao giờ từ lời Claude ----------
+
+
+def test_media_of_returns_the_https_images_of_the_row_with_the_sample_question_as_alt():
+    from app.services.skills.skill_tra_loi import media_of
+
+    row = hit(image="https://travel.state.gov/mau-i20.png", question="Mẫu I-20 trông thế nào?")
+
+    assert [(m.kind, m.url, m.alt) for m in media_of(row)] == [
+        ("image", "https://travel.state.gov/mau-i20.png", "Mẫu I-20 trông thế nào?")
+    ]
+
+
+def test_media_of_splits_several_links_keeps_only_https_and_caps_the_number():
+    from app.services.skills.skill_tra_loi import MAX_MEDIA, media_of
+
+    links = "https://a.org/1.png; http://b.org/2.png ;javascript:alert(1);https://c.org/3.png;https://c.org/3.png;https://d.org/4.png;https://e.org/5.png"
+
+    urls = [m.url for m in media_of(hit(image=links))]
+
+    assert urls == [
+        "https://a.org/1.png",
+        "https://c.org/3.png",
+        "https://d.org/4.png",
+    ]  # không trùng, bỏ http và javascript
+    assert len(urls) <= MAX_MEDIA
+
+
+@pytest.mark.parametrize(
+    "image", [None, "", "   ", "ftp://x.org/a.png", "https://", "not a url", "data:image/png;base64,AAAA"]
+)
+def test_media_of_a_row_without_a_usable_link_is_empty(image):
+    from app.services.skills.skill_tra_loi import media_of
+
+    assert media_of(hit(image=image)) == []
+
+
+async def test_answer_carries_the_image_of_the_chosen_row_only():
+    # Claude chọn dòng 2 (có ảnh); dòng 1 có ảnh khác nhưng không được chọn thì không hiện ảnh của nó
+    answer = "Phí SEVIS I-901 cho diện F-1 là 350 USD, bạn nộp một lần trước khi phỏng vấn visa."
+    first = hit(1, FINANCE, score=0.8, image="https://a.org/dong-1.png")
+    second = hit(2, SEVIS, score=0.78, image="https://b.org/dong-2.png")
+    llm = FakeLLMWithEmbed(good(answer, chosen=2))
+
+    out = await handler_with(llm, FakeRetriever([first, second])).run(ChatState(), "Phí SEVIS bao nhiêu?")
+
+    assert [m.url for m in out.media] == ["https://b.org/dong-2.png"]
+
+
+async def test_the_link_comes_from_the_row_even_when_claude_writes_another_one():
+    llm = FakeLLMWithEmbed(good(REWRITTEN + " Xem https://evil.example/fake.png"))
+
+    out = await handler_with(llm, FakeRetriever([hit(image="https://b.org/that.png")])).run(
+        ChatState(), "Phí SEVIS bao nhiêu?"
+    )
+
+    assert [m.url for m in out.media] == ["https://b.org/that.png"]  # media chỉ từ cơ sở dữ liệu
+
+
+async def test_a_refusal_carries_no_media():
+    out = await handler_with(
+        FakeLLMWithEmbed(NONE_FITS), FakeRetriever([hit(image="https://b.org/x.png")])
+    ).run(ChatState(), "q")
+
+    assert out.answer == NO_BASIS and out.media == []
+
+
+async def test_the_standard_answer_fallback_also_carries_the_image_of_that_row():
+    llm = FakeLLMWithEmbed(good(answer="Phí là 999 USD."), good(answer="Phí là 888 USD."))
+
+    out = await handler_with(llm, FakeRetriever([hit(score=0.9, image="https://b.org/x.png")])).run(
+        ChatState(), "q"
+    )
+
+    assert out.answer == SEVIS and [m.url for m in out.media] == ["https://b.org/x.png"]
