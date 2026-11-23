@@ -100,7 +100,7 @@ def check_answer(raw: dict[str, Any], question: str, hit: KnowledgeHit) -> Compo
 
 # lấy thông tin của một đoạn kiến thức và chuyển nó thành một đối tượng trích dẫn (Citation) để đính kèm vào câu trả lời cho người dùng.
 def citation_of(hit: KnowledgeHit) -> Citation:
-    title = hit.quote or hit.source_note or "Kho kiến thức tư vấn du học"
+    title = hit.source or hit.source_url or "Kho kiến thức tư vấn du học"
     return Citation(
         title=title, url=hit.source_url, snippet=hit.answer[:SNIPPET_CHARS], retrieved_at=hit.retrieved_at
     )
@@ -120,7 +120,11 @@ def related_buttons(
     buttons: list[QuickReply] = []
     for other in hits:
         question = other.question.strip()
-        if other.code == best.code or other.score < min_score - RELATED_MARGIN or question.lower() in seen:
+        if (
+            other.entry_no == best.entry_no
+            or other.score < min_score - RELATED_MARGIN
+            or question.lower() in seen
+        ):
             continue
         seen.add(question.lower())
         label = question if len(question) <= MAX_LABEL else question[: MAX_LABEL - 1].rstrip() + "…"
@@ -157,7 +161,7 @@ class TraLoiHandler:
             # Biến câu hỏi thành vector
             [vector] = await self._embedder.embed([message])
             # Lấy ra các dòng kiến thức gần nhất (đã xếp điểm cao trước)
-            hits = await self._retriever.search(vector, state.study_level)
+            hits = await self._retriever.search(vector)
         except Exception:  # Ollama tắt hoặc DB lỗi: nói thật là đang gián đoạn, không bịa
             logger.exception("Tìm kiến thức thất bại")
             return SkillOutput(UNAVAILABLE, quick_replies=menu_buttons("knowledge"))
@@ -167,7 +171,7 @@ class TraLoiHandler:
             logger.info(
                 "knowledge_miss score=%s nearest=%s question=%r",
                 f"{hits[0].score:.3f}" if hits else "none",
-                hits[0].code if hits else "none",
+                hits[0].entry_no if hits else "none",
                 mask_personal_info(message),
             )
             return SkillOutput(NO_BASIS, quick_replies=menu_buttons("knowledge"))
@@ -182,7 +186,9 @@ class TraLoiHandler:
         if composed is not None and not composed.enough:
             return SkillOutput(NO_BASIS, quick_replies=menu_buttons("knowledge"))
         if composed is None:  # Qwen sai hai lần: dùng câu trả lời chuẩn của dòng đó
-            logger.warning("Qwen không trả được câu hợp lệ sau 2 lần, dùng câu chuẩn của %s", best.code)
+            logger.warning(
+                "Qwen không trả được câu hợp lệ sau 2 lần, dùng câu chuẩn của dòng #%s", best.entry_no
+            )
             answer = best.answer
         else:
             answer = composed.answer

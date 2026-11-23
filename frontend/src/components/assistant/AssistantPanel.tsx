@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { describeSimulation, resetSimulation, showSimulation } from "@/lib/simulation-link";
 import { sourceDateText } from "@/lib/source-date";
+import { httpLink } from "@/lib/university-display";
 import { useAuth } from "@/contexts/AuthContext";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { isAuthRoute } from "@/lib/layout-routes";
@@ -485,18 +486,21 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       {searchData && <SchoolSearchCard data={searchData} />}
       {turn.citations && turn.citations.length > 0 && (
         <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
-          {turn.citations.map((c, j) => (
-            <li key={j}>
-              {c.url ? (
-                <a href={c.url} target="_blank" rel="noreferrer" className="underline hover:text-brand">
-                  {c.title}
-                </a>
-              ) : (
-                c.title
-              )}
-              <span className="text-ink-3"> · {sourceDateText(c.retrievedAt)}</span>
-            </li>
-          ))}
+          {turn.citations.map((c, j) => {
+            const link = httpLink(c.url?.split(";").map((s) => s.trim()).find(Boolean));
+            return (
+              <li key={j}>
+                {link ? (
+                  <a href={link.href} target="_blank" rel="noopener noreferrer" className="underline hover:text-brand">
+                    {c.title}
+                  </a>
+                ) : (
+                  c.title
+                )}
+                <span className="text-ink-3"> · {sourceDateText(c.retrievedAt)}</span>
+              </li>
+            );
+          })}
         </ol>
       )}
       {turn.disclaimer && <p className="mt-2 text-xs text-muted-foreground italic">{turn.disclaimer}</p>}

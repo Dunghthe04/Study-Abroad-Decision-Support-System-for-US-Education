@@ -482,7 +482,7 @@ public class SlmSampleServiceTests
         new(SlmSampleTypes.Knowledge, question, null, null, intents, null, null, null, "Website ĐSQ", submit);
 
     [Fact]
-    public async Task CreateAsync_QuestionAndIntentsDraft_StoresFieldsAndHistory()
+    public async Task CreateAsync_QuestionAndIntentsDraft_StoresFields()
     {
         var repo = new FakeSlmRepository();
 
@@ -490,8 +490,7 @@ public class SlmSampleServiceTests
 
         Assert.Equal((SlmReviewStatuses.Draft, "Website ĐSQ", "[{\"type\":\"knowledge\"}]"),
             (created.ReviewStatus, created.Source, created.Intents));
-        var history = Assert.Single(repo.History);
-        Assert.Equal((SlmSampleHistoryActions.Create, Actor, SlmReviewStatuses.Draft), (history.Action, history.ActorUserId, history.ToStatus));
+        Assert.Equal(Actor, Assert.Single(repo.Items).CreatedByUserId);
     }
 
     [Fact]
@@ -535,7 +534,7 @@ public class SlmSampleServiceTests
     }
 
     [Fact]
-    public async Task UpdateAsync_SubmitDraft_GoesToPendingWithSubmitHistory_AndNoChangeWritesNothing()
+    public async Task UpdateAsync_SubmitDraft_GoesToPending_AndNoChangeWritesNothing()
     {
         var repo = new FakeSlmRepository();
         var service = Svc(repo, new FakeReader());
@@ -545,22 +544,6 @@ public class SlmSampleServiceTests
         var submitted = await service.UpdateAsync(draft.Id, QA(submit: true), Actor);
 
         Assert.Equal(SlmReviewStatuses.Pending, submitted!.ReviewStatus);
-        Assert.Equal([SlmSampleHistoryActions.Create, SlmSampleHistoryActions.Submit], repo.History.Select(h => h.Action));
-    }
-
-    [Fact]
-    public async Task UpdateAsync_RecordsChangedFields()
-    {
-        var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
-        var draft = await service.CreateAsync(QA(), Actor);
-
-        await service.UpdateAsync(draft.Id, QA(intents: "[{\"type\":\"knowledge\",\"span\":\"visa\"}]"), Actor);
-
-        var detail = await service.GetDetailAsync(draft.Id);
-        var edit = detail!.History.Last();
-        Assert.Equal(SlmSampleHistoryActions.Edit, edit.Action);
-        Assert.Equal(["intents"], edit.ChangedFields);
     }
 
     [Fact]
@@ -576,7 +559,6 @@ public class SlmSampleServiceTests
         Assert.NotNull(sample.DeletedAt);
         Assert.Null(await service.GetAsync(sample.Id));
         Assert.Equal(0, (await service.GetPageAsync(new SlmSampleFilter(null, null, null, null), 1, 20)).TotalCount);
-        Assert.Equal(SlmSampleHistoryActions.Delete, Assert.Single(repo.History).Action);
     }
 
     [Theory]
@@ -597,7 +579,6 @@ public class SlmSampleServiceTests
     [Theory]
     [InlineData(SlmSampleSources.Manual)]
     [InlineData(SlmSampleSources.Excel)]
-    [InlineData(SlmSampleSources.ChatUnanswered)]
     public async Task SaveAsync_ReservedSource_CannotBeTypedButUnchangedValueCanBeResent(string reserved)
     {
         var repo = new FakeSlmRepository();
@@ -613,19 +594,17 @@ public class SlmSampleServiceTests
     }
 
     [Fact]
-    public async Task ReviewAsync_SkipsSamplesTheReviewerCreatedOrEdited()
+    public async Task ReviewAsync_SkipsSamplesTheReviewerCreated()
     {
         var repo = new FakeSlmRepository();
         var service = Svc(repo, new FakeReader());
         var own = await service.CreateAsync(QA(question: "câu của tôi", submit: true), Actor);
-        var captured = repo.AddDraft();
-        await service.UpdateAsync(captured.Id, QA(question: captured.Question, submit: true), Actor);
         var others = await service.CreateAsync(QA(question: "câu người khác", submit: true), Other);
 
         var result = await service.ReviewAsync(
-            new ReviewSlmSamplesRequest([own.Id, captured.Id, others.Id], SlmReviewStatuses.Approved, null), Actor);
+            new ReviewSlmSamplesRequest([own.Id, others.Id], SlmReviewStatuses.Approved, null), Actor);
 
-        Assert.Equal((1, 2, 0), (result.Updated, result.SkippedOwn, result.SkippedNotPending));
+        Assert.Equal((1, 1, 0), (result.Updated, result.SkippedOwn, result.SkippedNotPending));
         Assert.Equal(SlmReviewStatuses.Approved, repo.Items.Single(x => x.Id == others.Id).ReviewStatus);
         Assert.Equal(SlmReviewStatuses.Pending, repo.Items.Single(x => x.Id == own.Id).ReviewStatus);
     }
@@ -654,7 +633,6 @@ public class SlmSampleServiceTests
         Assert.Equal(SlmReviewStatuses.Approved, approved.ReviewStatus);
         Assert.Equal(SlmReviewStatuses.Rejected, rejected.ReviewStatus);
         Assert.Equal(SlmReviewStatuses.NeedsFix, needsFix.ReviewStatus);
-        Assert.Single(repo.History, h => h.Action == SlmSampleHistoryActions.Review);
     }
 
     [Theory]
@@ -695,8 +673,7 @@ public class SlmSampleServiceTests
 
         Assert.Equal((1, 1), (result.Updated, result.SkippedNotReady));
         Assert.Equal(SlmReviewStatuses.Pending, empty.ReviewStatus);
-        var review = repo.History.Single(h => h.Action == SlmSampleHistoryActions.Review);
-        Assert.Equal((SlmReviewStatuses.Pending, SlmReviewStatuses.Approved, Actor), (review.FromStatus, review.ToStatus, review.ActorUserId));
+        Assert.Equal((SlmReviewStatuses.Approved, Actor), (ready.ReviewStatus, ready.ReviewedByUserId));
     }
 
     [Fact]
@@ -741,7 +718,7 @@ public class SlmSampleServiceTests
     }
 
     [Fact]
-    public async Task GetDetailAsync_HasCreatorNameAndHistoryOldestFirst()
+    public async Task GetDetailAsync_HasCreatorName()
     {
         var repo = new FakeSlmRepository();
         repo.Names[Actor] = "Mod A";
@@ -752,8 +729,6 @@ public class SlmSampleServiceTests
         var detail = await service.GetDetailAsync(created.Id);
 
         Assert.Equal("Mod A", detail!.Sample.CreatedByName);
-        Assert.Equal([SlmSampleHistoryActions.Create, SlmSampleHistoryActions.Submit], detail.History.Select(h => h.Action));
-        Assert.All(detail.History, h => Assert.Equal("Mod A", h.ActorName));
     }
 
     [Fact]
@@ -765,7 +740,7 @@ public class SlmSampleServiceTests
             .Options;
         using var db = new StudyAbroad.Infrastructure.Persistence.AppDbContext(options);
         var filter = new SlmSampleFilter(SlmSampleTypes.Knowledge, null, SlmReviewStatuses.Pending, "visa",
-            Actor, new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2026, 11, 8, 0, 0, 0, DateTimeKind.Utc), SlmSampleSources.ChatUnanswered);
+            Actor, new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2026, 11, 8, 0, 0, 0, DateTimeKind.Utc), SlmSampleSources.Excel);
 
         var page = Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToQueryString(
             SlmSampleRepository.Filtered(db.SlmTrainingSamples, filter));
@@ -814,7 +789,6 @@ internal class FakeSlmRepository : ISlmSampleRepository
     private const string ValidIntents = "[{\"type\":\"knowledge\",\"span\":\"OPT là gì\",\"entities\":{}}]";
 
     public List<SlmTrainingSample> Items { get; } = [];
-    public List<SlmSampleHistory> History { get; } = [];
     public Dictionary<Guid, string> Names { get; } = [];
     public int AddRangeCalls { get; private set; }
     public int AddCalls { get; private set; }
@@ -858,47 +832,32 @@ internal class FakeSlmRepository : ISlmSampleRepository
     public Task<SlmTrainingSample?> FindAsync(Guid id, CancellationToken ct = default) =>
         Task.FromResult(Live.FirstOrDefault(x => x.Id == id));
 
-    public Task<IReadOnlyList<SlmSampleHistoryRow>> HistoryAsync(Guid sampleId, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<SlmSampleHistoryRow>>(History.Where(h => h.SampleId == sampleId)
-            .Select(h => new SlmSampleHistoryRow(h, h.ActorUserId is { } id ? Names.GetValueOrDefault(id) : null)).ToList());
-
     public Task<IReadOnlyDictionary<Guid, string>> UserNamesAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyDictionary<Guid, string>>(Names.Where(n => userIds.Contains(n.Key)).ToDictionary());
 
-    public Task AddAsync(SlmTrainingSample sample, SlmSampleHistory history, CancellationToken ct = default)
+    public Task AddAsync(SlmTrainingSample sample, CancellationToken ct = default)
     {
         AddCalls++;
         Items.Add(sample);
-        History.Add(history);
         return Task.CompletedTask;
     }
 
-    public Task AddRangeAsync(IReadOnlyList<SlmTrainingSample> samples, IReadOnlyList<SlmSampleHistory> history, CancellationToken ct = default)
+    public Task AddRangeAsync(IReadOnlyList<SlmTrainingSample> samples, CancellationToken ct = default)
     {
         AddRangeCalls++;
         Items.AddRange(samples);
-        History.AddRange(history);
         return Task.CompletedTask;
     }
 
-    public Task<int> UpdateManyAsync(IReadOnlyList<Guid> ids, Func<SlmTrainingSample, SlmSampleHistory?> apply, CancellationToken ct = default)
+    public Task<int> UpdateManyAsync(IReadOnlyList<Guid> ids, Func<SlmTrainingSample, bool> apply, CancellationToken ct = default)
     {
         var matched = Live.Where(x => ids.Contains(x.Id)).ToList();
         foreach (var sample in matched)
         {
-            if (apply(sample) is not { } history)
-                continue;
-            history.SampleId = sample.Id;
-            History.Add(history);
+            apply(sample);
         }
         return Task.FromResult(matched.Count);
     }
-
-    public Task<IReadOnlyList<(Guid SampleId, Guid ActorUserId)>> ContributorsAsync(IReadOnlyList<Guid> sampleIds, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<(Guid, Guid)>>(History
-            .Where(h => sampleIds.Contains(h.SampleId) && h.ActorUserId != null
-                        && h.Action is SlmSampleHistoryActions.Create or SlmSampleHistoryActions.Edit or SlmSampleHistoryActions.Submit)
-            .Select(h => (h.SampleId, h.ActorUserId!.Value)).Distinct().ToList());
 
     public Task<IReadOnlyList<SlmSampleCountRow>> CountsAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<SlmSampleCountRow>>(Live

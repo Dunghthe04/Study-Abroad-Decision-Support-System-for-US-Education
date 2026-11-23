@@ -36,22 +36,9 @@ export interface SlmSample {
   exportedAt: string | null;
 }
 
-export interface SlmSampleHistoryItem {
-  id: string;
-  action: "create" | "edit" | "submit" | "review" | "delete" | "capture";
-  fromStatus: SlmReviewStatus | null;
-  toStatus: SlmReviewStatus | null;
-  note: string | null;
-  changedFields: string[];
-  actorUserId: string | null;
-  actorName: string | null;
-  createdAt: string;
-}
-
 export interface SlmSampleDetail {
   sample: SlmSample;
   reviewedByName: string | null;
-  history: SlmSampleHistoryItem[];
 }
 
 export interface SlmSampleCreator {

@@ -15,60 +15,44 @@ public static class KnowledgeLabels
     };
 }
 
-/// <summary>Bậc học: lưu mã (chung, thcs...) trong cột levels; file Excel và giao diện dùng tên tiếng Việt.</summary>
-public static class KnowledgeLevels
+public static class KnowledgeDocTypes
 {
-    public const string Chung = "chung";
-    public const string Thcs = "thcs";
-    public const string Thpt = "thpt";
-    public const string DaiHoc = "dai_hoc";
-    public const string ThacSi = "thac_si";
-    public const string TienSi = "tien_si";
+    public const string Faq = "faq";
+    public const string Glossary = "glossary";
+    public const string ProcOverview = "proc_overview";
+    public const string ProcPrepare = "proc_prepare";
+    public const string ProcSteps = "proc_steps";
+    public const string ProcChecklist = "proc_checklist";
+    public const string ProcMistakes = "proc_mistakes";
+    public const string Timeline = "timeline";
+    public const string Compare = "compare";
+    public const string Situation = "situation";
+    public const string DataTable = "data_table";
+    public const string Resource = "resource";
+    public const string Notice = "notice";
 
-    public static readonly IReadOnlyList<string> All = new[] { Chung, Thcs, Thpt, DaiHoc, ThacSi, TienSi };
+    public static readonly IReadOnlyList<string> All = new[]
+    {
+        Faq, Glossary, ProcOverview, ProcPrepare, ProcSteps, ProcChecklist, ProcMistakes,
+        Timeline, Compare, Situation, DataTable, Resource, Notice,
+    };
 
-    /// <summary>Mã → tên hiển thị, đúng như cột level của file usas_knowledge_base.xlsx.</summary>
     public static readonly IReadOnlyDictionary<string, string> Names = new Dictionary<string, string>
     {
-        [Chung] = "Chung",
-        [Thcs] = "THCS",
-        [Thpt] = "THPT",
-        [DaiHoc] = "Đại học",
-        [ThacSi] = "Thạc sĩ",
-        [TienSi] = "Tiến sĩ",
+        [Faq] = "Hỏi đáp",
+        [Glossary] = "Thuật ngữ",
+        [ProcOverview] = "Thủ tục: tổng quan",
+        [ProcPrepare] = "Thủ tục: chuẩn bị",
+        [ProcSteps] = "Thủ tục: các bước",
+        [ProcChecklist] = "Thủ tục: danh sách kiểm tra",
+        [ProcMistakes] = "Thủ tục: lỗi hay gặp",
+        [Timeline] = "Mốc thời gian",
+        [Compare] = "So sánh",
+        [Situation] = "Tình huống",
+        [DataTable] = "Bảng số liệu",
+        [Resource] = "Công cụ và link",
+        [Notice] = "Quy định và cảnh báo",
     };
-}
 
-/// <summary>Cùng 5 giá trị với SlmReviewStatuses; tách riêng để hai tính năng không buộc vào nhau.</summary>
-public static class KnowledgeReviewStatuses
-{
-    public const string Draft = "draft";
-    public const string Pending = "pending";
-    public const string Approved = "approved";
-    public const string Rejected = "rejected";
-    public const string NeedsFix = "needs_fix";
-
-    public static readonly IReadOnlyList<string> All = new[] { Draft, Pending, Approved, Rejected, NeedsFix };
-}
-
-/// <summary>Dòng tri thức đến từ đâu. Khác cột Source (trích dẫn nguồn kiến thức).</summary>
-public static class KnowledgeOrigins
-{
-    public const string Manual = "manual";
-    public const string Excel = "excel";
-    public const string ChatUnanswered = "chat-unanswered";
-
-    public static readonly IReadOnlyList<string> All = new[] { Manual, Excel, ChatUnanswered };
-}
-
-public static class KnowledgeHistoryActions
-{
-    public const string Create = "create";
-    public const string Edit = "edit";
-    public const string Submit = "submit";
-    public const string Review = "review";
-    public const string Delete = "delete";
-    public const string Restore = "restore";
-    public const string Capture = "capture";
-    public const string Migrate = "migrate";
+    public static bool IsProcedure(string docType) => docType.StartsWith("proc_", StringComparison.Ordinal);
 }

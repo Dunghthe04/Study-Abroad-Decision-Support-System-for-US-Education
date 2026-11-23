@@ -43,6 +43,19 @@ export function satPolicyLabel(policy: string | null): string {
   return SAT_POLICY_LABELS[policy] ?? policy;
 }
 
+const ACT_POLICY_LABELS: Record<string, string> = {
+  required: "Bắt buộc",
+  optional: "Không bắt buộc (test-optional)",
+  not_accepted: "Không nhận ACT",
+};
+
+export function actPolicyLabel(policy: string | null): string {
+  if (!policy) {
+    return "—";
+  }
+  return ACT_POLICY_LABELS[policy] ?? policy;
+}
+
 const SOURCE_RELIABILITY_LABELS: Record<string, string> = {
   official: "Chính thức",
   aggregated: "Tổng hợp",
@@ -130,4 +143,5 @@ function buildOptions(emptyLabel: string, labels: Record<string, string>): Label
 export const CONTROL_OPTIONS = buildOptions("Chưa rõ", CONTROL_LABELS);
 export const CONTROL_FILTER_OPTIONS = buildOptions("Mọi loại trường", CONTROL_LABELS);
 export const SAT_POLICY_OPTIONS = buildOptions("Chưa rõ", SAT_POLICY_LABELS);
+export const ACT_POLICY_OPTIONS = buildOptions("Chưa rõ", ACT_POLICY_LABELS);
 export const SOURCE_RELIABILITY_OPTIONS = buildOptions("Chưa rõ", SOURCE_RELIABILITY_LABELS);

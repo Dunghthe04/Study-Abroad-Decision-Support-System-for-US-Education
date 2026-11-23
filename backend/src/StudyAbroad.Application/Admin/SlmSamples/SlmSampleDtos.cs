@@ -24,23 +24,10 @@ public record SlmSampleDto(
     string? CreatedByName = null,
     DateTime? ExportedAt = null);
 
-public record SlmSampleHistoryDto(
-    Guid Id,
-    string Action,
-    string? FromStatus,
-    string? ToStatus,
-    string? Note,
-    IReadOnlyList<string> ChangedFields,
-    Guid? ActorUserId,
-    string? ActorName,
-    DateTime CreatedAt);
-
-/// <summary>Chi tiết một mẫu kèm lịch sử sửa và duyệt, cũ trước (UC-96).</summary>
-public record SlmSampleDetailDto(SlmSampleDto Sample, string? ReviewedByName, IReadOnlyList<SlmSampleHistoryDto> History);
+/// <summary>Chi tiết một mẫu kèm tên người duyệt (UC-96).</summary>
+public record SlmSampleDetailDto(SlmSampleDto Sample, string? ReviewedByName);
 
 public record SlmSampleCreatorDto(Guid UserId, string Name);
-
-public record SlmSampleHistoryRow(SlmSampleHistory History, string? ActorName);
 
 public record SlmSampleListRow(SlmTrainingSample Sample, string? CreatorName);
 

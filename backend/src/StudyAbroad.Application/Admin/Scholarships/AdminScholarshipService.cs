@@ -23,6 +23,9 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
     private const int MaxPageSize = 100;
     private const decimal MaxAmountUsd = 9_999_999_999.99m;
     private static readonly string[] CoverageTypes = ["full", "partial", "tuition", "stipend"];
+    private static readonly string[] Kinds = ["merit", "need", "merit_and_need", "athletic", "program", "external", "other"];
+    private static readonly string[] AmountTypes = ["fixed", "range", "percent_tuition", "full_tuition", "full_ride", "varies"];
+    private static readonly string[] ApplicationMethods = ["automatic", "separate_application", "nomination", "unknown"];
 
     public Task<PagedResult<AdminScholarshipDto>> SearchAsync(AdminScholarshipQuery query, CancellationToken ct = default) =>
         repository.SearchAsync(query with
@@ -109,6 +112,12 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
             EligibilityNotes = Clean(request.EligibilityNotes),
             SourceUrl = Clean(request.SourceUrl),
             SourceReliability = Clean(request.SourceReliability)?.ToLowerInvariant(),
+            Kind = Clean(request.Kind)?.ToLowerInvariant(),
+            AmountType = Clean(request.AmountType)?.ToLowerInvariant(),
+            RenewalCriteria = Clean(request.RenewalCriteria),
+            MajorRestriction = Clean(request.MajorRestriction),
+            ApplicationMethod = Clean(request.ApplicationMethod)?.ToLowerInvariant(),
+            ApplyUrl = Clean(request.ApplyUrl),
         };
         var errors = new Dictionary<string, string>();
 
@@ -137,6 +146,34 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
         if (v.EligibilityNotes is { Length: > 2000 })
             errors["eligibilityNotes"] = "Điều kiện tối đa 2000 ký tự.";
 
+        // [USAS-2067] Cột bộ dữ liệu học bổng; null = chưa rõ.
+        if (v.Kind is not null && !Kinds.Contains(v.Kind))
+            errors["kind"] = "Loại học bổng chỉ nhận merit, need, merit_and_need, athletic, program, external hoặc other.";
+        if (v.AmountType is not null && !AmountTypes.Contains(v.AmountType))
+            errors["amountType"] = "Kiểu giá trị chỉ nhận fixed, range, percent_tuition, full_tuition, full_ride hoặc varies.";
+        if (v.AmountMinUsd is < 0 or > MaxAmountUsd)
+            errors["amountMinUsd"] = "Giá trị tối thiểu phải từ 0 đến 9.999.999.999,99 USD.";
+        if (v.AmountMaxUsd is < 0 or > MaxAmountUsd)
+            errors["amountMaxUsd"] = "Giá trị tối đa phải từ 0 đến 9.999.999.999,99 USD.";
+        else if (v.AmountMinUsd is { } min && v.AmountMaxUsd is { } max && min > max)
+            errors["amountMaxUsd"] = "Giá trị tối đa không được nhỏ hơn giá trị tối thiểu.";
+        if (v.DurationYears is < 1 or > 8)
+            errors["durationYears"] = "Thời hạn phải trong khoảng 1–8 năm.";
+        if (v.RenewalCriteria is { Length: > 1000 })
+            errors["renewalCriteria"] = "Điều kiện gia hạn tối đa 1000 ký tự.";
+        if (v.MinSat is < 400 or > 1600)
+            errors["minSat"] = "SAT tối thiểu phải trong khoảng 400–1600.";
+        if (v.MinAct is < 1 or > 36)
+            errors["minAct"] = "ACT tối thiểu phải trong khoảng 1–36.";
+        if (v.MinToefl is < 0 or > 120)
+            errors["minToefl"] = "TOEFL tối thiểu phải trong khoảng 0–120.";
+        if (v.MajorRestriction is { Length: > 500 })
+            errors["majorRestriction"] = "Giới hạn ngành tối đa 500 ký tự.";
+        if (v.ApplicationMethod is not null && !ApplicationMethods.Contains(v.ApplicationMethod))
+            errors["applicationMethod"] = "Cách nộp chỉ nhận automatic, separate_application, nomination hoặc unknown.";
+        if (v.ApplyUrl is not null && (v.ApplyUrl.Length > 512 || !IsHttpUrl(v.ApplyUrl)))
+            errors["applyUrl"] = "Link nộp phải là đường dẫn http(s), tối đa 512 ký tự.";
+
         ValidateSource(v.SourceUrl, v.RetrievedAt, v.SourceReliability, errors);
         return (v, errors);
     }
@@ -157,6 +194,23 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
         AddChange(changes, "sourceUrl", s?.SourceUrl, v.SourceUrl);
         AddChange(changes, "retrievedAt", s?.RetrievedAt, v.RetrievedAt);
         AddChange(changes, "sourceReliability", s?.SourceReliability, v.SourceReliability);
+        AddChange(changes, "kind", s?.Kind, v.Kind);
+        AddChange(changes, "amountType", s?.AmountType, v.AmountType);
+        AddChange(changes, "amountMinUsd", s?.AmountMinUsd, v.AmountMinUsd);
+        AddChange(changes, "amountMaxUsd", s?.AmountMaxUsd, v.AmountMaxUsd);
+        AddChange(changes, "durationYears", s?.DurationYears, v.DurationYears);
+        AddChange(changes, "renewable", s?.Renewable, v.Renewable);
+        AddChange(changes, "renewalCriteria", s?.RenewalCriteria, v.RenewalCriteria);
+        AddChange(changes, "intlEligible", s?.IntlEligible, v.IntlEligible);
+        AddChange(changes, "vnEligible", s?.VnEligible, v.VnEligible);
+        AddChange(changes, "needBased", s?.NeedBased, v.NeedBased);
+        AddChange(changes, "meritBased", s?.MeritBased, v.MeritBased);
+        AddChange(changes, "minSat", s?.MinSat, v.MinSat);
+        AddChange(changes, "minAct", s?.MinAct, v.MinAct);
+        AddChange(changes, "minToefl", s?.MinToefl, v.MinToefl);
+        AddChange(changes, "majorRestriction", s?.MajorRestriction, v.MajorRestriction);
+        AddChange(changes, "applicationMethod", s?.ApplicationMethod, v.ApplicationMethod);
+        AddChange(changes, "applyUrl", s?.ApplyUrl, v.ApplyUrl);
         return changes;
     }
 
@@ -175,10 +229,30 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
         s.SourceUrl = v.SourceUrl;
         s.RetrievedAt = v.RetrievedAt;
         s.SourceReliability = v.SourceReliability;
+        s.Kind = v.Kind;
+        s.AmountType = v.AmountType;
+        s.AmountMinUsd = v.AmountMinUsd;
+        s.AmountMaxUsd = v.AmountMaxUsd;
+        s.DurationYears = v.DurationYears;
+        s.Renewable = v.Renewable;
+        s.RenewalCriteria = v.RenewalCriteria;
+        s.IntlEligible = v.IntlEligible;
+        s.VnEligible = v.VnEligible;
+        s.NeedBased = v.NeedBased;
+        s.MeritBased = v.MeritBased;
+        s.MinSat = v.MinSat;
+        s.MinAct = v.MinAct;
+        s.MinToefl = v.MinToefl;
+        s.MajorRestriction = v.MajorRestriction;
+        s.ApplicationMethod = v.ApplicationMethod;
+        s.ApplyUrl = v.ApplyUrl;
     }
 
     private async Task<AdminScholarshipDto> ToDtoAsync(Scholarship s, CancellationToken ct) => new(
         s.Id, s.UniversityId, await repository.GetUniversityNameAsync(s.UniversityId, ct), s.Name, s.Provider, s.StudyLevel,
         s.AmountUsd, s.CoverageType, s.MinGpa4, s.MinIelts, s.Deadline, s.EligibilityNotes, s.SourceUrl, s.RetrievedAt,
-        s.SourceReliability, s.IsActive, s.UpdatedAt, await repository.GetUserDisplayNameAsync(s.LastEditedByUserId, ct));
+        s.SourceReliability, s.IsActive, s.UpdatedAt, await repository.GetUserDisplayNameAsync(s.LastEditedByUserId, ct),
+        s.Kind, s.AmountType, s.AmountMinUsd, s.AmountMaxUsd, s.DurationYears, s.Renewable, s.RenewalCriteria,
+        s.IntlEligible, s.VnEligible, s.NeedBased, s.MeritBased, s.MinSat, s.MinAct, s.MinToefl,
+        s.MajorRestriction, s.ApplicationMethod, s.ApplyUrl);
 }

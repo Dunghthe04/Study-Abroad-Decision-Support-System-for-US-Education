@@ -14,6 +14,7 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
         "min_gpa4", "min_ielts", "min_toefl", "min_duolingo", "avg_gpa4", "sat25", "sat75", "act25", "act75",
         "applicants_total", "admitted_total", "intl_applicants", "intl_admitted", "intl_acceptance_rate", "sat_policy", "deadlines_json",
         "c7_gpa_importance", "c7_test_importance", "c7_ec_importance", "sat_submit_pct", "gpa_submit_pct",
+        "application_fee_usd", "tuition_in_state_usd", "act_policy", "act_submit_pct",
         "gpa_pct_4_0", "gpa_pct_375_399", "gpa_pct_350_374", "gpa_pct_325_349", "gpa_pct_300_324", "gpa_pct_250_299", "gpa_pct_below_250",
         "intl_aid_policy", "intl_aid_avg_usd", "intl_aid_recipients", "retention_rate_1yr", "grad_rate_6yr"
     ];

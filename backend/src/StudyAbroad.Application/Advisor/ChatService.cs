@@ -37,7 +37,6 @@ namespace StudyAbroad.Application.Advisor
         IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null,
         IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null,
         IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null, AiPricing? pricing = null,
-        StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeBaseService? knowledgeBase = null,
         StudyAbroad.Application.Billing.IEntitlementService? entitlements = null) : History.IChatPendingQuestion
     {
         //Dữ liệu FE gửi lên
@@ -210,8 +209,6 @@ namespace StudyAbroad.Application.Advisor
             // Token ghi sau tin trả lời để nối được (chat_message_id). Tin không lưu (tắt công tắc hoặc lỗi) thì vẫn ghi token, chỉ không có liên kết
             // ai_calls.user_id là người trả (hạn mức Free đếm theo user_id), không phải chủ phiên chat
             await RecordAiCallsAsync(payerId, replyId, turnSignals.Usage, charge, ct);
-            if (ChatTurn.Outcome(turnSignals.Slm, turnSignals.Usage, response.NoBasis == true) == ChatOutcomes.NoAnswer)
-                await CaptureUnansweredAsync(request, ct);
 
             //Trả về trình duyệt: có mã phiên, ko lộ trạng thái nội bôk.
             // ProfileChanged để form biết mà nạp lại nháp (D2)
@@ -299,26 +296,6 @@ namespace StudyAbroad.Application.Advisor
                 // Ý định gói cho phép: luôn ghi đè bằng giá trị server, kể cả null (Premium còn token, nhân viên); không bao giờ chuyển giá trị trình duyệt gửi
                 AllowedIntents = ChatPremiumGate.AllowedIntentsFor(charge),
             };
-        }
-
-        private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(1);
-
-        // UC-53: câu chưa trả lời được vào kho tri thức ở dạng nháp, chỉ có câu hỏi. Theo công tắc Chat:StoreMessages
-        // (messages null khi tắt). Lỗi không làm hỏng lượt chat
-        private async Task CaptureUnansweredAsync(AdvisorChatRequest request, CancellationToken ct)
-        {
-            if (knowledgeBase is null || messages is null || request.Messages.LastOrDefault(m => m.Role == "user")?.Content is not { Length: > 0 } asked)
-                return;
-            try
-            {
-                using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                bounded.CancelAfter(CaptureTimeout);
-                await knowledgeBase.CaptureUnansweredAsync(asked, bounded.Token);
-            }
-            catch (Exception ex)
-            {
-                logger?.LogWarning(ex, "Không lưu được câu chưa trả lời vào kho tri thức");
-            }
         }
 
         // Tín hiệu của advisor ở lượt này, chụp trước khi .NET xử lý tiếp: lúc học sinh hỏi, nhãn model gán, số đo từng lần gọi AI, hành động, skill đã chạy

@@ -51,7 +51,7 @@ public class SlmTrainingSampleConfiguration : IEntityTypeConfiguration<SlmTraini
 
         b.HasOne<User>().WithMany().HasForeignKey(x => x.DeletedByUserId).OnDelete(DeleteBehavior.SetNull);
         b.Property(x => x.Source).HasMaxLength(256).IsRequired().HasDefaultValue(SlmSampleSources.Manual)
-            .HasComment("Nguồn: manual, excel, chat-unanswered hoặc nguồn tham khảo.");
+            .HasComment("Nguồn: manual, excel hoặc nguồn tham khảo.");
         b.Property(x => x.DeletedAt).HasComment("Xóa mềm: khác null thì không hiện, không xuất.");
         b.Property(x => x.DeletedByUserId).HasComment("Người xóa.");
         b.Property(x => x.ExportedAt).HasComment("Lần xuất gần nhất.");

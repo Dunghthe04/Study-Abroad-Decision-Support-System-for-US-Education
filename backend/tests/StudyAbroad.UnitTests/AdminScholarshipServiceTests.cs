@@ -78,6 +78,43 @@ public class AdminScholarshipServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_NewDatasetFields_SavedAndAudited()
+    {
+        var repo = new FakeRepository();
+        var request = Valid() with
+        {
+            Kind = "Merit", AmountType = "range", AmountMinUsd = 1000m, AmountMaxUsd = 5000m, DurationYears = 4,
+            Renewable = true, VnEligible = true, IntlEligible = null, MinSat = 1200, MinAct = 26, MinToefl = 80.5m,
+            ApplicationMethod = "automatic", ApplyUrl = "https://example.edu/apply",
+        };
+        var result = await new AdminScholarshipService(repo).CreateAsync(request, Actor);
+
+        Assert.True(result.Success);
+        var saved = Assert.Single(repo.Items);
+        Assert.Equal("merit", saved.Kind);
+        Assert.True(saved.VnEligible);
+        Assert.Null(saved.IntlEligible);
+        Assert.Equal(5000m, result.Value!.AmountMaxUsd);
+        Assert.Contains("applyUrl", Assert.Single(repo.Audits).DetailJson);
+    }
+
+    [Fact]
+    public async Task CreateAsync_MalformedDatasetFields_ReturnFieldErrors()
+    {
+        var repo = new FakeRepository();
+        var request = Valid() with
+        {
+            Kind = "lottery", AmountType = "free", AmountMinUsd = 9000m, AmountMaxUsd = 1000m, DurationYears = 9,
+            MinSat = 300, MinAct = 40, MinToefl = 121, ApplicationMethod = "email", ApplyUrl = "ftp://x",
+        };
+        var result = await new AdminScholarshipService(repo).CreateAsync(request, Actor);
+
+        foreach (var key in new[] { "kind", "amountType", "amountMaxUsd", "durationYears", "minSat", "minAct", "minToefl", "applicationMethod", "applyUrl" })
+            Assert.Contains(key, result.Errors.Keys);
+        Assert.Empty(repo.Audits);
+    }
+
+    [Fact]
     public async Task CreateAsync_MissingSourceAndDate_ReturnsErrors()
     {
         var result = await new AdminScholarshipService(new FakeRepository())

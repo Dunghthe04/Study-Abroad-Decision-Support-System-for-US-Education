@@ -176,7 +176,7 @@ export function KnowledgeImportDialog({ open, onOpenChange, onImported }: Props)
         <DialogHeader className="shrink-0 flex-row items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-1.5">
             <DialogTitle className="text-lg">Nhập tri thức từ Excel</DialogTitle>
-            <DialogDescription>Kiểm tra dữ liệu xem trước rồi mới nhập. Dòng hợp lệ vào trạng thái Chờ duyệt; dòng trùng câu hỏi được bỏ qua.</DialogDescription>
+            <DialogDescription>Kiểm tra dữ liệu xem trước rồi mới nhập. Dòng có id chưa có thì được thêm, id đã có thì được cập nhật.</DialogDescription>
           </div>
           <DialogClose disabled={importing} render={<Button type="button" variant="ghost" size="icon-sm" aria-label="Đóng" />}>
             <XIcon />

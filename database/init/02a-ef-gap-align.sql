@@ -12,8 +12,6 @@ ALTER TABLE app.scholarships ADD COLUMN IF NOT EXISTS description VARCHAR(2000);
 ALTER TABLE app.scholarships ADD COLUMN IF NOT EXISTS requirements_json JSONB;
 ALTER TABLE app.scholarships ALTER COLUMN is_active SET DEFAULT TRUE;
 
-ALTER TABLE app.knowledge_documents ALTER COLUMN study_level SET DEFAULT 'general';
-
 ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS state VARCHAR(64);
 ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS min_fee_usd NUMERIC(12,2) DEFAULT 0;
 ALTER TABLE app.study_centers ADD COLUMN IF NOT EXISTS max_fee_usd NUMERIC(12,2) DEFAULT 0;

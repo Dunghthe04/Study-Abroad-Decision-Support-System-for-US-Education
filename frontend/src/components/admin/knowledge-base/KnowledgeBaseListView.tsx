@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckIcon, FileDownIcon, FileInputIcon, FilterIcon, PlusIcon, RotateCcwIcon, SearchIcon, WrenchIcon, XIcon } from "lucide-react";
+import { FileDownIcon, FileInputIcon, FilterIcon, PlusIcon, RotateCcwIcon, SearchIcon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +15,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { DataTable, type DataTableToolbarSlots } from "@/components/admin/shared/DataTable";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
@@ -23,139 +22,85 @@ import { OptionSelect } from "@/components/admin/universities/OptionSelect";
 import { KnowledgeEntryFormPanel } from "@/components/admin/knowledge-base/KnowledgeEntryFormPanel";
 import { KnowledgeImportDialog } from "@/components/admin/knowledge-base/KnowledgeImportDialog";
 import { KnowledgeImportResultDialog } from "@/components/admin/knowledge-base/KnowledgeImportResultDialog";
-import { KnowledgeReviewDialog } from "@/components/admin/knowledge-base/KnowledgeReviewDialog";
 import { knowledgeBaseColumns } from "@/components/admin/knowledge-base/knowledge-base-columns";
-import { useAuth } from "@/contexts/AuthContext";
-import { adminKnowledgeBaseApi, duplicateIdOf } from "@/lib/knowledge-base-api";
-import { LABEL_OPTIONS, LEVEL_OPTIONS, ORIGIN_LABELS, REVIEW_STATUSES, SORT_OPTIONS } from "@/lib/knowledge-base-format";
+import { adminKnowledgeBaseApi } from "@/lib/knowledge-base-api";
+import { DOC_TYPE_OPTIONS, LABEL_OPTIONS, SORT_OPTIONS } from "@/lib/knowledge-base-format";
 import { useFetched } from "@/lib/use-fetched";
-import type { KnowledgeEntry, KnowledgeImportResult, KnowledgeLevel, KnowledgeOrigin, KnowledgeReviewStatus, KnowledgeSort } from "@/types/knowledge-base";
+import type { KnowledgeDocType, KnowledgeEntry, KnowledgeImportResult, KnowledgeSort } from "@/types/knowledge-base";
 
 const FILTER_FIELD_BG = "bg-card dark:bg-input/30";
 const TOOLBAR_BUTTON_BG = "border-border bg-card text-foreground shadow-xs hover:bg-muted dark:bg-input/30 dark:hover:bg-input/50";
-const TAB_TRIGGER_CLASS =
-  "flex-none rounded-none border-0 border-b-2 border-transparent px-3 data-active:border-b-brand data-active:bg-transparent data-active:text-foreground data-active:shadow-none dark:data-active:border-transparent dark:data-active:border-b-brand dark:data-active:bg-transparent after:hidden";
 const PAGE_SIZE = 20;
-const DELETED_TAB = "deleted";
 
 const LABEL_FILTER_OPTIONS = [{ value: "", label: "Mọi nhãn" }, ...LABEL_OPTIONS];
-const LEVEL_FILTER_OPTIONS = [{ value: "", label: "Mọi bậc học" }, ...LEVEL_OPTIONS];
-const ORIGIN_FILTER_OPTIONS = [{ value: "", label: "Mọi nguồn gốc" }, ...Object.entries(ORIGIN_LABELS).map(([value, label]) => ({ value, label }))];
-
-const BULK_ACTIONS: { status: KnowledgeReviewStatus; label: string; icon: typeof CheckIcon; className: string }[] = [
-  { status: "approved", label: "Duyệt", icon: CheckIcon, className: "border-ok/20 bg-ok-wash text-ok hover:bg-ok-wash/70" },
-  { status: "rejected", label: "Từ chối", icon: XIcon, className: "border-risk/20 bg-risk-wash text-risk hover:bg-risk-wash/70" },
-  { status: "needs_fix", label: "Yêu cầu sửa", icon: WrenchIcon, className: "border-warn/20 bg-warn-wash text-warn hover:bg-warn-wash/70" },
-];
+const DOC_TYPE_FILTER_OPTIONS = [{ value: "", label: "Mọi loại" }, ...DOC_TYPE_OPTIONS];
 
 interface Filters {
   search: string;
+  docType: string;
   label: string;
-  level: string;
-  source: string;
-  origin: string;
-  createdBy: string;
+  topicCode: string;
   sort: string;
-  tab: string; // "" = tất cả, một trạng thái, hoặc "deleted"
   page: number;
 }
 
-const EMPTY_FILTERS: Filters = { search: "", label: "", level: "", source: "", origin: "", createdBy: "", sort: "newest", tab: "", page: 1 };
+const EMPTY_FILTERS: Filters = { search: "", docType: "", label: "", topicCode: "", sort: "newest", page: 1 };
 
 function errorText(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
 export function KnowledgeBaseListView() {
-  const { user } = useAuth();
   const [draft, setDraft] = useState<Filters>(EMPTY_FILTERS);
   const [applied, setApplied] = useState<Filters>(EMPTY_FILTERS);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [reloadCounter, setReloadCounter] = useState(0);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [formState, setFormState] = useState<{ entry: KnowledgeEntry | null } | null>(null);
-  const [reviewStatus, setReviewStatus] = useState<KnowledgeReviewStatus | null>(null);
-  const [reviewIds, setReviewIds] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<KnowledgeEntry | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importSession, setImportSession] = useState(0);
   const [importResult, setImportResult] = useState<KnowledgeImportResult | null>(null);
 
-  const isTrash = applied.tab === DELETED_TAB;
-
   // key gồm mọi bộ lọc đã áp dụng + bộ đếm reload: đổi bất kỳ thứ gì thì useFetched tải lại
   const list = useFetched(`kb-list|${JSON.stringify(applied)}|${reloadCounter}`, () =>
     adminKnowledgeBaseApi.list({
       search: applied.search || undefined,
+      docType: (applied.docType || undefined) as KnowledgeDocType | undefined,
       label: applied.label || undefined,
-      level: (applied.level || undefined) as KnowledgeLevel | undefined,
-      source: applied.source || undefined,
-      origin: (applied.origin || undefined) as KnowledgeOrigin | undefined,
-      createdBy: applied.createdBy || undefined,
-      reviewStatus: (isTrash || applied.tab === "" ? undefined : applied.tab) as KnowledgeReviewStatus | undefined,
-      deleted: isTrash,
+      topicCode: applied.topicCode || undefined,
       sort: applied.sort as KnowledgeSort,
       page: applied.page,
       pageSize: PAGE_SIZE,
     }),
   );
-  const creators = useFetched("kb-creators", () => adminKnowledgeBaseApi.creators());
-  const creatorOptions = [{ value: "", label: "Mọi người tạo" }, ...(creators.data ?? []).map((item) => ({ value: item.userId, label: item.name }))];
 
   const items = list.data?.items ?? [];
-  const pendingSelectedIds = items.filter((entry) => selectedIds.has(entry.id) && entry.reviewStatus === "pending").map((entry) => entry.id);
   const reload = () => setReloadCounter((current) => current + 1);
-
-  const apply = (next: Filters) => {
-    setApplied(next);
-    setSelectedIds(new Set());
-  };
-
-  const toggleOne = (id: string, checked: boolean) => {
-    const next = new Set(selectedIds);
-    if (checked) next.add(id);
-    else next.delete(id);
-    setSelectedIds(next);
-  };
 
   const handleSearch = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    apply({ ...applied, search: draft.search.trim(), page: 1 });
+    setApplied({ ...applied, search: draft.search.trim(), page: 1 });
   };
 
   const handleFilterSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const { label, level, source, origin, createdBy, sort } = draft;
-    apply({ ...applied, label, level, source: source.trim(), origin, createdBy, sort, page: 1 });
+    const { docType, label, topicCode, sort } = draft;
+    setApplied({ ...applied, docType, label, topicCode: topicCode.trim(), sort, page: 1 });
     setIsFilterOpen(false);
   };
 
   const handleReset = () => {
-    setDraft({ ...EMPTY_FILTERS, tab: applied.tab });
-    apply({ ...EMPTY_FILTERS, tab: applied.tab });
+    setDraft(EMPTY_FILTERS);
+    setApplied(EMPTY_FILTERS);
     setIsFilterOpen(false);
   };
 
   const openById = async (id: string) => {
     try {
-      const detail = await adminKnowledgeBaseApi.get(id);
-      setFormState({ entry: detail.entry });
+      setFormState({ entry: await adminKnowledgeBaseApi.get(id) });
     } catch (error) {
       toast.add({ type: "error", title: "Không mở được tri thức", description: errorText(error, "Vui lòng thử lại sau.") });
-    }
-  };
-
-  const restore = async (entry: KnowledgeEntry) => {
-    try {
-      const restored = await adminKnowledgeBaseApi.restore(entry.id);
-      toast.add({ type: "success", title: `Đã khôi phục tri thức #${restored.entryNo}` });
-      if (formState?.entry?.id === entry.id) setFormState({ entry: restored });
-      reload();
-    } catch (error) {
-      const existingId = duplicateIdOf(error);
-      toast.add({ type: "error", title: "Không khôi phục được", description: errorText(error, "Vui lòng thử lại sau.") });
-      if (existingId) void openById(existingId);
     }
   };
 
@@ -164,10 +109,9 @@ export function KnowledgeBaseListView() {
     setDeleteBusy(true);
     try {
       await adminKnowledgeBaseApi.remove(deleting.id);
-      toggleOne(deleting.id, false);
       if (formState?.entry?.id === deleting.id) setFormState(null);
       if (items.length === 1 && applied.page > 1) setApplied({ ...applied, page: applied.page - 1 });
-      toast.add({ type: "success", title: "Đã xóa tri thức", description: "Có thể khôi phục trong mục Đã xóa." });
+      toast.add({ type: "success", title: "Đã xóa tri thức" });
       reload();
     } catch (error) {
       toast.add({ type: "error", title: "Không xóa được tri thức", description: errorText(error, "Vui lòng thử lại sau.") });
@@ -185,15 +129,9 @@ export function KnowledgeBaseListView() {
     }
   };
 
-  const columns = knowledgeBaseColumns({
-    selectedIds,
-    onToggle: toggleOne,
-    onOpen: (entry) => setFormState({ entry }),
-    onDelete: setDeleting,
-    onRestore: (entry) => void restore(entry),
-  });
+  const columns = knowledgeBaseColumns({ onOpen: (entry) => setFormState({ entry }), onDelete: setDeleting });
 
-  const activeFilterCount = [applied.label, applied.level, applied.source, applied.origin, applied.createdBy].filter((value) => value !== "").length
+  const activeFilterCount = [applied.docType, applied.label, applied.topicCode].filter((value) => value !== "").length
     + (applied.sort !== "newest" ? 1 : 0);
 
   const field = (id: string, label: string, control: React.ReactNode) => (
@@ -213,11 +151,9 @@ export function KnowledgeBaseListView() {
         <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] p-4">
           <PopoverTitle>Bộ lọc tri thức</PopoverTitle>
           <form onSubmit={handleFilterSubmit} className="flex flex-col gap-4">
+            {field("kb-doc-type-filter", "Loại nội dung", <OptionSelect id="kb-doc-type-filter" value={draft.docType} options={DOC_TYPE_FILTER_OPTIONS} onChange={(value) => setDraft({ ...draft, docType: value })} className={FILTER_FIELD_BG} />)}
             {field("kb-label-filter", "Nhãn", <OptionSelect id="kb-label-filter" value={draft.label} options={LABEL_FILTER_OPTIONS} onChange={(value) => setDraft({ ...draft, label: value })} className={FILTER_FIELD_BG} />)}
-            {field("kb-level-filter", "Bậc học", <OptionSelect id="kb-level-filter" value={draft.level} options={LEVEL_FILTER_OPTIONS} onChange={(value) => setDraft({ ...draft, level: value })} className={FILTER_FIELD_BG} />)}
-            {field("kb-source-filter", "Nguồn có chứa", <Input id="kb-source-filter" value={draft.source} placeholder="EduPath, EXP-KB..." onChange={(event) => setDraft({ ...draft, source: event.target.value })} className={FILTER_FIELD_BG} />)}
-            {field("kb-origin-filter", "Nguồn gốc", <OptionSelect id="kb-origin-filter" value={draft.origin} options={ORIGIN_FILTER_OPTIONS} onChange={(value) => setDraft({ ...draft, origin: value })} className={FILTER_FIELD_BG} />)}
-            {field("kb-creator-filter", "Người tạo", <OptionSelect id="kb-creator-filter" value={draft.createdBy} options={creatorOptions} onChange={(value) => setDraft({ ...draft, createdBy: value })} className={FILTER_FIELD_BG} />)}
+            {field("kb-topic-filter", "Mã chủ đề", <Input id="kb-topic-filter" value={draft.topicCode} placeholder="I-20, DS-160..." onChange={(event) => setDraft({ ...draft, topicCode: event.target.value })} className={FILTER_FIELD_BG} />)}
             {field("kb-sort", "Sắp xếp", <OptionSelect id="kb-sort" value={draft.sort} options={SORT_OPTIONS} onChange={(value) => setDraft({ ...draft, sort: value })} className={FILTER_FIELD_BG} />)}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" size="sm" onClick={handleReset}>Xóa lọc</Button>
@@ -264,28 +200,6 @@ export function KnowledgeBaseListView() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-        <Tabs value={applied.tab === "" ? "all" : applied.tab} onValueChange={(value) => apply({ ...applied, tab: value === "all" ? "" : String(value), page: 1 })}>
-          <TabsList variant="line" className="h-auto w-full justify-start gap-0 overflow-x-auto border-b border-border p-0">
-            <TabsTrigger value="all" className={TAB_TRIGGER_CLASS}>Tất cả</TabsTrigger>
-            {REVIEW_STATUSES.map((item) => (
-              <TabsTrigger key={item.id} value={item.id} className={TAB_TRIGGER_CLASS}>{item.label}</TabsTrigger>
-            ))}
-            <TabsTrigger value={DELETED_TAB} className={TAB_TRIGGER_CLASS}>Đã xóa</TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        {selectedIds.size > 0 && (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/60 px-3 py-2 text-sm">
-            <span className="font-medium">Đã chọn {selectedIds.size} tri thức{pendingSelectedIds.length < selectedIds.size ? `, ${pendingSelectedIds.length} chờ duyệt` : ""}</span>
-            {pendingSelectedIds.length > 0 && BULK_ACTIONS.map((action) => (
-              <Button key={action.status} type="button" size="sm" variant="outline" className={action.className} onClick={() => { setReviewIds(pendingSelectedIds); setReviewStatus(action.status); }}>
-                <action.icon /> {action.label}
-              </Button>
-            ))}
-            <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Bỏ chọn</Button>
-          </div>
-        )}
-
         <DataTable
           columns={columns}
           items={items}
@@ -294,7 +208,7 @@ export function KnowledgeBaseListView() {
           onRowSelect={(entry) => setFormState({ entry })}
           isLoading={list.loading && !list.data}
           error={list.error}
-          emptyMessage={isTrash ? "Không có tri thức nào đã xóa." : "Không có tri thức nào khớp bộ lọc."}
+          emptyMessage="Không có tri thức nào khớp bộ lọc."
           label="Danh sách kho tri thức"
           toolbar={toolbar}
           footer={
@@ -304,7 +218,7 @@ export function KnowledgeBaseListView() {
               totalCount={list.data?.totalCount}
               itemLabel="tri thức"
               disabled={list.loading || !!list.error}
-              onPageChange={(page) => apply({ ...applied, page })}
+              onPageChange={(page) => setApplied({ ...applied, page })}
             />
           }
         />
@@ -313,34 +227,16 @@ export function KnowledgeBaseListView() {
       {formState && (
         <KnowledgeEntryFormPanel
           entry={formState.entry}
-          version={reloadCounter}
-          currentUserId={user?.id}
           onClose={() => setFormState(null)}
           onChanged={(entry, isNew) => {
             setFormState(isNew ? null : { entry });
             reload();
           }}
           onDelete={setDeleting}
-          onRestore={(entry) => void restore(entry)}
-          onReview={(entry, status) => {
-            setReviewIds([entry.id]);
-            setReviewStatus(status);
-          }}
           onOpen={(id) => void openById(id)}
         />
       )}
 
-      <KnowledgeReviewDialog
-        status={reviewStatus}
-        ids={reviewIds}
-        onClose={() => setReviewStatus(null)}
-        onDone={(message) => {
-          setReviewStatus(null);
-          setSelectedIds(new Set());
-          toast.add({ type: "success", title: message });
-          reload();
-        }}
-      />
       <KnowledgeImportDialog
         key={importSession}
         open={importOpen}
@@ -357,7 +253,7 @@ export function KnowledgeBaseListView() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Xóa tri thức này?</AlertDialogTitle>
-            <AlertDialogDescription>Có thể khôi phục trong mục Đã xóa. Lịch sử của tri thức vẫn được giữ lại.</AlertDialogDescription>
+            <AlertDialogDescription>Tri thức bị xóa hẳn và chat không còn dùng nó nữa.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteBusy}>Hủy</AlertDialogCancel>

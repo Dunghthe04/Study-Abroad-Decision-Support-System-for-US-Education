@@ -24,9 +24,17 @@ FINANCE = (
 
 
 def hit(
-    code="KB-001", content=SEVIS, score=0.9, quote="8 CFR 214.13", url=None, note="Nguồn A", retrieved=None
+    entry_no=1,
+    content=SEVIS,
+    score=0.9,
+    source="8 CFR 214.13",
+    url=None,
+    retrieved=None,
+    question="câu hỏi mẫu",
 ):
-    return KnowledgeHit(code, "câu hỏi mẫu", content, quote, url, note, retrieved, score)
+    return KnowledgeHit(
+        entry_no, question, content, source, url, None, "faq", "LABEL_X", None, retrieved, score
+    )
 
 
 class FakeLLMWithEmbed(FakeLLM):
@@ -50,8 +58,8 @@ class FakeRetriever:
         self._error = error
         self.calls: list[tuple] = []
 
-    async def search(self, embedding, study_level=None):
-        self.calls.append((embedding, study_level))
+    async def search(self, embedding):
+        self.calls.append(embedding)
         if self._error:
             raise self._error
         return self._hits
@@ -156,10 +164,10 @@ def test_check_answer_does_not_require_list_numbering_to_be_kept():
 # ---------- nguồn trích dẫn ----------
 
 
-def test_citation_prefers_the_quote_then_the_note_then_a_generic_title():
-    assert citation_of(hit(quote="8 CFR 214.13")).title == "8 CFR 214.13"
-    assert citation_of(hit(quote=None, note="Nguồn A")).title == "Nguồn A"
-    assert citation_of(hit(quote=None, note=None)).title == "Kho kiến thức tư vấn du học"
+def test_citation_prefers_the_source_then_the_url_then_a_generic_title():
+    assert citation_of(hit(source="8 CFR 214.13", url="https://a.org")).title == "8 CFR 214.13"
+    assert citation_of(hit(source=None, url="https://a.org")).title == "https://a.org"
+    assert citation_of(hit(source=None, url=None)).title == "Kho kiến thức tư vấn du học"
 
 
 def test_citation_carries_the_date_the_source_was_collected():
@@ -202,7 +210,7 @@ async def test_answers_with_one_citation_and_disclaimer():
 async def test_sends_qwen_only_the_best_passage_even_when_others_pass_the_threshold():
     # dòng 2 (0.83) cũng đạt ngưỡng nhưng là chuyện khác: đưa cho Qwen thì Qwen trộn vào câu trả lời
     llm = FakeLLMWithEmbed(good())
-    retriever = FakeRetriever([hit(score=1.0), hit("KB-069", FINANCE, score=0.83)])
+    retriever = FakeRetriever([hit(score=1.0), hit(69, FINANCE, score=0.83)])
 
     out = await handler_with(llm, retriever).run(ChatState(), "Phí SEVIS bao nhiêu?")
 
@@ -259,7 +267,7 @@ async def test_logs_why_it_fell_back_to_the_standard_answer(caplog):
     with caplog.at_level("WARNING", logger="advisor.knowledge"):
         await handler_with(llm, FakeRetriever([hit()])).run(ChatState(), "Phí SEVIS bao nhiêu?")
 
-    assert "KB-001" in caplog.text  # biết dòng nào được dùng làm câu chuẩn khi Qwen không dùng được
+    assert "#1" in caplog.text  # biết dòng nào được dùng làm câu chuẩn khi Qwen không dùng được
 
 
 async def test_falls_back_when_qwen_is_unreachable_twice():
@@ -285,14 +293,6 @@ async def test_says_service_is_unavailable_when_the_database_fails():
     )
 
     assert out.answer == UNAVAILABLE
-
-
-async def test_passes_the_study_level_to_the_search():
-    retriever = FakeRetriever([])
-
-    await handler_with(FakeLLMWithEmbed(), retriever).run(ChatState(study_level="master"), "q")
-
-    assert retriever.calls == [([0.1, 0.2], "master")]
 
 
 # ---------- đăng ký và luồng chat ----------
@@ -327,24 +327,6 @@ async def test_chat_returns_the_citations_and_disclaimer_to_the_client():
     assert res.disclaimer == DISCLAIMER
 
 
-async def test_chat_remembers_the_study_level_sent_by_the_client():
-    retriever = FakeRetriever([])
-    flow = flow_with(build_handlers(FakeLLMWithEmbed(), "m", knowledge=retriever), KNOWLEDGE)
-    first = ChatRequest(
-        messages=[ChatMessage(role="user", content="Phí SEVIS bao nhiêu?")],
-        state=ChatState(current_step="B5"),
-        study_level="undergraduate",
-    )
-
-    res = await flow.reply(first)
-    # lượt sau .NET không gửi bậc học: vẫn dùng bậc đã nhớ trong state
-    await flow.reply(
-        ChatRequest(messages=[ChatMessage(role="user", content="Còn visa thì sao?")], state=res.state)
-    )
-
-    assert [call[1] for call in retriever.calls] == ["undergraduate", "undergraduate"]
-
-
 async def test_a_refusal_does_not_vouch_for_any_center_and_offers_the_center_button():
     out = await handler_with(FakeLLMWithEmbed(), FakeRetriever([hit(score=0.5)])).run(ChatState(), "q")
 
@@ -362,15 +344,15 @@ async def test_a_real_answer_has_no_center_button():
 
 # Câu trả lời kiến thức có nút đi tiếp: câu hỏi liên quan trong kho (gần câu hỏi, khác dòng vừa dùng), rồi gợi ý trường
 async def test_answer_offers_related_questions_then_schools():
-    def h(code, question, score):
-        return KnowledgeHit(code, question, SEVIS, None, None, "Nguồn", None, score)
+    def h(entry_no, question, score):
+        return hit(entry_no, SEVIS, score, "Nguồn", question=question)
 
     hits = [
-        h("KB-1", "Phí SEVIS là gì?", 0.9),
-        h("KB-2", "Phí SEVIS nộp khi nào?", 0.8),
-        h("KB-1", "Phí SEVIS là gì?", 0.85),  # cùng dòng vừa dùng: bỏ
-        h("KB-3", "Đóng phí SEVIS bằng thẻ nào?", 0.6),
-        h("KB-4", "Visa F-1 là gì?", 0.4),  # quá xa: bỏ
+        h(1, "Phí SEVIS là gì?", 0.9),
+        h(2, "Phí SEVIS nộp khi nào?", 0.8),
+        h(1, "Phí SEVIS là gì?", 0.85),  # cùng dòng vừa dùng: bỏ
+        h(3, "Đóng phí SEVIS bằng thẻ nào?", 0.6),
+        h(4, "Visa F-1 là gì?", 0.4),  # quá xa: bỏ
     ]
     out = await handler_with(FakeLLMWithEmbed(good()), FakeRetriever(hits)).run(
         ChatState(), "Phí SEVIS bao nhiêu?"

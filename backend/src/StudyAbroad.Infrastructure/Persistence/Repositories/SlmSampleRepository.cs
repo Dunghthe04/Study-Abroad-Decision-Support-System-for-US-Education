@@ -60,68 +60,38 @@ public class SlmSampleRepository(AppDbContext db) : ISlmSampleRepository
     public Task<SlmTrainingSample?> FindAsync(Guid id, CancellationToken ct = default) =>
         Live.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
 
-    public async Task<IReadOnlyList<SlmSampleHistoryRow>> HistoryAsync(Guid sampleId, CancellationToken ct = default)
-    {
-        var rows = await db.SlmSampleHistory.AsNoTracking()
-            .Where(h => h.SampleId == sampleId)
-            .GroupJoin(db.Users, h => h.ActorUserId, u => u.Id, (h, users) => new { h, users })
-            .SelectMany(x => x.users.DefaultIfEmpty(), (x, u) => new { x.h, Name = u == null ? null : u.FullName })
-            .OrderBy(x => x.h.CreatedAt)
-            .ThenBy(x => x.h.Id)
-            .ToListAsync(ct);
-        return rows.Select(x => new SlmSampleHistoryRow(x.h, x.Name)).ToList();
-    }
-
     public async Task<IReadOnlyDictionary<Guid, string>> UserNamesAsync(
         IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
         await db.Users.AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
 
-    public async Task AddAsync(SlmTrainingSample sample, SlmSampleHistory history, CancellationToken ct = default)
+    public async Task AddAsync(SlmTrainingSample sample, CancellationToken ct = default)
     {
         db.SlmTrainingSamples.Add(sample);
-        db.SlmSampleHistory.Add(history);
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task AddRangeAsync(
-        IReadOnlyList<SlmTrainingSample> samples, IReadOnlyList<SlmSampleHistory> history, CancellationToken ct = default)
+    public async Task AddRangeAsync(IReadOnlyList<SlmTrainingSample> samples, CancellationToken ct = default)
     {
         db.SlmTrainingSamples.AddRange(samples);
-        db.SlmSampleHistory.AddRange(history);
         await db.SaveChangesAsync(ct);
     }
 
     public async Task<int> UpdateManyAsync(
-        IReadOnlyList<Guid> ids, Func<SlmTrainingSample, SlmSampleHistory?> apply, CancellationToken ct = default)
+        IReadOnlyList<Guid> ids, Func<SlmTrainingSample, bool> apply, CancellationToken ct = default)
     {
         var distinctIds = ids.Distinct().ToList();
         var samples = await Live.Where(x => distinctIds.Contains(x.Id)).ToListAsync(ct);
         var now = DateTime.UtcNow;
         foreach (var sample in samples)
         {
-            if (apply(sample) is not { } history)
+            if (!apply(sample))
                 continue;
             sample.UpdatedAt = now;
-            history.SampleId = sample.Id;
-            db.SlmSampleHistory.Add(history);
         }
         await db.SaveChangesAsync(ct);
         return samples.Count;
-    }
-
-    public async Task<IReadOnlyList<(Guid SampleId, Guid ActorUserId)>> ContributorsAsync(
-        IReadOnlyList<Guid> sampleIds, CancellationToken ct = default)
-    {
-        var rows = await db.SlmSampleHistory.AsNoTracking()
-            .Where(h => sampleIds.Contains(h.SampleId) && h.ActorUserId != null
-                        && (h.Action == SlmSampleHistoryActions.Create || h.Action == SlmSampleHistoryActions.Edit
-                            || h.Action == SlmSampleHistoryActions.Submit))
-            .Select(h => new { h.SampleId, ActorUserId = h.ActorUserId!.Value })
-            .Distinct()
-            .ToListAsync(ct);
-        return rows.Select(x => (x.SampleId, x.ActorUserId)).ToList();
     }
 
     public async Task<IReadOnlyList<SlmSampleCountRow>> CountsAsync(CancellationToken ct = default) =>

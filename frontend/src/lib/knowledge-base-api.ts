@@ -1,14 +1,9 @@
 import { ApiError, apiFetch } from "@/lib/api";
 import type {
-  KnowledgeCreator,
+  KnowledgeDocType,
   KnowledgeEntry,
-  KnowledgeEntryDetail,
   KnowledgeImportPreview,
   KnowledgeImportResult,
-  KnowledgeLevel,
-  KnowledgeOrigin,
-  KnowledgeReviewResult,
-  KnowledgeReviewStatus,
   KnowledgeSort,
   PagedResult,
   SaveKnowledgeEntryRequest,
@@ -19,13 +14,9 @@ const TEMPLATE_FILE_NAME = "knowledge-base-template.xlsx";
 
 export interface KnowledgeFilters {
   search?: string;
+  docType?: KnowledgeDocType;
   label?: string;
-  level?: KnowledgeLevel;
-  source?: string;
-  reviewStatus?: KnowledgeReviewStatus;
-  origin?: KnowledgeOrigin;
-  createdBy?: string;
-  deleted?: boolean;
+  topicCode?: string;
   sort?: KnowledgeSort;
   page?: number;
   pageSize?: number;
@@ -71,9 +62,7 @@ async function download(path: string, fileName: string): Promise<void> {
 export const adminKnowledgeBaseApi = {
   list: (filters: KnowledgeFilters = {}) => apiFetch<PagedResult<KnowledgeEntry>>(`${base}${query({ ...filters })}`),
 
-  get: (id: string) => apiFetch<KnowledgeEntryDetail>(`${base}/${encodeURIComponent(id)}`),
-
-  creators: () => apiFetch<KnowledgeCreator[]>(`${base}/creators`),
+  get: (id: string) => apiFetch<KnowledgeEntry>(`${base}/${encodeURIComponent(id)}`),
 
   create: (data: SaveKnowledgeEntryRequest) => apiFetch<KnowledgeEntry>(base, { method: "POST", body: JSON.stringify(data) }),
 
@@ -82,11 +71,6 @@ export const adminKnowledgeBaseApi = {
 
   remove: (id: string) => apiFetch<null>(`${base}/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
-  restore: (id: string) => apiFetch<KnowledgeEntry>(`${base}/${encodeURIComponent(id)}/restore`, { method: "POST" }),
-
-  review: (ids: string[], status: KnowledgeReviewStatus, note?: string) =>
-    apiFetch<KnowledgeReviewResult>(`${base}/review`, { method: "POST", body: JSON.stringify({ ids, status, note: note || undefined }) }),
-
   previewXlsx: (file: File, signal?: AbortSignal) => postXlsx<KnowledgeImportPreview>("preview", file, signal),
 
   importXlsx: (file: File) => postXlsx<KnowledgeImportResult>("import", file),
@@ -94,7 +78,7 @@ export const adminKnowledgeBaseApi = {
   downloadTemplate: () => download(`${base}/template`, TEMPLATE_FILE_NAME),
 };
 
-/** existingId của lỗi 409 (câu hỏi trùng), để giao diện mở mục đã có. */
+/** existingId của lỗi 409 (mã số trùng), để giao diện mở mục đã có. */
 export function duplicateIdOf(error: unknown): string | null {
   if (!(error instanceof ApiError) || error.status !== 409) return null;
   const body = error.body as { existingId?: unknown } | null;

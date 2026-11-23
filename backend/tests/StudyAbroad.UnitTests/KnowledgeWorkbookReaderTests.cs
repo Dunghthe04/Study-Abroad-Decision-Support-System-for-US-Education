@@ -10,7 +10,7 @@ public class KnowledgeWorkbookReaderTests
 {
     private const string Ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
-    /// <summary>Giống file thật: id là ô số, có cột tiêu đề trống (G1) và dòng trống ở cuối.</summary>
+    /// <summary>Giống file thật: id là ô số, có cột tiêu đề trống (L1) và dòng trống ở cuối.</summary>
     private static MemoryStream RealShapedWorkbook(string sheetName = "knowledge_base")
     {
         static string Inline(string cell, string text) => $"<c r=\"{cell}\" t=\"inlineStr\"><is><t>{text}</t></is></c>";
@@ -25,10 +25,12 @@ public class KnowledgeWorkbookReaderTests
                 "<Relationship Id=\"rId1\" Target=\"worksheets/sheet1.xml\"/></Relationships>");
             Add(zip, "xl/worksheets/sheet1.xml",
                 $"<worksheet xmlns=\"{Ns}\"><sheetData>" +
-                "<row r=\"1\">" + Inline("A1", "id") + Inline("B1", "label") + Inline("C1", "level") + Inline("D1", "Question") +
-                Inline("E1", "answer") + Inline("F1", "source") + "<c r=\"G1\"/></row>" +
-                "<row r=\"2\"><c r=\"A2\"><v>1</v></c>" + Inline("B2", "LABEL_VISA_F1") + Inline("C2", "Đại học; Thạc sĩ") +
-                Inline("D2", "OPT là gì?") + Inline("E2", "Trả lời") + Inline("F2", "Nguồn\nMã: EXP-KB-1") + "</row>" +
+                "<row r=\"1\">" + Inline("A1", "id") + Inline("B1", "doc_type") + Inline("C1", "label") + Inline("D1", "Question") +
+                Inline("E1", "answer") + Inline("F1", "source") + Inline("G1", "source_url") + Inline("H1", "retrieved_at") +
+                Inline("I1", "topic_code") + Inline("J1", "image_url") + Inline("K1", "note") + "<c r=\"L1\"/></row>" +
+                "<row r=\"2\"><c r=\"A2\"><v>1</v></c>" + Inline("B2", "faq") + Inline("C2", "LABEL_VISA_F1") +
+                Inline("D2", "OPT là gì?") + Inline("E2", "Trả lời") + Inline("F2", "Nguồn\nMã: EXP-KB-1") +
+                Inline("H2", "2026-11-01") + "</row>" +
                 "<row r=\"3\"><c r=\"A3\"/><c r=\"B3\"/></row>" +
                 "</sheetData></worksheet>");
         }
@@ -47,7 +49,9 @@ public class KnowledgeWorkbookReaderTests
     {
         var row = Assert.Single(new KnowledgeWorkbookReader().Read(RealShapedWorkbook()));
 
-        Assert.Equal(new KnowledgeImportRow(2, "1", "LABEL_VISA_F1", "Đại học; Thạc sĩ", "OPT là gì?", "Trả lời", "Nguồn\nMã: EXP-KB-1"), row);
+        Assert.Equal(
+            new KnowledgeImportRow(2, "1", "faq", "LABEL_VISA_F1", "OPT là gì?", "Trả lời", "Nguồn\nMã: EXP-KB-1", null, "2026-11-01", null, null, null),
+            row);
     }
 
     [Fact]

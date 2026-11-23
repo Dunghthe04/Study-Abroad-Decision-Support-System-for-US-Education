@@ -56,6 +56,10 @@ export interface UniversityOffering {
   studentFacultyRatio: number | null;
   activities: string | null;
   campusSetting: string | null;
+  actPolicy: string | null;
+  actSubmitPct: number | null;
+  applicationFeeUsd: number | null;
+  tuitionInStateUsd: number | null;
   majors: UniversityMajor[];
   sourceUrl: string | null;
   retrievedAt: string | null;
