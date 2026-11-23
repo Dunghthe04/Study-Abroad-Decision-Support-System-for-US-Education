@@ -97,8 +97,7 @@ async def lifespan(app: FastAPI):
         app.state.db_pool = await asyncio.to_thread(open_pool, settings.database_url)
         knowledge = None
         if app.state.db_pool is not None:
-            statuses = [s.strip() for s in settings.knowledge_statuses.split(",") if s.strip()]
-            knowledge = KnowledgeRetriever(app.state.db_pool, statuses, settings.knowledge_top_k)
+            knowledge = KnowledgeRetriever(app.state.db_pool, settings.knowledge_top_k)
         centers = CenterFinder(backend_http) if settings.backend_base_url else None
         # Claude viết câu trả lời cho mọi skill; Ollama (app.state.llm) chỉ còn embedding cho kho kiến thức
         # Embedding chạy trên dịch vụ tương thích OpenAI nếu có cấu hình, không thì dùng Ollama (app.state.llm)

@@ -71,15 +71,18 @@ async def test_knowledge_skill_embeds_with_the_embedder_and_writes_with_the_llm(
             return {"enough": True, "answer": "I-20 là giấy xác nhận trường nhận bạn để xin visa du học."}
 
     class Retriever:
-        async def search(self, vector, study_level):
+        async def search(self, vector):
             assert vector == [0.1, 0.2]
             return [
                 KnowledgeHit(
-                    "K1",
+                    1,
                     "I-20 là gì",
                     "I-20 là giấy xác nhận trường nhận bạn để xin visa.",
                     None,
                     None,
+                    None,
+                    "faq",
+                    "LABEL_X",
                     None,
                     None,
                     0.9,
@@ -104,8 +107,12 @@ async def test_a_question_below_the_threshold_is_logged_as_a_knowledge_miss(capl
             return [[0.1]]
 
     class Retriever:
-        async def search(self, vector, study_level):
-            return [KnowledgeHit("K9", "câu khác", "nội dung khác", None, None, None, None, 0.40)]
+        async def search(self, vector):
+            return [
+                KnowledgeHit(
+                    9, "câu khác", "nội dung khác", None, None, None, "faq", "LABEL_X", None, None, 0.40
+                )
+            ]
 
     handler = TraLoiHandler(object(), "claude", Retriever(), 0.72, Embedder())
 
@@ -113,4 +120,4 @@ async def test_a_question_below_the_threshold_is_logged_as_a_knowledge_miss(capl
         res = await handler.run(ChatState(), "học bổng ở Mars")
 
     assert res.answer == NO_BASIS
-    assert "knowledge_miss" in caplog.text and "nearest=K9" in caplog.text and "0.400" in caplog.text
+    assert "knowledge_miss" in caplog.text and "nearest=9" in caplog.text and "0.400" in caplog.text

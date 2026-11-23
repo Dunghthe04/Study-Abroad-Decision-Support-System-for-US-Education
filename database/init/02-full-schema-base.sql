@@ -608,36 +608,6 @@ CREATE TABLE IF NOT EXISTS app.skills (
 CREATE TRIGGER trg_skills_updated_at BEFORE UPDATE ON app.skills
 FOR EACH ROW EXECUTE FUNCTION app.update_timestamp();
 
--- 6.2 knowledge_documents (UC-51, 52, 84)
-CREATE TABLE IF NOT EXISTS app.knowledge_documents (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title VARCHAR(256) NOT NULL,
-    question TEXT,
-    topic VARCHAR(128),
-    study_level VARCHAR(64) DEFAULT 'all',
-    stage VARCHAR(64),
-    scope VARCHAR(64) DEFAULT 'system_advisory',
-    doc_type VARCHAR(64) NOT NULL DEFAULT 'faq',
-    status VARCHAR(32) NOT NULL DEFAULT 'draft',
-    quote TEXT,
-    content TEXT NOT NULL,
-    source_type VARCHAR(64) DEFAULT 'official',
-    source_url VARCHAR(512),
-    review_due_at TIMESTAMPTZ,
-    version INT DEFAULT 1,
-    embedding vector(1536),
-    retrieved_at DATE DEFAULT CURRENT_DATE,
-    verified_by_user_id UUID REFERENCES app.users(id) ON DELETE SET NULL,
-    verified_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TRIGGER trg_knowledge_documents_updated_at BEFORE UPDATE ON app.knowledge_documents
-FOR EACH ROW EXECUTE FUNCTION app.update_timestamp();
-
-CREATE INDEX IF NOT EXISTS ix_knowledge_documents_status ON app.knowledge_documents(status);
-
 -- 6.3 chat_sessions (UC-34, 35, 36)
 CREATE TABLE IF NOT EXISTS app.chat_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
