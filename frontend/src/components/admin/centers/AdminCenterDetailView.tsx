@@ -89,7 +89,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
         });
       } else if (confirmAction === "hide" || confirmAction === "show") {
         const targetActive = confirmAction === "show";
-        const updated = await studyCentersApi.setActiveStatus(center.id, targetActive);
+        const updated = await studyCentersApi.setActiveStatus(center.id, targetActive, verificationNote ?? "");
         setUpdatedCenter({
           ...center,
           ...updated,

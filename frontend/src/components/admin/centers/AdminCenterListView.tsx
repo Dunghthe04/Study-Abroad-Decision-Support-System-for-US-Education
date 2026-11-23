@@ -207,7 +207,7 @@ export function AdminCenterListView() {
   }, []);
 
   // Xác minh chỉ thực hiện trong hàng đợi hồ sơ (UC-59); ở đây chỉ còn ẩn/hiện (UC-72).
-  const handleConfirmTarget = async () => {
+  const handleConfirmTarget = async (reason?: string) => {
     if (!confirmTarget) return;
     setIsSubmitting(true);
     const targetCenter = confirmTarget.center;
@@ -216,7 +216,7 @@ export function AdminCenterListView() {
     try {
       if (action === "hide" || action === "show") {
         const targetActive = action === "show";
-        const updated = await studyCentersApi.setActiveStatus(targetCenter.id, targetActive);
+        const updated = await studyCentersApi.setActiveStatus(targetCenter.id, targetActive, reason ?? "");
         updateCenterInState({
           ...targetCenter,
           ...updated,

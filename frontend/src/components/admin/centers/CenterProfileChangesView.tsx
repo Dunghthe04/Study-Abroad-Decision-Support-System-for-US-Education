@@ -148,7 +148,11 @@ export function CenterProfileChangesView() {
     if (!hideTarget || busyId) return;
     setBusyId(hideTarget.id);
     try {
-      await studyCentersApi.setActiveStatus(hideTarget.studyCenterId, false);
+      await studyCentersApi.setActiveStatus(
+        hideTarget.studyCenterId,
+        false,
+        hideTarget.reviewReason?.trim() || "Thay đổi thông tin không đạt kiểm tra (UC-114)",
+      );
       toast.add({ type: "success", title: "Đã ẩn trung tâm", description: `${hideTarget.studyCenterName} không còn hiện trong danh bạ và gợi ý.` });
       setHideTarget(null);
       setVersion((current) => current + 1);
