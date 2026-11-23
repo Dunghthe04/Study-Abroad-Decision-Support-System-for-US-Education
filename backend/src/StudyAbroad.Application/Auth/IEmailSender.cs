@@ -24,7 +24,7 @@ namespace StudyAbroad.Application.Auth
         Task SendPasswordChangedNotificationAsync(string toEmail, string fullName, CancellationToken ct = default);
 
         /// <summary>
-        /// [UC-59] Báo kết quả xét duyệt hồ sơ xác minh cho trung tâm. <paramref name="outcome"/>: submitted (đã nhận hồ sơ) | verified | rejected | changes_requested | revoked.
+        /// [UC-59] Báo kết quả xét duyệt hồ sơ xác minh cho trung tâm. <paramref name="outcome"/>: submitted (đã nhận hồ sơ) | verified | rejected | revoked.
         /// <paramref name="reason"/>: lý do Moderator nhập (từ chối, bổ sung, thu hồi); <paramref name="unmetConditions"/>: điều kiện nào chưa đạt.
         /// </summary>
         Task SendCenterVerificationOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? reason, IReadOnlyList<string>? unmetConditions, CancellationToken ct = default);
