@@ -8,15 +8,25 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 /// <summary>[UC-45] Lưu đánh giá do học sinh / phụ huynh gửi vào app.center_reviews.</summary>
 public class CenterReviewSubmissionRepository(AppDbContext db) : ICenterReviewSubmissionRepository
 {
+    private static readonly string[] AcceptedStatuses = [LeadStatuses.Accepted, LeadStatuses.Contacted, LeadStatuses.Closed];
+
     public Task<Lead?> FindLatestLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default) =>
         db.Leads.AsNoTracking()
             .Where(l => l.StudyCenterId == centerId && (l.UserId == userId || l.SubmittedByUserId == userId))
             .OrderByDescending(l => l.CreatedAt)
             .FirstOrDefaultAsync(ct);
 
+    public Task<Lead?> FindLatestAcceptedLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default) =>
+        db.Leads.AsNoTracking()
+            .Where(l => l.StudyCenterId == centerId && (l.UserId == userId || l.SubmittedByUserId == userId))
+            .Where(l => AcceptedStatuses.Contains(l.Status))
+            .OrderByDescending(l => l.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
     public Task<Lead?> FindLatestUnreviewedLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default) =>
         db.Leads.AsNoTracking()
             .Where(l => l.StudyCenterId == centerId && (l.UserId == userId || l.SubmittedByUserId == userId))
+            .Where(l => AcceptedStatuses.Contains(l.Status))
             .Where(l => !db.CenterReviews.Any(r => r.LeadId == l.Id))
             .OrderByDescending(l => l.CreatedAt)
             .FirstOrDefaultAsync(ct);
