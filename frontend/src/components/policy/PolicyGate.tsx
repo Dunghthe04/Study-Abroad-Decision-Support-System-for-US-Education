@@ -3,17 +3,12 @@
 import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDownIcon, ShieldCheckIcon, XIcon } from "lucide-react";
+import { ShieldCheckIcon, XIcon } from "lucide-react";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { PolicyContent } from "@/components/policy/PolicyContent";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Spinner } from "@/components/ui/spinner";
 import { acceptPolicies, getPolicyAcceptanceStatus } from "@/lib/policy-acceptance-api";
-import { formatPolicyDate, getCurrentPolicy } from "@/lib/policy-api";
 import { POLICY_REQUIRED_EVENT } from "@/lib/policy-events";
 import { useFetched } from "@/lib/use-fetched";
 import type { AcceptedPolicy, PolicyAcceptanceItem, PolicyAcceptanceStatus } from "@/types/policy";
@@ -27,11 +22,17 @@ const KIND_LABELS: Record<string, string> = {
   terms_of_use: "Điều khoản sử dụng",
   privacy_policy: "Chính sách bảo mật",
 };
+const KIND_HREFS: Record<string, string> = {
+  terms_of_use: "/terms",
+  privacy_policy: "/privacy",
+};
 const kindLabel = (item: PolicyAcceptanceItem) => KIND_LABELS[item.kind] ?? item.title ?? item.kind;
+const kindHref = (item: PolicyAcceptanceItem) => KIND_HREFS[item.kind] ?? "/terms";
 
 /**
- * [UC-104] Người dùng chưa đồng ý bản Điều khoản / Chính sách bảo mật bắt buộc thì thấy màn đồng ý thay cho cả ứng dụng.
- * Server chặn thật (403 policy_acceptance_required); màn này là chỗ để người dùng đọc và đồng ý, hoặc đăng xuất.
+ * [UC-104] Người dùng chưa đồng ý bản Điều khoản / Chính sách bảo mật bắt buộc thì thấy một hộp nhỏ nổi trên ứng dụng
+ * (trang phía sau làm mờ). Tên văn bản là link mở tab mới; chỉ một nút Đồng ý, dòng chữ ngay dưới nút nói rõ đồng ý với gì.
+ * Server chặn thật (403 policy_acceptance_required); hộp này là chỗ để người dùng đồng ý, hoặc đăng xuất.
  * Bản mới KHÔNG bắt buộc chỉ hiện một dòng thông báo, tắt được.
  */
 export function PolicyGate({ children }: { children: ReactNode }) {
@@ -41,8 +42,8 @@ export function PolicyGate({ children }: { children: ReactNode }) {
 
   const [attempt, setAttempt] = useState(0);
   const key = subject ? `${user.id}:${attempt}` : "none";
-  const { data: status, loading } = useFetched<PolicyAcceptanceStatus | null>(key, () =>
-    subject ? getPolicyAcceptanceStatus() : Promise.resolve(null),
+  const { data, loading } = useFetched<{ userId: string; status: PolicyAcceptanceStatus } | null>(key, async () =>
+    subject ? { userId: user.id, status: await getPolicyAcceptanceStatus() } : null,
   );
   const refresh = useCallback(() => setAttempt((n) => n + 1), []);
 
@@ -52,27 +53,39 @@ export function PolicyGate({ children }: { children: ReactNode }) {
     return () => window.removeEventListener(POLICY_REQUIRED_EVENT, refresh);
   }, [refresh]);
 
+  // Chỉ tin kết quả của CHÍNH người đang đăng nhập (đổi tài khoản không tải lại trang thì kết quả cũ thuộc người khác).
+  // Đang tải lại thì vẫn dùng kết quả cũ của người này, để hộp không nhấp nháy.
+  const status = subject && data?.userId === user.id ? data.status : null;
   const readable = READABLE_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-  if (!subject || loading || !status || readable) return <>{children}</>;
+  const blocked = status?.mustAccept === true && !readable;
 
-  if (status.mustAccept) return <PolicyAcceptanceScreen status={status} onChanged={refresh} />;
-
+  // Cấu trúc cố định (thông báo, trang, hộp) để trang phía sau không bị dựng lại mỗi lần đổi trạng thái
   return (
     <>
-      {status.hasUpdates && <PolicyUpdateNotice status={status} />}
-      {children}
+      {status && !blocked && status.hasUpdates && !status.mustAccept ? <PolicyUpdateNotice status={status} /> : null}
+      <div inert={blocked} aria-hidden={blocked || undefined} className="contents">
+        {children}
+      </div>
+      {blocked && status ? <PolicyAcceptanceDialog status={status} loading={loading} onChanged={refresh} /> : null}
     </>
   );
 }
 
-// ---------------------------------------------------------------- màn bắt buộc đồng ý
+// ---------------------------------------------------------------- hộp bắt buộc đồng ý
 
-function PolicyAcceptanceScreen({ status, onChanged }: { status: PolicyAcceptanceStatus; onChanged: () => void }) {
+function PolicyAcceptanceDialog({
+  status,
+  loading,
+  onChanged,
+}: {
+  status: PolicyAcceptanceStatus;
+  loading: boolean;
+  onChanged: () => void;
+}) {
   const { logout } = useAuth();
   const blocking = status.items.filter((i) => i.blocks);
   const firstTime = blocking.some((i) => i.state === "never_accepted");
 
-  const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,37 +99,47 @@ function PolicyAcceptanceScreen({ status, onChanged }: { status: PolicyAcceptanc
       onChanged();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Có lỗi kết nối máy chủ. Vui lòng thử lại.");
-      if (err instanceof ApiError && err.status === 409) {
-        setAgreed(false);   // nội dung đã đổi: phải đọc lại rồi đồng ý lại
-        onChanged();
-      }
+      if (err instanceof ApiError && err.status === 409) onChanged();   // nội dung đã đổi: tải lại để hiện bản mới
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-labelledby="policy-gate-title" className="min-h-screen bg-surface px-4 py-10 sm:px-6">
-      <div className="mx-auto max-w-2xl space-y-6">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-ink/40 p-4 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="policy-dialog-title"
+        className="w-full max-w-md space-y-5 rounded-2xl bg-background p-6 shadow-xl"
+      >
         <div className="space-y-2">
-          <div className="inline-flex size-11 items-center justify-center rounded-xl bg-brand/10 text-brand">
+          <div className="inline-flex size-10 items-center justify-center rounded-xl bg-brand/10 text-brand">
             <ShieldCheckIcon className="size-5" aria-hidden />
           </div>
-          <h1 id="policy-gate-title" className="font-heading text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-            {firstTime ? "Đồng ý Điều khoản và Chính sách" : "Điều khoản đã được cập nhật"}
-          </h1>
+          <h2 id="policy-dialog-title" className="font-heading text-xl font-semibold tracking-tight text-ink">
+            {firstTime ? "Trước khi tiếp tục" : "Chúng tôi vừa cập nhật điều khoản"}
+          </h2>
           <p className="text-sm text-ink-2">
             {firstTime
-              ? "Để tiếp tục sử dụng USDSS, bạn cần đọc và đồng ý với các nội dung dưới đây."
-              : "Chúng tôi vừa cập nhật nội dung dưới đây. Bạn cần đọc và đồng ý để tiếp tục sử dụng USDSS."}
+              ? "USDSS cần bạn xác nhận đã xem các nội dung sau."
+              : "Vui lòng xem nội dung mới và xác nhận để tiếp tục sử dụng USDSS."}
           </p>
         </div>
 
-        <div className="space-y-4">
+        <ul className="space-y-3">
           {blocking.map((item) => (
-            <PolicyItemCard key={item.kind} item={item} />
+            <li key={item.kind} className="space-y-0.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <Link href={kindHref(item)} target="_blank" rel="noopener noreferrer" className="font-medium text-brand hover:underline">
+                  {kindLabel(item)}
+                </Link>
+                {item.currentVersion && <span className="text-body-s text-ink-3">Phiên bản {item.currentVersion}</span>}
+              </div>
+              {item.state === "update_required" && item.changeSummary && <p className="text-sm text-ink-2">Có gì mới: {item.changeSummary}</p>}
+            </li>
           ))}
-        </div>
+        </ul>
 
         {error && (
           <Alert variant="destructive">
@@ -124,80 +147,29 @@ function PolicyAcceptanceScreen({ status, onChanged }: { status: PolicyAcceptanc
           </Alert>
         )}
 
-        <div className="flex items-start gap-2">
-          <Checkbox id="policy-gate-agree" checked={agreed} onCheckedChange={(c) => setAgreed(Boolean(c))} />
-          <Label htmlFor="policy-gate-agree" className="leading-snug text-ink">
-            Tôi đã đọc và đồng ý với {blocking.map(kindLabel).join(" và ")} của USDSS.
-          </Label>
-        </div>
-
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Button type="button" size="xl" className="flex-1" disabled={!agreed || submitting} loading={submitting} onClick={accept}>
+        <div className="space-y-3">
+          <Button type="button" size="xl" className="w-full" autoFocus disabled={submitting || loading} loading={submitting} onClick={accept}>
             {submitting ? "Đang ghi nhận..." : "Đồng ý và tiếp tục"}
           </Button>
-          <Button type="button" size="xl" variant="outline" className="flex-1" disabled={submitting} onClick={() => logout()}>
-            Đăng xuất
-          </Button>
+          <p className="text-center text-body-s text-ink-3">
+            Bằng việc bấm nút trên, bạn đồng ý với{" "}
+            {blocking.map((item, i) => (
+              <span key={item.kind}>
+                {i > 0 && (i === blocking.length - 1 ? " và " : ", ")}
+                <Link href={kindHref(item)} target="_blank" rel="noopener noreferrer" className="font-semibold text-ink hover:underline">
+                  {kindLabel(item)}
+                </Link>
+              </span>
+            ))}{" "}
+            của USDSS.
+          </p>
+          <div className="text-center">
+            <button type="button" disabled={submitting} onClick={() => logout()} className="text-sm text-ink-3 hover:text-ink hover:underline">
+              Không đồng ý, đăng xuất
+            </button>
+          </div>
         </div>
-        <p className="text-body-s text-ink-3">
-          Nếu không đồng ý, bạn sẽ không dùng được các chức năng của hệ thống. Bạn có thể đăng xuất bất cứ lúc nào.
-        </p>
       </div>
-    </div>
-  );
-}
-
-function PolicyItemCard({ item }: { item: PolicyAcceptanceItem }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <section className="space-y-3 rounded-xl border border-line bg-background p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-semibold text-ink">{kindLabel(item)}</h2>
-        {item.currentVersion && <span className="text-body-s text-ink-3">Phiên bản {item.currentVersion}</span>}
-      </div>
-      {item.state === "update_required" && item.changeSummary && (
-        <p className="text-sm text-ink-2">
-          <span className="font-medium text-ink">Có gì mới: </span>
-          {item.changeSummary}
-        </p>
-      )}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline"
-      >
-        {open ? "Ẩn toàn văn" : "Đọc toàn văn"}
-        <ChevronDownIcon className={`size-4 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
-      </button>
-      {open && <PolicyReader kind={item.kind} />}
-    </section>
-  );
-}
-
-function PolicyReader({ kind }: { kind: PolicyAcceptanceItem["kind"] }) {
-  const { data, error, loading } = useFetched(kind, () => getCurrentPolicy(kind));
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-ink-2">
-        <Spinner />
-        Đang tải nội dung...
-      </div>
-    );
-  }
-  if (error || !data) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>Không tải được toàn văn. Bạn có thể thử lại sau hoặc mở trang riêng của văn bản này.</AlertDescription>
-      </Alert>
-    );
-  }
-  return (
-    <div className="max-h-80 overflow-y-auto rounded-lg border border-line bg-surface p-4">
-      <p className="mb-3 text-body-s text-ink-3">
-        Phiên bản {data.version} · công bố {formatPolicyDate(data.publishedAt)}
-      </p>
-      <PolicyContent content={data.content} />
     </div>
   );
 }
