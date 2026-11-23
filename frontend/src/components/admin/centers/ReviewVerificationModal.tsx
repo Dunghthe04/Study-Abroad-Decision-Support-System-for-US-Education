@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/components/ui/toast";
 
 interface Props {
   requestId: string | null;
@@ -89,12 +90,12 @@ export function ReviewVerificationModal({
 
     if (action === "approve") {
       if (!isNationalRegistryMatched || !isBusinessOperating || !isRepresentativeValid) {
-        setError("Để cấp dấu xác minh (BR-C3), bạn phải tích xác nhận cả 3 tiêu chí đối chiếu trên Cổng ĐKDN.");
+        toast.add({ type: "error", title: "Chưa đủ điều kiện cấp dấu xác minh", description: "Bạn phải tích xác nhận cả 3 tiêu chí đối chiếu trên Cổng ĐKDN (BR-C3)." });
         return;
       }
     } else {
       if (!rejectionReason.trim()) {
-        setError("Vui lòng nhập lý do từ chối / nội dung yêu cầu bổ sung.");
+        toast.add({ type: "error", title: "Thiếu lý do", description: "Vui lòng nhập lý do từ chối hồ sơ." });
         return;
       }
     }
@@ -114,9 +115,9 @@ export function ReviewVerificationModal({
       onClose();
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message);
+        toast.add({ type: "error", title: "Thao tác kiểm duyệt thất bại", description: err.message });
       } else {
-        setError("Thao tác kiểm duyệt thất bại. Vui lòng thử lại.");
+        toast.add({ type: "error", title: "Thao tác kiểm duyệt thất bại", description: "Vui lòng thử lại." });
       }
     } finally {
       setSubmitting(false);
