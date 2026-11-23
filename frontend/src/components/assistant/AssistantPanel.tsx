@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { describeSimulation, resetSimulation, showSimulation } from "@/lib/simulation-link";
 import { sourceDateText } from "@/lib/source-date";
 import { httpLink } from "@/lib/university-display";
+import { ChatImages } from "@/components/assistant/ChatImages";
 import { useAuth } from "@/contexts/AuthContext";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { isAuthRoute } from "@/lib/layout-routes";
@@ -484,6 +485,7 @@ function Turn({ turn, onReply }: { turn: AssistantTurn; onReply?: (value: string
       )}
       {turn.widget?.type === "centers" && <CenterCardsWidget data={turn.widget.data} onPick={onReply} />}
       {searchData && <SchoolSearchCard data={searchData} />}
+      <ChatImages media={turn.media} />
       {turn.citations && turn.citations.length > 0 && (
         <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
           {turn.citations.map((c, j) => {
