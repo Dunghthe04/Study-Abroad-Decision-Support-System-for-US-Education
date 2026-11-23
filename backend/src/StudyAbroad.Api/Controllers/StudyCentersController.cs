@@ -96,7 +96,7 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         if (User.GetUserId() is not { } actorId)
             return Unauthorized();
 
-        var result = await service.SetCenterActiveAsync(id, request.IsActive, actorId, ct);
+        var result = await service.SetCenterActiveAsync(id, request.IsActive, actorId, request.Reason, ct);
         if (!result.Success || result.Center is null)
             return ValidationProblem(result.ErrorMessage);
 

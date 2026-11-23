@@ -107,7 +107,8 @@ public record UpdateStudyCenterResult(StudyCenterDto? Center, string? ErrorMessa
 }
 
 /// <summary>[UC-72] Moderator / Admin thay đổi trạng thái hoạt động (ẩn hoặc hiện khỏi gợi ý).</summary>
-public record SetStudyCenterActiveRequest(bool IsActive);
+/// <summary>[UC-72] Moderator ẩn hoặc hiện trung tâm; lý do bắt buộc (ghi nhật ký).</summary>
+public record SetStudyCenterActiveRequest(bool IsActive, string? Reason = null);
 
 /// <summary>[UC-72] Kết quả thay đổi trạng thái ẩn/hiện trung tâm tư vấn.</summary>
 public record SetStudyCenterActiveResult(StudyCenterDto? Center, string? ErrorMessage = null)

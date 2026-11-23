@@ -33,7 +33,7 @@ public interface IStudyCenterService
     /// <summary>[UC-72] Moderator / Admin sửa thông tin một trung tâm tư vấn trong danh bạ.</summary>
     Task<UpdateStudyCenterResult> UpdateCenterAsync(Guid id, UpdateStudyCenterRequest request, Guid actorUserId, CancellationToken ct = default);
     /// <summary>[UC-72] Moderator / Admin thay đổi trạng thái hoạt động (ẩn hoặc hiện khỏi gợi ý).</summary>
-    Task<SetStudyCenterActiveResult> SetCenterActiveAsync(Guid id, bool isActive, Guid actorUserId, CancellationToken ct = default);
+    Task<SetStudyCenterActiveResult> SetCenterActiveAsync(Guid id, bool isActive, Guid actorUserId, string? reason, CancellationToken ct = default);
 
     // --- Quy trình Tự đăng ký & Xác minh pháp lý (UC-71 mới, UC-59 mới, UC-92) ---
     Task<CenterVerificationStatusDto> GetVerificationStatusAsync(Guid userId, CancellationToken ct = default);
@@ -337,8 +337,17 @@ public class StudyCenterService(
         return UpdateStudyCenterResult.Ok(ToDto(center));
     }
 
-    public async Task<SetStudyCenterActiveResult> SetCenterActiveAsync(Guid id, bool isActive, Guid actorUserId, CancellationToken ct = default)
+    /// <summary>[UC-72] Độ dài tối đa của lý do ẩn hoặc hiện trung tâm.</summary>
+    public const int MaxVisibilityReasonLength = 500;
+
+    public async Task<SetStudyCenterActiveResult> SetCenterActiveAsync(Guid id, bool isActive, Guid actorUserId, string? reason, CancellationToken ct = default)
     {
+        var trimmedReason = reason?.Trim() ?? string.Empty;
+        if (trimmedReason.Length == 0)
+            return SetStudyCenterActiveResult.Fail("Lý do ẩn hoặc hiện trung tâm không được để trống.");
+        if (trimmedReason.Length > MaxVisibilityReasonLength)
+            return SetStudyCenterActiveResult.Fail($"Lý do tối đa {MaxVisibilityReasonLength} ký tự.");
+
         var center = await repository.GetByIdForUpdateAsync(id, ct);
         if (center is null)
             return SetStudyCenterActiveResult.Fail("Không tìm thấy trung tâm tư vấn trong hệ thống.");
@@ -356,6 +365,7 @@ public class StudyCenterService(
             centerName = center.Name,
             previousIsActive,
             newIsActive = isActive,
+            reason = trimmedReason,
             actorUserId
         });
 
