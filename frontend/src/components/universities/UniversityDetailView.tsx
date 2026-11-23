@@ -15,8 +15,6 @@ import type { UniversityDetail } from "@/types/university";
 import { acceptanceRateTone, DetailSection, Gauge, SchoolImage } from "./UniversityDetailParts";
 import { UniversityAdmissions, UniversityCampusLife, UniversityCosts, UniversityMajors, UniversityStatistics } from "./UniversityOfferingSections";
 import { findFieldSource, SourceTooltip } from "./UniversitySourceTooltip";
-import Link from "next/link";
-import { CostEstimateView } from "@/components/costs/CostEstimateView";
 import { AddTargetSchoolButton } from "@/components/target-schools/AddTargetSchoolButton";
 
 function cleanRankNumber(display: string | null | undefined, rank: number): string {
@@ -144,6 +142,7 @@ export function UniversityDetailView({ university }: { university: UniversityDet
                 universityName={university.name}
                 universityCity={university.city}
                 universityState={university.state}
+                deadlinesJson={university.offerings?.find((o) => o.deadlinesJson)?.deadlinesJson ?? null}
                 size="lg"
                 className="!border-transparent !bg-brand-wash !text-brand-ink hover:!bg-brand-wash/70"
               />
@@ -253,13 +252,6 @@ export function UniversityDetailView({ university }: { university: UniversityDet
           {offering ? (
             <div key={offering.studyLevel} className="space-y-12">
               <UniversityCosts offering={offering} sources={university.sources} />
-              <DetailSection id="cost-estimate" title="Ước tính chi phí du học" description="Học phí, sinh hoạt, bảo hiểm, visa và SEVIS theo USD và VND, so với ngân sách của bạn.">
-                <CostEstimateView codes={[university.code]} studyLevel={offering.studyLevel} />
-                <div className="mt-4 flex flex-wrap gap-4 text-sm">
-                  <Link href={`/universities/compare?codes=${university.code}`} className="underline">So sánh chi phí với trường khác</Link>
-                  <Link href="/universities/living-costs" className="underline">So sánh chi phí sinh hoạt theo bang</Link>
-                </div>
-              </DetailSection>
               <UniversityAdmissions offering={offering} sources={university.sources} />
               <UniversityCampusLife offering={offering} sources={university.sources} />
               <UniversityStatistics offering={offering} internationalStudentCount={university.internationalStudentCount} sources={university.sources} />
