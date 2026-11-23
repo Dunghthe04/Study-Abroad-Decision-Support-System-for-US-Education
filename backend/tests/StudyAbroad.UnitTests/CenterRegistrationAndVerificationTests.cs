@@ -413,6 +413,25 @@ public class CenterRegistrationAndVerificationTests
         return (service, email, req, center);
     }
 
+    [Theory]
+    [InlineData("approve")]
+    [InlineData("reject")]
+    public async Task Review_AlreadyProcessedRequest_CannotBeApprovedOrRejectedAgain(string action)
+    {
+        var (service, email, req, center) = NotificationSetup();
+        req.Status = CenterVerificationStatuses.Verified;
+        center.VerificationStatus = CenterVerificationStatuses.Verified;
+
+        var result = await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(
+            Action: action, IsNationalRegistryMatched: true, IsBusinessOperating: true, IsRepresentativeValid: true,
+            RejectionReason: "Đổi ý"), Guid.NewGuid());
+
+        Assert.False(result.Success);
+        Assert.Equal(CenterVerificationStatuses.Verified, req.Status);
+        Assert.Equal(CenterVerificationStatuses.Verified, center.VerificationStatus);
+        Assert.Empty(email.CenterVerificationEmails);
+    }
+
     [Fact]
     public async Task Review_Reject_EmailsTheCenterTheReasonAndTheUnmetConditions()
     {
