@@ -212,6 +212,16 @@ internal sealed class FakeAuditLogRepository : IAuditLogRepository
         return Task.CompletedTask;
     }
 
+    public Task<string?> GetLatestLockDetailJsonAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var idStr = userId.ToString();
+        var last = Entries
+            .Where(x => x.Action == "user.lock" && x.EntityId == idStr)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefault();
+        return Task.FromResult(last?.DetailJson);
+    }
+
     public Task<string?> GetLatestLockReasonAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var idStr = userId.ToString();
