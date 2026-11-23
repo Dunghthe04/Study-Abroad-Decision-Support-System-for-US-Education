@@ -79,3 +79,28 @@ export interface AcceptedPolicy {
   kind: "terms_of_use" | "privacy_policy";
   version: string;
 }
+
+// ---------------------------------------------------------------- tình trạng đồng ý của người dùng đang đăng nhập (UC-104)
+
+/** not_published: chưa công bố · accepted: đã đồng ý bản hiện hành · update_optional: có bản mới không bắt buộc ·
+ *  update_required: có bản mới bắt buộc đồng ý lại · never_accepted: chưa từng đồng ý. */
+export type PolicyAcceptanceState = "not_published" | "accepted" | "update_optional" | "update_required" | "never_accepted";
+
+/** Tình trạng với một loại tài liệu. Khớp PolicyAcceptanceItemDto của backend. */
+export interface PolicyAcceptanceItem {
+  kind: PolicyKind;
+  state: PolicyAcceptanceState;
+  /** update_required hoặc never_accepted: chặn người dùng dùng tiếp. */
+  blocks: boolean;
+  currentVersion: string | null;
+  title: string | null;
+  /** Bản mới có gì thay đổi. */
+  changeSummary: string | null;
+  acceptedVersion: string | null;
+}
+
+export interface PolicyAcceptanceStatus {
+  mustAccept: boolean;
+  hasUpdates: boolean;
+  items: PolicyAcceptanceItem[];
+}
