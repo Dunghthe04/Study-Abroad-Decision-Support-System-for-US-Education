@@ -481,7 +481,8 @@ export function SiteHeader() {
                 Thêm con
               </Link>
             )}
-            {!canOpenAdmin && (acting !== null || (user?.role !== "parent" && isLinkedParent === false)) && (
+            {/* Trung tâm và quản trị không có hồ sơ để phân tích */}
+            {isStudentOrParent && (acting !== null || (user?.role !== "parent" && isLinkedParent === false)) && (
               <Link
                 href="/analysis"
                 className={buttonVariants({
