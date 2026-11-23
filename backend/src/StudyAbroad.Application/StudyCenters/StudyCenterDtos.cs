@@ -54,6 +54,9 @@ public record StudyCenterDto(
 /// <summary>[UC-59] Moderator / Admin gửi yêu cầu xác minh hoặc hủy xác minh trung tâm tư vấn.</summary>
 public record VerifyStudyCenterRequest(bool IsVerified, string? VerificationNote = null);
 
+/// <summary>[UC-59] Moderator thu hồi dấu xác minh của trung tâm Đã xác minh; lý do bắt buộc.</summary>
+public record RevokeCenterVerificationRequest(string? Reason);
+
 /// <summary>[UC-59] Kết quả thực hiện xác minh trung tâm tư vấn.</summary>
 public record VerifyStudyCenterResult(StudyCenterDto? Center, string? ErrorMessage = null)
 {

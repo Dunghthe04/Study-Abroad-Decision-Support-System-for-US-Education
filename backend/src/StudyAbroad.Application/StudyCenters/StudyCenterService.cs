@@ -30,6 +30,8 @@ public interface IStudyCenterService
     Task<CreateStudyCenterResult> CreateAsync(CreateStudyCenterRequest request, Guid actorUserId, CancellationToken ct = default);
     /// <summary>[UC-59] Moderator / Admin xác minh hoặc hủy xác minh một trung tâm tư vấn.</summary>
     Task<VerifyStudyCenterResult> VerifyCenterAsync(Guid id, bool isVerified, Guid actorUserId, string? verificationNote = null, CancellationToken ct = default);
+    /// <summary>[UC-59] Thu hồi dấu xác minh: trung tâm Đã xác minh chuyển Tạm ngừng, lý do bắt buộc, báo trung tâm qua email.</summary>
+    Task<VerifyStudyCenterResult> RevokeVerificationAsync(Guid id, string? reason, Guid reviewerUserId, CancellationToken ct = default);
     /// <summary>[UC-72] Moderator / Admin sửa thông tin một trung tâm tư vấn trong danh bạ.</summary>
     Task<UpdateStudyCenterResult> UpdateCenterAsync(Guid id, UpdateStudyCenterRequest request, Guid actorUserId, CancellationToken ct = default);
     /// <summary>[UC-72] Moderator / Admin thay đổi trạng thái hoạt động (ẩn hoặc hiện khỏi gợi ý).</summary>
@@ -247,6 +249,49 @@ public class StudyCenterService(
             DetailJson = detailJson,
         }, ct);
 
+        return VerifyStudyCenterResult.Ok(ToDto(center));
+    }
+
+    public async Task<VerifyStudyCenterResult> RevokeVerificationAsync(Guid id, string? reason, Guid reviewerUserId, CancellationToken ct = default)
+    {
+        var trimmedReason = TrimOrNull(reason);
+        if (trimmedReason is null)
+            return VerifyStudyCenterResult.Fail("Lý do thu hồi dấu xác minh không được để trống.");
+        if (trimmedReason.Length > MaxVerificationNoteLength)
+            return VerifyStudyCenterResult.Fail($"Lý do thu hồi tối đa {MaxVerificationNoteLength} ký tự.");
+
+        var center = await repository.GetByIdForUpdateAsync(id, ct);
+        if (center is null)
+            return VerifyStudyCenterResult.Fail("Không tìm thấy trung tâm tư vấn trong hệ thống.");
+        if (center.VerificationStatus != CenterVerificationStatuses.Verified)
+            return VerifyStudyCenterResult.Fail("Chỉ thu hồi được dấu xác minh của trung tâm đang ở trạng thái Đã xác minh.");
+
+        center.VerificationStatus = CenterVerificationStatuses.Suspended;
+        center.VerificationNote = trimmedReason;
+        await repository.UpdateAsync(center, ct);
+
+        // Đơn xác minh gần nhất (nếu có) ghi nhận việc thu hồi; trung tâm cũ chưa có đơn vẫn thu hồi được.
+        if (verificationRepository is not null
+            && await verificationRepository.GetCurrentByCenterIdAsync(center.Id, ct) is { } request
+            && request.Status == CenterVerificationStatuses.Verified)
+        {
+            request.Status = CenterVerificationStatuses.Suspended;
+            request.ReviewedByUserId = reviewerUserId;
+            request.ReviewedAt = DateTime.UtcNow;
+            request.RejectionReason = trimmedReason;
+            await verificationRepository.UpdateRequestAsync(request, ct);
+        }
+
+        await auditLogs.AddAsync(new AuditLog
+        {
+            ActorUserId = reviewerUserId,
+            Action = "center.revoked",
+            EntityType = "StudyCenter",
+            EntityId = center.Id.ToString(),
+            DetailJson = JsonSerializer.Serialize(new { centerId = center.Id, reason = trimmedReason }),
+        }, ct);
+
+        await NotifyCenterAsync(center, "revoked", trimmedReason, null, ct);
         return VerifyStudyCenterResult.Ok(ToDto(center));
     }
 
