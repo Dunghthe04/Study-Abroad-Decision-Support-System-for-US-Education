@@ -759,13 +759,13 @@ export function CommunityChatView() {
 
                                   {/* Ảnh đính kèm */}
                                   {m.imageUrl && (
-                                    <div className="mt-1.5">
+                                    <div className="mt-2">
                                       <img
                                         src={m.imageUrl}
                                         alt="Ảnh đính kèm"
                                         loading="lazy"
                                         onClick={() => setLightboxUrl(m.imageUrl || null)}
-                                        className="max-h-64 max-w-sm rounded-lg border border-border/50 object-cover shadow-xs cursor-pointer hover:opacity-95 transition-opacity"
+                                        className="max-h-80 max-w-xs sm:max-w-md rounded-xl border border-border/50 object-cover shadow-xs cursor-pointer hover:opacity-95 hover:shadow-md transition-all"
                                       />
                                     </div>
                                   )}
@@ -1038,17 +1038,21 @@ export function CommunityChatView() {
 
         {/* Modal Lightbox xem ảnh lớn */}
         <Dialog open={!!lightboxUrl} onOpenChange={(open) => !open && setLightboxUrl(null)}>
-          <DialogContent className="max-w-4xl p-2 bg-background/95 backdrop-blur-md border-none flex flex-col items-center">
+          <DialogContent
+            className="w-[96vw] max-w-[96vw] sm:max-w-[96vw] h-[94vh] max-h-[94vh] p-2 sm:p-4 bg-black/90 backdrop-blur-md border border-white/10 flex flex-col items-center justify-center rounded-2xl shadow-2xl gap-0"
+          >
             <DialogHeader className="sr-only">
               <DialogTitle>Xem ảnh đính kèm</DialogTitle>
               <DialogDescription>Ảnh xem kích thước lớn</DialogDescription>
             </DialogHeader>
             {lightboxUrl && (
-              <img
-                src={lightboxUrl}
-                alt="Ảnh phóng to"
-                className="max-h-[80vh] max-w-full rounded-md object-contain shadow-2xl"
-              />
+              <div className="relative flex size-full items-center justify-center overflow-hidden">
+                <img
+                  src={lightboxUrl}
+                  alt="Ảnh phóng to"
+                  className="max-h-[90vh] max-w-[92vw] w-auto h-auto object-contain rounded-lg select-none drop-shadow-2xl"
+                />
+              </div>
             )}
           </DialogContent>
         </Dialog>
