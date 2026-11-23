@@ -113,6 +113,8 @@ async def lifespan(app: FastAPI):
         app.state.embed_job = (
             KnowledgeEmbedJob(app.state.db_pool, embedder) if app.state.db_pool is not None else None
         )
+        if app.state.embed_job is not None and settings.knowledge_embed_sweep_seconds > 0:
+            app.state.embed_job.start_sweeper(settings.knowledge_embed_sweep_seconds)
         skills = build_handlers(
             claude, settings.anthropic_model, knowledge, settings.knowledge_min_score, centers, embedder
         )

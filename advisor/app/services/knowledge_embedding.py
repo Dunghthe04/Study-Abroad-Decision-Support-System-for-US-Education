@@ -65,6 +65,7 @@ class KnowledgeEmbedJob:
         self._retries = retries
         self._retry_wait = retry_wait
         self._task: asyncio.Task[None] | None = None
+        self._sweeper: asyncio.Task[None] | None = None
         self.done = 0  # số dòng đã tạo vector trong lần chạy gần nhất
         self.error: str | None = (
             None  # lần chạy gần nhất lỗi thì có chữ, không kèm chi tiết (chi tiết nằm trong log)
@@ -90,11 +91,30 @@ class KnowledgeEmbedJob:
         self._task = asyncio.create_task(self._run())
         return True
 
+    # Quét định kỳ: dòng thiếu vector mà không ai nhờ (backend gọi hụt, advisor tắt lúc nhập, sửa thẳng trong DB) vẫn được tạo bù.
+    # Phải gọi trong vòng lặp asyncio; gọi lần hai khi đang quét thì không làm gì
+    def start_sweeper(self, interval: float) -> None:
+        if self._sweeper is None or self._sweeper.done():
+            self._sweeper = asyncio.create_task(self._sweep_forever(interval))
+
+    async def _sweep_forever(self, interval: float) -> None:
+        while True:
+            try:
+                if not self.running and await self.count_pending() > 0:
+                    logger.info("Quét định kỳ: có dòng thiếu vector, bắt đầu tạo")
+                    self.start()
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # DB tạm lỗi: vòng quét không được chết, lần sau quét lại
+                logger.exception("Quét dòng thiếu vector thất bại")
+            await asyncio.sleep(interval)
+
     # Dừng khi tắt dịch vụ
     async def stop(self) -> None:
-        if self._task is not None and not self._task.done():
-            self._task.cancel()
-            await asyncio.gather(self._task, return_exceptions=True)
+        tasks = [t for t in (self._sweeper, self._task) if t is not None and not t.done()]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _run(self) -> None:
         try:
