@@ -18,11 +18,11 @@ import { cn } from "@/lib/utils";
 import type { UniversityOffering, UniversitySource } from "@/types/university";
 import {
   activityLabel,
-  annualPublishedCost,
   deadlineRemainingText,
   gpaScaleTypeLabel,
   housingTypeLabel,
   MISSING_UNIVERSITY_DATA,
+  publishedCostSummary,
   schoolAidPolicy,
   schoolImportanceClass,
   schoolImportanceLabel,
@@ -48,7 +48,7 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
     fees: findFieldSource(sources, "fees_usd"),
     other: findFieldSource(sources, "other_expenses_usd"),
   };
-  const total = annualPublishedCost(offering);
+  const summary = publishedCostSummary(offering);
   const tuition = offering.tuitionUsd;
   const living = offering.livingUsd;
   const fees = offering.feesUsd;
@@ -98,7 +98,10 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
   ].filter((item): item is typeof item & { amount: number } => item.amount != null && item.amount > 0);
 
   const breakdownSum = costBreakdown.reduce((sum, item) => sum + item.amount, 0);
-  const displayTotal = total ?? (breakdownSum > 0 ? breakdownSum : null);
+  // Không có học phí thì không hiện tổng (xem publishedCostSummary); thiếu khoản khác thì có tổng kèm dòng "Chưa gồm"
+  const displayTotal = summary?.total ?? null;
+  const missingParts = summary?.missing ?? [];
+  const hasAnyCostPart = costBreakdown.length > 0;
 
   const hasAid = Boolean(
     offering.intlAidPolicy ||
@@ -122,7 +125,7 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
             <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2 border-b border-line pb-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-ink-3">
-                  Tổng chi phí công bố ước tính (COA)
+                  {missingParts.length > 0 ? "Tổng các khoản đã có số liệu" : "Tổng chi phí công bố ước tính (COA)"}
                 </p>
                 <div className="mt-1.5 flex items-baseline gap-2">
                   <span className="text-3xl sm:text-4xl font-extrabold tracking-tight text-brand">
@@ -132,6 +135,11 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
                   </span>
                   <span className="text-sm font-medium text-ink-2">/ năm học</span>
                 </div>
+                {missingParts.length > 0 && (
+                  <p className="mt-2 text-xs text-ink-2">
+                    Chưa gồm {missingParts.join(", ")} vì chưa có số liệu. Chi phí thực tế có thể cao hơn.
+                  </p>
+                )}
               </div>
               {offering.academicYear && (
                 <span className="text-xs text-ink-3">Áp dụng năm học {offering.academicYear}</span>
@@ -198,6 +206,9 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
               <GridDataItem icon={FileTextIcon} label="Phí bắt buộc" value={<SourceTooltip source={costSourceByKey.fees}>{universityMoney(offering.feesUsd)}</SourceTooltip>} />
               <GridDataItem icon={WalletIcon} label="Chi phí khác" value={<SourceTooltip source={costSourceByKey.other}>{universityMoney(offering.otherExpensesUsd)}</SourceTooltip>} />
             </div>
+            {hasAnyCostPart && (
+              <p className="mt-4 text-xs text-ink-2">Chưa có học phí nên chưa tính được tổng chi phí năm.</p>
+            )}
           </div>
         )}
 
@@ -236,7 +247,9 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
                     <p className="text-base font-semibold leading-tight text-white">
                       Chi phí ước tính sau hỗ trợ
                     </p>
-                    <p className="mt-1 text-sm text-white/75">Chưa gồm học bổng bên ngoài</p>
+                    <p className="mt-1 text-sm text-white/75">
+                      Chưa gồm học bổng bên ngoài{missingParts.length > 0 ? `; chưa gồm ${missingParts.join(", ")}` : ""}
+                    </p>
                   </div>
                   <div className="flex items-baseline gap-1.5 shrink-0">
                     <span className="text-2xl sm:text-3xl font-semibold tracking-tight tabular-nums text-white">

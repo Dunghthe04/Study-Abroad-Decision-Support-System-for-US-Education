@@ -152,10 +152,33 @@ export function scoreRange(low: number | null, high: number | null): string {
   return MISSING_UNIVERSITY_DATA;
 }
 
-export function annualPublishedCost(offering: UniversityOffering): number | null {
-  const values = [offering.tuitionUsd, offering.livingUsd, offering.feesUsd, offering.otherExpensesUsd];
-  if (values.some((value) => value == null || !Number.isFinite(value))) return null;
-  return values.reduce<number>((total, value) => total + (value ?? 0), 0);
+const isKnownAmount = (value: number | null | undefined): value is number => value != null && Number.isFinite(value);
+
+export interface PublishedCostSummary {
+  /** Học phí cộng các khoản đã có số liệu (USD/năm). */
+  total: number;
+  /** Các khoản chưa có số liệu, chưa nằm trong total (ví dụ "phí bắt buộc"). Rỗng nghĩa là tổng đủ cả 4 khoản. */
+  missing: string[];
+}
+
+/**
+ * Tổng chi phí năm của một trường (UC-26). Một quy tắc cho mọi nơi hiện tổng:
+ * - Không có học phí thì KHÔNG có tổng (khoản lớn nhất vắng thì tổng sai nặng và dễ hiểu nhầm là chi phí cả năm).
+ * - Có học phí thì cộng các khoản đã có số liệu, và nói rõ khoản nào chưa gồm. Không coi khoản thiếu là 0 một cách lặng lẽ,
+ *   cũng không tự điền số thay cho khoản thiếu. Số 0 thật (ví dụ phí bắt buộc 0) vẫn là số liệu.
+ */
+export function publishedCostSummary(offering: UniversityOffering): PublishedCostSummary | null {
+  if (!isKnownAmount(offering.tuitionUsd)) return null;
+  const parts: [string, number | null | undefined][] = [
+    ["ăn ở", offering.livingUsd],
+    ["phí bắt buộc", offering.feesUsd],
+    ["chi phí khác", offering.otherExpensesUsd],
+  ];
+  const known = parts.reduce((sum, [, value]) => sum + (isKnownAmount(value) ? value : 0), 0);
+  return {
+    total: offering.tuitionUsd + known,
+    missing: parts.filter(([, value]) => !isKnownAmount(value)).map(([label]) => label),
+  };
 }
 
 export function universityDeadlines(value: string | null): { round: string; label: string; date: string; rawDate: string }[] {
