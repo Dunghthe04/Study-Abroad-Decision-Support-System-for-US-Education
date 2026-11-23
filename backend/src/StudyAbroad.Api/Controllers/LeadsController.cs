@@ -24,7 +24,8 @@ namespace StudyAbroad.Api.Controllers;
 public class LeadsController(
     ILeadService leadService,
     IServiceProvider? services = null,
-    IOptions<CloudinaryOptions>? cloudinaryOptions = null) : ControllerBase
+    IOptions<CloudinaryOptions>? cloudinaryOptions = null,
+    IConfiguration? configuration = null) : ControllerBase
 {
     /// <summary>Ảnh trong chat: tối đa 5MB, chỉ JPEG / PNG / WebP (uploader kiểm tra thêm nội dung thật, kích thước điểm ảnh, ảnh động).</summary>
     public const int MaxChatImageBytes = 5 * 1024 * 1024;
@@ -198,6 +199,11 @@ public class LeadsController(
 
     private Func<CancellationToken, Task<LeadMessageAttachment>> CreateAttachmentFactory(IFormFile? file)
     {
+        // [SC-40 / UC-44] Tắt gửi ảnh trong nhắn tin với trung tâm bằng cấu hình
+        var allowImageUpload = configuration?.GetValue<bool?>("Features:AllowChatImageUpload") ?? false;
+        if (!allowImageUpload)
+            throw new LeadRuleException("upload_disabled", StatusCodes.Status403Forbidden, "Tính năng gửi ảnh tạm thời bị tắt.");
+
         if (file is null || file.Length == 0 || Request.Form.Files.Count != 1)
             throw new ArgumentException("Vui lòng chọn đúng một ảnh để gửi.");
         if (file.Length > MaxChatImageBytes)
