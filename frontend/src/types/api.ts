@@ -432,7 +432,6 @@ export interface AdminUserAccountListQuery {
 /** [UC-63] Admin tạo tài khoản moderator (khách không tự đăng ký). */
 export interface CreateModeratorAccountRequest {
   email: string;
-  password: string;
   fullName: string;
   phone?: string | null;
 }

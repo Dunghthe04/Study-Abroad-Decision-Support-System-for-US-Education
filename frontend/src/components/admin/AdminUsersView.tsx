@@ -188,7 +188,6 @@ export function AdminUsersView() {
   // Form tạo tài khoản (Moderator hoặc Center)
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
@@ -462,7 +461,6 @@ export function AdminUsersView() {
 
   const handleOpenCreateModal = () => {
     setEmail("");
-    setPassword("");
     setFullName("");
     setPhone("");
     setFormError(null);
@@ -493,11 +491,6 @@ export function AdminUsersView() {
       setFormError("Vui lòng nhập email.");
       return;
     }
-    if (password.length < 8) {
-      setFormError("Mật khẩu tối thiểu 8 ký tự.");
-      return;
-    }
-
     let phonePayload: string | null = null;
     if (phone.trim()) {
       const parsed = normalizeVietnamesePhone(phone);
@@ -512,7 +505,6 @@ export function AdminUsersView() {
     try {
       const payload: CreateModeratorAccountRequest = {
         email: trimmedEmail,
-        password,
         fullName: trimmedName,
         phone: phonePayload,
       };
@@ -520,7 +512,6 @@ export function AdminUsersView() {
 
       setIsCreateOpen(false);
       setEmail("");
-      setPassword("");
       setFullName("");
       setPhone("");
       setPage(1);
@@ -531,7 +522,7 @@ export function AdminUsersView() {
         priority: "high",
         timeout: 6000,
         title: "Đã tạo tài khoản moderator",
-        description: created.email,
+        description: `${created.email}: đã gửi email để đặt mật khẩu.`,
       });
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Không tạo được tài khoản.");
@@ -1056,19 +1047,9 @@ export function AdminUsersView() {
                 />
               </Field>
 
-              <Field>
-                <FieldLabel htmlFor="create-password">Mật khẩu khởi tạo</FieldLabel>
-                <Input
-                  id="create-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="new-password"
-                  required
-                  minLength={8}
-                />
-                <FieldDescription>Tối thiểu 8 ký tự.</FieldDescription>
-              </Field>
+              <p className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                Hệ thống gửi email kèm mã xác thực để Moderator tự đặt mật khẩu qua trang Quên mật khẩu. Quản trị viên không biết mật khẩu này.
+              </p>
 
               <Field>
                 <FieldLabel htmlFor="create-phone">Số điện thoại (tùy chọn)</FieldLabel>
