@@ -121,11 +121,10 @@ class Widget(CamelModel):
     data: dict[str, Any] = {}
 
 
-class ChatRequest(CamelModel):
-    messages: list[ChatMessage] = Field(min_length=1, max_length=100)
-    session_id: str | None = None
+# Các thông tin .NET gửi kèm mỗi lượt (đọc mới từ server, không tin trình duyệt) để advisor ghép vào state trước khi xử lý.
+# Dùng chung cho lượt chat và cho việc dựng lại câu hồ sơ đang chờ khi mở lại phiên cũ, để hai nơi thấy cùng một state
+class TurnInputs(CamelModel):
     study_level: StudyLevel | None = None
-    state: ChatState | None = None  # None = cuộc trò chuyện mới
     # Hồ sơ hiện tại do .NET gửi mỗi lượt (đọc từ bản nháp dùng chung); None = không gửi
     profile: dict[str, ProfileField] | None = None
     # Danh sách trường của lần gợi ý gần nhất do .NET gửi mỗi lượt; None = không gửi
@@ -142,11 +141,31 @@ class ChatRequest(CamelModel):
     has_committed_profile: bool | None = None
     # Phụ huynh đang nhập hộ con managed (.NET đọc từ token mỗi lượt, không tin trình duyệt); None = không gửi (giữ giá trị cũ)
     exact_budget: bool | None = None
+
+
+class ChatRequest(TurnInputs):
+    messages: list[ChatMessage] = Field(min_length=1, max_length=100)
+    session_id: str | None = None
+    state: ChatState | None = None  # None = cuộc trò chuyện mới
     # Tin này do form gửi ngay sau khi lưu hồ sơ chính thức (câu gộp việc đã tích, hoặc "Tiếp tục bằng chat"):
     # form đã là bước rà soát nên không hỏi lại bảng xác nhận X1 trong chat
     from_form: bool = False
     # Loại ý được chạy theo gói của học sinh (.NET gửi, vd gói Free: ["knowledge", "out_of_scope"]); None = chạy mọi loại
     allowed_intents: list[str] | None = None
+
+
+# Mở lại một phiên chat cũ (lịch sử chat): .NET gửi state của phiên cùng thông tin mới như một lượt chat, advisor dựng lại
+# nút và công cụ của câu HỒ SƠ đang chờ (nút, công cụ không được lưu cùng tin nhắn). Chỉ đọc: không trả state, không gọi AI
+class PendingQuestionRequest(TurnInputs):
+    state: ChatState
+
+
+class PendingQuestionResponse(CamelModel):
+    pending: bool = False  # có câu hồ sơ đang chờ học sinh trả lời hay không
+    question_id: str | None = None  # mã câu đang chờ (vd "D3", "X1")
+    question: str = ""  # chữ của câu đang chờ
+    quick_replies: list[QuickReply] = []
+    widget: Widget | None = None
 
 
 # Token của MỘT lần gọi AI (Claude hoặc Ollama), số do nhà cung cấp trả về. Một lượt chat có thể gồm nhiều lần gọi

@@ -100,10 +100,13 @@ public class AiQualitySampleTests
 
     // ---- dịch vụ
 
-    private sealed class FakeRepository(IReadOnlyList<AiQualityCandidate> candidates, IReadOnlyList<AiQualitySampleRow>? rows = null)
+    private sealed class FakeRepository(
+        IReadOnlyList<AiQualityCandidate> candidates, IReadOnlyList<AiQualitySampleRow>? rows = null,
+        IReadOnlyDictionary<Guid, AiQualityHiddenRow>? hiddenRows = null)
         : IAiQualitySampleRepository
     {
         public List<Guid> RowsAsked { get; } = [];
+        public List<Guid> HiddenAsked { get; } = [];
         public int RowsCalls { get; private set; }
         public string? OutcomeAsked { get; private set; }
 
@@ -118,6 +121,17 @@ public class AiQualitySampleTests
             RowsCalls++;
             RowsAsked.AddRange(messageIds);
             return Task.FromResult<IReadOnlyList<AiQualitySampleRow>>((rows ?? []).Where(r => messageIds.Contains(r.MessageId)).ToList());
+        }
+
+        // Mặc định mỗi lượt bị ẩn có một dòng số liệu trống (chỉ thời điểm); truyền hiddenRows để thử meta
+        public Task<IReadOnlyList<AiQualityHiddenRow>> HiddenRowsAsync(IReadOnlyCollection<Guid> messageIds, CancellationToken ct = default)
+        {
+            HiddenAsked.AddRange(messageIds);
+            return Task.FromResult<IReadOnlyList<AiQualityHiddenRow>>(candidates
+                .Where(c => messageIds.Contains(c.MessageId))
+                .Select(c => hiddenRows is not null && hiddenRows.TryGetValue(c.MessageId, out var h)
+                    ? h : new AiQualityHiddenRow(c.MessageId, c.CreatedAt, "no_answer", null, false))
+                .ToList());
         }
     }
 
@@ -210,34 +224,37 @@ public class AiQualitySampleTests
     // ---- dưới 16 tuổi
 
     [Fact]
-    public async Task AMinorsChat_IsCountedAsHidden_AndItsContentIsNeverLoaded()
+    public async Task AMinorsChat_BecomesAPlaceholderInPlace_AndItsContentIsNeverLoaded()
     {
         var repo = new FakeRepository([Adult(1), Minor(2), Adult(3)], [Row(1), Row(2, question: "BÍ MẬT CỦA TRẺ"), Row(3)]);
         var service = new AiQualitySampleService(repo, new FakeAudit(), Now);
 
         var page = await Page(service);
 
-        Assert.Equal((2, 1), (page.TotalCount, page.HiddenCount));
-        Assert.Equal([Id(1), Id(3)], repo.RowsAsked);   // lượt của trẻ không được hỏi nội dung
-        Assert.DoesNotContain(page.Items, i => i.Question == "BÍ MẬT CỦA TRẺ");
+        Assert.Equal((3, 1), (page.TotalCount, page.HiddenCount));   // tổng tính cả dòng giữ chỗ: khớp số trên thẻ
+        Assert.Equal([Id(1), Id(3)], repo.RowsAsked);                 // lượt của trẻ không được hỏi nội dung
+        Assert.Equal([Id(2)], repo.HiddenAsked);
+        Assert.Equal([null, AiQualityHiddenReasons.MinorWithoutConsent, null], page.Items.Select(i => i.HiddenReason));
+        var placeholder = page.Items[1];
+        Assert.Equal((null, null, 0), (placeholder.Question, placeholder.Answer, placeholder.Context.Count));
     }
 
     [Fact]
-    public async Task APageOfHiddenTurnsOnly_ReturnsNoItems_NoAuditEntryAndNoContentLoaded()
+    public async Task APageOfHiddenTurnsOnly_ReturnsPlaceholders_NoAuditEntryAndNoContentLoaded()
     {
         var repo = new FakeRepository([Minor(1), Minor(2)], [Row(1), Row(2)]);
         var audit = new FakeAudit();
 
         var page = await Page(new AiQualitySampleService(repo, audit, Now));
 
-        Assert.Empty(page.Items);
-        Assert.Equal((0, 2), (page.TotalCount, page.HiddenCount));
+        Assert.All(page.Items, i => Assert.Equal((AiQualityHiddenReasons.MinorWithoutConsent, (string?)null), (i.HiddenReason, i.Answer)));
+        Assert.Equal((2, 2, 2), (page.Items.Count, page.TotalCount, page.HiddenCount));
         Assert.Equal(0, repo.RowsCalls);
         Assert.Empty(audit.Entries);   // không có nội dung rời đi nên không có gì để ghi
     }
 
     [Fact]
-    public async Task Paging_CountsOnlyTheTurnsThatCanBeRead_SoPagesAreNeverShort()
+    public async Task Paging_CountsEveryTurn_AndHiddenTurnsKeepTheirPlaceInTime()
     {
         // 5 lượt xem được xen lẫn 2 lượt của trẻ, mới nhất trước
         var candidates = new[] { Adult(1), Minor(2), Adult(3), Adult(4), Minor(5), Adult(6), Adult(7) };
@@ -246,10 +263,12 @@ public class AiQualitySampleTests
 
         var first = await Page(service, page: 1, size: 2);
         var third = await Page(service, page: 3, size: 2);
+        var fourth = await Page(service, page: 4, size: 2);
 
-        Assert.Equal(["q1", "q3"], first.Items.Select(i => i.Question));
-        Assert.Equal(["q7"], third.Items.Select(i => i.Question));
-        Assert.Equal((5, 2), (first.TotalCount, first.HiddenCount));
+        Assert.Equal(["q1", null], first.Items.Select(i => i.Question));   // lượt 2 của trẻ: dòng giữ chỗ ngay sau lượt 1
+        Assert.Equal([null, "q6"], third.Items.Select(i => i.Question));   // lượt 5 của trẻ rồi lượt 6
+        Assert.Equal(["q7"], fourth.Items.Select(i => i.Question));
+        Assert.Equal((7, 2), (first.TotalCount, first.HiddenCount));
     }
 
     // ---- nhật ký người xem
@@ -279,9 +298,11 @@ public class AiQualitySampleTests
         Assert.Contains("\"outcome\":\"failed\"", entry.DetailJson);
         Assert.Contains("\"count\":1", entry.DetailJson);
         Assert.Contains("\"hiddenCount\":1", entry.DetailJson);
-        Assert.Contains(Id(1).ToString(), entry.DetailJson);
         Assert.DoesNotContain("BÍ MẬT", entry.DetailJson);
-        Assert.DoesNotContain(Id(2).ToString(), entry.DetailJson);   // lượt bị ẩn không nằm trong nhật ký như lượt đã xem
+        // Tách rõ: lượt đã đọc nội dung, và lượt chỉ hiện dòng giữ chỗ
+        using var detail = System.Text.Json.JsonDocument.Parse(entry.DetailJson!);
+        Assert.Equal([Id(1).ToString()], detail.RootElement.GetProperty("messageIds").EnumerateArray().Select(e => e.GetString()));
+        Assert.Equal([Id(2).ToString()], detail.RootElement.GetProperty("placeholderMessageIds").EnumerateArray().Select(e => e.GetString()));
     }
 
     [Fact]
@@ -314,5 +335,56 @@ public class AiQualitySampleTests
         var service = new AiQualitySampleService(new FakeRepository([]), new FakeAudit(), Now);
 
         await Assert.ThrowsAsync<ArgumentException>(() => service.GetPageAsync(Admin, D20, D1, "failed", 1, 10, null, null, default));
+    }
+
+    // ---- học sinh đã xóa cuộc trò chuyện
+
+    [Fact]
+    public void ADeletedConversation_IsHiddenForThatReason_EvenForAnAdultOwner()
+    {
+        var adultDeleted = new AiQualityCandidate(Id(1), At(5), new DateOnly(2000, 1, 1), [], SessionDeleted: true);
+        var minorDeleted = new AiQualityCandidate(Id(2), At(5), new DateOnly(2012, 6, 1), [], SessionDeleted: true);
+
+        Assert.Equal(AiQualityHiddenReason.DeletedByUser, AiQualityContentGate.HiddenReason(adultDeleted));
+        Assert.Equal(AiQualityHiddenReason.DeletedByUser, AiQualityContentGate.HiddenReason(minorDeleted));   // xét xóa trước tuổi
+        Assert.Equal(AiQualityHiddenReason.MinorWithoutConsent, AiQualityContentGate.HiddenReason(Minor(3)));
+        Assert.Null(AiQualityContentGate.HiddenReason(Adult(4)));
+    }
+
+    [Fact]
+    public async Task TheHiddenCount_IsSplitByReason_AndDeletedContentIsNeverLoaded()
+    {
+        var deleted = new AiQualityCandidate(Id(2), At(5), new DateOnly(2000, 1, 1), [], SessionDeleted: true);
+        var repo = new FakeRepository([Adult(1), deleted, Minor(3), Adult(4)], [Row(1), Row(2, question: "ĐÃ XÓA"), Row(3), Row(4)]);
+        var audit = new FakeAudit();
+
+        var page = await Page(new AiQualitySampleService(repo, audit, Now));
+
+        Assert.Equal((4, 2, 1, 1), (page.TotalCount, page.HiddenCount, page.HiddenDeletedCount, page.HiddenMinorCount));
+        Assert.Equal([Id(1), Id(4)], repo.RowsAsked);
+        Assert.Equal(
+            [null, AiQualityHiddenReasons.DeletedByUser, AiQualityHiddenReasons.MinorWithoutConsent, null],
+            page.Items.Select(i => i.HiddenReason));
+        Assert.Contains("\"hiddenDeletedCount\":1", audit.Entries.Single().DetailJson);
+        Assert.Contains("\"hiddenMinorCount\":1", audit.Entries.Single().DetailJson);
+    }
+
+    [Fact]
+    public async Task APlaceholder_KeepsTheTurnsNumbers_TimeOutcomeFeatureAndResponseTime()
+    {
+        var deleted = new AiQualityCandidate(Id(1), At(5), new DateOnly(2000, 1, 1), [], SessionDeleted: true);
+        var fellBack = new AiQualityCandidate(Id(2), At(4), new DateOnly(2000, 1, 1), [], SessionDeleted: true);
+        var hidden = new Dictionary<Guid, AiQualityHiddenRow>
+        {
+            [Id(1)] = new(Id(1), At(5), "failed", "{\"turnMs\":3100,\"skills\":[\"knowledge\"]}", false),
+            [Id(2)] = new(Id(2), At(4), "failed", "{\"turnMs\":900,\"skills\":[\"out_of_scope\"]}", true),
+        };
+        var service = new AiQualitySampleService(new FakeRepository([deleted, fellBack], [], hidden), new FakeAudit(), Now);
+
+        var items = (await Page(service, "failed")).Items;
+
+        Assert.Equal((At(5), "failed", "knowledge", 3100L), (items[0].CreatedAt, items[0].Outcome, items[0].Feature, items[0].TurnMs));
+        Assert.Equal(AiQualityMetaReader.SlmFallbackFeature, items[1].Feature);   // cờ dự phòng tính trong database, không cần meta tin hỏi
+        Assert.All(items, i => Assert.Equal(AiQualityHiddenReasons.DeletedByUser, i.HiddenReason));
     }
 }

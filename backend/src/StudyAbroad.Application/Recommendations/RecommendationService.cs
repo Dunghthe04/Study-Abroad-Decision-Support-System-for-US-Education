@@ -36,6 +36,14 @@ public record RecommendationRun(
     EnglishSummary? English = null
 );
 
+// Bộ tham số của một lượt tính gợi ý: tham số xếp nhóm (B6 đến B9) và trọng số fit score (B10).
+// Current là bộ đang chạy, lấy đúng giá trị mặc định trong code (cùng nguồn với danh mục UC-89).
+// UC-85 tạo bản đã nhích bằng `with`: record bất biến nên bản đang chạy không bao giờ bị sửa.
+public record RecommendationTuning(GroupingOptions Grouping, FitWeights Fit)
+{
+    public static RecommendationTuning Current { get; } = new(new GroupingOptions(), new FitWeights());
+}
+
 // Lời tư vấn một trường, trả cho frontend.
 public record SchoolExplanation(
     string Code,
@@ -158,18 +166,22 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     }
 
     // Phần thuần của lượt gợi ý (không gọi mạng, không ghi DB): cùng hồ sơ và dữ liệu thì cùng kết quả.
+    // tuning null là bộ tham số đang chạy (RecommendationTuning.Current).
     private static RecommendationRun Compute(
         StudentProfile profile,
         IReadOnlyList<int>? pref,
         IReadOnlyList<RecommendSchoolInput> schools,
         IReadOnlyList<FilterResult> filtered,
         IReadOnlyList<FilterResult> kept,
-        int tier)
+        int tier,
+        RecommendationTuning? tuning = null)
     {
+        var t = tuning ?? RecommendationTuning.Current;
         var byCode = kept.ToDictionary(r => r.School.Code, StringComparer.OrdinalIgnoreCase);
         var student = new StudentAcademics(profile.OverallGpa, SatScore(profile.Sat), ActScore(profile.Act), tier);
         var fitStudent = new FitStudent(profile.BudgetMaxUsd);
-        var weights = SchoolRanker.WeightsFromPriorities(NormalizePref(pref));
+        // Ưu tiên của học sinh nhân lên trọng số của bộ tham số (không phải luôn là bộ mặc định)
+        var weights = SchoolRanker.WeightsFromPriorities(NormalizePref(pref), t.Fit);
 
         // Chấm nhóm cho từng trường còn lại sau lọc cứng
         var graded = new List<(RecommendSchoolInput School, FilterResult Filter, GradedSchool Graded)>();
@@ -178,7 +190,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
                      .Where(s => byCode.ContainsKey(s.University.Code))
                      .OrderBy(s => s.University.Code, StringComparer.Ordinal))
         {
-            var grade = SchoolGrouper.Grade(student, ToSchoolAcademics(school));
+            var grade = SchoolGrouper.Grade(student, ToSchoolAcademics(school), t.Grouping);
             var filter = byCode[school.University.Code];
             graded.Add((school, filter,
                 new GradedSchool(school.University.Code, grade, ToFitSchool(school, filter.EnglishShortfall))));
@@ -319,6 +331,38 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             BudgetMaxUsd = o.BudgetUsd ?? profile.BudgetMaxUsd,
             ScholarshipNeed = o.ScholarshipNeed ?? profile.ScholarshipNeed
         };
+    }
+
+    /// <summary>
+    /// [UC-85] Chạy lại TOÀN BỘ đường gợi ý thật (lọc cứng, xếp nhóm, fit score, chọn tối đa 4 trường mỗi khối) với một bộ tham số
+    /// truyền vào. Hàm thuần: không gọi mạng, không đọc hay ghi database, không lưu lượt gợi ý. Bộ tham số đang chạy không bị đổi.
+    /// Dùng chung đúng hàm Compute của lượt gợi ý thật nên phân tích độ nhạy không thể lệch với thuật toán.
+    /// Hồ sơ thiếu nhu cầu học bổng hoặc ngành thì ném InvalidOperationException như lượt gợi ý thật.
+    /// </summary>
+    public static RecommendationRun EvaluateWith(
+        StudentProfile profile, IReadOnlyList<RecommendSchoolInput> schools, int ecTier, RecommendationTuning tuning,
+        IReadOnlyList<int>? pref = null)
+    {
+        EnsureRunnable(profile);
+        var (filtered, kept) = FilterSchools(profile, schools);
+        return kept.Count == 0
+            ? new RecommendationRun(ecTier, filtered, [], null)
+            : Compute(profile, pref, schools, filtered, kept, ecTier, tuning);
+    }
+
+    /// <summary>
+    /// [UC-85] Dấu nhận biết dữ liệu trường: SHA-256 của ĐÚNG các số mà thuật toán đọc (lọc cứng, xếp nhóm, fit score) của mọi trường,
+    /// xếp theo mã. Dữ liệu trường đổi (tỉ lệ nhận, SAT, học phí...) thì dấu đổi; sửa thứ thuật toán không đọc (mô tả, ảnh) thì không.
+    /// Dùng để biết hai lần phân tích độ nhạy có chạy trên cùng dữ liệu trường không.
+    /// </summary>
+    public static string SchoolDataFingerprint(IReadOnlyList<RecommendSchoolInput> schools)
+    {
+        var rows = schools
+            .OrderBy(s => s.University.Code, StringComparer.Ordinal)
+            .Select(s => new { Filter = ToFilterSchool(s), Academics = ToSchoolAcademics(s), Fit = ToFitSchool(s, null) })
+            .ToList();
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(rows)))
+            .ToLowerInvariant();
     }
 
     // Lọc cứng rồi chấm: phần thuần dùng chung cho mô phỏng (không đọc ngoại khóa, không lưu).

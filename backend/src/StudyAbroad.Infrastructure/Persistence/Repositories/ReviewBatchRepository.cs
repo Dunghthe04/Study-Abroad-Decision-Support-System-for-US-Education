@@ -10,7 +10,7 @@ public class ReviewBatchRepository(AppDbContext db) : IReviewBatchRepository
 {
     public async Task<IReadOnlyList<ReviewCandidate>> ListCandidatesAsync(
         DateTime? fromUtc, DateTime? toUtcExclusive, CancellationToken ct = default) =>
-        await ReviewCandidateQuery.Candidates(db.ChatMessages.AsNoTracking(), fromUtc, toUtcExclusive).ToListAsync(ct);
+        await ReviewCandidateQuery.Candidates(db.ChatMessages.AsNoTracking(), fromUtc, toUtcExclusive, db.ChatSessions.AsNoTracking()).ToListAsync(ct);
 
     public async Task<IReadOnlyList<Guid>> FindActiveAdminIdsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
         await db.Users.AsNoTracking()
@@ -105,6 +105,18 @@ public class ReviewBatchRepository(AppDbContext db) : IReviewBatchRepository
             return null;
 
         var messages = db.ChatMessages.AsNoTracking();
+        // Học sinh đã xóa cuộc trò chuyện sau khi câu được bốc: không tải nội dung nào, chỉ báo lại cho người duyệt
+        var deletedByUser = await messages
+            .Where(m => m.Id == item.ChatMessageId)
+            .AnyAsync(m => db.ChatSessions.Any(s => s.Id == m.ChatSessionId && s.DeletedAt != null), ct);
+        if (deletedByUser)
+        {
+            var mineOnDeleted = await db.ReviewVerdicts.AsNoTracking()
+                .FirstOrDefaultAsync(v => v.ReviewBatchItemId == itemId && v.ReviewerUserId == reviewerUserId, ct);
+            var placeholder = new ChatReviewReplyRow(item.ChatMessageId, Guid.Empty, Guid.Empty, default, "assistant", "", "", "", null, null);
+            return new ReviewItemDetailRows(item.Id, item.Position, item.Stratum, placeholder, null, [], mineOnDeleted, DeletedByUser: true);
+        }
+
         var reply = await ReviewItemQuery.AnsweredReply(messages, db.ChatSessions.AsNoTracking(), item.ChatMessageId).FirstOrDefaultAsync(ct);
         if (reply is null)
             return null;
@@ -149,9 +161,12 @@ public class ReviewBatchRepository(AppDbContext db) : IReviewBatchRepository
         Guid batchId, Guid itemId, Guid reviewerUserId, string labelVerdict, string? correctIntent, string answerVerdict, string? cause,
         CancellationToken ct = default)
     {
+        // Câu thuộc cuộc trò chuyện học sinh đã xóa thì không chấm được nữa (người duyệt không còn thấy nội dung)
         var allowed = await db.ReviewBatchItems.AnyAsync(
             i => i.Id == itemId && i.ReviewBatchId == batchId
-                 && db.ReviewBatchReviewers.Any(r => r.ReviewBatchId == batchId && r.UserId == reviewerUserId), ct);
+                 && db.ReviewBatchReviewers.Any(r => r.ReviewBatchId == batchId && r.UserId == reviewerUserId)
+                 && !db.ChatMessages.Any(m => m.Id == i.ChatMessageId
+                                              && db.ChatSessions.Any(s => s.Id == m.ChatSessionId && s.DeletedAt != null)), ct);
         if (!allowed)
             return null;
 

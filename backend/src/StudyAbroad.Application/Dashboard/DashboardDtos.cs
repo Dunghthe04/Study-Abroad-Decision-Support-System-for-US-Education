@@ -22,7 +22,7 @@ public record RecommendationKpiDto(
 );
 
 /// <summary>
-/// KPI 2: Tiến độ hoàn thiện hồ sơ (UC-640 Unified Profile Flow).
+/// KPI 2: Tiến độ hoàn thiện hồ sơ (USAS-640 Unified Profile Flow).
 /// </summary>
 public record ProfileProgressKpiDto(
     int CompletedSteps,

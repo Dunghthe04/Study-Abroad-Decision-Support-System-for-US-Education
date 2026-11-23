@@ -161,10 +161,11 @@ public record FlowTranscriptSubjectScoreDto(
     [property: JsonPropertyName("reviewReason")] string? ReviewReason = null
 );
 
+/// <summary>Thông tin tệp bảng điểm trong nháp. StoredFileName/RelativePath chỉ có ở nháp cũ từ khi còn lưu tệp, nay luôn null.</summary>
 public record DraftTranscriptInfoDto(
     [property: JsonPropertyName("originalFileName")] string OriginalFileName,
-    [property: JsonPropertyName("storedFileName")] string StoredFileName,
-    [property: JsonPropertyName("relativePath")] string RelativePath,
+    [property: JsonPropertyName("storedFileName")] string? StoredFileName,
+    [property: JsonPropertyName("relativePath")] string? RelativePath,
     [property: JsonPropertyName("fileSizeBytes")] long FileSizeBytes,
     [property: JsonPropertyName("contentType")] string ContentType,
     [property: JsonPropertyName("uploadedAt")] DateTime UploadedAt

@@ -19,7 +19,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories
 
         public Task<ChatSession?> FindAsync(Guid id, Guid userId, CancellationToken ct = default)
         {
-            return db.ChatSessions.FirstOrDefaultAsync(s => s.Id == id && s.UserId == userId, ct);
+            // Phiên đã xóa (xóa mềm) coi như không có: gửi tin kèm mã phiên đó thì ChatService tạo phiên mới
+            return StudyAbroad.Application.Advisor.History.ChatHistoryQuery.Active(db.ChatSessions, id, userId).FirstOrDefaultAsync(ct);
         }
 
         public Task SaveAsync(CancellationToken ct = default)

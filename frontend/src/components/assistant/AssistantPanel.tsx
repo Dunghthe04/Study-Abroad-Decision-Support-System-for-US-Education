@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -28,6 +28,7 @@ import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { isAuthRoute } from "@/lib/layout-routes";
 import { useAssistant, type AssistantTurn } from "./AssistantProvider";
 import { BudgetWidget } from "./BudgetWidget";
+import { ChatHistoryPopover } from "./ChatHistoryPopover";
 import { CenterCardsWidget } from "./CenterCardsWidget";
 import { ChatText } from "./ChatText";
 import { MajorWidget } from "./MajorWidget";
@@ -50,8 +51,10 @@ export function useAssistantVisible() {
 
 /** Khung "Trợ lý USDSS" cố định bên phải; màn hẹp thì phủ kín */
 export function AssistantPanel() {
-  const { open, wide, turns, loading, streaming, error, page, closePanel, toggleWide, newChat, send, retry, subscription } =
-    useAssistant();
+  const {
+    open, wide, turns, loading, streaming, error, page, closePanel, toggleWide, newChat, send, retry, subscription,
+    currentSessionId, openSession, openingSession, resumed, hasOlder, loadingOlder, loadOlder,
+  } = useAssistant();
   const visible = useAssistantVisible();
   const pathname = usePathname();
   const [input, setInput] = useState("");
@@ -64,11 +67,37 @@ export function AssistantPanel() {
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Cuộn xuống tin mới nhất
-  useEffect(() => {
+  // Vị trí đang đọc trước khi chèn tin cũ lên trên (cuộn lên đầu phiên mở lại), để giữ nguyên chỗ thay vì nhảy xuống cuối
+  const anchorRef = useRef<{ height: number; top: number } | null>(null);
+
+  // Cuộn xuống tin mới nhất; vừa chèn tin cũ lên trên thì giữ nguyên chỗ đang đọc
+  useLayoutEffect(() => {
     const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const anchor = anchorRef.current;
+    if (anchor) {
+      el.scrollTop = el.scrollHeight - anchor.height + anchor.top;
+      anchorRef.current = null;
+      return;
+    }
+    el.scrollTop = el.scrollHeight;
   }, [turns, loading, streaming, error, open]);
+
+  // Tải tin cũ hơn: ghi chỗ đang đọc rồi tải; tải lỗi hoặc không có gì mới thì bỏ chỗ đã ghi (sau khi khung đã vẽ lại)
+  const loadEarlier = () => {
+    const el = listRef.current;
+    if (!el || !hasOlder || loadingOlder) return;
+    anchorRef.current = { height: el.scrollHeight, top: el.scrollTop };
+    void loadOlder().finally(() => requestAnimationFrame(() => {
+      anchorRef.current = null;
+    }));
+  };
+
+  // Cuộn gần tới đầu khung thì tự tải tin cũ hơn
+  const onListScroll = () => {
+    const el = listRef.current;
+    if (el && el.scrollTop < 120) loadEarlier();
+  };
 
   // Mở khung thì đặt con trỏ vào ô nhập
   useEffect(() => {
@@ -86,12 +115,12 @@ export function AssistantPanel() {
   if (!visible || !open) return null;
 
   const submit = () => {
-    if (!input.trim() || loading || !canSend) return;
+    if (!input.trim() || loading || openingSession || !canSend) return;
     send(input);
     setInput("");
   };
 
-  const empty = turns.length === 0 && !loading && !error;
+  const empty = turns.length === 0 && !loading && !error && !openingSession;
 
   return (
     <aside
@@ -103,7 +132,7 @@ export function AssistantPanel() {
         "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-300",
       )}
     >
-      <div ref={listRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div ref={listRef} onScroll={onListScroll} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {/* Đầu khung dính trên cùng, nền mờ dần xuống dưới để tin nhắn trượt qua bên dưới */}
         <div className="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface)_70%,transparent)] px-3 pt-3 pb-6">
           <div className="flex items-center gap-2">
@@ -118,6 +147,18 @@ export function AssistantPanel() {
             >
               <PlusIcon className="size-4.5" />
             </Button>
+            {/* Lịch sử: chỉ khi được chat (đã đăng nhập, không bị chặn tuổi). Khóa khi đang chờ trả lời hoặc đang mở một phiên */}
+            {canSend ? (
+              <ChatHistoryPopover
+                currentSessionId={currentSessionId}
+                disabled={loading || openingSession}
+                onSelect={(id) => void openSession(id)}
+                // Xóa đúng phiên đang mở thì khung chat chuyển sang cuộc trò chuyện mới (phiên đó không hỏi tiếp được nữa)
+                onDeleted={(id) => {
+                  if (id === currentSessionId) newChat();
+                }}
+              />
+            ) : null}
             <h2 className="min-w-0 flex-1 truncate font-heading text-base font-semibold text-ink">USDSS Advisor</h2>
             <div className="flex shrink-0 items-center rounded-lg border border-line p-0.5">
               <IconButton
@@ -205,6 +246,28 @@ export function AssistantPanel() {
           </div>
         ) : (
           <div className="flex flex-col gap-5 px-4 pb-4 text-[14.5px] leading-relaxed">
+            {openingSession && (
+              <p role="status" className="text-center text-xs text-ink-3">Đang mở cuộc trò chuyện...</p>
+            )}
+
+            {/* Phiên mở lại từ lịch sử: tải tin cũ hơn ở đầu khung, và nói rõ tin cũ chỉ còn chữ */}
+            {resumed && !openingSession && (
+              <div className="flex flex-col items-center gap-1.5 text-center text-xs text-ink-3">
+                {loadingOlder ? (
+                  <span role="status">Đang tải tin cũ hơn...</span>
+                ) : hasOlder ? (
+                  <Button type="button" variant="ghost" size="sm" onClick={loadEarlier}>
+                    Tải tin cũ hơn
+                  </Button>
+                ) : (
+                  <span>Đầu cuộc trò chuyện</span>
+                )}
+                <span className="max-w-[40ch]">
+                  Bạn đang mở lại một cuộc trò chuyện cũ. Bảng và nút của các tin trước không hiển thị lại, bạn cứ gõ tiếp để hỏi.
+                </span>
+              </div>
+            )}
+
             {turns.map((t, i) => (
               <Turn
                 key={i}
@@ -311,7 +374,7 @@ export function AssistantPanel() {
               type="submit"
               size="icon"
               aria-label="Gửi"
-              disabled={loading || !canSend || !input.trim()}
+              disabled={loading || openingSession || !canSend || !input.trim()}
               className="size-9 self-end bg-brand text-brand-foreground hover:bg-brand hover:opacity-90 [&:disabled:not([aria-busy])]:opacity-40"
             >
               <ArrowUpIcon className="size-4.5" />

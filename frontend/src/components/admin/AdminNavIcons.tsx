@@ -325,6 +325,55 @@ export function SlidersHorizontalFilledIcon({ className }: AdminNavIconProps) {
   );
 }
 
+// Bản đậm của ActivityIcon (đường nhịp): nét dày hơn khi mục đang được chọn
+export function ActivityFilledIcon({ className }: AdminNavIconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="24"
+      height="24"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <path
+        d="M22 12h-4l-3 9L9 3l-3 9H2"
+        stroke="currentColor"
+        strokeWidth="2.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+// Bản đặc của FileTextIcon (tờ giấy gập góc có dòng chữ): dòng chữ khoét rỗng khi mục đang được chọn
+export function FileTextFilledIcon({ className }: AdminNavIconProps) {
+  const maskId = useId().replace(/:/g, "");
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="24"
+      height="24"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <defs>
+        <mask id={maskId}>
+          <rect width="24" height="24" fill="white" />
+          <path d="M8 13h8M8 17h8M8 9h2" stroke="black" strokeWidth="1.8" strokeLinecap="round" />
+        </mask>
+      </defs>
+      <path
+        d="M6 2h8l6 6v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z"
+        fill="currentColor"
+        mask={`url(#${maskId})`}
+      />
+    </svg>
+  );
+}
+
 export function MessagesSquareFilledIcon({ className }: AdminNavIconProps) {
   const maskId = useId().replace(/:/g, "");
   const frontBubble =

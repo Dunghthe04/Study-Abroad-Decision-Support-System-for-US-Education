@@ -1,11 +1,13 @@
 import type { ComponentType } from "react";
 import {
+  ActivityIcon,
   ArchiveXIcon,
   BarChart3Icon,
   BookOpenIcon,
   BuildingIcon,
   ClipboardCheckIcon,
   CreditCardIcon,
+  FileTextIcon,
   GraduationCapIcon,
   LayoutDashboardIcon,
   LibraryBigIcon,
@@ -19,12 +21,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
+  ActivityFilledIcon,
   ArchiveXFilledIcon,
   BarChart3FilledIcon,
   BookOpenFilledIcon,
   BuildingFilledIcon,
   ClipboardCheckFilledIcon,
   CreditCardFilledIcon,
+  FileTextFilledIcon,
   GraduationCapFilledIcon,
   LayoutDashboardFilledIcon,
   LibraryBigFilledIcon,
@@ -253,6 +257,26 @@ export const ADMIN_NAV: AdminNavItem[] = [
     // Moderator vào để sửa bảng quy đổi điểm (UC-68); admin chỉ xem bảng này. Tham số thuật toán (UC-89, gộp UC-69) chỉ xem.
     roles: ["admin", "moderator"],
     useCases: ["UC-68", "UC-70", "UC-89"],
+  },
+  {
+    href: "/admin/policies",
+    label: "Chính sách & điều khoản",
+    description: "Soạn, xem trước và công bố điều khoản sử dụng, chính sách bảo mật theo phiên bản; bản đã công bố không sửa được",
+    icon: FileTextIcon,
+    filledIcon: FileTextFilledIcon,
+    section: "system",
+    roles: ["admin"],
+    useCases: ["UC-103"],
+  },
+  {
+    href: "/admin/sensitivity",
+    label: "Độ nhạy tham số",
+    description: "Nhích từng tham số thuật toán gợi ý ±10%, ±20% trên hồ sơ giả lập và xem kết quả thay đổi bao nhiêu",
+    icon: ActivityIcon,
+    filledIcon: ActivityFilledIcon,
+    section: "system",
+    roles: ["admin"],
+    useCases: ["UC-85"],
   },
   {
     href: "/admin/access-logs",

@@ -37,6 +37,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ChatSession> ChatSessions => Set<ChatSession>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<ReviewBatch> ReviewBatches => Set<ReviewBatch>();
+    public DbSet<SensitivityRun> SensitivityRuns => Set<SensitivityRun>();
+    public DbSet<PolicyDocument> PolicyDocuments => Set<PolicyDocument>();
     public DbSet<ReviewBatchReviewer> ReviewBatchReviewers => Set<ReviewBatchReviewer>();
     public DbSet<ReviewBatchItem> ReviewBatchItems => Set<ReviewBatchItem>();
     public DbSet<ReviewVerdict> ReviewVerdicts => Set<ReviewVerdict>();

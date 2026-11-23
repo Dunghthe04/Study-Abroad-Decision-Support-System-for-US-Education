@@ -26,9 +26,12 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Admin.AiUsage.IAiUsageReportService, StudyAbroad.Application.Admin.AiUsage.AiUsageReportService>();   // token của các lần gọi AI cho admin
         services.AddScoped<StudyAbroad.Application.Admin.AiQuality.IAiQualityService, StudyAbroad.Application.Admin.AiQuality.AiQualityService>();   // báo cáo chất lượng AI cho admin (UC-90)
         services.AddScoped<StudyAbroad.Application.Admin.AiQuality.IAiQualitySampleService, StudyAbroad.Application.Admin.AiQuality.AiQualitySampleService>();   // mẫu hội thoại đã che cho admin (UC-90)
+        services.AddScoped<StudyAbroad.Application.Advisor.History.IChatHistoryService, StudyAbroad.Application.Advisor.History.ChatHistoryService>();   // lịch sử chat của chính người dùng
         services.AddScoped<StudyAbroad.Application.Admin.SlmSamples.ISlmSampleService, StudyAbroad.Application.Admin.SlmSamples.SlmSampleService>();
         services.AddScoped<StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeBaseService, StudyAbroad.Application.Admin.KnowledgeBase.KnowledgeBaseService>();   // kho tri thức (UC-118..125)
         services.AddScoped<StudyAbroad.Application.Admin.ReviewBatches.IReviewBatchService, StudyAbroad.Application.Admin.ReviewBatches.ReviewBatchService>();   // đợt duyệt mẫu
+        services.AddScoped<StudyAbroad.Application.Admin.Sensitivity.ISensitivityRunService, StudyAbroad.Application.Admin.Sensitivity.SensitivityRunService>();   // phân tích độ nhạy tham số (UC-85)
+        services.AddScoped<StudyAbroad.Application.Admin.Policies.IPolicyService, StudyAbroad.Application.Admin.Policies.PolicyService>();   // quản lý chính sách và điều khoản (UC-103)
         services.AddScoped<StudyAbroad.Application.Leads.ILeadService, StudyAbroad.Application.Leads.LeadService>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadParentConfirmService, StudyAbroad.Application.Leads.LeadParentConfirmService>();   // [UC-116] phụ huynh xác nhận lead qua mail
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewService, StudyAbroad.Application.StudyCenters.CenterReviewService>();
@@ -54,6 +57,8 @@ public static class DependencyInjection
         // Chat chạy gợi ý trường qua interface, dùng chung RecommendationService đã đăng ký ở trên
         services.AddScoped<IRecommendationRunner>(sp => sp.GetRequiredService<RecommendationService>());
         services.AddScoped<StudyAbroad.Application.Advisor.ChatService>();
+        // Dựng lại câu hồ sơ đang chờ khi mở phiên cũ: cùng một ChatService trong phạm vi yêu cầu
+        services.AddScoped<StudyAbroad.Application.Advisor.History.IChatPendingQuestion>(sp => sp.GetRequiredService<StudyAbroad.Application.Advisor.ChatService>());
         services.AddScoped<RecommendationHistoryService>();   // [UC-87] xem lịch sử gợi ý
         services.AddScoped<ParentChildrenService>();   // khu "Con của tôi": phụ huynh xem con, chỉ đọc
         services.AddScoped<ParentPreferenceService>();   // UC-76: ưu tiên của phụ huynh cho từng con

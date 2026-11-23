@@ -258,10 +258,13 @@ public class ReviewBatchTests
         using var db = new AppDbContext(options);
 
         var sql = ReviewCandidateQuery.Candidates(db.ChatMessages, Day(1), Day(30)).ToQueryString();
+        var skippingDeleted = ReviewCandidateQuery.Candidates(db.ChatMessages, Day(1), Day(30), db.ChatSessions).ToQueryString();
 
         Assert.Contains("review_status", sql);
         Assert.Contains("meta_json", sql);
         Assert.DoesNotContain("content", sql);
+        Assert.Contains("deleted_at IS NULL", skippingDeleted);   // bỏ cuộc trò chuyện học sinh đã xóa, ngay trong database
+        Assert.DoesNotContain("content", skippingDeleted);
     }
 
     // ================================================================= tạo đợt
@@ -574,5 +577,23 @@ public class ReviewBatchTests
         var names = typeof(ReviewBatchCreatedDto).GetProperties().Select(p => p.Name);
 
         Assert.DoesNotContain(names, n => n is "Content" or "Text" or "Question" or "Answer");
+    }
+
+    [Fact]
+    public void Candidates_SkipConversationsTheStudentDeleted_WhenSessionsAreGiven()
+    {
+        var kept = new ChatSession { UserId = Guid.NewGuid() };
+        var deleted = new ChatSession { UserId = Guid.NewGuid(), DeletedAt = Day(3) };
+        var keptReply = Msg(1, "assistant", Day(2));
+        keptReply.ChatSessionId = kept.Id;
+        var deletedReply = Msg(2, "assistant", Day(2));
+        deletedReply.ChatSessionId = deleted.Id;
+        var messages = new[] { keptReply, deletedReply }.AsQueryable();
+
+        var withSessions = ReviewCandidateQuery.Candidates(messages, null, null, new[] { kept, deleted }.AsQueryable()).Select(c => c.MessageId).ToList();
+        var withoutSessions = ReviewCandidateQuery.Candidates(messages, null, null).Select(c => c.MessageId).ToList();
+
+        Assert.Equal([keptReply.Id], withSessions);
+        Assert.Equal(2, withoutSessions.Count);
     }
 }

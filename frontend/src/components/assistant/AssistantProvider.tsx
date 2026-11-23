@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { streamAdvisorChat } from "@/lib/advisor-stream";
 import { billingApi, getBillingError } from "@/lib/billing-api";
+import { chatHistoryApi } from "@/lib/chat-history-api";
 import { rememberChatGoals } from "@/lib/form-goals";
 import { useFetched } from "@/lib/use-fetched";
 import {
@@ -17,6 +18,7 @@ import {
 } from "@/lib/simulation-link";
 import type { AssistantAction, ChatLock, ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
 import type { SubscriptionSummaryDto } from "@/types/billing";
+import type { ChatHistoryMessage } from "@/types/chat-history";
 import type { SimulationOverrides } from "@/types/recommendation";
 
 export type AssistantTurn = ChatMessage & {
@@ -78,6 +80,20 @@ interface AssistantContextValue {
   setOnProfileChanged: (fn: ProfileChanged | null) => void;
   /** Gói của học sinh/phụ huynh khi khung đang mở (null: chưa tải, khách, nhân viên); tải lại sau mỗi câu trả lời */
   subscription: SubscriptionSummaryDto | null;
+  // ---- lịch sử chat
+  /** Phiên đang hiện trong khung (null: cuộc trò chuyện mới chưa gửi câu nào) */
+  currentSessionId: string | null;
+  /** Mở lại một phiên cũ: nạp các tin mới nhất, gắn nút của câu hồ sơ đang chờ, gõ tiếp là tiếp tục đúng phiên đó */
+  openSession: (sessionId: string) => Promise<void>;
+  /** Đang mở một phiên cũ (đang tải tin) */
+  openingSession: boolean;
+  /** Khung đang hiện một phiên mở lại từ lịch sử (để báo nút và bảng của tin cũ không hiện lại) */
+  resumed: boolean;
+  /** Phiên mở lại còn tin cũ hơn chưa tải */
+  hasOlder: boolean;
+  loadingOlder: boolean;
+  /** Tải thêm các tin cũ hơn của phiên đang mở, chèn lên trên */
+  loadOlder: () => Promise<void>;
 }
 
 /** fromForm: câu do form gửi ngay sau khi lưu hồ sơ chính thức, advisor bỏ bảng xác nhận đang treo và trả lời luôn */
@@ -137,6 +153,11 @@ function toAssistantError(err: unknown): AssistantError {
   return { kind: "unavailable", message: "Không kết nối được tới trợ lý, bạn thử lại sau." };
 }
 
+// Tin lấy từ lịch sử: chỉ có chữ và nguồn. Dòng system (lượt hệ thống không phản hồi) hiện như một câu của trợ lý
+function toTurn(message: ChatHistoryMessage): AssistantTurn {
+  return { role: message.role === "user" ? "user" : "assistant", content: message.content, citations: message.citations };
+}
+
 const AssistantContext = createContext<AssistantContextValue | null>(null);
 
 export function AssistantProvider({ children }: { children: React.ReactNode }) {
@@ -151,6 +172,12 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const [streaming, setStreaming] = useState<AssistantStreaming | null>(null);
   const [error, setError] = useState<AssistantError | null>(null);
   const [registered, setRegistered] = useState<AssistantPageContext | null>(null);
+  // Lịch sử chat: phiên đang hiện, con trỏ tải tin cũ hơn của phiên mở lại, cờ đang mở / đang tải
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [olderCursor, setOlderCursor] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [openingSession, setOpeningSession] = useState(false);
+  const [resumed, setResumed] = useState(false);
   // Gói chỉ tải khi khung chat đang mở; replyCount tăng sau mỗi câu trả lời để tải lại phần trăm (thanh báo 80% / sắp hết hạn)
   const [replyCount, setReplyCount] = useState(0);
   const hasPlan = open && (user?.role === "student" || user?.role === "parent");
@@ -165,6 +192,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const lastFromFormRef = useRef(false); // lượt gần nhất do form gửi sau khi lưu, "Thử lại" gửi lại kèm cờ này
   const restoredRef = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
+  // Tăng mỗi lần đổi phiên (mở phiên cũ, cuộc trò chuyện mới): kết quả mở phiên về muộn sau một lần đổi khác thì bỏ
+  const switchRef = useRef(0);
   // Người dùng đang đăng nhập (null: chưa đăng nhập) — chưa đăng nhập thì không gửi chat, không đọc ghi lịch sử
   const userIdRef = useRef<string | null>(null);
   // Chủ của cuộc trò chuyện đang hiện, để biết khi nào đổi người dùng
@@ -178,6 +207,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     setTurns([]);
     setError(null);
     setStreaming(null);
+    setCurrentSessionId(null);
+    setOlderCursor(null);
+    setResumed(false);
   }
 
   // Dọn khóa cũ không có userId (cách lưu trước đây), để không ai đọc lại được
@@ -239,6 +271,21 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Phiên đang dùng: ghi cả ref (gửi đi), state (tô đậm trong lịch sử) và storage (giữ khi tải lại trang) ở một chỗ.
+  // commitTurns đọc lại mã phiên từ storage, nên phải gọi hàm này TRƯỚC commitTurns khi đổi phiên
+  const rememberSession = useCallback((id: string | null) => {
+    sessionIdRef.current = id;
+    setCurrentSessionId(id);
+    const uid = userIdRef.current;
+    if (!uid) return;
+    try {
+      if (id) sessionStorage.setItem(sessionKey(uid), id);
+      else sessionStorage.removeItem(sessionKey(uid));
+    } catch {
+      // trình duyệt chặn storage → chỉ giữ trong bộ nhớ
+    }
+  }, []);
+
   // Khôi phục cuộc trò chuyện của phiên (sau khi tải lại trang) ở lần mở đầu tiên
   // Chỉ khôi phục lịch sử của người đang đăng nhập; chưa đăng nhập thì để lần sau
   const restore = useCallback(() => {
@@ -248,6 +295,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     if (turnsRef.current.length > 0) return;
     try {
       sessionIdRef.current = sessionStorage.getItem(sessionKey(uid));
+      setCurrentSessionId(sessionIdRef.current);
       const saved = JSON.parse(sessionStorage.getItem(chatKey(uid)) ?? "null");
       if (Array.isArray(saved) && saved.length > 0) {
         turnsRef.current = saved;
@@ -300,14 +348,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
           },
         );
         if (!stillOwner() || !owner) return;
-        if (res.sessionId) {
-          sessionIdRef.current = res.sessionId;
-          try {
-            sessionStorage.setItem(sessionKey(owner), res.sessionId);
-          } catch {
-            // trình duyệt chặn storage → chỉ giữ trong bộ nhớ
-          }
-        }
+        if (res.sessionId) rememberSession(res.sessionId);
         commitTurns([
           ...history,
           {
@@ -344,7 +385,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         setStreaming(null);
       }
     },
-    [commitTurns, router]
+    [commitTurns, rememberSession, router]
   );
 
   const send = useCallback(
@@ -392,16 +433,74 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
 
   const newChat = useCallback(() => {
     // Cuộc trò chuyện mới: quên phiên cũ để backend tạo phiên mới (bắt đầu lại từ B0)
-    sessionIdRef.current = null;
-    const uid = userIdRef.current;
-    try {
-      if (uid) sessionStorage.removeItem(sessionKey(uid));
-    } catch {
-      // trình duyệt chặn storage → bỏ qua
-    }
+    switchRef.current += 1;
+    rememberSession(null);
+    lastActionRef.current = null;
+    lastFromFormRef.current = false;
+    setOlderCursor(null);
+    setResumed(false);
     commitTurns([]);
     setError(null);
-  }, [commitTurns]);
+  }, [commitTurns, rememberSession]);
+
+  // Mở lại một phiên từ lịch sử: tải 100 tin mới nhất và câu hồ sơ đang chờ (nếu có) cùng lúc, rồi thay khung chat bằng phiên đó.
+  // Trong lúc mở không cho gửi tin (loadingRef), để câu hỏi không rơi vào phiên cũ hay phiên mới giữa chừng.
+  // Tin lưu trong database chỉ có chữ: nút và công cụ chỉ gắn lại cho tin cuối khi phiên đang chờ một câu hồ sơ
+  const openSession = useCallback(
+    async (sessionId: string) => {
+      const owner = userIdRef.current;
+      if (!owner || loadingRef.current) return;
+      const token = ++switchRef.current;
+      loadingRef.current = true;
+      setOpeningSession(true);
+      setError(null);
+      try {
+        const [history, pending] = await Promise.all([
+          chatHistoryApi.messages(sessionId),
+          // Không dựng lại được câu đang chờ thì vẫn mở phiên, học sinh gõ tay câu trả lời
+          chatHistoryApi.pending(sessionId).catch(() => null),
+        ]);
+        // Đổi người dùng, hoặc bấm "Cuộc trò chuyện mới" trong lúc đang mở: bỏ kết quả
+        if (userIdRef.current !== owner || switchRef.current !== token) return;
+        const next = history.items.map(toTurn);
+        const last = next[next.length - 1];
+        if (pending?.pending && last?.role === "assistant")
+          next[next.length - 1] = { ...last, quickReplies: pending.quickReplies, widget: pending.widget };
+        // "Thử lại" không được gửi lại hành động của phiên trước
+        lastActionRef.current = null;
+        lastFromFormRef.current = false;
+        rememberSession(sessionId);   // trước commitTurns: commitTurns đọc lại mã phiên từ storage
+        setOlderCursor(history.olderCursor);
+        setResumed(true);
+        commitTurns(next);
+      } catch (err) {
+        if (userIdRef.current === owner) setError(toAssistantError(err));
+      } finally {
+        loadingRef.current = false;
+        setOpeningSession(false);
+      }
+    },
+    [commitTurns, rememberSession]
+  );
+
+  // Cuộn lên đầu phiên mở lại: tải các tin cũ hơn và chèn lên trên (khung giữ nguyên chỗ đang đọc, xem AssistantPanel)
+  const loadOlder = useCallback(async () => {
+    const sessionId = sessionIdRef.current;
+    const owner = userIdRef.current;
+    if (!sessionId || !owner || !olderCursor || loadingOlder) return;
+    setLoadingOlder(true);
+    try {
+      const history = await chatHistoryApi.messages(sessionId, olderCursor);
+      // Đổi người dùng hoặc đổi phiên trong lúc chờ thì bỏ kết quả
+      if (userIdRef.current !== owner || sessionIdRef.current !== sessionId) return;
+      setOlderCursor(history.olderCursor);
+      commitTurns([...history.items.map(toTurn), ...turnsRef.current]);
+    } catch (err) {
+      if (userIdRef.current === owner) setError(toAssistantError(err));
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [commitTurns, olderCursor, loadingOlder]);
 
   const value = useMemo<AssistantContextValue>(
     () => ({
@@ -423,8 +522,16 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       setBeforeSend,
       setOnProfileChanged,
       subscription,
+      currentSessionId,
+      openSession,
+      openingSession,
+      resumed,
+      hasOlder: olderCursor !== null,
+      loadingOlder,
+      loadOlder,
     }),
-    [open, wide, turns, loading, streaming, error, page, openPanel, newChat, send, sendAction, retry, setBeforeSend, setOnProfileChanged, subscription]
+    [open, wide, turns, loading, streaming, error, page, openPanel, newChat, send, sendAction, retry, setBeforeSend, setOnProfileChanged, subscription,
+      currentSessionId, openSession, openingSession, resumed, olderCursor, loadingOlder, loadOlder]
   );
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;

@@ -382,10 +382,11 @@ public static class SchoolRanker
 
     // Ba thanh ưu tiên của học sinh [chi phí, học bổng, chất lượng], mỗi số 0–4 (2 là cân bằng).
     // Nhân trọng số mặc định của thành phần tương ứng với mức / 2: 0 là bỏ hẳn, 2 giữ nguyên, 4 gấp đôi.
-    // Chỉ đổi thứ tự trong nhóm; ngoài khoảng 0–4 hoặc không đủ 3 số thì dùng trọng số mặc định.
-    public static FitWeights WeightsFromPriorities(IReadOnlyList<int>? priorities)
+    // Chỉ đổi thứ tự trong nhóm; ngoài khoảng 0–4 hoặc không đủ 3 số thì dùng trọng số gốc.
+    // baseline: trọng số gốc để nhân lên, null là bộ mặc định đang chạy (UC-85 truyền bộ đã nhích).
+    public static FitWeights WeightsFromPriorities(IReadOnlyList<int>? priorities, FitWeights? baseline = null)
     {
-        var defaults = new FitWeights();
+        var defaults = baseline ?? new FitWeights();
         if (priorities is not { Count: 3 } || priorities.Any(n => n is < 0 or > 4)) return defaults;
         return defaults with
         {

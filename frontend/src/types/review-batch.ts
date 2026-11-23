@@ -119,6 +119,8 @@ export interface ReviewItemDetail {
   /** Vài tin trước câu hỏi, theo thứ tự thời gian. */
   context: ChatReviewMessage[];
   myVerdict: ReviewVerdict | null;
+  /** Học sinh đã xóa cuộc trò chuyện này sau khi câu được bốc: không có nội dung, không chấm được nữa. */
+  deletedByUser?: boolean;
 }
 
 export interface SaveReviewVerdictRequest {

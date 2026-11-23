@@ -71,7 +71,10 @@ public record ReviewItemDetailDto(
     ChatReviewQuestionDto? Question,
     ChatReviewMessageDto Reply,
     IReadOnlyList<ChatReviewMessageDto> Context,
-    ReviewVerdictDto? MyVerdict);
+    ReviewVerdictDto? MyVerdict,
+    // Học sinh đã xóa cuộc trò chuyện này sau khi câu được bốc vào đợt: không có nội dung (câu hỏi rỗng, câu trả lời rỗng, không ngữ cảnh),
+    // không chấm được nữa. Giao diện ghi rõ lý do thay vì hiện khung trống
+    bool DeletedByUser = false);
 
 /// <summary>Kết luận gửi lên. Quy tắc kiểm tra nằm ở dịch vụ (và lặp lại bằng ràng buộc kiểm trong database).</summary>
 public record SaveReviewVerdictRequest(string? LabelVerdict, string? CorrectIntent, string? AnswerVerdict, string? Cause);
@@ -105,7 +108,9 @@ public record ReviewItemDetailRows(
     ChatReviewReplyRow Reply,
     ChatReviewQuestionRow? Question,
     IReadOnlyList<ChatReviewContextRow> Context,
-    ReviewVerdict? MyVerdict);
+    ReviewVerdict? MyVerdict,
+    // Học sinh đã xóa cuộc trò chuyện: kho không tải nội dung, Reply chỉ là chỗ giữ (mã tin, nội dung rỗng)
+    bool DeletedByUser = false);
 
 // ===== Báo cáo của một đợt: chỉ số tổng hợp, KHÔNG có nội dung chat, không nêu ai chấm thế nào =====
 

@@ -52,8 +52,12 @@ public record ParentLinkDto(
 
 // Token đi trong body (không nằm trên URL của API) để không lọt vào log truy cập
 public record InviteTokenRequest(string Token);
-/// <summary>[UC-115] Phụ huynh đồng ý qua link mời: phải tick "Tôi là cha, mẹ hoặc người giám hộ hợp pháp".</summary>
-public record AcceptInviteRequest(string Token, bool IsGuardian);
+/// <summary>
+/// [UC-115] Phụ huynh đồng ý qua link mời: phải tick "Tôi là cha, mẹ hoặc người giám hộ hợp pháp".
+/// PolicyVersion: phiên bản văn bản phụ huynh đã đọc trên trang; nếu khác phiên bản đang hiệu lực (admin vừa công bố bản mới) thì không ghi
+/// đồng ý để phụ huynh đọc lại. Bỏ trống thì ghi theo phiên bản đang hiệu lực.
+/// </summary>
+public record AcceptInviteRequest(string Token, bool IsGuardian, string? PolicyVersion = null);
 public record ChangeParentEmailRequest(string ParentEmail);
 
 public enum ParentLinkError
