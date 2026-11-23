@@ -62,6 +62,9 @@ public record ChatAction(
 public record ChatSchool(string Code, string Name, string? Group);
 public record Citation(string Title, string? Url, string? Snippet, DateOnly? RetrievedAt = null);
 
+/// <summary>Ảnh minh họa kèm câu trả lời (ví dụ ảnh mẫu form I-20). Url lấy từ cột image_url của dòng kho tri thức, chỉ https; trình duyệt tải ảnh thẳng từ link.</summary>
+public record MediaItem(string Kind, string Url, string Alt);
+
 /// <summary>
 /// Nút gợi ý: Label là chữ trên nút, Value là chữ gửi đi như tin nhắn của học sinh khi bấm.
 /// Có Action thì nút chạy thẳng hành động có cấu trúc (giải thích, goal-seeking) bằng mã trường, không qua SLM hiểu câu nên không nhầm tên trường.
@@ -132,4 +135,6 @@ public record AdvisorChatResponse(
     ChatLock? Locked = null,
     // Câu trả lời này nói "chưa có thông tin": kho kiến thức không có dòng phù hợp và cơ sở dữ liệu trường cũng không có số liệu học sinh hỏi.
     // Chỉ .NET đặt (ở bước hỏi thông tin trường), advisor không gửi; dùng để đánh dấu lượt là no_answer, không trả cho trình duyệt
-    bool? NoBasis = null);
+    bool? NoBasis = null,
+    // Ảnh minh họa của câu trả lời, từ dòng kho tri thức được dùng. ChatService kiểm lại (chỉ https, tối đa 3) trước khi lưu và trả trình duyệt
+    IReadOnlyList<MediaItem>? Media = null);

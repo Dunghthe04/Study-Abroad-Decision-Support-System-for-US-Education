@@ -12,6 +12,8 @@ public class ChatMessage : BaseEntity
     public string? Step { get; set; }
     /// <summary>nguồn trích dẫn: title, url</summary>
     public string? SourcesJson { get; set; }
+    /// <summary>Ảnh minh họa của câu trả lời: [{kind, url, alt}], link https lấy từ cột image_url của dòng kho tri thức được dùng. Null nếu không có ảnh.</summary>
+    public string? MediaJson { get; set; }
     /// <summary>trung tâm AI gợi ý khi chuyển sang trung tâm</summary>
     public string? SuggestedCentersJson { get; set; }
     /// <summary>null nếu AI trả lời được; open | resolved | ignored nếu chưa, để admin bổ sung tài liệu</summary>

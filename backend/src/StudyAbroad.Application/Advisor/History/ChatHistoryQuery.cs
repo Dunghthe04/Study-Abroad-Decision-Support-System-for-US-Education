@@ -57,6 +57,6 @@ public static class ChatHistoryQuery
             .OrderByDescending(m => m.CreatedAt)
             .ThenByDescending(m => m.Id)
             .Take(take)
-            .Select(m => new ChatHistoryMessageRow(m.Id, m.Role, m.Content, m.CreatedAt, m.SourcesJson));
+            .Select(m => new ChatHistoryMessageRow(m.Id, m.Role, m.Content, m.CreatedAt, m.SourcesJson, m.MediaJson));
     }
 }

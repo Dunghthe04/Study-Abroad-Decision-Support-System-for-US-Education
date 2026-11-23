@@ -1,6 +1,6 @@
 // Lịch sử chat của chính người dùng. Khớp các DTO của backend (Application/Advisor/History), JSON camelCase.
 
-import type { ChatWidget, Citation, QuickReply } from "@/types/api";
+import type { ChatMedia, ChatWidget, Citation, QuickReply } from "@/types/api";
 
 /** Một phiên trong danh sách lịch sử: chỉ tóm tắt, không có nội dung tin. */
 export interface ChatSessionSummary {
@@ -25,6 +25,8 @@ export interface ChatHistoryMessage {
   content: string;
   createdAt: string;
   citations: Citation[];
+  /** Ảnh minh họa của câu trả lời (link https), rỗng nếu không có. Tin cũ từ trước khi có ảnh cũng rỗng. */
+  media?: ChatMedia[];
 }
 
 /** Các tin của một phiên, cũ trước mới sau. olderCursor: tải các tin cũ hơn nữa; null là đã tới tin đầu tiên. */

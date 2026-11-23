@@ -20,6 +20,14 @@ ORDER BY embedding <=> %(vector)s
 LIMIT %(top_k)s
 """
 
+# Các phần của một thủ tục (là gì, chuẩn bị, các bước, lỗi hay gặp...): cùng topic_code
+BY_TOPIC_SQL = """
+SELECT entry_no, question, doc_type
+FROM app.knowledge_documents
+WHERE topic_code = %(code)s AND embedding IS NOT NULL
+ORDER BY entry_no
+"""
+
 
 # Mô tả 1 kết quả tìm kiếm trong kho
 @dataclass(frozen=True)
@@ -37,6 +45,14 @@ class KnowledgeHit:
     score: float  # độ tương đồng cosine (0 đến 1) giữa câu hỏi của học sinh và câu hỏi mẫu
 
 
+# Một phần của thủ tục (để làm nút "Các bước", "Lỗi hay gặp"...)
+@dataclass(frozen=True)
+class TopicPart:
+    entry_no: int
+    question: str
+    doc_type: str
+
+
 class KnowledgeRetriever:
     def __init__(self, pool: Any, top_k: int = 4) -> None:
         self._pool = pool
@@ -48,6 +64,15 @@ class KnowledgeRetriever:
         with self._pool.connection() as conn:
             rows = conn.execute(SEARCH_SQL, params).fetchall()
         return [KnowledgeHit(*row[:-1], score=float(row[-1])) for row in rows]
+
+    # Các phần khác của cùng một thủ tục (cùng topic_code)
+    def by_topic_sync(self, topic_code: str) -> list[TopicPart]:
+        with self._pool.connection() as conn:
+            rows = conn.execute(BY_TOPIC_SQL, {"code": topic_code}).fetchall()
+        return [TopicPart(*row) for row in rows]
+
+    async def by_topic(self, topic_code: str) -> list[TopicPart]:
+        return await asyncio.to_thread(self.by_topic_sync, topic_code)
 
     # Trả về tối đa top_k dòng gần nghĩa nhất, xếp theo độ tương đồng giảm dần
     async def search(self, embedding: list[float]) -> list[KnowledgeHit]:

@@ -360,6 +360,12 @@ export interface Citation {
   /** Ngày thu thập thông tin của nguồn, dạng yyyy-MM-dd. Null là kho chưa ghi ngày. */
   retrievedAt?: string | null;
 }
+/** Ảnh minh họa kèm câu trả lời: link https tới ảnh (lấy từ cột image_url của dòng kho tri thức), trình duyệt tải thẳng từ link. */
+export interface ChatMedia {
+  kind: "image";
+  url: string;
+  alt: string;
+}
 // Nút gợi ý: bấm thì gửi `value` như tin nhắn của học sinh
 export interface QuickReply {
   label: string;
@@ -395,6 +401,7 @@ export interface AssistantAction {
 export interface AdvisorChatResponse {
   answer: string;
   citations: Citation[];
+  media?: ChatMedia[] | null; // ảnh minh họa của câu trả lời, trống nếu không có
   disclaimer: string | null;
   sessionId: string | null;
   quickReplies?: QuickReply[] | null;

@@ -33,12 +33,10 @@
     },
     "knowledge": {
       "branch": "KnowledgeBranch",
-      "who": "claude",
-      "skills": ["skill_tra_loi"],
-      "writer": "app.services.skills.skill_tra_loi.TraLoiHandler",
-      "fallback": "Câu trả lời chuẩn nguyên văn của dòng kho kiến thức; không có dòng đủ điểm thì nói chưa có thông tin.",
+      "who": "code",
+      "reads": ["skill_tra_loi"],
       "may_emit": ["school_info", "school_search", "school_compare"],
-      "why": "Claude chỉ viết lại câu trả lời chuẩn đã kiểm chứng, không thêm ý. Câu hỏi về trường cụ thể thì chuyển sang tra cứu số liệu."
+      "why": "Chữ trả về là nguyên văn dòng đã được người viết và kiểm chứng trong kho kiến thức, AI không viết hay sửa chữ nào. Claude chỉ đọc câu hỏi và chọn dòng đúng ý trong tối đa 3 ứng viên (hoặc nói không dòng nào đúng, khi đó nói chưa có thông tin). Câu hỏi về trường cụ thể thì chuyển sang tra cứu số liệu."
     },
     "center_referral": {
       "branch": "CenterBranch",

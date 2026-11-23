@@ -94,3 +94,42 @@ def test_a_quick_reply_can_carry_a_link_that_the_browser_follows_instead_of_send
     ).model_dump(by_alias=True)
 
     assert body == {"label": "Trang Trung tâm", "value": "Em muốn xem trang trung tâm", "href": "/centers"}
+
+
+# ---------- media: ảnh minh họa của câu trả lời ----------
+
+
+def test_media_is_serialized_in_camel_case_and_empty_by_default():
+    from app.schemas.chat import Media
+
+    empty = ChatResponse(answer="x", state=ChatState())
+    with_image = ChatResponse(
+        answer="x", state=ChatState(), media=[Media(kind="image", url="https://a.org/i.png", alt="Mẫu I-20")]
+    )
+
+    assert empty.model_dump(by_alias=True, mode="json")["media"] == []
+    assert with_image.model_dump(by_alias=True, mode="json")["media"] == [
+        {"kind": "image", "url": "https://a.org/i.png", "alt": "Mẫu I-20"}
+    ]
+
+
+def test_media_only_accepts_https_links():
+    from pydantic import ValidationError
+
+    from app.schemas.chat import Media
+
+    for bad in ("http://a.org/i.png", "javascript:alert(1)", "//a.org/i.png", "i.png"):
+        with pytest.raises(ValidationError):
+            Media(kind="image", url=bad, alt="x")
+
+
+def test_combine_merges_media_without_duplicates():
+    from app.schemas.chat import Media
+    from app.services.chat_flow import SkillOutput, combine
+
+    a = Media(kind="image", url="https://a.org/1.png", alt="1")
+    b = Media(kind="image", url="https://a.org/2.png", alt="2")
+
+    merged = combine(SkillOutput("một", media=[a]), SkillOutput("hai", media=[a, b]))
+
+    assert [m.url for m in merged.media] == ["https://a.org/1.png", "https://a.org/2.png"]

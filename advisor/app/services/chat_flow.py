@@ -20,6 +20,7 @@ from app.schemas.chat import (
     ChatResponse,
     ChatState,
     Citation,
+    Media,
     PendingQuestionResponse,
     ProfileField,
     QuickReply,
@@ -126,6 +127,7 @@ class SkillOutput:
     quick_replies: list[QuickReply] = field(default_factory=list)
     widget: Widget | None = None
     citations: list[Citation] = field(default_factory=list)  # nguồn của thông tin trong câu trả lời
+    media: list[Media] = field(default_factory=list)  # ảnh minh họa (từ dòng kho được dùng)
     disclaimer: str | None = None  # lời lưu ý kèm theo
     action: str | None = None  # việc .NET cần làm sau lượt này, xem ChatResponse.action
     action_data: dict[str, Any] = field(default_factory=dict)  # dữ liệu kèm action
@@ -150,6 +152,7 @@ def combine(first: SkillOutput, second: SkillOutput) -> SkillOutput:
         quick_replies=second.quick_replies or first.quick_replies,
         widget=second.widget or first.widget,
         citations=first.citations + [c for c in second.citations if c not in first.citations],
+        media=first.media + [m for m in second.media if m not in first.media],
         disclaimer=second.disclaimer or first.disclaimer,
         action=second.action or first.action,
         action_data=second.action_data if second.action else first.action_data,
@@ -537,6 +540,7 @@ class ChatFlow:
             quick_replies=output.quick_replies,
             widget=output.widget,
             citations=output.citations,
+            media=output.media,
             disclaimer=output.disclaimer,
             profile=state.profile,
             profile_changed=changed_keys(profile_before, state.profile),

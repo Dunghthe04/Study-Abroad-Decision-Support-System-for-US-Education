@@ -104,7 +104,7 @@ public class ChatHistoryService(IChatHistoryRepository repository, TimeProvider?
         repository.SoftDeleteAsync(sessionId, userId, (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime, ct);
 
     private static ChatHistoryMessageDto ToDto(ChatHistoryMessageRow row) =>
-        new(row.Id, row.Role, row.Role == "system" ? SystemFailureText : row.Content, row.CreatedAt, Citations(row.SourcesJson));
+        new(row.Id, row.Role, row.Role == "system" ? SystemFailureText : row.Content, row.CreatedAt, Citations(row.SourcesJson), ChatMedia.FromJson(row.MediaJson));
 
     // sources_json do ChatService ghi: [{ title, url, retrievedAt }]. Dòng hỏng thì bỏ nguồn chứ không làm hỏng cả lịch sử
     private static IReadOnlyList<Citation> Citations(string? json)
