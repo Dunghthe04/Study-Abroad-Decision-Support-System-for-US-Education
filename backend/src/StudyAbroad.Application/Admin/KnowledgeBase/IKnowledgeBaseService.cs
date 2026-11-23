@@ -23,6 +23,12 @@ public interface IKnowledgeBaseService
 
     /// <summary>Thêm hoặc cập nhật theo entry_no trong một transaction; dòng lỗi được báo và bỏ qua.</summary>
     Task<KnowledgeImportResultDto> ImportAsync(Stream workbook, CancellationToken ct = default);
+
+    /// <summary>Tiến độ tạo vector. Không hỏi được advisor thì trả Available = false chứ không ném lỗi.</summary>
+    Task<KnowledgeEmbedStatusDto> GetEmbedStatusAsync(CancellationToken ct = default);
+
+    /// <summary>Nhờ advisor tạo vector cho dòng còn thiếu (nút "Thử lại"). Không nhờ được thì trả Available = false.</summary>
+    Task<KnowledgeEmbedStatusDto> StartEmbedAsync(CancellationToken ct = default);
 }
 
 /// <summary>Đọc sheet knowledge_base của file xlsx thành các dòng thô, chưa kiểm tra nội dung.</summary>

@@ -58,6 +58,9 @@ public class UsageCollectingAdvisorClient(IAdvisorClient inner, IAiUsageCollecto
     public Task<KnowledgeEmbedDto> EmbedKnowledgeAsync(CancellationToken ct = default) =>
         inner.EmbedKnowledgeAsync(ct);
 
+    public Task<KnowledgeEmbedDto> GetKnowledgeEmbedStatusAsync(CancellationToken ct = default) =>
+        inner.GetKnowledgeEmbedStatusAsync(ct);
+
     public async Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default)
     {
         var response = await inner.WriteCompareNoteAsync(request, ct);

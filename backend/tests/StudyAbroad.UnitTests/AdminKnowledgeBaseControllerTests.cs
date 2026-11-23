@@ -22,6 +22,30 @@ public class AdminKnowledgeBaseControllerTests
         new FormFile(new MemoryStream(new byte[length]), 0, length, "file", name);
 
     [Fact]
+    public async Task EmbedStatus_And_StartEmbed_Return200WithTheAdvisorNumbers()
+    {
+        var controller = Controller(new FakeKnowledgeRepository());
+
+        var status = Assert.IsType<OkObjectResult>((await controller.EmbedStatus(CancellationToken.None)).Result);
+        var started = Assert.IsType<OkObjectResult>((await controller.StartEmbed(CancellationToken.None)).Result);
+
+        Assert.Equal(494, Assert.IsType<KnowledgeEmbedStatusDto>(status.Value).Pending);
+        Assert.True(Assert.IsType<KnowledgeEmbedStatusDto>(started.Value).Started);
+    }
+
+    [Fact]
+    public void TheEmbedRoutes_AreOnlyForModeratorAndAdmin_LikeTheRestOfTheController()
+    {
+        var authorize = typeof(AdminKnowledgeBaseController).GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>().Single();
+
+        Assert.Contains(UserRoles.Moderator, authorize.Roles!);
+        Assert.Equal("embed-status", typeof(AdminKnowledgeBaseController).GetMethod(nameof(AdminKnowledgeBaseController.EmbedStatus))!
+            .GetCustomAttributes(typeof(HttpGetAttribute), true).Cast<HttpGetAttribute>().Single().Template);
+        Assert.Equal("embed", typeof(AdminKnowledgeBaseController).GetMethod(nameof(AdminKnowledgeBaseController.StartEmbed))!
+            .GetCustomAttributes(typeof(HttpPostAttribute), true).Cast<HttpPostAttribute>().Single().Template);
+    }
+
+    [Fact]
     public async Task Create_Returns201_ThenSameEntryNoReturns409WithExistingId()
     {
         var controller = Controller(new FakeKnowledgeRepository());
