@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Memory;
 using StudyAbroad.Application.Admin.Policies;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
@@ -16,20 +17,47 @@ public interface IPolicyAcceptanceService
     /// Trả về tình trạng mới sau khi ghi.
     /// </summary>
     Task<PolicyAcceptanceStatusDto> AcceptAsync(Guid userId, string role, AcceptPoliciesRequest request, string? ipAddress, CancellationToken ct = default);
+
+    /// <summary>
+    /// Người dùng này có đang bị chặn vì chưa đồng ý bản bắt buộc không. Chạy ở MỌI lệnh gọi API cần đăng nhập nên rẻ:
+    /// kết quả "ổn" được nhớ 60 giây, kết quả "bị chặn" không bao giờ được nhớ (đồng ý xong là hết chặn ngay).
+    /// </summary>
+    Task<bool> MustAcceptAsync(Guid userId, string role, CancellationToken ct = default);
 }
 
 /// <summary>
 /// [UC-104] Xác nhận chính sách và điều khoản của tài khoản. Luật "có phải đồng ý không" nằm ở <see cref="PolicyAcceptanceRules"/>;
 /// lớp này chỉ gom dữ liệu (các bản đã công bố, lần đồng ý gần nhất) rồi ghi bằng chứng.
 /// </summary>
-public class PolicyAcceptanceService(IPublishedPolicyReader policies, IConsentRepository consents, IUnitOfWork unitOfWork) : IPolicyAcceptanceService
+public class PolicyAcceptanceService(
+    IPublishedPolicyReader policies, IConsentRepository consents, IUnitOfWork unitOfWork,
+    // Nhớ kết quả "ổn" để không truy vấn DB ở mọi lệnh gọi API; null (test cũ) thì luôn truy vấn
+    IMemoryCache? cache = null) : IPolicyAcceptanceService
 {
+    /// <summary>
+    /// Người đã ổn được nhớ bấy nhiêu giây. Đây cũng là độ trễ tối đa để một bản bắt buộc MỚI công bố bắt đầu chặn người
+    /// đang dùng (người đăng nhập mới thì bị chặn ngay vì chưa có kết quả nhớ).
+    /// </summary>
+    public const int OkCacheSeconds = 60;
+
+    private static string OkKey(Guid userId) => $"policy-acceptance-ok:{userId}";
+
     public const string PolicyChangedCode = "policy_changed";
     public const string PolicyChangedMessage = "Nội dung vừa được cập nhật. Vui lòng tải lại trang và đọc lại trước khi đồng ý.";
 
     /// <summary>Vai trò phải đồng ý. Admin và moderator là người nội bộ nên không bị chặn.</summary>
     public static bool AppliesTo(string role) =>
         role is UserRoles.Student or UserRoles.Parent or UserRoles.Center;
+
+    public async Task<bool> MustAcceptAsync(Guid userId, string role, CancellationToken ct = default)
+    {
+        if (!AppliesTo(role)) return false;
+        if (cache is not null && cache.TryGetValue(OkKey(userId), out _)) return false;
+
+        var must = (await GetStatusAsync(userId, role, ct)).MustAccept;
+        if (!must) cache?.Set(OkKey(userId), true, TimeSpan.FromSeconds(OkCacheSeconds));
+        return must;
+    }
 
     public async Task<PolicyAcceptanceStatusDto> GetStatusAsync(Guid userId, string role, CancellationToken ct = default)
     {
@@ -96,6 +124,7 @@ public class PolicyAcceptanceService(IPublishedPolicyReader policies, IConsentRe
             }
         }, ct);
 
+        cache?.Remove(OkKey(userId));   // vừa đồng ý: lần kiểm tra sau tính lại từ dữ liệu mới
         return await GetStatusAsync(userId, role, ct);
     }
 

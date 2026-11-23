@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Memory;
 using StudyAbroad.Application.Admin.Policies;
 using StudyAbroad.Application.Policies;
 using StudyAbroad.Domain.Constants;
@@ -52,6 +53,89 @@ public class PolicyAcceptanceServiceTests
     {
         _published.Add(Terms, version).Add(Privacy, version);
         return Create();
+    }
+
+    // ------------------------------------------------------------ [UC-104] chặn ở server
+
+    private PolicyAcceptanceService WithCache(out MemoryCache cache)
+    {
+        cache = new MemoryCache(new MemoryCacheOptions());
+        _published.Add(Terms, "2026-11").Add(Privacy, "2026-11");
+        return new PolicyAcceptanceService(_published, _consents, _uow, cache);
+    }
+
+    [Fact]
+    public async Task New_user_is_blocked_until_accepting_both()
+    {
+        var service = WithCache(out _);
+
+        Assert.True(await service.MustAcceptAsync(User, UserRoles.Student));
+        await service.AcceptAsync(User, UserRoles.Student, Req((Terms, "2026-11")), null);
+        Assert.True(await service.MustAcceptAsync(User, UserRoles.Student));   // mới đồng ý một trong hai
+        await service.AcceptAsync(User, UserRoles.Student, Req((Privacy, "2026-11")), null);
+        Assert.False(await service.MustAcceptAsync(User, UserRoles.Student));
+    }
+
+    [Fact]
+    public async Task Being_blocked_is_never_remembered_so_accepting_unblocks_at_once()
+    {
+        var service = WithCache(out _);
+
+        Assert.True(await service.MustAcceptAsync(User, UserRoles.Parent));
+        Assert.True(await service.MustAcceptAsync(User, UserRoles.Parent));
+        await service.AcceptAsync(User, UserRoles.Parent, Req((Terms, "2026-11"), (Privacy, "2026-11")), null);
+
+        Assert.False(await service.MustAcceptAsync(User, UserRoles.Parent));   // không phải đợi hết hạn bộ nhớ
+    }
+
+    [Fact]
+    public async Task An_ok_result_is_remembered_for_a_short_time_to_spare_the_database()
+    {
+        var service = WithCache(out _);
+        await service.AcceptAsync(User, UserRoles.Student, Req((Terms, "2026-11"), (Privacy, "2026-11")), null);
+        Assert.False(await service.MustAcceptAsync(User, UserRoles.Student));
+
+        // Admin công bố bản bắt buộc mới: người đã được nhớ là ổn chưa bị chặn ngay, chậm nhất sau OkCacheSeconds giây
+        _published.Add(Terms, "2026-11-02", required: true);
+
+        Assert.False(await service.MustAcceptAsync(User, UserRoles.Student));
+        Assert.True((await service.GetStatusAsync(User, UserRoles.Student)).MustAccept);   // còn tình trạng thật thì đã thấy ngay
+    }
+
+    [Fact]
+    public async Task Without_a_cache_every_check_reads_fresh_data()
+    {
+        _published.Add(Terms, "2026-11").Add(Privacy, "2026-11");
+        var service = Create();
+        await service.AcceptAsync(User, UserRoles.Student, Req((Terms, "2026-11"), (Privacy, "2026-11")), null);
+        _published.Add(Terms, "2026-11-02", required: true);
+
+        Assert.True(await service.MustAcceptAsync(User, UserRoles.Student));
+    }
+
+    [Fact]
+    public async Task One_users_ok_result_does_not_unblock_another_user()
+    {
+        var service = WithCache(out _);
+        await service.AcceptAsync(User, UserRoles.Student, Req((Terms, "2026-11"), (Privacy, "2026-11")), null);
+        Assert.False(await service.MustAcceptAsync(User, UserRoles.Student));
+
+        Assert.True(await service.MustAcceptAsync(Guid.NewGuid(), UserRoles.Student));
+    }
+
+    [Theory]
+    [InlineData(UserRoles.Admin)]
+    [InlineData(UserRoles.Moderator)]
+    public async Task Internal_roles_are_never_blocked(string role)
+    {
+        var service = WithCache(out _);
+        Assert.False(await service.MustAcceptAsync(User, role));
+    }
+
+    [Fact]
+    public async Task Nothing_published_blocks_nobody_at_the_gate()
+    {
+        Assert.False(await Create().MustAcceptAsync(User, UserRoles.Student));
     }
 
     // ------------------------------------------------------------ xem tình trạng

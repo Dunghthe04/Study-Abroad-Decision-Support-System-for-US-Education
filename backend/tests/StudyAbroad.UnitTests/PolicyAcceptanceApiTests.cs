@@ -30,6 +30,8 @@ public class PolicyAcceptanceApiTests
             return Task.FromResult(Pending);
         }
 
+        public Task<bool> MustAcceptAsync(Guid userId, string role, CancellationToken ct = default) => Task.FromResult(false);
+
         public Task<PolicyAcceptanceStatusDto> AcceptAsync(Guid userId, string role, AcceptPoliciesRequest request, string? ipAddress, CancellationToken ct = default)
         {
             WriteCalls++;
