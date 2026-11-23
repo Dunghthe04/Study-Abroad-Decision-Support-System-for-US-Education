@@ -298,11 +298,13 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task CreateModeratorAccount_CreatesActiveModeratorWithoutOtp()
+    public async Task CreateModeratorAccount_CreatesActiveModeratorEmailsSetPasswordCodeAndWritesAudit()
     {
         var service = CreateService();
+        var adminId = Guid.NewGuid();
+
         var result = await service.CreateModeratorAccountAsync(
-            new CreateModeratorAccountRequest("mod@test.com", "password123", "Người kiểm duyệt", "0912345678"));
+            new CreateModeratorAccountRequest("mod@test.com", "Người kiểm duyệt", "0912345678"), adminId);
 
         Assert.Equal(AuthError.None, result.Error);
         Assert.NotNull(result.User);
@@ -310,32 +312,45 @@ public class AuthServiceTests
         Assert.Equal(UserStatuses.Active, result.User.Status);
         var stored = Assert.Single(_repo.Users);
         Assert.Equal("mod@test.com", stored.Email);
-        Assert.Empty(_repo.Otps);
-        Assert.Empty(_emailSender.SentEmails);
+        Assert.Single(_repo.Otps);
+        var invite = Assert.Single(_emailSender.SentEmails);
+        Assert.Equal(("mod@test.com", FakeEmailSender.ModeratorInvitePurpose), (invite.To, invite.Purpose));
+        var log = Assert.Single(_auditLogs.Entries);
+        Assert.Equal("user.create_moderator", log.Action);
+        Assert.Equal(adminId, log.ActorUserId);
+        Assert.Equal(stored.Id.ToString(), log.EntityId);
     }
 
     [Fact]
-    public async Task CreateModeratorAccount_DuplicateEmail_ReturnsValidationError()
+    public async Task CreateModeratorAccount_DuplicateEmail_ReturnsValidationErrorAndSendsNothingNew()
     {
         var service = CreateService();
         await service.CreateModeratorAccountAsync(
-            new CreateModeratorAccountRequest("mod@test.com", "password123", "Mod A"));
+            new CreateModeratorAccountRequest("mod@test.com", "Mod A"), Guid.NewGuid());
         var result = await service.CreateModeratorAccountAsync(
-            new CreateModeratorAccountRequest("MOD@test.com", "password123", "Mod B"));
+            new CreateModeratorAccountRequest("MOD@test.com", "Mod B"), Guid.NewGuid());
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Single(_repo.Users);
+        Assert.Single(_emailSender.SentEmails);
+        Assert.Single(_auditLogs.Entries);
     }
 
     [Fact]
-    public async Task Login_ModeratorCreatedByAdmin_SucceedsWithoutEmailVerification()
+    public async Task Moderator_CreatedByAdmin_CannotLoginUntilSettingPasswordWithEmailedCode()
     {
         var service = CreateService();
         await service.CreateModeratorAccountAsync(
-            new CreateModeratorAccountRequest("mod@test.com", "password123", "Mod User"));
+            new CreateModeratorAccountRequest("mod@test.com", "Mod User"), Guid.NewGuid());
+        var code = _emailSender.SentEmails.Single().Code;
 
-        var login = await service.LoginAsync(new LoginRequest("mod@test.com", "password123"));
+        var beforeSetting = await service.LoginAsync(new LoginRequest("mod@test.com", "password123"));
+        Assert.NotEqual(AuthError.None, beforeSetting.Error);
 
+        var reset = await service.ResetPasswordAsync(new ResetPasswordRequest("mod@test.com", code, "newPassword123"));
+        Assert.Equal(AuthError.None, reset.Error);
+
+        var login = await service.LoginAsync(new LoginRequest("mod@test.com", "newPassword123"));
         Assert.Equal(AuthError.None, login.Error);
         Assert.NotNull(login.Response);
         Assert.Equal(UserRoles.Moderator, login.Response.User.Role);

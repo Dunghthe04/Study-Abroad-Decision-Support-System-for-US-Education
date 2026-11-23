@@ -253,6 +253,14 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
+    public const string ModeratorInvitePurpose = "moderator_invite";
+
+    public Task SendModeratorInvitationEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 5, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, ModeratorInvitePurpose, otpCode));
+        return Task.CompletedTask;
+    }
+
     public Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 0, CancellationToken ct = default)
     {
         SentEmails.Add((toEmail, "temp_locked_notice", $"lockout:{lockoutMinutes}m"));
