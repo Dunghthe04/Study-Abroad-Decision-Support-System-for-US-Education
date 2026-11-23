@@ -41,10 +41,13 @@ namespace StudyAbroad.Domain.Entities
         /// <summary>Lý do hạn chế quyền diễn đàn.</summary>
         public string? ForumRestrictionReason { get; set; }
 
+        /// <summary>Người thực hiện hạn chế quyền diễn đàn gần nhất.</summary>
+        public Guid? ForumRestrictedByUserId { get; set; }
+
         /// <summary>UC-80: thời điểm yêu cầu xóa tài khoản (UTC). Null = chưa yêu cầu. Hết thời hạn xóa mềm thì job xóa hẳn.</summary>
         public DateTime? DeletedAt { get; set; }
 
-        /// <summary>Legal Hold: đóng băng tài khoản khi có khiếu nại, tố cáo lừa đảo hoặc cơ quan điều tra yêu cầu (Nghị định 13/2023/NĐ-CP). Job dọn dẹp không xóa tài khoản này.</summary>
+        /// <summary>Legal Hold: đóng băng tài khoản khi có khiếu nại, tố cáo lừa đảo hoặc cơ quan điều tra yêu cầu. Job dọn dẹp không xóa tài khoản này. Căn cứ: Luật 91/2025/QH15 Điều 14 khoản 2 (không thực hiện yêu cầu xóa trong các trường hợp Điều 19) và Điều 19 khoản 1 điểm a, b; bên kiểm soát có trách nhiệm chứng minh trường hợp này nên phải ghi LegalHoldReason. Không xóa được thì phải thông báo cho chủ thể dữ liệu (Điều 14 khoản 5). Nghị định 13/2023/NĐ-CP đã hết hiệu lực từ 01/01/2026 (Điều 42 Nghị định 356/2025/NĐ-CP).</summary>
         public bool IsLegalHold { get; set; } = false;
 
         /// <summary>Lý do áp dụng Legal Hold.</summary>

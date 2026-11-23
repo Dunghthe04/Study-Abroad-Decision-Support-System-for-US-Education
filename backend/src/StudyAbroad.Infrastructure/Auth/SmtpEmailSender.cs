@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.Billing;
 using System;
+using System.Globalization;
 using System.Net;
 using System.Net.Mail;
 using System.Threading;
@@ -209,14 +211,24 @@ namespace StudyAbroad.Infrastructure.Auth
             var purgeDate = purgeAt?.AddHours(7).ToString("dd/MM/yyyy");
             var (subject, title, content) = outcome switch
             {
+                "received" => ("[USAS] Đã nhận yêu cầu xóa tài khoản trung tâm", "Đã nhận yêu cầu xóa",
+                    $"USAS đã nhận yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong>. Yêu cầu sẽ được xử lý chậm nhất vào ngày <strong>{purgeDate}</strong> (20 ngày kể từ khi nhận). Chúng tôi sẽ gửi email khi có kết quả."),
+                "extended" => ("[USAS] Gia hạn thời gian xử lý yêu cầu xóa tài khoản trung tâm", "Đã gia hạn thời gian xử lý",
+                    $"Thời gian xử lý yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> được gia hạn một lần đến ngày <strong>{purgeDate}</strong>."),
+                "held" => ("[USAS] Yêu cầu xóa tài khoản trung tâm chưa thể thực hiện", "Yêu cầu xóa chưa thể thực hiện",
+                    $"Yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> hiện chưa thể hoàn tất do USAS cần hoàn thành một số thủ tục xử lý nội bộ theo quy định. Trong thời gian này, tài khoản và dữ liệu được giữ nguyên. Nếu cần bổ sung thông tin, chúng tôi sẽ liên hệ với bạn."),
+                "resumed" => ("[USAS] Yêu cầu xóa tài khoản trung tâm đang được xử lý tiếp", "Yêu cầu xóa đang được xử lý tiếp",
+                    $"Yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> đang được xử lý tiếp. Chúng tôi sẽ gửi email khi có kết quả."),
                 "approved" => ("[USAS] Yêu cầu xóa tài khoản trung tâm đã được duyệt", "Yêu cầu xóa đã được duyệt",
                     $"Yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> đã được duyệt. Tài khoản đã bị khóa, trung tâm không còn hiển thị và các yêu cầu liên hệ đang mở đã được đóng. Dữ liệu sẽ được xóa hẳn vào ngày <strong>{purgeDate}</strong>."),
+                "completed_partial" => ("[USAS] Đã xóa tài khoản trung tâm, còn một phần dữ liệu chưa xóa được", "Đã xóa phần lớn dữ liệu trung tâm",
+                    $"Tài khoản và dữ liệu của <strong>{center}</strong> đã được xóa khỏi USAS theo yêu cầu của bạn, trừ một số nội dung trao đổi hiện chưa thể xóa vì USAS cần hoàn thành một số thủ tục xử lý nội bộ theo quy định. Phần này đã được tách khỏi thông tin nhận diện của bạn và sẽ được xóa khi thủ tục hoàn tất."),
                 "completed" => ("[USAS] Đã xóa tài khoản và dữ liệu trung tâm", "Đã xóa dữ liệu trung tâm",
                     $"Tài khoản và dữ liệu của <strong>{center}</strong> đã được xóa khỏi USAS theo yêu cầu của bạn."),
                 _ => ("[USAS] Yêu cầu xóa tài khoản trung tâm chưa được chấp nhận", "Yêu cầu xóa chưa được chấp nhận",
                     $"Yêu cầu xóa tài khoản và dữ liệu của <strong>{center}</strong> chưa được chấp nhận. Tài khoản vẫn hoạt động bình thường."),
             };
-            var label = outcome == "rejected" ? "Lý do" : "Ghi chú";
+            var label = outcome switch { "rejected" => "Lý do", "extended" => "Lý do gia hạn", _ => "Ghi chú" };
             var detail = string.IsNullOrWhiteSpace(note) || outcome == "approved"
                 ? string.Empty
                 : $"<p style=\"font-size: 14px; color: #475569; line-height: 1.6;\"><strong>{label}:</strong> {WebUtility.HtmlEncode(note)}</p>";
@@ -431,6 +443,89 @@ namespace StudyAbroad.Infrastructure.Auth
 
             await SendEmailAsync(toEmail, subject, body, ct);
         }
+
+        // Biên nhận chỉ có mã đơn, tên gói và số tiền: không lưu, không in thông tin thẻ hay tài khoản ngân hàng.
+        public async Task SendPaymentReceiptEmailAsync(string toEmail, string fullName, long orderCode, string planName, decimal amountVnd, DateTime paidAtUtc, DateTime? startsAtUtc, DateTime? endsAtUtc, CancellationToken ct = default)
+        {
+            var subject = $"Biên nhận thanh toán gói {planName}";
+            var encodedName = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(fullName) ? "Người dùng USAS" : fullName);
+            var validity = startsAtUtc is null || endsAtUtc is null
+                ? "Gói của bạn đã được kích hoạt."
+                : $"Hiệu lực từ <strong>{VietnamTime(startsAtUtc.Value)}</strong> đến <strong>{VietnamTime(endsAtUtc.Value)}</strong>.";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">Biên nhận thanh toán</h2>
+                    <p style="font-size: 15px; color: #334155;">Xin chào <strong>{encodedName}</strong>,</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Cảm ơn bạn đã thanh toán. Dưới đây là thông tin đơn hàng:</p>
+                    <div style="background-color: #eff6ff; border-radius: 8px; padding: 16px; margin: 20px 0; font-size: 14px; color: #1e293b; line-height: 1.8;">
+                        <div>Mã đơn: <strong>{orderCode}</strong></div>
+                        <div>Gói: <strong>{WebUtility.HtmlEncode(planName)}</strong></div>
+                        <div>Số tiền: <strong>{Vnd(amountVnd)}</strong></div>
+                        <div>Thời điểm thanh toán: <strong>{VietnamTime(paidAtUtc)}</strong> (giờ Việt Nam)</div>
+                    </div>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">{validity}</p>
+                    <p style="font-size: 13px; color: #64748b; line-height: 1.6;">Hệ thống không lưu thông tin thẻ hay tài khoản ngân hàng.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
+        public async Task SendSubscriptionExpiringEmailAsync(string toEmail, string fullName, string planName, DateTime endsAtUtc, CancellationToken ct = default)
+        {
+            var subject = $"Gói {planName} sắp hết hạn";
+            var encodedName = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(fullName) ? "Người dùng USAS" : fullName);
+            var plansUrl = $"{_options.AppBaseUrl.TrimEnd('/')}/plans";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">Gói của bạn sắp hết hạn</h2>
+                    <p style="font-size: 15px; color: #334155;">Xin chào <strong>{encodedName}</strong>,</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Gói <strong>{WebUtility.HtmlEncode(planName)}</strong> của bạn sẽ hết hạn vào <strong>{VietnamTime(endsAtUtc)}</strong> (giờ Việt Nam).</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Việc gia hạn là thủ công: hệ thống không tự động trừ tiền của bạn. Nếu muốn tiếp tục dùng, bạn có thể chọn gói mới bất cứ lúc nào.</p>
+                    <div style="text-align: center; margin: 24px 0;">
+                        <a href="{WebUtility.HtmlEncode(plansUrl)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 28px; border-radius: 8px;">Xem các gói</a>
+                    </div>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
+        // Token là chuỗi dùng một lần nên mới đưa vào link; mở link chỉ dẫn tới trang xác nhận, chưa đổi trạng thái gì.
+        public async Task SendFamilyInviteEmailAsync(string toEmail, string ownerName, string seatRole, string inviteToken, int expiryDays, CancellationToken ct = default)
+        {
+            var subject = $"{ownerName} mời bạn tham gia gói Gia đình";
+            var owner = WebUtility.HtmlEncode(ownerName);
+            var role = seatRole switch { "student" => "Học sinh", "parent" => "Phụ huynh", _ => WebUtility.HtmlEncode(seatRole) };
+            var link = $"{_options.AppBaseUrl.TrimEnd('/')}/family/invite?token={Uri.EscapeDataString(inviteToken)}";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">Lời mời tham gia gói Gia đình</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;"><strong>{owner}</strong> mời bạn tham gia gói Gia đình trên Hệ thống Hỗ trợ Ra quyết định Du học Mỹ (USAS) với vai trò <strong>{role}</strong>.</p>
+                    <div style="text-align: center; margin: 24px 0;">
+                        <a href="{WebUtility.HtmlEncode(link)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 28px; border-radius: 8px;">Xem lời mời</a>
+                        <p style="margin: 8px 0 0; font-size: 13px; color: #64748b;">Lời mời hết hạn sau <strong>{expiryDays} ngày</strong>.</p>
+                    </div>
+                    <p style="font-size: 13px; color: #94a3b8; line-height: 1.5;">Nếu bạn không quen người mời, hãy bỏ qua email này.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
+        /// <summary>Giờ Việt Nam dạng dd/MM/yyyy HH:mm (chuỗi chỉ gồm số và dấu / :, an toàn để chèn thẳng vào HTML).</summary>
+        public static string VietnamTime(DateTime utc) =>
+            CycleRules.ToVietnamTime(utc).ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
+
+        /// <summary>"79.000 đ": dấu chấm ngăn nghìn như vi-VN, không phần lẻ. Tự ngăn nghìn để không phụ thuộc ICU của máy chủ.</summary>
+        public static string Vnd(decimal amount) =>
+            amount.ToString("N0", CultureInfo.InvariantCulture).Replace(',', '.') + " đ";
 
         private async Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken ct)
         {

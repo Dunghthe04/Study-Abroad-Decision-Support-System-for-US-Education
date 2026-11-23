@@ -8,11 +8,12 @@ import { RankedBars } from "@/components/admin/ai-usage/charts-share";
 import { ChartCard, Segmented, StatTile } from "@/components/admin/ai-usage/parts";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { adminAiUsageApi, type DateRange } from "@/lib/ai-usage-api";
 import {
-  dailySeries, formatCompact, formatDateTime, formatInt, formatMs, formatPct, formatUsd, kindLabel, purposeLabel,
+  dailySeries, formatCompact, formatDateTime, formatInt, formatMs, formatPct, formatUsd, kindLabel, outcomeLabel, purposeLabel,
   purposeRows, PURPOSE_METRICS, ratio, totalTokens, type PurposeMetric,
 } from "@/lib/ai-usage-format";
 import { useFetched } from "@/lib/use-fetched";
@@ -32,7 +33,9 @@ interface Props {
 export function UserUsageSheet({ user, range, onClose }: Props) {
   return (
     <Sheet open={user !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent side="right" className="w-full gap-0 overflow-y-auto sm:max-w-3xl">
+      {/* Khung Sheet mặc định khóa bề ngang bằng data-[side=right]:w-3/4 và data-[side=right]:sm:max-w-sm (bộ chọn thuộc tính nặng hơn class thường),
+          nên phải ghi đè đúng biến thể đó; ghi sm:max-w-3xl thường không có tác dụng và khung bị thu còn 24rem làm cắt cột "Chi phí" */}
+      <SheetContent side="right" className="gap-0 overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-4xl">
         {/* Sheet vẽ ra ngoài khung trang nên tự mang bộ màu biểu đồ */}
         <div className="ai-viz flex flex-col gap-4 p-4">
           {user ? <Body key={user.userId} user={user} range={range} /> : null}
@@ -125,18 +128,18 @@ function Turns({ user, range }: { user: AiUsageUserRank; range: DateRange }) {
                 <Fragment key={turn.messageId}>
                   <TableRow className="cursor-pointer" onClick={() => setOpenId(open ? null : turn.messageId)}>
                     <TableCell>
-                      <button
-                        type="button" aria-expanded={open} aria-label={open ? "Thu gọn lượt này" : "Xem từng lần gọi của lượt này"}
-                        className="rounded outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      <Button
+                        type="button" variant="ghost" size="icon-xs"
+                        aria-expanded={open} aria-label={open ? "Thu gọn lượt này" : "Xem từng lần gọi của lượt này"}
                         onClick={(event) => { event.stopPropagation(); setOpenId(open ? null : turn.messageId); }}
                       >
                         {open ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}
-                      </button>
+                      </Button>
                     </TableCell>
                     <TableCell>
                       <span className="tabular block">{formatDateTime(turn.createdAt)}</span>
                       <span className="block text-xs text-ink-3">
-                        {ROLE_LABELS[turn.role] ?? turn.role}{turn.outcome ? ` · ${turn.outcome}` : ""}
+                        {ROLE_LABELS[turn.role] ?? turn.role}{turn.outcome ? ` · ${outcomeLabel(turn.outcome)}` : ""}
                       </span>
                     </TableCell>
                     <TableCell className="tabular text-right">

@@ -195,8 +195,8 @@ export function RecommendationHistory({ studentId }: { studentId?: string } = {}
                       ))}
                     </div>
                   </div>
-                  <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => open(run.id)}>
-                    {busy === run.id ? <Spinner className="size-3.5" /> : "Xem"}
+                  <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => open(run.id)} loading={busy === run.id}>
+                    Xem
                   </Button>
                 </li>
               );
@@ -208,13 +208,17 @@ export function RecommendationHistory({ studentId }: { studentId?: string } = {}
             <p className="text-xs text-muted-foreground">
               {selected.length === 2 ? "Đã chọn 2/2" : `Chọn thêm ${2 - selected.length} lần để so sánh`}
               {selected.length > 0 && (
-                <button type="button" className="ml-2 font-semibold text-brand hover:underline" onClick={() => setSelected([])}>
+                <button
+                  type="button"
+                  className="ml-2 cursor-pointer rounded font-semibold text-brand hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
+                  onClick={() => setSelected([])}
+                >
                   Bỏ chọn
                 </button>
               )}
             </p>
-            <Button size="sm" className="gap-1" disabled={selected.length !== 2 || busy !== null} onClick={compare}>
-              {busy === "compare" ? <Spinner className="size-3.5" /> : <GitCompareIcon className="size-3.5" />}
+            <Button size="sm" className="gap-1" disabled={selected.length !== 2 || busy !== null} onClick={compare} loading={busy === "compare"}>
+              <GitCompareIcon className="size-3.5" />
               So sánh
             </Button>
           </div>

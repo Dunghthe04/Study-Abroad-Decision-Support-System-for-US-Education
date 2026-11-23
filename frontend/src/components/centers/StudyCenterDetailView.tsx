@@ -294,7 +294,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                 <div className="text-xs text-muted-foreground flex items-start gap-2 bg-muted/40 p-2.5 rounded-lg">
                   <ShieldCheckIcon className="w-4 h-4 text-brand shrink-0 mt-0.5" />
                   <span>
-                    Toàn bộ quy trình tiếp nhận tư vấn và đăng ký dịch vụ du học được hỗ trợ và bảo trợ tập trung qua hệ thống USAS để đảm bảo tính xác thực và quyền lợi của người dùng.
+                    Toàn bộ quy trình tiếp nhận tư vấn và đăng ký dịch vụ du học được hỗ trợ và bảo trợ tập trung qua hệ thống USDSS để đảm bảo tính xác thực và quyền lợi của người dùng.
                   </span>
                 </div>
               </CardContent>
@@ -312,7 +312,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                 Các Dịch vụ Hồ sơ Du học Mỹ
               </CardTitle>
               <CardDescription className="text-xs">
-                Các gói dịch vụ chuyên môn được xác thực trên hệ thống USAS
+                Các gói dịch vụ chuyên môn được xác thực trên hệ thống USDSS
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

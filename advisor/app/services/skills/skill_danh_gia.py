@@ -1,30 +1,18 @@
-"""skill_danh_gia (B3): đánh giá hồ sơ mạnh / yếu từng mặt (framework 4.5).
+"""Tính mức từng mặt của hồ sơ (framework 4.5): học lực, SAT, tiếng Anh, tài chính, ngoại khóa, học bổng.
 
-F1. Mức từng mặt do code tính, ngưỡng chép đúng assessProfile (frontend ProfileSummary.tsx), để chat và trang
+Mức từng mặt do code tính, ngưỡng chép đúng assessProfile (frontend ProfileSummary.tsx), để chat và trang
 phân tích cho cùng một kết luận. Ngưỡng là [tham khảo], chỉ sửa ở đây và sửa cả hai bên.
-F2. Qwen chỉ viết lời nhận xét từ các mức đó. Qwen đổi mức, bịa số hay hứa đỗ thì gọi lại 1 lần,
-vẫn sai thì dùng câu mẫu của code. Viết xong thì chuyển B4 và hỏi X2.
 Thiếu SAT, hoạt động... thì mức "none", khuyên đi thi / bổ sung, không đoán điểm.
+Lời nhận xét không viết ở đây: skill_ho_so_khuon và viet_tra_loi_ho_so để Claude viết từ các mức này.
 """
 
-import logging
-import re
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from pydantic import BaseModel, Field
-
-from app.schemas.chat import ChatState, GradeScaleRule, ProfileField, QuickReply
-from app.services.chat_flow import SkillOutput, ask, go_to
-from app.services.skill_call import SKILLS_DIR, SkillCall
-from app.services.skills.buttons import BUDGET_LABELS
-from app.services.skills.validators import BUDGET_RANGES, IMPACT_LEVELS, month_index, parse_month_year
-
-logger = logging.getLogger("advisor.chat")
-
-SKILL_PATH = SKILLS_DIR / "skill_danh_gia.md"
+from app.schemas.chat import GradeScaleRule, ProfileField
+from app.services.skills.validators import IMPACT_LEVELS, month_index, parse_month_year
 
 # Ngưỡng [tham khảo] (giống assessProfile): (ngưỡng dưới, mức), dò từ cao xuống thấp; không đạt ngưỡng nào là mức cuối
 ACADEMIC_CUTS = [(3.5, "strong"), (3.0, "medium")]  # GPA thang 4
@@ -58,22 +46,6 @@ MAX_POINTS = 3  # tối đa 3 điểm mạnh, 3 điểm yếu
 
 ENGLISH_PASS = ("excellent", "good")
 SCHOLARSHIP_CHANCES = ("high", "medium", "low")
-LEVEL_VALUES = {
-    "academic": ("strong", "medium", "weak", "none"),
-    "sat": ("strong", "medium", "weak", "none"),
-    "english": ("excellent", "good", "near", "low", "none"),
-    "finance": ("ok", "tight", "short", "none"),
-    "scholarship": SCHOLARSHIP_CHANCES,
-}
-
-# Không hứa đỗ
-BANNED_WORDS = ("chắc chắn", "đảm bảo", "100%", "chắc đỗ", "chắc đậu")
-# Số được phép xuất hiện ngoài số trong hồ sơ: thang điểm 4, 10, "bậc x/5" và các số trong câu mẫu
-# (thi trước 2 tháng, SAT khoảng 1400, ngân sách 35.000 USD)
-FREE_NUMBERS = {2.0, 4.0, 5.0, 10.0, 1400.0, 35_000.0}
-
-YES_REPLY = QuickReply(label="Có, gợi ý giúp mình", value="Có")
-NO_REPLY = QuickReply(label="Để sau", value="Để sau")
 
 
 # Mức của một giá trị theo bảng ngưỡng
@@ -309,148 +281,3 @@ def template(levels: dict[str, Any], facts: Facts) -> Assessment:
     strengths, weak = template_points(levels, facts)
     summary = "Mình đã xem hồ sơ của bạn. " + SCHOLARSHIP_TEXT[levels["scholarship"]]
     return Assessment(levels=levels, summary=summary, strengths=strengths, weaknesses=weak)
-
-
-# F2. Dạng JSON Qwen trả
-class AiLevels(BaseModel):
-    academic: str
-    sat: str
-    english: str
-    finance: str
-    ec_tier: int | None = None
-    scholarship: str
-
-
-class AiAssessment(BaseModel):
-    levels: AiLevels
-    summary: str = Field(min_length=1, max_length=600)
-    strengths: list[str] = Field(max_length=MAX_POINTS)
-    weaknesses: list[str] = Field(max_length=MAX_POINTS)
-
-
-SCHEMA = {
-    "type": "object",
-    "required": ["levels", "summary", "strengths", "weaknesses"],
-    "properties": {
-        "levels": {
-            "type": "object",
-            "required": ["academic", "sat", "english", "finance", "ec_tier", "scholarship"],
-            "properties": {
-                **{name: {"enum": list(values)} for name, values in LEVEL_VALUES.items()},
-                "ec_tier": {"type": ["integer", "null"]},
-            },
-        },
-        "summary": {"type": "string"},
-        "strengths": {"type": "array", "items": {"type": "string"}, "maxItems": MAX_POINTS},
-        "weaknesses": {"type": "array", "items": {"type": "string"}, "maxItems": MAX_POINTS},
-    },
-}
-
-NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
-
-
-# Một cụm số trong câu có thể hiểu theo nhiều cách: "35.000" = 35000, "3.5" hay "3,5" = 3.5
-def readings(token: str) -> set[float]:
-    found = set()
-    if re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", token):
-        found.add(float(re.sub(r"[.,]", "", token)))
-    if token.count(".") + token.count(",") <= 1:
-        found.add(float(token.replace(",", ".")))
-    return found
-
-
-# Các số được phép xuất hiện trong lời nhận xét: số trong hồ sơ, thang điểm
-def allowed_numbers(facts: Facts) -> set[float]:
-    numbers = {facts.gpa, facts.gpa_scale, facts.gpa4, facts.sat, facts.english_score, facts.ielts}
-    numbers |= {facts.ec_tier, facts.activities}
-    if facts.budget_tier:
-        # Sàn và trần của mức ngân sách, viết đủ (35.000) hoặc theo nghìn (35k); bỏ sàn 0 và trần không có
-        bounds = {n for n in BUDGET_RANGES[facts.budget_tier] if n}
-        numbers |= bounds | {n / 1000 for n in bounds}
-    return {float(n) for n in numbers if n is not None} | FREE_NUMBERS
-
-
-# extra: số khác được phép (vd năm, tháng trong mốc thời gian của skill_lo_trinh)
-def check_text(texts: list[str], facts: Facts, extra: frozenset[float] = frozenset()) -> None:
-    allowed = allowed_numbers(facts) | extra
-    for text in texts:
-        low = text.lower()
-        for word in BANNED_WORDS:
-            if word in low:
-                raise ValueError(f"Lời nhận xét hứa hẹn: {word}")
-        for token in NUMBER.findall(text):
-            if not any(abs(r - a) < 0.005 for r in readings(token) for a in allowed):
-                raise ValueError(f"Số {token} không có trong hồ sơ")
-
-
-# Kiểm tra JSON Qwen: mức phải đúng mức code tính, lời không bịa số, không hứa đỗ. Sai thì ném ValueError
-def check_assessment(raw: dict[str, Any], levels: dict[str, Any], facts: Facts) -> Assessment:
-    ai = AiAssessment.model_validate(raw)
-    if ai.levels.model_dump() != levels:
-        raise ValueError(f"Qwen đổi mức: {ai.levels.model_dump()} khác {levels}")
-    check_text([ai.summary, *ai.strengths, *ai.weaknesses], facts)
-    return Assessment(
-        levels=levels, summary=ai.summary, strengths=ai.strengths, weaknesses=ai.weaknesses, ai_used=True
-    )
-
-
-# Dữ liệu gửi Qwen: chỉ số trong hồ sơ và mức code đã tính, không có tin nhắn của học sinh
-def ai_input(levels: dict[str, Any], facts: Facts) -> dict[str, Any]:
-    return {
-        "profile": {
-            "gpa": facts.gpa,
-            "gpa_scale": facts.gpa_scale,
-            "sat": facts.sat,
-            "english": {"type": facts.english_type, "value": facts.english_score}
-            if facts.english_type
-            else None,
-            # Gửi khoảng tiền như nút của form ("Trên 70.000 USD"), không gửi số trần để Qwen khỏi viết sai số
-            "budget_per_year": BUDGET_LABELS.get(facts.budget_tier) if facts.budget_tier else None,
-            "activities": facts.activities,
-        },
-        "levels": levels,
-    }
-
-
-class Assessor:
-    def __init__(self, llm: Any, model: str) -> None:
-        self._call = SkillCall(llm, model, SKILL_PATH)
-        self.skill_version = self._call.skill_version
-
-    async def assess(
-        self,
-        profile: dict[str, ProfileField],
-        today: date | None = None,
-        gpa_table: list[tuple[float, float]] | None = None,
-    ) -> Assessment:
-        facts = read_facts(profile, today, gpa_table)
-        levels = assess_levels(facts)
-
-        def check(raw: dict[str, Any]) -> Assessment:
-            return check_assessment(raw, levels, facts)
-
-        result = await self._call.run(ai_input(levels, facts), SCHEMA, check)
-        if result is None:
-            logger.warning("skill_danh_gia: Qwen sai 2 lần, dùng câu mẫu theo mức %s", levels)
-            return template(levels, facts)
-        return result
-
-
-def render(result: Assessment) -> str:
-    lines = [result.summary]
-    if result.strengths:
-        lines.append("Điểm mạnh:\n" + "\n".join(f"- {s}" for s in result.strengths))
-    if result.weaknesses:
-        lines.append("Cần cải thiện:\n" + "\n".join(f"- {s}" for s in result.weaknesses))
-    lines.append("Đây là đánh giá tham khảo, không phải kết quả tuyển sinh.")
-    return "\n\n".join(lines)
-
-
-class DanhGiaHandler:
-    def __init__(self, llm: Any, model: str) -> None:
-        self._assessor = Assessor(llm, model)
-
-    async def run(self, state: ChatState, message: str) -> SkillOutput:
-        result = await self._assessor.assess(state.profile, gpa_table=gpa_table_of(state.grade_scale))
-        go_to(state, "B4")
-        return SkillOutput(f"{render(result)}\n\n{ask(state, 'X2')}", quick_replies=[YES_REPLY, NO_REPLY])

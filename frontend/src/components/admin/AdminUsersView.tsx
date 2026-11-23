@@ -4,17 +4,13 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BanIcon,
   CakeIcon,
-  CheckCircle2Icon,
-  ClockIcon,
   EyeIcon,
   FilterIcon,
   KeyRoundIcon,
   RotateCcwIcon,
   SearchIcon,
-  ShieldAlertIcon,
   ShieldCheckIcon,
   UserPlusIcon,
-  UsersIcon,
 } from "lucide-react";
 import { adminUsersApi, ApiError } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -544,11 +540,6 @@ export function AdminUsersView() {
     }
   };
 
-  // Tính số liệu nhanh từ danh sách đang tải
-  const activeCount = users.filter((u) => u.status === "active").length;
-  const lockedCount = users.filter((u) => u.status === "locked" || u.status === "temp_locked").length;
-  const pendingCount = users.filter((u) => u.status === "unverified" || u.status === "pending").length;
-
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [draftRole, setDraftRole] = useState<string>("all");
   const [draftStatus, setDraftStatus] = useState<string>("all");
@@ -624,7 +615,7 @@ export function AdminUsersView() {
               e.stopPropagation();
               toggleDetailTarget(u);
             }}
-            className="text-left font-medium text-brand underline-offset-2 hover:underline"
+            className="cursor-pointer rounded-sm text-left font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
             {u.email}
           </button>
@@ -833,55 +824,6 @@ export function AdminUsersView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <header className="shrink-0">
-        <h1 className="text-h2">Quản trị người dùng</h1>
-        <p className="text-sm text-ink-2 mt-1">
-          {isModerator
-            ? "Xem danh sách tài khoản hệ thống."
-            : "Quản lý toàn bộ tài khoản người dùng và cấp tài khoản kiểm duyệt viên."}
-        </p>
-      </header>
-
-      {/* Compact KPI summary tiles */}
-      <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-line bg-surface px-4 py-3 flex items-center gap-3">
-          <div className="size-9 rounded-lg bg-brand-wash text-brand flex items-center justify-center shrink-0">
-            <UsersIcon className="size-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-ink-2 truncate">Tổng kết quả</p>
-            <p className="font-heading text-lg font-bold tabular-nums text-ink">{totalCount}</p>
-          </div>
-        </div>
-        <div className="rounded-xl border border-line bg-surface px-4 py-3 flex items-center gap-3">
-          <div className="size-9 rounded-lg bg-ok-wash text-ok flex items-center justify-center shrink-0">
-            <CheckCircle2Icon className="size-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-ink-2 truncate">Hoạt động (trang)</p>
-            <p className="font-heading text-lg font-bold tabular-nums text-ink">{activeCount}</p>
-          </div>
-        </div>
-        <div className="rounded-xl border border-line bg-surface px-4 py-3 flex items-center gap-3">
-          <div className="size-9 rounded-lg bg-risk-wash text-risk flex items-center justify-center shrink-0">
-            <ShieldAlertIcon className="size-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-ink-2 truncate">Bị khóa / Tạm khóa</p>
-            <p className="font-heading text-lg font-bold tabular-nums text-ink">{lockedCount}</p>
-          </div>
-        </div>
-        <div className="rounded-xl border border-line bg-surface px-4 py-3 flex items-center gap-3">
-          <div className="size-9 rounded-lg bg-warn-wash text-warn flex items-center justify-center shrink-0">
-            <ClockIcon className="size-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-ink-2 truncate">Chờ xác thực</p>
-            <p className="font-heading text-lg font-bold tabular-nums text-ink">{pendingCount}</p>
-          </div>
-        </div>
-      </div>
-
       {/* Master-detail table & side panel */}
       <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1148,8 +1090,8 @@ export function AdminUsersView() {
                 >
                   Hủy
                 </Button>
-                <Button type="submit" disabled={isSubmitting} className="gap-2 bg-brand text-white hover:bg-brand/90">
-                  {isSubmitting ? <Spinner className="size-4" /> : <ShieldCheckIcon className="size-4" />}
+                <Button type="submit" loading={isSubmitting} className="gap-2 bg-brand text-white hover:bg-brand/90">
+                  <ShieldCheckIcon className="size-4" />
                   Tạo tài khoản
                 </Button>
               </DialogFooter>
@@ -1199,10 +1141,10 @@ export function AdminUsersView() {
               type="button"
               variant="destructive"
               onClick={() => void handleConfirmLock()}
-              disabled={lockSubmitting}
+              loading={lockSubmitting}
               className="gap-1.5"
             >
-              {lockSubmitting ? <Spinner className="size-4" /> : <BanIcon className="size-4" />}
+              <BanIcon className="size-4" />
               Xác nhận khóa
             </Button>
           </DialogFooter>
@@ -1278,10 +1220,11 @@ export function AdminUsersView() {
             <Button
               type="button"
               onClick={() => void handleConfirmBirthDate()}
-              disabled={birthSubmitting || birthDetailLoading}
+              disabled={birthDetailLoading}
+              loading={birthSubmitting}
               className="gap-1.5 bg-brand text-white hover:bg-brand/90"
             >
-              {birthSubmitting ? <Spinner className="size-4" /> : <CakeIcon className="size-4" />}
+              <CakeIcon className="size-4" />
               Lưu ngày sinh
             </Button>
           </DialogFooter>
@@ -1329,9 +1272,9 @@ export function AdminUsersView() {
               type="button"
               className="bg-ok text-white hover:bg-ok/90 gap-1.5"
               onClick={() => void handleConfirmUnlock()}
-              disabled={unlockSubmitting}
+              loading={unlockSubmitting}
             >
-              {unlockSubmitting ? <Spinner className="size-4" /> : <KeyRoundIcon className="size-4" />}
+              <KeyRoundIcon className="size-4" />
               Xác nhận mở khóa
             </Button>
           </DialogFooter>

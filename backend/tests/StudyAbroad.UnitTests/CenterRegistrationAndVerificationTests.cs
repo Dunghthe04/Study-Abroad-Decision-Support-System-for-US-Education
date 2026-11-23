@@ -121,7 +121,7 @@ public class CenterRegistrationAndVerificationTests
     }
 
     [Fact]
-    public async Task SubmitVerification_FailsWhenPhoneNotVerified()
+    public async Task SubmitVerification_FailsWhenEmailNotVerified()
     {
         var centerRepo = new FakeStudyCenterRepo();
         var verifRepo = new FakeVerificationRepo();
@@ -702,17 +702,15 @@ public class CenterRegistrationAndVerificationTests
     }
 
     [Fact]
-    public async Task Submit_EmailVerifiedButPhoneNotVerified_IsRejected()
+    public async Task Submit_PhoneNeverVerified_IsNotABlocker()
     {
-        // [UC-91] Phải xác thực cả email và số điện thoại trước khi nộp hồ sơ xác minh
+        // [UC-91] Số điện thoại không xác thực bằng SMS OTP nữa: chỉ email là điều kiện nộp hồ sơ
         var (service, _, _, center) = SubmitSetup();
         center.PhoneVerifiedAt = null;
 
         var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(1));
 
-        Assert.False(result.Success);
-        Assert.Contains("xác thực số điện thoại", result.ErrorMessage);
-        Assert.Equal(CenterVerificationStatuses.Unverified, center.VerificationStatus);
+        Assert.True(result.Success);
     }
     // ===== [UC-92] Phân loại thay đổi khi trung tâm tự sửa hồ sơ, yêu cầu xóa tài khoản =====
 
@@ -751,7 +749,8 @@ public class CenterRegistrationAndVerificationTests
 
         public Task<CenterDeletionRequest?> GetOpenByCenterIdAsync(Guid studyCenterId, CancellationToken ct = default) =>
             Task.FromResult(Items.FirstOrDefault(x =>
-                x.StudyCenterId == studyCenterId && x.Status == CenterDeletionRequestStatuses.Pending));
+                x.StudyCenterId == studyCenterId
+                && (x.Status == CenterDeletionRequestStatuses.Pending || x.Status == CenterDeletionRequestStatuses.Approved)));
 
         public Task<CenterDeletionRequest?> GetLatestByCenterIdAsync(Guid studyCenterId, CancellationToken ct = default) =>
             Task.FromResult(Items.Where(x => x.StudyCenterId == studyCenterId).OrderByDescending(x => x.CreatedAt).FirstOrDefault());
@@ -771,13 +770,32 @@ public class CenterRegistrationAndVerificationTests
             Task.FromResult(new PagedResult<CenterDeletionRequest>(Items, page, pageSize, Items.Count));
     }
 
+    private sealed class FakeMediaCleaner : ICenterMediaCleaner
+    {
+        public List<string> Deleted { get; } = [];
+        public int Calls { get; private set; }
+        public bool Throws { get; set; }
+
+        public Task<IReadOnlyList<string>> DeleteAsync(IReadOnlyCollection<string> urls, CancellationToken ct = default)
+        {
+            Calls++;
+            if (Throws) throw new InvalidOperationException("CDN down");
+            Deleted.AddRange(urls);
+            return Task.FromResult<IReadOnlyList<string>>([]);
+        }
+    }
+
+    private static string OwnImage(Guid owner, string name) =>
+        $"https://res.cloudinary.com/demo/image/upload/v1/usas/centers/{owner:N}/{name}.png";
+
     private sealed record ProfileSetup(
         StudyCenterService Service,
         StudyCenter Center,
         FakeAuditLogs Audit,
         FakeVerificationRepo Verifications,
         FakeProfileChangeRepo Changes,
-        FakeDeletionRepo Deletions);
+        FakeDeletionRepo Deletions,
+        FakeMediaCleaner Cleaner);
 
     private static async Task<ProfileSetup> ProfileEditSetup(string status, Action<StudyCenter>? configure = null)
     {
@@ -786,6 +804,7 @@ public class CenterRegistrationAndVerificationTests
         var verifications = new FakeVerificationRepo();
         var changes = new FakeProfileChangeRepo();
         var deletions = new FakeDeletionRepo();
+        var cleaner = new FakeMediaCleaner();
         var center = new StudyCenter
         {
             Id = Guid.NewGuid(),
@@ -799,8 +818,116 @@ public class CenterRegistrationAndVerificationTests
         };
         configure?.Invoke(center);
         await centers.AddAsync(center);
-        var service = new StudyCenterService(centers, audit, verifications, emailSender: null, notifications: null, profileChanges: changes, deletionRequests: deletions);
-        return new ProfileSetup(service, center, audit, verifications, changes, deletions);
+        var service = new StudyCenterService(centers, audit, verifications, emailSender: null, notifications: null, profileChanges: changes, deletionRequests: deletions, mediaCleaner: cleaner);
+        return new ProfileSetup(service, center, audit, verifications, changes, deletions, cleaner);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_ReplacingOwnLogo_DeletesTheOldImageFromTheCdn()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified, c => c.LogoUrl = OwnImage(c.OwnerUserId!.Value, "old"));
+        var owner = s.Center.OwnerUserId!.Value;
+
+        var result = await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(LogoUrl: OwnImage(owner, "new")));
+
+        Assert.True(result.Success);
+        Assert.Equal([OwnImage(owner, "old")], s.Cleaner.Deleted);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_ReplacingALogoThatPointsAtSomeoneElsesAsset_DoesNotDeleteIt()
+    {
+        var foreign = "https://res.cloudinary.com/demo/image/upload/v1/usas/universities/harvard.png";
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified, c => c.LogoUrl = foreign);
+        var owner = s.Center.OwnerUserId!.Value;
+
+        var result = await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(LogoUrl: OwnImage(owner, "new")));
+
+        Assert.True(result.Success);
+        Assert.Empty(s.Cleaner.Deleted);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_RemovingAGalleryImage_DeletesOnlyTheRemovedOwnImage()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified,
+            c => c.GalleryImages = [OwnImage(c.OwnerUserId!.Value, "a"), OwnImage(c.OwnerUserId!.Value, "b")]);
+        var owner = s.Center.OwnerUserId!.Value;
+
+        await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(GalleryImages: [OwnImage(owner, "a")]));
+
+        Assert.Equal([OwnImage(owner, "b")], s.Cleaner.Deleted);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_NothingRemoved_DoesNotCallTheCdn()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified,
+            c => { c.LogoUrl = OwnImage(c.OwnerUserId!.Value, "a"); c.GalleryImages = [OwnImage(c.OwnerUserId!.Value, "g")]; });
+        var owner = s.Center.OwnerUserId!.Value;
+
+        await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(Description: "Mô tả mới", GalleryImages: [OwnImage(owner, "g"), OwnImage(owner, "h")]));
+
+        Assert.Equal(0, s.Cleaner.Calls);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_CdnFailure_DoesNotFailTheSave()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified, c => c.LogoUrl = OwnImage(c.OwnerUserId!.Value, "old"));
+        s.Cleaner.Throws = true;
+        var owner = s.Center.OwnerUserId!.Value;
+
+        var result = await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(LogoUrl: OwnImage(owner, "new")));
+
+        Assert.True(result.Success);
+        Assert.Equal(OwnImage(owner, "new"), s.Center.LogoUrl);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_Gallery_SavedImmediately_TrimmedAndWithoutDuplicates()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified);
+
+        var result = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value, new UpdateCenterProfileRequest(
+            GalleryImages: [" https://res.cloudinary.com/x/a.png ", "https://res.cloudinary.com/x/b.png", "https://res.cloudinary.com/x/a.png"]));
+
+        Assert.True(result.Success);
+        Assert.Equal(["https://res.cloudinary.com/x/a.png", "https://res.cloudinary.com/x/b.png"], s.Center.GalleryImages);
+        var outcome = Assert.IsType<CenterProfileUpdateOutcome>(result.Outcome);
+        Assert.Contains("galleryImages", outcome.SavedFields);
+        Assert.Empty(outcome.ReviewFields);
+        Assert.Empty(outcome.LegalFields);
+        Assert.False(outcome.VerificationReset);
+        Assert.Equal(CenterVerificationStatuses.Verified, s.Center.VerificationStatus);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_Gallery_NullKeepsAndEmptyListClears()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified, c => c.GalleryImages = ["https://res.cloudinary.com/x/a.png"]);
+
+        await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value, new UpdateCenterProfileRequest(Description: "Mô tả mới"));
+        Assert.Equal(["https://res.cloudinary.com/x/a.png"], s.Center.GalleryImages);
+
+        var cleared = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value, new UpdateCenterProfileRequest(GalleryImages: []));
+        Assert.True(cleared.Success);
+        Assert.Empty(s.Center.GalleryImages);
+    }
+
+    [Fact]
+    public async Task UpdateCenterProfile_Gallery_RejectsTooManyImagesAndNonHttpLinks()
+    {
+        var s = await ProfileEditSetup(CenterVerificationStatuses.Verified, c => c.GalleryImages = ["https://res.cloudinary.com/x/keep.png"]);
+        var tooMany = Enumerable.Range(0, StudyCenterService.MaxGalleryImages + 1).Select(i => $"https://res.cloudinary.com/x/{i}.png").ToList();
+
+        var many = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value, new UpdateCenterProfileRequest(GalleryImages: tooMany));
+        var bad = await s.Service.UpdateCenterProfileAsync(s.Center.OwnerUserId!.Value, new UpdateCenterProfileRequest(GalleryImages: ["javascript:alert(1)"]));
+
+        Assert.False(many.Success);
+        Assert.Contains("tối đa", many.ErrorMessage);
+        Assert.False(bad.Success);
+        Assert.Equal(["https://res.cloudinary.com/x/keep.png"], s.Center.GalleryImages);
     }
 
     [Fact]
@@ -868,7 +995,8 @@ public class CenterRegistrationAndVerificationTests
         Assert.Equal("https://lan-2.edu.vn", pending.NewValue);
 
         await s.Service.UpdateCenterProfileAsync(owner, new UpdateCenterProfileRequest(Website: "https://abc.edu.vn"));
-        Assert.Equal(CenterProfileChangeStatuses.Passed, pending.Status);
+        // Không phải Moderator duyệt nên dùng trạng thái riêng, không lẫn vào danh sách Đạt
+        Assert.Equal(CenterProfileChangeStatuses.Withdrawn, pending.Status);
     }
 
     [Theory]
@@ -964,6 +1092,153 @@ public class CenterRegistrationAndVerificationTests
         // Yêu cầu cũ đã được xử lý (UC-93) thì gửi được yêu cầu mới
         s.Deletions.Items[0].Status = CenterDeletionRequestStatuses.Rejected;
         Assert.True((await s.Service.RequestDeletionAsync(owner, "Gửi lại")).Success);
+    }
+
+    [Fact]
+    public async Task RequestDeletion_SetsTwentyDayDeadlineAndEmailsReceipt()
+    {
+        var centers = new FakeStudyCenterRepo();
+        var deletions = new FakeDeletionRepo();
+        var email = new FakeEmailSender();
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = "info@abc.vn",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.Verified,
+        };
+        await centers.AddAsync(center);
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), new FakeVerificationRepo(), emailSender: email,
+            notifications: null, profileChanges: new FakeProfileChangeRepo(), deletionRequests: deletions);
+
+        var result = await service.RequestDeletionAsync(center.OwnerUserId!.Value, "Ngừng hoạt động");
+
+        Assert.True(result.Success);
+        var saved = Assert.Single(deletions.Items);
+        // Nghị định 356/2025/NĐ-CP Điều 5 khoản 4: xử lý trong 20 ngày kể từ khi nhận
+        Assert.Equal(saved.CreatedAt.AddDays(20), saved.DueAt);
+        Assert.Equal(saved.DueAt, result.Request!.DueAt);
+        // Điều 5 khoản 4: phản hồi trong 02 ngày làm việc, gửi xác nhận ngay khi nhận
+        var mail = Assert.Single(email.CenterDeletionEmails);
+        Assert.Equal(("info@abc.vn", "Trung tâm ABC", "received", (string?)null, saved.DueAt), mail);
+    }
+
+    [Fact]
+    public async Task RequestDeletion_WhenCenterAlreadyUnderLegalHold_SendsHeldNoticeInsteadOfReceipt()
+    {
+        var centers = new FakeStudyCenterRepo();
+        var deletions = new FakeDeletionRepo();
+        var email = new FakeEmailSender();
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = "info@abc.vn",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.Verified,
+            IsLegalHold = true,
+            LegalHoldReason = "Khiếu nại",
+        };
+        await centers.AddAsync(center);
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), new FakeVerificationRepo(), emailSender: email,
+            notifications: null, profileChanges: new FakeProfileChangeRepo(), deletionRequests: deletions);
+
+        var result = await service.RequestDeletionAsync(center.OwnerUserId!.Value, "Ngừng hoạt động");
+
+        Assert.True(result.Success);
+        // Luật 91/2025 Điều 14 khoản 5: không xóa được thì phải báo; không hứa hạn, không nêu lý do giữ
+        var mail = Assert.Single(email.CenterDeletionEmails);
+        Assert.Equal(("info@abc.vn", "Trung tâm ABC", "held", (string?)null, (DateTime?)null), mail);
+    }
+
+    [Fact]
+    public async Task RequestDeletion_WhenOnlyOwnerAccountUnderLegalHold_AlsoSendsHeldNotice()
+    {
+        var centers = new FakeStudyCenterRepo();
+        var deletions = new FakeDeletionRepo();
+        var email = new FakeEmailSender();
+        var users = new FakeUserRepository();
+        var owner = new User { Id = Guid.NewGuid(), Email = "owner@abc.vn", FullName = "Chủ", IsLegalHold = true };
+        users.Users.Add(owner);
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = "info@abc.vn",
+            OwnerUserId = owner.Id,
+            VerificationStatus = CenterVerificationStatuses.Verified,
+        };
+        await centers.AddAsync(center);
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), new FakeVerificationRepo(), emailSender: email,
+            notifications: null, profileChanges: new FakeProfileChangeRepo(), deletionRequests: deletions, users: users);
+
+        var result = await service.RequestDeletionAsync(owner.Id, "Ngừng hoạt động");
+
+        Assert.True(result.Success);
+        Assert.Null(result.Request!.DueAt);
+        var mail = Assert.Single(email.CenterDeletionEmails);
+        Assert.Equal("held", mail.Outcome);
+    }
+
+    [Fact]
+    public async Task RequestDeletion_WhenEarlierRequestAlreadyApproved_IsRejected()
+    {
+        var centers = new FakeStudyCenterRepo();
+        var deletions = new FakeDeletionRepo();
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = "info@abc.vn",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.Verified,
+        };
+        await centers.AddAsync(center);
+        deletions.Items.Add(new CenterDeletionRequest
+        {
+            StudyCenterId = center.Id,
+            RequestedByUserId = center.OwnerUserId!.Value,
+            Reason = "Lần trước",
+            Status = CenterDeletionRequestStatuses.Approved,
+        });
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), new FakeVerificationRepo(), emailSender: new FakeEmailSender(),
+            notifications: null, profileChanges: new FakeProfileChangeRepo(), deletionRequests: deletions);
+
+        var result = await service.RequestDeletionAsync(center.OwnerUserId!.Value, "Gửi lại");
+
+        // Đã duyệt và đang chờ xóa hẳn thì vẫn tính là yêu cầu đang mở
+        Assert.False(result.Success);
+        Assert.Single(deletions.Items);
+    }
+
+    [Fact]
+    public async Task GetDeletionRequest_HidesDeadlineWhileCenterUnderLegalHold()
+    {
+        var centers = new FakeStudyCenterRepo();
+        var deletions = new FakeDeletionRepo();
+        var center = new StudyCenter
+        {
+            Id = Guid.NewGuid(),
+            Name = "Trung tâm ABC",
+            Email = "info@abc.vn",
+            OwnerUserId = Guid.NewGuid(),
+            VerificationStatus = CenterVerificationStatuses.Verified,
+        };
+        await centers.AddAsync(center);
+        var service = new StudyCenterService(centers, new FakeAuditLogs(), new FakeVerificationRepo(), emailSender: new FakeEmailSender(),
+            notifications: null, profileChanges: new FakeProfileChangeRepo(), deletionRequests: deletions);
+        await service.RequestDeletionAsync(center.OwnerUserId!.Value, "Ngừng hoạt động");
+
+        var normal = await service.GetDeletionRequestAsync(center.OwnerUserId!.Value);
+        Assert.NotNull(normal!.DueAt);
+
+        // Đang giữ: không hứa mốc xử lý và không để lộ việc đang giữ
+        center.IsLegalHold = true;
+        var held = await service.GetDeletionRequestAsync(center.OwnerUserId!.Value);
+        Assert.Null(held!.DueAt);
+        Assert.Null(held.ExtendedAt);
+        Assert.Equal("pending", held.Status);
     }
 
     [Fact]

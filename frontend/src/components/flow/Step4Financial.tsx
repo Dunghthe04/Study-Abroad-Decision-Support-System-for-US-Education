@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RequiredMark } from "./RequiredMark";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { MAX_BUDGET_VND, MIN_BUDGET_VND } from "@/lib/parent-preference-api";
 import {
   BUDGET_RATE,
   DEFAULT_BUDGET_TIERS,
@@ -19,6 +21,8 @@ import type { BudgetTierId, FinancialDraft, FundingSource, ProfileMetadataRespon
 interface Step4FinancialProps {
   data: FinancialDraft;
   metadata: ProfileMetadataResponse | null;
+  /** UC-94: số tiền tối đa/năm phụ huynh đã nhập (USD). Có thì ngân sách cố định, học sinh không sửa */
+  lockedUsd?: number | null;
   onUpdate: (updated: Partial<FinancialDraft>) => void;
   onPrev: () => void;
   onNext: () => void;
@@ -26,7 +30,7 @@ interface Step4FinancialProps {
 
 type Currency = "vnd" | "usd";
 
-export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Step4FinancialProps) {
+export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onPrev, onNext }: Step4FinancialProps) {
   // Lỗi của từng câu, hiện ngay dưới câu đó
   const [budgetError, setBudgetError] = useState<string | null>(null);
   const [aidError, setAidError] = useState<string | null>(null);
@@ -34,6 +38,14 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
   const aidSectionId = useId();
   const [currency, setCurrency] = useState<Currency>("vnd");
   const [amountText, setAmountText] = useState("");
+  // UC-94: phụ huynh nhập hộ con managed → câu chính là số tiền tối đa/năm chính xác (VND).
+  // "Chưa biết chính xác" → chọn hạng (ước tính). Mở lại hồ sơ đã chọn theo hạng thì vào thẳng chế độ hạng.
+  const { acting } = useAuth();
+  const exactAsk = Boolean(acting);
+  const [unsure, setUnsure] = useState(
+    () => Boolean(data.annualBudgetTier) && data.annualBudgetVnd == null && data.annualBudgetUsd == null);
+  const [vndText, setVndText] = useState(
+    data.annualBudgetVnd ? data.annualBudgetVnd.toLocaleString("vi-VN") : "");
   // Tỷ giá mới nhất từ BE, chưa có thì dùng tỷ giá mặc định
   const RATE = Math.round(metadata?.vndPerUsd || BUDGET_RATE);
 
@@ -75,6 +87,43 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
 
   const selectedTierLabel = budgetTiers.find((t) => t.key === data.annualBudgetTier)?.label;
 
+  const vndOutOfRange = (v: number) => v < MIN_BUDGET_VND || v > MAX_BUDGET_VND;
+  const rangeMessage = `Số tiền phải từ ${MIN_BUDGET_VND.toLocaleString("vi-VN")} đến ${MAX_BUDGET_VND.toLocaleString("vi-VN")} VNĐ.`;
+
+  const applyExactVnd = (text: string) => {
+    const raw = text.replace(/\D/g, "");
+    const value = raw ? Number(raw) : null;
+    setVndText(value ? value.toLocaleString("vi-VN") : "");
+    setBudgetError(null);
+    // Hạng tự suy từ số tiền (BE suy lại theo tỷ giá lúc lưu); số ngoài khoảng báo lỗi lúc bấm Tiếp tục
+    onUpdate(value && !vndOutOfRange(value)
+      ? { annualBudgetVnd: value, annualBudgetTier: tierForUsd(Math.round(value / RATE)) }
+      : { annualBudgetVnd: value });
+  };
+
+  const switchToTiers = () => {
+    setUnsure(true);
+    setVndText("");
+    setBudgetError(null);
+    onUpdate({ annualBudgetVnd: null, annualBudgetUsd: null, annualBudgetTier: null });
+  };
+
+  const switchToExact = () => {
+    setUnsure(false);
+    setBudgetError(null);
+    onUpdate({ annualBudgetTier: null });
+  };
+
+  const exactVnd = data.annualBudgetVnd ?? null;
+  const savedUsd = data.annualBudgetUsd ?? null;
+
+  /** Lỗi câu ngân sách khi phụ huynh nhập hộ (null = hợp lệ) */
+  const exactBudgetError = (): string | null => {
+    if (unsure) return data.annualBudgetTier ? null : "Vui lòng chọn mức ngân sách mỗi năm.";
+    if (exactVnd != null) return vndOutOfRange(exactVnd) ? rangeMessage : null;
+    return savedUsd != null ? null : "Vui lòng nhập số tiền tối đa mỗi năm, hoặc bấm \"Chưa biết chính xác\" để chọn mức.";
+  };
+
   const needOptions: { key: ScholarshipNeed; title: string; description: string }[] =
     SCHOLARSHIP_NEED_OPTIONS.map((o) => {
       const fromMeta = metadata?.financialNeedLevels.find((m) => m.key === o.value);
@@ -86,9 +135,14 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
     });
 
   const handleNextClick = () => {
-    const missingBudget = !data.annualBudgetTier;
+    const budgetMsg = lockedUsd != null
+      ? null
+      : exactAsk
+      ? exactBudgetError()
+      : data.annualBudgetTier ? null : "Vui lòng chọn mức ngân sách mỗi năm.";
+    const missingBudget = budgetMsg != null;
     const missingAid = !data.needFinancialAid;
-    setBudgetError(missingBudget ? "Vui lòng chọn mức ngân sách mỗi năm." : null);
+    setBudgetError(budgetMsg);
     setAidError(missingAid ? "Vui lòng chọn nhu cầu học bổng của bạn." : null);
     if (missingBudget || missingAid) {
       // Cuộn tới câu sai đầu tiên
@@ -108,14 +162,74 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
           Bước 4/6 · khoảng 30 giây
         </div>
         <h1 className="text-h1 text-foreground">
-          Gia đình bạn dự định chi bao nhiêu cho một năm học?
+          {exactAsk
+            ? "Gia đình chi trả được tối đa bao nhiêu cho một năm học?"
+            : "Gia đình bạn dự định chi bao nhiêu cho một năm học?"}
         </h1>
         <p className="text-body text-muted-foreground">
-          Chọn mức gần đúng nhất hoặc nhập số tiền cụ thể. Chúng tôi dùng nó để loại các trường vượt ngân sách của bạn.
+          {exactAsk
+            ? "Nhập số tiền tối đa bằng VNĐ. Đây là mức trần chắc chắn: hệ thống chỉ giữ các trường có chi phí trong số tiền này, cả ở hồ sơ của con và tổng quan của phụ huynh."
+            : "Chọn mức gần đúng nhất hoặc nhập số tiền cụ thể. Chúng tôi dùng nó để loại các trường vượt ngân sách của bạn."}
         </p>
       </div>
 
-      {/* Question 1: Annual Budget Tiers */}
+      {lockedUsd != null ? (
+      // UC-94: phụ huynh đã nhập số tiền chính xác → cố định theo phụ huynh, chỉ xem
+      <section id={budgetSectionId} className="space-y-2">
+        <Label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+          <DollarSignIcon className="size-4 text-brand" />
+          Số tiền tối đa chi trả được mỗi năm
+        </Label>
+        <div className="rounded-xl border border-line bg-ground/50 px-4 py-3.5 text-sm">
+          <p>
+            <strong className="font-semibold text-foreground">{lockedUsd.toLocaleString("vi-VN")} USD/năm</strong>{" "}
+            <span className="text-muted-foreground">(≈ {(lockedUsd * RATE).toLocaleString("vi-VN")} VNĐ theo tỷ giá hôm nay)</span>
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Do phụ huynh nhập, cố định theo phụ huynh nên bạn không sửa được. Cần đổi thì nhờ phụ huynh liên hệ.
+          </p>
+        </div>
+      </section>
+      ) : exactAsk && !unsure ? (
+      <section id={budgetSectionId} className="space-y-3">
+        <div>
+          <Label htmlFor="exactBudgetVnd" className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+            <DollarSignIcon className="size-4 text-brand" />
+            Số tiền tối đa chi trả được mỗi năm (VNĐ) <RequiredMark />
+          </Label>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Gồm học phí và chi phí ăn ở mỗi năm (chưa gồm vé máy bay). Từ 100 triệu đến 10 tỷ đồng.
+          </p>
+        </div>
+        <Input
+          id="exactBudgetVnd"
+          inputMode="numeric"
+          placeholder="VD: 1.300.000.000"
+          value={vndText}
+          onChange={(e) => applyExactVnd(e.target.value)}
+          aria-invalid={budgetError ? true : undefined}
+          className="max-w-xs bg-surface"
+        />
+        <p className="text-xs text-muted-foreground">
+          {exactVnd != null && !vndOutOfRange(exactVnd) ? (
+            <>
+              ≈ <strong className="font-semibold text-foreground">{Math.round(exactVnd / RATE).toLocaleString("vi-VN")} USD</strong>{" "}
+              mỗi năm theo tỷ giá hôm nay (1 USD = {RATE.toLocaleString("vi-VN")} VNĐ). Số USD chốt theo tỷ giá lúc lưu hồ sơ.
+            </>
+          ) : exactVnd == null && savedUsd != null ? (
+            <>
+              Đã lưu: <strong className="font-semibold text-foreground">{savedUsd.toLocaleString("vi-VN")} USD/năm</strong>{" "}
+              (≈ {(savedUsd * RATE).toLocaleString("vi-VN")} VNĐ theo tỷ giá hôm nay). Để trống thì giữ số này.
+            </>
+          ) : null}
+        </p>
+        {budgetError && <p className="text-xs font-medium text-destructive">{budgetError}</p>}
+        <Button type="button" variant="outline" size="sm" onClick={switchToTiers} className="cursor-pointer">
+          Chưa biết chính xác
+        </Button>
+      </section>
+      ) : (
+      // Question 1: Annual Budget Tiers
       <section id={budgetSectionId} className="space-y-4">
         <div>
           <Label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
@@ -140,7 +254,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
                   onUpdate({ annualBudgetTier: tier.key });
                 }}
                 className={cn(
-                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full",
+                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                   isSelected
                     ? "border-brand bg-brand-wash/40 ring-2 ring-brand text-brand-ink"
                     : "border-line bg-surface hover:border-brand/40 hover:bg-muted/30"
@@ -168,7 +282,18 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
         </div>
         {budgetError && <p className="text-xs font-medium text-destructive">{budgetError}</p>}
 
-        {/* Nhập số tiền cụ thể → tự chọn mức tương ứng */}
+        {exactAsk ? (
+          // Phụ huynh chưa biết số chính xác: hạng chỉ là ước tính
+          <div className="space-y-2 rounded-xl bg-ground/50 px-4 py-3.5 text-xs text-muted-foreground">
+            <p>
+              Chọn theo mức là ước tính: hệ thống lấy trần của mức để lọc trường. Khi biết số chính xác, hãy cập nhật để kết quả sát hơn.
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={switchToExact} className="cursor-pointer">
+              Nhập số tiền chính xác
+            </Button>
+          </div>
+        ) : (
+        /* Nhập số tiền cụ thể → tự chọn mức tương ứng */
         <div className="space-y-2.5 rounded-xl bg-ground/50 px-4 py-3.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Label htmlFor="budgetAmount" className="text-sm font-semibold text-foreground">
@@ -185,7 +310,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
                     applyAmount(amountText, c);
                   }}
                   className={cn(
-                    "cursor-pointer rounded-md px-3 py-1 transition-colors",
+                    "cursor-pointer rounded-md px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                     currency === c ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -220,7 +345,9 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
             )}
           </p>
         </div>
+        )}
       </section>
+      )}
 
       {/* Question 2: Scholarship Need */}
       <section id={aidSectionId} className="space-y-4 pt-2">
@@ -243,7 +370,7 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
                   onUpdate({ needFinancialAid: opt.key });
                 }}
                 className={cn(
-                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full",
+                  "flex flex-col items-start justify-between rounded-xl border p-4 text-left transition-all cursor-pointer h-full focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                   isSelected
                     ? "border-brand bg-brand-wash/40 ring-2 ring-brand text-brand-ink"
                     : "border-line bg-surface hover:border-brand/40 hover:bg-muted/30"
@@ -295,11 +422,11 @@ export function Step4Financial({ data, metadata, onUpdate, onPrev, onNext }: Ste
 
       {/* Bottom Actions */}
       <div className="flex justify-between pt-4 border-t border-line">
-        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5 cursor-pointer">
+        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5">
           <ArrowLeftIcon className="size-4" />
           Quay lại
         </Button>
-        <Button onClick={handleNextClick} size="lg" className="gap-1.5 cursor-pointer">
+        <Button onClick={handleNextClick} size="lg" className="gap-1.5">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>

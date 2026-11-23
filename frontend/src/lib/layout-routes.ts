@@ -1,5 +1,5 @@
 // Trang làm việc dùng khung rộng như demo; các trang đọc giữ bề rộng cũ
-const WIDE_PREFIXES = ["/analysis", "/recommendations", "/admin", "/centers", "/center", "/universities", "/scholarships", "/university/", "/target-schools"];
+const WIDE_PREFIXES = ["/account", "/analysis", "/recommendations", "/admin", "/centers", "/center", "/universities", "/scholarships", "/university/", "/target-schools", "/plans", "/orders", "/community"];
 
 export function isWideRoute(pathname: string) {
   if (pathname === "/") return true;
@@ -7,7 +7,7 @@ export function isWideRoute(pathname: string) {
 }
 
 // Trang tự quản lý lề và độ rộng (ví dụ full bleed banner hoặc thanh dính mép)
-const FULL_PREFIXES = ["/recommendations", "/university/"];
+const FULL_PREFIXES = ["/recommendations", "/universities", "/university/", "/methodology"];
 
 export function isFullRoute(pathname: string) {
   if (pathname === "/") return true; // trang chủ: ảnh đầu trang tràn mép

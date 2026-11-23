@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_chat_flow
-from app.schemas.chat import ChatRequest, ChatResponse
-from app.services.chat_flow import ChatFlow
+from app.schemas.chat import ChatRequest, ChatResponse, PendingQuestionRequest, PendingQuestionResponse
+from app.services.chat_flow import ChatFlow, pending_question
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 logger = logging.getLogger("advisor.api")
@@ -19,6 +19,13 @@ logger = logging.getLogger("advisor.api")
 @router.post("", response_model=ChatResponse, response_model_by_alias=True)
 async def chat(req: ChatRequest, flow: Annotated[ChatFlow, Depends(get_chat_flow)]) -> ChatResponse:
     return await flow.reply(req)
+
+
+# Mở lại phiên chat cũ: dựng lại nút và công cụ của câu hồ sơ đang chờ từ state của phiên (tin nhắn lưu chỉ có chữ).
+# Chỉ đọc: không trả state, không gọi AI. Không có câu hồ sơ nào đang chờ thì pending = false
+@router.post("/pending-question", response_model=PendingQuestionResponse, response_model_by_alias=True)
+async def chat_pending_question(req: PendingQuestionRequest) -> PendingQuestionResponse:
+    return pending_question(req.state, req)
 
 
 # Trả lời theo từng ý khi ý đó xong. Mỗi dòng là một JSON (NDJSON):

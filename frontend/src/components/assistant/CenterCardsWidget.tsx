@@ -123,7 +123,7 @@ export function CenterCardsWidget({
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Link
                     href={`/centers/${center.id}`}
-                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "cursor-pointer")}
+                    className={buttonVariants({ variant: "outline", size: "sm" })}
                   >
                     Chi tiết
                   </Link>

@@ -28,11 +28,14 @@ namespace StudyAbroad.Infrastructure.Persistence.Configurations
             builder.Property(x => x.LockoutEnd);
             // UC-80: thời điểm yêu cầu xóa tài khoản, null = chưa yêu cầu
             builder.Property(x => x.DeletedAt);
-            // Legal Hold: đóng băng tài khoản khi có điều tra gian lận (Nghị định 13/2023/NĐ-CP)
+            // Legal Hold: đóng băng tài khoản khi có điều tra gian lận (căn cứ pháp lý do BA/pháp chế xác nhận; xem ghi chú ở User.IsLegalHold)
             builder.Property(x => x.IsLegalHold).HasDefaultValue(false).IsRequired();
             builder.Property(x => x.LegalHoldReason).HasMaxLength(500);
             // Ngày sinh (kiểu date), null với tài khoản cũ / center / admin
             builder.Property(x => x.DateOfBirth);
+            builder.Property(x => x.ForumRestrictedUntil);
+            builder.Property(x => x.ForumRestrictionReason);
+            builder.Property(x => x.ForumRestrictedByUserId);
             // Npgsql ánh xạ uint IsRowVersion vào cột hệ thống xmin (không tạo cột mới)
             builder.Property(x => x.Version).IsRowVersion();
         }

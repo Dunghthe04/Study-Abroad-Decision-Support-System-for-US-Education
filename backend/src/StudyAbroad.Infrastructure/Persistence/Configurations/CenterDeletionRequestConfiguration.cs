@@ -17,6 +17,7 @@ public class CenterDeletionRequestConfiguration : IEntityTypeConfiguration<Cente
         // Bản ghi yêu cầu xóa phải còn sau khi trung tâm bị xóa (UC-93 cần lưu vết), nên không cascade.
         b.HasOne<StudyCenter>().WithMany().HasForeignKey(x => x.StudyCenterId).OnDelete(DeleteBehavior.Restrict);
         b.Property(x => x.DecisionNote).HasMaxLength(1000);
+        b.Property(x => x.ExtensionNote).HasMaxLength(1000);
         b.HasIndex(x => new { x.Status, x.ScheduledPurgeAt });
         // [UC-93] Tài khoản trung tâm bị xóa hẳn thì bỏ liên kết người gửi, giữ bản ghi yêu cầu
         b.HasOne<User>().WithMany().HasForeignKey(x => x.RequestedByUserId).OnDelete(DeleteBehavior.SetNull);

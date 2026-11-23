@@ -127,14 +127,22 @@ async def test_a_greeting_next_to_a_real_question_is_dropped():
     assert result.types() == ["knowledge"]
 
 
-# ---- sai thì thử lại, rồi lùi về mơ hồ ----
-async def test_an_answer_that_breaks_the_rules_is_retried_once():
-    no_mode = {"intents": [y("scenario", "nếu em lên SAT 1500 thì sao")]}  # scenario thiếu mode
-    slm = FakeSlm(no_mode, GOOD)
+# ---- Ollama lỗi thì thử lại; model trả sai luật thì lùi về mơ hồ ngay, không gọi lại ----
+async def test_an_ollama_error_is_retried_once():
+    slm = FakeSlm(OllamaError("timeout"), GOOD)
 
     result = await OllamaSlm(slm).read("x", None, "")
 
     assert result.types() == ["center_referral"] and len(slm.calls) == 2
+
+
+async def test_an_answer_that_breaks_the_rules_is_not_retried():
+    no_mode = {"intents": [y("scenario", "nếu em lên SAT 1500 thì sao")]}  # scenario thiếu mode
+    slm = FakeSlm(no_mode, GOOD)  # model thật ở nhiệt độ 0 sẽ không đổi ý nên lần hai không có ý nghĩa
+
+    result = await OllamaSlm(slm).read("x", None, "")
+
+    assert result.fallback is True and len(slm.calls) == 1
 
 
 @pytest.mark.parametrize(
@@ -148,12 +156,13 @@ async def test_an_answer_that_breaks_the_rules_is_retried_once():
         {"intents": [y("loai_la", "x")]},
     ],
 )
-async def test_an_answer_in_the_wrong_shape_is_retried_not_crashed(bad):
+async def test_an_answer_in_the_wrong_shape_falls_back_not_crashed(bad):
     slm = FakeSlm(bad, GOOD)
 
     result = await OllamaSlm(slm).read("ai sửa bài luận ở HN", None, "")
 
-    assert result.types() == ["center_referral"] and len(slm.calls) == 2
+    assert result.fallback is True and len(slm.calls) == 1
+    assert result.intents[0].span == "ai sửa bài luận ở HN"
 
 
 async def test_two_failures_fall_back_to_an_ambiguous_message_with_zero_confidence():

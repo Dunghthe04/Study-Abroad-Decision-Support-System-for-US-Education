@@ -31,7 +31,14 @@ public record CenterDeletionRequestDto(
     string Reason,
     string Status,
     DateTime CreatedAt,
-    DateTime? HandledAt);
+    DateTime? HandledAt,
+    /// <summary>
+    /// Hạn xử lý của USAS (20 ngày kể từ khi nhận, có thể gia hạn một lần). Null khi trung tâm đang bị giữ pháp lý:
+    /// hệ thống không thể hứa mốc xử lý, và không để lộ việc đang giữ.
+    /// </summary>
+    DateTime? DueAt = null,
+    /// <summary>Thời điểm gia hạn (null nếu chưa gia hạn).</summary>
+    DateTime? ExtendedAt = null);
 
 public record CenterDeletionRequestResult(CenterDeletionRequestDto? Request, string? ErrorMessage = null)
 {
@@ -68,7 +75,10 @@ public interface ICenterProfileChangeRepository
 /// </summary>
 public interface ICenterDeletionRequestRepository
 {
-    /// <summary>Yêu cầu đang mở (pending) của trung tâm; mỗi trung tâm tối đa một yêu cầu mở.</summary>
+    /// <summary>
+    /// Yêu cầu đang mở của trung tâm: pending (chờ duyệt) hoặc approved (đã duyệt, chờ xóa hẳn).
+    /// Mỗi trung tâm tối đa một yêu cầu mở.
+    /// </summary>
     Task<CenterDeletionRequest?> GetOpenByCenterIdAsync(Guid studyCenterId, CancellationToken ct = default);
 
     /// <summary>Yêu cầu mới nhất của trung tâm (bất kể trạng thái) để hiện trên trang hồ sơ.</summary>

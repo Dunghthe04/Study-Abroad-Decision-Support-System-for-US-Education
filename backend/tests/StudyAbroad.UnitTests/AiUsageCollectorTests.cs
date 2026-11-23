@@ -79,14 +79,16 @@ public class AiUsageCollectorTests
         var goal = await advisor.WriteGoalNoteAsync(new GoalNoteRequestDto("s", "t", "o", [], [], []));
         var scenario = await advisor.WriteScenarioNoteAsync(new ScenarioNoteRequestDto("l", [], [], "none", new(null, null), [], []));
         var compare = await advisor.WriteCompareNoteAsync(new CompareNoteRequestDto([], [], []));
+        var schoolList = await advisor.WriteRecommendNoteAsync(new RecommendNoteRequestDto([], [], []));
 
-        Assert.Equal(["chat", "stream", "explain", "goal", "scenario", "compare"], basket.Snapshot().Select(c => c.Purpose));
+        Assert.Equal(["chat", "stream", "explain", "goal", "scenario", "compare", "school_list"], basket.Snapshot().Select(c => c.Purpose));
         Assert.Same(inner.LastChat, chat);          // lớp bọc trả đúng đối tượng advisor vừa trả, không dựng lại
         Assert.Same(inner.LastStream, streamed);
         Assert.Equal("explain", explain.AiUsage![0].Purpose);
         Assert.Equal("goal", goal.AiUsage![0].Purpose);
         Assert.Equal("scenario", scenario.AiUsage![0].Purpose);
         Assert.Equal("compare", compare.AiUsage![0].Purpose);
+        Assert.Equal("school_list", schoolList.AiUsage![0].Purpose);
     }
 
     [Fact]
@@ -111,9 +113,28 @@ public class AiUsageCollectorTests
         Assert.Empty(basket.Snapshot());
     }
 
+    [Fact]
+    public async Task ThePendingQuestionCall_IsForwardedToTheRealClient_NotLeftAtTheEmptyDefault()
+    {
+        // Dựng lại câu hồ sơ đang chờ không có token để gom, nhưng lớp bọc phải chuyển tiếp: bỏ sót thì rơi vào bản mặc định (không có câu nào)
+        var question = new PendingQuestionDto(true, "F1", "Gia đình bạn chi bao nhiêu?", [], new Widget("budget"));
+        var basket = new AiUsageCollector();
+        var advisor = new UsageCollectingAdvisorClient(new StubAdvisor { Pending = question }, basket);
+
+        var result = await advisor.PendingQuestionAsync(new AdvisorPendingQuestionRequest(System.Text.Json.JsonDocument.Parse("{}").RootElement));
+
+        Assert.Same(question, result);
+        Assert.Empty(basket.Snapshot());
+    }
+
     private sealed class StubAdvisor : IAdvisorClient
     {
         public Exception? Error { get; init; }
+        public PendingQuestionDto Pending { get; init; } = PendingQuestionDto.None;
+
+        public Task<PendingQuestionDto> PendingQuestionAsync(AdvisorPendingQuestionRequest request, CancellationToken ct = default) =>
+            Task.FromResult(Pending);
+
         public bool WithoutUsage { get; init; }
         public AdvisorChatResponse? LastChat { get; private set; }
         public AdvisorChatResponse? LastStream { get; private set; }
@@ -142,5 +163,8 @@ public class AiUsageCollectorTests
 
         public Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default) =>
             Task.FromResult(new CompareNoteResponseDto("1", "m", "OK", "a", Usage("compare")));
+
+        public Task<RecommendNoteResponseDto> WriteRecommendNoteAsync(RecommendNoteRequestDto request, CancellationToken ct = default) =>
+            Task.FromResult(new RecommendNoteResponseDto("1", "m", "OK", "a", Usage("school_list")));
     }
 }

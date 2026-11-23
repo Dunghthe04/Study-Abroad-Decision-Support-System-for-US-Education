@@ -44,9 +44,18 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Costs.ICostRepository, CostRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.Settings.IGradeScaleSettingRepository, GradeScaleSettingRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.AiUsage.IAiUsageReportRepository, AiUsageReportRepository>();
+        services.AddScoped<StudyAbroad.Application.Admin.AiQuality.IAiQualityRepository, AiQualityRepository>();
+        services.AddScoped<StudyAbroad.Application.Admin.AiQuality.IAiQualitySampleRepository, AiQualitySampleRepository>();
+        services.AddScoped<StudyAbroad.Application.Advisor.History.IChatHistoryRepository, ChatHistoryRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.SlmSamples.ISlmSampleRepository, SlmSampleRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.ReviewBatches.IReviewBatchRepository, ReviewBatchRepository>();
+        services.AddScoped<StudyAbroad.Application.Admin.Sensitivity.ISensitivityRunRepository, SensitivityRunRepository>();   // [UC-85]
+        services.AddScoped<StudyAbroad.Application.Admin.Policies.IPolicyDocumentRepository, PolicyDocumentRepository>();   // [UC-103]
+        services.AddScoped<StudyAbroad.Application.Admin.Policies.IPolicyVersionLookup, PolicyDocumentRepository>();   // phiên bản chính sách đang hiệu lực cho đồng ý của phụ huynh
+        services.AddScoped<StudyAbroad.Application.Policies.IPublishedPolicyReader, PolicyDocumentRepository>();   // [UC-104] các bản đã công bố để xét đồng ý
+        services.AddScoped<StudyAbroad.Application.Policies.IConsentRepository, ConsentRepository>();   // [UC-104] bằng chứng đồng ý điều khoản
         services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();
+        services.AddScoped<StudyAbroad.Application.Community.ICommunityRepository, CommunityRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadWithdrawalRepository, LeadWithdrawalRepository>();   // [UC-80] thu hồi lead khi xóa tài khoản
         services.AddScoped<StudyAbroad.Application.Auth.IAccountPurgeRepository, AccountPurgeRepository>();
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterDeletionWorkRepository, CenterDeletionWorkRepository>();   // [UC-93]   // [UC-80] xóa hẳn tài khoản quá hạn
@@ -59,6 +68,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<StudyAbroad.Application.Common.IUnitOfWork, EfUnitOfWork>();   // [UC-80] gom nhiều bước ghi vào một transaction
         services.AddScoped<StudyAbroad.Application.ParentLinks.IParentLinkRepository, ParentLinkRepository>();
+        services.AddScoped<StudyAbroad.Application.Dashboard.IDashboardRepository, DashboardRepository>(); // [UC-94] Dashboard KPI
         services.AddScoped<IScenarioRepository, ScenarioRepository>();   // [UC-86] kịch bản what-if đã lưu
         services.AddScoped<IFinancialProfileRepository, FinancialProfileRepository>();
         services.AddScoped<StudyAbroad.Application.AcademicProfiles.IAcademicProfileRepository, AcademicProfileRepository>();
@@ -79,7 +89,36 @@ public static class DependencyInjection
         // Nhật ký các lần gọi AI (token, thời gian, lỗi): chỉ số đo, không có nội dung chat nên luôn bật, không theo Chat:StoreMessages
         services.AddScoped<IAiCallRepository, AiCallRepository>();
         services.AddScoped<IChatAnalysisRepository, ChatAnalysisRepository>();
+        services.AddScoped<StudyAbroad.Application.Billing.IBillingRepository, BillingRepository>();   // gói dịch vụ: kỳ, nhóm gia đình, token đã dùng
+        services.AddScoped<StudyAbroad.Application.Billing.Admin.IPlanAdminRepository, PlanAdminRepository>();   // UC-79: admin quản lý gói
+        services.AddScoped<StudyAbroad.Application.Billing.Family.IFamilyRepository, FamilyRepository>();   // gói Gia đình: lời mời, thành viên, khóa nhóm
         services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
+        services.AddScoped<StudyAbroad.Application.Billing.Orders.IOrderRepository, OrderRepository>();   // đơn hàng thanh toán
+        services.AddScoped<StudyAbroad.Application.Billing.IBillingAccountRepository, BillingAccountRepository>();   // UC-80: gói dịch vụ khi xóa tài khoản
+        services.AddScoped<StudyAbroad.Application.Billing.Jobs.IBillingJobRepository, BillingJobRepository>();   // job nền thanh toán: đơn chờ, làn tới hạn, nhắc hạn
+        services.AddScoped<StudyAbroad.Application.Billing.Admin.IAdminOrderRepository, AdminOrderRepository>();   // UC-132: danh sách đơn cho admin
+
+        // Thanh toán gói qua payOS: khóa từ appsettings "PayOs" hoặc biến môi trường PAYOS_*; "Billing" là các giá trị rút ngắn được ở máy kiểm thử
+        services.Configure<StudyAbroad.Application.Billing.Payments.PayOsOptions>(options =>
+        {
+            configuration.GetSection(StudyAbroad.Application.Billing.Payments.PayOsOptions.SectionName).Bind(options);
+            options.ClientId = NonEmpty(configuration["PAYOS_CLIENT_ID"]) ?? options.ClientId;
+            options.ApiKey = NonEmpty(configuration["PAYOS_API_KEY"]) ?? options.ApiKey;
+            options.ChecksumKey = NonEmpty(configuration["PAYOS_CHECKSUM_KEY"]) ?? options.ChecksumKey;
+            options.ReturnUrlBase = NonEmpty(configuration["PAYOS_RETURN_URL_BASE"]) ?? options.ReturnUrlBase;
+            if (bool.TryParse(configuration["PAYOS_USE_FAKE"], out var useFake)) options.UseFake = useFake;
+        });
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<StudyAbroad.Application.Billing.Payments.PayOsOptions>>().Value);
+        services.Configure<StudyAbroad.Application.Billing.BillingOptions>(configuration.GetSection(StudyAbroad.Application.Billing.BillingOptions.SectionName));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<StudyAbroad.Application.Billing.BillingOptions>>().Value);
+        services.AddSingleton<StudyAbroad.Infrastructure.Payments.FakeGatewayState>();
+        services.AddSingleton<StudyAbroad.Application.Billing.Payments.IPaymentGateway>(sp =>
+        {
+            var options = sp.GetRequiredService<StudyAbroad.Application.Billing.Payments.PayOsOptions>();
+            return options.UseFake
+                ? new StudyAbroad.Infrastructure.Payments.FakePaymentGateway(options, sp.GetRequiredService<StudyAbroad.Infrastructure.Payments.FakeGatewayState>())
+                : new StudyAbroad.Infrastructure.Payments.PayOsGateway(options, sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<StudyAbroad.Infrastructure.Payments.PayOsGateway>>());
+        });
 
 
         // [USAS-362] Đăng ký JWT Token Service (Ưu tiên nạp key từ biến môi trường JWT_SECRET_KEY).
@@ -109,11 +148,6 @@ public static class DependencyInjection
         services.AddSingleton<SmtpEmailSender>();
         services.AddSingleton<EmailQueue>();
         services.AddSingleton<IEmailSender, QueuedEmailSender>();
-        // [UC-91] OTP qua SMS: chưa có nhà cung cấp thật. Ngoài Production chỉ ghi log mã; Production báo kênh chưa sẵn sàng.
-        services.AddSingleton<ISmsSender>(sp =>
-            sp.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>().EnvironmentName == "Production"
-                ? new UnavailableSmsSender()
-                : ActivatorUtilities.CreateInstance<LoggingSmsSender>(sp));
         services.AddHostedService<EmailDispatchBackgroundService>();
 
         // [UC-80] Thời hạn chờ xóa tài khoản và chu kỳ job xóa hẳn (appsettings "AccountDeletion")
@@ -146,6 +180,7 @@ public static class DependencyInjection
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountUnlockBackgroundService>();
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.OtpCleanupBackgroundService>();
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountPurgeBackgroundService>();   // [UC-80]
+        services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.BillingBackgroundService>();   // đối soát đơn, chuyển kỳ, nhắc hạn, thông báo hạn mức
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.ParentProfileMigrationBackgroundService>();   // [1.5d] chạy 1 lần lúc khởi động
 
         return services;

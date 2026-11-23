@@ -14,7 +14,9 @@ public record ProfileFlowStateDto(
     [property: JsonPropertyName("draftTranscript")] DraftTranscriptFileDto? DraftTranscript,
     [property: JsonPropertyName("lastUpdatedAt")] DateTime? LastUpdatedAt,
     [property: JsonPropertyName("hasCommittedProfile")] bool HasCommittedProfile = false,
-    [property: JsonPropertyName("lastCompletedStep")] int LastCompletedStep = 0
+    [property: JsonPropertyName("lastCompletedStep")] int LastCompletedStep = 0,
+    // UC-94: học sinh nhận hồ sơ phụ huynh nhập hộ có số tiền tối đa/năm chính xác → số USD đó, cố định, không sửa được; null = sửa bình thường
+    [property: JsonPropertyName("budgetLockedUsd")] decimal? BudgetLockedUsd = null
 );
 
 /// <summary>Draft 5 bước nhập liệu (bước 6 là xem lại). Mirror `frontend/src/types/profile-flow.ts`.</summary>
@@ -108,12 +110,16 @@ public record FlowOtherTestDraftDto(
 
 /// <summary>
 /// Bước 4 – annualBudgetTier: id tier_* trong metadata; needFinancialAid: mandatory | preferred | optional;
-/// fundingSource: mã ProfileConstants.FundingSources (ai chi trả chính)
+/// fundingSource: mã ProfileConstants.FundingSources (ai chi trả chính);
+/// annualBudgetVnd: số tiền tối đa/năm phụ huynh nhập chính xác (VND), có thì đổi sang USD theo tỷ giá lúc lưu và ghi vào budget_max_usd;
+/// annualBudgetUsd: số USD chính xác đã lưu lần trước (server trả về khi mở lại), lưu lại không đổi thì giữ số này, không để hạng ghi đè
 /// </summary>
 public record FlowFinancialDraftDto(
     [property: JsonPropertyName("annualBudgetTier")] string? AnnualBudgetTier = null,
     [property: JsonPropertyName("needFinancialAid")] string? NeedFinancialAid = null,
-    [property: JsonPropertyName("fundingSource")] string? FundingSource = null
+    [property: JsonPropertyName("fundingSource")] string? FundingSource = null,
+    [property: JsonPropertyName("annualBudgetVnd")] long? AnnualBudgetVnd = null,
+    [property: JsonPropertyName("annualBudgetUsd")] decimal? AnnualBudgetUsd = null
 );
 
 public record FlowActivitiesDraftDto(
@@ -155,10 +161,11 @@ public record FlowTranscriptSubjectScoreDto(
     [property: JsonPropertyName("reviewReason")] string? ReviewReason = null
 );
 
+/// <summary>Thông tin tệp bảng điểm trong nháp. StoredFileName/RelativePath chỉ có ở nháp cũ từ khi còn lưu tệp, nay luôn null.</summary>
 public record DraftTranscriptInfoDto(
     [property: JsonPropertyName("originalFileName")] string OriginalFileName,
-    [property: JsonPropertyName("storedFileName")] string StoredFileName,
-    [property: JsonPropertyName("relativePath")] string RelativePath,
+    [property: JsonPropertyName("storedFileName")] string? StoredFileName,
+    [property: JsonPropertyName("relativePath")] string? RelativePath,
     [property: JsonPropertyName("fileSizeBytes")] long FileSizeBytes,
     [property: JsonPropertyName("contentType")] string ContentType,
     [property: JsonPropertyName("uploadedAt")] DateTime UploadedAt

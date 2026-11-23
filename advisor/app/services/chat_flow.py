@@ -20,11 +20,13 @@ from app.schemas.chat import (
     ChatResponse,
     ChatState,
     Citation,
+    PendingQuestionResponse,
     ProfileField,
     QuickReply,
     SlmSummary,
     SlmSummaryIntent,
     Step,
+    TurnInputs,
     Widget,
 )
 from app.schemas.slm import SlmTinResult, SlmY
@@ -39,12 +41,12 @@ from app.services.replies import (
     CHAT_BUTTON,
     CONTINUE_CHAT,
     FORM_BUTTON,
-    FORM_DONE,
     INTAKE_FORM,
     INTAKE_MORE,
     MENU,
     NEED_MAJOR,
     NOT_READY,
+    PREMIUM_REQUIRED,
 )
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
 from app.services.slm_contract import SlmClassifier
@@ -238,6 +240,66 @@ def recreate_question_output(state: ChatState, question_id: str, question_text: 
     )
 
 
+# Ghép các thông tin .NET gửi mỗi lượt (hồ sơ, học bạ, mốc, bảng quy đổi, danh sách trường...) vào state, sửa trực tiếp state.
+# Dùng chung cho lượt chat (ChatFlow) và cho việc dựng lại câu hồ sơ đang chờ khi mở lại phiên cũ (pending_question),
+# để hai nơi luôn thấy cùng một state
+def apply_turn_inputs(state: ChatState, req: TurnInputs) -> None:
+    if req.study_level:  # .NET gửi bậc học mỗi lượt; không gửi thì giữ bậc đã nhớ
+        state.study_level = req.study_level
+    # Hồ sơ trong nháp (do .NET gửi) là nguồn thật; không gửi thì giữ hồ sơ trong state như cũ
+    if req.profile is not None:
+        state.profile = merge_profile(state.profile, req.profile)
+        # Học bạ đi cùng hồ sơ: lượt .NET gửi hồ sơ thì thay luôn học bạ, kể cả None (đã chuyển sang GPA tổng)
+        state.transcript = req.transcript
+    # Mốc trường đổi theo bậc học; không gửi thì giữ mốc đã nhớ
+    if req.benchmarks is not None:
+        state.benchmarks = req.benchmarks
+    # Bảng quy đổi điểm do moderator sửa; không gửi thì giữ bảng đã nhớ (chưa từng gửi thì dùng bảng WES)
+    if req.grade_scale:
+        state.grade_scale = req.grade_scale
+    # Đã lưu hồ sơ chưa: quyết định hỏi đủ hay chỉ hỏi mục bắt buộc còn thiếu; không gửi thì giữ giá trị cũ
+    if req.has_committed_profile is not None:
+        state.has_committed_profile = req.has_committed_profile
+    # Phụ huynh nhập hộ con managed hay không: F1 hỏi số tiền chính xác (VNĐ) thay cho mức
+    if req.exact_budget is not None:
+        state.exact_budget = req.exact_budget
+    # Danh sách trường gợi ý do .NET gửi mỗi lượt (lấy từ lần gợi ý đã lưu); không gửi thì giữ như cũ.
+    # Có danh sách nghĩa là học sinh đã có kết quả, dù gợi ý ở trang Gợi ý trường chứ không phải trong chat
+    if req.schools is not None:
+        state.schools = req.schools
+        state.has_results = state.has_results or bool(req.schools)
+    if req.other_schools is not None:
+        state.other_schools = req.other_schools
+
+
+# Câu HỒ SƠ có thể dựng lại nút và công cụ khi mở lại phiên cũ: câu bậc học, ngành (B1), các câu hồ sơ (D, E, F, N) và bảng rà soát X1.
+# Không gồm câu mở đầu (B0) và câu gợi ý X2, X3: nút của chúng chỉ là gợi ý, học sinh gõ tay là đủ.
+# Nhập muộn vì các skill nhập chat_flow
+def profile_questions() -> frozenset[str]:
+    from app.services.skills import skill_bac_hoc, skill_ho_so
+
+    return frozenset(skill_bac_hoc.QUESTION_FIELDS) | frozenset(skill_ho_so.QUESTION_FIELDS) | {"X1"}
+
+
+# Mở lại một phiên chat cũ: dựng lại nút và công cụ của câu hồ sơ đang chờ (tin nhắn lưu trong database chỉ có chữ).
+# Chỉ đọc: chạy trên bản sao của state nên state của phiên không đổi, không gọi AI (không tốn token, không trừ lượt).
+# Không có câu hồ sơ nào đang chờ thì pending = False
+def pending_question(state: ChatState, req: TurnInputs) -> PendingQuestionResponse:
+    work = state.model_copy(deep=True)
+    apply_turn_inputs(work, req)
+    question_id = work.question_id
+    if question_id is None or question_id not in profile_questions():
+        return PendingQuestionResponse()
+    output = recreate_question_output(work, question_id, work.last_question)
+    return PendingQuestionResponse(
+        pending=True,
+        question_id=question_id,
+        question=work.last_question or output.answer,
+        quick_replies=output.quick_replies,
+        widget=output.widget,
+    )
+
+
 class ChatFlow:
     # slm: bộ phân loại tin nhắn (OllamaSlm, test dùng FixedSlm). branches: loại câu hỏi -> nhánh (build_branches)
     def __init__(self, slm: SlmClassifier, branches: dict[str, Branch]) -> None:
@@ -261,29 +323,7 @@ class ChatFlow:
             ask(state, "B0.1")
         else:
             state = req.state.model_copy(deep=True)
-        if req.study_level:  # .NET gửi bậc học mỗi lượt; không gửi thì giữ bậc đã nhớ
-            state.study_level = req.study_level
-        # Hồ sơ trong nháp (do .NET gửi) là nguồn thật; không gửi thì giữ hồ sơ trong state như cũ
-        if req.profile is not None:
-            state.profile = merge_profile(state.profile, req.profile)
-            # Học bạ đi cùng hồ sơ: lượt .NET gửi hồ sơ thì thay luôn học bạ, kể cả None (đã chuyển sang GPA tổng)
-            state.transcript = req.transcript
-        # Mốc trường đổi theo bậc học; không gửi thì giữ mốc đã nhớ
-        if req.benchmarks is not None:
-            state.benchmarks = req.benchmarks
-        # Bảng quy đổi điểm do moderator sửa; không gửi thì giữ bảng đã nhớ (chưa từng gửi thì dùng bảng WES)
-        if req.grade_scale:
-            state.grade_scale = req.grade_scale
-        # Đã lưu hồ sơ chưa: quyết định hỏi đủ hay chỉ hỏi mục bắt buộc còn thiếu; không gửi thì giữ giá trị cũ
-        if req.has_committed_profile is not None:
-            state.has_committed_profile = req.has_committed_profile
-        # Danh sách trường gợi ý do .NET gửi mỗi lượt (lấy từ lần gợi ý đã lưu); không gửi thì giữ như cũ.
-        # Có danh sách nghĩa là học sinh đã có kết quả, dù gợi ý ở trang Gợi ý trường chứ không phải trong chat
-        if req.schools is not None:
-            state.schools = req.schools
-            state.has_results = state.has_results or bool(req.schools)
-        if req.other_schools is not None:
-            state.other_schools = req.other_schools
+        apply_turn_inputs(state, req)
         # Chụp hồ sơ đầu lượt để cuối lượt biết khóa nào đổi (sao chép sâu vì nhánh sửa trực tiếp trên state)
         profile_before = {key: field.model_copy(deep=True) for key, field in state.profile.items()}
         message = last_user_message(req)
@@ -309,12 +349,17 @@ class ChatFlow:
             if continue_chat and state.pending_advice is None and profile_ready(state):
                 from app.services.skills import skill_ho_so
 
+                if not allows(req, "collect_profile"):
+                    return self._locked(req, state, message, started, profile_before, ["collect_profile"])
                 state.intake_mode = "chat"
                 # Còn dự định thi quá hạn thì hỏi dự định đó trước khi báo hồ sơ đã đủ
-                output = skill_ho_so.ask_overdue_first(state) or SkillOutput(FORM_DONE)
+                output = skill_ho_so.ask_overdue_first(state) or SkillOutput(skill_ho_so.FORM_SAVED)
                 log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
                 return self._response(state, output, [], profile_before)
             if continue_chat and state.pending_advice is not None and profile_ready(state):
+                # Khóa trước khi lấy câu tư vấn đang chờ ra, để nâng cấp xong câu đó vẫn còn
+                if not allows(req, "profile_review"):
+                    return self._locked(req, state, message, started, profile_before, ["profile_review"])
                 original = state.pending_advice
                 state.pending_advice = None
                 state.intake_mode = "chat"
@@ -331,12 +376,16 @@ class ChatFlow:
                 )
                 return self._response(state, output, ["profile_review"], profile_before)
             if choice:
+                if not allows(req, "collect_profile"):
+                    return self._locked(req, state, message, started, profile_before, ["collect_profile"])
                 output = begin_intake(state, choice)
                 log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
                 return self._response(state, output, [], profile_before)
 
         # Nút menu "Thử thay đổi hồ sơ": câu chung chung này model chưa đọc được, code trả lời luôn (hỏi thử gì, kèm nút thử nhanh)
         if is_try_menu(message):
+            if not allows(req, "scenario"):
+                return self._locked(req, state, message, started, profile_before, ["scenario"])
             output = self._branches["scenario"].ask_what(state)
             log_turn(
                 state, message, None, ["scenario"], (time.perf_counter() - started) * 1000, req.session_id
@@ -362,8 +411,17 @@ class ChatFlow:
             slm = with_comparison_intent(message, slm)
             slm = contextualize(state, message, slm)
 
+        # Gói của học sinh không cho loại ý nào thì bỏ ý đó; không còn ý nào thì trả câu cần Premium, không chạy nhánh nào
+        intents = intents_to_run(slm)
+        locked = list(dict.fromkeys(y.type for y in intents if not allows(req, y.type)))
+        intents = [y for y in intents if allows(req, y.type)]
+        if not intents:
+            response = self._locked(req, state, message, started, profile_before, locked, slm)
+            response.slm = slm_summary(slm, asked_slm, fell_back, model_intents)
+            return response
+
         # 2. Chạy từng ý theo thứ tự, ghép câu trả lời
-        names, output = await self._run_intents(state, message, slm, emit)
+        names, output = await self._run_intents(state, message, slm, intents, emit)
 
         # 3-4. Học sinh hỏi xen ngang lúc đang hỏi hồ sơ (câu đang chờ chưa được trả lời): nhắc lại câu đang chờ.
         # Không nhắc khi nhánh hồ sơ đã chạy (nó tự hỏi câu kế tiếp) hoặc khi câu đang chờ là câu chào mở đầu
@@ -388,6 +446,25 @@ class ChatFlow:
         log_turn(state, message, slm, names, (time.perf_counter() - started) * 1000, req.session_id)
         response = self._response(state, output, names, profile_before)
         response.slm = slm_summary(slm, asked_slm, fell_back, model_intents)
+        response.locked_intents = locked
+        return response
+
+    # Lượt bị khóa vì gói: câu cần Premium, không chạy nhánh nào (không gọi Claude), state giữ như đang có
+    def _locked(
+        self,
+        req: ChatRequest,
+        state: ChatState,
+        message: str,
+        started: float,
+        profile_before: dict[str, ProfileField],
+        locked: list[str],
+        slm: SlmTinResult | None = None,
+    ) -> ChatResponse:
+        log_turn(state, message, slm, [], (time.perf_counter() - started) * 1000, req.session_id)
+        response = self._response(
+            state, SkillOutput(PREMIUM_REQUIRED, action="premium_required"), [], profile_before
+        )
+        response.locked_intents = locked
         return response
 
     # Mỗi ý chạy nhánh của loại nó. Ý collect_profile chạy TRƯỚC để các ý khác thấy hồ sơ mới, nhưng câu trả lời của nó
@@ -395,9 +472,13 @@ class ChatFlow:
     # Các ý chỉ đọc state (PARALLEL_SAFE) chạy song song (tối đa PARALLEL_LIMIT ý cùng lúc) cho nhanh;
     # Khi stream (emit), mỗi ý xong thì gửi đi ngay, nhưng chỉ khi mọi ý đứng trước nó đã gửi (đúng thứ tự hỏi)
     async def _run_intents(
-        self, state: ChatState, message: str, slm: SlmTinResult, emit: Emit | None = None
+        self,
+        state: ChatState,
+        message: str,
+        slm: SlmTinResult,
+        intents: list[SlmY],
+        emit: Emit | None = None,
     ) -> tuple[list[str], SkillOutput]:
-        intents = intents_to_run(slm)
         results: dict[int, SkillOutput] = {}
         sent = 0  # số ý đầu danh sách đã xét gửi đi
         if emit:
@@ -463,6 +544,11 @@ class ChatFlow:
             action=output.action,
             action_data=output.action_data,
         )
+
+
+# Gói của học sinh cho chạy loại ý này không (allowed_intents None = mọi loại)
+def allows(req: ChatRequest, kind: str) -> bool:
+    return req.allowed_intents is None or kind in req.allowed_intents
 
 
 # Tin nhắn mới nhất của học sinh

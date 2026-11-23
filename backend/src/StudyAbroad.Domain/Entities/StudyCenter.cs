@@ -36,7 +36,10 @@ public class StudyCenter : BaseEntity
     /// <summary>Thời điểm email liên hệ/đăng nhập của trung tâm được xác thực qua OTP (UC-91).</summary>
     public DateTime? EmailVerifiedAt { get; set; }
 
-    /// <summary>Thời điểm số điện thoại của trung tâm được xác thực qua SMS OTP (UC-91, BR-C3).</summary>
+    /// <summary>
+    /// Không còn dùng: xác thực số điện thoại bằng SMS OTP đã bỏ, số điện thoại chỉ là thông tin liên hệ.
+    /// Giữ cột để tránh migration; dữ liệu cũ không ảnh hưởng nghiệp vụ.
+    /// </summary>
     public DateTime? PhoneVerifiedAt { get; set; }
 
     /// <summary>Thời điểm trung tâm đồng ý Điều khoản &amp; Quyền riêng tư (UC-64).</summary>
@@ -112,6 +115,12 @@ public class StudyCenter : BaseEntity
     /// <summary>Legal Hold: đóng băng dữ liệu trung tâm khi có điều tra gian lận/tranh chấp. Job nền không được purge.</summary>
     public bool IsLegalHold { get; set; } = false;
 
-    /// <summary>Lý do áp dụng Legal Hold.</summary>
+    /// <summary>Lý do áp dụng Legal Hold. Căn cứ: Luật 91/2025/QH15 Điều 14 khoản 2 và Điều 19 khoản 1 điểm a, b; bên kiểm soát phải chứng minh được trường hợp này (Điều 19 khoản 1 điểm a), nên lý do phải cụ thể.</summary>
     public string? LegalHoldReason { get; set; }
+
+    /// <summary>[UC-93] Thời điểm Administrator bật Legal Hold (UTC). Null khi không giữ.</summary>
+    public DateTime? LegalHoldAt { get; set; }
+
+    /// <summary>[UC-93] Administrator bật Legal Hold. Lịch sử bật/gỡ đầy đủ nằm trong audit_logs.</summary>
+    public Guid? LegalHoldByUserId { get; set; }
 }

@@ -3,7 +3,7 @@ import { AdminSection } from "@/components/admin/AdminSection";
 import { ReviewBatchesView } from "@/components/admin/review-batches/ReviewBatchesView";
 
 export const metadata: Metadata = {
-  title: "Duyệt mẫu – Quản trị USAS",
+  title: "Duyệt mẫu – Quản trị USDSS",
 };
 
 export default function AdminReviewBatchesPage() {

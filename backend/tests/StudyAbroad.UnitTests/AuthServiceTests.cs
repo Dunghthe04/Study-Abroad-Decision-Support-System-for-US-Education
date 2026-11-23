@@ -624,6 +624,7 @@ public class AuthServiceTests
             IsRevoked = false
         });
 
+        var callsBefore = _unitOfWork.Calls;   // đăng ký ở trên cũng dùng giao dịch (UC-104): chỉ đếm phần xóa tài khoản
         var result = await service.AnonymizeUserAccountAsync(
             userId,
             ipAddress: "127.0.0.1",
@@ -637,7 +638,7 @@ public class AuthServiceTests
         Assert.Equal(originalName, user.FullName);
         Assert.Equal(originalHash, user.PasswordHash);
         Assert.True(_repo.Sessions[0].IsRevoked);
-        Assert.Equal(1, _unitOfWork.Calls);
+        Assert.Equal(callsBefore + 1, _unitOfWork.Calls);
 
         var log = Assert.Single(_auditLogs.Entries);
         Assert.Equal("user.delete_account", log.Action);
@@ -691,12 +692,13 @@ public class AuthServiceTests
         user.Status = UserStatuses.Active;
         user.Role = role;
 
+        var callsBefore = _unitOfWork.Calls;   // đăng ký ở trên cũng dùng giao dịch (UC-104)
         var result = await service.AnonymizeUserAccountAsync(user.Id);
 
         Assert.Equal(AuthError.RoleNotAllowed, result.Error);
         Assert.Equal(UserStatuses.Active, user.Status);
         Assert.Null(user.DeletedAt);
-        Assert.Equal(0, _unitOfWork.Calls);
+        Assert.Equal(callsBefore, _unitOfWork.Calls);
         Assert.Empty(_auditLogs.Entries);
     }
 
@@ -930,6 +932,90 @@ public class AuthServiceTests
 
         // Email chỉ gửi sau khi transaction commit; lỗi giữa chừng thì phụ huynh không nhận mail sai
         Assert.DoesNotContain(_emailSender.SentEmails, e => e.Purpose == "parent_unlinked");
+    }
+
+    // [UC-80 / billing] Hook gói dịch vụ: gọi trong transaction xóa mềm; việc sau commit (thông báo, hủy link thanh toán) chạy sau khi commit
+
+    private sealed class RecordingBillingHooks(List<string> log) : StudyAbroad.Application.Billing.IBillingAccountHooks
+    {
+        public Exception? Throw { get; set; }
+
+        public Task<Func<CancellationToken, Task>> OnAccountSoftDeletedAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default)
+        {
+            if (Throw is not null)
+                throw Throw;
+            log.Add($"hook:{userId}");
+            return Task.FromResult<Func<CancellationToken, Task>>(_ =>
+            {
+                log.Add("after-commit");
+                return Task.CompletedTask;
+            });
+        }
+
+        public Task<Func<CancellationToken, Task>> OnBeforePurgeAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class LoggingUnitOfWork(List<string> log) : IUnitOfWork
+    {
+        public async Task ExecuteInTransactionAsync(Func<CancellationToken, Task> work, CancellationToken ct = default)
+        {
+            log.Add("tx-begin");
+            await work(ct);
+            log.Add("tx-commit");
+        }
+    }
+
+    private AuthService CreateServiceWithBillingHooks(List<string> log, RecordingBillingHooks hooks) => new(
+        _repo, new FakeHasher(), _tokens, _emailSender, _links, _auditLogs,
+        new ParentLinkService(_links, _repo, _emailSender, _auditLogs), new LoggingUnitOfWork(log), _leadWithdrawals,
+        billingHooks: hooks);
+
+    private async Task<User> ActiveStudent()
+    {
+        await CreateService().RegisterAsync(Request(role: UserRoles.Student, dateOfBirth: BornYearsAgo(18)));
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Active;
+        return user;
+    }
+
+    [Fact]
+    public async Task AnonymizeUserAccount_CallsBillingHookInsideTransaction_AndItsAfterCommitWorkOnlyAfterCommit()
+    {
+        var user = await ActiveStudent();
+        List<string> log = [];
+
+        var result = await CreateServiceWithBillingHooks(log, new RecordingBillingHooks(log)).AnonymizeUserAccountAsync(user.Id);
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(new[] { "tx-begin", $"hook:{user.Id}", "tx-commit", "after-commit" }, log);
+        Assert.Equal(UserStatuses.Deleted, user.Status);
+    }
+
+    [Fact]
+    public async Task AnonymizeUserAccount_BillingHookFails_NothingCommittedAndAfterCommitWorkSkipped()
+    {
+        var user = await ActiveStudent();
+        List<string> log = [];
+        var hooks = new RecordingBillingHooks(log) { Throw = new InvalidOperationException("db lỗi") };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => CreateServiceWithBillingHooks(log, hooks).AnonymizeUserAccountAsync(user.Id));
+
+        Assert.Equal(new[] { "tx-begin" }, log);
+        Assert.Empty(_auditLogs.Entries);
+    }
+
+    [Fact]
+    public async Task AnonymizeUserAccount_RejectedRole_DoesNotCallBillingHook()
+    {
+        var user = await ActiveStudent();
+        user.Role = UserRoles.Admin;
+        List<string> log = [];
+
+        var result = await CreateServiceWithBillingHooks(log, new RecordingBillingHooks(log)).AnonymizeUserAccountAsync(user.Id);
+
+        Assert.Equal(AuthError.RoleNotAllowed, result.Error);
+        Assert.Empty(log);
     }
 
     [Fact]

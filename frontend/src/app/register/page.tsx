@@ -3,7 +3,7 @@ import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
 import { RegisterForm } from "@/components/auth/RegisterForm";
 
 export const metadata: Metadata = {
-  title: "Đăng ký tài khoản – USAS",
+  title: "Đăng ký tài khoản – USDSS",
   description: "Đăng ký tài khoản học sinh hoặc phụ huynh để nhận tư vấn du học Mỹ",
 };
 

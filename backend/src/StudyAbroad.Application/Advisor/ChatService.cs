@@ -28,23 +28,35 @@ namespace StudyAbroad.Application.Advisor
     // aiCalls: ghi nhật ký token, thời gian, lỗi của từng lần gọi AI vào ai_calls (null thì không ghi, dùng trong test cũ). Độc lập với messages
     // usageCollector: "giỏ chung" gom số đo của MỌI lần gọi advisor trong lượt (chat, giải thích, what-if, goal-seek, so sánh), do lớp bọc
     //   IAdvisorClient bỏ vào. Có số liệu thì dùng cả giỏ; không có (test cũ, advisor chưa bọc) thì dùng số đo của lần gọi chat
+    // entitlements: chọn pool trả cho lượt (Personal → Family → Free) trước mọi lần gọi advisor, đóng dấu kỳ và mã gói lên ai_calls
+    //   (null thì không đóng dấu, không chặn, dùng trong test cũ). Cũng là đầu vào của cổng Premium (ChatPremiumGate): hết hạn mức Free hoặc nút Premium
+    //   của tài khoản Free thì .NET tự trả thẻ khóa; tin gõ thì gửi advisor kèm AllowedIntents để advisor bỏ ý bị khóa
     public class ChatService(
         IAdvisorClient advisor, IChatSessionRepository sessions, IProfileFlowService profileFlow,
         IChatAnalysisRepository? analyses = null, IRecommendationRunner? recommender = null,
         IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null,
         IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null,
-        IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null, AiPricing? pricing = null)
+        IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null, AiPricing? pricing = null,
+        StudyAbroad.Application.Billing.IEntitlementService? entitlements = null) : History.IChatPendingQuestion
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
         // Mọi bước còn lại (lưu state, nháp, gợi ý trường...) chạy như cũ sau khi advisor trả xong, kết quả cuối giống hệt
+        // chargeUserId, chargeRole: ai trả cho lượt này. Phụ huynh đang nhập hộ con thì phiên chat là của con nhưng gói, hạn mức và token tính theo
+        // phụ huynh (con managed không mua được gói). Để trống thì người hỏi tự trả (userId, role)
         public async Task<AdvisorChatResponse> ChatAsync(
             Guid userId, AdvisorChatRequest request, CancellationToken ct = default,
-            Func<AdvisorStreamEvent, Task>? onEvent = null)
+            Func<AdvisorStreamEvent, Task>? onEvent = null, string? role = null,
+            Guid? chargeUserId = null, string? chargeRole = null)
         {
             var askedAt = DateTime.UtcNow;   // lúc học sinh hỏi, để ghi thời điểm tin của học sinh
             var turnClock = Stopwatch.StartNew();
             usageCollector?.Clear();         // giỏ số đo của lượt này bắt đầu rỗng
+            // Pool trả cho cả lượt, chọn một lần trước mọi lần gọi advisor (kể cả nút bấm gọi advisor viết ghi chú)
+            var payerId = chargeUserId ?? userId;
+            var charge = entitlements is null
+                ? null
+                : await entitlements.ResolveChatChargeAsync(payerId, chargeRole ?? role ?? UserRoles.Student, askedAt, ct);
             // SessionId do trình duyệt gửi chỉ dùng để tìm phiên; State của trình duyệt bị bỏ, luôn lấy từ DB
             var isNew = false;
             ChatSession? session = null;
@@ -55,69 +67,81 @@ namespace StudyAbroad.Application.Advisor
             //Nếu chưa có phiên -> tạo mới
             if (session is null)
             {
-                session = new ChatSession { UserId = userId, StudyLevel = request.StudyLevel };
+                // Tiêu đề trong lịch sử chat lấy từ câu hỏi đầu tiên (lượt đầu chỉ bấm nút thì không có, lịch sử hiện tên mặc định)
+                session = new ChatSession
+                {
+                    UserId = userId,
+                    StudyLevel = request.StudyLevel,
+                    Title = History.ChatSessionTitle.From(request.Messages.LastOrDefault(m => m.Role == "user")?.Content),
+                };
                 isNew = true;
             }
             JsonElement? state = null;
             if (!string.IsNullOrEmpty(session.StateJson))
                 state = JsonDocument.Parse(session.StateJson).RootElement.Clone();
 
-            // Hồ sơ lấy từ nháp (form sửa thì chat thấy), không tin Profile trình duyệt gửi.
-            // Truyền hồ sơ lượt trước để giữ các ô học sinh nói "không có" / "chưa rõ" mà nháp không lưu được
-            var flow = await profileFlow.GetFlowStateAsync(userId, ct);
-            var profile = ChatProfileMapper.ToChatProfile(flow.Draft, PreviousProfile(state));
-
-            // Đã có danh sách trường thì gửi kèm (lấy lần gợi ý mới nhất, kể cả khi học sinh vừa gợi ý lại ở trang khác)
-            var (schools, otherSchools) = await LatestSchoolsAsync(userId, ct);
-
-            // Học bạ theo năm gửi riêng, không nằm trong hồ sơ chat (chat chỉ đọc, chỉ form nhập được)
-            var transcript = ChatTranscript.From(flow.Draft.Step2) is { } years ? JsonSerializer.SerializeToElement(years) : (JsonElement?)null;
-
-            // Mốc so sánh GPA / tiếng Anh từ dữ liệu trường, cùng bậc học với gợi ý trường
-            var marks = await BenchmarksAsync(flow.Draft.Step1?.TargetDegreeLevel, ct);
-
-            // Bảng quy đổi điểm thang 10 sang GPA thang 4 trong DB (moderator sửa) để advisor đổi GPA giống .NET và form.
-            // Luôn lấy từ server, không tin bảng trình duyệt gửi; không có provider thì null, advisor dùng bảng mặc định
-            var scaleRules = gradeScale is null ? null : (await gradeScale.GetAsync(ct)).Rules;
-
-            //Gửi request sang Advisor
-            var toAdvisor = request with
-            {
-                State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools, Transcript = transcript,
-                Benchmarks = marks, OtherSchools = otherSchools, Simulation = null,   // giá trị giả định chỉ .NET dùng, không gửi advisor
-                GradeScale = scaleRules,
-                // Hồ sơ trống lúc đầu (nháp mặc định vẫn có loại trường "all") thì advisor hỏi đủ như form; luôn lấy từ server
-                HasCommittedProfile = flow.HasCommittedProfile,
-            };
-            // Nút trên giao diện gửi hành động có cấu trúc (mã trường): bỏ qua advisor, dựng sẵn lượt như thể advisor đã hiểu
+            // Cổng Premium (sau cổng tuổi, trước advisor): hết hạn mức Free, hoặc nút Premium của tài khoản Free, thì .NET tự trả thẻ khóa.
+            // Không gọi advisor, không đọc dữ liệu gợi ý, không tính token; state của DB đi nguyên qua nên lượt khóa không làm mất câu hỏi đang dở
+            var gate = ChatPremiumGate.Check(charge, request.Action, state);
+            var locked = gate?.Lock;
             AdvisorChatResponse response;
-            try
+            if (gate is not null)
+                response = gate.Reply;
+            else
             {
-                response = (recommender is not null ? ChatActions.ToResponse(request.Action, state) : null)
-                    ?? (onEvent is null
-                        ? await advisor.ChatAsync(toAdvisor, ct)
-                        : await advisor.ChatStreamAsync(toAdvisor, onEvent, ct));
-            }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            {
-                // Advisor sập hẳn (503, hết thời gian...): học sinh nhận lỗi như cũ, nhưng câu hỏi không được mất vì đây là lỗi admin cần biết nhất
-                await RecordAdvisorFailureAsync(session, isNew, request, askedAt, ex, turnClock.ElapsedMilliseconds, ct);
-                throw;
+                var toAdvisor = await BuildAdvisorRequestAsync(userId, request, state, charge, ct);
+                // Nút trên giao diện gửi hành động có cấu trúc (mã trường): bỏ qua advisor, dựng sẵn lượt như thể advisor đã hiểu
+                try
+                {
+                    response = (recommender is not null ? ChatActions.ToResponse(request.Action, state) : null)
+                        ?? (onEvent is null
+                            ? await advisor.ChatAsync(toAdvisor, ct)
+                            : await advisor.ChatStreamAsync(toAdvisor, onEvent, ct));
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    // Advisor sập hẳn (503, hết thời gian...): học sinh nhận lỗi như cũ, nhưng câu hỏi không được mất vì đây là lỗi admin cần biết nhất
+                    await RecordAdvisorFailureAsync(session, isNew, request, askedAt, ex, turnClock.ElapsedMilliseconds, ct);
+                    throw;
+                }
             }
             // Chụp ngay các tín hiệu của advisor (nhãn model gán, số đo AI, hành động) trước khi các bước sau thay response.
             // Dùng để đánh giá lượt (ChatTurn) và ghi chat_messages ở cuối
             var advisorSignals = new TurnSignals(askedAt, response.Slm, response.AiUsage, response.Action, response.Skills);
             // 1f: phụ huynh đã liên kết không có hồ sơ riêng, lượt về hồ sơ được thay trước khi lưu nháp (ParentChatGate)
+            var beforeParentGate = response;
             if (!await profileFlow.CanEditOwnProfileAsync(userId, ct))
                 response = ParentChatGate.Apply(response, state, await profileFlow.GetParentChatChildrenAsync(userId, ct));
+            // Advisor tự khóa (premium_required) hoặc bỏ một phần ý (lockedIntents) thì kèm thẻ khóa. ParentChatGate đi trước: lượt đã bị nó thay thì không có thẻ.
+            // Action premium_required không khớp nhánh nào bên dưới nên không chạy gợi ý, giải thích, mô phỏng, goal-seeking hay tra trường;
+            // chỉ có lockedIntents thì Action là của ý được phép và vẫn chạy bình thường
+            if (gate is null && ReferenceEquals(beforeParentGate, response))
+                locked = ChatPremiumGate.LockOf(charge, response);
+            // Chạy TRƯỚC lớp chặn Premium bên dưới: câu hỏi số liệu mà SLM lỡ xếp vào giải thích / goal-seeking của tài khoản Free là câu tra cứu Free được dùng, phải được trả lời chứ không bị khóa.
+            // SLM đôi khi xếp câu hỏi số liệu một trường ("UCLA xếp hạng bao nhiêu", "MIT cần IELTS bao nhiêu") vào giải thích hoặc goal-seeking:
+            // câu tự gõ (không phải nút) mà chỉ hỏi số liệu thì chuyển sang trả lời số liệu
+            if (request.Action is null && recommender is not null
+                && response.Action is ChatExplanation.Action or ChatGoalSeek.Action
+                && request.Messages.LastOrDefault(m => m.Role == "user")?.Content is { } typed
+                && ChatSchoolInfo.Reroute(response, typed) is { } rerouted)
+                response = rerouted;
+
+            // Advisor bản cũ có thể bỏ qua allowedIntents và trả hành động Premium cho tài khoản Free: khóa luôn, không chạy nhánh nào và không lưu gì vào nháp hồ sơ
+            if (ChatPremiumGate.BlockPremiumAction(charge, response, state) is { } blocked)
+            {
+                response = blocked.Reply;
+                locked = blocked.Lock;
+            }
             var changed = await SaveProfileToDraftAsync(userId, response, ct);
 
             // C5: học sinh bấm "Đúng rồi" ở X1 thì chat rời bảng rà soát sang B3, lúc đó lưu hồ sơ chính thức.
             // Đánh giá chạy luôn trong lượt này nên chat có thể đã sang B4.
+            // Sửa hồ sơ đã lưu trong chat (chat vẫn ở B3, hiện lại X1) rồi xác nhận cũng lưu lại; còn ở X1 hay đang hỏi mục sửa thì chưa lưu.
             // Lưu lỗi thì giữ nguyên trạng thái cũ (vẫn ở X1) và nháp, báo lỗi để học sinh sửa rồi xác nhận lại
             var nextStep = CurrentStep(response.State);
             var profileSaved = false;
-            if (QuestionOf(state) == ReviewQuestion && IsPastReview(nextStep) && !IsPastReview(session.CurrentStep))
+            if (QuestionOf(state) == ReviewQuestion && IsPastReview(nextStep)
+                && QuestionOf(response.State) != ReviewQuestion && !IsEditing(response.State))
             {
                 var commitError = await CommitProfileAsync(userId, ct);
                 profileSaved = commitError is null;
@@ -141,14 +165,6 @@ namespace StudyAbroad.Application.Advisor
             // Chạy sau khi lưu analysis để bản lưu lộ trình không lẫn danh sách trường
             if (response.Action == ChatRecommendation.Action && recommender is not null)
                 response = await RecommendAsync(userId, response, ct);
-
-            // SLM đôi khi xếp câu hỏi số liệu một trường ("UCLA xếp hạng bao nhiêu", "MIT cần IELTS bao nhiêu") vào giải thích hoặc goal-seeking:
-            // câu tự gõ (không phải nút) mà chỉ hỏi số liệu thì chuyển sang trả lời số liệu
-            if (request.Action is null && recommender is not null
-                && response.Action is ChatExplanation.Action or ChatGoalSeek.Action
-                && request.Messages.LastOrDefault(m => m.Role == "user")?.Content is { } typed
-                && ChatSchoolInfo.Reroute(response, typed) is { } rerouted)
-                response = rerouted;
 
             // Học sinh hỏi về một trường: lời tư vấn lấy từ phần tư vấn từng trường có sẵn, thay câu tạm của advisor
             if (response.Action == ChatExplanation.Action && recommender is not null)
@@ -191,7 +207,8 @@ namespace StudyAbroad.Application.Advisor
             var turnSignals = advisorSignals with { Usage = TurnUsage(advisorSignals.Usage) };
             var replyId = await RecordTurnAsync(session, request, response, turnSignals, turnClock.ElapsedMilliseconds, ct);
             // Token ghi sau tin trả lời để nối được (chat_message_id). Tin không lưu (tắt công tắc hoặc lỗi) thì vẫn ghi token, chỉ không có liên kết
-            await RecordAiCallsAsync(userId, replyId, turnSignals.Usage, ct);
+            // ai_calls.user_id là người trả (hạn mức Free đếm theo user_id), không phải chủ phiên chat
+            await RecordAiCallsAsync(payerId, replyId, turnSignals.Usage, charge, ct);
 
             //Trả về trình duyệt: có mã phiên, ko lộ trạng thái nội bôk.
             // ProfileChanged để form biết mà nạp lại nháp (D2)
@@ -208,6 +225,76 @@ namespace StudyAbroad.Application.Advisor
                 ActionData = null,
                 AiUsage = null,   // số token là việc nội bộ, học sinh không thấy
                 Slm = null,       // nhãn model gán chứa chữ của học sinh, chỉ lưu cho admin
+                NoBasis = null,   // dấu nội bộ để đánh dấu lượt, học sinh không thấy
+                LockedIntents = null,   // đã đổi thành Locked ở trên; Locked là phần duy nhất của cổng Premium trình duyệt thấy
+                Locked = locked,
+            };
+        }
+
+        // Mở lại phiên cũ (lịch sử chat): dựng lại nút và công cụ của câu hồ sơ đang chờ. Chỉ đọc: không đổi state, không lưu tin,
+        // không tính lượt. Gửi advisor cùng thông tin như một lượt chat (BuildAdvisorRequestAsync) để bảng rà soát hiện hồ sơ hiện tại.
+        // Null: không có phiên đó hoặc phiên của người khác. Advisor lỗi thì coi như không có câu nào: lịch sử vẫn dùng được, học sinh gõ tay
+        public async Task<PendingQuestionDto?> PendingQuestionAsync(Guid userId, Guid sessionId, bool exactBudget, CancellationToken ct = default)
+        {
+            var session = await sessions.FindAsync(sessionId, userId, ct);
+            if (session is null)
+                return null;
+            if (string.IsNullOrEmpty(session.StateJson))
+                return PendingQuestionDto.None;
+            // Phụ huynh đã liên kết không có hồ sơ riêng: chat không hỏi hồ sơ của họ (ParentChatGate), nên không có câu hồ sơ nào để dựng lại
+            if (!await profileFlow.CanEditOwnProfileAsync(userId, ct))
+                return PendingQuestionDto.None;
+
+            var state = JsonDocument.Parse(session.StateJson).RootElement.Clone();
+            var inputs = await BuildAdvisorRequestAsync(userId, new AdvisorChatRequest([]), state, null, ct);
+            try
+            {
+                return await advisor.PendingQuestionAsync(
+                    new AdvisorPendingQuestionRequest(
+                        state, inputs.Profile, inputs.Schools, inputs.OtherSchools, inputs.Transcript, inputs.Benchmarks,
+                        inputs.GradeScale, inputs.HasCommittedProfile, exactBudget),
+                    ct);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or JsonException
+                                       || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+            {
+                logger?.LogWarning(ex, "Không dựng lại được câu hồ sơ đang chờ của phiên {SessionId}", sessionId);
+                return PendingQuestionDto.None;
+            }
+        }
+
+        // Request gửi advisor: hồ sơ, trường, học bạ, mốc, bảng quy đổi đều đọc từ server, không tin giá trị trình duyệt gửi
+        private async Task<AdvisorChatRequest> BuildAdvisorRequestAsync(
+            Guid userId, AdvisorChatRequest request, JsonElement? state, StudyAbroad.Application.Billing.ChatCharge? charge, CancellationToken ct)
+        {
+            // Hồ sơ lấy từ nháp (form sửa thì chat thấy), không tin Profile trình duyệt gửi.
+            // Truyền hồ sơ lượt trước để giữ các ô học sinh nói "không có" / "chưa rõ" mà nháp không lưu được
+            var flow = await profileFlow.GetFlowStateAsync(userId, ct);
+            var profile = ChatProfileMapper.ToChatProfile(flow.Draft, PreviousProfile(state));
+
+            // Đã có danh sách trường thì gửi kèm (lấy lần gợi ý mới nhất, kể cả khi học sinh vừa gợi ý lại ở trang khác)
+            var (schools, otherSchools) = await LatestSchoolsAsync(userId, ct);
+
+            // Học bạ theo năm gửi riêng, không nằm trong hồ sơ chat (chat chỉ đọc, chỉ form nhập được)
+            var transcript = ChatTranscript.From(flow.Draft.Step2) is { } years ? JsonSerializer.SerializeToElement(years) : (JsonElement?)null;
+
+            // Mốc so sánh GPA / tiếng Anh từ dữ liệu trường, cùng bậc học với gợi ý trường
+            var marks = await BenchmarksAsync(flow.Draft.Step1?.TargetDegreeLevel, ct);
+
+            // Bảng quy đổi điểm thang 10 sang GPA thang 4 trong DB (moderator sửa) để advisor đổi GPA giống .NET và form.
+            // Luôn lấy từ server, không tin bảng trình duyệt gửi; không có provider thì null, advisor dùng bảng mặc định
+            var scaleRules = gradeScale is null ? null : (await gradeScale.GetAsync(ct)).Rules;
+
+            //Gửi request sang Advisor
+            return request with
+            {
+                State = state, Profile = JsonSerializer.SerializeToElement(profile), Schools = schools, Transcript = transcript,
+                Benchmarks = marks, OtherSchools = otherSchools, Simulation = null,   // giá trị giả định chỉ .NET dùng, không gửi advisor
+                GradeScale = scaleRules,
+                // Hồ sơ trống lúc đầu (nháp mặc định vẫn có loại trường "all") thì advisor hỏi đủ như form; luôn lấy từ server
+                HasCommittedProfile = flow.HasCommittedProfile,
+                // Ý định gói cho phép: luôn ghi đè bằng giá trị server, kể cả null (Premium còn token, nhân viên); không bao giờ chuyển giá trị trình duyệt gửi
+                AllowedIntents = ChatPremiumGate.AllowedIntentsFor(charge),
             };
         }
 
@@ -238,7 +325,7 @@ namespace StudyAbroad.Application.Advisor
                     rows.Add(question);
                 }
 
-                var outcome = ChatTurn.Outcome(signals.Slm, signals.Usage);
+                var outcome = ChatTurn.Outcome(signals.Slm, signals.Usage, response.NoBasis == true);
                 var reply = new StudyAbroad.Domain.Entities.ChatMessage
                 {
                     ChatSessionId = session.Id,
@@ -271,8 +358,11 @@ namespace StudyAbroad.Application.Advisor
 
         // Ghi mỗi lần gọi AI một dòng ai_calls (nguồn, skill, token, thời gian, lỗi), nối với tin trả lời nếu có.
         // Lỗi khi ghi chỉ cảnh báo, không bao giờ làm hỏng lượt chat. Không có số đo thì không làm gì
-        private Task RecordAiCallsAsync(Guid userId, Guid? replyId, IReadOnlyList<AiUsageDto>? usage, CancellationToken ct) =>
-            aiCalls is null ? Task.CompletedTask : new AiCallRecorder(aiCalls, pricing, logger).RecordAsync(userId, replyId, usage, ct);
+        private Task RecordAiCallsAsync(
+            Guid userId, Guid? replyId, IReadOnlyList<AiUsageDto>? usage, StudyAbroad.Application.Billing.ChatCharge? charge, CancellationToken ct) =>
+            aiCalls is null
+                ? Task.CompletedTask
+                : new AiCallRecorder(aiCalls, pricing, logger).RecordAsync(userId, replyId, usage, ct, charge?.CycleId, charge?.PlanCode);
 
         // Advisor lỗi hẳn nên không có câu trả lời. Lưu câu hỏi và một dòng vai trò system ghi lỗi (outcome failed, review_status open)
         // để câu không biến mất khỏi hàng đợi của admin. Không dùng vai trò assistant vì trợ lý chưa hề trả lời.
@@ -326,9 +416,14 @@ namespace StudyAbroad.Application.Advisor
             try
             {
                 var saved = await recommender!.CreateAsync(userId, null, ct);
+                // Chỉ xin danh sách: Claude viết lời cho danh sách (lỗi thì dùng câu liệt kê ghép bằng code).
+                // Có cả đánh giá hồ sơ: lời đã do Claude viết rồi, danh sách chỉ nối thêm
+                var answer = ChatRecommendation.NoteRequested(response.ActionData) && ChatRecommendation.Note(saved) is { } note
+                    ? await WriteRecommendNoteAsync(note, saved, ct)
+                    : $"{response.Answer}\n\n{ChatRecommendation.Summarize(saved)}";
                 return response with
                 {
-                    Answer = $"{response.Answer}\n\n{ChatRecommendation.Summarize(saved)}",
+                    Answer = answer,
                     State = ChatRecommendation.WithResults(response.State),
                     Widget = new Widget(ChatRecommendation.WidgetType),
                     QuickReplies = ChatNextSteps.AfterRecommend(Suggested(ChatRecommendation.Schools(saved))),
@@ -339,13 +434,13 @@ namespace StudyAbroad.Application.Advisor
                 // Lỗi do hồ sơ ("Chưa...", "Hồ sơ...") thì nói rõ; lỗi kết quả AI thì báo chung
                 var reason = ex.Message.StartsWith("Chưa") || ex.Message.StartsWith("Hồ sơ")
                     ? $"Mình chưa tạo được danh sách trường: {ex.Message}"
-                    : ChatRecommendation.Invalid;
+                    : AdvisorMessages.RecommendationInvalid;
                 return response with { Answer = $"{response.Answer}\n\n{reason}" };
             }
             catch (Exception ex) when (ex is HttpRequestException
                                        || (ex is TaskCanceledException && !ct.IsCancellationRequested))
             {
-                return response with { Answer = $"{response.Answer}\n\n{ChatRecommendation.Busy}" };
+                return response with { Answer = $"{response.Answer}\n\n{AdvisorMessages.RecommendationBusy}" };
             }
         }
 
@@ -399,7 +494,7 @@ namespace StudyAbroad.Application.Advisor
         {
             var code = ChatExplanation.CodeOf(response.ActionData);
             if (code is null)
-                return response with { Answer = ChatExplanation.Failed };
+                return response with { Answer = AdvisorMessages.ExplanationFailed };
             try
             {
                 // Thẻ do code dựng gửi trước để học sinh thấy ngay, rồi mới chờ AI viết lời tư vấn (chậm hơn)
@@ -411,7 +506,7 @@ namespace StudyAbroad.Application.Advisor
                 var suggested = Suggested((await LatestSchoolsAsync(userId, ct)).Shown, code);
                 return response with
                 {
-                    Answer = result.Status == "OK" ? ChatExplanation.Format(result) : ChatExplanation.Failed,
+                    Answer = result.Status == "OK" ? ChatExplanation.Format(result) : AdvisorMessages.ExplanationFailed,
                     Widget = widget,
                     QuickReplies = result.Status == "OK" ? ChatNextSteps.AfterExplain(code, suggested) : ChatNextSteps.AfterExplainFailed(suggested),
                 };
@@ -428,13 +523,13 @@ namespace StudyAbroad.Application.Advisor
                 }
                 var reason = ex.Message.StartsWith("Chưa")
                     ? $"Mình chưa giải thích được trường này: {ex.Message}"
-                    : ChatRecommendation.Invalid;
+                    : AdvisorMessages.RecommendationInvalid;
                 return response with { Answer = reason };
             }
             catch (Exception ex) when (ex is HttpRequestException
                                        || (ex is TaskCanceledException && !ct.IsCancellationRequested))
             {
-                return response with { Answer = ChatExplanation.Busy };
+                return response with { Answer = AdvisorMessages.ExplanationBusy };
             }
         }
 
@@ -445,7 +540,7 @@ namespace StudyAbroad.Application.Advisor
             var scale = gradeScale is null ? null : await gradeScale.GetAsync(ct);
             var scenario = ChatSimulation.Parse(response.ActionData, scale);
             if (scenario is null)
-                return response with { Answer = ChatSimulation.Failed };
+                return response with { Answer = AdvisorMessages.SimulationFailed };
             try
             {
                 // Ưu tiên mới tính từ ưu tiên của lần gợi ý đã lưu (mức học sinh không nhắc thì giữ nguyên)
@@ -484,7 +579,7 @@ namespace StudyAbroad.Application.Advisor
             {
                 var reason = ex.Message.StartsWith("Chưa") || ex.Message.StartsWith("Hồ sơ")
                     ? $"Mình chưa thử được kịch bản này: {ex.Message}"
-                    : ChatSimulation.Failed;
+                    : AdvisorMessages.SimulationFailed;
                 return response with { Answer = reason };
             }
         }
@@ -528,7 +623,7 @@ namespace StudyAbroad.Application.Advisor
                 // Model đã trả trường và mục (không chạy kho kiến thức) mà không khớp được trường nào trong hệ thống: nói rõ, không để câu tạm
                 if (code is null && query.KbSkipped && query.School is { } unknown
                     && (await recommender!.FindMentionedSchoolsAsync(userId, query.Question, ct)).Count != 1)
-                    return MergeSchoolInfo(response, query, ChatSchoolInfo.SchoolNotFound(unknown), clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
+                    return MergeSchoolInfo(response, query, ChatSchoolInfo.SchoolNotFound(unknown), clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData(), NoBasis = true };
                 if (code is null)
                 {
                     // SLM không trích được tên: quét câu, chỉ nhận khi đúng một trường chắc chắn (nhiều trường là so sánh, làm sau)
@@ -537,7 +632,7 @@ namespace StudyAbroad.Application.Advisor
                         code = mentioned[0].Code;
                 }
                 if (code is null)
-                    return response;
+                    return query.KbFound ? response : response with { NoBasis = true };   // giữ câu của kho: chỉ là câu trả lời thật khi kho có nguồn
 
                 var info = await recommender!.SchoolInfoAsync(userId, code, ct);
                 var answer = ChatSchoolInfo.Answer(info, fields, unstored);
@@ -548,7 +643,7 @@ namespace StudyAbroad.Application.Advisor
                     // Chỉ hỏi điều cơ sở dữ liệu không có: kho kiến thức có nguồn thật thì giữ, không thì nói chưa có và chỉ website
                     return query.KbFound
                         ? response
-                        : MergeSchoolInfo(response, query, answer.Text, clearKb: true) with { QuickReplies = ChatNextSteps.AfterSchoolInfo(info.Code, info.Name, fields) };
+                        : MergeSchoolInfo(response, query, answer.Text, clearKb: true) with { QuickReplies = ChatNextSteps.AfterSchoolInfo(info.Code, info.Name, fields), NoBasis = true };
                 }
                 // Thẻ nói đủ số liệu nên giao diện bỏ đoạn chữ này cho gọn; còn lời về điều hệ thống không lưu thì thẻ không nói, giữ chữ
                 var merged = MergeSchoolInfo(response, query, answer.Text, clearKb: true)
@@ -564,8 +659,8 @@ namespace StudyAbroad.Application.Advisor
             {
                 // Có kho kiến thức làm dự phòng thì giữ câu của kho; model đã bỏ qua kho thì báo chưa tra được thay vì để câu tạm
                 return query.KbSkipped
-                    ? MergeSchoolInfo(response, query, ChatSchoolInfo.Unavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() }
-                    : response;
+                    ? MergeSchoolInfo(response, query, AdvisorMessages.SchoolInfoUnavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData(), NoBasis = true }
+                    : query.KbFound ? response : response with { NoBasis = true };
             }
         }
 
@@ -616,7 +711,7 @@ namespace StudyAbroad.Application.Advisor
             }
             catch (InvalidOperationException)
             {
-                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.Unavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
+                return MergeSchoolInfo(response, asQuery, AdvisorMessages.SchoolInfoUnavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
             }
         }
 
@@ -676,7 +771,7 @@ namespace StudyAbroad.Application.Advisor
             }
             catch (InvalidOperationException)
             {
-                return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.Unavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
+                return MergeSchoolInfo(response, asQuery, AdvisorMessages.SchoolInfoUnavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
             }
         }
 
@@ -705,7 +800,7 @@ namespace StudyAbroad.Application.Advisor
         {
             var query = ChatGoalSeek.Parse(response.ActionData);
             if (query is null)
-                return response with { Answer = ChatGoalSeek.Failed };
+                return response with { Answer = AdvisorMessages.GoalSeekFailed };
             try
             {
                 var code = query.Code;
@@ -756,12 +851,28 @@ namespace StudyAbroad.Application.Advisor
             {
                 var reason = ex.Message.StartsWith("Chưa") || ex.Message.StartsWith("Hồ sơ")
                     ? $"Mình chưa tính được: {ex.Message}"
-                    : ChatGoalSeek.Failed;
+                    : AdvisorMessages.GoalSeekFailed;
                 return response with { Answer = reason };
             }
         }
 
         // Gemini diễn đạt kết quả goal-seeking. Lỗi, hết lượt hoặc lời không qua kiểm tra thì dùng câu ghép bằng code (cùng dữ kiện)
+        private async Task<string> WriteRecommendNoteAsync(RecommendNoteRequestDto note, Recommendation saved, CancellationToken ct)
+        {
+            try
+            {
+                var written = await advisor.WriteRecommendNoteAsync(note, ct);
+                if (written.Status == "OK" && !string.IsNullOrWhiteSpace(written.Answer))
+                    return written.Answer;
+            }
+            catch (Exception ex) when (ex is HttpRequestException
+                                       || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+            {
+                // Claude không trả lời được: dùng câu liệt kê ghép bằng code, danh sách vẫn đúng
+            }
+            return ChatRecommendation.Summarize(saved);
+        }
+
         private async Task<string> WriteGoalNoteAsync(GoalNoteRequestDto note, SchoolGoalResult result, CancellationToken ct)
         {
             try
@@ -840,17 +951,25 @@ namespace StudyAbroad.Application.Advisor
                 ? q.GetString()
                 : null;
 
+        // Đang sửa hồ sơ trong chat: state.editQueue là danh sách (rỗng = đang hỏi mục sửa cuối), null = không sửa
+        private static bool IsEditing(JsonElement? state) =>
+            state is { ValueKind: JsonValueKind.Object } s
+            && s.TryGetProperty("editQueue", out var queue) && queue.ValueKind == JsonValueKind.Array;
+
         private static string? CurrentStep(JsonElement? state) =>
             state is { ValueKind: JsonValueKind.Object } s && s.TryGetProperty("currentStep", out var step)
                 ? step.GetString()
                 : null;
 
-        // Lưu hồ sơ chính thức; trả câu lỗi tiếng Việt nếu hồ sơ chưa đủ điều kiện, null nếu lưu được
+        // Lưu hồ sơ chính thức; trả câu lỗi tiếng Việt nếu hồ sơ chưa đủ điều kiện, null nếu lưu được.
+        // Gửi kèm bản nháp lấy từ GetFlowStateAsync: sửa hồ sơ đã lưu mà giữ nguyên mọi mục thì không có nháp
+        // (lần lưu trước đã xóa), lúc đó hàm dựng nháp từ hồ sơ đã lưu nên vẫn lưu được
         private async Task<string?> CommitProfileAsync(Guid userId, CancellationToken ct)
         {
             try
             {
-                await profileFlow.CommitFlowAsync(userId, null, ct);
+                var flow = await profileFlow.GetFlowStateAsync(userId, ct);
+                await profileFlow.CommitFlowAsync(userId, new CommitProfileFlowRequest(flow.Draft), ct);
                 return null;
             }
             catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)

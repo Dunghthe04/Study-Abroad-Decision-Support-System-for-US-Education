@@ -70,11 +70,17 @@ public class AdvisorClient(HttpClient http) : IAdvisorClient
     public Task<GoalNoteResponseDto> WriteGoalNoteAsync(GoalNoteRequestDto request, CancellationToken ct = default) =>
         PostAsync<GoalNoteRequestDto, GoalNoteResponseDto>("api/v1/recommend/goal-seek", request, ct);
 
+    public Task<RecommendNoteResponseDto> WriteRecommendNoteAsync(RecommendNoteRequestDto request, CancellationToken ct = default) =>
+        PostAsync<RecommendNoteRequestDto, RecommendNoteResponseDto>("api/v1/recommend/school-list", request, ct);
+
     public Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default) =>
         PostAsync<CompareNoteRequestDto, CompareNoteResponseDto>("api/v1/recommend/compare", request, ct);
 
     public Task<ScenarioNoteResponseDto> WriteScenarioNoteAsync(ScenarioNoteRequestDto request, CancellationToken ct = default) =>
         PostAsync<ScenarioNoteRequestDto, ScenarioNoteResponseDto>("api/v1/recommend/what-if", request, ct);
+
+    public Task<PendingQuestionDto> PendingQuestionAsync(AdvisorPendingQuestionRequest request, CancellationToken ct = default) =>
+        PostAsync<AdvisorPendingQuestionRequest, PendingQuestionDto>("api/v1/chat/pending-question", request, ct);
 
     private async Task<TResponse> PostAsync<TRequest, TResponse>(string url, TRequest request, CancellationToken ct)
     {

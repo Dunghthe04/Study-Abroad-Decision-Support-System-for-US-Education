@@ -182,8 +182,7 @@ export function LeadParentConfirmForm() {
 
           <div className="space-y-4">
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button type="button" size="xl" className="flex-1" disabled={submitting !== null} onClick={() => decide("accept")}>
-                {submitting === "accept" && <Spinner data-icon="inline-start" />}
+              <Button type="button" size="xl" className="flex-1" disabled={submitting !== null} onClick={() => decide("accept")} loading={submitting === "accept"}>
                 {submitting === "accept" ? "Đang ghi nhận..." : "Đồng ý gửi cho trung tâm"}
               </Button>
               <Button
@@ -193,8 +192,8 @@ export function LeadParentConfirmForm() {
                 className="flex-1"
                 disabled={submitting !== null}
                 onClick={() => decide("reject")}
+                loading={submitting === "reject"}
               >
-                {submitting === "reject" && <Spinner data-icon="inline-start" />}
                 {submitting === "reject" ? "Đang ghi nhận..." : "Từ chối"}
               </Button>
             </div>

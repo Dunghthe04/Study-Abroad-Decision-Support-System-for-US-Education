@@ -4,7 +4,6 @@ import inspect
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
 from app.services.chat_flow import SkillOutput, ask
-from app.services.skill_rules import ORDER
 from app.services.skills import build_handlers
 from tests.fakes import flow_with, tin
 
@@ -13,11 +12,6 @@ def test_build_handlers_returns_a_dict_and_does_not_need_a_real_llm():
     handlers = build_handlers(llm=object(), model="qwen3:8b")
 
     assert isinstance(handlers, dict)
-
-
-def test_registered_names_are_known_skill_names():
-    for name in build_handlers(llm=object(), model="qwen3:8b"):
-        assert name in ORDER, f"{name} không phải tên skill đã biết"
 
 
 def test_every_registered_handler_has_an_async_run():

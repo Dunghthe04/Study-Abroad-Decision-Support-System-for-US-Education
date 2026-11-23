@@ -15,7 +15,7 @@ public static class ActingScope
     public static readonly IReadOnlySet<string> ChildControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "ProfileFlow", "ProfileMetadata", "AcademicProfile", "AcademicAnalysis", "FinancialProfile",
-        "Recommendations", "RecommendationHistory", "Scenarios", "TargetSchools",
+        "Recommendations", "RecommendationHistory", "Scenarios", "TargetSchools", "Dashboard",
         "Advisor",   // chat: phần hồ sơ dùng hồ sơ của con, câu hỏi khác trả lời như thường
         "Acting",    // đọc thanh "Đang nhập cho ..." từ token của con
     };

@@ -5,7 +5,7 @@ import { toChildTab } from "@/lib/child-tabs";
 
 // Chức năng 1 "Con của tôi": tự mở con đầu tiên, chưa liên kết thì chỉ sang Tài khoản
 export const metadata: Metadata = {
-  title: "Con của tôi – USAS",
+  title: "Con của tôi – USDSS",
 };
 
 interface Props {

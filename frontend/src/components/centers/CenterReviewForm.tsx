@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { StarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -101,7 +100,7 @@ export function CenterReviewForm({ centerId, onCreated }: CenterReviewFormProps)
                   setRating(value);
                   if (formError) setFormError(null);
                 }}
-                className="rounded p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="cursor-pointer rounded p-0.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
               >
                 <StarIcon aria-hidden="true" className={cn("size-6", value <= rating ? "fill-current text-gold" : "text-ink-3 opacity-40")} />
               </button>
@@ -123,8 +122,7 @@ export function CenterReviewForm({ centerId, onCreated }: CenterReviewFormProps)
           <span className="text-xs text-ink-3">
             {comment.length} / {MAX_COMMENT_LENGTH} ký tự
           </span>
-          <Button type="button" size="sm" disabled={isSending || rating < 1} onClick={() => void submit()} className="gap-1.5">
-            {isSending ? <Spinner className="size-3.5" /> : null}
+          <Button type="button" size="sm" disabled={isSending || rating < 1} onClick={() => void submit()} className="gap-1.5" loading={isSending}>
             Gửi đánh giá
           </Button>
         </div>

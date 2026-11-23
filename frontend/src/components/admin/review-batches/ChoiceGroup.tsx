@@ -22,7 +22,7 @@ export function ChoiceGroup<T extends string>({ label, value, options, onChange 
             aria-checked={checked}
             onClick={() => onChange(option.id)}
             className={cn(
-              "rounded-md border px-3 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "cursor-pointer rounded-md border px-3 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
               checked ? "border-brand bg-brand-wash text-brand-ink" : "border-line bg-surface text-ink-2 hover:text-ink",
             )}
           >

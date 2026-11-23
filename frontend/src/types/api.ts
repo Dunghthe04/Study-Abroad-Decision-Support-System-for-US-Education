@@ -1,4 +1,6 @@
 import type { ProfileFlowDraft } from "@/types/profile-flow";
+import type { AcceptedPolicy } from "@/types/policy";
+export * from "@/types/dashboard";
 
 // Mirrors the DTOs of the ASP.NET Core API (StudyAbroad.Application).
 
@@ -51,7 +53,6 @@ export interface StudyCenter {
   legalDocumentUrls?: string[];
   verificationNote?: string | null;
   emailVerifiedAt?: string | null;
-  phoneVerifiedAt?: string | null;
   feeMin?: number | null;
   feeMax?: number | null;
   feeDescription?: string | null;
@@ -74,14 +75,12 @@ export interface RegisterCenterRequest {
   registrantPosition?: string;
   agreeTerms: boolean;
   agreeTruthfulnessCommitment: boolean;
+  /** [UC-104] Điều khoản và Chính sách bảo mật đã đọc, kèm đúng phiên bản được hiển thị. */
+  acceptedPolicies?: AcceptedPolicy[];
 }
 
 export interface VerifyCenterEmailRequest {
   email: string;
-  code: string;
-}
-
-export interface VerifyPhoneOtpRequest {
   code: string;
 }
 
@@ -137,15 +136,12 @@ export interface CenterVerificationDto {
   centerEmail?: string | null;
   centerPhone?: string | null;
   emailVerifiedAt?: string | null;
-  phoneVerifiedAt?: string | null;
 }
 
 export interface CenterVerificationStatusDto {
   verificationStatus: string;
   isEmailVerified: boolean;
   emailVerifiedAt?: string | null;
-  isPhoneVerified: boolean;
-  phoneVerifiedAt?: string | null;
   currentRequest?: CenterVerificationDto | null;
   rejectionReason?: string | null;
 }
@@ -176,6 +172,7 @@ export interface UpdateCenterProfileRequest {
   feeDescription?: string | null;
   logoUrl?: string | null;
   coverImageUrl?: string | null;
+  galleryImages?: string[];
   /** Thông tin pháp lý: chỉ gửi khi trung tâm chưa được xác minh. */
   taxCode?: string | null;
   legalRepresentative?: string | null;
@@ -232,6 +229,30 @@ export interface AdminCenterDeletionRequestDto {
   decisionNote: string | null;
   scheduledPurgeAt: string | null;
   completedAt: string | null;
+  /** Trung tâm hoặc tài khoản chủ đang bị giữ pháp lý: không duyệt xóa được, job không xóa hẳn. */
+  isLegalHold: boolean;
+  legalHoldReason: string | null;
+  legalHoldAt: string | null;
+  /** Số tin nhắn của trung tâm bị báo cáo mà Admin chưa xử lý (UC-58). */
+  openReportCount: number;
+  /** Hạn xử lý: 20 ngày kể từ khi nhận, cộng 20 ngày nếu đã gia hạn (NĐ 356/2025 Điều 5 khoản 4). */
+  dueAt: string | null;
+  extendedAt: string | null;
+  extensionNote: string | null;
+}
+
+/** [UC-93] Tình trạng giữ pháp lý (Legal Hold) dữ liệu của một trung tâm. */
+export interface CenterLegalHoldDto {
+  studyCenterId: string;
+  centerName: string;
+  isLegalHold: boolean;
+  reason: string | null;
+  since: string | null;
+  byUserId: string | null;
+  byName: string | null;
+  openDeletionRequestId: string | null;
+  openDeletionRequestStatus: CenterDeletionRequestStatus | null;
+  scheduledPurgeAt: string | null;
 }
 
 /** [UC-92 / UC-93] Yêu cầu xóa tài khoản trung tâm. status: pending | approved | completed | rejected. */
@@ -242,6 +263,10 @@ export interface CenterDeletionRequestDto {
   status: string;
   createdAt: string;
   handledAt: string | null;
+  /** Hạn xử lý của USAS; null khi chưa có hoặc đang tạm dừng. */
+  dueAt?: string | null;
+  /** Thời điểm gia hạn một lần (null nếu chưa gia hạn). */
+  extendedAt?: string | null;
 }
 
 export interface VerifyStudyCenterRequest {
@@ -378,6 +403,13 @@ export interface AdvisorChatResponse {
   profileSaved?: boolean | null; // lượt này vừa lưu hồ sơ chính thức (bấm "Đúng rồi" ở bảng rà soát)
   formStep?: number | null; // trang form (1–6) của câu chat đang hỏi; form chuyển theo
   formGoals?: string[] | null; // việc học sinh đã hỏi khi điền hồ sơ trong chat (danh_gia, lo_trinh, goi_y_truong); form tích sẵn
+  /** Lượt bị khóa theo gói (billing spec mục 5): cần Premium, hoặc hết lượt miễn phí của tháng (resetsAt là ngày làm mới) */
+  locked?: ChatLock | null;
+}
+
+export interface ChatLock {
+  reason: "premium_required" | "quota_exhausted";
+  resetsAt: string | null;
 }
 
 /** Một dòng của POST /api/v1/advisor/chat/stream (mỗi dòng một JSON): trả lời theo từng ý khi xong. */
@@ -481,6 +513,8 @@ export interface RegisterRequest {
   /** Bắt buộc với học sinh dưới 16, không bắt buộc với 16–17 */
   parentEmail?: string | null;
   phone?: string | null;
+  /** [UC-104] Điều khoản và Chính sách bảo mật đã đọc, kèm đúng phiên bản được hiển thị. */
+  acceptedPolicies?: AcceptedPolicy[];
 }
 
 export interface LoginRequest {
@@ -894,7 +928,7 @@ export interface UnreadCountDto {
 }
 
 /** [UC-114] Bộ lọc danh sách thay đổi trung tâm chờ Moderator kiểm tra. */
-export type CenterProfileChangeFilter = "pending" | "passed" | "failed" | "all";
+export type CenterProfileChangeFilter = "pending" | "passed" | "failed" | "withdrawn" | "all";
 
 /** [UC-114] Một thay đổi website / fanpage do trung tâm tự sửa (UC-92). */
 export interface CenterProfileChangeDto {
@@ -906,7 +940,7 @@ export interface CenterProfileChangeDto {
   field: "website" | "fanpage" | string;
   oldValue?: string | null;
   newValue?: string | null;
-  status: "pending" | "passed" | "failed" | string;
+  status: "pending" | "passed" | "failed" | "withdrawn" | string;
   createdAt: string;
   reviewedByUserId?: string | null;
   reviewedAt?: string | null;

@@ -56,7 +56,9 @@ public class StudyCenterService(
     IEmailSender? emailSender = null,
     StudyAbroad.Application.Notifications.INotificationService? notifications = null,
     ICenterProfileChangeRepository? profileChanges = null,
-    ICenterDeletionRequestRepository? deletionRequests = null) : IStudyCenterService
+    ICenterDeletionRequestRepository? deletionRequests = null,
+    StudyAbroad.Application.Auth.IUserRepository? users = null,
+    ICenterMediaCleaner? mediaCleaner = null) : IStudyCenterService
 {
     private const int MaxPageSize = 100;
     public const int MaxNameLength = 200;
@@ -389,7 +391,7 @@ public class StudyCenterService(
             c.TaxCode, c.LegalRepresentative, c.LicenseIssuedBy, c.LicenseIssuedDate,
             c.LegalComplianceMode, c.TrainingLicenseNumber, c.CertifiedCounselorCount,
             c.LegalDocumentUrls, c.VerificationNote,
-            c.EmailVerifiedAt, c.PhoneVerifiedAt, c.FeeMin, c.FeeMax, c.FeeDescription,
+            c.EmailVerifiedAt, c.FeeMin, c.FeeMax, c.FeeDescription,
             c.RegistrantName, c.RegistrantPosition, c.Fanpage, c.ServiceAreas, c.Branches);
 
     /// <summary>True nếu yêu cầu thay đổi một trường pháp lý so với giá trị hiện tại.</summary>
@@ -558,7 +560,7 @@ public class StudyCenterService(
         {
             return new CenterVerificationStatusDto(
                 CenterVerificationStatuses.Unverified,
-                false, null, false, null, null, null);
+                false, null, null, null);
         }
 
         CenterVerificationDto? currentReqDto = null;
@@ -582,8 +584,6 @@ public class StudyCenterService(
             center.VerificationStatus,
             center.EmailVerifiedAt.HasValue,
             center.EmailVerifiedAt,
-            center.PhoneVerifiedAt.HasValue,
-            center.PhoneVerifiedAt,
             currentReqDto,
             rejectionReason);
     }
@@ -616,11 +616,9 @@ public class StudyCenterService(
         if (center is null)
             return CreateStudyCenterResult.Fail("Không tìm thấy thông tin trung tâm cho tài khoản này.");
 
-        // [UC-91] Phải xác thực cả email (OTP email) và số điện thoại (OTP SMS) trước khi nộp hồ sơ xác minh.
+        // [UC-91] Phải xác thực email (OTP email) trước khi nộp hồ sơ xác minh. Số điện thoại không xác thực bằng SMS OTP.
         if (!center.EmailVerifiedAt.HasValue)
             return CreateStudyCenterResult.Fail("Bạn cần xác thực email bằng mã OTP trước khi nộp hồ sơ xác minh.");
-        if (!center.PhoneVerifiedAt.HasValue)
-            return CreateStudyCenterResult.Fail("Bạn cần xác thực số điện thoại bằng mã OTP qua SMS trước khi nộp hồ sơ xác minh.");
 
         var existingPending = await verificationRepository.GetCurrentByCenterIdAsync(center.Id, ct);
         if (existingPending is not null && existingPending.Status == CenterVerificationStatuses.PendingReview)
@@ -907,6 +905,7 @@ public class StudyCenterService(
     public const int MaxProfileListItems = 20;
     public const int MaxProfileListItemLength = 256;
     public const int MaxProfileUrlLength = 512;
+    public const int MaxGalleryImages = 10;
     public const int MaxDeletionReasonLength = 1000;
 
     /// <summary>[UC-92] Trường pháp lý: đổi khi đã xác minh thì hồ sơ về Chờ duyệt (UC-59).</summary>
@@ -955,7 +954,43 @@ public class StudyCenterService(
             ["feeDescription"] = c.FeeDescription,
             ["logoUrl"] = c.LogoUrl,
             ["coverImageUrl"] = c.CoverImageUrl,
+            ["galleryImages"] = List(c.GalleryImages),
         };
+    }
+
+    private static List<string> CenterMediaUrls(StudyCenter center)
+    {
+        var urls = new List<string>();
+        if (!string.IsNullOrWhiteSpace(center.LogoUrl)) urls.Add(center.LogoUrl.Trim());
+        if (!string.IsNullOrWhiteSpace(center.CoverImageUrl)) urls.Add(center.CoverImageUrl.Trim());
+        urls.AddRange(center.GalleryImages.Where(u => !string.IsNullOrWhiteSpace(u)).Select(u => u.Trim()));
+        return urls;
+    }
+
+    /// <summary>
+    /// Ảnh vừa bị thay hoặc xóa khỏi hồ sơ thì xóa luôn trên CDN để không còn ảnh mồ côi (Luật 91/2025 Điều 3 khoản 3).
+    /// Chỉ xóa ảnh do chính tài khoản này tải lên (<see cref="CenterMediaFolders"/>). Lỗi CDN không làm hỏng việc lưu hồ sơ:
+    /// hồ sơ đã lưu, ảnh cũ chỉ còn sót trên CDN.
+    /// </summary>
+    private async Task RemoveReplacedMediaAsync(Guid ownerUserId, IReadOnlyCollection<string> before, StudyCenter center, CancellationToken ct)
+    {
+        if (mediaCleaner is null) return;
+
+        var stillUsed = CenterMediaUrls(center).ToHashSet(StringComparer.Ordinal);
+        var removed = before
+            .Where(url => !stillUsed.Contains(url) && CenterMediaFolders.IsOwnedBy(ownerUserId, url))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (removed.Count == 0) return;
+
+        try
+        {
+            await mediaCleaner.DeleteAsync(removed, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Best effort: không để lỗi CDN làm thất bại việc lưu hồ sơ
+        }
     }
 
     private static string? ValidateProfileUrl(string? value, string label)
@@ -1010,6 +1045,21 @@ public class StudyCenterService(
         var (branches, branchesError) = NormalizeProfileList(request.Branches, "Chi nhánh");
         if (branchesError is not null) return UpdateStudyCenterResult.Fail(branchesError);
 
+        List<string>? gallery = null;
+        if (request.GalleryImages is not null)
+        {
+            gallery = [];
+            foreach (var raw in request.GalleryImages)
+            {
+                var urlError = ValidateProfileUrl(raw, "Ảnh trong thư viện");
+                if (urlError is not null) return UpdateStudyCenterResult.Fail(urlError);
+                var url = TrimOrNull(raw);
+                if (url is not null && !gallery.Contains(url, StringComparer.Ordinal)) gallery.Add(url);
+            }
+            if (gallery.Count > MaxGalleryImages)
+                return UpdateStudyCenterResult.Fail($"Thư viện ảnh tối đa {MaxGalleryImages} ảnh.");
+        }
+
         if (request.FeeMin.HasValue && request.FeeMax.HasValue && request.FeeMin > request.FeeMax)
             return UpdateStudyCenterResult.Fail("Mức phí tối thiểu không được lớn hơn mức phí tối đa.");
 
@@ -1017,6 +1067,7 @@ public class StudyCenterService(
             return UpdateStudyCenterResult.Fail($"Tên trung tâm tối đa {MaxNameLength} ký tự.");
 
         var before = SnapshotProfile(center);
+        var mediaBefore = CenterMediaUrls(center);
 
         // Thông tin pháp lý: trung tâm chưa xác minh sửa tự do; đã xác minh chỉ kiểm tra khi thực sự đổi.
         if (!pendingReview && (!verified || touchesLegal))
@@ -1069,6 +1120,7 @@ public class StudyCenterService(
         if (request.FeeDescription != null) center.FeeDescription = TrimOrNull(request.FeeDescription);
         if (request.LogoUrl != null) center.LogoUrl = TrimOrNull(request.LogoUrl);
         if (request.CoverImageUrl != null) center.CoverImageUrl = TrimOrNull(request.CoverImageUrl);
+        if (gallery is not null) center.GalleryImages = gallery;
 
         if (center.FeeMin.HasValue && center.FeeMax.HasValue && center.FeeMin > center.FeeMax)
             return UpdateStudyCenterResult.Fail("Mức phí tối thiểu không được lớn hơn mức phí tối đa.");
@@ -1085,6 +1137,7 @@ public class StudyCenterService(
             center.VerificationStatus = CenterVerificationStatuses.PendingReview;
 
         await repository.UpdateAsync(center, ct);
+        await RemoveReplacedMediaAsync(userId, mediaBefore, center, ct);
 
         if (verificationReset)
             await CreateReverificationRequestAsync(center, userId, legalChanged, ct);
@@ -1134,7 +1187,8 @@ public class StudyCenterService(
             if (string.Equals(pending.OldValue, newValue, StringComparison.Ordinal))
             {
                 // Sửa lại đúng giá trị đã được chấp nhận trước đó: không còn gì để kiểm tra.
-                pending.Status = CenterProfileChangeStatuses.Passed;
+                // Trạng thái riêng (không dùng passed) để không lẫn với mục do Moderator duyệt
+                pending.Status = CenterProfileChangeStatuses.Withdrawn;
                 pending.ReviewReason = "Trung tâm đã đổi lại giá trị cũ.";
                 pending.ReviewedAt = DateTime.UtcNow;
             }
@@ -1202,8 +1256,9 @@ public class StudyCenterService(
         }, ct);
     }
 
-    private static CenterDeletionRequestDto ToDeletionDto(CenterDeletionRequest r) =>
-        new(r.Id, r.StudyCenterId, r.Reason, r.Status, r.CreatedAt, r.HandledAt);
+    private static CenterDeletionRequestDto ToDeletionDto(CenterDeletionRequest r, bool underLegalHold = false) =>
+        new(r.Id, r.StudyCenterId, r.Reason, r.Status, r.CreatedAt, r.HandledAt,
+            underLegalHold ? null : r.DueAt, underLegalHold ? null : r.ExtendedAt);
 
     /// <summary>[UC-92] Yêu cầu xóa mới nhất của trung tâm (null nếu chưa gửi).</summary>
     public async Task<CenterDeletionRequestDto?> GetDeletionRequestAsync(Guid userId, CancellationToken ct = default)
@@ -1212,7 +1267,10 @@ public class StudyCenterService(
         var center = await repository.GetByOwnerOrEmailAsync(userId, null, ct);
         if (center is null) return null;
         var latest = await deletionRequests.GetLatestByCenterIdAsync(center.Id, ct);
-        return latest is null ? null : ToDeletionDto(latest);
+        if (latest is null) return null;
+        var underHold = center.IsLegalHold
+            || (users is not null && center.OwnerUserId is { } ownerId && (await users.GetUserById(ownerId, ct))?.IsLegalHold == true);
+        return ToDeletionDto(latest, underHold);
     }
 
     /// <summary>
@@ -1237,12 +1295,16 @@ public class StudyCenterService(
         if (await deletionRequests.GetOpenByCenterIdAsync(center.Id, ct) is not null)
             return CenterDeletionRequestResult.Fail("Trung tâm đã có yêu cầu xóa đang chờ Quản trị viên xử lý.");
 
+        var receivedAt = DateTime.UtcNow;
         var entity = new CenterDeletionRequest
         {
             StudyCenterId = center.Id,
             RequestedByUserId = userId,
             Reason = trimmed,
             Status = CenterDeletionRequestStatuses.Pending,
+            CreatedAt = receivedAt,
+            // Nghị định 356/2025/NĐ-CP Điều 5 khoản 4: thực hiện yêu cầu xóa trong 20 ngày
+            DueAt = receivedAt.AddDays(CenterDeletionDeadlines.ProcessingDays),
         };
         await deletionRequests.AddAsync(entity, ct);
 
@@ -1252,10 +1314,29 @@ public class StudyCenterService(
             Action = "center.deletion_requested",
             EntityType = "StudyCenter",
             EntityId = center.Id.ToString(),
-            DetailJson = JsonSerializer.Serialize(new { centerId = center.Id, requestId = entity.Id })
+            DetailJson = JsonSerializer.Serialize(new { centerId = center.Id, requestId = entity.Id, dueAt = entity.DueAt })
         }, ct);
 
-        return CenterDeletionRequestResult.Ok(ToDeletionDto(entity));
+        // Điều 5 khoản 4: phản hồi trong 02 ngày làm việc. Gửi xác nhận ngay khi nhận; lỗi gửi mail không làm hỏng yêu cầu.
+        // Nếu trung tâm đã bị giữ pháp lý từ trước, yêu cầu không thể thực hiện: báo ngay "chưa thể thực hiện"
+        // (Luật 91/2025 Điều 14 khoản 5) thay vì "đã nhận" kèm hạn 20 ngày mà hệ thống không thể giữ.
+        // Giữ pháp lý đặt trên cả trung tâm lẫn tài khoản chủ; chỉ cần một bên bị giữ là không xóa được.
+        var underHold = center.IsLegalHold
+            || (users is not null && center.OwnerUserId is { } ownerId && (await users.GetUserById(ownerId, ct))?.IsLegalHold == true);
+        if (emailSender is not null && !string.IsNullOrWhiteSpace(center.Email))
+        {
+            try
+            {
+                var outcome = underHold ? "held" : "received";
+                await emailSender.SendCenterDeletionOutcomeEmailAsync(center.Email.Trim(), center.Name, outcome, null, underHold ? null : entity.DueAt, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Yêu cầu đã lưu; người dùng vẫn thấy trạng thái trên trang hồ sơ
+            }
+        }
+
+        return CenterDeletionRequestResult.Ok(ToDeletionDto(entity, underHold));
     }
 
     private static CenterVerificationDto ToVerificationDto(CenterVerificationRequest req, StudyCenter? center) =>
@@ -1284,6 +1365,5 @@ public class StudyCenterService(
             center?.Code,
             center?.Email,
             center?.Phone,
-            center?.EmailVerifiedAt,
-            center?.PhoneVerifiedAt);
+            center?.EmailVerifiedAt);
 }

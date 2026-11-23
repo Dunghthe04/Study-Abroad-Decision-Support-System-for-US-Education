@@ -7,23 +7,28 @@ namespace StudyAbroad.Application.Advisor;
 /// Đánh giá một lượt chat để ghi vào chat_messages: kết quả (outcome), có cần admin xem không (review_status) và bản tóm tắt cho admin (meta_json).
 /// Là logic thuần (không đụng database) để dễ kiểm. Quy tắc outcome:
 ///   failed    : có bước AI mà MỌI lần gọi đều lỗi (hết thời gian, bị từ chối, Ollama tắt). Gọi lại thành công thì không tính.
-///   no_answer : ý ngoài phạm vi loại ambiguous (không hiểu) hoặc exception (ngoài chuyện du học).
-///   answered  : còn lại, kể cả câu bị chặn có chủ ý (sensitive), chào, hỏi về hệ thống, xin gặp người thật.
-/// failed được xét trước no_answer: Ollama tắt làm SLM dùng kết quả dự phòng thì lỗi do hệ thống, không phải câu khó hiểu.
+///   no_answer : ý ngoài phạm vi loại ambiguous (không hiểu câu hỏi), hoặc câu trả lời nói "chưa có thông tin" (noBasis): hệ thống muốn trả lời nhưng không có cơ sở.
+///   refused   : ý ngoài phạm vi loại exception (ngoài chuyện du học) hoặc sensitive: hệ thống hiểu và cố ý không trả lời.
+///   answered  : còn lại, kể cả chào, tạm biệt, hỏi về hệ thống, xin gặp người thật.
+/// failed được xét trước: Ollama tắt làm SLM dùng kết quả dự phòng thì lỗi do hệ thống, không phải câu khó hiểu.
+/// Chỉ no_answer và failed vào hàng đợi của admin: refused là đúng thiết kế nên không có gì để bổ sung.
 /// </summary>
 public static class ChatTurn
 {
     /// <summary>Phiên bản khuôn meta_json, để đọc được các dòng cũ khi khuôn đổi.</summary>
     public const int MetaVersion = 1;
 
-    private static readonly string[] UnansweredSubtypes = ["ambiguous", "exception"];
+    // Loại con của ý ngoài phạm vi (advisor: SUBTYPES). greeting, farewell, about_system, human_handoff là hội thoại bình thường nên vẫn answered.
+    private static readonly string[] UnansweredSubtypes = ["ambiguous"];
+    private static readonly string[] RefusedSubtypes = ["exception", "sensitive"];
 
     private static readonly JsonSerializerOptions MetaJson = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public static string Outcome(AdvisorSlmDto? slm, IReadOnlyList<AiUsageDto>? usage)
+    // noBasis: câu trả lời nói "chưa có thông tin" vì kho kiến thức không có nguồn và cơ sở dữ liệu trường cũng không có số liệu (ChatService đặt)
+    public static string Outcome(AdvisorSlmDto? slm, IReadOnlyList<AiUsageDto>? usage, bool noBasis = false)
     {
         if (FailedSteps(usage).Count > 0)
             return ChatOutcomes.Failed;
@@ -31,13 +36,17 @@ public static class ChatTurn
         var outOfScope = slm?.Intents?.Contains("out_of_scope") == true ? slm.OutOfScope : null;
         if (outOfScope is not null && UnansweredSubtypes.Contains(outOfScope))
             return ChatOutcomes.NoAnswer;
+        if (outOfScope is not null && RefusedSubtypes.Contains(outOfScope))
+            return ChatOutcomes.Refused;
+        if (noBasis)
+            return ChatOutcomes.NoAnswer;
 
         return ChatOutcomes.Answered;
     }
 
-    /// <summary>Lượt không trả lời được hoặc lỗi thì vào hàng đợi của admin (open); lượt trả lời được thì null.</summary>
+    /// <summary>Lượt không trả lời được hoặc lỗi thì vào hàng đợi của admin (open); lượt trả lời được hoặc bị từ chối đúng thiết kế thì null.</summary>
     public static string? ReviewStatus(string outcome) =>
-        outcome == ChatOutcomes.Answered ? null : ChatReviewStatuses.Open;
+        outcome is ChatOutcomes.NoAnswer or ChatOutcomes.Failed ? ChatReviewStatuses.Open : null;
 
     /// <summary>Các bước AI (nguồn + skill) có ít nhất một lần lỗi và không lần nào thành công.</summary>
     public static IReadOnlyList<string> FailedSteps(IReadOnlyList<AiUsageDto>? usage) =>

@@ -9,13 +9,14 @@ namespace StudyAbroad.Application.Advisor;
 /// </summary>
 public class AiCallRecorder(IAiCallRepository repository, AiPricing? pricing = null, ILogger? logger = null)
 {
-    public async Task RecordAsync(Guid userId, Guid? chatMessageId, IReadOnlyList<AiUsageDto>? usage, CancellationToken ct)
+    public async Task RecordAsync(
+        Guid userId, Guid? chatMessageId, IReadOnlyList<AiUsageDto>? usage, CancellationToken ct, Guid? cycleId = null, string? planCode = null)
     {
         if (usage is not { Count: > 0 })
             return;
         try
         {
-            await repository.AddRangeAsync(usage.Select(call => AiCallMapper.ToEntity(call, userId, chatMessageId, pricing ?? AiPricing.None)).ToList(), ct);
+            await repository.AddRangeAsync(usage.Select(call => AiCallMapper.ToEntity(call, userId, chatMessageId, pricing ?? AiPricing.None, cycleId, planCode)).ToList(), ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

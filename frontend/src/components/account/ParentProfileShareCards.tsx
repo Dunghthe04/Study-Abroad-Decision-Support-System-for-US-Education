@@ -1,14 +1,21 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { ArrowRightLeftIcon, UsersIcon } from "lucide-react";
+import Link from "next/link";
+import { ArrowRightLeftIcon, CheckIcon, UserPlusIcon, UsersIcon, XIcon } from "lucide-react";
 import { profileApi, ApiError } from "@/lib/api";
 import type { ParentProfileOfferDto, ParentProfileOverviewDto } from "@/types/api";
 import { AcademicSummaryCard } from "@/components/account/AcademicSummaryCard";
+import { AccountSectionHeader } from "@/components/account/AccountSectionHeader";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
 
 function errorMessage(err: unknown, fallback: string) {
   if (err instanceof ApiError) return err.message || fallback;
@@ -61,89 +68,120 @@ export function ParentAcademicSection({ overview, onChanged }: ParentAcademicSec
     }
   };
 
-  if (overview.children.length === 0) {
-    return (
-      <Alert role="status">
-        <AlertDescription>
-          Tài khoản phụ huynh không có hồ sơ riêng. Bạn thêm con hoặc liên kết với tài khoản của con ở mục Con của tôi để
-          nhập và xem hồ sơ.
-        </AlertDescription>
-      </Alert>
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      {notice && (
-        <Alert role="status">
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      )}
+    <div>
+      <AccountSectionHeader
+        title="Học bạ của con"
+        description="Tài khoản phụ huynh không có hồ sơ riêng; bạn xem tổng quan bảng điểm và chứng chỉ của các con đã liên kết tại đây."
+        actions={
+          <Link href="/parent/children" className={buttonVariants({ variant: "outline", size: "lg", className: "bg-surface" })}>
+            <UsersIcon data-icon="inline-start" aria-hidden />
+            Quản lý Con của tôi
+          </Link>
+        }
+      />
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {overview.pendingMatches.map((pending) => (
-        <Card key={pending.linkId}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ArrowRightLeftIcon className="size-5" aria-hidden />
-              <h2>{nameWithDob(pending.studentName, pending.dateOfBirth)} có phải là con bạn đã nhập hồ sơ?</h2>
-            </CardTitle>
-            <CardDescription>
-              Chọn đúng con bạn đã nhập để chuyển hồ sơ, trường mục tiêu và kịch bản sang tài khoản mới liên kết. Nếu
-              con đã có hồ sơ riêng, con sẽ tự chọn dùng bản của bạn hay giữ bản của mình.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {managedChildren.some((m) => isDobFarApart(m.dateOfBirth, pending.dateOfBirth)) && (
-              <Alert role="status">
-                <AlertDescription>
-                  Ngày sinh {pending.studentName} tự khai lệch hơn 1 năm so với ngày sinh bạn đã nhập cho
-                  {" "}
-                  {managedChildren
-                    .filter((m) => isDobFarApart(m.dateOfBirth, pending.dateOfBirth))
-                    .map((m) => m.studentName)
-                    .join(", ")}
-                  . Kiểm tra lại trước khi chuyển. Sau khi chuyển, tài khoản của con giữ ngày sinh con tự khai.
-                </AlertDescription>
-              </Alert>
-            )}
-            <div className="flex flex-wrap gap-2">
-              {managedChildren.map((managed) => (
-                <Button
-                  key={managed.studentUserId}
-                  disabled={submitting !== null}
-                  onClick={() => match(pending.linkId, managed.studentUserId)}
-                >
-                  {submitting === `${pending.linkId}:${managed.studentUserId}` && <Spinner />}
-                  Là {nameWithDob(managed.studentName, managed.dateOfBirth)}
-                </Button>
-              ))}
-              <Button variant="outline" disabled={submitting !== null} onClick={() => match(pending.linkId, null)}>
-                {submitting === `${pending.linkId}:none` && <Spinner />}
-                Không phải ai trong số này
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-
-      {overview.children.map((child) => (
-        <div key={child.linkId} className="space-y-2">
-          {child.profileTransferStatus === "offered" && (
+      {overview.children.length === 0 ? (
+        <Empty className="py-16">
+          <EmptyHeader>
+            <EmptyTitle className="text-base font-semibold text-ink">
+              Chưa có hồ sơ con để hiển thị
+            </EmptyTitle>
+            <EmptyDescription>
+              Thêm con hoặc liên kết với tài khoản của con ở mục Con của tôi để nhập và theo dõi hồ sơ học thuật.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Link href="/parent/children/add" className={buttonVariants({ size: "lg" })}>
+              <UserPlusIcon data-icon="inline-start" aria-hidden />
+              Thêm con
+            </Link>
+          </EmptyContent>
+        </Empty>
+      ) : (
+        <div className="space-y-6">
+          {notice && (
             <Alert role="status">
-              <AlertDescription>
-                Đã gửi hồ sơ bạn nhập cho {child.studentName}. Con đã có hồ sơ riêng nên đang chờ con chọn bản nào.
-              </AlertDescription>
+              <AlertDescription>{notice}</AlertDescription>
             </Alert>
           )}
-          <AcademicSummaryCard profile={child.profile} isLoading={false} readOnly title={`Hồ sơ của ${child.studentName}`} />
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {overview.pendingMatches.map((pending) => (
+            <div key={pending.linkId} className="space-y-4 rounded-xl border border-brand/25 bg-surface p-5 sm:p-6">
+              <div className="space-y-1">
+                <h2 className="flex items-center gap-2 font-heading text-lg font-semibold text-ink">
+                  <ArrowRightLeftIcon className="size-5 text-brand" aria-hidden />
+                  {nameWithDob(pending.studentName, pending.dateOfBirth)} có phải là con bạn đã nhập hồ sơ?
+                </h2>
+                <p className="text-sm text-ink-2">
+                  Chọn đúng con bạn đã nhập để chuyển hồ sơ, trường mục tiêu và kịch bản sang tài khoản mới liên kết. Nếu
+                  con đã có hồ sơ riêng, con sẽ tự chọn dùng bản của bạn hay giữ bản của mình.
+                </p>
+              </div>
+
+              {managedChildren.some((m) => isDobFarApart(m.dateOfBirth, pending.dateOfBirth)) && (
+                <Alert role="status">
+                  <AlertDescription>
+                    Ngày sinh {pending.studentName} tự khai lệch hơn 1 năm so với ngày sinh bạn đã nhập cho{" "}
+                    {managedChildren
+                      .filter((m) => isDobFarApart(m.dateOfBirth, pending.dateOfBirth))
+                      .map((m) => m.studentName)
+                      .join(", ")}
+                    . Kiểm tra lại trước khi chuyển. Sau khi chuyển, tài khoản của con giữ ngày sinh con tự khai.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                {managedChildren.map((managed) => (
+                  <Button
+                    key={managed.studentUserId}
+                    disabled={submitting !== null}
+                    onClick={() => match(pending.linkId, managed.studentUserId)}
+                    loading={submitting === `${pending.linkId}:${managed.studentUserId}`}
+                  >
+                    <CheckIcon data-icon="inline-start" aria-hidden />
+                    Là {nameWithDob(managed.studentName, managed.dateOfBirth)}
+                  </Button>
+                ))}
+                <Button
+                  variant="outline"
+                  disabled={submitting !== null}
+                  onClick={() => match(pending.linkId, null)}
+                  loading={submitting === `${pending.linkId}:none`}
+                >
+                  <XIcon data-icon="inline-start" aria-hidden />
+                  Không phải ai trong số này
+                </Button>
+              </div>
+            </div>
+          ))}
+
+          {overview.children.map((child) => (
+            <div key={child.linkId} className="space-y-3">
+              {child.profileTransferStatus === "offered" && (
+                <Alert role="status">
+                  <AlertDescription>
+                    Đã gửi hồ sơ bạn nhập cho {child.studentName}. Con đã có hồ sơ riêng nên đang chờ con chọn bản nào.
+                  </AlertDescription>
+                </Alert>
+              )}
+              <AcademicSummaryCard
+                profile={child.profile}
+                isLoading={false}
+                readOnly
+                title={`Hồ sơ của ${child.studentName}`}
+              />
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -188,41 +226,50 @@ export function StudentParentOffers({ onChanged }: StudentParentOffersProps) {
   return (
     <div className="space-y-4">
       {offers.map((offer) => (
-        <Card key={offer.linkId}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <UsersIcon className="size-5" aria-hidden />
-              <h2>{offer.parentName} đã nhập hồ sơ cho bạn</h2>
-            </CardTitle>
-            <CardDescription>
+        <div key={offer.linkId} className="space-y-4 rounded-xl border border-brand/25 bg-surface p-5 sm:p-6">
+          <div className="space-y-1">
+            <h2 className="flex items-center gap-2 font-heading text-lg font-semibold text-ink">
+              <UsersIcon className="size-5 text-brand" aria-hidden />
+              {offer.parentName} đã nhập hồ sơ cho bạn
+            </h2>
+            <p className="text-sm text-ink-2">
               Bạn đã có hồ sơ riêng nên hệ thống không tự ghi đè. Chọn dùng bản của phụ huynh (thay hồ sơ hiện tại) hoặc
               giữ bản của mình.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            <AcademicSummaryCard
-              profile={offer.parentProfile}
-              isLoading={false}
-              readOnly
-              title={`Bản của ${offer.parentName}`}
-            />
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button disabled={submitting !== null} onClick={() => decide(offer.linkId, true)}>
-                {submitting === `${offer.linkId}:true` && <Spinner />}
-                Dùng bản của phụ huynh
-              </Button>
-              <Button variant="outline" disabled={submitting !== null} onClick={() => decide(offer.linkId, false)}>
-                {submitting === `${offer.linkId}:false` && <Spinner />}
-                Giữ bản của mình
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </p>
+          </div>
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <AcademicSummaryCard
+            profile={offer.parentProfile}
+            isLoading={false}
+            readOnly
+            title={`Bản của ${offer.parentName}`}
+          />
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              disabled={submitting !== null}
+              onClick={() => decide(offer.linkId, true)}
+              loading={submitting === `${offer.linkId}:true`}
+            >
+              <CheckIcon data-icon="inline-start" aria-hidden />
+              Dùng bản của phụ huynh
+            </Button>
+            <Button
+              variant="outline"
+              disabled={submitting !== null}
+              onClick={() => decide(offer.linkId, false)}
+              loading={submitting === `${offer.linkId}:false`}
+            >
+              Giữ bản của mình
+            </Button>
+          </div>
+        </div>
       ))}
     </div>
   );

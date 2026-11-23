@@ -1,5 +1,7 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using StudyAbroad.Domain.Entities;
 using StudyAbroad.Infrastructure.Persistence;
 using Xunit;
@@ -38,7 +40,7 @@ public class DbContextSchemaTests
             // Phân hệ 6: Trợ lý AI RAG (7)
             "Skill", "KnowledgeDocument", "ChatSession", "ChatMessage", "AiCall", "EvalCase", "EvalRun",
             // Phân hệ 7: Gói dịch vụ & Thanh toán (4)
-            "SubscriptionPlan", "UserSubscription", "UserDailyUsage", "PaymentTransaction",
+            "SubscriptionPlan", "UserSubscription", "UserDailyUsage", "PaymentTransaction", "FamilyGroup", "FamilyMember",
             // Phân hệ 8: Diễn đàn, Thông báo & Kiểm toán (5)
             "ForumPost", "ForumReport", "PolicyAlert", "Notification", "AuditLog",
             // Phân hệ 9: Xác minh dữ liệu (1)
@@ -83,7 +85,7 @@ public class DbContextSchemaTests
         AssertForeignKey<CenterReview>(db, nameof(CenterReview.UserId), "users", DeleteBehavior.Cascade);
         AssertForeignKey<CenterReview>(db, nameof(CenterReview.LeadId), "leads", DeleteBehavior.SetNull);
         AssertForeignKey<UserSubscription>(db, nameof(UserSubscription.UserId), "users", DeleteBehavior.Cascade);
-        AssertForeignKey<UserSubscription>(db, nameof(UserSubscription.SubscriptionPlanId), "subscription_plans", DeleteBehavior.Cascade);
+        AssertForeignKey<UserSubscription>(db, nameof(UserSubscription.SubscriptionPlanId), "subscription_plans", DeleteBehavior.Restrict);   // gói đã có kỳ thì không xóa được
         AssertForeignKey<UserDailyUsage>(db, nameof(UserDailyUsage.UserId), "users", DeleteBehavior.Cascade);
         AssertForeignKey<PaymentTransaction>(db, nameof(PaymentTransaction.UserId), "users", DeleteBehavior.SetNull);   // [UC-80] giữ giao dịch ẩn danh khi xóa hẳn user
         AssertForeignKey<PaymentTransaction>(db, nameof(PaymentTransaction.UserSubscriptionId), "user_subscriptions", DeleteBehavior.SetNull);
@@ -99,6 +101,7 @@ public class DbContextSchemaTests
         Assert.True(HasIndex<AiCall>(db, nameof(AiCall.ChatMessageId)));
 
         Assert.Equal("jsonb", ColumnType<ChatMessage>(db, nameof(ChatMessage.MetaJson)));
+        AssertBillingSchema(db);
         Assert.Equal("jsonb", ColumnType<ExpertRule>(db, nameof(ExpertRule.ConditionJson)));
         Assert.Equal("jsonb", ColumnType<WhatIfSimulation>(db, nameof(WhatIfSimulation.SimulatedProfileJson)));
         Assert.Equal("jsonb", ColumnType<WhatIfSimulation>(db, nameof(WhatIfSimulation.SimulatedRecommendationsJson)));
@@ -115,6 +118,66 @@ public class DbContextSchemaTests
         Assert.Equal(128, studyCenterEntity.FindProperty(nameof(StudyCenter.TrainingLicenseNumber))!.GetMaxLength());
         Assert.Equal("text[]", ColumnType<StudyCenter>(db, nameof(StudyCenter.LegalDocumentUrls)));
         Assert.Equal(1000, studyCenterEntity.FindProperty(nameof(StudyCenter.VerificationNote))!.GetMaxLength());
+    }
+
+    // Gói dịch vụ v2 (migration AddSubscriptionBillingV2): bảng gia đình, cột mới, index duy nhất có điều kiện, ràng buộc kiểm tra
+    private static void AssertBillingSchema(AppDbContext db)
+    {
+        Assert.Equal("family_groups", TableName<FamilyGroup>(db));
+        Assert.Equal("family_members", TableName<FamilyMember>(db));
+        AssertForeignKey<UserSubscription>(db, nameof(UserSubscription.FamilyGroupId), "family_groups", DeleteBehavior.SetNull);
+        AssertForeignKey<FamilyGroup>(db, nameof(FamilyGroup.OwnerUserId), "users", DeleteBehavior.Cascade);
+        AssertForeignKey<FamilyMember>(db, nameof(FamilyMember.FamilyGroupId), "family_groups", DeleteBehavior.Cascade);
+        AssertForeignKey<FamilyMember>(db, nameof(FamilyMember.UserId), "users", DeleteBehavior.SetNull);
+        AssertForeignKey<PaymentTransaction>(db, nameof(PaymentTransaction.SubscriptionPlanId), "subscription_plans", DeleteBehavior.Restrict);
+        AssertForeignKey<PaymentTransaction>(db, nameof(PaymentTransaction.HandledByUserId), "users", DeleteBehavior.SetNull);
+        AssertForeignKey<AiCall>(db, nameof(AiCall.UserSubscriptionId), "user_subscriptions", DeleteBehavior.SetNull);
+        Assert.True(HasIndex<AiCall>(db, nameof(AiCall.UserSubscriptionId), nameof(AiCall.CreatedAt)));   // cộng token của một kỳ
+
+        // Cột: kỳ có ends_at (null khi xếp hàng), bản chụp gói; đã bỏ auto_renew và các hạn mức cũ của gói
+        var cycle = db.Model.FindEntityType(typeof(UserSubscription))!;
+        Assert.Equal("ends_at", cycle.FindProperty(nameof(UserSubscription.EndsAt))!.GetColumnName());
+        Assert.True(cycle.FindProperty(nameof(UserSubscription.StartsAt))!.IsNullable);
+        Assert.Equal("warned_80_at", cycle.FindProperty(nameof(UserSubscription.Warned80At))!.GetColumnName());
+        Assert.Equal("bigint", ColumnType<UserSubscription>(db, nameof(UserSubscription.TokenQuota)) ?? cycle.FindProperty(nameof(UserSubscription.TokenQuota))!.GetRelationalTypeMapping().StoreType);
+        Assert.Null(cycle.FindProperty("AutoRenew"));
+        var plan = db.Model.FindEntityType(typeof(SubscriptionPlan))!;
+        Assert.Null(plan.FindProperty("DailyAiChatQuota"));
+        Assert.Null(plan.FindProperty("MaxLeadsQuota"));
+        Assert.Null(plan.FindProperty("EstimatedQuestions"));
+        Assert.True(plan.FindProperty(nameof(SubscriptionPlan.DurationDays))!.IsNullable);
+        Assert.True(plan.FindProperty(nameof(SubscriptionPlan.QuotaPeriodDays))!.IsNullable);
+        Assert.True(cycle.FindProperty(nameof(UserSubscription.QuotaPeriodDays))!.IsNullable);
+        Assert.True(db.Model.FindEntityType(typeof(PaymentTransaction))!.FindProperty(nameof(PaymentTransaction.PlanQuotaPeriodDays))!.IsNullable);
+        Assert.Equal(16, plan.FindProperty(nameof(SubscriptionPlan.Kind))!.GetMaxLength());
+        Assert.True(HasUniqueIndex<PaymentTransaction>(db, nameof(PaymentTransaction.OrderCode)));
+        Assert.True(db.Model.FindEntityType(typeof(FamilyMember))!.FindProperty(nameof(FamilyMember.Version))!.IsConcurrencyToken);
+
+        // Kỳ cộng dồn nên không có index duy nhất theo (người, loại); một nhóm active mỗi chủ, một thành viên active mỗi người, một lời mời chờ mỗi email,
+        // một đơn chờ mỗi người, một gói free
+        Assert.DoesNotContain(cycle.GetIndexes(), i => i.IsUnique);
+        Assert.Equal("status = 'active'", PartialUniqueFilter<FamilyGroup>(db, "ux_family_groups_one_active_per_owner", "OwnerUserId"));
+        Assert.Equal("status = 'active'", PartialUniqueFilter<FamilyMember>(db, "ux_family_members_one_active_per_user", "UserId"));
+        Assert.Equal("status = 'pending'", PartialUniqueFilter<FamilyMember>(db, "ux_family_members_one_pending_per_email", "FamilyGroupId", "InvitedEmail"));
+        Assert.Equal("token_hash IS NOT NULL", db.Model.FindEntityType(typeof(FamilyMember))!.GetIndexes()
+            .Single(i => i.IsUnique && i.Properties.Select(p => p.Name).SequenceEqual([nameof(FamilyMember.TokenHash)])).GetFilter());
+        Assert.Equal("status = 'pending'", PartialUniqueFilter<PaymentTransaction>(db, "ux_payment_transactions_one_pending_per_user", "UserId"));
+        Assert.Equal("kind = 'free'", PartialUniqueFilter<SubscriptionPlan>(db, "ux_subscription_plans_single_free", "Kind"));
+
+        var designModel = db.GetService<IDesignTimeModel>().Model;   // ràng buộc kiểm tra chỉ có trong model lúc thiết kế
+        Assert.Equal(
+            ["ck_subscription_plans_duration", "ck_subscription_plans_kind", "ck_subscription_plans_quota_period"],
+            designModel.FindEntityType(typeof(SubscriptionPlan))!.GetCheckConstraints().Select(c => c.Name).Order());
+        Assert.Contains("'mismatch'", designModel.FindEntityType(typeof(PaymentTransaction))!.GetCheckConstraints()
+            .Single(c => c.Name == "ck_payment_transactions_status").Sql);
+    }
+
+    private static string? PartialUniqueFilter<T>(AppDbContext db, string name, params string[] propertyNames) where T : class
+    {
+        var index = db.Model.FindEntityType(typeof(T))!.GetIndexes().Single(i => i.GetDatabaseName() == name);
+        Assert.True(index.IsUnique, $"{name} phải là index duy nhất");
+        Assert.Equal(propertyNames, index.Properties.Select(p => p.Name));
+        return index.GetFilter();
     }
 
     private static string TableName<T>(AppDbContext db) where T : class

@@ -15,7 +15,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
-import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { DataTable, type DataTableToolbarSlots } from "@/components/admin/shared/DataTable";
@@ -313,12 +312,12 @@ export function SlmSampleListView() {
         )}
         {isAdmin && (
           <>
-            <Button type="button" variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} disabled={exporting !== null} onClick={() => void handleExport("jsonl")}>
-              {exporting === "jsonl" ? <Spinner /> : <DownloadIcon />}
+            <Button type="button" variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} disabled={exporting !== null} loading={exporting === "jsonl"} onClick={() => void handleExport("jsonl")}>
+              <DownloadIcon />
               Xuất JSONL
             </Button>
-            <Button type="button" variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} disabled={exporting !== null} onClick={() => void handleExport("xlsx")}>
-              {exporting === "xlsx" ? <Spinner /> : <DownloadIcon />}
+            <Button type="button" variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} disabled={exporting !== null} loading={exporting === "xlsx"} onClick={() => void handleExport("xlsx")}>
+              <DownloadIcon />
               Xuất Excel
             </Button>
           </>
@@ -416,8 +415,8 @@ export function SlmSampleListView() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteBusy}>Hủy</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirmDelete()} disabled={deleteBusy}>
-              {deleteBusy && <Spinner />} Xóa
+            <AlertDialogAction onClick={() => void confirmDelete()} loading={deleteBusy}>
+              Xóa
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

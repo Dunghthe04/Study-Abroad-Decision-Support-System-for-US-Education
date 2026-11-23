@@ -11,6 +11,7 @@ import { scenarioOverrides, snapshotText, useSavedScenarios } from "@/components
 import { ActAsChildButton, AddManagedChildButton } from "@/components/parent/ManagedChildActions";
 import { SuggestTargetSchool } from "@/components/parent/SuggestTargetSchool";
 import { ParentPreferencePanel } from "@/components/parent/ParentPreferencePanel";
+import { ParentDashboardKpiSection } from "@/components/parent/ParentDashboardKpiSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -140,8 +141,9 @@ export function ChildDashboard({ studentId, initialTab = "overview" }: { student
         </div>
       </div>
 
-      {/* key: đổi con thì về lại tab đầu, không giữ dữ liệu của con trước */}
-      <Tabs key={studentId} defaultValue={initialTab} className="space-y-4">
+      {/* key: đổi con thì về lại tab đầu, không giữ dữ liệu của con trước;
+          link ?tab=... trong cùng trang (vd. thẻ Tổng quan UC-94) cũng phải mở đúng tab */}
+      <Tabs key={`${studentId}:${initialTab}`} defaultValue={initialTab} className="space-y-4">
         <TabsList className="h-auto flex-wrap">
           <TabsTrigger value="overview">Tổng quan</TabsTrigger>
           <TabsTrigger value="recommend">Trường gợi ý</TabsTrigger>
@@ -149,7 +151,8 @@ export function ChildDashboard({ studentId, initialTab = "overview" }: { student
           <TabsTrigger value="history">Lịch sử và kịch bản</TabsTrigger>
           {!child.isManaged && <TabsTrigger value="preference">So sánh ưu tiên</TabsTrigger>}
         </TabsList>
-        <TabsContent value="overview">
+        <TabsContent value="overview" className="space-y-6">
+          <ParentDashboardKpiSection studentId={studentId} childName={child.studentName} />
           <AcademicSummaryCard profile={child.profile} isLoading={false} readOnly title={`Hồ sơ của ${child.studentName}`} />
         </TabsContent>
         <TabsContent value="recommend">
@@ -277,8 +280,8 @@ function TargetSchoolList({ studentId, childName }: { studentId: string; childNa
                       size="sm"
                       disabled={withdrawing === t.id}
                       onClick={() => withdraw(t)}
+                      loading={withdrawing === t.id}
                     >
-                      {withdrawing === t.id && <Spinner />}
                       Rút lại
                     </Button>
                   </TargetRow>

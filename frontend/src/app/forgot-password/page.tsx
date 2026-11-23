@@ -5,7 +5,7 @@ import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
 import { ForgotPasswordForm } from "@/components/auth/ForgotPasswordForm";
 
 export const metadata: Metadata = {
-  title: "Quên mật khẩu – USAS",
+  title: "Quên mật khẩu – USDSS",
   description: "Yêu cầu mã xác thực để đặt lại mật khẩu tài khoản",
 };
 

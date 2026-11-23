@@ -18,7 +18,7 @@ public class AdminUsersControllerTests
     {
         public List<UserDto> Users { get; set; } = [];
 
-        public Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken ct = default) =>
+        public Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken ct = default, string? ipAddress = null) =>
             throw new NotImplementedException();
 
         public Task<AuthResult> LoginAsync(LoginRequest request, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default) =>
@@ -119,28 +119,7 @@ public class AdminUsersControllerTests
             return Task.FromResult(AuthResult.Ok(updated, "Đã khóa tài khoản."));
         }
 
-        public Task<AuthResult> RegisterCenterAsync(RegisterCenterRequest request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> VerifyCenterEmailAsync(VerifyCenterEmailRequest request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> RequestCenterPhoneChangeAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> ConfirmCenterPhoneChangeAsync(Guid userId, ConfirmContactChangeDto request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> RequestCenterPhoneVerificationAsync(Guid userId, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> VerifyCenterPhoneAsync(Guid userId, string? code, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> RequestCenterEmailChangeAsync(Guid userId, RequestContactChangeDto request, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<AuthResult> ConfirmCenterEmailChangeAsync(Guid userId, ConfirmContactChangeDto request, CancellationToken ct = default) =>
+        public Task<AuthResult> StartSessionAsync(StudyAbroad.Domain.Entities.User user, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
         public (Guid TargetId, UnlockUserAccountRequest Request, Guid ActorId)? LastUnlockCall { get; private set; }

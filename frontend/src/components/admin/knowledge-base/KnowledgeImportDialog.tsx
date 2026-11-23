@@ -214,12 +214,12 @@ export function KnowledgeImportDialog({ open, onOpenChange, onImported }: Props)
             <Button type="button" variant="outline" disabled={importing || completed} onClick={() => inputRef.current?.click()}>
               <FolderOpenIcon /> Chọn file
             </Button>
-            <Button type="button" variant="link" disabled={downloading} onClick={() => void handleDownload()}>
-              {downloading ? <Spinner /> : <FileDownIcon />} Tải file mẫu
+            <Button type="button" variant="link" loading={downloading} onClick={() => void handleDownload()}>
+              <FileDownIcon /> Tải file mẫu
             </Button>
           </div>
-          <Button type="button" disabled={!canImport} onClick={() => void handleImport()}>
-            {importing && <Spinner />} Nhập {validRows > 0 ? `${validRows} dòng hợp lệ` : "dữ liệu"}
+          <Button type="button" disabled={!canImport} loading={importing} onClick={() => void handleImport()}>
+            Nhập {validRows > 0 ? `${validRows} dòng hợp lệ` : "dữ liệu"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -20,7 +20,6 @@ public static class ChatGoalSeek
     public const string WidgetType = "goal_seek";
     public const string PickerType = "school";
 
-    public const string Failed = "Mình chưa tính được phần này, bạn thử lại sau ít phút nhé.";
     public const string AskSchool = "Bạn muốn vào trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé.";
     public const string AskExplainSchool = "Bạn muốn xem giải thích về trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé.";
     public const int MaxOthers = 400;

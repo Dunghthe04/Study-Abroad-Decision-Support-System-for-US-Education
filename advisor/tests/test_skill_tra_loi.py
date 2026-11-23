@@ -5,7 +5,6 @@ import pytest
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState
 from app.services.knowledge import KnowledgeHit
 from app.services.ollama import OllamaError
-from app.services.skill_rules import ORDER
 from app.services.skills import build_handlers
 from app.services.skills.skill_tra_loi import (
     DISCLAIMER,
@@ -304,7 +303,7 @@ def test_skill_tra_loi_is_registered_only_when_the_knowledge_store_exists():
 
     handlers = build_handlers(llm=object(), model="m", knowledge=FakeRetriever())
 
-    assert "skill_tra_loi" in handlers and "skill_tra_loi" in ORDER
+    assert "skill_tra_loi" in handlers
 
 
 # SLM đọc là câu hỏi kiến thức: nhánh kiến thức gọi skill_tra_loi

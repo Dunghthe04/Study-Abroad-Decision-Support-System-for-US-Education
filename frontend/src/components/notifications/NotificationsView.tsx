@@ -127,6 +127,7 @@ export function NotificationsView() {
             ].map((t) => (
               <button
                 key={t.label}
+                type="button"
                 role="tab"
                 aria-selected={unreadOnly === t.value}
                 onClick={() => {
@@ -134,7 +135,7 @@ export function NotificationsView() {
                   setPage(1);
                 }}
                 className={cn(
-                  "rounded-md px-3 py-1.5 transition-colors",
+                  "cursor-pointer rounded-md px-3 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                   unreadOnly === t.value
                     ? "bg-brand text-white"
                     : "text-ink-2 hover:bg-muted",
@@ -185,9 +186,10 @@ export function NotificationsView() {
           {items.map((n) => (
             <li key={n.id}>
               <button
+                type="button"
                 onClick={() => void open(n)}
                 className={cn(
-                  "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted",
+                  "flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
                   !n.isRead && "bg-brand-wash/40",
                 )}
               >

@@ -22,12 +22,15 @@ import { profileFlowApi } from "@/lib/profile-flow-api";
 import { migrateLegacyStep3 } from "@/lib/certification-utils";
 import { recommendationApi } from "@/lib/recommendation-api";
 import {
+  EDIT_ONLY,
   GOALS_CHANGED_EVENT,
   GOALS_KEY,
   goalsNeedMajor,
   goalsQuestion,
+  onlyEdit,
   onlySchoolList,
   parseGoals,
+  safeBackPath,
   type FormGoal,
 } from "@/lib/form-goals";
 import type {
@@ -125,6 +128,8 @@ export function ProfileFlowWizard() {
   const [draft, setDraft] = useState<ProfileFlowDraft>(INITIAL_DRAFT);
   const [draftTranscript, setDraftTranscript] = useState<DraftTranscriptFile | null>(null);
   const [metadata, setMetadata] = useState<ProfileMetadataResponse | null>(null);
+  // UC-94: ngân sách phụ huynh đã nhập (USD), cố định với học sinh
+  const [budgetLockedUsd, setBudgetLockedUsd] = useState<number | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -135,6 +140,10 @@ export function ProfileFlowWizard() {
   // Mục tiêu ở trang 1. Mở từ chat có ?goal= thì lấy theo câu hỏi trong chat và khóa lại
   const [goals, setGoals] = useState<FormGoal[]>([]);
   const goalsLocked = fromChat && goals.length > 0;
+  // "Chỉ sửa hồ sơ": lưu xong quay về trang đã mở form (?back=), không có thì về Tổng quan
+  const editOnly = onlyEdit(goals);
+  const [backPath, setBackPath] = useState<string | null>(null);
+  const [savedNotice, setSavedNotice] = useState(false);
   const goalsRef = useRef<FormGoal[]>([]);
   useEffect(() => {
     goalsRef.current = goals;
@@ -142,7 +151,8 @@ export function ProfileFlowWizard() {
   const updateGoals = (next: FormGoal[]) => {
     setGoals(next);
     try {
-      sessionStorage.setItem(GOALS_KEY, next.join(","));
+      // "Chỉ sửa hồ sơ" chỉ dùng cho lần mở này, không giữ lại cho lần mở form sau
+      sessionStorage.setItem(GOALS_KEY, next.filter((g) => g !== EDIT_ONLY).join(","));
     } catch {
       // trình duyệt chặn storage → chỉ giữ trong trang
     }
@@ -195,7 +205,13 @@ export function ProfileFlowWizard() {
             // bỏ qua
           }
         }
-        const startGoals = parseGoals(openedFromChat ? params.get("goal") : savedGoals);
+        // "Chỉ sửa hồ sơ" từ chat (sửa hồ sơ, không có việc chờ) thì giữ; ngoài chat chỉ tích khi đã có hồ sơ (bên dưới)
+        let startGoals = parseGoals(openedFromChat ? params.get("goal") : savedGoals).filter(
+          (g) => openedFromChat || g !== EDIT_ONLY
+        );
+        setBackPath(openedFromChat ? null : safeBackPath(params.get("back")));
+        // Link "Sửa hồ sơ" (Tổng quan, Tài khoản...) gửi ?goal=chi_sua: tích sẵn "Chỉ sửa hồ sơ" khi đã có hồ sơ
+        const wantEditOnly = !openedFromChat && parseGoals(params.get("goal")).includes(EDIT_ONLY);
         setGoals(startGoals);
         // Vào form trực tiếp mà chưa tích mục tiêu (nháp cũ đang ở bước sau): mở trang 1 để chọn trước
         const startStep = (saved: number) => (!openedFromChat && startGoals.length === 0 ? 1 : saved);
@@ -217,9 +233,14 @@ export function ProfileFlowWizard() {
         if (metaData) setMetadata(metaData);
 
         if (stateData) {
+          if (wantEditOnly && stateData.hasCommittedProfile) {
+            startGoals = [EDIT_ONLY];
+            setGoals(startGoals);
+          }
           setCurrentStep(startStep(stateData.currentStep || 1));
           setCompletedSteps(stateData.completedSteps ?? []);
           setDraftTranscript(stateData.draftTranscript ?? null);
+          setBudgetLockedUsd(stateData.budgetLockedUsd ?? null);
           const incomingDraft = stateData.draft;
           if (incomingDraft) {
             setDraft((prev) => mergeDraft(prev, incomingDraft));
@@ -479,12 +500,13 @@ export function ProfileFlowWizard() {
 
   // Thoát khỏi luồng
   const handleExit = () => {
-    router.push("/");
+    router.push(backPath ?? "/");
   };
 
   // Xác nhận commit ở bước 6
-  // Chỉ tích "Gợi ý trường" (hoặc chưa tích gì, như form cũ) thì sang trang gợi ý trường; còn lại về chat
-  const backToChat = fromChat || (goals.length > 0 && !onlySchoolList(goals));
+  // Chỉ tích "Gợi ý trường" (hoặc chưa tích gì, như form cũ) thì sang trang gợi ý trường;
+  // "Chỉ sửa hồ sơ" thì lưu rồi quay về trang cũ; còn lại về chat
+  const backToChat = fromChat || (goals.length > 0 && !onlySchoolList(goals) && !editOnly);
   const handleSubmitCommit = async () => {
     setErrorMessage(null);
     // Còn bước thiếu mục bắt buộc (vd. quay lại xoá rồi nhảy thẳng tới đây): đưa về bước đó
@@ -516,7 +538,7 @@ export function ProfileFlowWizard() {
       } catch {
         // trình duyệt chặn storage → coi như hồ sơ mới
       }
-      if (!backToChat && lastCommitted === draftJson && (await recommendationApi.getLatest().catch(() => null))) {
+      if (!backToChat && !editOnly && lastCommitted === draftJson && (await recommendationApi.getLatest().catch(() => null))) {
         router.push("/recommendations");
         return;
       }
@@ -530,10 +552,17 @@ export function ProfileFlowWizard() {
         } catch {
           // bỏ qua
         }
-        // Mở từ chat: mở khung chat, advisor thấy hồ sơ đủ thì trả lời luôn câu học sinh đã hỏi.
+        // Mở từ chat: mở khung chat, advisor thấy hồ sơ đủ thì trả lời luôn câu học sinh đã hỏi
+        // (chỉ sửa hồ sơ thì chat báo đã lưu thành công).
         // fromForm: form đã là bước rà soát, advisor bỏ bảng xác nhận đang treo trong chat
         if (fromChat) {
           openAssistant(CONTINUE_CHAT, { fromForm: true });
+          return;
+        }
+        // Chỉ sửa hồ sơ: báo đã lưu rồi quay về trang cũ, không chạy gợi ý, không mở chat
+        if (editOnly) {
+          setSavedNotice(true);
+          window.setTimeout(() => router.push(backPath ?? "/dashboard"), 1200);
           return;
         }
         // Vào form trực tiếp mà tích cả đánh giá hay lộ trình: gửi một câu gộp các việc đã tích, chat trả lời luôn
@@ -586,7 +615,7 @@ export function ProfileFlowWizard() {
             <button
               type="button"
               onClick={() => openAssistant(CONTINUE_CHAT)}
-              className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 font-medium text-brand hover:bg-brand-wash"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 font-medium text-brand hover:bg-brand-wash focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
             >
               <MessageCircleIcon className="size-3.5" />
               {CONTINUE_CHAT}
@@ -595,13 +624,21 @@ export function ProfileFlowWizard() {
           <button
             type="button"
             onClick={handleExit}
-            className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
           >
             <XIcon className="size-3.5" />
             Thoát
           </button>
         </div>
       </div>
+
+      {savedNotice && (
+        <Alert className="mb-6">
+          <CheckIcon className="size-4" />
+          <AlertTitle>Đã lưu hồ sơ</AlertTitle>
+          <AlertDescription className="text-xs">Đang quay về trang trước...</AlertDescription>
+        </Alert>
+      )}
 
       {/* Lỗi khi gửi hồ sơ hiện ở bước 6, cạnh thẻ của từng bước */}
       {errorMessage && currentStep !== 6 && (
@@ -660,6 +697,7 @@ export function ProfileFlowWizard() {
               <Step4Financial
                 data={draft.step4}
                 metadata={metadata}
+                lockedUsd={budgetLockedUsd}
                 onUpdate={updateStep4}
                 onPrev={handlePrev}
                 onNext={handleNext}
@@ -684,7 +722,8 @@ export function ProfileFlowWizard() {
                 onPrev={handlePrev}
                 onSubmit={handleSubmitCommit}
                 backToChat={backToChat}
-                isSubmitting={isSubmitting}
+                editOnly={editOnly}
+                isSubmitting={isSubmitting || savedNotice}
                 submitError={errorMessage}
               />
             )}

@@ -5,7 +5,6 @@ import { SaveIcon, Trash2Icon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { DetailPanel } from "@/components/admin/shared/DetailPanel";
@@ -219,8 +218,8 @@ function KnowledgeEntryForm({ entry, onClose, onChanged, onDelete, onOpen }: Pro
           </TableFrame>
           <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Hủy</Button>
-            <Button type="button" onClick={() => void save()} disabled={saving}>
-              {saving ? <Spinner /> : <SaveIcon />} Lưu
+            <Button type="button" onClick={() => void save()} loading={saving}>
+              <SaveIcon /> Lưu
             </Button>
           </div>
         </form>

@@ -22,6 +22,10 @@ public record AdvisorStreamEvent(string Type, int? Answers = null, string? Text 
 /// mục bắt buộc còn thiếu; false thì hỏi đủ như form; null = advisor tự đoán theo các ô hồ sơ như cũ.</param>
 /// <param name="FromForm">Tin do form gửi ngay sau khi lưu hồ sơ chính thức (frontend đặt, .NET chuyển nguyên sang advisor):
 /// form đã là bước rà soát nên advisor bỏ bảng xác nhận X1 đang treo và trả lời luôn câu học sinh hỏi.</param>
+/// <param name="ExactBudget">UC-94: phụ huynh đang nhập hộ con managed (controller đặt theo token, không lấy từ frontend):
+/// câu ngân sách F1 hỏi số tiền tối đa/năm chính xác bằng VNĐ như bước 4 của form; null/false = hỏi chọn mức như cũ.</param>
+/// <param name="AllowedIntents">Gói của tài khoản cho chạy những loại ý nào trong chat (ChatPremiumGate); null = tất cả (Premium còn token, nhân viên).
+/// Cùng record này được nhận từ trình duyệt nên ChatService LUÔN ghi đè bằng giá trị của server, không bao giờ chuyển giá trị trình duyệt gửi.</param>
 public record AdvisorChatRequest(
     IReadOnlyList<ChatMessage> Messages,
     string? SessionId = null,
@@ -36,7 +40,9 @@ public record AdvisorChatRequest(
     SimulationOverrides? Simulation = null,
     IReadOnlyList<GradeScaleRuleDto>? GradeScale = null,
     bool? HasCommittedProfile = null,
-    bool FromForm = false);
+    bool FromForm = false,
+    bool? ExactBudget = null,
+    IReadOnlyList<string>? AllowedIntents = null);
 
 /// <summary>
 /// Hành động có cấu trúc từ một nút trên giao diện (không qua SLM hiểu câu): Type là goal_seek hoặc explain,
@@ -66,6 +72,31 @@ public record QuickReply(string Label, string Value, ChatAction? Action = null, 
 /// <summary>Công cụ nhập ngay trong chat. Type: major | review | budget | scholarship; Data tùy loại.</summary>
 public record Widget(string Type, JsonElement? Data = null);
 
+/// <summary>
+/// Gửi advisor (POST api/v1/chat/pending-question) để dựng lại nút và công cụ của câu hồ sơ đang chờ khi mở lại phiên chat cũ.
+/// State là trạng thái đã lưu của phiên; các trường còn lại là thông tin .NET đọc mới từ server, giống hệt một lượt chat
+/// (ChatService.BuildAdvisorRequestAsync), để bảng rà soát hiện đúng hồ sơ hiện tại.
+/// </summary>
+public record AdvisorPendingQuestionRequest(
+    JsonElement State,
+    JsonElement? Profile = null,
+    IReadOnlyList<ChatSchool>? Schools = null,
+    IReadOnlyList<ChatSchool>? OtherSchools = null,
+    JsonElement? Transcript = null,
+    JsonElement? Benchmarks = null,
+    IReadOnlyList<GradeScaleRuleDto>? GradeScale = null,
+    bool? HasCommittedProfile = null,
+    bool? ExactBudget = null);
+
+/// <summary>
+/// Câu hồ sơ đang chờ học sinh trả lời trong một phiên cũ, kèm nút và công cụ dựng lại (tin nhắn lưu chỉ có chữ).
+/// Pending = false: không có câu hồ sơ nào đang chờ (phiên hỏi đáp thường, hoặc câu đang chờ chỉ là câu gợi ý).
+/// </summary>
+public record PendingQuestionDto(bool Pending, string? QuestionId, string Question, IReadOnlyList<QuickReply> QuickReplies, Widget? Widget)
+{
+    public static PendingQuestionDto None { get; } = new(false, null, "", [], null);
+}
+
 /// <param name="Profile">Hồ sơ sau lượt này (nội bộ, .NET dùng để ghi vào bản nháp).</param>
 /// <param name="ProfileChanged">Khóa hồ sơ đổi trong lượt này.</param>
 /// <param name="FormStep">Trang form (1–6) của câu chat đang hỏi; null = câu không thuộc trang nào.</param>
@@ -94,4 +125,11 @@ public record AdvisorChatResponse(
     AdvisorSlmDto? Slm = null,
     // Lượt này vừa lưu hồ sơ chính thức (bấm "Đúng rồi" ở bảng rà soát): trang Gợi ý trường hiện nút cập nhật danh sách.
     // Chỉ .NET đặt, advisor không gửi
-    bool? ProfileSaved = null);
+    bool? ProfileSaved = null,
+    // Loại ý advisor bỏ vì gói không cho (allowedIntents). Nội bộ: ChatService đổi thành Locked rồi bỏ trước khi trả trình duyệt
+    IReadOnlyList<string>? LockedIntents = null,
+    // Lượt bị khóa vì gói (cần Premium hoặc hết hạn mức Free): giao diện hiện thẻ nâng cấp. Chỉ .NET đặt, trả cho trình duyệt
+    ChatLock? Locked = null,
+    // Câu trả lời này nói "chưa có thông tin": kho kiến thức không có dòng phù hợp và cơ sở dữ liệu trường cũng không có số liệu học sinh hỏi.
+    // Chỉ .NET đặt (ở bước hỏi thông tin trường), advisor không gửi; dùng để đánh dấu lượt là no_answer, không trả cho trình duyệt
+    bool? NoBasis = null);

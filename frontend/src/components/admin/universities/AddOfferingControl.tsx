@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { AdminFormError, createAdminOffering } from "@/lib/admin-university-api";
@@ -61,8 +60,8 @@ export function AddOfferingControl({ universityId, existingLevels, disabled, onC
         size="sm"
         aria-label="Bậc học cần thêm"
       />
-      <Button type="button" size="sm" onClick={handleAdd} disabled={disabled || isSaving || !level}>
-        {isSaving ? <Spinner /> : <PlusIcon />}
+      <Button type="button" size="sm" onClick={handleAdd} loading={isSaving} disabled={disabled || !level}>
+        <PlusIcon />
         Thêm bậc học
       </Button>
     </div>

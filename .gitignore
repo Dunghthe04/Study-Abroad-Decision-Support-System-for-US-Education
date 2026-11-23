@@ -33,3 +33,5 @@ advisor/slm/results/bao_cao/
 
 # Gói tạm để kéo lên Google Drive (nặng, tạo lại được bằng script), xóa sau khi đã tải lên
 advisor/slm/drive_package/
+advisor/drive_package/
+

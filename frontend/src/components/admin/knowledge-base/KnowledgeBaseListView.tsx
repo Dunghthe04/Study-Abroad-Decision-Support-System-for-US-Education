@@ -15,7 +15,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
-import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { DataTable, type DataTableToolbarSlots } from "@/components/admin/shared/DataTable";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
@@ -258,8 +257,8 @@ export function KnowledgeBaseListView() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteBusy}>Hủy</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirmDelete()} disabled={deleteBusy}>
-              {deleteBusy && <Spinner />} Xóa
+            <AlertDialogAction onClick={() => void confirmDelete()} loading={deleteBusy}>
+              Xóa
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

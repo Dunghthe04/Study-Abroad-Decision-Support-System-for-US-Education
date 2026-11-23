@@ -12,8 +12,10 @@ using StudyAbroad.Domain.Entities;
 namespace StudyAbroad.Application.ParentLinks;
 
 // Ưu tiên phụ huynh đã lưu. HasResult: đã có danh sách theo cha mẹ tính sẵn chưa (con chưa nhận gợi ý thì chưa có).
+// HasPref=false: phụ huynh mới lưu số tiền (UC-94 popup), chưa chọn ưu tiên; Pref khi đó là mặc định [2,2,2].
 public record ParentPreferenceDto(
-    IReadOnlyList<int> Pref, long? BudgetVnd, decimal? VndPerUsd, decimal? BudgetUsd, DateTime UpdatedAt, bool HasResult);
+    IReadOnlyList<int> Pref, long? BudgetVnd, decimal? VndPerUsd, decimal? BudgetUsd, DateTime UpdatedAt, bool HasResult,
+    bool HasPref = true);
 
 // [UC-76 2c] Màn so sánh. StudentHasRun=false: con chưa nhận gợi ý, Comparison null.
 // IsPreview: danh sách cha mẹ vừa tính từ giá trị chưa lưu (kéo thanh, hoặc cha mẹ chưa lưu lần nào → [2,2,2]).
@@ -53,8 +55,9 @@ public class ParentPreferenceService(
     // Cách lưu trong cột jsonb. Result: ItemsJson của SimulateAsync, cùng khuôn danh sách của con.
     // BasedOnRecommendationId: lần gợi ý của con mà Result được tính theo. Stale: lần tính gần nhất bị lỗi, trang so sánh sẽ tính bù.
     // Rule: phiên bản luật lọc lúc tính Result. Khác CurrentRule (bản lưu trước khi đổi luật thì thiếu, đọc ra 0) thì tính lại.
+    // Pref null: phụ huynh mới lưu số tiền tối đa từ dashboard (UC-94), chưa chọn ưu tiên → coi như chưa chọn, con không thấy.
     public record Stored(
-        IReadOnlyList<int> Pref, long? BudgetVnd, decimal? VndPerUsd, decimal? BudgetUsd, DateTime UpdatedAt,
+        IReadOnlyList<int>? Pref, long? BudgetVnd, decimal? VndPerUsd, decimal? BudgetUsd, DateTime UpdatedAt,
         JsonElement? Result, Guid? BasedOnRecommendationId, DateTime? ComputedAt, bool Stale, int Rule = 0);
 
     // 2: ngân sách cha mẹ không có mức dư 10%, vượt là sang khối cần học bổng (UC-76 2j-1)
@@ -123,6 +126,37 @@ public class ParentPreferenceService(
         return ParentLinkResult<ParentPreferenceDto>.Ok(ToDto(stored));
     }
 
+    /// <summary>[UC-94] Phụ huynh chỉ lưu số tiền tối đa chi trả được/năm từ dashboard. Không đụng ưu tiên, không báo cho con.
+    /// Đã có ưu tiên thì đánh dấu Stale để trang so sánh tính lại danh sách theo số tiền mới.</summary>
+    public async Task<ParentLinkResult<ParentPreferenceDto>> SaveBudgetAsync(
+        Guid parentId, Guid childId, long? budgetVnd, CancellationToken ct)
+    {
+        if (budgetVnd is null || !ValidBudget(budgetVnd))
+            return Fail(ParentLinkError.Validation, BudgetError);
+
+        var link = await FindLinkAsync(parentId, childId, ct);
+        if (link is null)
+            return Fail(ParentLinkError.NotFound, NoLinkError);
+
+        var (vndPerUsd, budgetUsd) = await ToUsdAsync(budgetVnd, ct);
+        var now = DateTime.UtcNow;
+        var old = Read(link.ParentPreferenceJson);
+        var stored = old is null
+            ? new Stored(null, budgetVnd, vndPerUsd, budgetUsd, now, null, null, null, false, CurrentRule)
+            : old with { BudgetVnd = budgetVnd, VndPerUsd = vndPerUsd, BudgetUsd = budgetUsd, UpdatedAt = now, Stale = old.Pref is not null };
+
+        link.ParentPreferenceJson = JsonSerializer.Serialize(stored, WebJson);
+        try
+        {
+            await links.UpdateAsync(link, ct);
+        }
+        catch (ConcurrencyConflictException)
+        {
+            return Fail(ParentLinkError.Conflict, "Liên kết vừa thay đổi. Hãy tải lại trang rồi lưu lại.");
+        }
+        return ParentLinkResult<ParentPreferenceDto>.Ok(ToDto(stored));
+    }
+
     /// <summary>[2c] Phụ huynh xem so sánh. Có pref hoặc budgetVnd: xem thử, tính bằng giá trị chưa lưu và không ghi DB
     /// (budgetVnd bỏ trống = ngân sách trong hồ sơ con). Không có: dùng ý đã lưu; chưa lưu lần nào thì xem thử với [2,2,2].</summary>
     public async Task<ParentLinkResult<PreferenceCompareDto>> CompareForParentAsync(
@@ -140,8 +174,8 @@ public class ParentPreferenceService(
         var stored = Read(link.ParentPreferenceJson);
         if (pref is not null || budgetVnd is not null)
             return await PreviewAsync(childId, pref ?? stored?.Pref ?? DefaultPref, budgetVnd, stored, ct);
-        if (stored is null)
-            return await PreviewAsync(childId, DefaultPref, null, null, ct);
+        if (stored?.Pref is null)   // chưa chọn ưu tiên (có thể đã lưu số tiền): xem thử [2,2,2] với số tiền đã lưu
+            return await PreviewAsync(childId, DefaultPref, stored?.BudgetVnd, stored, ct);
         return await CompareSavedAsync(link, childId, stored, ct);
     }
 
@@ -164,18 +198,18 @@ public class ParentPreferenceService(
         {
             var parent = await users.GetUserById(l.ParentUserId!.Value, ct);
             var name = string.IsNullOrWhiteSpace(parent?.FullName) ? l.ParentEmail : parent!.FullName!;
-            options.Add(new ParentOption(l.ParentUserId.Value, name, !string.IsNullOrEmpty(l.ParentPreferenceJson)));
+            options.Add(new ParentOption(l.ParentUserId.Value, name, Read(l.ParentPreferenceJson)?.Pref is not null));
         }
 
         var selected = parentId is { } pid
             ? active.FirstOrDefault(l => l.ParentUserId == pid)
-            : active.FirstOrDefault(l => !string.IsNullOrEmpty(l.ParentPreferenceJson)) ?? active.First();
+            : active.FirstOrDefault(l => Read(l.ParentPreferenceJson)?.Pref is not null) ?? active.First();
         if (selected is null)
             return ParentLinkResult<ChildPreferenceView>.Fail(ParentLinkError.NotFound, "Không tìm thấy phụ huynh này.");
 
         var stored = Read(selected.ParentPreferenceJson);
         PreferenceCompareDto compare;
-        if (stored is null)
+        if (stored?.Pref is null)   // chỉ lưu số tiền: con chưa thấy gì
         {
             var latest = await runner.GetLatestAsync(childId, ct);
             compare = new PreferenceCompareDto(latest is not null,
@@ -199,7 +233,7 @@ public class ParentPreferenceService(
         var latest = await runner.GetLatestAsync(childId, ct);
         if (latest is null)
             return ParentLinkResult<PreferenceCompareDto>.Ok(
-                NotRun(pref, budgetVnd, null, null, stored is not null, true, stored?.UpdatedAt));
+                NotRun(pref, budgetVnd, null, null, stored?.Pref is not null, true, stored?.UpdatedAt));
 
         var (vndPerUsd, budgetUsd) = await ToUsdAsync(budgetVnd, ct);
         JsonElement parentItems;
@@ -212,25 +246,25 @@ public class ParentPreferenceService(
             return FailCompare(ParentLinkError.Conflict, ProfileNotReady(ex));
         }
         var dto = await BuildAsync(childId, latest, pref, budgetVnd, budgetUsd, vndPerUsd,
-            stored is not null, true, stored?.UpdatedAt, null, parentItems, ct);
+            stored?.Pref is not null, true, stored?.UpdatedAt, null, parentItems, ct);
         return ParentLinkResult<PreferenceCompareDto>.Ok(dto);
     }
 
-    // Ý đã lưu: đọc danh sách đã tính sẵn. Chỉ tính bù (rồi lưu) khi chưa có, bị đánh dấu stale, theo lần gợi ý cũ của con, hoặc theo luật lọc cũ.
+    // Ý đã lưu (Pref có giá trị): đọc danh sách đã tính sẵn. Chỉ tính bù (rồi lưu) khi chưa có, bị đánh dấu stale, theo lần gợi ý cũ của con, hoặc theo luật lọc cũ.
     private async Task<ParentLinkResult<PreferenceCompareDto>> CompareSavedAsync(
         ParentStudentLink link, Guid childId, Stored stored, CancellationToken ct)
     {
         var latest = await runner.GetLatestAsync(childId, ct);
         if (latest is null)
             return ParentLinkResult<PreferenceCompareDto>.Ok(
-                NotRun(stored.Pref, stored.BudgetVnd, stored.BudgetUsd, stored.VndPerUsd, true, false, stored.UpdatedAt));
+                NotRun(stored.Pref!, stored.BudgetVnd, stored.BudgetUsd, stored.VndPerUsd, true, false, stored.UpdatedAt));
 
         var current = stored;
         if (stored.Result is null || stored.Stale || stored.BasedOnRecommendationId != latest.Id || stored.Rule != CurrentRule)
         {
             try
             {
-                var items = await SimulateAsync(childId, stored.Pref, stored.BudgetUsd, ct);
+                var items = await SimulateAsync(childId, stored.Pref!, stored.BudgetUsd, ct);
                 current = stored with { Result = items, BasedOnRecommendationId = latest.Id, ComputedAt = DateTime.UtcNow, Stale = false, Rule = CurrentRule };
             }
             catch (InvalidOperationException ex)
@@ -249,7 +283,7 @@ public class ParentPreferenceService(
             }
         }
 
-        var dto = await BuildAsync(childId, latest, current.Pref, current.BudgetVnd, current.BudgetUsd, current.VndPerUsd,
+        var dto = await BuildAsync(childId, latest, current.Pref!, current.BudgetVnd, current.BudgetUsd, current.VndPerUsd,
             true, false, current.UpdatedAt, current.ComputedAt, current.Result!.Value, ct);
         return ParentLinkResult<PreferenceCompareDto>.Ok(dto);
     }
@@ -350,7 +384,7 @@ public class ParentPreferenceService(
         string.IsNullOrEmpty(json) ? null : JsonSerializer.Deserialize<Stored>(json, WebJson);
 
     private static ParentPreferenceDto ToDto(Stored s) =>
-        new(s.Pref, s.BudgetVnd, s.VndPerUsd, s.BudgetUsd, s.UpdatedAt, s.Result is not null);
+        new(s.Pref ?? DefaultPref, s.BudgetVnd, s.VndPerUsd, s.BudgetUsd, s.UpdatedAt, s.Result is not null, s.Pref is not null);
 
     private static ParentLinkResult<ParentPreferenceDto> Fail(ParentLinkError error, string message) =>
         ParentLinkResult<ParentPreferenceDto>.Fail(error, message);

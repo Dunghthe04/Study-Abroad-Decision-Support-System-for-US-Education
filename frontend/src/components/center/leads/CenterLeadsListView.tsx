@@ -329,7 +329,7 @@ export function CenterLeadsListView() {
                 e.stopPropagation();
                 setSelectedLead(lead);
               }}
-              className="font-medium text-brand underline-offset-2 hover:underline text-left block"
+              className="cursor-pointer disabled:cursor-default rounded-xs font-medium text-brand underline-offset-2 hover:underline text-left block focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             >
               {lead.studentName}
             </button>
@@ -365,6 +365,7 @@ export function CenterLeadsListView() {
               size="icon-xs"
               onClick={() => copyToClipboard(lead.contactPhone!, "Số điện thoại")}
               title="Sao chép số điện thoại"
+              aria-label="Sao chép số điện thoại"
               className="size-6 text-ink-3 hover:text-ink"
             >
               <CopyIcon className="size-3" />
@@ -513,96 +514,120 @@ export function CenterLeadsListView() {
       {/* KPI Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {/* Total */}
-        <Card
-          size="sm"
-          className={cn(
-            "cursor-pointer transition-all hover:border-brand/40",
-            statusFilter === "all" ? "ring-2 ring-brand border-brand" : "border-line"
-          )}
+        <button
+          type="button"
+          aria-pressed={statusFilter === "all"}
           onClick={() => {
             setStatusFilter("all");
             setPage(1);
           }}
+          className="text-left rounded-xl cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
-          <CardContent className="pt-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-ink-2">Tổng yêu cầu</p>
-              <p className="font-heading text-2xl font-bold text-ink tabular-nums mt-0.5">{totalCount}</p>
-            </div>
-            <div className="size-9 rounded-lg bg-ground flex items-center justify-center text-ink-2">
-              <InboxIcon className="size-4" />
-            </div>
-          </CardContent>
-        </Card>
+          <Card
+            size="sm"
+            className={cn(
+              "h-full transition-all hover:border-brand/40",
+              statusFilter === "all" ? "ring-2 ring-brand border-brand" : "border-line"
+            )}
+          >
+            <CardContent className="pt-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-ink-2">Tổng yêu cầu</p>
+                <p className="font-heading text-2xl font-bold text-ink tabular-nums mt-0.5">{totalCount}</p>
+              </div>
+              <div className="size-9 rounded-lg bg-ground flex items-center justify-center text-ink-2">
+                <InboxIcon className="size-4" />
+              </div>
+            </CardContent>
+          </Card>
+        </button>
 
         {/* New */}
-        <Card
-          size="sm"
-          className={cn(
-            "cursor-pointer transition-all hover:border-brand/40",
-            statusFilter === "new" ? "ring-2 ring-brand border-brand bg-brand-wash/35" : "border-line"
-          )}
+        <button
+          type="button"
+          aria-pressed={statusFilter === "new"}
           onClick={() => {
             setStatusFilter("new");
             setPage(1);
           }}
+          className="text-left rounded-xl cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
-          <CardContent className="pt-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-brand">Chờ xử lý (Mới)</p>
-              <p className="font-heading text-2xl font-bold text-brand-ink tabular-nums mt-0.5">{newCount}</p>
-            </div>
-            <div className="size-9 rounded-lg bg-brand-wash flex items-center justify-center text-brand">
-              <ClockIcon className="size-4" />
-            </div>
-          </CardContent>
-        </Card>
+          <Card
+            size="sm"
+            className={cn(
+              "h-full transition-all hover:border-brand/40",
+              statusFilter === "new" ? "ring-2 ring-brand border-brand bg-brand-wash/35" : "border-line"
+            )}
+          >
+            <CardContent className="pt-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-brand">Chờ xử lý (Mới)</p>
+                <p className="font-heading text-2xl font-bold text-brand-ink tabular-nums mt-0.5">{newCount}</p>
+              </div>
+              <div className="size-9 rounded-lg bg-brand-wash flex items-center justify-center text-brand">
+                <ClockIcon className="size-4" />
+              </div>
+            </CardContent>
+          </Card>
+        </button>
 
         {/* Contacted */}
-        <Card
-          size="sm"
-          className={cn(
-            "cursor-pointer transition-all hover:border-warn/40",
-            statusFilter === "contacted" ? "ring-2 ring-warn border-warn bg-warn-wash/40" : "border-line"
-          )}
+        <button
+          type="button"
+          aria-pressed={statusFilter === "contacted"}
           onClick={() => {
             setStatusFilter("contacted");
             setPage(1);
           }}
+          className="text-left rounded-xl cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
-          <CardContent className="pt-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-warn">Đã chấp nhận</p>
-              <p className="font-heading text-2xl font-bold text-warn tabular-nums mt-0.5">{contactedCount}</p>
-            </div>
-            <div className="size-9 rounded-lg bg-warn-wash flex items-center justify-center text-warn">
-              <PhoneIcon className="size-4" />
-            </div>
-          </CardContent>
-        </Card>
+          <Card
+            size="sm"
+            className={cn(
+              "h-full transition-all hover:border-warn/40",
+              statusFilter === "contacted" ? "ring-2 ring-warn border-warn bg-warn-wash/40" : "border-line"
+            )}
+          >
+            <CardContent className="pt-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-warn">Đã chấp nhận</p>
+                <p className="font-heading text-2xl font-bold text-warn tabular-nums mt-0.5">{contactedCount}</p>
+              </div>
+              <div className="size-9 rounded-lg bg-warn-wash flex items-center justify-center text-warn">
+                <PhoneIcon className="size-4" />
+              </div>
+            </CardContent>
+          </Card>
+        </button>
 
         {/* Closed */}
-        <Card
-          size="sm"
-          className={cn(
-            "cursor-pointer transition-all hover:border-ok/40",
-            statusFilter === "closed" ? "ring-2 ring-ok border-ok bg-ok-wash/40" : "border-line"
-          )}
+        <button
+          type="button"
+          aria-pressed={statusFilter === "closed"}
           onClick={() => {
             setStatusFilter("closed");
             setPage(1);
           }}
+          className="text-left rounded-xl cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
-          <CardContent className="pt-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-ok">Đã hoàn tất</p>
-              <p className="font-heading text-2xl font-bold text-ok tabular-nums mt-0.5">{closedCount}</p>
-            </div>
-            <div className="size-9 rounded-lg bg-ok-wash flex items-center justify-center text-ok">
-              <CheckCheckIcon className="size-4" />
-            </div>
-          </CardContent>
-        </Card>
+          <Card
+            size="sm"
+            className={cn(
+              "h-full transition-all hover:border-ok/40",
+              statusFilter === "closed" ? "ring-2 ring-ok border-ok bg-ok-wash/40" : "border-line"
+            )}
+          >
+            <CardContent className="pt-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-ok">Đã hoàn tất</p>
+                <p className="font-heading text-2xl font-bold text-ok tabular-nums mt-0.5">{closedCount}</p>
+              </div>
+              <div className="size-9 rounded-lg bg-ok-wash flex items-center justify-center text-ok">
+                <CheckCheckIcon className="size-4" />
+              </div>
+            </CardContent>
+          </Card>
+        </button>
       </div>
 
       {/* Main DataTable */}
@@ -712,10 +737,12 @@ export function CenterLeadsListView() {
                               {selectedLead.contactPhone}
                             </a>
                             <Button
+                              type="button"
                               variant="ghost"
                               size="icon-xs"
                               onClick={() => copyToClipboard(selectedLead.contactPhone!, "Số điện thoại")}
                               title="Sao chép"
+                              aria-label="Sao chép số điện thoại"
                               className="size-6 text-muted-foreground hover:text-foreground"
                             >
                               <CopyIcon className="size-3" />
@@ -862,6 +889,7 @@ export function CenterLeadsListView() {
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
                       <Button
+                        type="button"
                         size="sm"
                         disabled={isUpdatingStatus}
                         onClick={() => handleDecision(selectedLead.id, true)}
@@ -871,6 +899,7 @@ export function CenterLeadsListView() {
                         Chấp nhận
                       </Button>
                       <Button
+                        type="button"
                         variant="outline"
                         size="sm"
                         disabled={isUpdatingStatus}
@@ -911,6 +940,7 @@ export function CenterLeadsListView() {
                   <div className="flex flex-wrap items-center gap-2">
                     {selectedLead.status === "closed" && (
                       <Button
+                        type="button"
                         variant="outline"
                         size="sm"
                         disabled={isUpdatingStatus}
@@ -924,6 +954,7 @@ export function CenterLeadsListView() {
 
                     {selectedLead.status !== "closed" && (
                       <Button
+                        type="button"
                         variant="outline"
                         size="sm"
                         disabled={isUpdatingStatus}
@@ -941,7 +972,7 @@ export function CenterLeadsListView() {
               )}
 
               <DialogFooter>
-                <Button variant="outline" onClick={() => setSelectedLead(null)}>
+                <Button type="button" variant="outline" onClick={() => setSelectedLead(null)}>
                   Đóng
                 </Button>
               </DialogFooter>

@@ -1,10 +1,10 @@
 """B1. Dựng skill ho_so bằng code từ một khuôn cố định (ý thầy 09/11/2026).
 
 Phần lớn skill giống nhau giữa các học sinh, chỉ khoảng vài phần trăm là riêng. Vì vậy không để SLM sinh cả skill:
-khuôn 9 mục nằm ở skills/skill_ho_so_khuon.md, code chỉ điền ba chỗ riêng của từng học sinh:
+khuôn nằm ở skills/skill_ho_so_khuon.md (theo khuôn chung của skill, xem docs/SKILL_FORMAT.md), code chỉ điền ba chỗ riêng của từng học sinh:
 - {nhiem_vu} (mục 1): các việc học sinh hỏi, lấy từ tasks SLM phân loại;
-- {du_lieu} (mục 3): bảng hồ sơ, chép nguyên chữ của ho_so và tinh_san (skill_request_of);
-- {noi_dung} (mục 5): nhóm điểm mạnh / ở mức giữa / cần lưu ý theo mức code tính, và lộ trình của skill_lo_trinh.
+- {du_lieu} (mục 2): bảng hồ sơ, chép nguyên chữ của ho_so và tinh_san (skill_request_of);
+- {noi_dung} (mục 4): nhóm điểm mạnh / ở mức giữa / cần lưu ý theo mức code tính, và lộ trình của skill_lo_trinh.
 Mọi chữ của skill đều chép từ dữ liệu, không có chữ do model viết, nên không cần kiểm lại nội dung skill.
 """
 
@@ -45,7 +45,7 @@ ONLY_NOTED = "Chỉ ghi nhận, không dùng để chọn trường"
 REFUSED = "đã từng bị từ chối visa"
 PLANNED = "dự định"
 
-# Bảng mục 3: (tên dòng, khóa ho_so, khóa tinh_san hoặc chữ cố định cho cột Mức). Thứ tự giống form
+# Bảng mục 2: (tên dòng, khóa ho_so, khóa tinh_san hoặc chữ cố định cho cột Mức). Thứ tự giống form
 ROWS = (
     ("Hệ đang học", "education_system", None),
     ("Bậc muốn học", "target_level", None),

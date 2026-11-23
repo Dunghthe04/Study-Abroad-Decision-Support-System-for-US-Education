@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { adminSlmSampleApi } from "@/lib/slm-sample-api";
 import { statusLabel } from "@/lib/slm-sample-format";
@@ -70,7 +69,7 @@ function ReviewForm({ status, ids, onClose, onDone }: Omit<Props, "status"> & { 
       {error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}
       <DialogFooter>
         <Button type="button" variant="outline" disabled={saving} onClick={onClose}>Hủy</Button>
-        <Button type="button" disabled={saving || missingNote} onClick={() => void submit()}>{saving && <Spinner />} Xác nhận</Button>
+        <Button type="button" disabled={missingNote} loading={saving} onClick={() => void submit()}>Xác nhận</Button>
       </DialogFooter>
     </>
   );

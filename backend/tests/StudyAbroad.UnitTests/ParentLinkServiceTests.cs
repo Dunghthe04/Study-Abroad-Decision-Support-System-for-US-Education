@@ -16,6 +16,21 @@ public class ParentLinkServiceTests
 
     private ParentLinkService CreateService() => new(_links, _users, _emails, _audit);
 
+    // [UC-103] Dịch vụ có tra phiên bản "Đồng ý của phụ huynh" đang hiệu lực do admin công bố
+    private sealed class FixedPolicyVersion(string? version) : StudyAbroad.Application.Admin.Policies.IPolicyVersionLookup
+    {
+        public string? Version { get; set; } = version;
+        public string? AskedKind { get; private set; }
+        public Task<string?> GetPublishedVersionAsync(string kind, CancellationToken ct = default)
+        {
+            AskedKind = kind;
+            return Task.FromResult(Version);
+        }
+    }
+
+    private ParentLinkService CreateServiceWithPolicy(FixedPolicyVersion policy) =>
+        new(_links, _users, _emails, _audit, policyVersions: policy);
+
     private static DateOnly BornYearsAgo(int years) =>
         AgePolicy.TodayInVietnam(DateTime.UtcNow).AddDays(-10).AddYears(-years);
 
@@ -96,6 +111,104 @@ public class ParentLinkServiceTests
         var result = await CreateService().GetInviteAsync(token);
 
         Assert.Equal(ParentLinkError.Expired, result.Error);
+    }
+
+    // ===== [UC-103] Phiên bản văn bản đồng ý lấy từ bản đang hiệu lực, không còn viết cứng =====
+
+    [Fact]
+    public async Task Accept_RecordsThePublishedVersionOfTheConsentText_NotTheConstant()
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        var (_, token) = AddPendingLink(student);
+        var policy = new FixedPolicyVersion("2026-12");
+
+        var result = await CreateServiceWithPolicy(policy).AcceptAsync(token, isGuardian: true, "1.2.3.4");
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal("2026-12", Assert.Single(_links.Consents).PolicyVersion);
+        Assert.Equal("2026-12", result.Value!.PolicyVersion);
+        Assert.Equal(PolicyKinds.ChildDataConsent, policy.AskedKind);       // đúng loại "Đồng ý của phụ huynh"
+        Assert.NotEqual(ConsentPurposes.ChildDataPolicyVersion, "2026-12");
+    }
+
+    [Fact]
+    public async Task Reject_AlsoRecordsThePublishedVersion()
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        var (_, token) = AddPendingLink(student);
+
+        await CreateServiceWithPolicy(new FixedPolicyVersion("2026-12")).RejectAsync(token, "1.2.3.4");
+
+        var consent = Assert.Single(_links.Consents);
+        Assert.False(consent.Granted);
+        Assert.Equal("2026-12", consent.PolicyVersion);
+    }
+
+    [Fact]
+    public async Task GetInvite_ShowsThePublishedVersion_ToTheParent()
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        var (_, token) = AddPendingLink(student);
+
+        var result = await CreateServiceWithPolicy(new FixedPolicyVersion("2026-12")).GetInviteAsync(token);
+
+        Assert.Equal("2026-12", result.Value!.PolicyVersion);
+    }
+
+    [Theory]
+    [InlineData(null)]                    // chưa có bản nào được công bố (không nên xảy ra sau khi nạp bản đầu)
+    public async Task Accept_WithNoPublishedVersion_FallsBackToTheFirstVersionConstant(string? published)
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        var (_, token) = AddPendingLink(student);
+
+        await CreateServiceWithPolicy(new FixedPolicyVersion(published)).AcceptAsync(token, isGuardian: true, "1.2.3.4");
+
+        Assert.Equal(ConsentPurposes.ChildDataPolicyVersion, Assert.Single(_links.Consents).PolicyVersion);
+    }
+
+    [Fact]
+    public async Task Accept_WhenTheParentReadAnOlderVersion_IsRefused_AndNothingIsRecorded()
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        var (link, token) = AddPendingLink(student);
+        // Phụ huynh mở trang lúc bản 2026-11 đang hiệu lực, admin công bố 2026-12 trước khi họ bấm Đồng ý
+        var policy = new FixedPolicyVersion("2026-12");
+
+        var result = await CreateServiceWithPolicy(policy).AcceptAsync(token, isGuardian: true, "1.2.3.4", seenPolicyVersion: "2026-11");
+
+        Assert.Equal(ParentLinkError.Validation, result.Error);
+        Assert.Contains("đọc lại", result.Message);
+        Assert.Empty(_links.Consents);                                       // không có bằng chứng sai
+        Assert.Equal(ParentLinkStatuses.Pending, Stored(link.Id).Status);    // lời mời vẫn còn chờ, đồng ý được sau khi đọc bản mới
+        var retry = await CreateServiceWithPolicy(policy).AcceptAsync(token, isGuardian: true, "1.2.3.4", seenPolicyVersion: "2026-12");
+        Assert.Equal(ParentLinkError.None, retry.Error);
+        Assert.Equal("2026-12", Assert.Single(_links.Consents).PolicyVersion);
+    }
+
+    [Fact]
+    public async Task Accept_WhenTheParentReadTheCurrentVersion_IsRecorded()
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        var (_, token) = AddPendingLink(student);
+
+        var result = await CreateServiceWithPolicy(new FixedPolicyVersion("2026-12"))
+            .AcceptAsync(token, isGuardian: true, "1.2.3.4", seenPolicyVersion: "2026-12");
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal("2026-12", Assert.Single(_links.Consents).PolicyVersion);
+    }
+
+    [Fact]
+    public async Task Reject_IsNeverBlockedByANewerVersion()
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        var (_, token) = AddPendingLink(student);
+
+        // Từ chối không phải đồng ý với văn bản nào, nên luôn ghi nhận được
+        var result = await CreateServiceWithPolicy(new FixedPolicyVersion("2026-12")).RejectAsync(token, "1.2.3.4");
+
+        Assert.Equal(ParentLinkError.None, result.Error);
     }
 
     // ===== [UC-115] Phụ huynh đồng ý / từ chối qua link trong mail, không cần tài khoản =====

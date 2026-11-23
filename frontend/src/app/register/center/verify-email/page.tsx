@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
-import { VerifyCenterEmailForm } from "@/components/auth/VerifyCenterEmailForm";
+import { VerifyCenterEmailForm } from "@/components/center/VerifyCenterEmailForm";
 
 export const metadata: Metadata = {
-  title: "Xác thực Email Trung tâm – USAS",
+  title: "Xác thực Email Trung tâm – USDSS",
   description: "Xác thực địa chỉ email bằng mã OTP để kích hoạt tài khoản đối tác",
 };
 

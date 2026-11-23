@@ -15,7 +15,7 @@ using StudyAbroad.Infrastructure.Services;
 namespace StudyAbroad.UnitTests;
 
 /// <summary>
-/// [USAS-640] Bảo mật upload bảng điểm: kiểm tra nội dung thật của tệp, chỉ xoá tệp trong thư mục của chính user,
+/// [USAS-640] Bảo mật upload bảng điểm: kiểm tra nội dung thật của tệp, không lưu tệp, chỉ xoá tệp cũ trong thư mục của chính user,
 /// controller chỉ nhận 1 tệp ≤ 10MB và có giới hạn tần suất.
 /// </summary>
 public class ProfileTranscriptUploadSecurityTests : IDisposable
@@ -39,31 +39,39 @@ public class ProfileTranscriptUploadSecurityTests : IDisposable
             Directory.Delete(_root, recursive: true);
     }
 
-    private Task<DraftTranscriptInfoDto> Save(Guid userId, byte[] bytes, string fileName, string contentType = "application/octet-stream") =>
-        _storage.SaveDraftTranscriptAsync(userId, new MemoryStream(bytes), fileName, contentType, bytes.Length);
+    private DraftTranscriptInfoDto Validate(byte[] bytes, string fileName) =>
+        _storage.ValidateTranscriptFile(bytes, fileName);
+
+    /// <summary>Tạo tệp cũ như bản trước khi bỏ lưu tệp (uploads/{folder}/{userId}/{tên}) để test các hàm dọn dẹp</summary>
+    private string LegacyFile(Guid userId, string folder, string storedName)
+    {
+        var dir = Path.Combine(_root, "uploads", folder, userId.ToString());
+        Directory.CreateDirectory(dir);
+        File.WriteAllBytes(Path.Combine(dir, storedName), PdfBytes);
+        return $"/uploads/{folder}/{userId}/{storedName}";
+    }
 
     private string FullPath(string relativePath) =>
         Path.Combine(_root, relativePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
 
-    // ───────────── [UC-80] Xóa hẳn tài khoản: xóa mọi tệp của user ─────────────
+    // ───────────── [UC-80] Xóa hẳn tài khoản: xóa mọi tệp cũ của user ─────────────
 
     [Fact]
     public async Task DeleteAllUserFiles_RemovesDraftsAndTranscripts_KeepsOtherUsers()
     {
         var userId = Guid.NewGuid();
         var otherId = Guid.NewGuid();
-        var draft = await Save(userId, PdfBytes, "nhap.pdf");
-        var official = await Save(userId, PngBytes, "chinh_thuc.png");
-        var officialPath = await _storage.CommitDraftTranscriptAsync(userId, official.RelativePath);
-        var otherDraft = await Save(otherId, PdfBytes, "khac.pdf");
+        var draft = LegacyFile(userId, "drafts", "nhap.pdf");
+        var official = LegacyFile(userId, "transcripts", "chinh_thuc.pdf");
+        var otherDraft = LegacyFile(otherId, "drafts", "khac.pdf");
 
         await _storage.DeleteAllUserFilesAsync(userId);
 
         Assert.False(Directory.Exists(Path.Combine(_root, "uploads", "drafts", userId.ToString())));
         Assert.False(Directory.Exists(Path.Combine(_root, "uploads", "transcripts", userId.ToString())));
-        Assert.False(File.Exists(FullPath(draft.RelativePath)));
-        Assert.False(File.Exists(FullPath(officialPath!)));
-        Assert.True(File.Exists(FullPath(otherDraft.RelativePath)));
+        Assert.False(File.Exists(FullPath(draft)));
+        Assert.False(File.Exists(FullPath(official)));
+        Assert.True(File.Exists(FullPath(otherDraft)));
     }
 
     [Fact]
@@ -72,14 +80,14 @@ public class ProfileTranscriptUploadSecurityTests : IDisposable
         await _storage.DeleteAllUserFilesAsync(Guid.NewGuid());
     }
 
-    // ───────────── Storage: kiểm tra nội dung thật ─────────────
+    // ───────────── Kiểm tra nội dung thật, không lưu tệp ─────────────
 
     [Theory]
     [InlineData("bang_diem.pdf", "application/pdf")]
     [InlineData("bang_diem.PNG", "image/png")]
     [InlineData("bang_diem.jpeg", "image/jpeg")]
     [InlineData("bang_diem.jpg", "image/jpeg")]
-    public async Task Save_ValidFile_StoresWholeContent_AndUsesDetectedContentType(string fileName, string expectedType)
+    public void Validate_ValidFile_UsesDetectedContentType_AndWritesNothing(string fileName, string expectedType)
     {
         var bytes = expectedType switch
         {
@@ -88,69 +96,72 @@ public class ProfileTranscriptUploadSecurityTests : IDisposable
             _ => JpegBytes,
         };
 
-        // Content type trình duyệt gửi lên sai cũng không được lưu lại
-        var info = await Save(Guid.NewGuid(), bytes, fileName, contentType: "text/html");
+        var info = Validate(bytes, fileName);
 
         Assert.Equal(expectedType, info.ContentType);
-        Assert.Equal(bytes, await File.ReadAllBytesAsync(FullPath(info.RelativePath)));
+        Assert.Equal(fileName, info.OriginalFileName);
+        Assert.Equal(bytes.Length, info.FileSizeBytes);
+        Assert.Null(info.StoredFileName);
+        Assert.Null(info.RelativePath);
+        // Không ghi gì xuống ổ đĩa: server không cần quyền ghi hay volume
+        Assert.False(Directory.Exists(Path.Combine(_root, "uploads")));
     }
 
     [Fact]
-    public async Task Save_HtmlDisguisedAsPng_IsRejected_AndNothingStored()
+    public void Validate_HtmlDisguisedAsPng_IsRejected()
     {
-        var userId = Guid.NewGuid();
         var html = Encoding.UTF8.GetBytes("<html><script>alert(1)</script></html>");
-
-        await Assert.ThrowsAsync<ArgumentException>(() => Save(userId, html, "anh.png", "image/png"));
-
-        Assert.False(Directory.Exists(Path.Combine(_root, "uploads", "drafts", userId.ToString()))
-            && Directory.EnumerateFiles(Path.Combine(_root, "uploads", "drafts", userId.ToString())).Any());
+        Assert.Throws<ArgumentException>(() => Validate(html, "anh.png"));
     }
 
     [Fact]
-    public async Task Save_JpegContentWithPdfExtension_IsRejected() =>
-        await Assert.ThrowsAsync<ArgumentException>(() => Save(Guid.NewGuid(), JpegBytes, "bang_diem.pdf"));
+    public void Validate_JpegContentWithPdfExtension_IsRejected() =>
+        Assert.Throws<ArgumentException>(() => Validate(JpegBytes, "bang_diem.pdf"));
 
     [Theory]
     [InlineData("script.svg")]
     [InlineData("trang.html")]
     [InlineData("anh.webp")]
     [InlineData("khong_duoi")]
-    public async Task Save_DisallowedExtension_IsRejected(string fileName) =>
-        await Assert.ThrowsAsync<ArgumentException>(() => Save(Guid.NewGuid(), PdfBytes, fileName));
+    public void Validate_DisallowedExtension_IsRejected(string fileName) =>
+        Assert.Throws<ArgumentException>(() => Validate(PdfBytes, fileName));
 
     [Fact]
-    public async Task Save_TooShortFile_IsRejected() =>
-        await Assert.ThrowsAsync<ArgumentException>(() => Save(Guid.NewGuid(), [0x25, 0x50], "a.pdf"));
+    public void Validate_TooShortFile_IsRejected() =>
+        Assert.Throws<ArgumentException>(() => Validate([0x25, 0x50], "a.pdf"));
 
     [Fact]
-    public async Task Save_OverSizeLimit_IsRejected() =>
-        await Assert.ThrowsAsync<ArgumentException>(() => _storage.SaveDraftTranscriptAsync(
-            Guid.NewGuid(), new MemoryStream(PdfBytes), "a.pdf", "application/pdf", ProfileFileStorageLimits.MaxFileSizeBytes + 1));
+    public void Validate_EmptyFile_IsRejected() =>
+        Assert.Throws<ArgumentException>(() => Validate([], "a.pdf"));
 
     [Fact]
-    public async Task Save_UsesRandomStoredName_NotClientFileName()
+    public void Validate_OverSizeLimit_IsRejected()
     {
-        var info = await Save(Guid.NewGuid(), PdfBytes, "..\\..\\evil.pdf");
-
-        Assert.Equal("evil.pdf", Path.GetFileName(info.OriginalFileName.Replace('\\', '/')));
-        Assert.DoesNotContain("evil", info.StoredFileName);
-        Assert.DoesNotContain("..", info.RelativePath);
+        var big = new byte[ProfileFileStorageLimits.MaxFileSizeBytes + 1];
+        PdfBytes.CopyTo(big, 0);
+        Assert.Throws<ArgumentException>(() => Validate(big, "a.pdf"));
     }
 
-    // ───────────── Storage: xoá tệp cũ ─────────────
+    [Fact]
+    public void Validate_KeepsOnlyFileNameFromClientPath()
+    {
+        var info = Validate(PdfBytes, "../../evil.pdf");
+        Assert.Equal("evil.pdf", info.OriginalFileName);
+    }
+
+    // ───────────── Dọn tệp cũ còn sót từ bản trước ─────────────
 
     [Fact]
     public async Task DeleteDraftFile_RemovesOnlyThatFile()
     {
         var userId = Guid.NewGuid();
-        var oldFile = await Save(userId, PdfBytes, "cu.pdf");
-        var newFile = await Save(userId, PdfBytes, "moi.pdf");
+        var oldFile = LegacyFile(userId, "drafts", "cu.pdf");
+        var otherFile = LegacyFile(userId, "drafts", "khac.pdf");
 
-        await _storage.DeleteDraftFileAsync(userId, oldFile.RelativePath);
+        await _storage.DeleteDraftFileAsync(userId, oldFile);
 
-        Assert.False(File.Exists(FullPath(oldFile.RelativePath)));
-        Assert.True(File.Exists(FullPath(newFile.RelativePath)));
+        Assert.False(File.Exists(FullPath(oldFile)));
+        Assert.True(File.Exists(FullPath(otherFile)));
     }
 
     [Fact]
@@ -158,27 +169,24 @@ public class ProfileTranscriptUploadSecurityTests : IDisposable
     {
         var owner = Guid.NewGuid();
         var attacker = Guid.NewGuid();
-        var draft = await Save(owner, PdfBytes, "a.pdf");
-        var official = await _storage.CommitDraftTranscriptAsync(owner, draft.RelativePath);
+        var official = LegacyFile(owner, "transcripts", "a.pdf");
 
         // Đường dẫn trỏ sang thư mục người khác hoặc đi ngược thư mục đều chỉ lấy tên tệp trong thư mục của attacker
         await _storage.DeleteTranscriptFileAsync(attacker, official);
-        await _storage.DeleteTranscriptFileAsync(attacker, $"../../transcripts/{owner}/{Path.GetFileName(official)}");
+        await _storage.DeleteTranscriptFileAsync(attacker, $"../../transcripts/{owner}/a.pdf");
 
-        Assert.True(File.Exists(FullPath(official!)));
+        Assert.True(File.Exists(FullPath(official)));
     }
 
     [Fact]
     public async Task DeleteTranscriptFile_RemovesOldOfficialFile()
     {
         var userId = Guid.NewGuid();
-        var draft = await Save(userId, PngBytes, "a.png");
-        var official = await _storage.CommitDraftTranscriptAsync(userId, draft.RelativePath);
-        Assert.True(File.Exists(FullPath(official!)));
+        var official = LegacyFile(userId, "transcripts", "a.pdf");
 
         await _storage.DeleteTranscriptFileAsync(userId, official);
 
-        Assert.False(File.Exists(FullPath(official!)));
+        Assert.False(File.Exists(FullPath(official)));
     }
 
     // ───────────── Controller ─────────────

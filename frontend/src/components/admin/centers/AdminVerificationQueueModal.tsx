@@ -85,13 +85,16 @@ export function AdminVerificationQueueModal({
               </p>
             </div>
           </div>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-sm"
             onClick={onClose}
-            className="p-1 rounded-lg text-ink-3 hover:bg-surface-3 hover:text-ink transition-colors"
+            aria-label="Đóng"
+            className="text-ink-3 hover:bg-surface-3 hover:text-ink"
           >
             <XIcon className="h-5 w-5" />
-          </button>
+          </Button>
         </div>
 
         {/* Toolbar Filter & Search */}
@@ -108,7 +111,7 @@ export function AdminVerificationQueueModal({
                 key={tab.id}
                 type="button"
                 onClick={() => setStatusFilter(tab.id)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
+                className={`cursor-pointer px-2.5 py-1 text-xs font-medium rounded-lg transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${
                   statusFilter === tab.id
                     ? "bg-brand/10 text-brand font-semibold"
                     : "text-ink-2 hover:bg-surface-2"
@@ -138,10 +141,10 @@ export function AdminVerificationQueueModal({
             <Button
               type="button"
               variant="outline"
-              size="sm"
+              size="icon"
               onClick={fetchQueue}
               disabled={loading}
-              className="h-8 px-2.5"
+              aria-label="Tải lại danh sách"
             >
               <RotateCcwIcon className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             </Button>
@@ -207,10 +210,9 @@ export function AdminVerificationQueueModal({
 
                     <div className="flex items-center gap-2 shrink-0">
                       <Button
-                        size="sm"
                         variant={isPending ? "default" : "outline"}
                         onClick={() => setSelectedRequestId(req.id)}
-                        className="text-xs h-8"
+                        className="text-xs"
                       >
                         {isPending ? "Đối chiếu & Duyệt (UC-59)" : "Xem chi tiết"}
                       </Button>
@@ -225,7 +227,7 @@ export function AdminVerificationQueueModal({
         {/* Footer */}
         <div className="border-t border-line px-6 py-3 bg-surface-2 flex items-center justify-between text-xs text-ink-3">
           <span>Tổng số: {totalCount} yêu cầu xác minh</span>
-          <Button variant="ghost" size="sm" onClick={onClose} className="h-8 text-xs">
+          <Button variant="ghost" onClick={onClose} className="text-xs">
             Đóng
           </Button>
         </div>

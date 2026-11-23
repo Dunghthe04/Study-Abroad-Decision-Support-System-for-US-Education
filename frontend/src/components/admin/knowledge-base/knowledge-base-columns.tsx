@@ -42,7 +42,7 @@ export function knowledgeBaseColumns({ onOpen, onDelete }: ColumnHandlers): Data
       render: (entry) => (
         <button
           type="button"
-          className="line-clamp-2 text-left font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+          className="line-clamp-2 cursor-pointer rounded-sm text-left font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           onClick={(event) => {
             event.stopPropagation();
             onOpen(entry);

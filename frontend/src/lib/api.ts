@@ -1,3 +1,4 @@
+import { POLICY_REQUIRED_CODE, POLICY_REQUIRED_EVENT } from "@/lib/policy-events";
 import { authFetch } from "@/lib/auth-refresh";
 import type {
   AccessLogDto,
@@ -63,6 +64,7 @@ import type {
   CenterProfileUpdateResponse,
   AdminCenterDeletionRequestDto,
   CenterDeletionRequestDto,
+  CenterLegalHoldDto,
   CenterDeletionRequestStatus,
 } from "@/types/api";
 
@@ -124,6 +126,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
         message = `${message} (${errorList})`;
       }
     }
+    // [UC-104] Chưa đồng ý bản điều khoản bắt buộc: báo cho PolicyGate hiện màn đồng ý
+    if (res.status === 403 && body?.code === POLICY_REQUIRED_CODE && typeof window !== "undefined") {
+      window.dispatchEvent(new Event(POLICY_REQUIRED_EVENT));
+    }
     throw new ApiError(res.status, message, body);
   }
 
@@ -145,20 +151,6 @@ export const authApi = {
   // [AC-1] Đăng ký tài khoản (học sinh hoặc phụ huynh, email/SĐT, mật khẩu)
   register: (data: RegisterRequest) =>
     apiFetch<{ message: string }>("/api/v1/auth/register", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  // [UC-64] Trung tâm tự đăng ký tài khoản
-  registerCenter: (data: RegisterCenterRequest) =>
-    apiFetch<{ message: string; email: string }>("/api/v1/auth/register-center", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  // [UC-91] Xác thực email trung tâm qua mã OTP 6 số
-  verifyCenterEmail: (data: VerifyCenterEmailRequest) =>
-    apiFetch<AuthResponse>("/api/v1/auth/verify-center-email", {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -281,10 +273,10 @@ export const parentLinksApi = {
     }),
 
   // [UC-115] Không cần đăng nhập: link một lần trong mail là xác thực
-  acceptInvite: (token: string, isGuardian: boolean) =>
+  acceptInvite: (token: string, isGuardian: boolean, policyVersion?: string) =>
     apiFetch<ParentLinkResponse<ParentInviteInfo>>("/api/v1/parent-links/invite/accept", {
       method: "POST",
-      body: JSON.stringify({ token, isGuardian }),
+      body: JSON.stringify({ token, isGuardian, policyVersion }),
     }),
 
   rejectInvite: (token: string) =>
@@ -479,13 +471,17 @@ export const centerProfileChangesApi = {
     return apiFetch<PagedResult<CenterProfileChangeDto>>(`/api/v1/moderator/center-profile-changes${qs ? `?${qs}` : ""}`);
   },
 
-  pass: (id: string) =>
-    apiFetch<CenterProfileChangeDto>(`/api/v1/moderator/center-profile-changes/${encodeURIComponent(id)}/pass`, { method: "POST" }),
+  /** `newValue` là giá trị mới Moderator đang xem; trung tâm sửa tiếp sau đó thì máy chủ từ chối. */
+  pass: (id: string, newValue: string | null) =>
+    apiFetch<CenterProfileChangeDto>(`/api/v1/moderator/center-profile-changes/${encodeURIComponent(id)}/pass`, {
+      method: "POST",
+      body: JSON.stringify({ newValue }),
+    }),
 
-  fail: (id: string, reason: string) =>
+  fail: (id: string, reason: string, newValue: string | null) =>
     apiFetch<CenterProfileChangeDto>(`/api/v1/moderator/center-profile-changes/${encodeURIComponent(id)}/fail`, {
       method: "POST",
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ reason, newValue }),
     }),
 };
 
@@ -509,6 +505,31 @@ export const centerDeletionRequestsApi = {
 
   reject: (id: string, reason: string) =>
     apiFetch<AdminCenterDeletionRequestDto>(`/api/v1/admin/center-deletion-requests/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+
+  /** Gia hạn một lần, tối đa 20 ngày; lý do được gửi cho người yêu cầu. */
+  extend: (id: string, reason: string) =>
+    apiFetch<AdminCenterDeletionRequestDto>(`/api/v1/admin/center-deletion-requests/${encodeURIComponent(id)}/extend`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+};
+
+/** [UC-93] Administrator giữ pháp lý dữ liệu trung tâm khi bị nghi lừa đảo, tranh chấp hoặc cơ quan có thẩm quyền yêu cầu. */
+export const centerLegalHoldApi = {
+  get: (centerId: string) =>
+    apiFetch<CenterLegalHoldDto>(`/api/v1/admin/study-centers/${encodeURIComponent(centerId)}/legal-hold`),
+
+  set: (centerId: string, reason: string) =>
+    apiFetch<CenterLegalHoldDto>(`/api/v1/admin/study-centers/${encodeURIComponent(centerId)}/legal-hold`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+
+  release: (centerId: string, reason: string) =>
+    apiFetch<CenterLegalHoldDto>(`/api/v1/admin/study-centers/${encodeURIComponent(centerId)}/legal-hold/release`, {
       method: "POST",
       body: JSON.stringify({ reason }),
     }),
@@ -665,6 +686,21 @@ export const targetSchoolsApi = {
   },
 };
 
+// [UC-64, UC-91] Tài khoản trung tâm chưa đăng nhập: tự đăng ký và xác thực email bằng OTP
+export const centerAccountApi = {
+  register: (data: RegisterCenterRequest) =>
+    apiFetch<{ message: string; email: string }>("/api/v1/center-accounts/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  verifyEmail: (data: VerifyCenterEmailRequest) =>
+    apiFetch<AuthResponse>("/api/v1/center-accounts/verify-email", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};
+
 // [UC-71, UC-91, UC-92] Cổng Trung tâm tư vấn
 export const centerPortalApi = {
   getProfile: () => apiFetch<StudyCenter>("/api/v1/center/profile"),
@@ -684,25 +720,11 @@ export const centerPortalApi = {
     }),
   getVerificationStatus: () =>
     apiFetch<CenterVerificationStatusDto>("/api/v1/center/verification/status"),
-  /** [UC-91] Gửi OTP qua SMS tới số điện thoại hiện tại để xác thực. */
-  requestPhoneVerification: () =>
-    apiFetch<{ message: string }>("/api/v1/center/contact/phone/verify/request", { method: "POST" }),
-  /** [UC-91] Nhập OTP SMS để ghi nhận số điện thoại đã xác thực. */
-  verifyPhone: (code: string) =>
-    apiFetch<{ message: string }>("/api/v1/center/contact/phone/verify", {
-      method: "POST",
-      body: JSON.stringify({ code }),
-    }),
-  /** [UC-91] Đổi số điện thoại: gửi OTP qua SMS tới số mới rồi xác nhận bằng mã. */
-  requestPhoneChange: (newValue: string) =>
-    apiFetch<{ message: string }>("/api/v1/center/contact/phone/request", {
+  /** [UC-91] Đổi số điện thoại liên lạc, lưu thẳng, không xác thực SMS OTP. */
+  changePhone: (newValue: string) =>
+    apiFetch<{ message: string }>("/api/v1/center/contact/phone", {
       method: "POST",
       body: JSON.stringify({ newValue }),
-    }),
-  confirmPhoneChange: (newValue: string, code: string) =>
-    apiFetch<{ message: string }>("/api/v1/center/contact/phone/confirm", {
-      method: "POST",
-      body: JSON.stringify({ newValue, code }),
     }),
   /** Đổi email liên lạc: gửi OTP tới email mới rồi xác nhận bằng mã. */
   requestEmailChange: (newValue: string) =>
@@ -799,4 +821,7 @@ export const accessLogsApi = {
     return apiFetch<AccessLogSummaryDto>(`/api/v1/admin/access-logs/summary${qs ? `?${qs}` : ""}`);
   },
 };
+
+// [UC-94] Dashboard KPI học sinh và phụ huynh
+export { dashboardApi } from "@/lib/dashboard-api";
 

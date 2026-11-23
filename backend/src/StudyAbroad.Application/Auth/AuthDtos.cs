@@ -3,12 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using StudyAbroad.Application.Policies;
 
 namespace StudyAbroad.Application.Auth
 {
     // [USAS-362] Request đăng ký từ client: Phone là thông tin liên hệ không bắt buộc.
     // DateOfBirth bắt buộc (tính nhóm tuổi); ParentEmail bắt buộc với học sinh dưới 16, không bắt buộc với 16–17.
-    public record RegisterRequest(string Email, string Password, string FullName, string Role, DateOnly? DateOfBirth = null, string? ParentEmail = null, string? Phone = null);
+    // [UC-104] AcceptedPolicies: Điều khoản và Chính sách bảo mật đã đọc, kèm đúng phiên bản; thiếu hoặc sai phiên bản thì không tạo tài khoản.
+    public record RegisterRequest(string Email, string Password, string FullName, string Role, DateOnly? DateOfBirth = null, string? ParentEmail = null, string? Phone = null,
+        IReadOnlyList<AcceptPolicyItem>? AcceptedPolicies = null);
 
     // [UC-63] Admin tạo tài khoản moderator (khách không tự đăng ký role này).
     public record CreateModeratorAccountRequest(string Email, string Password, string FullName, string? Phone = null);

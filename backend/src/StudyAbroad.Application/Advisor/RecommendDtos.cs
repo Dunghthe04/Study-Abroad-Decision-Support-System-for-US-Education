@@ -62,6 +62,21 @@ public record CompareNoteResponseDto(
     string Answer,
     [property: JsonPropertyName("aiUsage")] IReadOnlyList<AiUsageDto>? AiUsage = null);
 
+// --- Lời cho danh sách gợi ý trường trong chat: POST api/v1/recommend/school-list ---
+// Schools: tên mọi trường đang hiện trong danh sách. Facts: dữ kiện code đã tính (tổng số trường, mỗi nhóm một dòng).
+// Others: tên các trường đã chấm nhưng không hiện, để advisor chặn nhắc tên ngoài danh sách.
+public record RecommendNoteRequestDto(
+    IReadOnlyList<string> Schools,
+    IReadOnlyList<string> Facts,
+    IReadOnlyList<string> Others);
+
+public record RecommendNoteResponseDto(
+    [property: JsonPropertyName("skill_version")] string SkillVersion,
+    string Model,
+    string Status,                       // OK | FAILED
+    string Answer,
+    [property: JsonPropertyName("aiUsage")] IReadOnlyList<AiUsageDto>? AiUsage = null);
+
 public record GoalNoteResponseDto(
     [property: JsonPropertyName("skill_version")] string SkillVersion,
     string Model,

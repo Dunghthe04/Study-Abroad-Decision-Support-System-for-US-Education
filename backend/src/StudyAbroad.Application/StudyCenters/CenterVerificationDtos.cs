@@ -1,3 +1,5 @@
+using StudyAbroad.Application.Policies;
+
 namespace StudyAbroad.Application.StudyCenters;
 
 public record RegisterCenterRequest(
@@ -9,17 +11,16 @@ public record RegisterCenterRequest(
     string RegistrantName,
     string? RegistrantPosition = null,
     bool AgreeTerms = false,
-    bool AgreeTruthfulnessCommitment = false);
+    bool AgreeTruthfulnessCommitment = false,
+    // [UC-104] Điều khoản và Chính sách bảo mật đã đọc, kèm đúng phiên bản
+    IReadOnlyList<AcceptPolicyItem>? AcceptedPolicies = null);
 
 public record VerifyCenterEmailRequest(string Email, string Code);
 
-/// <summary>Yêu cầu gửi OTP tới số điện thoại / email liên lạc MỚI của trung tâm.</summary>
+/// <summary>Giá trị liên lạc MỚI của trung tâm: gửi OTP tới email mới, hoặc đổi thẳng số điện thoại.</summary>
 public record RequestContactChangeDto(string NewValue);
 
-/// <summary>[UC-91] Mã OTP người dùng nhập để xác thực số điện thoại hiện tại.</summary>
-public record VerifyContactCodeDto(string? Code);
-
-/// <summary>Xác nhận đổi số điện thoại / email liên lạc bằng OTP đã gửi tới giá trị mới.</summary>
+/// <summary>Xác nhận đổi email liên lạc bằng OTP đã gửi tới email mới.</summary>
 public record ConfirmContactChangeDto(string NewValue, string Code);
 
 public record VerificationDocumentUploadDto(
@@ -70,8 +71,7 @@ public record CenterVerificationDto(
     string? CenterCode = null,
     string? CenterEmail = null,
     string? CenterPhone = null,
-    DateTime? EmailVerifiedAt = null,
-    DateTime? PhoneVerifiedAt = null);
+    DateTime? EmailVerifiedAt = null);
 
 public record ReviewCenterVerificationRequest(
     string Action,
@@ -111,13 +111,13 @@ public record UpdateCenterProfileRequest(
     // [UC-92] Fanpage (Moderator kiểm tra như website), khu vực phục vụ và chi nhánh (lưu ngay).
     string? Fanpage = null,
     List<string>? ServiceAreas = null,
-    List<string>? Branches = null);
+    List<string>? Branches = null,
+    // Thư viện ảnh trung tâm (lưu ngay). Null = giữ nguyên; danh sách rỗng = xóa hết.
+    List<string>? GalleryImages = null);
 
 public record CenterVerificationStatusDto(
     string VerificationStatus,
     bool IsEmailVerified,
     DateTime? EmailVerifiedAt,
-    bool IsPhoneVerified,
-    DateTime? PhoneVerifiedAt,
     CenterVerificationDto? CurrentRequest,
     string? RejectionReason);

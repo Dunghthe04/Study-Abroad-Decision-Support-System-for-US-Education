@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Source_Serif_4 } from "next/font/google";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { PolicyGate } from "@/components/policy/PolicyGate";
 import { AppShell } from "@/components/assistant/AppShell";
 import { RealtimeProvider } from "@/components/realtime/RealtimeProvider";
 import { AssistantProvider } from "@/components/assistant/AssistantProvider";
@@ -19,7 +20,7 @@ const sourceSerif = Source_Serif_4({
 });
 
 export const metadata: Metadata = {
-  title: "USAS – Study Abroad Decision Support System",
+  title: "USDSS – Study Abroad Decision Support System",
   description: "Hệ thống hỗ trợ ra quyết định du học Mỹ: tư vấn AI, tra cứu thông tin và tìm trung tâm.",
 };
 
@@ -31,7 +32,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <RealtimeProvider />
           <TooltipProvider>
             <AssistantProvider>
-              <AppShell>{children}</AppShell>
+              <PolicyGate>
+                <AppShell>{children}</AppShell>
+              </PolicyGate>
             </AssistantProvider>
           </TooltipProvider>
         </AuthProvider>
