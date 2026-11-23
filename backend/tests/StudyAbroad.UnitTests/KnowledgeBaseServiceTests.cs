@@ -56,6 +56,9 @@ public class KnowledgeBaseServiceTests
     [InlineData("source", null)]
     [InlineData("topic_code", "proc")]
     [InlineData("image_url", "ảnh.png")]
+    [InlineData("source_url", "javascript:alert(1)")]
+    [InlineData("source_url", "https://ok.com;javascript:x")]
+    [InlineData("source_url", ";;;")]
     public async Task CreateAsync_RejectsInvalidFields(string field, string? value)
     {
         var request = field switch
@@ -66,6 +69,7 @@ public class KnowledgeBaseServiceTests
             "answer" => Full() with { Answer = value },
             "retrieved_at" => Full() with { RetrievedAt = null },
             "source" => Full() with { Source = null, SourceUrl = null },
+            "source_url" => Full() with { SourceUrl = value },
             "topic_code" => Full() with { DocType = "proc_steps", TopicCode = null },
             _ => Full() with { ImageUrl = value },
         };

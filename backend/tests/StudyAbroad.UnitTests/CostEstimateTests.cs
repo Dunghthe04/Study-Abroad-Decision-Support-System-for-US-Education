@@ -124,8 +124,9 @@ public class CostEstimateTests
             ProfileLookup = userId;
             return Task.FromResult<BudgetInput?>(new BudgetInput("profile", 40_000m, false));
         }
+        public IReadOnlyList<StateLivingCostDto> States { get; init; } = [];
         public Task<IReadOnlyList<StateLivingCostDto>> GetStateLivingCostsAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<StateLivingCostDto>>([]);
+            Task.FromResult(States);
     }
 
     private sealed class FakeRates : IExchangeRateProvider
@@ -159,5 +160,26 @@ public class CostEstimateTests
         Assert.Equal(40_000m, fromProfile.Schools[0].Budget!.AnnualBudgetUsd);
         Assert.Equal("input", typed.Schools[0].Budget!.Source);
         Assert.Equal(90_000m, typed.Schools[0].Budget!.AnnualBudgetUsd);
+    }
+
+    [Fact]
+    public async Task UnsafeSourceUrls_AreStrippedInCostAndStateOutputs()
+    {
+        var row = Row("A") with { SourceUrl = "javascript:alert(1)" };
+        var repo = new FakeRepo(row)
+        {
+            States = [
+                new StateLivingCostDto("CA", "California", "West", 112m, 120m, 2025, "javascript:alert(1)", null),
+                new StateLivingCostDto("TX", "Texas", "South", 97m, 95m, 2025, "https://bea.gov/rpp", null),
+            ],
+        };
+        var service = new CostService(repo, new FakeRates());
+
+        var estimate = await service.EstimateAsync(["A"], null, null, null, null);
+        var states = await service.GetStateLivingCostsAsync();
+
+        Assert.Null(estimate.Schools[0].SourceUrl);
+        Assert.Null(states[0].SourceUrl);
+        Assert.Equal("https://bea.gov/rpp", states[1].SourceUrl);
     }
 }

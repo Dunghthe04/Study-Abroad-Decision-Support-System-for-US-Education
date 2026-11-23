@@ -1,5 +1,6 @@
 using System.Text.Json;
 using StudyAbroad.Application.Profile.Flow;
+using StudyAbroad.Application.Universities;
 using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Application.Costs;
@@ -100,7 +101,7 @@ public static class CostCalculator
         return new SchoolCostDto(
             row.Code, row.Name, row.State, row.StudyLevel, row.AcademicYear, years, lines,
             annual, firstYear, total, scholarshipPerYear, annualAfter, totalAfter,
-            missing.Count == 0, missing, row.SourceUrl, row.RetrievedAt, compare);
+            missing.Count == 0, missing, UniversityDetailService.PublicUrl(row.SourceUrl), row.RetrievedAt, compare);
     }
 }
 
@@ -135,8 +136,10 @@ public class CostService(ICostRepository repository, IExchangeRateProvider rates
         return new CostEstimateResponse(await rates.GetQuoteAsync(ct), schools, missingCodes, differ);
     }
 
-    public Task<IReadOnlyList<StateLivingCostDto>> GetStateLivingCostsAsync(CancellationToken ct = default) =>
-        repository.GetStateLivingCostsAsync(ct);
+    public async Task<IReadOnlyList<StateLivingCostDto>> GetStateLivingCostsAsync(CancellationToken ct = default) =>
+        (await repository.GetStateLivingCostsAsync(ct))
+            .Select(s => s with { SourceUrl = UniversityDetailService.PublicUrl(s.SourceUrl) })
+            .ToList();
 
     public static ReferenceFees ParseFees(string? json)
     {

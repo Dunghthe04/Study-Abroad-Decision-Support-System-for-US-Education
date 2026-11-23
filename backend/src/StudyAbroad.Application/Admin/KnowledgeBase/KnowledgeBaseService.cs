@@ -107,6 +107,12 @@ public partial class KnowledgeBaseService(
             throw new ArgumentException($"source tối đa {MaxSourceLength} ký tự.");
         if (sourceUrl is { Length: > MaxSourceUrlLength })
             throw new ArgumentException($"source_url tối đa {MaxSourceUrlLength} ký tự.");
+        if (sourceUrl is not null)
+        {
+            var urls = sourceUrl.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (urls.Length == 0 || urls.Any(part => !AdminEditHelpers.IsHttpUrl(part)))
+                throw new ArgumentException("Mỗi link trong source_url phải bắt đầu bằng http:// hoặc https://.");
+        }
 
         var retrievedAt = request.RetrievedAt
             ?? throw new ArgumentException("Cần nhập ngày thu thập (retrieved_at).");
