@@ -414,6 +414,74 @@ public class CenterRegistrationAndVerificationTests
     }
 
     [Fact]
+    public async Task RevokeVerification_VerifiedCenter_BecomesSuspendedRecordsReasonAndEmailsTheCenter()
+    {
+        var (service, email, req, center) = NotificationSetup();
+        center.VerificationStatus = CenterVerificationStatuses.Verified;
+        req.Status = CenterVerificationStatuses.Verified;
+        var moderator = Guid.NewGuid();
+
+        var result = await service.RevokeVerificationAsync(center.Id, "  Giấy phép hết hiệu lực  ", moderator);
+
+        Assert.True(result.Success);
+        Assert.Equal(CenterVerificationStatuses.Suspended, center.VerificationStatus);
+        Assert.Equal("Giấy phép hết hiệu lực", center.VerificationNote);
+        Assert.Equal(CenterVerificationStatuses.Suspended, req.Status);
+        Assert.Equal(moderator, req.ReviewedByUserId);
+        var sent = Assert.Single(email.CenterVerificationEmails);
+        Assert.Equal("revoked", sent.Outcome);
+        Assert.Equal("Giấy phép hết hiệu lực", sent.Reason);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task RevokeVerification_WithoutReason_IsRejectedAndChangesNothing(string? reason)
+    {
+        var (service, email, req, center) = NotificationSetup();
+        center.VerificationStatus = CenterVerificationStatuses.Verified;
+        req.Status = CenterVerificationStatuses.Verified;
+
+        var result = await service.RevokeVerificationAsync(center.Id, reason, Guid.NewGuid());
+
+        Assert.False(result.Success);
+        Assert.Equal(CenterVerificationStatuses.Verified, center.VerificationStatus);
+        Assert.Empty(email.CenterVerificationEmails);
+    }
+
+    [Theory]
+    [InlineData(CenterVerificationStatuses.Unverified)]
+    [InlineData(CenterVerificationStatuses.PendingReview)]
+    [InlineData(CenterVerificationStatuses.Rejected)]
+    [InlineData(CenterVerificationStatuses.Suspended)]
+    public async Task RevokeVerification_CenterThatIsNotVerified_IsRejected(string status)
+    {
+        var (service, email, _, center) = NotificationSetup();
+        center.VerificationStatus = status;
+
+        var result = await service.RevokeVerificationAsync(center.Id, "Lý do", Guid.NewGuid());
+
+        Assert.False(result.Success);
+        Assert.Equal(status, center.VerificationStatus);
+        Assert.Empty(email.CenterVerificationEmails);
+    }
+
+    [Fact]
+    public async Task RevokeVerification_CenterWithoutAnyRequest_StillSuspends()
+    {
+        var (service, _, req, center) = NotificationSetup();
+        center.VerificationStatus = CenterVerificationStatuses.Verified;
+        req.Status = CenterVerificationStatuses.Rejected; // không có đơn nào đang ở trạng thái Đã xác minh
+
+        var result = await service.RevokeVerificationAsync(center.Id, "Vi phạm", Guid.NewGuid());
+
+        Assert.True(result.Success);
+        Assert.Equal(CenterVerificationStatuses.Suspended, center.VerificationStatus);
+        Assert.Equal(CenterVerificationStatuses.Rejected, req.Status);
+    }
+
+    [Fact]
     public async Task Review_Reject_EmailsTheCenterTheReasonAndTheUnmetConditions()
     {
         var (service, email, req, _) = NotificationSetup();
