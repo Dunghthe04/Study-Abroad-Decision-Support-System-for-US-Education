@@ -36,9 +36,12 @@ class FakeStore:
             for i, q in enumerate(questions, start=1)
         ]
         self.fail_commit = False
+        self.fail_read = False
 
     @contextmanager
     def connection(self):
+        if self.fail_read:
+            raise RuntimeError("DB tắt")
         conn = FakeConn(self)
         yield conn
         if self.fail_commit:
@@ -247,3 +250,79 @@ def test_embed_routes_need_the_api_key_when_one_is_configured(monkeypatch, path,
         config.get_settings.cache_clear()
 
     assert res.status_code == 401
+
+
+# --- quét định kỳ: dự phòng khi backend không nhờ được ---
+
+
+async def test_sweeper_creates_vectors_for_rows_nobody_asked_for():
+    store, embedder = FakeStore(["A?", "B?"]), FakeEmbedder()
+    job = make_job(store, embedder)
+
+    job.start_sweeper(0.01)
+    try:
+        await asyncio.wait_for(_until(lambda: all(r["has_vector"] for r in store.rows)), timeout=5)
+    finally:
+        await job.stop()
+
+    assert embedder.asked == [["A?", "B?"]]
+
+
+async def test_sweeper_picks_up_rows_added_later():
+    store, embedder = FakeStore([]), FakeEmbedder()
+    job = make_job(store, embedder)
+    job.start_sweeper(0.01)
+    try:
+        await asyncio.sleep(0.05)  # vòng đầu không có gì để làm
+        assert embedder.asked == []
+        store.rows.append(
+            {"id": 9, "question": "Mới?", "hash": None, "has_vector": False}
+        )  # moderator sửa thẳng DB
+        await asyncio.wait_for(_until(lambda: store.rows[0]["has_vector"]), timeout=5)
+    finally:
+        await job.stop()
+
+
+async def test_sweeper_survives_a_database_error_and_works_next_round():
+    store, embedder = FakeStore(["A?"]), FakeEmbedder()
+    store.fail_read = True
+    job = make_job(store, embedder)
+    job.start_sweeper(0.01)
+    try:
+        await asyncio.sleep(0.05)  # vài vòng đầu đọc DB lỗi
+        assert store.rows[0]["has_vector"] is False
+        store.fail_read = False
+        await asyncio.wait_for(_until(lambda: store.rows[0]["has_vector"]), timeout=5)
+    finally:
+        await job.stop()
+
+
+async def test_sweeper_does_not_start_a_second_run_while_one_is_running():
+    store, embedder = FakeStore(["A?"]), FakeEmbedder()
+    embedder.gate = asyncio.Event()
+    job = make_job(store, embedder)
+    job.start()
+    job.start_sweeper(0.01)
+    try:
+        await asyncio.sleep(0.05)  # nhiều vòng quét trong lúc lần chạy đầu còn đang giữ
+        embedder.gate.set()
+        await finish(job)
+    finally:
+        await job.stop()
+
+    assert embedder.asked == [["A?"]]  # chỉ một lần gọi embedding
+
+
+async def test_stop_ends_the_sweeper():
+    job = make_job(FakeStore([]), FakeEmbedder())
+    job.start_sweeper(0.01)
+    sweeper = job._sweeper  # noqa: SLF001
+
+    await job.stop()
+
+    assert sweeper.done()
+
+
+async def _until(condition) -> None:
+    while not condition():
+        await asyncio.sleep(0.005)

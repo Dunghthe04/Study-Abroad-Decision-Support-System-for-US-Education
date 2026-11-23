@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     knowledge_min_score: float = 0.72
     # Số đoạn kiến thức đưa cho AI mỗi lần trả lời
     knowledge_top_k: int = 4
+    # Cứ vài giây advisor quét kho một lần, tạo vector cho dòng còn thiếu (dự phòng khi backend không nhờ được). 0 = tắt quét
+    knowledge_embed_sweep_seconds: float = 120
     llm_keep_alive: str = "30m"  # giữ model trong VRAM giữa các lượt, không nạp lại
     # Đọc bảng điểm: model ảnh chép ảnh thành chữ (bước A), LLM chữ bóc điểm thành JSON (bước B)
     vision_model: str = "glm-ocr"
