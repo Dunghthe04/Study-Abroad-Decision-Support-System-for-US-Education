@@ -624,6 +624,7 @@ public class AuthServiceTests
             IsRevoked = false
         });
 
+        var callsBefore = _unitOfWork.Calls;   // đăng ký ở trên cũng dùng giao dịch (UC-104): chỉ đếm phần xóa tài khoản
         var result = await service.AnonymizeUserAccountAsync(
             userId,
             ipAddress: "127.0.0.1",
@@ -637,7 +638,7 @@ public class AuthServiceTests
         Assert.Equal(originalName, user.FullName);
         Assert.Equal(originalHash, user.PasswordHash);
         Assert.True(_repo.Sessions[0].IsRevoked);
-        Assert.Equal(1, _unitOfWork.Calls);
+        Assert.Equal(callsBefore + 1, _unitOfWork.Calls);
 
         var log = Assert.Single(_auditLogs.Entries);
         Assert.Equal("user.delete_account", log.Action);
@@ -691,12 +692,13 @@ public class AuthServiceTests
         user.Status = UserStatuses.Active;
         user.Role = role;
 
+        var callsBefore = _unitOfWork.Calls;   // đăng ký ở trên cũng dùng giao dịch (UC-104)
         var result = await service.AnonymizeUserAccountAsync(user.Id);
 
         Assert.Equal(AuthError.RoleNotAllowed, result.Error);
         Assert.Equal(UserStatuses.Active, user.Status);
         Assert.Null(user.DeletedAt);
-        Assert.Equal(0, _unitOfWork.Calls);
+        Assert.Equal(callsBefore, _unitOfWork.Calls);
         Assert.Empty(_auditLogs.Entries);
     }
 

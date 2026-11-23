@@ -5,6 +5,7 @@ using StudyAbroad.Api.Controllers;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.ParentLinks;
+using StudyAbroad.Application.Policies;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -105,6 +106,71 @@ public class CenterAccountTests
         Assert.Empty(_users.Users);
         Assert.Empty(_centers.Centers);
         Assert.Empty(_email.SentEmails);
+    }
+
+    // ------------------------------------------------------------ [UC-104] đồng ý Điều khoản và Chính sách bảo mật
+
+    private readonly FakePublishedPolicies _published = new();
+    private readonly FakeConsentStore _consents = new();
+    private readonly FakeUnitOfWork _uow = new();
+
+    private CenterAccountService ServiceWithConsent() => new(
+        _users, new FakeHasher(), _email, _audit, _centers,
+        new AuthService(
+            _users, new FakeHasher(), new FakeTokenService(), _email, _links, _audit,
+            new ParentLinkService(_links, _users, _email, _audit), new FakeUnitOfWork(), new FakeLeadWithdrawalRepository(),
+            studyCenters: _centers),
+        new RegistrationConsent(_published, _consents), _uow);
+
+    private static RegisterCenterRequest WithPolicies(IReadOnlyList<AcceptPolicyItem>? accepted) =>
+        Request() with { AcceptedPolicies = accepted };
+
+    [Fact]
+    public async Task RegisterCenter_WithConsent_RecordsTheEvidenceForTheNewAccount()
+    {
+        _published.Add(PolicyKinds.TermsOfUse, "2026-11").Add(PolicyKinds.PrivacyPolicy, "2026-11");
+
+        var result = await ServiceWithConsent().RegisterAsync(
+            WithPolicies([new(PolicyKinds.TermsOfUse, "2026-11"), new(PolicyKinds.PrivacyPolicy, "2026-11")]), ipAddress: "203.0.113.8");
+
+        Assert.Equal(AuthError.None, result.Error);
+        var user = Assert.Single(_users.Users);
+        Assert.Equal(2, _consents.Rows.Count);
+        Assert.All(_consents.Rows, c =>
+        {
+            Assert.Equal(user.Id, c.UserId);
+            Assert.Equal("2026-11", c.PolicyVersion);
+            Assert.Equal("203.0.113.8", c.GrantedIp);
+        });
+        Assert.Equal(1, _uow.Calls);   // tài khoản, trung tâm, bằng chứng cùng một giao dịch
+    }
+
+    [Fact]
+    public async Task RegisterCenter_WithoutConsentVersions_CreatesNothing()
+    {
+        _published.Add(PolicyKinds.TermsOfUse, "2026-11").Add(PolicyKinds.PrivacyPolicy, "2026-11");
+
+        var result = await ServiceWithConsent().RegisterAsync(WithPolicies(null));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal(RegistrationConsent.MissingMessage, result.Message);
+        Assert.Empty(_users.Users);
+        Assert.Empty(_centers.Centers);
+        Assert.Empty(_consents.Rows);
+        Assert.Empty(_email.SentEmails);
+    }
+
+    [Fact]
+    public async Task RegisterCenter_WithAnOldVersion_IsRefused()
+    {
+        _published.Add(PolicyKinds.TermsOfUse, "2026-11-02").Add(PolicyKinds.PrivacyPolicy, "2026-11");
+
+        var result = await ServiceWithConsent().RegisterAsync(
+            WithPolicies([new(PolicyKinds.TermsOfUse, "2026-11"), new(PolicyKinds.PrivacyPolicy, "2026-11")]));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Empty(_users.Users);
+        Assert.Empty(_consents.Rows);
     }
 
     [Fact]
