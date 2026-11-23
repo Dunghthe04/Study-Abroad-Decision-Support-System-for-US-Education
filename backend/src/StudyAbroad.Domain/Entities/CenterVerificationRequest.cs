@@ -25,7 +25,7 @@ public class CenterVerificationRequest : BaseEntity
     /// <summary>Website hoặc Fanpage chính thức (tùy chọn).</summary>
     public string? Website { get; set; }
 
-    /// <summary>pending_review | approved | rejected | changes_requested | suspended</summary>
+    /// <summary>pending_review | verified | rejected | suspended</summary>
     public string Status { get; set; } = "pending_review";
 
     public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
@@ -33,7 +33,7 @@ public class CenterVerificationRequest : BaseEntity
     public Guid? ReviewedByUserId { get; set; }
     public DateTime? ReviewedAt { get; set; }
 
-    /// <summary>Lý do từ chối hoặc yêu cầu bổ sung nếu không đạt duyệt.</summary>
+    /// <summary>Lý do từ chối nếu không đạt duyệt.</summary>
     public string? RejectionReason { get; set; }
 
     /// <summary>Ghi chú nội bộ của Moderator khi kiểm tra.</summary>

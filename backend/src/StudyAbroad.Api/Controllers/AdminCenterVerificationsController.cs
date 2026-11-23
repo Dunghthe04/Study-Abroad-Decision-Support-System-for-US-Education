@@ -78,7 +78,7 @@ public class AdminCenterVerificationsController(
         return File(stream, doc.ContentType, doc.FileName);
     }
 
-    /// <summary>[UC-59] Moderator duyệt, từ chối, yêu cầu bổ sung hoặc thu hồi dấu xác minh.</summary>
+    /// <summary>[UC-59] Moderator duyệt, từ chối hoặc thu hồi dấu xác minh.</summary>
     [HttpPost("{id:guid}/review")]
     public async Task<ActionResult<StudyCenterDto>> Review(
         Guid id,

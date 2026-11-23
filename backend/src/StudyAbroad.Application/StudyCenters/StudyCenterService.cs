@@ -564,7 +564,7 @@ public class StudyCenterService(
         }
 
         CenterVerificationDto? currentReqDto = null;
-        // Phản hồi của moderator (lý do từ chối / yêu cầu bổ sung / thu hồi) lấy từ dữ liệu thật, không tự đặt sẵn
+        // Phản hồi của moderator (lý do từ chối / thu hồi) lấy từ dữ liệu thật, không tự đặt sẵn
         string? rejectionReason = center.VerificationStatus is CenterVerificationStatuses.Rejected or CenterVerificationStatuses.Suspended
             ? center.VerificationNote
             : null;
@@ -747,7 +747,6 @@ public class StudyCenterService(
             {
                 "verified" => "Hồ sơ xác minh đã được duyệt",
                 "reject" => "Hồ sơ xác minh bị từ chối",
-                "changes_requested" => "Hồ sơ xác minh cần bổ sung",
                 "revoked" => "Dấu xác minh của trung tâm bị thu hồi",
                 _ => "Cập nhật kết quả xác minh",
             };
@@ -839,14 +838,13 @@ public class StudyCenterService(
             await NotifyCenterAsync(center, "verified", request.ReviewNotes?.Trim(), null, ct);
             return VerifyStudyCenterResult.Ok(ToDto(center));
         }
-        else if (action == "reject" || action == "changes_requested")
+        else if (action == "reject")
         {
             var reason = request.RejectionReason?.Trim();
             if (string.IsNullOrEmpty(reason))
-                return VerifyStudyCenterResult.Fail("Lý do từ chối / yêu cầu bổ sung không được để trống.");
+                return VerifyStudyCenterResult.Fail("Lý do từ chối không được để trống.");
 
-            var newReqStatus = action == "reject" ? CenterVerificationStatuses.Rejected : "changes_requested";
-            req.Status = newReqStatus;
+            req.Status = CenterVerificationStatuses.Rejected;
             req.ReviewedByUserId = reviewerUserId;
             req.ReviewedAt = DateTime.UtcNow;
             req.RejectionReason = reason;
