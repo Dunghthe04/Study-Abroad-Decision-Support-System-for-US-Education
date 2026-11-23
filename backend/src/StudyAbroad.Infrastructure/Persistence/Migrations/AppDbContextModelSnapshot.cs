@@ -1605,7 +1605,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<string>("Answer")
                         .IsRequired()
                         .HasColumnType("text")
-                        .HasColumnName("answer");
+                        .HasColumnName("answer")
+                        .HasComment("Câu trả lời chuẩn đã chốt, đưa cho AI làm căn cứ khi trả lời.");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1615,56 +1616,68 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
-                        .HasColumnName("doc_type");
+                        .HasColumnName("doc_type")
+                        .HasComment("Loại nội dung, một trong 13 loại: faq, glossary, proc_overview, proc_prepare, proc_steps, proc_checklist, proc_mistakes, timeline, compare, situation, data_table, resource, notice.");
 
                     b.Property<string>("EmbeddingHash")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
-                        .HasColumnName("embedding_hash");
+                        .HasColumnName("embedding_hash")
+                        .HasComment("Mã băm sha256 của question lúc tạo vector, chỉ tạo lại vector khi câu hỏi đổi.");
 
                     b.Property<int>("EntryNo")
                         .HasColumnType("integer")
-                        .HasColumnName("entry_no");
+                        .HasColumnName("entry_no")
+                        .HasComment("Cột id trong file Excel, khóa để cập nhật khi nhập lại file. Không trùng.");
 
                     b.Property<string>("ImageUrl")
                         .HasColumnType("text")
-                        .HasColumnName("image_url");
+                        .HasColumnName("image_url")
+                        .HasComment("Link ảnh minh họa (ví dụ ảnh mẫu form). Trống nếu không có ảnh.");
 
                     b.Property<DateTime?>("IngestedAt")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("ingested_at");
+                        .HasColumnName("ingested_at")
+                        .HasComment("Lần gần nhất tạo vector cho dòng này.");
 
                     b.Property<string>("Label")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
-                        .HasColumnName("label");
+                        .HasColumnName("label")
+                        .HasComment("Nhãn chủ đề LABEL_... (ví dụ LABEL_VISA_F1, LABEL_CHI_PHI) để lọc và thống kê.");
 
                     b.Property<string>("Note")
                         .HasColumnType("text")
-                        .HasColumnName("note");
+                        .HasColumnName("note")
+                        .HasComment("Ghi chú nội bộ cho người thu thập. Không đưa cho học sinh. Note bắt đầu bằng CHỜ DUYỆT thì dòng chưa chốt, import bỏ qua.");
 
                     b.Property<string>("Question")
                         .IsRequired()
                         .HasColumnType("text")
-                        .HasColumnName("question");
+                        .HasColumnName("question")
+                        .HasComment("Câu hỏi mẫu. Chỉ câu này được tạo vector để tìm kiếm.");
 
                     b.Property<DateOnly>("RetrievedAt")
                         .HasColumnType("date")
-                        .HasColumnName("retrieved_at");
+                        .HasColumnName("retrieved_at")
+                        .HasComment("Ngày thu thập hoặc xem lại nguồn, để biết thông tin có cũ không.");
 
                     b.Property<string>("Source")
                         .HasColumnType("text")
-                        .HasColumnName("source");
+                        .HasColumnName("source")
+                        .HasComment("Tên nguồn bằng chữ. Cần ít nhất một trong source và source_url.");
 
                     b.Property<string>("SourceUrl")
                         .HasColumnType("text")
-                        .HasColumnName("source_url");
+                        .HasColumnName("source_url")
+                        .HasComment("Link nguồn kiểm chứng (http, https), nhiều link cách nhau bằng dấu chấm phẩy.");
 
                     b.Property<string>("TopicCode")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
-                        .HasColumnName("topic_code");
+                        .HasColumnName("topic_code")
+                        .HasComment("Mã thủ tục (I-20, DS-160...) nối các dòng cùng một thủ tục. Bắt buộc với dòng proc_*.");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1688,6 +1701,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.ToTable("knowledge_documents", "app", t =>
                         {
+                            t.HasComment("Kho tri thức cho chat tư vấn: mỗi dòng là một cặp câu hỏi mẫu và câu trả lời đã chốt, nhập từ file Excel (sheet knowledge_base). Chat so vector của câu hỏi học sinh với vector của question để tìm câu trả lời.");
+
                             t.HasCheckConstraint("ck_knowledge_documents_doc_type", "doc_type IN ('faq','glossary','proc_overview','proc_prepare','proc_steps','proc_checklist','proc_mistakes','timeline','compare','situation','data_table','resource','notice')");
                         });
                 });
@@ -5088,6 +5103,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("failed_login_attempts");
 
+                    b.Property<Guid?>("ForumRestrictedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("forum_restricted_by_user_id");
+
                     b.Property<DateTime?>("ForumRestrictedUntil")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("forum_restricted_until");
@@ -5095,10 +5114,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.Property<string>("ForumRestrictionReason")
                         .HasColumnType("text")
                         .HasColumnName("forum_restriction_reason");
-
-                    b.Property<Guid?>("ForumRestrictedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("forum_restricted_by_user_id");
 
                     b.Property<string>("FullName")
                         .IsRequired()
@@ -6020,6 +6035,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_sensitivity_runs_users_created_by_user_id");
                 });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.SlmTrainingSample", b =>
                 {
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
