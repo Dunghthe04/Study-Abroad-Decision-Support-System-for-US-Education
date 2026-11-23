@@ -83,6 +83,24 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         return Ok(result.Center);
     }
 
+    /// <summary>[UC-59] Thu hồi dấu xác minh của trung tâm Đã xác minh kèm lý do bắt buộc (chỉ Moderator).</summary>
+    [HttpPost("{id:guid}/revoke-verification")]
+    [Authorize(Roles = UserRoles.Moderator)]
+    public async Task<ActionResult<StudyCenterDto>> RevokeVerification(
+        Guid id,
+        [FromBody] RevokeCenterVerificationRequest request,
+        CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId)
+            return Unauthorized();
+
+        var result = await service.RevokeVerificationAsync(id, request.Reason, actorId, ct);
+        if (!result.Success || result.Center is null)
+            return ValidationProblem(result.ErrorMessage);
+
+        return Ok(result.Center);
+    }
+
     // [UC-72] Moderator chỉ ẩn/hiện trung tâm (quyết định bản 14/11). Sửa nội dung do trung tâm tự làm qua PUT /center/profile (UC-92).
 
     /// <summary>[UC-72] Thay đổi trạng thái hoạt động (ẩn/hiện khỏi danh bạ và gợi ý) của trung tâm (chỉ Moderator).</summary>
