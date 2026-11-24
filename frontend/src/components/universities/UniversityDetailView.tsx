@@ -262,7 +262,7 @@ export function UniversityDetailView({
 
           {offering ? (
             <div key={offering.studyLevel} className="space-y-12">
-              <UniversityCosts offering={offering} sources={university.sources} />
+              <UniversityCosts offering={offering} sources={university.sources} scholarshipCount={scholarships.length} />
               <UniversityAdmissions offering={offering} sources={university.sources} />
               <UniversityCampusLife offering={offering} sources={university.sources} />
               <UniversityStatistics offering={offering} internationalStudentCount={university.internationalStudentCount} sources={university.sources} />
@@ -282,7 +282,7 @@ export function UniversityDetailView({
             <DetailSection
               id="scholarships"
               title="Học bổng"
-              description={`${scholarships.length} học bổng của ${university.name} còn hạn nộp.`}
+              description="Mức trường công bố cho từng gói; số tiền thực nhận tùy hồ sơ. Mức thực nhận trung bình xem ở mục Chi phí & hỗ trợ."
             >
               <ul className="space-y-4">
                 {scholarships.map((s) => (

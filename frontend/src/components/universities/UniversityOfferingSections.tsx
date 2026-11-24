@@ -3,6 +3,8 @@
 import { useSyncExternalStore } from "react";
 import Image from "next/image";
 import {
+  ArrowDownIcon,
+  AwardIcon,
   BuildingIcon,
   FileTextIcon,
   GraduationCapIcon,
@@ -41,7 +43,16 @@ import {
 } from "./UniversityDetailParts";
 import { findFieldSource, SourceTooltip } from "./UniversitySourceTooltip";
 
-export function UniversityCosts({ offering, sources }: { offering: UniversityOffering; sources: UniversitySource[] }) {
+export function UniversityCosts({
+  offering,
+  sources,
+  scholarshipCount = 0,
+}: {
+  offering: UniversityOffering;
+  sources: UniversitySource[];
+  /** Số học bổng còn hạn ở mục #scholarships; > 0 thì hiện liên kết xuống mục đó */
+  scholarshipCount?: number;
+}) {
   const costSourceByKey: Record<string, UniversitySource | undefined> = {
     tuition: findFieldSource(sources, "tuition_usd"),
     living: findFieldSource(sources, "living_usd"),
@@ -227,7 +238,13 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
 
         {hasAid && (
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-ink">Hỗ trợ cho sinh viên quốc tế</h3>
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-ink">Hỗ trợ cho sinh viên quốc tế</h3>
+              {/* intl_aid_* là số thực chi trường báo cáo (CDS H6), khác mức công bố của từng gói ở mục Học bổng */}
+              <p className="text-xs leading-relaxed text-ink-2">
+                Số liệu trường báo cáo về hỗ trợ đã thực chi cho sinh viên quốc tế, gồm cả hỗ trợ theo hoàn cảnh và học bổng của trường.
+              </p>
+            </div>
             <div className="overflow-hidden rounded-xl border border-line bg-surface">
               <div className="p-5 sm:p-6">
                 <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -241,7 +258,7 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
                   {offering.intlAidAvgUsd != null && (
                     <GridDataItem
                       icon={HandCoinsIcon}
-                      label="Mức hỗ trợ trung bình"
+                      label="Thực nhận trung bình mỗi người"
                       value={<SourceTooltip source={findFieldSource(sources, "intl_aid_avg_usd")}>{universityMoney(offering.intlAidAvgUsd)}</SourceTooltip>}
                     />
                   )}
@@ -272,6 +289,22 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
               )}
             </div>
           </div>
+        )}
+
+        {scholarshipCount > 0 && (
+          <a
+            href="#scholarships"
+            className="group flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-5 py-4 transition-colors hover:border-brand/40 sm:px-6"
+          >
+            <span className="flex items-center gap-3">
+              <AwardIcon className="size-5 shrink-0 text-brand" aria-hidden />
+              <span>
+                <span className="block text-sm font-semibold text-ink">{scholarshipCount} học bổng còn hạn nộp</span>
+                <span className="block text-xs text-ink-2">Mức trường công bố cho từng gói, kèm điều kiện và hạn nộp</span>
+              </span>
+            </span>
+            <ArrowDownIcon className="size-4 shrink-0 text-ink-2 transition-transform group-hover:translate-y-0.5" aria-hidden />
+          </a>
         )}
       </div>
     </DetailSection>
