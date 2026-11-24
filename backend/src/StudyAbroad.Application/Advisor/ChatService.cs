@@ -1,6 +1,7 @@
 using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
+using StudyAbroad.Application.Scholarships;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using Microsoft.Extensions.Logging;
@@ -37,7 +38,8 @@ namespace StudyAbroad.Application.Advisor
         IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null,
         IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null,
         IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null, AiPricing? pricing = null,
-        StudyAbroad.Application.Billing.IEntitlementService? entitlements = null) : History.IChatPendingQuestion
+        StudyAbroad.Application.Billing.IEntitlementService? entitlements = null,
+        IScholarshipSearchRepository? scholarshipSearch = null) : History.IChatPendingQuestion
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
@@ -281,7 +283,7 @@ namespace StudyAbroad.Application.Advisor
             var transcript = ChatTranscript.From(flow.Draft.Step2) is { } years ? JsonSerializer.SerializeToElement(years) : (JsonElement?)null;
 
             // Mốc so sánh GPA / tiếng Anh từ dữ liệu trường, cùng bậc học với gợi ý trường
-            var marks = await BenchmarksAsync(flow.Draft.Step1?.TargetDegreeLevel, ct);
+            var marks = await BenchmarksAsync(StudyLevels.Undergraduate, ct);
 
             // Bảng quy đổi điểm thang 10 sang GPA thang 4 trong DB (moderator sửa) để advisor đổi GPA giống .NET và form.
             // Luôn lấy từ server, không tin bảng trình duyệt gửi; không có provider thì null, advisor dùng bảng mặc định
@@ -638,7 +640,11 @@ namespace StudyAbroad.Application.Advisor
                     return query.KbFound ? response : response with { NoBasis = true };   // giữ câu của kho: chỉ là câu trả lời thật khi kho có nguồn
 
                 var info = await recommender!.SchoolInfoAsync(userId, code, ct);
-                var answer = ChatSchoolInfo.Answer(info, fields, unstored);
+                // Lấy học bổng cụ thể (tối đa 3) của trường khi câu hỏi nhắc mục Aid hoặc Scholarships
+                IReadOnlyList<ScholarshipDto> scholarships = [];
+                if (scholarshipSearch is not null && (fields.Contains(InfoField.Aid) || fields.Contains(InfoField.Scholarships)))
+                    scholarships = await scholarshipSearch.GetByUniversityCodeAsync(code, 3, ct);
+                var answer = ChatSchoolInfo.Answer(info, fields, unstored, scholarships);
                 if (noTopic)
                     answer = answer with { Text = $"{ChatSchoolInfo.NoTopicLead(info.Name)}\n{answer.Text}" };
                 if (!answer.Complete)

@@ -51,6 +51,9 @@ public record ScholarshipDto(
 public interface IScholarshipSearchRepository
 {
     Task<PagedResult<ScholarshipDto>> SearchAsync(ScholarshipSearchQuery query, CancellationToken ct = default);
+
+    /// <summary>Lấy tối đa <paramref name="maxCount"/> học bổng đang hoạt động của trường theo mã trường, sắp theo hạn nộp (null ở cuối).</summary>
+    Task<IReadOnlyList<ScholarshipDto>> GetByUniversityCodeAsync(string universityCode, int maxCount, CancellationToken ct = default);
 }
 
 public interface IScholarshipSearchService

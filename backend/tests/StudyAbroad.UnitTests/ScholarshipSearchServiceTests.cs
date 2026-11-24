@@ -18,6 +18,10 @@ public class ScholarshipSearchServiceTests
             Last = query;
             return Task.FromResult(new PagedResult<ScholarshipDto>(rows, query.Page, query.PageSize, rows.Length));
         }
+
+        // Phương thức mới thêm vào interface; test này không kiểm tra nên trả rỗng
+        public Task<IReadOnlyList<ScholarshipDto>> GetByUniversityCodeAsync(string universityCode, int maxCount, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ScholarshipDto>>([]);
     }
 
     [Fact]

@@ -88,4 +88,45 @@ public class ScholarshipSearchRepository(AppDbContext db) : IScholarshipSearchRe
 
         return new PagedResult<ScholarshipDto>(items, query.Page, query.PageSize, total);
     }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<ScholarshipDto>> GetByUniversityCodeAsync(string universityCode, int maxCount, CancellationToken ct = default)
+    {
+        // Lấy học bổng IsActive của trường có Code khớp, sắp hạn nộp (null cuối), tối đa maxCount bản ghi
+        var items = await db.Scholarships.AsNoTracking()
+            .Where(s => s.IsActive
+                && db.Universities.Any(u => u.Id == s.UniversityId && u.IsActive && u.Code == universityCode))
+            .OrderBy(s => s.Deadline == null)
+            .ThenBy(s => s.Deadline)
+            .ThenBy(s => s.Name)
+            .Take(maxCount)
+            .Select(s => new ScholarshipDto(
+                s.Id,
+                db.Universities.Where(u => u.Id == s.UniversityId).Select(u => u.Code).FirstOrDefault(),
+                db.Universities.Where(u => u.Id == s.UniversityId).Select(u => u.Name).FirstOrDefault(),
+                s.Name,
+                s.Provider,
+                s.StudyLevel,
+                s.AmountUsd,
+                s.CoverageType,
+                s.MinGpa4,
+                s.MinIelts,
+                s.Deadline,
+                s.EligibilityNotes,
+                s.SourceUrl,
+                s.RetrievedAt,
+                s.SourceReliability,
+                s.Kind,
+                s.AmountType,
+                s.AmountMinUsd,
+                s.AmountMaxUsd,
+                s.DurationYears,
+                s.Renewable,
+                s.VnEligible,
+                s.ApplicationMethod,
+                s.ApplyUrl))
+            .ToListAsync(ct);
+
+        return items;
+    }
 }

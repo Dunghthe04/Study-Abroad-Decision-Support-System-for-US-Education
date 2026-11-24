@@ -26,6 +26,10 @@ public record SchoolAidInfo(string? Policy, decimal? AvgUsd, int? Recipients);
 public record SchoolOutcomeInfo(decimal? RetentionRate1Yr, decimal? GradRate6Yr);
 
 // GPA của sinh viên đã trúng tuyển (thang 4): trung bình, tỉ lệ có GPA 4,0 và tỉ lệ có GPA từ 3,75 trở lên (0..1)
+/// <summary>Số liệu bổ sung của trường (v14): phí nộp hồ sơ, bảo hiểm, học phí trong bang, tỷ lệ nộp điểm thi.</summary>
+public record SchoolExtraInfo(
+    decimal? ApplicationFeeUsd, decimal? HealthInsuranceUsd, decimal? TuitionInStateUsd, decimal? SatSubmitPct, decimal? ActSubmitPct);
+
 public record SchoolGpaInfo(decimal? Avg, decimal? ShareFour, decimal? ShareAbove375);
 
 // Một vòng nộp hồ sơ. Round là mã vòng (ED, EA, RD, Spring...), Date là chữ gốc trong dữ liệu (thường yyyy-MM-dd).
@@ -52,7 +56,8 @@ public record SchoolInfoDto(
     IReadOnlyList<SchoolRanking> Rankings,
     string? SourceUrl,
     DateOnly? RetrievedAt,
-    SchoolGpaInfo? Gpa = null);
+    SchoolGpaInfo? Gpa = null,
+    SchoolExtraInfo? Extra = null);
 
 public partial class RecommendationService
 {
@@ -93,7 +98,8 @@ public partial class RecommendationService
             input.Majors,
             rankings,
             o.SourceUrl, o.RetrievedAt,
-            new SchoolGpaInfo(o.AvgGpa4, o.GpaPct40, o.GpaPct375To399 is { } a && o.GpaPct40 is { } b ? a + b : null));
+            new SchoolGpaInfo(o.AvgGpa4, o.GpaPct40, o.GpaPct375To399 is { } a && o.GpaPct40 is { } b ? a + b : null),
+            new SchoolExtraInfo(o.ApplicationFeeUsd, o.HealthInsuranceUsd, o.TuitionInStateUsd, o.SatSubmitPct, o.ActSubmitPct));
     }
 
     // DeadlinesJson dạng {"ED":"2026-11-01","RD":"2027-01-05"}. Hỏng hoặc không đúng dạng thì coi như không có hạn nộp, không làm hỏng câu trả lời.
