@@ -1265,6 +1265,33 @@ public class AuthServiceTests
         Assert.Contains("Mật khẩu không được vượt quá", result.Message!);
     }
 
+    // [UC-01 quy tắc mật khẩu] AUTH-020/185: 8 dấu cách bị từ chối, không tạo tài khoản
+    [Fact]
+    public async Task Register_PasswordOnlyWhitespace_ReturnsValidationError()
+    {
+        var service = CreateService();
+        var result = await service.RegisterAsync(Request(password: "        "));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Contains("khoảng trắng", result.Message!);
+        Assert.Empty(_repo.Users);
+    }
+
+    // [UC-01 quy tắc mật khẩu] AUTH-021: mật khẩu phổ biến bị từ chối (không phân biệt hoa thường)
+    [Theory]
+    [InlineData("12345678")]
+    [InlineData("Password1")]
+    [InlineData("QWERTY123")]
+    public async Task Register_CommonPassword_ReturnsValidationError(string password)
+    {
+        var service = CreateService();
+        var result = await service.RegisterAsync(Request(password: password));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Contains("quá phổ biến", result.Message!);
+        Assert.Empty(_repo.Users);
+    }
+
     [Fact]
     public async Task Login_PayloadExceedsMaxLength_ReturnsInvalidCredentials()
     {

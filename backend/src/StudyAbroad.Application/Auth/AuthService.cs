@@ -741,6 +741,13 @@ namespace StudyAbroad.Application.Auth
             if (password.Length > MaxPasswordLength)
                 return $"{label} không được vượt quá {MaxPasswordLength} ký tự.";
 
+            // [UC-01] Không được toàn khoảng trắng, không thuộc danh sách mật khẩu phổ biến
+            if (string.IsNullOrWhiteSpace(password))
+                return $"{label} không được chỉ gồm khoảng trắng.";
+
+            if (CommonPasswords.Contains(password))
+                return $"{label} quá phổ biến, dễ đoán. Vui lòng chọn mật khẩu khác.";
+
             return null;
         }
 

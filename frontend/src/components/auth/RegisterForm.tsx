@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState, useSyncExternalStore } from "react";
+import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Building2Icon, CheckIcon, GraduationCapIcon, InfoIcon, UsersIcon, XIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
+import { passwordRuleError } from "@/lib/common-passwords";
 import { useAccountPolicies } from "@/lib/use-account-policies";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -112,7 +113,14 @@ interface FieldErrors {
 
 export function RegisterForm() {
   const router = useRouter();
-  const { register } = useAuth();
+  const { register, user, isLoading } = useAuth();
+
+  // [AUTH-059] Đã đăng nhập mà mở /register thì chuyển đi như /login: admin/moderator → /admin, còn lại → trang chủ
+  useEffect(() => {
+    if (!isLoading && user) {
+      router.replace(user.role === "admin" || user.role === "moderator" ? "/admin" : "/");
+    }
+  }, [isLoading, user, router]);
 
   const [fullName, setFullName] = useState("");
   // Mở từ trang phụ huynh đồng ý: ?role=parent chọn sẵn Phụ huynh, email lấy từ sessionStorage (không có trên URL).
@@ -125,6 +133,9 @@ export function RegisterForm() {
   const [chosenRole, setRole] = useState<"student" | "parent" | null>(null);
   const role = chosenRole ?? (urlRole === "parent" ? "parent" : "student");
   const [dateOfBirth, setDateOfBirth] = useState("");
+  // [AUTH-041] Ô ngày có chữ nhưng trình duyệt không đọc được (vd 31/02) → value rỗng, validity.badInput = true.
+  // Đọc lúc bấm gửi qua ref vì khi value giữ nguyên "" thì onChange không chạy.
+  const dobInputRef = useRef<HTMLInputElement>(null);
   const [parentEmail, setParentEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -185,7 +196,9 @@ export function RegisterForm() {
       errors.fullName = "Họ và tên không được vượt quá 100 ký tự.";
     }
 
-    if (!dateOfBirth) {
+    if (!dateOfBirth && dobInputRef.current?.validity.badInput) {
+      errors.dateOfBirth = "Ngày sinh không tồn tại.";
+    } else if (!dateOfBirth) {
       errors.dateOfBirth = "Vui lòng chọn ngày sinh.";
     } else if (dateOfBirth > todayInVietnam()) {
       errors.dateOfBirth = "Ngày sinh không được ở tương lai.";
@@ -219,12 +232,10 @@ export function RegisterForm() {
       }
     }
 
-    if (!password) {
-      errors.password = "Vui lòng nhập mật khẩu.";
-    } else if (password.length < 8) {
-      errors.password = "Mật khẩu phải có tối thiểu 8 ký tự.";
-    } else if (password.length > 100) {
-      errors.password = "Mật khẩu không được vượt quá 100 ký tự.";
+    // [UC-01] 8–100 ký tự, không toàn khoảng trắng, không thuộc danh sách mật khẩu phổ biến (khớp backend)
+    const passwordError = passwordRuleError(password);
+    if (passwordError) {
+      errors.password = passwordError;
     }
 
     if (!confirmPassword) {
@@ -376,6 +387,7 @@ export function RegisterForm() {
             </FieldLabel>
             <Input
               id="dateOfBirth"
+              ref={dobInputRef}
               type="date"
               max={todayInVietnam()}
               value={dateOfBirth}
@@ -656,7 +668,7 @@ export function RegisterForm() {
             )}
           </Field>
 
-          <Button type="submit" size="xl" disabled={isSubmitting || !accountPolicies.ready} className="w-full" loading={isSubmitting}>
+          <Button type="submit" size="xl" disabled={isSubmitting || !accountPolicies.ready || !agreeTerms} className="w-full" loading={isSubmitting}>
             {isSubmitting ? "Đang xử lý..." : "Tạo tài khoản"}
           </Button>
         </FieldGroup>
