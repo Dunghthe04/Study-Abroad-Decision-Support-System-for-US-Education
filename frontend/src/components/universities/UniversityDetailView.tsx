@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "cn";
 import { studyLevelLabel } from "@/lib/study-levels";
 import { campusSettingLabel, schoolControlLabel, universityNumber, universityUrl } from "@/lib/university-display";
+import { ScholarshipCard } from "@/components/scholarships/ScholarshipCard";
+import type { ScholarshipItem } from "@/types/scholarship";
 import type { UniversityDetail } from "@/types/university";
 import { acceptanceRateTone, DetailSection, Gauge, SchoolImage } from "./UniversityDetailParts";
 import { UniversityAdmissions, UniversityCampusLife, UniversityCosts, UniversityMajors, UniversityStatistics } from "./UniversityOfferingSections";
@@ -47,7 +49,15 @@ function campusSettingIcon(value: string): LucideIcon {
   return MapPinIcon;
 }
 
-export function UniversityDetailView({ university }: { university: UniversityDetail }) {
+export function UniversityDetailView({
+  university,
+  scholarships = [],
+  today = "",
+}: {
+  university: UniversityDetail;
+  scholarships?: ScholarshipItem[];
+  today?: string;
+}) {
   const [selectedLevel, setSelectedLevel] = useState(university.offerings[0]?.studyLevel ?? "");
   const [activeSection, setActiveSection] = useState("overview");
   const offering = university.offerings.find((item) => item.studyLevel === selectedLevel) ?? university.offerings[0];
@@ -76,8 +86,9 @@ export function UniversityDetailView({ university }: { university: UniversityDet
             { id: "majors", label: "Ngành học" },
           ]
         : []),
+      ...(scholarships.length > 0 ? [{ id: "scholarships", label: "Học bổng" }] : []),
     ],
-    [offering, hasCampusData],
+    [offering, hasCampusData, scholarships.length],
   );
 
   useEffect(() => {
@@ -264,6 +275,22 @@ export function UniversityDetailView({ university }: { university: UniversityDet
                   Trường chưa có dữ liệu bậc học trong hệ thống. Bạn có thể tham khảo website chính thức của trường.
                 </p>
               </div>
+            </DetailSection>
+          )}
+
+          {scholarships.length > 0 && (
+            <DetailSection
+              id="scholarships"
+              title="Học bổng"
+              description={`${scholarships.length} học bổng của ${university.name} còn hạn nộp.`}
+            >
+              <ul className="space-y-4">
+                {scholarships.map((s) => (
+                  <li key={s.id}>
+                    <ScholarshipCard scholarship={s} today={today} showSchool={false} />
+                  </li>
+                ))}
+              </ul>
             </DetailSection>
           )}
 

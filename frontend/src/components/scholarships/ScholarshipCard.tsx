@@ -48,12 +48,13 @@ function Fact({ label, value, fallback }: { label: string; value: string | null;
   );
 }
 
-export function ScholarshipCard({ scholarship: s, today }: { scholarship: ScholarshipItem; today: string }) {
+/** showSchool=false khi thẻ nằm ngay trong trang của trường đó: bỏ tên trường và nút "Xem trường" cho đỡ lặp. */
+export function ScholarshipCard({ scholarship: s, today, showSchool = true }: { scholarship: ScholarshipItem; today: string; showSchool?: boolean }) {
   const amount = amountText(s);
   const status = deadlineStatus(s.deadline, today);
   const applyLink = httpLink(s.applyUrl);
   const sourceLink = httpLink(s.sourceUrl);
-  const schoolHref = s.universityCode ? `/university/${encodeURIComponent(s.universityCode)}?from=scholarships` : null;
+  const schoolHref = showSchool && s.universityCode ? `/university/${encodeURIComponent(s.universityCode)}?from=scholarships` : null;
   const duration = [
     s.durationYears !== null ? `${s.durationYears} năm` : null,
     s.renewable === null ? null : s.renewable ? "có gia hạn" : "không gia hạn",
@@ -71,16 +72,18 @@ export function ScholarshipCard({ scholarship: s, today }: { scholarship: Schola
             {s.vnEligible === true && <Badge variant="brand">Mở cho du học sinh Việt Nam</Badge>}
           </div>
           <h3 className="font-heading text-lg font-bold leading-snug text-balance text-foreground">{s.name}</h3>
-          <p className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
-            <Building2Icon className="size-4 shrink-0" aria-hidden />
-            {schoolHref ? (
-              <Link href={schoolHref} className="truncate font-medium text-foreground underline-offset-4 hover:text-brand hover:underline">
-                {s.universityName}
-              </Link>
-            ) : (
-              <span className="truncate">{s.provider ?? "Chưa rõ đơn vị cấp"}</span>
-            )}
-          </p>
+          {(showSchool || s.provider) && (
+            <p className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+              <Building2Icon className="size-4 shrink-0" aria-hidden />
+              {schoolHref ? (
+                <Link href={schoolHref} className="truncate font-medium text-foreground underline-offset-4 hover:text-brand hover:underline">
+                  {s.universityName}
+                </Link>
+              ) : (
+                <span className="truncate">{s.provider ?? "Chưa rõ đơn vị cấp"}</span>
+              )}
+            </p>
+          )}
         </div>
 
         {/* Hai điều người xem cần nhất: được bao nhiêu và còn bao lâu */}
