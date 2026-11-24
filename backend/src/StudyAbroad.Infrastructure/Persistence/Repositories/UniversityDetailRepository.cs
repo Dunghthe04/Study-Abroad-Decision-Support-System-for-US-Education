@@ -96,14 +96,28 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
             q = q.Where(u => u.IsIvy == query.IsIvy.Value);
         }
 
+        // ponytail: some source rows have AcceptanceRate > 1 (Williams 1.15, Amherst 1.13, Illinois Wesleyan 1.19);
+        // treated as missing here until the source data is corrected.
         if (query.MinAcceptanceRate.HasValue)
         {
-            q = q.Where(u => u.AcceptanceRate != null && u.AcceptanceRate >= query.MinAcceptanceRate.Value);
+            q = q.Where(u => u.AcceptanceRate != null && u.AcceptanceRate <= 1 && u.AcceptanceRate >= query.MinAcceptanceRate.Value);
         }
 
         if (query.MaxAcceptanceRate.HasValue)
         {
-            q = q.Where(u => u.AcceptanceRate != null && u.AcceptanceRate <= query.MaxAcceptanceRate.Value);
+            q = q.Where(u => u.AcceptanceRate != null && u.AcceptanceRate <= 1 && u.AcceptanceRate <= query.MaxAcceptanceRate.Value);
+        }
+
+        var generalListIds = await db.RankingLists.AsNoTracking()
+            .Where(l => l.ListGroup == RecommendationRepository.GeneralRankingGroup)
+            .Select(l => l.Id)
+            .ToListAsync(ct);
+
+        if (query.MaxRank is > 0)
+        {
+            var maxRank = query.MaxRank.Value;
+            q = q.Where(u => db.UniversityRankings.Any(r =>
+                r.UniversityId == u.Id && generalListIds.Contains(r.ListId) && r.Rank <= maxRank));
         }
 
         var studyLevel = query.StudyLevel;
@@ -149,6 +163,40 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                 o.MinDuolingo != null && o.MinDuolingo <= query.MaxMinDuolingo.Value));
         }
 
+        if (query.TestOptional == true)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                (o.SatPolicy == "optional" || o.SatPolicy == "not_accepted" || o.ActPolicy == "optional" || o.ActPolicy == "not_accepted") &&
+                (o.SatPolicy == null || o.SatPolicy != "required") &&
+                (o.ActPolicy == null || o.ActPolicy != "required")));
+        }
+
+        if (query.HasIntlAid == true)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.IntlAidPolicy != null && o.IntlAidPolicy != "none"));
+        }
+
+        var campusPrefix = query.CampusSetting?.Trim().ToLowerInvariant() switch
+        {
+            "city" => "City:",
+            "suburb" => "Suburb:",
+            "town" => "Town:",
+            "rural" => "Rural:",
+            _ => null,
+        };
+        if (campusPrefix != null)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.CampusSetting != null && EF.Functions.ILike(o.CampusSetting, campusPrefix + "%")));
+        }
+
         if (!string.IsNullOrWhiteSpace(query.Major))
         {
             var majorPattern = $"%{query.Major.Trim()}%";
@@ -161,11 +209,6 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
         }
 
         var total = await q.CountAsync(ct);
-
-        var generalListIds = await db.RankingLists.AsNoTracking()
-            .Where(l => l.ListGroup == RecommendationRepository.GeneralRankingGroup)
-            .Select(l => l.Id)
-            .ToListAsync(ct);
 
         IQueryable<University> sorted = (query.SortBy?.ToLowerInvariant()) switch
         {
@@ -204,11 +247,11 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                     .Max(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)))
                 .ThenBy(u => u.Name),
             "acceptance_asc" => q
-                .OrderBy(u => u.AcceptanceRate == null)
+                .OrderBy(u => u.AcceptanceRate == null || u.AcceptanceRate > 1)
                 .ThenBy(u => u.AcceptanceRate)
                 .ThenBy(u => u.Name),
             "acceptance_desc" => q
-                .OrderBy(u => u.AcceptanceRate == null)
+                .OrderBy(u => u.AcceptanceRate == null || u.AcceptanceRate > 1)
                 .ThenByDescending(u => u.AcceptanceRate)
                 .ThenBy(u => u.Name),
             _ => q
@@ -314,7 +357,7 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                 u.State,
                 stateName,
                 u.Control,
-                u.AcceptanceRate,
+                u.AcceptanceRate > 1 ? null : u.AcceptanceRate,
                 u.IsIvy,
                 logoUrl,
                 coverUrl,
@@ -326,6 +369,7 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                 bestRank?.Rank,
                 bestRank?.ListName,
                 offering?.SatPolicy,
+                offering?.ActPolicy,
                 offering?.IntlAidPolicy,
                 majors);
         }).ToList();

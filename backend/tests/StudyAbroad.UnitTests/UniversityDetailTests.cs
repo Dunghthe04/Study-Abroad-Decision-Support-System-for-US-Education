@@ -302,7 +302,7 @@ public class UniversityDetailTests
                     data.University.Id, data.University.Code, data.University.Name,
                     data.University.City, data.University.State, data.StateName,
                     data.University.Control, data.University.AcceptanceRate, data.University.IsIvy,
-                    null, null, 45000, 60000, 6.5m, 80, 105, 10, "US News", "optional", "need_and_merit", []));
+                    null, null, 45000, 60000, 6.5m, 80, 105, 10, "US News", "optional", "optional", "need_and_merit", []));
             }
             return Task.FromResult(new PagedResult<UniversityListItemDto>(items, query.Page, query.PageSize, items.Count));
         }

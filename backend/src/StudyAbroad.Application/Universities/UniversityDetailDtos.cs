@@ -60,6 +60,10 @@ public record UniversitySearchQuery(
     decimal? MinAcceptanceRate = null,
     decimal? MaxAcceptanceRate = null,
     bool? IsIvy = null,
+    bool? TestOptional = null,
+    bool? HasIntlAid = null,
+    string? CampusSetting = null,
+    int? MaxRank = null,
     string? SortBy = null,
     string? StudyLevel = "undergraduate",
     int Page = 1,
@@ -85,6 +89,7 @@ public record UniversityListItemDto(
     int? BestRank,
     string? BestRankList,
     string? SatPolicy,
+    string? ActPolicy,
     string? IntlAidPolicy,
     IReadOnlyList<string> Majors);
 
