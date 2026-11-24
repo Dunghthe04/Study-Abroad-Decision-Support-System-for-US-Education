@@ -7,7 +7,7 @@ import { BugIcon, RotateCcwIcon, XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SubscriptionSummaryDto } from "@/types/billing";
 import type { SchoolGoalResult, SchoolSearchData } from "@/types/recommendation";
-import { setPeekDismissed } from "./AssistantPanel";
+import { setPeekDismissed } from "@/components/assistant/AssistantPanel";
 import {
   useAssistant,
   type AssistantDebugOverrides,
@@ -15,7 +15,7 @@ import {
   type AssistantStreaming,
   type AssistantTurn,
   type DebugComposerMode,
-} from "./AssistantProvider";
+} from "@/components/assistant/AssistantProvider";
 
 const MOCK_SUB_BASE: SubscriptionSummaryDto = {
   tier: "premium",

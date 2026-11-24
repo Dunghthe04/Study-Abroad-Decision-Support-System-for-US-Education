@@ -10,7 +10,6 @@ import { SiteHeader } from "@/components/layout/SiteHeader";
 import { ActingAsBanner } from "@/components/parent/ActingAsBanner";
 import { Toaster } from "@/components/ui/toast";
 import { useAutoHideScrollbar } from "@/hooks/use-auto-hide-scrollbar";
-import { AssistantDebugDrawer } from "./AssistantDebugDrawer";
 import { AssistantLauncher, AssistantPanel, useAssistantVisible } from "./AssistantPanel";
 import { useAssistant } from "./AssistantProvider";
 
@@ -76,7 +75,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {showAssistant && <AssistantPanel />}
       {/* Trang phân tích có nút chat ở thanh bước; nút nổi sẽ che nút "Tiếp tục" */}
       {showAssistant && !hideable && <AssistantLauncher />}
-      {showAssistant && process.env.NODE_ENV !== "production" && <AssistantDebugDrawer />}
       <Toaster />
     </div>
   );
