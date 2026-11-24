@@ -35,6 +35,10 @@ export interface ScholarshipSearchParams {
   maxMinIelts?: number;
   kind?: string;
   vnEligible?: boolean;
+  /** yyyy-MM-dd: chỉ lấy học bổng còn hạn từ ngày này (hạn trống = xét quanh năm vẫn giữ) */
+  deadlineFrom?: string;
+  /** Chỉ dùng ở URL trang /scholarships: mặc định ẩn học bổng đã hết hạn, true thì hiện cả */
+  includeExpired?: boolean;
   page?: number;
   pageSize?: number;
 }
