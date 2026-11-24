@@ -557,10 +557,16 @@ public class ParentLinkService(
         var result = new List<ParentLinkDto>();
         if (user.Role == UserRoles.Student)
         {
-            foreach (var link in (await links.GetByStudentAsync(userId, ct)).Where(IsOpen))
+            var all = await links.GetByStudentAsync(userId, ct);
+            var shown = all.Where(IsOpen).ToList();
+            // [UC-111] Phụ huynh rút đồng ý và chưa có lời mời mới: học sinh vẫn thấy "Đã thu hồi" để gửi lại yêu cầu
+            if (shown.Count == 0 && all.Where(l => IsRevokedByParent(l, userId)).MaxBy(l => l.RevokedAt) is { } revoked)
+                shown.Add(revoked);
+            foreach (var link in shown)
             {
                 var parent = link.ParentUserId is { } pid ? await users.GetUserById(pid, ct) : null;
-                result.Add(ToDto(link, parent, user, CanStudentRevoke(link, user)));
+                var canRevoke = link.Status != ParentLinkStatuses.Revoked && CanStudentRevoke(link, user);
+                result.Add(ToDto(link, parent, user, canRevoke));
             }
         }
         else if (user.Role == UserRoles.Parent)
@@ -647,6 +653,10 @@ public class ParentLinkService(
         link.Status == ParentLinkStatuses.Pending && IsPastExpiry(link, DateTime.UtcNow) ? ParentLinkStatuses.Expired : link.Status;
 
     /// <summary>Học sinh tự hủy lời mời chưa thành được; hủy liên kết đã đồng ý chỉ khi từ 16 tuổi (hoặc tài khoản cũ chưa có ngày sinh).</summary>
+    /// <summary>Liên kết đã đồng ý rồi bị phụ huynh rút (qua link mail hoặc tài khoản), không phải học sinh tự hủy / đổi email.</summary>
+    private static bool IsRevokedByParent(ParentStudentLink link, Guid studentUserId) =>
+        link.Status == ParentLinkStatuses.Revoked && link.AcceptedAt is not null && link.RevokedByUserId != studentUserId;
+
     private static bool CanStudentRevoke(ParentStudentLink link, User student) =>
         link.Status != ParentLinkStatuses.Active ||
         AgeOf(student) is not { } age || age >= AgeGroups.ChildMaxAgeExclusive;

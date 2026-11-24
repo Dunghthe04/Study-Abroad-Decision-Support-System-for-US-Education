@@ -721,6 +721,34 @@ public class ParentLinkServiceTests
     }
 
     [Fact]
+    public async Task GetMine_Student_AfterParentRevokes_SeesRevokedLink_NoRevokeButton()
+    {
+        var (student, parent, link) = await AcceptedLinkAsync(studentAge: 14);
+        var service = CreateService();
+        await service.RevokeAsync(parent.Id, link.Id);
+
+        var result = await service.GetMineAsync(student.Id);
+
+        var shown = Assert.Single(result.Value!);
+        Assert.Equal(link.Id, shown.Id);
+        Assert.Equal(ParentLinkStatuses.Revoked, shown.Status);
+        Assert.False(shown.CanRevoke);
+    }
+
+    [Fact]
+    public async Task GetMine_Student_RevokedThenReinvited_SeesOnlyNewInvite()
+    {
+        var (student, parent, link) = await AcceptedLinkAsync(studentAge: 14);
+        var service = CreateService();
+        await service.RevokeAsync(parent.Id, link.Id);
+        await service.ChangeParentEmailAsync(student.Id, link.ParentEmail);
+
+        var result = await service.GetMineAsync(student.Id);
+
+        Assert.Equal(ParentLinkStatuses.Pending, Assert.Single(result.Value!).Status);
+    }
+
+    [Fact]
     public async Task GetMine_Parent_SeesLinkedChildren()
     {
         var (student, parent, _) = await AcceptedLinkAsync(studentAge: 14);

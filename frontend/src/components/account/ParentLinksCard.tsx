@@ -234,6 +234,11 @@ export function ParentLinksCard() {
                             Đồng ý ngày {new Date(link.acceptedAt).toLocaleDateString("vi-VN")}
                           </div>
                         )}
+                        {link.status === "revoked" && (
+                          <div className="text-xs text-ink-3">
+                            Phụ huynh đã rút đồng ý. Gửi lại yêu cầu để phụ huynh xác nhận qua email mới.
+                          </div>
+                        )}
                         {link.status === "pending" && link.tokenExpiresAt && (
                           <div className="text-xs text-ink-3">
                             Lời mời hết hạn {new Date(link.tokenExpiresAt).toLocaleString("vi-VN")}
@@ -249,6 +254,8 @@ export function ParentLinksCard() {
                         <Badge variant="warn"><XIcon aria-hidden />Phụ huynh đã từ chối</Badge>
                       ) : link.status === "expired" ? (
                         <Badge variant="warn"><HourglassIcon aria-hidden />Lời mời hết hạn</Badge>
+                      ) : link.status === "revoked" ? (
+                        <Badge variant="warn"><UnlinkIcon aria-hidden />Đã thu hồi</Badge>
                       ) : (
                         <Badge variant="warn"><HourglassIcon aria-hidden />Chờ phụ huynh xác nhận</Badge>
                       )}
@@ -264,6 +271,23 @@ export function ParentLinksCard() {
                         >
                           <MailIcon data-icon="inline-start" aria-hidden />
                           Gửi lại
+                        </Button>
+                      )}
+
+                      {/* [UC-111] Phụ huynh đã rút đồng ý: gửi yêu cầu mới tới cùng email (link cũ không dùng lại) */}
+                      {isStudent && link.status === "revoked" && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={busy !== null}
+                          onClick={() =>
+                            run("reinvite", () => parentLinksApi.changeParentEmail(link.parentEmail), "Không thể gửi lại yêu cầu.")
+                          }
+                          loading={busy === "reinvite"}
+                        >
+                          <MailIcon data-icon="inline-start" aria-hidden />
+                          Gửi lại yêu cầu
                         </Button>
                       )}
 
