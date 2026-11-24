@@ -67,7 +67,7 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
             .Select(row => new UniversityRankingDto(row.List.Publisher, row.List.Name, row.Rank.Rank,
                 row.Rank.IsTie, row.Rank.RankDisplay, row.List.Edition, row.List.EditionYear, row.List.Url));
 
-    public async Task<PagedResult<UniversityListItemDto>> SearchAsync(UniversitySearchQuery query, CancellationToken ct = default)
+    private IQueryable<University> BuildSearchQuery(UniversitySearchQuery query, IReadOnlyList<string> generalListIds)
     {
         var q = db.Universities.AsNoTracking().Where(u => u.IsActive);
 
@@ -83,6 +83,27 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
         {
             var state = query.State.Trim().ToUpperInvariant();
             q = q.Where(u => u.State == state);
+        }
+
+        var region = query.Region?.Trim().ToLowerInvariant();
+        if (region is "northeast" or "midwest" or "south" or "west")
+        {
+            q = q.Where(u => u.State != null && db.UsStates.Any(s => s.Code == u.State && s.Region == region));
+        }
+
+        if (query.MinIntlStudents.HasValue)
+        {
+            q = q.Where(u => u.InternationalStudentCount != null && u.InternationalStudentCount >= query.MinIntlStudents.Value);
+        }
+
+        if (query.MaxIntlStudents.HasValue)
+        {
+            q = q.Where(u => u.InternationalStudentCount != null && u.InternationalStudentCount <= query.MaxIntlStudents.Value);
+        }
+
+        if (query.HasScholarship == true)
+        {
+            q = q.Where(u => db.Scholarships.Any(s => s.UniversityId == u.Id && s.IsActive));
         }
 
         if (!string.IsNullOrWhiteSpace(query.Control))
@@ -107,11 +128,6 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
         {
             q = q.Where(u => u.AcceptanceRate != null && u.AcceptanceRate <= 1 && u.AcceptanceRate <= query.MaxAcceptanceRate.Value);
         }
-
-        var generalListIds = await db.RankingLists.AsNoTracking()
-            .Where(l => l.ListGroup == RecommendationRepository.GeneralRankingGroup)
-            .Select(l => l.Id)
-            .ToListAsync(ct);
 
         if (query.MaxRank is > 0)
         {
@@ -210,6 +226,228 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                     .Join(db.Majors, link => link.MajorId, m => m.Id, (link, m) => m.Name)
                     .Any(name => EF.Functions.ILike(name, majorPattern))));
         }
+
+        if (query.MinLivingUsd.HasValue || query.MaxLivingUsd.HasValue)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.LivingUsd != null &&
+                (!query.MinLivingUsd.HasValue || o.LivingUsd >= query.MinLivingUsd.Value) &&
+                (!query.MaxLivingUsd.HasValue || o.LivingUsd <= query.MaxLivingUsd.Value)));
+        }
+
+        if (query.MaxApplicationFeeUsd.HasValue)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.ApplicationFeeUsd != null && o.ApplicationFeeUsd <= query.MaxApplicationFeeUsd.Value));
+        }
+
+        if (query.MinIntlAcceptanceRate.HasValue || query.MaxIntlAcceptanceRate.HasValue)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.IntlAcceptanceRate != null && o.IntlAcceptanceRate <= 1 &&
+                (!query.MinIntlAcceptanceRate.HasValue || o.IntlAcceptanceRate >= query.MinIntlAcceptanceRate.Value) &&
+                (!query.MaxIntlAcceptanceRate.HasValue || o.IntlAcceptanceRate <= query.MaxIntlAcceptanceRate.Value)));
+        }
+
+        if (query.MaxMinGpa4.HasValue)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.MinGpa4 != null && o.MinGpa4 <= query.MaxMinGpa4.Value));
+        }
+
+        if (query.MinAvgGpa4.HasValue || query.MaxAvgGpa4.HasValue)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.AvgGpa4 != null &&
+                (!query.MinAvgGpa4.HasValue || o.AvgGpa4 >= query.MinAvgGpa4.Value) &&
+                (!query.MaxAvgGpa4.HasValue || o.AvgGpa4 <= query.MaxAvgGpa4.Value)));
+        }
+
+        if (query.MinSat.HasValue || query.MaxSat.HasValue)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.Sat25 != null && o.Sat75 != null &&
+                (!query.MinSat.HasValue || (o.Sat25 + o.Sat75) / 2 >= query.MinSat.Value) &&
+                (!query.MaxSat.HasValue || (o.Sat25 + o.Sat75) / 2 <= query.MaxSat.Value)));
+        }
+
+        if (query.MinAct.HasValue || query.MaxAct.HasValue)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.Act25 != null && o.Act75 != null &&
+                (!query.MinAct.HasValue || (o.Act25 + o.Act75) / 2 >= query.MinAct.Value) &&
+                (!query.MaxAct.HasValue || (o.Act25 + o.Act75) / 2 <= query.MaxAct.Value)));
+        }
+
+        var satPolicy = query.SatPolicy?.Trim().ToLowerInvariant();
+        if (satPolicy is "required" or "optional" or "not_accepted")
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.SatPolicy == satPolicy));
+        }
+
+        var actPolicy = query.ActPolicy?.Trim().ToLowerInvariant();
+        if (actPolicy is "required" or "optional" or "not_accepted")
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.ActPolicy == actPolicy));
+        }
+
+        var deadlineRound = query.DeadlineRound?.Trim();
+        if (deadlineRound is "ED" or "EA" or "RD" or "RollingFinal")
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.DeadlinesJson != null && EF.Functions.JsonExists(o.DeadlinesJson, deadlineRound)));
+        }
+
+        var c7Test = query.C7TestImportance?.Trim().ToLowerInvariant();
+        if (c7Test is "very_important" or "important" or "considered" or "not_considered")
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.C7TestImportance == c7Test));
+        }
+
+        var c7Ec = query.C7EcImportance?.Trim().ToLowerInvariant();
+        if (c7Ec is "very_important" or "important" or "considered" or "not_considered")
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.C7EcImportance == c7Ec));
+        }
+
+        if (query.MinStudentFacultyRatio.HasValue || query.MaxStudentFacultyRatio.HasValue)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.StudentFacultyRatio != null &&
+                (!query.MinStudentFacultyRatio.HasValue || o.StudentFacultyRatio >= query.MinStudentFacultyRatio.Value) &&
+                (!query.MaxStudentFacultyRatio.HasValue || o.StudentFacultyRatio <= query.MaxStudentFacultyRatio.Value)));
+        }
+
+        if (query.MinRetentionRate.HasValue || query.MaxRetentionRate.HasValue)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.RetentionRate1Yr != null &&
+                (!query.MinRetentionRate.HasValue || o.RetentionRate1Yr >= query.MinRetentionRate.Value) &&
+                (!query.MaxRetentionRate.HasValue || o.RetentionRate1Yr <= query.MaxRetentionRate.Value)));
+        }
+
+        if (query.MinGradRate6Yr.HasValue || query.MaxGradRate6Yr.HasValue)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.GradRate6Yr != null &&
+                (!query.MinGradRate6Yr.HasValue || o.GradRate6Yr >= query.MinGradRate6Yr.Value) &&
+                (!query.MaxGradRate6Yr.HasValue || o.GradRate6Yr <= query.MaxGradRate6Yr.Value)));
+        }
+
+        var intlAidPolicy = query.IntlAidPolicy?.Trim().ToLowerInvariant();
+        if (intlAidPolicy is "need_and_merit" or "merit_only" or "need_only" or "none")
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.IntlAidPolicy == intlAidPolicy));
+        }
+
+        if (query.MinIntlAidAvgUsd.HasValue || query.MaxIntlAidAvgUsd.HasValue)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.IntlAidAvgUsd != null &&
+                (!query.MinIntlAidAvgUsd.HasValue || o.IntlAidAvgUsd >= query.MinIntlAidAvgUsd.Value) &&
+                (!query.MaxIntlAidAvgUsd.HasValue || o.IntlAidAvgUsd <= query.MaxIntlAidAvgUsd.Value)));
+        }
+
+        if (query.MinFyOnCampusPct.HasValue || query.MaxFyOnCampusPct.HasValue)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.FyOnCampusPct != null &&
+                (!query.MinFyOnCampusPct.HasValue || o.FyOnCampusPct >= query.MinFyOnCampusPct.Value) &&
+                (!query.MaxFyOnCampusPct.HasValue || o.FyOnCampusPct <= query.MaxFyOnCampusPct.Value)));
+        }
+
+        if (query.IntlHousing == true)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.IntlHousing == true));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.HousingType))
+        {
+            var housingPattern = $"%|{query.HousingType.Trim()}|%";
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.HousingTypes != null && EF.Functions.ILike("|" + o.HousingTypes + "|", housingPattern)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Activity))
+        {
+            var act = query.Activity.Trim();
+            if (string.Equals(act, "International Student Organization", StringComparison.OrdinalIgnoreCase))
+            {
+                q = q.Where(u => db.UniversityOfferings.Any(o =>
+                    o.UniversityId == u.Id &&
+                    (studyLevel == null || o.StudyLevel == studyLevel) &&
+                    o.Activities != null &&
+                    (EF.Functions.ILike("|" + o.Activities + "|", "%|International Student Organization|%") ||
+                     EF.Functions.ILike("|" + o.Activities + "|", "%|International student org.|%"))));
+            }
+            else
+            {
+                var actPattern = $"%|{act}|%";
+                q = q.Where(u => db.UniversityOfferings.Any(o =>
+                    o.UniversityId == u.Id &&
+                    (studyLevel == null || o.StudyLevel == studyLevel) &&
+                    o.Activities != null && EF.Functions.ILike("|" + o.Activities + "|", actPattern)));
+            }
+        }
+
+        return q;
+    }
+
+    public async Task<PagedResult<UniversityListItemDto>> SearchAsync(UniversitySearchQuery query, CancellationToken ct = default)
+    {
+        var studyLevel = query.StudyLevel;
+        var generalListIds = await db.RankingLists.AsNoTracking()
+            .Where(l => l.ListGroup == RecommendationRepository.GeneralRankingGroup)
+            .Select(l => l.Id)
+            .ToListAsync(ct);
+
+        var q = BuildSearchQuery(query, generalListIds);
 
         var total = await q.CountAsync(ct);
 
@@ -433,19 +671,75 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
             .Select(m => new UniversityFilterOptionItem(m.Name, m.NameVi ?? m.Name))
             .ToListAsync(ct);
 
-        var costs = await db.UniversityOfferings.AsNoTracking()
-            .Where(o => db.Universities.Any(u => u.Id == o.UniversityId && u.IsActive) && o.TuitionUsd != null)
+        var offeringStats = await db.UniversityOfferings.AsNoTracking()
+            .Where(o => db.Universities.Any(u => u.Id == o.UniversityId && u.IsActive) && o.StudyLevel == "undergraduate")
             .Select(o => new
             {
-                Tuition = o.TuitionUsd!.Value,
-                Total = o.TuitionUsd!.Value + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)
+                o.TuitionUsd,
+                o.LivingUsd,
+                o.FeesUsd,
+                o.OtherExpensesUsd,
+                o.Sat25,
+                o.Sat75,
+                o.Act25,
+                o.Act75,
+                o.StudentFacultyRatio,
+                o.IntlAidAvgUsd,
+                o.HousingTypes,
+                o.Activities,
             })
             .ToListAsync(ct);
 
-        var minTuition = costs.Count > 0 ? costs.Min(c => c.Tuition) : 0m;
-        var maxTuition = costs.Count > 0 ? costs.Max(c => c.Tuition) : 100000m;
-        var minTotal = costs.Count > 0 ? costs.Min(c => c.Total) : 0m;
-        var maxTotal = costs.Count > 0 ? costs.Max(c => c.Total) : 120000m;
+        var withTuition = offeringStats.Where(o => o.TuitionUsd != null).ToList();
+        var minTuition = withTuition.Count > 0 ? withTuition.Min(c => c.TuitionUsd!.Value) : 0m;
+        var maxTuition = withTuition.Count > 0 ? withTuition.Max(c => c.TuitionUsd!.Value) : 100000m;
+        var minTotal = withTuition.Count > 0
+            ? withTuition.Min(c => c.TuitionUsd!.Value + (c.LivingUsd ?? 0) + (c.FeesUsd ?? 0) + (c.OtherExpensesUsd ?? 0))
+            : 0m;
+        var maxTotal = withTuition.Count > 0
+            ? withTuition.Max(c => c.TuitionUsd!.Value + (c.LivingUsd ?? 0) + (c.FeesUsd ?? 0) + (c.OtherExpensesUsd ?? 0))
+            : 120000m;
+
+        var livingVals = offeringStats.Where(o => o.LivingUsd != null).Select(o => o.LivingUsd!.Value).ToList();
+        var satMids = offeringStats.Where(o => o.Sat25 != null && o.Sat75 != null).Select(o => (o.Sat25!.Value + o.Sat75!.Value) / 2).ToList();
+        var actMids = offeringStats.Where(o => o.Act25 != null && o.Act75 != null).Select(o => (o.Act25!.Value + o.Act75!.Value) / 2).ToList();
+        var ratioVals = offeringStats.Where(o => o.StudentFacultyRatio != null).Select(o => o.StudentFacultyRatio!.Value).ToList();
+        var intlCounts = await db.Universities.AsNoTracking()
+            .Where(u => u.IsActive && u.InternationalStudentCount != null)
+            .Select(u => u.InternationalStudentCount!.Value)
+            .ToListAsync(ct);
+
+        var ranges = new UniversityFilterRangesDto(
+            livingVals.Count > 0 ? livingVals.Min() : 0m,
+            livingVals.Count > 0 ? livingVals.Max() : 30000m,
+            satMids.Count > 0 ? satMids.Min() : 800,
+            satMids.Count > 0 ? satMids.Max() : 1600,
+            actMids.Count > 0 ? actMids.Min() : 15,
+            actMids.Count > 0 ? actMids.Max() : 36,
+            ratioVals.Count > 0 ? ratioVals.Min() : 5,
+            ratioVals.Count > 0 ? ratioVals.Max() : 30,
+            intlCounts.Count > 0 ? intlCounts.Min() : 0,
+            intlCounts.Count > 0 ? intlCounts.Max() : 8000,
+            100000m);
+
+        var housingTypes = offeringStats
+            .Where(o => !string.IsNullOrWhiteSpace(o.HousingTypes))
+            .SelectMany(o => o.HousingTypes!.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x)
+            .ToList();
+
+        var activities = offeringStats
+            .Where(o => !string.IsNullOrWhiteSpace(o.Activities))
+            .SelectMany(o => o.Activities!.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Select(a => string.Equals(a, "International student org.", StringComparison.OrdinalIgnoreCase)
+                ? "International Student Organization"
+                : string.Equals(a, "Pep Band", StringComparison.OrdinalIgnoreCase)
+                    ? "Pep band"
+                    : a)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x)
+            .ToList();
 
         var activeListIds = await db.UniversityRankings.AsNoTracking()
             .Where(r => db.Universities.Any(u => u.Id == r.UniversityId && u.IsActive))
@@ -474,7 +768,10 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
             maxTuition,
             minTotal,
             maxTotal,
-            rankingLists);
+            rankingLists,
+            ranges,
+            housingTypes,
+            activities);
     }
 }
 
