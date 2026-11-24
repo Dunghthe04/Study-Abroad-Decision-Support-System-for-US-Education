@@ -14,6 +14,7 @@ export type AdvisorProgressEvent = Exclude<AdvisorStreamEvent, { type: "final" |
 export async function streamAdvisorChat(
   body: unknown,
   onEvent: (event: AdvisorProgressEvent) => void,
+  signal?: AbortSignal,
 ): Promise<AdvisorChatResponse> {
   const res = await authFetch("/api/v1/advisor/chat/stream", {
     method: "POST",
@@ -21,6 +22,7 @@ export async function streamAdvisorChat(
     headers: { "Content-Type": "application/json" },
     cache: "no-store",
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!res.ok) {

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
-import { ArchiveIcon, CheckIcon, HistoryIcon, PencilIcon, SearchIcon, XIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import Image from "next/image";
+import { ArchiveIcon, CheckIcon, HomeIcon, MenuIcon, Minimize2Icon, PencilIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -20,25 +21,27 @@ interface Props {
   currentSessionId: string | null;
   /** Đang chờ câu trả lời: không cho đổi phiên (câu trả lời đang về có thể rơi nhầm sang phiên khác). */
   disabled?: boolean;
-  onSelect: (sessionId: string) => void;
+  onSelect: (sessionId: string, title?: string) => void;
+  /** Một phiên vừa bị đổi tên trong lịch sử. */
+  onRenamed?: (sessionId: string, title: string) => void;
   /** Một phiên vừa bị xóa khỏi lịch sử (nếu là phiên đang mở thì khung chat cần chuyển sang cuộc trò chuyện mới). */
   onDeleted: (sessionId: string) => void;
 }
 
-/**
- * Nút "Lịch sử" ở đầu khung chat: mở danh sách các cuộc trò chuyện cũ (mới trao đổi nhất trước), tìm theo tiêu đề, tải thêm khi cần.
- * Rê chuột (hoặc chuyển tiêu điểm) vào một dòng thì hiện hai nút: đổi tên và xóa (xóa mềm, có hỏi lại).
- * Mỗi lần mở đều tải lại trang đầu để phiên vừa chat hiện lên trên cùng. Chỉ hiện phiên có tin đã lưu và chưa xóa (backend lọc).
- */
-export function ChatHistoryPopover({ currentSessionId, disabled = false, onSelect, onDeleted }: Props) {
-  const [open, setOpen] = useState(false);
+function useHistoryList(
+  currentSessionId: string | null,
+  onSelect: (sessionId: string, title?: string) => void,
+  onRenamed: ((sessionId: string, title: string) => void) | undefined,
+  onDeleted: (sessionId: string) => void,
+  afterSelect?: () => void,
+) {
   const [items, setItems] = useState<ChatSessionSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  const load = async (cursor: string | null) => {
+  const load = useCallback(async (cursor: string | null) => {
     setLoading(true);
     setError(null);
     try {
@@ -55,15 +58,7 @@ export function ChatHistoryPopover({ currentSessionId, disabled = false, onSelec
     } finally {
       setLoading(false);
     }
-  };
-
-  const onOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (next) {
-      setSearch("");
-      void load(null);
-    }
-  };
+  }, []);
 
   // Tìm trong các phiên đã tải, không phân biệt dấu và chữ hoa
   const shown = useMemo(() => {
@@ -72,15 +67,113 @@ export function ChatHistoryPopover({ currentSessionId, disabled = false, onSelec
   }, [items, search]);
 
   const choose = (id: string) => {
-    setOpen(false);
-    if (id !== currentSessionId) onSelect(id);
+    afterSelect?.();
+    const title = items.find((s) => s.id === id)?.title;
+    if (id !== currentSessionId) onSelect(id, title);
   };
 
-  const renamed = (id: string, title: string) => setItems((current) => current.map((s) => (s.id === id ? { ...s, title } : s)));
+  const renamed = (id: string, title: string) => {
+    setItems((current) => current.map((s) => (s.id === id ? { ...s, title } : s)));
+    onRenamed?.(id, title);
+  };
 
   const deleted = (id: string) => {
     setItems((current) => current.filter((s) => s.id !== id));
     onDeleted(id);
+  };
+
+  return { items, shown, nextCursor, loading, error, search, setSearch, load, choose, renamed, deleted };
+}
+
+function HistoryListBody({
+  state,
+  currentSessionId,
+  listClassName,
+  hideSearch = false,
+  sectionLabel,
+}: {
+  state: ReturnType<typeof useHistoryList>;
+  currentSessionId: string | null;
+  listClassName?: string;
+  hideSearch?: boolean;
+  sectionLabel?: string;
+}) {
+  return (
+    <>
+      {!hideSearch && (
+        <div className="relative">
+          <SearchIcon aria-hidden className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-ink-3" />
+          <Input
+            value={state.search}
+            onChange={(event) => state.setSearch(event.target.value)}
+            placeholder="Tìm cuộc trò chuyện..."
+            aria-label="Tìm cuộc trò chuyện theo tiêu đề"
+            className="h-9 bg-surface pl-8"
+          />
+        </div>
+      )}
+
+      <div className={cn("overflow-y-auto", listClassName)} aria-busy={state.loading}>
+        {sectionLabel && (
+          <p className="px-2 pb-1.5 text-xs font-medium text-ink-3">{sectionLabel}</p>
+        )}
+        {state.error ? <p className="px-2 py-3 text-sm text-risk">{state.error}</p> : null}
+        {!state.error && state.items.length === 0 && state.loading ? (
+          <p className="px-2 py-3 text-sm text-ink-2">Đang tải...</p>
+        ) : null}
+        {!state.error && !state.loading && state.items.length === 0 ? (
+          <p className="px-2 py-3 text-sm text-ink-2">Chưa có cuộc trò chuyện nào được lưu.</p>
+        ) : null}
+        {state.items.length > 0 && state.shown.length === 0 ? (
+          <p className="px-2 py-3 text-sm text-ink-2">Không có cuộc trò chuyện nào khớp.</p>
+        ) : null}
+
+        <ul className="flex flex-col">
+          {state.shown.map((session) => (
+            <SessionRow
+              key={session.id}
+              session={session}
+              current={session.id === currentSessionId}
+              onOpen={() => state.choose(session.id)}
+              onRenamed={state.renamed}
+              onDeleted={state.deleted}
+            />
+          ))}
+        </ul>
+
+        {/* Tìm chỉ trong các phiên đã tải: còn trang sau thì cho tải thêm để tìm tiếp */}
+        {state.nextCursor && !state.error ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="mt-1 w-full"
+            disabled={state.loading}
+            onClick={() => void state.load(state.nextCursor)}
+          >
+            {state.loading ? "Đang tải..." : "Xem thêm cuộc trò chuyện cũ hơn"}
+          </Button>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Nút "Lịch sử" ở đầu khung chat: mở danh sách các cuộc trò chuyện cũ (mới trao đổi nhất trước), tìm theo tiêu đề, tải thêm khi cần.
+ * Rê chuột (hoặc chuyển tiêu điểm) vào một dòng thì hiện hai nút: đổi tên và xóa (xóa mềm, có hỏi lại).
+ * Mỗi lần mở đều tải lại trang đầu để phiên vừa chat hiện lên trên cùng. Chỉ hiện phiên có tin đã lưu và chưa xóa (backend lọc).
+ */
+export function ChatHistoryPopover({ currentSessionId, disabled = false, onSelect, onRenamed, onDeleted }: Props) {
+  const [open, setOpen] = useState(false);
+  const state = useHistoryList(currentSessionId, onSelect, onRenamed, onDeleted, () => setOpen(false));
+
+  const onOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (next) {
+      state.setSearch("");
+      void state.load(null);
+    }
   };
 
   return (
@@ -94,56 +187,126 @@ export function ChatHistoryPopover({ currentSessionId, disabled = false, onSelec
             size="icon"
             aria-label="Lịch sử trò chuyện"
             title={disabled ? "Đợi trợ lý trả lời xong rồi mở lịch sử" : "Lịch sử trò chuyện"}
-            className="size-9 rounded-full border-line text-ink-2 hover:border-brand/40 hover:bg-brand-wash hover:text-brand dark:hover:bg-brand-wash"
+            className="size-9 rounded-full border border-line bg-[var(--surface-2)] text-ink-2 hover:border-brand/40 hover:bg-brand-wash hover:text-brand dark:hover:bg-brand-wash"
           />
         }
       >
-        <HistoryIcon className="size-4.5" />
+        <MenuIcon className="size-4.5" />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] gap-2 p-2">
+        <HistoryListBody state={state} currentSessionId={currentSessionId} listClassName="max-h-80" />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Thanh bên lịch sử khi khung chat mở Toàn màn hình (có thể ẩn/hiện từ nút ≡). */
+export function ChatHistorySidebar({
+  open,
+  currentSessionId,
+  disabled = false,
+  onToggle,
+  onNewChat,
+  onShrink,
+  onGoHome,
+  onSelect,
+  onRenamed,
+  onDeleted,
+}: Props & {
+  open: boolean;
+  onToggle: () => void;
+  onNewChat: () => void;
+  onShrink: () => void;
+  onGoHome: () => void;
+}) {
+  const state = useHistoryList(currentSessionId, onSelect, onRenamed, onDeleted);
+
+  useEffect(() => {
+    if (open) void state.load(null);
+  }, [open, currentSessionId, state.load]);
+
+  return (
+    <div
+      aria-label="Lịch sử trò chuyện"
+      aria-hidden={!open}
+      inert={!open || undefined}
+      className={cn(
+        "hidden shrink-0 flex-col overflow-hidden border-r border-line bg-[var(--surface-2)] transition-[width,opacity,transform] duration-250 ease-out motion-reduce:transition-none min-[900px]:flex",
+        open ? "w-72 translate-x-0 opacity-100" : "w-0 -translate-x-4 border-r-0 opacity-0 pointer-events-none",
+      )}
+    >
+      <div className="flex w-72 min-h-0 flex-1 flex-col gap-3 p-3">
+        {/* Hàng đầu: Logo + Advisor bên trái, nút thu gọn thanh bên bên phải */}
+        <div className="flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-2.5">
+            <Image src="/icons/USDSS.png" alt="" width={28} height={28} className="size-7 shrink-0 object-contain" />
+            <span className="font-heading text-xl font-semibold text-ink">Advisor</span>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onToggle}
+            aria-label="Ẩn thanh lịch sử"
+            title="Ẩn thanh lịch sử"
+            className="size-9 shrink-0 rounded-full border border-line bg-surface text-ink-2 hover:border-brand/40 hover:bg-brand-wash hover:text-brand"
+          >
+            <MenuIcon className="size-4.5" />
+          </Button>
+        </div>
+
+        {/* Ô tìm kiếm đoạn chat */}
         <div className="relative">
-          <SearchIcon aria-hidden className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-ink-3" />
+          <SearchIcon aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-3" />
           <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Tìm cuộc trò chuyện..."
-            aria-label="Tìm cuộc trò chuyện theo tiêu đề"
-            className="h-9 pl-8"
+            value={state.search}
+            onChange={(event) => state.setSearch(event.target.value)}
+            placeholder="Tìm kiếm đoạn chat"
+            aria-label="Tìm kiếm đoạn chat"
+            className="h-9 rounded-full border-line bg-surface pl-9 text-sm"
           />
         </div>
 
-        <div className="max-h-80 overflow-y-auto" aria-busy={loading}>
-          {error ? <p className="px-2 py-3 text-sm text-risk">{error}</p> : null}
-          {!error && items.length === 0 && loading ? <p className="px-2 py-3 text-sm text-ink-2">Đang tải...</p> : null}
-          {!error && !loading && items.length === 0 ? (
-            <p className="px-2 py-3 text-sm text-ink-2">Chưa có cuộc trò chuyện nào được lưu.</p>
-          ) : null}
-          {items.length > 0 && shown.length === 0 ? (
-            <p className="px-2 py-3 text-sm text-ink-2">Không có cuộc trò chuyện nào khớp.</p>
-          ) : null}
+        {/* Cuộc trò chuyện mới: không nền, cỡ chữ lớn hơn */}
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onNewChat}
+          className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-left text-[15px] font-medium text-ink transition-colors hover:bg-ground disabled:cursor-default disabled:opacity-50"
+        >
+          <PlusIcon className="size-5 shrink-0 text-ink-2" />
+          <span>Cuộc trò chuyện mới</span>
+        </button>
 
-          <ul className="flex flex-col">
-            {shown.map((session) => (
-              <SessionRow
-                key={session.id}
-                session={session}
-                current={session.id === currentSessionId}
-                onOpen={() => choose(session.id)}
-                onRenamed={renamed}
-                onDeleted={deleted}
-              />
-            ))}
-          </ul>
+        <HistoryListBody
+          state={state}
+          currentSessionId={currentSessionId}
+          listClassName="min-h-0 flex-1"
+          hideSearch
+          sectionLabel="Gần đây"
+        />
 
-          {/* Tìm chỉ trong các phiên đã tải: còn trang sau thì cho tải thêm để tìm tiếp */}
-          {nextCursor && !error ? (
-            <Button type="button" variant="ghost" size="sm" className="mt-1 w-full" disabled={loading} onClick={() => void load(nextCursor)}>
-              {loading ? "Đang tải..." : "Xem thêm cuộc trò chuyện cũ hơn"}
-            </Button>
-          ) : null}
+        {/* Chân thanh bên: Thu nhỏ & Về màn hình chính */}
+        <div className="mt-auto flex flex-col gap-0.5 border-t border-line/70 pt-2">
+          <button
+            type="button"
+            onClick={onShrink}
+            className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm text-ink transition-colors hover:bg-ground"
+          >
+            <Minimize2Icon className="size-4 shrink-0 text-ink-2" />
+            <span>Thu nhỏ</span>
+          </button>
+          <button
+            type="button"
+            onClick={onGoHome}
+            className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm text-ink transition-colors hover:bg-ground"
+          >
+            <HomeIcon className="size-4 shrink-0 text-ink-2" />
+            <span>Về màn hình chính</span>
+          </button>
         </div>
-      </PopoverContent>
-    </Popover>
+      </div>
+    </div>
   );
 }
 
@@ -275,7 +438,7 @@ function SessionRow({ session, current, onOpen, onRenamed, onDeleted }: RowProps
         aria-current={current ? "true" : undefined}
         className={cn(
           "flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          current ? "font-semibold text-brand-ink" : "text-ink",
+          current ? "text-brand-ink" : "text-ink",
         )}
       >
         <span className="min-w-0 flex-1 truncate" title={session.title}>{session.title}</span>

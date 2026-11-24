@@ -60,9 +60,30 @@ export interface AssistantPageContext {
   simulation?: SimulationOverrides | null;
 }
 
+// ponytail: temporary debug hook for AI chat UI inspection, remove after polish
+export type DebugComposerMode = "auto" | "normal" | "needLogin" | "ageBlock";
+
+export type AssistantPanelMode = "compact" | "half" | "full" | "window";
+
+export interface AssistantDebugOverrides {
+  turns?: AssistantTurn[];
+  loading?: boolean;
+  streaming?: AssistantStreaming | null;
+  error?: AssistantError | null;
+  page?: Partial<AssistantPageContext>;
+  subscription?: SubscriptionSummaryDto | null;
+  openingSession?: boolean;
+  resumed?: boolean;
+  hasOlder?: boolean;
+  loadingOlder?: boolean;
+  composerMode?: DebugComposerMode;
+}
+
 interface AssistantContextValue {
   open: boolean;
   wide: boolean;
+  panelMode: AssistantPanelMode;
+  setPanelMode: (mode: AssistantPanelMode) => void;
   turns: AssistantTurn[];
   loading: boolean;
   /** Phần câu trả lời đã nhận khi đang chờ (null nếu chưa có gì); hết lượt thì bị câu cuối cùng thay */
@@ -77,6 +98,7 @@ interface AssistantContextValue {
   /** Gửi một câu kèm hành động có cấu trúc (mã trường): hiện câu trong khung chat, backend chạy thẳng không qua SLM */
   sendAction: (text: string, action: AssistantAction) => void;
   retry: () => void;
+  stop: () => void;
   setPageContext: (ctx: AssistantPageContext | null) => void;
   setBeforeSend: (fn: BeforeSend | null) => void;
   setOnProfileChanged: (fn: ProfileChanged | null) => void;
@@ -85,8 +107,11 @@ interface AssistantContextValue {
   // ---- lịch sử chat
   /** Phiên đang hiện trong khung (null: cuộc trò chuyện mới chưa gửi câu nào) */
   currentSessionId: string | null;
+  /** Tiêu đề phiên đang mở (nếu mở từ lịch sử hoặc vừa đổi tên) */
+  currentSessionTitle: string | null;
+  setCurrentSessionTitle: (title: string | null) => void;
   /** Mở lại một phiên cũ: nạp các tin mới nhất, gắn nút của câu hồ sơ đang chờ, gõ tiếp là tiếp tục đúng phiên đó */
-  openSession: (sessionId: string) => Promise<void>;
+  openSession: (sessionId: string, title?: string) => Promise<void>;
   /** Đang mở một phiên cũ (đang tải tin) */
   openingSession: boolean;
   /** Khung đang hiện một phiên mở lại từ lịch sử (để báo nút và bảng của tin cũ không hiện lại) */
@@ -96,6 +121,9 @@ interface AssistantContextValue {
   loadingOlder: boolean;
   /** Tải thêm các tin cũ hơn của phiên đang mở, chèn lên trên */
   loadOlder: () => Promise<void>;
+  /** Temporary UI debugger overrides */
+  debugOverrides: AssistantDebugOverrides | null;
+  setDebugOverrides: React.Dispatch<React.SetStateAction<AssistantDebugOverrides | null>>;
 }
 
 /** fromForm: câu do form gửi ngay sau khi lưu hồ sơ chính thức, advisor bỏ bảng xác nhận đang treo và trả lời luôn */
@@ -173,7 +201,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const { user, isLoading: authLoading } = useAuth();
   const userId = user?.id ?? null;
   const [open, setOpen] = useState(false);
-  const [wide, setWide] = useState(false);
+  const [panelMode, setPanelMode] = useState<AssistantPanelMode>("compact");
+  const wide = panelMode === "half" || panelMode === "full";
   const [turns, setTurns] = useState<AssistantTurn[]>([]);
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState<AssistantStreaming | null>(null);
@@ -181,10 +210,12 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const [registered, setRegistered] = useState<AssistantPageContext | null>(null);
   // Lịch sử chat: phiên đang hiện, con trỏ tải tin cũ hơn của phiên mở lại, cờ đang mở / đang tải
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [currentSessionTitle, setCurrentSessionTitle] = useState<string | null>(null);
   const [olderCursor, setOlderCursor] = useState<string | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [openingSession, setOpeningSession] = useState(false);
   const [resumed, setResumed] = useState(false);
+  const [debugOverrides, setDebugOverrides] = useState<AssistantDebugOverrides | null>(null);
   // Gói chỉ tải khi khung chat đang mở; replyCount tăng sau mỗi câu trả lời để tải lại phần trăm (thanh báo 80% / sắp hết hạn)
   const [replyCount, setReplyCount] = useState(0);
   const hasPlan = open && (user?.role === "student" || user?.role === "parent");
@@ -195,6 +226,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
 
   const turnsRef = useRef<AssistantTurn[]>([]);
   const loadingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
   const lastActionRef = useRef<AssistantAction | null>(null); // hành động của lượt gần nhất, để "Thử lại" gửi lại đúng như cũ
   const lastFromFormRef = useRef(false); // lượt gần nhất do form gửi sau khi lưu, "Thử lại" gửi lại kèm cờ này
   const restoredRef = useRef(false);
@@ -327,6 +359,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       loadingRef.current = true;
       setLoading(true);
       setError(null);
+      const controller = new AbortController();
+      abortRef.current = controller;
       try {
         // D1: lưu ngay nháp form đang chờ, để chat đọc đúng những gì học sinh vừa gõ.
         // Lưu lỗi vẫn gửi chat (form tự báo lỗi lưu của nó)
@@ -353,6 +387,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
                 text: cur?.text ? `${cur.text}\n\n${event.text}` : event.text,
               }));
           },
+          controller.signal,
         );
         if (!stillOwner() || !owner) return;
         if (res.sessionId) rememberSession(res.sessionId);
@@ -386,8 +421,10 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         // Điền hồ sơ trong chat: nhớ việc học sinh đã hỏi để mở form từ menu vẫn tích sẵn ô "Bạn muốn hệ thống làm gì?"
         if (res.formGoals?.length) rememberChatGoals(res.formGoals);
       } catch (err) {
+        if (controller.signal.aborted) return;
         if (stillOwner()) setError(toAssistantError(err));
       } finally {
+        if (abortRef.current === controller) abortRef.current = null;
         loadingRef.current = false;
         setLoading(false);
         setStreaming(null);
@@ -430,6 +467,15 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     void request(history, lastActionRef.current ?? undefined, lastFromFormRef.current);
   }, [request]);
 
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    loadingRef.current = false;
+    setLoading(false);
+    setStreaming(null);
+    setDebugOverrides((prev) => (prev ? { ...prev, loading: false, streaming: null } : prev));
+  }, []);
+
   const openPanel = useCallback(
     (question?: string, options?: SendOptions) => {
       restore();
@@ -443,6 +489,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     // Cuộc trò chuyện mới: quên phiên cũ để backend tạo phiên mới (bắt đầu lại từ B0)
     switchRef.current += 1;
     rememberSession(null);
+    setCurrentSessionTitle(null);
     lastActionRef.current = null;
     lastFromFormRef.current = false;
     setOlderCursor(null);
@@ -455,7 +502,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   // Trong lúc mở không cho gửi tin (loadingRef), để câu hỏi không rơi vào phiên cũ hay phiên mới giữa chừng.
   // Tin lưu trong database chỉ có chữ: nút và công cụ chỉ gắn lại cho tin cuối khi phiên đang chờ một câu hồ sơ
   const openSession = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, title?: string) => {
       const owner = userIdRef.current;
       if (!owner || loadingRef.current) return;
       const token = ++switchRef.current;
@@ -478,6 +525,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         lastActionRef.current = null;
         lastFromFormRef.current = false;
         rememberSession(sessionId);   // trước commitTurns: commitTurns đọc lại mã phiên từ storage
+        setCurrentSessionTitle(title ?? null);
         setOlderCursor(history.olderCursor);
         setResumed(true);
         commitTurns(next);
@@ -511,35 +559,46 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   }, [commitTurns, olderCursor, loadingOlder]);
 
   const value = useMemo<AssistantContextValue>(
-    () => ({
-      open,
-      wide,
-      turns,
-      loading,
-      streaming,
-      error,
-      page,
-      openPanel,
-      closePanel: () => setOpen(false),
-      toggleWide: () => setWide((w) => !w),
-      newChat,
-      send,
-      sendAction,
-      retry,
-      setPageContext: setRegistered,
-      setBeforeSend,
-      setOnProfileChanged,
-      subscription,
-      currentSessionId,
-      openSession,
-      openingSession,
-      resumed,
-      hasOlder: olderCursor !== null,
-      loadingOlder,
-      loadOlder,
-    }),
-    [open, wide, turns, loading, streaming, error, page, openPanel, newChat, send, sendAction, retry, setBeforeSend, setOnProfileChanged, subscription,
-      currentSessionId, openSession, openingSession, resumed, olderCursor, loadingOlder, loadOlder]
+    () => {
+      const d = debugOverrides;
+      const effectivePage: AssistantPageContext = d?.page ? { ...page, ...d.page } : page;
+      return {
+        open,
+        wide,
+        panelMode,
+        setPanelMode,
+        turns: d?.turns !== undefined ? d.turns : turns,
+        loading: d?.loading !== undefined ? d.loading : loading,
+        streaming: d?.streaming !== undefined ? d.streaming : streaming,
+        error: d?.error !== undefined ? d.error : error,
+        page: effectivePage,
+        openPanel,
+        closePanel: () => setOpen(false),
+        toggleWide: () => setPanelMode((m) => (m === "compact" ? "half" : "compact")),
+        newChat,
+        send,
+        sendAction,
+        retry,
+        stop,
+        setPageContext: setRegistered,
+        setBeforeSend,
+        setOnProfileChanged,
+        subscription: d?.subscription !== undefined ? d.subscription : subscription,
+        currentSessionId,
+        currentSessionTitle,
+        setCurrentSessionTitle,
+        openSession,
+        openingSession: d?.openingSession !== undefined ? d.openingSession : openingSession,
+        resumed: d?.resumed !== undefined ? d.resumed : resumed,
+        hasOlder: d?.hasOlder !== undefined ? d.hasOlder : olderCursor !== null,
+        loadingOlder: d?.loadingOlder !== undefined ? d.loadingOlder : loadingOlder,
+        loadOlder,
+        debugOverrides,
+        setDebugOverrides,
+      };
+    },
+    [open, wide, panelMode, turns, loading, streaming, error, page, openPanel, newChat, send, sendAction, retry, stop, setBeforeSend, setOnProfileChanged, subscription,
+      currentSessionId, currentSessionTitle, openSession, openingSession, resumed, olderCursor, loadingOlder, loadOlder, debugOverrides]
   );
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { SendIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BUDGET_RATE, DEFAULT_BUDGET_TIERS, FALLBACK_MAX_USD } from "@/lib/profile-flow-options";
@@ -42,7 +41,7 @@ function ExactBudgetInput({ data, onPick }: { data: Record<string, unknown>; onP
   };
 
   return (
-    <div className="mt-2.5 space-y-2 rounded-xl border border-line bg-surface p-2.5">
+    <div className="mt-3 space-y-2 rounded-xl border border-[var(--control-border)]/60 bg-[var(--surface-2)] p-3">
       <div className="flex items-center gap-2">
         <input
           inputMode="numeric"
@@ -73,9 +72,8 @@ function ExactBudgetInput({ data, onPick }: { data: Record<string, unknown>; onP
           type="button"
           disabled={!onPick || !valid}
           onClick={submit}
-          className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-full bg-brand px-3 text-xs font-semibold text-white transition-colors hover:bg-brand-ink disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-lg bg-brand px-3 text-xs font-semibold text-white transition-colors hover:bg-brand-ink disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <SendIcon className="size-3.5" />
           Gửi
         </button>
       </div>
@@ -105,7 +103,7 @@ function TierBudgetInput({ data, onPick }: { data?: Record<string, unknown> | nu
   };
 
   return (
-    <div className="mt-2.5 space-y-2 rounded-xl border border-line bg-surface p-2.5">
+    <div className="mt-3 space-y-2 rounded-xl border border-[var(--control-border)]/60 bg-[var(--surface-2)] p-3">
       <div className="flex items-center gap-2">
         <input
           inputMode="numeric"
@@ -117,7 +115,7 @@ function TierBudgetInput({ data, onPick }: { data?: Record<string, unknown> | nu
           onKeyDown={(e) => e.key === "Enter" && submit()}
           className="w-full min-w-0 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] text-foreground outline-none focus:border-brand disabled:cursor-not-allowed disabled:opacity-60"
         />
-        <div className="flex shrink-0 rounded-lg border border-line p-0.5 text-xs">
+        <div className="flex shrink-0 rounded-lg border border-line bg-surface p-0.5 text-xs">
           {(["vnd", "usd"] as const).map((c) => (
             <button
               key={c}
@@ -150,9 +148,8 @@ function TierBudgetInput({ data, onPick }: { data?: Record<string, unknown> | nu
           size="sm"
           disabled={!onPick || !tier}
           onClick={submit}
-          className="shrink-0 rounded-full bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-ink"
+          className="shrink-0 rounded-lg bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-ink"
         >
-          <SendIcon className="size-3.5" />
           Gửi
         </Button>
       </div>

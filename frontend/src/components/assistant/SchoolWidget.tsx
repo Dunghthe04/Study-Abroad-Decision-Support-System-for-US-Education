@@ -80,8 +80,8 @@ export function SchoolWidget({
       });
 
   return (
-    <div className="mt-2.5 overflow-hidden rounded-xl border border-line bg-surface">
-      <label htmlFor={inputId} className="flex items-center gap-2 border-b border-line px-3 py-2">
+    <div className="mt-3 overflow-hidden rounded-xl border border-[var(--control-border)]/60 bg-[var(--surface-2)]">
+      <label htmlFor={inputId} className="flex items-center gap-2 border-b border-line bg-surface px-3 py-2">
         <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
         <input
           id={inputId}
