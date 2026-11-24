@@ -22,6 +22,14 @@ public interface IChildAccountDeletionService
     /// </summary>
     Task<ParentLinkResult<ParentRestoreInfo>> RestoreAsync(
         string token, bool isGuardian, string? seenPolicyVersion, string? ipAddress, string? userAgent = null, CancellationToken ct = default);
+
+    /// <summary>[UC-111 3a] Rút đồng ý kèm xóa tài khoản con dưới 16 bằng link rút đồng ý trong email (không cần đăng nhập).</summary>
+    Task<ParentLinkResult<ParentRevokeInfo>> RevokeAndDeleteByTokenAsync(
+        string revokeToken, string? ipAddress, string? userAgent = null, CancellationToken ct = default);
+
+    /// <summary>[UC-75 1a] Phụ huynh đã đăng nhập rút đồng ý kèm xóa tài khoản con dưới 16 trong "Con của tôi".</summary>
+    Task<ParentLinkResult<ParentRevokeInfo>> RevokeAndDeleteAsync(
+        Guid parentUserId, Guid linkId, string? ipAddress, string? userAgent = null, CancellationToken ct = default);
 }
 
 public class ChildAccountDeletionService(
@@ -29,7 +37,9 @@ public class ChildAccountDeletionService(
     IParentLinkService parentLinks,
     IUnitOfWork unitOfWork,
     IAuditLogRepository auditLogs,
-    IEmailSender emailSender) : IChildAccountDeletionService
+    IEmailSender emailSender,
+    IParentLinkRepository links,
+    IParentRequestedDeletion deletion) : IChildAccountDeletionService
 {
     /// <summary>Action ghi audit khi người đại diện hủy yêu cầu xóa tài khoản của con.</summary>
     public const string RestoreAuditAction = "user.restore_by_parent";
@@ -39,6 +49,9 @@ public class ChildAccountDeletionService(
     private const string InvalidRestoreMessage = "Liên kết khôi phục không hợp lệ, đã được sử dụng hoặc đã hết hạn.";
     private const string GuardianRequiredMessage = "Vui lòng xác nhận bạn là cha, mẹ hoặc người giám hộ hợp pháp của học sinh.";
     private const string PolicyChangedMessage = "Nội dung đồng ý vừa được cập nhật. Vui lòng tải lại trang và đọc lại trước khi đồng ý.";
+    private const string LinkNotFoundMessage = "Liên kết không hợp lệ, đã được sử dụng hoặc không còn hiệu lực.";
+    private const string DeleteAgeMessage = "Con đã đủ 16 tuổi và tự quản lý tài khoản. Bạn chỉ rút được đồng ý, không xóa được tài khoản của con.";
+    private const string DeleteConflictMessage = "Thao tác vừa bị thay đổi bởi một yêu cầu khác. Vui lòng tải lại trang và thử lại.";
     private const string ReconsentAgeMessage = "Học sinh đã đủ 16 tuổi và tự quyết định việc đồng ý xử lý dữ liệu của mình. Bạn chỉ hủy được yêu cầu xóa bằng nút \"Chỉ hủy xóa\" trong email.";
 
     public async Task<ParentLinkResult<ParentRestoreInfo>> GetRestoreInfoAsync(string token, CancellationToken ct = default)
@@ -126,6 +139,64 @@ public class ChildAccountDeletionService(
             ? $"Đã hủy yêu cầu xóa và ghi nhận bạn đồng ý lại. Tài khoản của {student.FullName} đã được khôi phục."
             : $"Đã hủy yêu cầu xóa. Tài khoản của {student.FullName} đã được khôi phục; con tạm chưa dùng được các chức năng cần hồ sơ cho tới khi có người đại diện đồng ý.");
     }
+
+    public async Task<ParentLinkResult<ParentRevokeInfo>> RevokeAndDeleteByTokenAsync(
+        string revokeToken, string? ipAddress, string? userAgent = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(revokeToken) || revokeToken.Length > 128)
+            return RevokeFail(ParentLinkError.NotFound, LinkNotFoundMessage);
+
+        var link = await links.GetByRevokeTokenHashAsync(ParentInvite.HashToken(revokeToken), ct);
+        return await DeleteForLinkAsync(link, ipAddress, userAgent, ct);
+    }
+
+    public async Task<ParentLinkResult<ParentRevokeInfo>> RevokeAndDeleteAsync(
+        Guid parentUserId, Guid linkId, string? ipAddress, string? userAgent = null, CancellationToken ct = default)
+    {
+        var link = await links.GetByIdAsync(linkId, ct);
+        // Chỉ phụ huynh của đúng liên kết đang hiệu lực; liên kết của người khác báo như không tồn tại
+        if (link?.ParentUserId != parentUserId)
+            return RevokeFail(ParentLinkError.NotFound, LinkNotFoundMessage);
+
+        return await DeleteForLinkAsync(link, ipAddress, userAgent, ct);
+    }
+
+    /// <summary>
+    /// Kiểm liên kết đang hiệu lực và học sinh dưới 16 (chưa biết ngày sinh coi như dưới 16), rồi xóa mềm theo yêu cầu người đại diện.
+    /// Việc rút đồng ý của mọi liên kết, thu hồi yêu cầu liên hệ, ghi audit và gửi mail nằm trong lõi xóa (UC-80).
+    /// </summary>
+    private async Task<ParentLinkResult<ParentRevokeInfo>> DeleteForLinkAsync(
+        ParentStudentLink? link, string? ipAddress, string? userAgent, CancellationToken ct)
+    {
+        if (link is not { Status: ParentLinkStatuses.Active })
+            return RevokeFail(ParentLinkError.NotFound, LinkNotFoundMessage);
+
+        var student = await users.GetUserById(link.StudentUserId, ct);
+        if (student is not { Role: UserRoles.Student } || student.Status == UserStatuses.Deleted)
+            return RevokeFail(ParentLinkError.NotFound, LinkNotFoundMessage);
+        if (student.DateOfBirth is { } dob &&
+            AgePolicy.GetAge(dob, AgePolicy.TodayInVietnam(DateTime.UtcNow)) >= AgeGroups.ChildMaxAgeExclusive)
+            return RevokeFail(ParentLinkError.Forbidden, DeleteAgeMessage);
+
+        AuthResult result;
+        try
+        {
+            result = await deletion.DeleteChildAccountByParentAsync(
+                student.Id, new ParentDeletionRequester(link.ParentEmail, link.ParentUserId), ipAddress, userAgent, ct);
+        }
+        catch (ConcurrencyConflictException)
+        {
+            return RevokeFail(ParentLinkError.Conflict, DeleteConflictMessage);
+        }
+
+        if (result.Error != AuthError.None)
+            return RevokeFail(ParentLinkError.Validation, result.Message ?? LinkNotFoundMessage);
+
+        return ParentLinkResult<ParentRevokeInfo>.Ok(new ParentRevokeInfo(student.FullName, link.AcceptedAt), result.Message);
+    }
+
+    private static ParentLinkResult<ParentRevokeInfo> RevokeFail(ParentLinkError error, string message) =>
+        ParentLinkResult<ParentRevokeInfo>.Fail(error, message);
 
     /// <summary>
     /// Mã sai / đã dùng / hết hạn (hết hạn đúng ngày xóa hẳn) hoặc tài khoản không còn chờ xóa theo yêu cầu người đại diện

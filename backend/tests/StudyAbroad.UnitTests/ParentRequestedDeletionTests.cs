@@ -225,7 +225,7 @@ public class ParentRequestedDeletionTests
     // ===== [UC-75 4b] Người đại diện bấm nút trong mail để hủy yêu cầu xóa =====
 
     private ChildAccountDeletionService CreateRestoreService() =>
-        new(_repo, new ParentLinkService(_links, _repo, _emails, _auditLogs), new FakeUnitOfWork(), _auditLogs, _emails);
+        new(_repo, new ParentLinkService(_links, _repo, _emails, _auditLogs), new FakeUnitOfWork(), _auditLogs, _emails, _links, CreateService());
 
     /// <summary>Xóa theo yêu cầu phụ huynh rồi trả hai mã trong mail (đồng ý lại, chỉ hủy xóa).</summary>
     private async Task<(User Student, User Parent, string Reconsent, string RestoreOnly)> DeletedFamilyAsync(int studentAge = 14)
@@ -339,6 +339,57 @@ public class ParentRequestedDeletionTests
 
         Assert.Equal(ParentLinkError.NotFound, (await CreateRestoreService().GetRestoreInfoAsync(reconsent)).Error);
         Assert.Equal(ParentLinkError.NotFound, (await CreateRestoreService().RestoreAsync(restoreOnly, false, null, null)).Error);
+    }
+
+    // ===== [UC-111 3a / UC-75 1a] Rút đồng ý kèm xóa tài khoản con =====
+
+    [Fact]
+    public async Task RevokeAndDeleteByToken_DeletesChild_RevokesConsent_SendsRestoreButtons()
+    {
+        var (student, parent, link) = Family();
+        const string revokeToken = "ma-rut-dong-y";
+        link.RevokeTokenHash = ParentInvite.HashToken(revokeToken);
+
+        var result = await CreateRestoreService().RevokeAndDeleteByTokenAsync(revokeToken, "1.2.3.4");
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal(UserStatuses.Deleted, student.Status);
+        Assert.Equal(parent.Email, student.DeletionRequestedByEmail);
+        Assert.Equal(ParentLinkStatuses.Revoked, _links.Links.Single(l => l.Id == link.Id).Status);
+        Assert.False(await _links.HasGrantedConsentAsync(student.Id));
+        Assert.Contains(_emails.SentEmails, e => e.To == parent.Email && e.Purpose == "parent_child_deletion_confirmed");
+        // Link đã dùng thì hết tác dụng
+        Assert.Equal(ParentLinkError.NotFound, (await CreateRestoreService().RevokeAndDeleteByTokenAsync(revokeToken, null)).Error);
+    }
+
+    [Fact]
+    public async Task RevokeAndDeleteByToken_WrongToken_NotFound_Child16_Forbidden()
+    {
+        var (student, _, link) = Family(16);
+        link.RevokeTokenHash = ParentInvite.HashToken("ma");
+        var service = CreateRestoreService();
+
+        Assert.Equal(ParentLinkError.NotFound, (await service.RevokeAndDeleteByTokenAsync("sai", null)).Error);
+        Assert.Equal(ParentLinkError.Forbidden, (await service.RevokeAndDeleteByTokenAsync("ma", null)).Error);
+        Assert.Equal(UserStatuses.Active, student.Status);
+        Assert.Equal(ParentLinkStatuses.Active, link.Status);
+    }
+
+    [Fact]
+    public async Task RevokeAndDelete_LoggedInParent_OwnActiveLinkOnly()
+    {
+        var (student, parent, link) = Family();
+        var stranger = AddUser("stranger@test.com", UserRoles.Parent, 40);
+        var service = CreateRestoreService();
+
+        var byStranger = await service.RevokeAndDeleteAsync(stranger.Id, link.Id, null);
+        Assert.Equal(ParentLinkError.NotFound, byStranger.Error);
+        Assert.Equal(UserStatuses.Active, student.Status);
+
+        var byParent = await service.RevokeAndDeleteAsync(parent.Id, link.Id, null);
+        Assert.Equal(ParentLinkError.None, byParent.Error);
+        Assert.Equal(UserStatuses.Deleted, student.Status);
+        Assert.Equal(ParentLinkError.NotFound, (await service.RevokeAndDeleteAsync(parent.Id, link.Id, null)).Error);
     }
 
     [Fact]
