@@ -985,12 +985,9 @@ export function AssistantLauncher() {
         onClick={() => openPanel()}
         aria-label="Mở USDSS Advisor"
         title="USDSS Advisor"
-        className="fixed right-5 bottom-5 z-30 inline-flex cursor-pointer items-center gap-2 rounded-full bg-brand py-2 pr-4 pl-2.5 text-brand-foreground shadow-lg outline-none transition-colors hover:bg-brand-ink focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200 print:hidden"
+        className="fixed right-5 bottom-5 z-30 flex size-14 cursor-pointer items-center justify-center rounded-full border border-brand/25 bg-white shadow-[inset_0_0_14px_2px_color-mix(in_srgb,var(--brand)_28%,transparent)] outline-none transition-[border-color,box-shadow,transform] hover:border-brand/45 hover:shadow-[inset_0_0_16px_3px_color-mix(in_srgb,var(--brand)_36%,transparent)] focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200 print:hidden"
       >
-        <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white p-0.5">
-          <Image src="/icons/USDSS.png" alt="" width={24} height={24} className="size-6 object-contain" />
-        </span>
-        <span className="font-heading text-sm font-semibold">Advisor</span>
+        <Image src="/icons/USDSS.png" alt="" width={40} height={40} className="size-10 object-contain" />
       </button>
     );
   }
