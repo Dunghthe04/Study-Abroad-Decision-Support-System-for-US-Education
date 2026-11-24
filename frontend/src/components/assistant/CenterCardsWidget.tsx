@@ -103,7 +103,7 @@ export function CenterCardsWidget({
       {shown.length > 0 && (
         <ul className="mt-2 space-y-2">
           {shown.map((center) => (
-            <li key={center.id ?? center.name} className="rounded-xl border border-line bg-surface px-3 py-2.5">
+            <li key={center.id ?? center.name} className="rounded-xl border border-[var(--control-border)]/60 bg-[var(--surface-2)] px-3.5 py-2.5">
               <p className="text-[13px] font-bold text-foreground">
                 {center.name}
                 {center.city && <span className="font-normal text-ink-2"> · {center.city}</span>}

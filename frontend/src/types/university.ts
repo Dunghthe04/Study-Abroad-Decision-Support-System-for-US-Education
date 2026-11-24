@@ -128,6 +128,7 @@ export interface UniversityListItem {
   bestRank: number | null;
   bestRankList: string | null;
   satPolicy: string | null;
+  actPolicy: string | null;
   intlAidPolicy: string | null;
   majors: string[];
 }
@@ -137,30 +138,90 @@ export interface UniversityFilterOptionItem {
   label: string;
 }
 
+export interface UniversityFilterRanges {
+  minLivingUsd: number;
+  maxLivingUsd: number;
+  minSat: number;
+  maxSat: number;
+  minAct: number;
+  maxAct: number;
+  minStudentFacultyRatio: number;
+  maxStudentFacultyRatio: number;
+  minIntlStudents: number;
+  maxIntlStudents: number;
+  maxIntlAidAvgUsd: number;
+}
+
 export interface UniversityFilterOptions {
   states: UniversityFilterOptionItem[];
   controls: UniversityFilterOptionItem[];
-  majors: string[];
+  majors: UniversityFilterOptionItem[];
   minTuitionUsd: number;
   maxTuitionUsd: number;
   minTotalCostUsd: number;
   maxTotalCostUsd: number;
+  rankingLists: UniversityFilterOptionItem[];
+  ranges: UniversityFilterRanges;
+  housingTypes: string[];
+  activities: string[];
 }
 
 export interface UniversitySearchParams {
   search?: string;
   state?: string;
+  region?: string;
   control?: string;
   major?: string;
+  minTuitionUsd?: number;
   maxTuitionUsd?: number;
+  minTotalCostUsd?: number;
   maxTotalCostUsd?: number;
+  minLivingUsd?: number;
+  maxLivingUsd?: number;
+  maxApplicationFeeUsd?: number;
   maxMinIelts?: number;
   maxMinToefl?: number;
   maxMinDuolingo?: number;
+  maxMinGpa4?: number;
+  minAvgGpa4?: number;
+  maxAvgGpa4?: number;
+  minSat?: number;
+  maxSat?: number;
+  minAct?: number;
+  maxAct?: number;
+  satPolicy?: string;
+  actPolicy?: string;
+  deadlineRound?: string;
+  c7TestImportance?: string;
+  c7EcImportance?: string;
   minAcceptanceRate?: number;
   maxAcceptanceRate?: number;
+  minIntlAcceptanceRate?: number;
+  maxIntlAcceptanceRate?: number;
+  minStudentFacultyRatio?: number;
+  maxStudentFacultyRatio?: number;
+  minRetentionRate?: number;
+  maxRetentionRate?: number;
+  minGradRate6Yr?: number;
+  maxGradRate6Yr?: number;
+  minIntlStudents?: number;
+  maxIntlStudents?: number;
+  intlAidPolicy?: string;
+  minIntlAidAvgUsd?: number;
+  maxIntlAidAvgUsd?: number;
+  minFyOnCampusPct?: number;
+  maxFyOnCampusPct?: number;
+  housingType?: string;
+  activity?: string;
   isIvy?: boolean;
+  testOptional?: boolean;
+  hasIntlAid?: boolean;
+  hasScholarship?: boolean;
+  intlHousing?: boolean;
+  campusSetting?: string;
+  maxRank?: number;
   sortBy?: string;
+  rankListId?: string;
   studyLevel?: string;
   page?: number;
   pageSize?: number;

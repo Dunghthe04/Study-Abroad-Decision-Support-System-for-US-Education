@@ -14,13 +14,11 @@ import {
   Trash2Icon,
   UploadCloudIcon,
   Edit3Icon,
-  SparklesIcon,
   TrendingUpIcon,
   TrendingDownIcon,
   XIcon,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,8 +29,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RequiredMark } from "./RequiredMark";
+import { StepHeader, StepNav } from "./StepChrome";
+import {
+  ActionList,
+  ActionRow,
+  AddRow,
+  ChoiceCards,
+  ChoicePicker,
+  DATA_TABLE,
+  Field,
+  FieldError,
+  FormBody,
+  FormGroup,
+  FormSection,
+  GroupResult,
+  GroupTabs,
+  INLINE_INPUT,
+  SegmentedControl,
+} from "./FormKit";
 import { cn } from "@/lib/utils";
 import { GpaConversionNote } from "./GpaConversionNote";
 import { useGradeScale } from "@/hooks/use-grade-scale";
@@ -71,12 +85,8 @@ export const TRANSCRIPT_ACCEPT = TRANSCRIPT_EXTENSIONS.join(",");
 export const TRANSCRIPT_MAX_BYTES = 10 * 1024 * 1024;
 
 const GPA_MODE_OPTIONS: { value: GpaMode; label: string; description: string }[] = [
-  { value: "overall", label: "Nhập GPA tổng", description: "Đã biết điểm trung bình chung, chỉ cần gõ một số." },
-  {
-    value: "transcript",
-    label: "Tải học bạ hoặc nhập từng môn",
-    description: "Hệ thống tự tính GPA từ điểm các môn.",
-  },
+  { value: "overall", label: "Nhập GPA tổng", description: "Nhập điểm trung bình chung, đơn giản hơn" },
+  { value: "transcript", label: "Nhập từng môn", description: "Chi tiết hơn, hệ thống tự tính GPA" },
 ];
 
 // Dải điểm ước tính chuẩn cho học sinh Việt Nam và Quốc tế (áp dụng khi học sinh chưa rõ GPA)
@@ -477,7 +487,7 @@ export function Step2Transcript({
   const fileInputId = useId();
   const overallInputId = useId();
 
-  const gpaModeOptions = useMemo(() => {
+  const gpaModeOptions = useMemo<{ value: GpaMode; label: string; description: string }[]>(() => {
     if (isMiddleSchoolEarly) {
       return [
         {
@@ -1308,7 +1318,7 @@ export function Step2Transcript({
       if (isOngoingCurrentGrade) {
         if (!hasSem1 && !hasSem2) {
           setValidationError(
-            `Bạn đang để trống điểm của ${y.gradeName}. Nếu bạn chưa học xong hoặc chưa có điểm năm nay, vui lòng bấm nút xóa (biểu tượng thùng rác/x) trên tab ${y.gradeName} để tiếp tục với điểm các năm trước.`
+            `Bạn đang để trống điểm của ${y.gradeName}. Nếu bạn chưa học xong hoặc chưa có điểm năm nay, vui lòng bấm “Xóa khối này” dưới bảng điểm ${y.gradeName} để tiếp tục với điểm các năm trước.`
           );
           setShowManualTable(true);
           setActiveYearIndex(idx);
@@ -1355,87 +1365,79 @@ export function Step2Transcript({
     onNext();
   };
 
-  return (
-    <div className="space-y-8 animate-in fade-in-50 duration-200">
-      {/* Step Header */}
-      <div className="space-y-2 border-b border-line pb-4">
-        <div className="text-xs font-semibold text-brand">
-          Bước 2/6 · khoảng 1 phút
-        </div>
-        <h1 className="text-h1 text-foreground">
-          Bảng điểm của bạn
-        </h1>
-        <p className="text-body text-muted-foreground">
-          Đã biết GPA thì gõ thẳng. Chưa biết thì tải bảng điểm lên để hệ thống tự tính.
-        </p>
-      </div>
+  // Các dòng thao tác dưới bảng điểm (xóa / thêm lại khối lớp), chỉ để dựng giao diện
+  const activeYear = years[activeYearIndex];
+  const activeIsCurrent = Boolean(
+    activeYear && maxAllowedGradeName && normalizeGrade(activeYear.gradeName) === normalizeGrade(maxAllowedGradeName)
+  );
+  const canAddCurrentYear = Boolean(
+    maxAllowedGradeName && !years.some((y) => normalizeGrade(y.gradeName) === normalizeGrade(maxAllowedGradeName))
+  );
+  const canAddGrade9 = !years.some((y) => normalizeGrade(y.gradeName) === "lop 9") && !isGrade9;
+  const hasYearActions = activeIsCurrent || canAddCurrentYear || canAddGrade9;
+  const estimatorPresets = overallScale === "10" ? ESTIMATOR_PRESETS_10 : ESTIMATOR_PRESETS_4;
+  const overallLabel = isMiddleSchoolEarly ? "GPA mục tiêu" : "GPA tổng";
 
-      {/* Hai cách nhập GPA: GPA tổng hoặc học bạ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-label="Cách nhập GPA">
-        {gpaModeOptions.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            role="radio"
-            aria-checked={mode === opt.value}
-            onClick={() => handleModeChange(opt.value)}
-            className={cn(
-              "rounded-xl border p-4 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-              mode === opt.value
-                ? "border-brand bg-brand-wash/40 ring-1 ring-brand"
-                : "border-line bg-surface hover:border-brand/50"
-            )}
-          >
-            <div className="font-semibold text-sm text-foreground">{opt.label}</div>
-            <div className="text-xs text-muted-foreground mt-0.5">{opt.description}</div>
-          </button>
-        ))}
-      </div>
-
-      {/* Hidden file input */}
-      <input
-        id={fileInputId}
-        type="file"
-        accept={TRANSCRIPT_ACCEPT}
-        className="hidden"
-        onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
+  const modeTabs = (
+    <GroupTabs options={gpaModeOptions} value={mode} onChange={handleModeChange} ariaLabel="Cách nhập GPA" />
+  );
+  // Số GPA hiện tại: GPA tổng thang 4 thì chưa có số thang 10; nhập từng môn thì lấy số hệ thống đã tính
+  const shownGpa10 = mode === "overall" ? (overallScale === "10" ? overallValue : null) : gpa10;
+  const shownGpa4 =
+    mode === "overall"
+      ? overallScale === "10"
+        ? overallValue != null
+          ? toGpa4(overallValue)
+          : null
+        : overallValue
+      : gpa4;
+  const fmtGpa = (v: number | null | undefined) => (v != null ? v.toFixed(2) : "—");
+  const gpaFooter = (
+    <div className="space-y-3">
+      <GroupResult
+        label={isMiddleSchoolEarly ? "GPA mục tiêu của bạn là" : "Điểm trung bình của bạn là"}
+        items={[
+          { label: "Thang 10", value: fmtGpa(shownGpa10) },
+          { label: "Quy đổi thang 4", value: fmtGpa(shownGpa4) },
+        ]}
       />
+      {mode !== "overall" && shownGpa4 !== null && <GpaConversionNote />}
+    </div>
+  );
 
-      {mode === "overall" ? (
-        <div className="rounded-xl border border-line bg-surface p-5 space-y-4">
-          <div>
-            <div className="font-semibold text-sm text-foreground">
-              {isMiddleSchoolEarly ? "GPA mục tiêu chung của bạn" : "GPA tổng của bạn"}
-            </div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              {isMiddleSchoolEarly
-                ? "Điểm trung bình kỳ vọng chung cho bậc THPT. Nhớ chọn đúng thang điểm."
-                : "Điểm trung bình chung trên học bạ hoặc bảng điểm. Nhớ chọn đúng thang điểm."}
-            </div>
-          </div>
-          <div className="flex flex-col sm:flex-row sm:items-end gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-foreground">Thang điểm</Label>
-              <div className="flex gap-2">
-                {(["10", "4"] as const).map((scale) => (
-                  <Button
-                    key={scale}
-                    type="button"
-                    size="sm"
-                    variant={overallScale === scale ? "default" : "outline"}
-                    onClick={() => handleOverallScaleChange(scale)}
-                  >
-                    Thang {scale}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={overallInputId} className="text-xs font-semibold text-foreground">
-                {isMiddleSchoolEarly ? "GPA mục tiêu" : "GPA tổng"} (0–{overallScale}) <RequiredMark />
-              </Label>
+  return (
+    <>
+      <StepHeader title="Bảng điểm của bạn" />
+      <FormBody>
+        {mode === "overall" ? (
+          <FormGroup title={overallLabel} tabs={modeTabs} footer={gpaFooter}>
+            <FormSection title="Thang điểm">
+              <ChoicePicker
+                ariaLabel="Thang điểm"
+                fill
+                options={[
+                  { value: "10", label: "Thang 10" },
+                  { value: "4", label: "Thang 4" },
+                ]}
+                value={overallScale}
+                onChange={(v) => v && handleOverallScaleChange(v as GpaScale)}
+              />
+            </FormSection>
+
+            <FormSection
+              title={`${overallLabel} (0–${overallScale})`}
+              required
+              description={
+                isMiddleSchoolEarly
+                  ? "Điểm trung bình kỳ vọng chung cho bậc THPT."
+                  : "Điểm trung bình chung trên học bạ hoặc bảng điểm."
+              }
+              aside={overallScale === "10" ? <GpaConversionNote /> : undefined}
+              error={validationError}
+            >
               <Input
                 id={overallInputId}
+                aria-label={`${overallLabel} (0–${overallScale})`}
                 type="number"
                 inputMode="decimal"
                 min={0}
@@ -1445,861 +1447,76 @@ export function Step2Transcript({
                 value={overallValue ?? ""}
                 onChange={(e) => handleOverallChange(e.target.value)}
                 aria-invalid={Boolean(validationError) || undefined}
-                className="w-40 bg-surface"
+                className="h-10 w-full"
               />
-            </div>
-            {overallScale === "10" && (
-              <div className="text-xs text-muted-foreground sm:pb-2.5">
-                Quy đổi thang 4:{" "}
-                <strong className="text-brand">
-                  {data.manualGpa10Scale != null ? toGpa4(data.manualGpa10Scale).toFixed(2) : "—"}
-                </strong>
-              </div>
-            )}
-          </div>
-          {/* Hiện ngay khi chọn thang 10 (cùng lúc với dòng "Quy đổi thang 4"), không đợi gõ số */}
-          {overallScale === "10" && <GpaConversionNote />}
+            </FormSection>
 
-          {/* Nút bật/tắt bảng ước tính GPA ("Tôi chưa rõ GPA") */}
-          <div className="pt-2 border-t border-line/60">
-            <button
-              type="button"
-              onClick={() => setShowEstimator((v) => !v)}
-              className="rounded text-xs text-brand font-medium hover:underline cursor-pointer flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
+            <FormSection
+              title="Chưa rõ GPA?"
+              description="Chọn mức gần đúng nhất, hệ thống sẽ điền giúp bạn."
+              open={showEstimator}
+              onToggle={() => setShowEstimator((v) => !v)}
             >
-              <SparklesIcon className="size-3.5" />
-              {showEstimator ? "Thu gọn bảng ước tính" : "Tôi chưa rõ GPA (Ước tính giúp tôi)"}
-            </button>
-            {showEstimator && (
-              <div className="mt-3 rounded-xl border border-brand/20 bg-brand-wash/20 p-4 space-y-3 animate-in fade-in-50">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-foreground">
-                    Chọn mức học lực tương ứng để tự động điền GPA trung bình:
-                  </span>
-                  <Badge variant="outline" className="text-xs text-muted-foreground">
-                    Thang {overallScale}
-                  </Badge>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                  {(overallScale === "10" ? ESTIMATOR_PRESETS_10 : ESTIMATOR_PRESETS_4).map((preset) => (
-                    <button
-                      key={preset.range}
-                      type="button"
-                      onClick={() => handleOverallChange(String(preset.midpoint))}
-                      className="flex flex-col items-start p-3 rounded-lg border border-line bg-surface hover:border-brand hover:bg-brand-wash/40 text-left transition-all cursor-pointer group focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
-                    >
-                      <div className="flex items-center justify-between w-full">
-                        <span className="text-xs font-bold text-foreground group-hover:text-brand">
-                          {preset.label}
-                        </span>
-                        <Badge variant="secondary" className="text-xs font-semibold px-1.5 py-0">
-                          {preset.range}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1 leading-snug">
-                        {preset.desc}
-                      </p>
-                      <span className="text-xs font-semibold text-brand mt-2 group-hover:underline">
-                        → Điền ngay: {preset.midpoint}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {validationError && <p className="text-xs font-medium text-destructive">{validationError}</p>}
-        </div>
-      ) : isMiddleSchoolEarly ? (
-        <div className="space-y-6">
-          {/* Lộ trình mục tiêu 4 năm cho học sinh THCS (Lớp 8 trở xuống hoặc Lớp 9 chưa có điểm) */}
-          <div className="space-y-4">
-            {isGrade9 && isGrade9EarlyRoadmap && (
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 rounded-xl bg-brand-wash/60 border border-brand/30 text-xs text-foreground animate-in fade-in-50">
-                <div className="flex items-center gap-2">
-                  <SparklesIcon className="size-4 text-brand shrink-0" />
-                  <span>
-                    Bạn đang ở chế độ <strong>Lộ trình mục tiêu 4 năm</strong> (như Lớp 8) do chưa có điểm học bạ Lớp 9.
-                  </span>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={handleSwitchToGrade9Transcript}
-                  className="text-xs font-semibold bg-surface border-brand/50 text-brand hover:bg-brand hover:text-white shrink-0"
-                >
-                  + Quay lại nhập bảng điểm Lớp 9
-                </Button>
-              </div>
-            )}
-
-            <div className="rounded-xl border border-brand/30 bg-brand-wash/30 p-4 space-y-1">
-              <div className="flex items-center gap-2">
-                <SparklesIcon className="size-4 text-brand" />
-                <span className="text-sm font-semibold text-foreground">
-                  Thiết lập điểm mục tiêu 4 năm cấp 3 (Lớp 9 – 12)
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Hệ thống tuyển sinh đại học Mỹ tính điểm từ Lớp 9 đến Lớp 12. Vì bạn đang ở bậc THCS ({currentGrade || "Lớp 6–8"}), 
-                hãy nhập mức GPA mục tiêu thang 10 bạn kỳ vọng đạt được cho từng năm để hệ thống phân tích xu hướng học tập và đề xuất trường phù hợp.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {years.map((y, yIdx) => {
-                const targetScore = getYearTargetScore(y);
-                const usYearName = yIdx === 0 ? "Freshman" : yIdx === 1 ? "Sophomore" : yIdx === 2 ? "Junior" : "Senior";
-                return (
-                  <div
-                    key={y.gradeName}
-                    className="rounded-xl border border-line bg-surface p-4 space-y-3 hover:border-brand/40 transition-all"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm text-foreground">{y.gradeName}</span>
-                      <Badge variant="outline" className="text-xs text-muted-foreground">
-                        {usYearName}
-                      </Badge>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Điểm mục tiêu (0–10) <RequiredMark /></Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={10}
-                        step={0.1}
-                        placeholder="VD: 8.5"
-                        value={targetScore ?? ""}
-                        onChange={(e) => handleYearTargetChange(yIdx, e.target.value)}
-                        className="text-sm font-bold text-foreground"
-                      />
-                    </div>
-
-                    <div className="space-y-1 pt-1 border-t border-line/60">
-                      <span className="text-xs text-muted-foreground block">Chọn nhanh:</span>
-                      <div className="flex flex-wrap gap-1">
-                        {[8.0, 8.5, 9.0, 9.5].map((presetScore) => (
-                          <button
-                            key={presetScore}
-                            type="button"
-                            onClick={() => handleYearTargetChange(yIdx, String(presetScore))}
-                            className={cn(
-                              "text-xs font-semibold px-2 py-0.5 rounded border transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                              targetScore === presetScore
-                                ? "bg-brand text-white border-brand"
-                                : "bg-muted/40 hover:bg-brand-wash border-line text-muted-foreground hover:text-brand"
-                            )}
-                          >
-                            {presetScore.toFixed(1)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Lỗi kiểm tra */}
-          {validationError && (
-            <div className="rounded-xl bg-destructive/10 p-3 text-xs text-destructive font-medium border border-destructive/20 leading-relaxed">
-              {validationError}
-            </div>
-          )}
-
-          {/* Dynamic GPA Calculation Card & Grade Trend */}
-          <div className="space-y-3">
-            <div className="rounded-xl border border-brand/30 bg-brand-wash/30 p-4 ">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
-                    <span>GPA mục tiêu tổng 4 năm</span>
-                    <Badge variant="outline" className="text-xs border-brand/40 text-brand">
-                      Quy đổi tham khảo
-                    </Badge>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    Điểm trung bình cộng mục tiêu từ Lớp 9 đến Lớp 12.
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <div className="text-xs text-muted-foreground">Thang điểm 10</div>
-                    <div className="text-lg font-bold text-foreground">
-                      {gpa10 !== null ? gpa10.toFixed(2) : "—"}
-                    </div>
-                  </div>
-                  <div className="h-8 w-px bg-line" />
-                  <div className="text-right">
-                    <div className="text-xs text-brand font-semibold">Quy đổi thang 4</div>
-                    <div className="text-2xl font-extrabold text-brand">
-                      {gpa4 !== null ? gpa4.toFixed(2) : "—"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {gpa4 !== null && <GpaConversionNote className="mt-3" />}
-            </div>
-
-            {/* Grade Trend Card */}
-            {gradeTrend.hasEnoughData && (
-              <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3.5 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    {gradeTrend.trend === "downward" ? (
-                      <TrendingDownIcon className="size-4 text-amber-500" />
-                    ) : (
-                      <TrendingUpIcon className="size-4 text-emerald-600" />
-                    )}
-                    <span className="text-xs font-bold text-foreground">
-                      Kỳ vọng xu hướng điểm số (Grade Trend)
-                    </span>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-xs font-semibold",
-                      gradeTrend.trend === "strong_upward" || gradeTrend.trend === "slight_upward"
-                        ? "border-emerald-500 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30"
-                        : gradeTrend.trend === "downward"
-                        ? "border-amber-500 text-amber-600 bg-amber-50 dark:bg-amber-950/30"
-                        : "border-slate-300 text-muted-foreground"
-                    )}
-                  >
-                    {gradeTrend.trend === "strong_upward" && "Tiến bộ vượt trội (+Upward)"}
-                    {gradeTrend.trend === "slight_upward" && "Tiến bộ tích cực (+Upward)"}
-                    {gradeTrend.trend === "stable" && "Phong độ ổn định"}
-                    {gradeTrend.trend === "downward" && "Cần chú ý phục hồi"}
-                  </Badge>
-                </div>
-
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {gradeTrend.summaryMessage}
-                </p>
-
-                <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                  {gradeTrend.yearlyAverages.map((y, idx) => (
-                    <div
-                      key={y.gradeName}
-                      className="flex items-center gap-1.5 text-xs bg-surface border border-line rounded-lg px-2.5 py-1 "
-                    >
-                      <span className="font-medium text-foreground">{y.gradeName}:</span>
-                      <span className="font-bold text-brand">{y.gpa10.toFixed(2)}</span>
-                      <span className="text-xs text-muted-foreground">({y.gpa4.toFixed(2)}/4.0)</span>
-                      {idx < gradeTrend.yearlyAverages.length - 1 && (
-                        <span className="text-muted-foreground font-semibold ml-1">→</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <>
-      {/* OCR Warnings if any */}
-      {ocrWarnings.length > 0 && (
-        <Alert className="border-warn/40 bg-warn-wash/40">
-          <AlertTriangleIcon className="size-4 text-warn" />
-          <AlertTitle className="text-sm font-semibold text-warn">Lưu ý khi đọc bảng điểm</AlertTitle>
-          <AlertDescription className="text-xs text-muted-foreground space-y-1">
-            {ocrWarnings.map((w, idx) => (
-              <div key={idx}>• {w}</div>
-            ))}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* OCR Success notice */}
-      {ocrSuccessNotice && (
-        <Alert className="border-brand/40 bg-brand-wash/40">
-          <CheckCircle2Icon className="size-4 text-brand" />
-          <AlertTitle className="text-sm font-semibold text-brand">Đã trích xuất điểm thành công</AlertTitle>
-          <AlertDescription className="text-xs text-brand-ink">{ocrSuccessNotice}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* OCR Failure & Re-upload or Manual Entry Card */}
-      {ocrFailedNotice && (
-        <div className="rounded-2xl border-2 border-warn/60 bg-warn-wash/30 p-5 space-y-3 animate-in fade-in-50">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-xl bg-warn-wash text-warn shrink-0">
-              <AlertTriangleIcon className="size-5" />
-            </div>
-            <div className="space-y-1">
-              <div className="font-semibold text-sm text-foreground">
-                Chưa nhận diện được dữ liệu từ bảng điểm
-              </div>
-              <div className="text-xs text-muted-foreground leading-relaxed">
-                {ocrFailedNotice}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-warn/20">
-            <Button
-              type="button"
-              size="sm"
-              onClick={triggerFileInput}
-              className="gap-1.5 bg-brand hover:bg-brand-ink text-xs font-semibold text-white"
+              <ChoiceCards
+                ariaLabel="Mức học lực"
+                options={estimatorPresets.map((p) => ({
+                  value: p.range,
+                  label: `${p.label} (${p.range})`,
+                  description: p.desc,
+                }))}
+                value={estimatorPresets.find((p) => p.midpoint === overallValue)?.range ?? null}
+                onChange={(range) => {
+                  const preset = estimatorPresets.find((p) => p.range === range);
+                  if (preset) handleOverallChange(String(preset.midpoint));
+                }}
+              />
+            </FormSection>
+          </FormGroup>
+        ) : isMiddleSchoolEarly ? (
+          <>
+            {/* Lộ trình mục tiêu 4 năm cho học sinh THCS (Lớp 8 trở xuống hoặc Lớp 9 chưa có điểm) */}
+            <FormGroup title="Điểm mục tiêu" tabs={modeTabs} footer={gpaFooter}>
+            <FormSection
+              title="Điểm mục tiêu 4 năm cấp 3"
+              required
+              wide
+              description={
+                isGrade9 && isGrade9EarlyRoadmap
+                  ? "Bạn chưa có điểm Lớp 9 nên đặt mục tiêu cho cả 4 năm. Nhập GPA thang 10 bạn muốn đạt mỗi năm."
+                  : "Đại học Mỹ xét điểm từ Lớp 9 đến Lớp 12. Nhập GPA thang 10 bạn muốn đạt mỗi năm."
+              }
+              error={validationError}
             >
-              <RefreshCwIcon className="size-3.5" />
-              Chọn ảnh / tệp khác rõ nét hơn
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setShowManualTable(true);
-                setOcrFailedNotice(null);
-              }}
-              className="gap-1.5 text-xs font-semibold"
-            >
-              <Edit3Icon className="size-3.5" />
-              Chuyển sang điền điểm bằng tay
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* 1. Vùng Upload bảng điểm (Luôn nằm ngay trên bảng điểm) */}
-      <div className="space-y-3">
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragOver(false);
-            if (e.dataTransfer.files) handleFileUpload(e.dataTransfer.files);
-          }}
-          className={cn(
-            "flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 sm:p-7 text-center transition-all",
-            dragOver
-              ? "border-brand bg-brand-wash/30 scale-[1.01]"
-              : "border-line bg-surface hover:border-brand/50 hover:bg-muted/10",
-            isUploading && "border-brand bg-brand-wash/20"
-          )}
-        >
-          {isUploading ? (
-            <div className="py-2 space-y-3 flex flex-col items-center">
-              <Loader2Icon className="size-9 animate-spin text-brand" />
-              <div className="space-y-1">
-                <div className="font-semibold text-sm text-foreground">
-                  Đang phân tích bảng điểm bằng Ollama AI...
-                </div>
-                <div className="text-xs text-muted-foreground max-w-md">
-                  Mô hình thị giác đang đọc các cột môn học và bóc tách điểm số. Vui lòng đợi trong giây lát...
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 w-full">
-              <div className="flex items-center gap-3 text-left">
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-wash text-brand">
-                  <UploadCloudIcon className="size-6" />
-                </div>
-                <div>
-                  <div className="font-semibold text-sm text-foreground">
-                    {draftTranscript ? "Đã đọc xong bảng điểm của bạn" : "Tải học bạ lên để tự điền bảng dưới"}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {draftTranscript
-                      ? "Kiểm tra lại điểm ở bảng dưới, sửa trực tiếp nếu cần."
-                      : "Tệp PDF hoặc ảnh chụp (PNG, JPG). Tải tiếp tệp khác để bổ sung các kỳ còn thiếu."}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                {draftTranscript && (
-                  <Badge variant="secondary" className="text-xs gap-1 px-2.5 py-1">
-                    <CheckCircle2Icon className="size-3 text-ok" />
-                    Đã tải file
-                  </Badge>
-                )}
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={triggerFileInput}
-                  className="gap-2 font-semibold text-xs bg-brand hover:bg-brand-ink text-white"
-                >
-                  <FileUpIcon className="size-3.5" />
-                  {draftTranscript ? "Tải tệp khác" : "Chọn tệp từ máy"}
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {uploadError && (
-          <div className="rounded-xl bg-destructive/10 p-3 text-xs text-destructive font-medium border border-destructive/20">
-            {uploadError}
-          </div>
-        )}
-      </div>
-
-      {/* 2. Bảng điểm các năm học & thanh tóm tắt GPA (Nằm ngay phía dưới vùng upload) */}
-      <div className="space-y-6">
-        {/* File attached banner if any */}
-        {draftTranscript && (
-          <div className="flex items-center justify-between rounded-xl border border-line bg-surface p-3 text-xs">
-            <div className="flex items-center gap-2 text-foreground font-medium">
-              <FileTextIcon className="size-4 text-brand" />
-              <span>{draftTranscript.originalFileName}</span>
-              <Badge variant="secondary" className="text-xs">Đã quét AI</Badge>
-            </div>
-            <button
-              type="button"
-              onClick={triggerFileInput}
-              className="rounded text-xs font-semibold text-brand hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
-            >
-              Tải tệp khác
-            </button>
-          </div>
-        )}
-
-          {/* Banner lộ trình mục tiêu cho học sinh THCS (Lớp 8 trở xuống) */}
-          {currentEducationLevel === "middle_school" && currentGrade !== "Lớp 9" && (
-            <div className="rounded-xl border border-brand/30 bg-brand-wash/30 p-3.5 flex items-start gap-3">
-              <div className="p-1.5 rounded-lg bg-brand/10 text-brand shrink-0 mt-0.5">
-                <SparklesIcon className="size-4" />
-              </div>
-              <div className="space-y-0.5">
-                <div className="text-xs font-semibold text-foreground">
-                  Lộ trình điểm mục tiêu (Target GPA Roadmap) cho 4 năm cấp 3
-                </div>
-                <div className="text-xs text-muted-foreground leading-relaxed">
-                  Bạn đang ở bậc THCS ({currentGrade || "Lớp 6–8"}). Các trường đại học Mỹ tính điểm từ Lớp 9 đến Lớp 12. 
-                  Bạn có thể thiết lập mức điểm mục tiêu kỳ vọng cho từng năm dưới đây để hệ thống định hướng trường và học bổng phù hợp.
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Quick Assignment khi bảng điểm thiếu khối lớp / học kỳ */}
-          {pendingTerms && pendingTerms.length > 0 && (
-            <div className="rounded-xl border-2 border-brand bg-brand-wash/50 p-4 space-y-3 animate-in fade-in-50">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-lg bg-brand text-white shrink-0 mt-0.5">
-                    <SparklesIcon className="size-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-foreground">
-                      {pendingTerms.length >= 2
-                        ? `Đã nhận diện bảng điểm 2 học kỳ (${
-                            pendingTerms[0].scores.length + (pendingTerms[1]?.scores.length || 0)
-                          } môn)`
-                        : pendingAssignStep === "choose_semester"
-                        ? `Chọn học kỳ cho ${pendingGrade}`
-                        : `Đã nhận diện bảng điểm (${pendingTerms[0].scores.length} môn)`}
-                    </h4>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {pendingTerms.length >= 2
-                        ? "Bảng điểm có 2 học kỳ nhưng chưa nhận diện được khối lớp. Vui lòng bấm chọn lớp bên dưới để tự động điền cả 2 kỳ:"
-                        : pendingAssignStep === "choose_semester"
-                        ? `Bạn muốn điền bảng điểm này vào học kỳ nào của ${pendingGrade}?`
-                        : "Bảng điểm chưa có thông tin khối lớp. Vui lòng bấm chọn lớp bạn muốn điền điểm:"}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={handleDismissPendingTerms}
-                  className="text-muted-foreground hover:text-foreground"
-                  title="Bỏ qua"
-                  aria-label="Bỏ qua"
-                >
-                  <XIcon className="size-4" />
-                </Button>
-              </div>
-
-              {/* TH 1: Bảng điểm có 2 kỳ -> chỉ hỏi lớp, chọn là điền cả 2 kỳ luôn */}
-              {pendingTerms.length >= 2 ? (
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-brand/20">
-                  <span className="text-xs font-semibold text-foreground">Chọn lớp để điền cả 2 kỳ:</span>
-                  {years.map((y) => (
-                    <Button
-                      key={y.gradeName}
-                      type="button"
-                      size="sm"
-                      onClick={() => handleChooseGrade(y.gradeName)}
-                      className="text-xs font-semibold bg-brand hover:bg-brand-ink text-white"
-                    >
-                      Điền vào {y.gradeName} (Cả 2 kỳ)
-                    </Button>
-                  ))}
-                </div>
-              ) : pendingAssignStep === "choose_grade" ? (
-                /* TH 2 - Bước 1: Hỏi lớp trước */
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-brand/20">
-                  <span className="text-xs font-semibold text-foreground">Chọn lớp:</span>
-                  {years.map((y) => (
-                    <Button
-                      key={y.gradeName}
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleChooseGrade(y.gradeName)}
-                      className="text-xs font-semibold bg-surface hover:bg-brand hover:text-white"
-                    >
-                      {y.gradeName}
-                    </Button>
-                  ))}
-                </div>
-              ) : (
-                /* TH 2 - Bước 2: Đã chọn lớp, hỏi kỳ nào */
-                <div className="space-y-2.5 pt-2 border-t border-brand/20">
-                  {pendingGrade && isCompletedGrade(pendingGrade) && (
-                    <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg p-2.5 flex items-start gap-2">
-                      <AlertTriangleIcon className="size-4 shrink-0 text-amber-600 mt-0.5" />
-                      <div>
-                        <strong>Lưu ý:</strong> {pendingGrade} là năm học đã kết thúc nên bắt buộc phải có đủ điểm cả 2 học kỳ.
-                        Nếu bạn chọn điền 1 kỳ, sau đó sẽ cần bổ sung tiếp học kỳ còn lại để hồ sơ hợp lệ trước khi tiếp tục.
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-semibold text-foreground">Điền vào {pendingGrade}:</span>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleChooseSemester(1)}
-                      className="text-xs font-semibold bg-surface hover:bg-brand hover:text-white"
-                    >
-                      Học kỳ 1
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleChooseSemester(2)}
-                      className="text-xs font-semibold bg-surface hover:bg-brand hover:text-white"
-                    >
-                      Học kỳ 2
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleChooseSemester("all")}
-                      className="text-xs font-semibold bg-surface hover:bg-brand hover:text-white"
-                    >
-                      Cả năm (Điền cả 2 kỳ)
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setPendingGrade(null);
-                        setPendingAssignStep("choose_grade");
-                      }}
-                      className="text-xs text-muted-foreground hover:text-foreground ml-auto"
-                    >
-                      ← Chọn lại lớp khác
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Thông báo màu vàng xác nhận đã điền điểm & Nút đổi sang lớp khác nếu chọn nhầm */}
-          {gradeNotices.length > 0 && (
-            <div className="space-y-3">
-              {gradeNotices.map((g) => (
-                <div
-                  key={g.gradeName}
-                  className="rounded-2xl border-2 border-amber-300 bg-amber-50/90 dark:border-amber-700/60 dark:bg-amber-950/40 p-4 space-y-3 animate-in fade-in-50"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300 shrink-0 mt-0.5">
-                        <AlertTriangleIcon className="size-5" />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="font-semibold text-sm text-amber-950 dark:text-amber-100">
-                          {g.hasSem1 && g.hasSem2
-                            ? `Đã nhập đủ ${g.gradeName}`
-                            : `Đã nhập ${g.gradeName} (${g.hasSem1 ? "Học kỳ 1" : "Học kỳ 2"})`}
-                        </div>
-                        <div className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
-                          <strong className="font-bold text-amber-950 dark:text-amber-100">{g.subjectCount} môn học</strong>{" "}
-                          đang ở <strong>{g.gradeName}</strong>. Đối chiếu với bảng điểm gốc xem đúng lớp và học kỳ chưa.
-                          {g.reviewCells > 0 && (
-                            <span className="block mt-1">
-                              Có {g.reviewCells} ô tô cam (điểm đọc từ ảnh, chênh lệch bất thường hoặc bị ghi đè / trùng
-                              môn) — rê chuột vào ô để xem lý do.
-                            </span>
-                          )}
-                          {isCompletedGrade(g.gradeName) && !(g.hasSem1 && g.hasSem2) && (
-                            <span className="block mt-1 font-semibold text-red-600 dark:text-red-400">
-                              ⚠️ {g.gradeName} là năm học đã kết thúc. Bạn cần bổ sung học kỳ còn lại để hồ sơ hợp lệ!
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 self-end sm:self-center shrink-0">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setReassignTargetId(g.gradeName)}
-                        className="text-xs font-semibold border-amber-300 bg-white hover:bg-amber-100/80 text-amber-900 dark:border-amber-700 dark:bg-zinc-900 dark:text-amber-200 dark:hover:bg-amber-950"
-                      >
-                        <RefreshCwIcon className="size-3.5 mr-1 text-amber-600 dark:text-amber-400" />
-                        Sai lớp
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => handleConfirmGrade(g.gradeName)}
-                        className="text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-600 dark:hover:bg-amber-700"
-                      >
-                        <CheckCircle2Icon className="size-3.5 mr-1" />
-                        Xác nhận đúng hết
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Academic Years Selector */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-sm font-semibold text-foreground">
-                  Điểm học bạ {years.length} năm tính đến hiện tại
-                </Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Đang hiển thị các năm học tính đến {currentGrade || "lớp hiện tại"}.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={triggerFileInput}
-                className="rounded text-xs text-brand font-medium hover:underline cursor-pointer flex items-center gap-1 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
-              >
-                <FileUpIcon className="size-3.5" />
-                Tải ảnh khác
-              </button>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 border-b border-line pb-2">
-              {years.map((y, idx) => {
-                const isCurrentGradeYear =
-                  Boolean(maxAllowedGradeName && normalizeGrade(y.gradeName) === normalizeGrade(maxAllowedGradeName));
-                return (
-                  <div key={y.gradeName} className="inline-flex items-center">
-                    <button
-                      type="button"
-                      onClick={() => setActiveYearIndex(idx)}
-                      className={cn(
-                        "rounded-lg px-4 py-2 text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default flex items-center gap-1.5",
-                        activeYearIndex === idx
-                          ? "bg-brand text-white "
-                          : "bg-surface border border-line text-muted-foreground hover:border-brand/40 hover:text-foreground"
-                      )}
-                    >
-                      <span>{y.gradeName}</span>
-                      {isCurrentGradeYear && (
-                        <span className={cn("text-[10px]", activeYearIndex === idx ? "text-white/80" : "text-brand font-medium")}>
-                          (hiện tại)
-                        </span>
-                      )}
-                    </button>
-
-                    {/* Chỉ cho phép xóa khối lớp hiện tại (học sinh chưa có điểm kỳ nào của năm nay; không cho xóa lớp cũ) */}
-                    {isCurrentGradeYear && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemoveCurrentGradeYear();
-                        }}
-                        title={
-                          isGrade9
-                            ? "Chưa có điểm Lớp 9? Bấm để xóa và chuyển sang lộ trình mục tiêu 4 năm như Lớp 8"
-                            : `Chưa có điểm ${y.gradeName}? Bấm để xóa khối này`
-                        }
-                        aria-label={`Xóa khối ${y.gradeName}`}
-                        className="ml-1 p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-                      >
-                        <XIcon className="size-3.5" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* Nút thêm lại khối lớp hiện tại nếu đã xóa (tối đa bằng đúng lớp đã khai báo ở Bước 1, không thêm lớp cao hơn) */}
-              {maxAllowedGradeName &&
-                !years.some((y) => normalizeGrade(y.gradeName) === normalizeGrade(maxAllowedGradeName)) && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={handleAddCurrentGradeYear}
-                    className="rounded-lg px-3 py-2 text-xs font-semibold gap-1 border-dashed border-brand/50 text-brand hover:bg-brand/10 hover:text-brand"
-                  >
-                    <PlusIcon className="size-3" />
-                    Thêm {maxAllowedGradeName} (đang học)
-                  </Button>
-                )}
-
-              {/* Nút bổ sung Lớp 9 nếu danh sách năm chưa có */}
-              {!years.some((y) => normalizeGrade(y.gradeName) === "lop 9") && !isGrade9 && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={handleAddGrade9}
-                  className="rounded-lg px-3 py-2 text-xs font-semibold gap-1 border-dashed hover:border-brand text-muted-foreground hover:text-foreground"
-                >
-                  <PlusIcon className="size-3" />
-                  Bổ sung Lớp 9 (Chuẩn US)
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Subjects Table */}
-          {years[activeYearIndex] && (
-            <div className="space-y-4">
-              {/* Thông báo hướng dẫn nếu lớp hiện tại đang chưa có điểm học kỳ nào */}
-              {Boolean(
-                maxAllowedGradeName &&
-                  normalizeGrade(years[activeYearIndex].gradeName) === normalizeGrade(maxAllowedGradeName) &&
-                  years[activeYearIndex].subjects.every(
-                    (s) =>
-                      (s.semester1Score === null || s.semester1Score === undefined) &&
-                      (s.semester2Score === null || s.semester2Score === undefined)
-                  )
-              ) && (
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 rounded-xl bg-brand-wash/50 border border-brand/30 text-xs text-muted-foreground animate-in fade-in-50">
-                  <div className="leading-relaxed">
-                    💡 <strong>Lưu ý:</strong> Bạn đang học{" "}
-                    <span className="font-semibold text-foreground">{years[activeYearIndex].gradeName}</span> nhưng
-                    chưa học xong hoặc chưa có điểm học kỳ nào?{" "}
-                    {isGrade9
-                      ? "Bạn có thể xóa khối này để chuyển sang thiết lập lộ trình mục tiêu 4 năm cấp 3 (như Lớp 8)."
-                      : "Bạn có thể tạm xóa khối này để tiếp tục nộp hồ sơ bằng điểm các năm trước."}
-                  </div>
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="outline"
-                    onClick={handleRemoveCurrentGradeYear}
-                    className="text-destructive hover:bg-destructive/10 border-destructive/30 shrink-0 text-xs font-medium"
-                  >
-                    <Trash2Icon className="size-3 mr-1" />
-                    {isGrade9 ? "Xóa Lớp 9 (Chuyển sang như Lớp 8)" : `Xóa khối ${years[activeYearIndex].gradeName}`}
-                  </Button>
-                </div>
-              )}
-
-              <div className="overflow-hidden rounded-xl border border-line bg-surface ">
-                <table className="w-full text-left text-xs">
-                  <thead className="border-b border-line bg-muted/30 text-muted-foreground font-semibold text-xs">
+              <div className="overflow-hidden rounded-xl border border-line bg-surface">
+                <table className={DATA_TABLE}>
+                  <thead className="border-b border-line bg-(--surface-2) text-xs font-medium text-ink-2">
                     <tr>
-                      <th className="py-2.5 px-3">Môn học</th>
-                      <th className="py-2.5 px-3 w-28 text-center">Học kỳ 1</th>
-                      <th className="py-2.5 px-3 w-28 text-center">Học kỳ 2</th>
-                      <th className="py-2.5 px-3 w-24 text-center">Trung bình</th>
-                      <th className="py-2.5 px-2 w-12 text-center">Xóa</th>
+                      <th className="px-3 py-2.5 text-left">Năm học</th>
+                      <th className="w-44 px-3 py-2.5 text-center">GPA mục tiêu (0–10)</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-line/60">
-                    {years[activeYearIndex].subjects.map((sub, sIdx, subjects) => {
-                      const s1 = typeof sub.semester1Score === "number" ? sub.semester1Score : null;
-                      const s2 = typeof sub.semester2Score === "number" ? sub.semester2Score : null;
-                      // TB cả năm (HK2 hệ số 2), làm tròn 1 chữ số chỉ để hiển thị
-                      const yearAvg = yearAverage(s1, s2);
-                      const avg = yearAvg === null ? null : Math.round(yearAvg * 10) / 10;
-
-                      // Sau khi AI điền điểm, ô còn trống trong năm đã có điểm được tô vàng để nhắc kiểm tra
-                      const flagEmpty =
-                        ocrSuccessNotice !== null &&
-                        subjects.some((x) => x.semester1Score != null || x.semester2Score != null);
-                      const outOfRange = (v: number | null | undefined) => typeof v === "number" && (v < 0 || v > 10);
-                      const cellClass = (empty: boolean, invalid: boolean, review?: string | null) =>
-                        cn(
-                          "h-8 text-center text-xs w-20 mx-auto",
-                          flagEmpty && empty && "border-warn bg-warn-wash/40",
-                          review && "border-warn bg-warn-wash ring-1 ring-warn/60",
-                          invalid && "border-destructive ring-1 ring-destructive"
-                        );
-                      const reviewTitle = (review?: string | null) =>
-                        review ? REVIEW_LABELS[review] ?? "Ô này cần kiểm tra lại." : undefined;
-
+                  <tbody className="divide-y divide-line">
+                    {years.map((y, yIdx) => {
+                      const targetScore = getYearTargetScore(y);
+                      const usYearName =
+                        yIdx === 0 ? "Freshman" : yIdx === 1 ? "Sophomore" : yIdx === 2 ? "Junior" : "Senior";
                       return (
-                        <tr key={sIdx} className="hover:bg-muted/10 transition-colors">
-                          <td className="py-2 px-3 font-medium text-foreground">
-                            {sub.subjectName}
+                        <tr key={y.gradeName}>
+                          <td className="px-3 py-2 font-medium text-ink">
+                            {y.gradeName} <span className="font-normal text-ink-2">· {usYearName}</span>
                           </td>
-                          <td className="py-1 px-2 text-center">
-                            <Input
+                          <td className="p-0">
+                            <input
                               type="number"
                               min={0}
                               max={10}
                               step={0.1}
-                              placeholder="0–10"
-                              value={sub.semester1Score ?? ""}
-                              onChange={(e) =>
-                                handleScoreChange(activeYearIndex, sIdx, "semester1Score", e.target.value)
-                              }
-                              className={cellClass(s1 === null, outOfRange(sub.semester1Score), sub.semester1Review)}
-                              title={reviewTitle(sub.semester1Review)}
+                              placeholder="VD: 8.5"
+                              value={targetScore ?? ""}
+                              onChange={(e) => handleYearTargetChange(yIdx, e.target.value)}
+                              aria-label={`GPA mục tiêu ${y.gradeName}`}
+                              className={cn(INLINE_INPUT, NUMBER_INPUT)}
                             />
-                          </td>
-                          <td className="py-1 px-2 text-center">
-                            <Input
-                              type="number"
-                              min={0}
-                              max={10}
-                              step={0.1}
-                              placeholder="0–10"
-                              value={sub.semester2Score ?? ""}
-                              onChange={(e) =>
-                                handleScoreChange(activeYearIndex, sIdx, "semester2Score", e.target.value)
-                              }
-                              className={cellClass(s2 === null, outOfRange(sub.semester2Score), sub.semester2Review)}
-                              title={reviewTitle(sub.semester2Review)}
-                            />
-                          </td>
-                          <td className="py-2 px-3 text-center font-bold text-foreground">
-                            {avg !== null ? avg.toFixed(1) : "-"}
-                          </td>
-                          <td className="py-2 px-2 text-center">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-xs"
-                              onClick={() => handleRemoveSubject(activeYearIndex, sIdx)}
-                              className="text-muted-foreground hover:text-destructive"
-                              title="Xóa môn"
-                              aria-label={`Xóa môn ${sub.subjectName}`}
-                            >
-                              <Trash2Icon className="size-3.5" />
-                            </Button>
                           </td>
                         </tr>
                       );
@@ -2307,127 +1524,421 @@ export function Step2Transcript({
                   </tbody>
                 </table>
               </div>
+              {isGrade9 && isGrade9EarlyRoadmap && (
+                <ActionList>
+                  <ActionRow icon={<ArrowLeftIcon />} onClick={handleSwitchToGrade9Transcript}>
+                    Nhập bảng điểm Lớp 9
+                  </ActionRow>
+                </ActionList>
+              )}
+            </FormSection>
 
-              {/* Add Subject Button */}
-              <div className="flex justify-between items-center">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openAddSubjectDialog(activeYearIndex)}
-                  className="gap-1.5 text-xs"
-                >
-                  <PlusIcon className="size-3.5" />
-                  Thêm môn học
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                  Điểm số tính theo thang điểm 10 của Việt Nam
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Lỗi bảng điểm hiện ngay dưới bảng */}
-          {validationError && (
-            <div className="rounded-xl bg-destructive/10 p-3 text-xs text-destructive font-medium border border-destructive/20 leading-relaxed">
-              {validationError}
-            </div>
-          )}
-
-          {/* Dynamic GPA Calculation Card & Grade Trend */}
-          <div className="space-y-3">
-            <div className="rounded-xl border border-brand/30 bg-brand-wash/30 p-4 ">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
-                    <span>Điểm TB tự tính</span>
-                    <Badge variant="outline" className="text-xs border-brand/40 text-brand">
-                      Quy đổi tham khảo
-                    </Badge>
+              {gradeTrend.hasEnoughData && (
+                <FormSection title="Xu hướng điểm mục tiêu">
+                  <TrendSummary trend={gradeTrend} />
+                </FormSection>
+              )}
+            </FormGroup>
+          </>
+        ) : (
+          <>
+            <FormGroup title="Học bạ" tabs={modeTabs} footer={gpaFooter}>
+            <FormSection
+              title="Học bạ của bạn"
+              description="Tải PDF hoặc ảnh chụp, hệ thống tự điền điểm vào bảng bên dưới."
+              wide
+            >
+              <input
+                id={fileInputId}
+                type="file"
+                accept={TRANSCRIPT_ACCEPT}
+                className="hidden"
+                onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
+              />
+              <div
+                role="group"
+                aria-label="Tải học bạ"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  if (e.dataTransfer.files) handleFileUpload(e.dataTransfer.files);
+                }}
+                className={cn(
+                  "rounded-xl border border-input bg-surface p-4",
+                  dragOver && "border-brand bg-brand-wash/40"
+                )}
+              >
+                {isUploading ? (
+                  <div role="status" className="flex items-center gap-3 py-2 text-sm text-ink">
+                    <Loader2Icon className="size-5 shrink-0 animate-spin text-brand" />
+                    Đang đọc bảng điểm, vui lòng chờ trong giây lát…
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    Được tính tự động từ toàn bộ các môn và năm học đã nhập ở trên.
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <div className="text-xs text-muted-foreground">Thang điểm 10</div>
-                    <div className="text-lg font-bold text-foreground">
-                      {gpa10 !== null ? gpa10.toFixed(2) : "—"}
+                ) : (
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span
+                        aria-hidden
+                        className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-(--surface-2) text-ink-2"
+                      >
+                        {draftTranscript ? <FileTextIcon className="size-5" /> : <UploadCloudIcon className="size-5" />}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-ink">
+                          {draftTranscript ? draftTranscript.originalFileName : "Kéo thả học bạ vào đây"}
+                        </p>
+                        <p className="text-xs text-ink-2">
+                          {draftTranscript
+                            ? "Đã đọc xong. Kiểm tra lại điểm trong bảng bên dưới."
+                            : "PDF, PNG hoặc JPG, tối đa 10MB"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="h-8 w-px bg-line" />
-                  <div className="text-right">
-                    <div className="text-xs text-brand font-semibold">Quy đổi thang 4</div>
-                    <div className="text-2xl font-extrabold text-brand">
-                      {gpa4 !== null ? gpa4.toFixed(2) : "—"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {gpa4 !== null && <GpaConversionNote className="mt-3" />}
-            </div>
-
-            {/* Grade Trend Card khi có dữ liệu từ 2 năm trở lên */}
-            {gradeTrend.hasEnoughData && (
-              <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3.5 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    {gradeTrend.trend === "downward" ? (
-                      <TrendingDownIcon className="size-4 text-amber-500" />
-                    ) : (
-                      <TrendingUpIcon className="size-4 text-emerald-600" />
-                    )}
-                    <span className="text-xs font-bold text-foreground">
-                      Xu hướng điểm số (Grade Trend)
-                    </span>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-xs font-semibold",
-                      gradeTrend.trend === "strong_upward" || gradeTrend.trend === "slight_upward"
-                        ? "border-emerald-500 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30"
-                        : gradeTrend.trend === "downward"
-                        ? "border-amber-500 text-amber-600 bg-amber-50 dark:bg-amber-950/30"
-                        : "border-slate-300 text-muted-foreground"
-                    )}
-                  >
-                    {gradeTrend.trend === "strong_upward" && "Tiến bộ vượt trội (+Upward)"}
-                    {gradeTrend.trend === "slight_upward" && "Tiến bộ tích cực (+Upward)"}
-                    {gradeTrend.trend === "stable" && "Phong độ ổn định"}
-                    {gradeTrend.trend === "downward" && "Cần chú ý phục hồi"}
-                  </Badge>
-                </div>
-
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {gradeTrend.summaryMessage}
-                </p>
-
-                <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                  {gradeTrend.yearlyAverages.map((y, idx) => (
-                    <div
-                      key={y.gradeName}
-                      className="flex items-center gap-1.5 text-xs bg-surface border border-line rounded-lg px-2.5 py-1 "
+                    <Button
+                      type="button"
+                      variant={draftTranscript ? "outline" : "default"}
+                      onClick={triggerFileInput}
+                      className="shrink-0 gap-2"
                     >
-                      <span className="font-medium text-foreground">{y.gradeName}:</span>
-                      <span className="font-bold text-brand">{y.gpa10.toFixed(2)}</span>
-                      <span className="text-xs text-muted-foreground">({y.gpa4.toFixed(2)}/4.0)</span>
-                      {idx < gradeTrend.yearlyAverages.length - 1 && (
-                        <span className="text-muted-foreground font-semibold ml-1">→</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                      <FileUpIcon className="size-4" />
+                      {draftTranscript ? "Tải tệp khác" : "Chọn tệp từ máy"}
+                    </Button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
-        </>
-      )}
 
-      {/* Dialog Thêm môn học */}
+              {uploadError && <FieldError>{uploadError}</FieldError>}
+
+              {ocrWarnings.length > 0 && (
+                <Alert className="border-warn/40 bg-warn-wash/40">
+                  <AlertTriangleIcon className="size-4 text-warn" />
+                  <AlertTitle className="text-sm font-semibold text-ink">Lưu ý khi đọc bảng điểm</AlertTitle>
+                  <AlertDescription className="space-y-1 text-sm text-ink-2">
+                    {ocrWarnings.map((w, idx) => (
+                      <div key={idx}>• {w}</div>
+                    ))}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {ocrSuccessNotice && (
+                <Alert className="border-brand/40 bg-brand-wash/40">
+                  <CheckCircle2Icon className="size-4 text-brand" />
+                  <AlertTitle className="text-sm font-semibold text-ink">Đã trích xuất điểm thành công</AlertTitle>
+                  <AlertDescription className="text-sm text-ink-2">{ocrSuccessNotice}</AlertDescription>
+                </Alert>
+              )}
+
+              {ocrFailedNotice && (
+                <Alert className="border-warn/40 bg-warn-wash/40">
+                  <AlertTriangleIcon className="size-4 text-warn" />
+                  <AlertTitle className="text-sm font-semibold text-ink">Chưa nhận diện được bảng điểm</AlertTitle>
+                  <AlertDescription className="space-y-3 text-sm text-ink-2">
+                    <p>{ocrFailedNotice}</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" size="sm" onClick={triggerFileInput} className="gap-1.5">
+                        <RefreshCwIcon className="size-3.5" />
+                        Chọn tệp rõ nét hơn
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setShowManualTable(true);
+                          setOcrFailedNotice(null);
+                        }}
+                        className="gap-1.5"
+                      >
+                        <Edit3Icon className="size-3.5" />
+                        Điền điểm bằng tay
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Gán nhanh khi bảng điểm thiếu khối lớp / học kỳ */}
+              {pendingTerms && pendingTerms.length > 0 && (
+                <div className="space-y-4 rounded-xl border border-brand/40 bg-brand-wash/40 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-ink">
+                        {pendingTerms.length >= 2
+                          ? `Đã nhận diện bảng điểm 2 học kỳ (${
+                              pendingTerms[0].scores.length + (pendingTerms[1]?.scores.length || 0)
+                            } môn)`
+                          : pendingAssignStep === "choose_semester"
+                          ? `Chọn học kỳ cho ${pendingGrade}`
+                          : `Đã nhận diện bảng điểm (${pendingTerms[0].scores.length} môn)`}
+                      </h3>
+                      <p className="mt-1 text-sm text-ink-2">
+                        {pendingTerms.length >= 2
+                          ? "Chưa rõ khối lớp. Chọn lớp để điền cả 2 kỳ."
+                          : pendingAssignStep === "choose_semester"
+                          ? `Bạn muốn điền vào học kỳ nào của ${pendingGrade}?`
+                          : "Chưa rõ khối lớp. Chọn lớp bạn muốn điền điểm."}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={handleDismissPendingTerms}
+                      className="text-ink-2 hover:text-ink"
+                      title="Bỏ qua"
+                      aria-label="Bỏ qua"
+                    >
+                      <XIcon className="size-4" />
+                    </Button>
+                  </div>
+
+                  {pendingTerms.length >= 2 || pendingAssignStep === "choose_grade" ? (
+                    <ChoicePicker
+                      ariaLabel={pendingTerms.length >= 2 ? "Chọn lớp để điền cả 2 kỳ" : "Chọn lớp"}
+                      options={years.map((y) => ({ value: y.gradeName, label: y.gradeName }))}
+                      value={null}
+                      onChange={(v) => v && handleChooseGrade(v)}
+                    />
+                  ) : (
+                    <div className="space-y-3">
+                      {pendingGrade && isCompletedGrade(pendingGrade) && (
+                        <p className="flex items-start gap-2 text-sm text-warn">
+                          <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
+                          <span>
+                            {pendingGrade} là năm học đã kết thúc nên cần đủ điểm cả 2 học kỳ. Nếu chỉ điền 1 kỳ, bạn
+                            sẽ cần bổ sung kỳ còn lại trước khi tiếp tục.
+                          </span>
+                        </p>
+                      )}
+                      <div className="flex flex-wrap items-center gap-3">
+                        <ChoicePicker
+                          ariaLabel={`Điền vào ${pendingGrade}`}
+                          options={[
+                            { value: "1", label: "Học kỳ 1" },
+                            { value: "2", label: "Học kỳ 2" },
+                            { value: "all", label: "Cả năm" },
+                          ]}
+                          value={null}
+                          onChange={(v) => v && handleChooseSemester(v === "all" ? "all" : (Number(v) as 1 | 2))}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setPendingGrade(null);
+                            setPendingAssignStep("choose_grade");
+                          }}
+                          className="text-ink-2 hover:text-ink"
+                        >
+                          Chọn lại lớp
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </FormSection>
+
+            <FormSection
+              title="Điểm từng môn"
+              description={`Các năm học tính đến ${currentGrade || "lớp hiện tại"}. Điểm theo thang 10 của Việt Nam, sửa trực tiếp trong bảng nếu cần.`}
+              error={validationError}
+              wide
+            >
+              {/* Mỗi lớp đúng 1 thông báo: vừa được điền điểm hoặc còn ô tô cam */}
+              {gradeNotices.map((g) => (
+                <div key={g.gradeName} className="space-y-3 rounded-xl border border-warn/40 bg-warn-wash/40 p-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-ink">
+                      {g.hasSem1 && g.hasSem2
+                        ? `Đã nhập đủ ${g.gradeName}`
+                        : `Đã nhập ${g.gradeName} (${g.hasSem1 ? "Học kỳ 1" : "Học kỳ 2"})`}
+                    </p>
+                    <p className="text-sm text-ink-2">
+                      <strong className="font-semibold text-ink">{g.subjectCount} môn học</strong> đang ở{" "}
+                      <strong className="font-semibold text-ink">{g.gradeName}</strong>. Đối chiếu với bảng điểm gốc xem
+                      đúng lớp và học kỳ chưa.
+                    </p>
+                    {g.reviewCells > 0 && (
+                      <p className="text-sm text-ink-2">
+                        Có {g.reviewCells} ô tô cam (điểm đọc từ ảnh, chênh lệch bất thường hoặc bị ghi đè / trùng môn),
+                        rê chuột vào ô để xem lý do.
+                      </p>
+                    )}
+                    {isCompletedGrade(g.gradeName) && !(g.hasSem1 && g.hasSem2) && (
+                      <p className="text-sm font-medium text-risk">
+                        {g.gradeName} là năm học đã kết thúc. Bạn cần bổ sung học kỳ còn lại để hồ sơ hợp lệ.
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setReassignTargetId(g.gradeName)}
+                      className="gap-1.5"
+                    >
+                      <RefreshCwIcon className="size-3.5" />
+                      Sai lớp
+                    </Button>
+                    <Button type="button" size="sm" onClick={() => handleConfirmGrade(g.gradeName)} className="gap-1.5">
+                      <CheckCircle2Icon className="size-3.5" />
+                      Xác nhận đúng hết
+                    </Button>
+                  </div>
+                </div>
+              ))}
+
+              {years.length > 0 && (
+                <SegmentedControl
+                  ariaLabel="Năm học"
+                  options={years.map((y, idx) => ({ value: String(idx), label: y.gradeName }))}
+                  value={String(activeYearIndex)}
+                  onChange={(v) => setActiveYearIndex(Number(v))}
+                />
+              )}
+
+              {activeYear && (
+                <div className="overflow-hidden rounded-xl border border-line bg-surface">
+                  <table className={DATA_TABLE}>
+                    <thead className="border-b border-line bg-(--surface-2) text-xs font-medium text-ink-2">
+                      <tr>
+                        <th className="px-3 py-2.5 text-left">Môn học</th>
+                        <th className="w-28 px-3 py-2.5 text-center">Học kỳ 1</th>
+                        <th className="w-28 px-3 py-2.5 text-center">Học kỳ 2</th>
+                        <th className="w-24 px-3 py-2.5 text-center">Trung bình</th>
+                        <th className="w-20 px-2 py-2.5 text-center">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {activeYear.subjects.map((sub, sIdx, subjects) => {
+                        const s1 = typeof sub.semester1Score === "number" ? sub.semester1Score : null;
+                        const s2 = typeof sub.semester2Score === "number" ? sub.semester2Score : null;
+                        // TB cả năm (HK2 hệ số 2), làm tròn 1 chữ số chỉ để hiển thị
+                        const yearAvg = yearAverage(s1, s2);
+                        const avg = yearAvg === null ? null : Math.round(yearAvg * 10) / 10;
+
+                        // Sau khi AI điền điểm, ô còn trống trong năm đã có điểm được tô vàng để nhắc kiểm tra
+                        const flagEmpty =
+                          ocrSuccessNotice !== null &&
+                          subjects.some((x) => x.semester1Score != null || x.semester2Score != null);
+                        const outOfRange = (v: number | null | undefined) => typeof v === "number" && (v < 0 || v > 10);
+                        const cellClass = (empty: boolean, review?: string | null) =>
+                          cn(
+                            INLINE_INPUT,
+                            NUMBER_INPUT,
+                            flagEmpty && empty && "bg-warn-wash/40",
+                            review && "bg-warn-wash ring-1 ring-warn/60"
+                          );
+                        const reviewTitle = (review?: string | null) =>
+                          review ? REVIEW_LABELS[review] ?? "Ô này cần kiểm tra lại." : undefined;
+
+                        return (
+                          <tr key={sIdx}>
+                            <td className="px-3 py-2 font-medium text-ink">{sub.subjectName}</td>
+                            <td className="p-0">
+                              <input
+                                type="number"
+                                min={0}
+                                max={10}
+                                step={0.1}
+                                placeholder="0–10"
+                                value={sub.semester1Score ?? ""}
+                                onChange={(e) =>
+                                  handleScoreChange(activeYearIndex, sIdx, "semester1Score", e.target.value)
+                                }
+                                aria-label={`${sub.subjectName}, học kỳ 1`}
+                                aria-invalid={outOfRange(sub.semester1Score) || undefined}
+                                className={cellClass(s1 === null, sub.semester1Review)}
+                                title={reviewTitle(sub.semester1Review)}
+                              />
+                            </td>
+                            <td className="p-0">
+                              <input
+                                type="number"
+                                min={0}
+                                max={10}
+                                step={0.1}
+                                placeholder="0–10"
+                                value={sub.semester2Score ?? ""}
+                                onChange={(e) =>
+                                  handleScoreChange(activeYearIndex, sIdx, "semester2Score", e.target.value)
+                                }
+                                aria-label={`${sub.subjectName}, học kỳ 2`}
+                                aria-invalid={outOfRange(sub.semester2Score) || undefined}
+                                className={cellClass(s2 === null, sub.semester2Review)}
+                                title={reviewTitle(sub.semester2Review)}
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-center font-semibold tabular-nums text-ink">
+                              {avg !== null ? avg.toFixed(1) : "-"}
+                            </td>
+                            <td className="px-2 py-1 text-center">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-xs"
+                                onClick={() => handleRemoveSubject(activeYearIndex, sIdx)}
+                                className="text-ink-2 hover:text-destructive"
+                                title="Xóa môn"
+                                aria-label={`Xóa môn ${sub.subjectName}`}
+                              >
+                                <Trash2Icon className="size-3.5" />
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      <AddRow colSpan={5} onClick={() => openAddSubjectDialog(activeYearIndex)}>
+                        <PlusIcon className="size-4" />
+                        Thêm môn học
+                      </AddRow>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {hasYearActions && (
+                <ActionList>
+                  {activeIsCurrent && (
+                    <ActionRow icon={<Trash2Icon />} onClick={handleRemoveCurrentGradeYear}>
+                      {isGrade9
+                        ? "Chưa có điểm Lớp 9? Chuyển sang lộ trình mục tiêu 4 năm"
+                        : `Chưa có điểm ${activeYear?.gradeName}? Xóa khối này`}
+                    </ActionRow>
+                  )}
+                  {canAddCurrentYear && (
+                    <ActionRow icon={<PlusIcon />} onClick={handleAddCurrentGradeYear}>
+                      Thêm {maxAllowedGradeName} (đang học)
+                    </ActionRow>
+                  )}
+                  {canAddGrade9 && (
+                    <ActionRow icon={<PlusIcon />} onClick={handleAddGrade9}>
+                      Thêm Lớp 9 (chuẩn tuyển sinh Mỹ)
+                    </ActionRow>
+                  )}
+                </ActionList>
+              )}
+            </FormSection>
+
+              {gradeTrend.hasEnoughData && (
+                <FormSection title="Xu hướng điểm số">
+                  <TrendSummary trend={gradeTrend} />
+                </FormSection>
+              )}
+            </FormGroup>
+          </>
+        )}
+      </FormBody>
+
+      {/* Hộp thêm môn học */}
       <Dialog open={isAddSubjectOpen} onOpenChange={setIsAddSubjectOpen}>
         <DialogContent className="sm:max-w-md">
           <form
@@ -2437,82 +1948,51 @@ export function Step2Transcript({
             }}
           >
             <DialogHeader>
-              <DialogTitle>Thêm môn học mới</DialogTitle>
+              <DialogTitle>Thêm môn học</DialogTitle>
               <DialogDescription>
-                Bổ sung môn học vào bảng điểm của{" "}
-                <span className="font-semibold text-foreground">
-                  {years[activeYearIndex]?.gradeName || "năm học này"}
-                </span>
-                .
+                Bổ sung môn vào bảng điểm {years[activeYearIndex]?.gradeName || "năm học này"}.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="py-4 space-y-3.5">
-              <div className="space-y-1.5">
-                <Label htmlFor="new-subject-input" className="text-xs font-semibold text-foreground">
-                  Tên môn học <RequiredMark />
-                </Label>
+            <div className="space-y-5 py-4">
+              <Field label="Tên môn học" htmlFor="new-subject-input" required error={addSubjectError}>
                 <Input
                   id="new-subject-input"
                   autoFocus
-                  placeholder="Ví dụ: Công nghệ, Tiếng Pháp, GDCD..."
+                  placeholder="Ví dụ: Công nghệ, Tiếng Pháp, GDCD"
                   value={newSubjectName}
                   onChange={(e) => {
                     setNewSubjectName(e.target.value);
                     if (addSubjectError) setAddSubjectError(null);
                   }}
-                  className={cn(addSubjectError && "border-destructive focus-visible:ring-destructive")}
+                  className={cn("h-10", addSubjectError && "border-destructive focus-visible:ring-destructive")}
                 />
-                {addSubjectError && (
-                  <p className="text-xs text-destructive font-medium">{addSubjectError}</p>
-                )}
-              </div>
+              </Field>
 
-              {/* Gợi ý môn học phổ biến */}
-              <div className="space-y-1.5 pt-1">
-                <div className="text-xs text-muted-foreground font-medium">Gợi ý môn tự chọn phổ biến:</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {SUGGESTED_ADDITIONAL_SUBJECTS.filter(
+              <Field label="Môn tự chọn phổ biến">
+                <ChoicePicker
+                  ariaLabel="Môn tự chọn phổ biến"
+                  maxChips={SUGGESTED_ADDITIONAL_SUBJECTS.length}
+                  options={SUGGESTED_ADDITIONAL_SUBJECTS.filter(
                     (suggested) =>
                       !years[activeYearIndex]?.subjects.some(
                         (s) => s.subjectName.toLowerCase() === suggested.toLowerCase()
                       )
-                  ).map((suggested) => (
-                    <button
-                      key={suggested}
-                      type="button"
-                      onClick={() => {
-                        setNewSubjectName(suggested);
-                        if (addSubjectError) setAddSubjectError(null);
-                      }}
-                      className={cn(
-                        "rounded-full px-2.5 py-1 text-xs border transition-colors cursor-pointer",
-                        newSubjectName === suggested
-                          ? "bg-brand text-white border-brand font-medium"
-                          : "bg-surface hover:bg-muted text-foreground border-line"
-                      )}
-                    >
-                      + {suggested}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                  ).map((suggested) => ({ value: suggested, label: suggested }))}
+                  value={newSubjectName}
+                  onChange={(v) => {
+                    setNewSubjectName(v ?? "");
+                    if (addSubjectError) setAddSubjectError(null);
+                  }}
+                />
+              </Field>
             </div>
 
             <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsAddSubjectOpen(false)}
-              >
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsAddSubjectOpen(false)}>
                 Hủy
               </Button>
-              <Button
-                type="submit"
-                size="sm"
-                className="bg-brand text-white hover:bg-brand-ink"
-              >
+              <Button type="submit" size="sm">
                 Thêm môn
               </Button>
             </DialogFooter>
@@ -2520,73 +2000,78 @@ export function Step2Transcript({
         </DialogContent>
       </Dialog>
 
-      {/* Modal chọn lại lớp khi người dùng bấm "Sai lớp" */}
-      <Dialog open={reassignTargetId !== null} onOpenChange={(open) => { if (!open) setReassignTargetId(null); }}>
+      {/* Hộp chọn lại lớp khi bấm "Sai lớp" */}
+      <Dialog
+        open={reassignTargetId !== null}
+        onOpenChange={(open) => {
+          if (!open) setReassignTargetId(null);
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <RefreshCwIcon className="size-4 text-brand" />
-              Chọn lại khối lớp để điền điểm
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Điểm hiện tại đang được điền vào{" "}
-              <strong className="text-foreground">{reassignTargetId}</strong>. Bạn muốn chuyển toàn bộ điểm này sang khối lớp nào?
+            <DialogTitle>Chọn lại khối lớp</DialogTitle>
+            <DialogDescription>
+              Điểm đang được điền vào <strong className="text-ink">{reassignTargetId}</strong>. Chuyển toàn bộ điểm này
+              sang lớp nào?
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-2 gap-2.5 py-3">
-            {years.map((y) => {
-              const isCurrentTarget =
-                reassignTargetId !== null && normalizeGrade(y.gradeName) === normalizeGrade(reassignTargetId);
-              return (
-                <Button
-                  key={y.gradeName}
-                  type="button"
-                  variant={isCurrentTarget ? "default" : "outline"}
-                  className={cn(
-                    "h-12 flex flex-col items-center justify-center text-xs font-semibold gap-0.5",
-                    isCurrentTarget
-                      ? "bg-brand text-white"
-                      : "bg-surface hover:bg-brand/10 hover:border-brand/40"
-                  )}
-                  onClick={() => {
-                    if (reassignTargetId) {
-                      handleReassignGrade(reassignTargetId, y.gradeName);
-                    }
-                  }}
-                >
-                  <span>{y.gradeName}</span>
-                  {isCurrentTarget && <span className="text-[10px] opacity-80">(đang chọn)</span>}
-                </Button>
-              );
-            })}
+          <div className="py-3">
+            <ChoicePicker
+              ariaLabel="Khối lớp"
+              options={years.map((y) => ({ value: y.gradeName, label: y.gradeName }))}
+              value={years.find((y) => reassignTargetId !== null && normalizeGrade(y.gradeName) === normalizeGrade(reassignTargetId))?.gradeName ?? null}
+              onChange={(v) => {
+                if (v && reassignTargetId) handleReassignGrade(reassignTargetId, v);
+              }}
+            />
           </div>
 
           <DialogFooter className="sm:justify-end">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setReassignTargetId(null)}
-              className="text-xs"
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={() => setReassignTargetId(null)}>
               Đóng
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Bottom Actions */}
-      <div className="flex justify-between pt-4 border-t border-line">
-        <Button variant="outline" onClick={onPrev} size="lg" className="gap-1.5">
-          <ArrowLeftIcon className="size-4" />
-          Quay lại
-        </Button>
+      <StepNav onPrev={onPrev}>
         <Button onClick={handleNextClick} size="lg" className="gap-1.5">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>
-      </div>
+      </StepNav>
+    </>
+  );
+}
+
+/** Ẩn nút tăng giảm của ô số để ô trong bảng gọn như ô văn bản */
+const NUMBER_INPUT = "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
+
+type GradeTrend = ReturnType<typeof calculateGradeTrend>;
+
+/** Xu hướng điểm qua các năm: một dòng kết luận, lời giải thích và điểm từng năm */
+function TrendSummary({ trend }: { trend: GradeTrend }) {
+  const down = trend.trend === "downward";
+  const label =
+    trend.trend === "strong_upward"
+      ? "Tiến bộ vượt trội"
+      : trend.trend === "slight_upward"
+      ? "Tiến bộ tích cực"
+      : trend.trend === "stable"
+      ? "Phong độ ổn định"
+      : "Cần chú ý phục hồi";
+  const Icon = down ? TrendingDownIcon : TrendingUpIcon;
+  return (
+    <div className="space-y-2">
+      <p className={cn("flex items-center gap-2 text-sm font-medium", down ? "text-warn" : "text-ok")}>
+        <Icon aria-hidden className="size-4" />
+        {label}
+      </p>
+      <p className="text-sm text-ink-2">{trend.summaryMessage}</p>
+      <p className="text-sm tabular-nums text-ink">
+        {trend.yearlyAverages.map((y) => `${y.gradeName}: ${y.gpa10.toFixed(2)}`).join("  →  ")}
+      </p>
     </div>
   );
 }

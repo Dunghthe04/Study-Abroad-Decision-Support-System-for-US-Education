@@ -120,7 +120,7 @@
   --chart-4: #5b6f86;
   --chart-5: #b98a3e;
   --radius: 0.5rem;
-  --header-h: 6.5rem; /* thanh đầu 2 hàng (56px + 48px + viền), để ảnh đầu trang chủ nằm dưới nó */
+  --header-h: 6rem; /* thanh đầu 2 hàng (52px + 44px), khớp mép dưới header để sticky nav không hở khe */
   /* Thông số chuyển động & độ mờ nút theo claude-ui (không đổi bảng màu) */
   --cds-dur-fast: 60ms;
   --cds-dur-snap: 120ms;
@@ -270,3 +270,29 @@
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
 }
+
+@keyframes shiny-text {
+  0%, 90%, 100% {
+    background-position: calc(-100% - var(--shiny-width, 100px)) 0;
+  }
+  30%, 60% {
+    background-position: calc(100% + var(--shiny-width, 100px)) 0;
+  }
+}
+
+.animate-shiny-text {
+  animation: shiny-text 3.5s infinite;
+}
+
+/* Luồng hồ sơ /analysis: tắt chuyển động khi người dùng chọn giảm chuyển động */
+/* Bề rộng tối đa của cột câu hỏi trong luồng hồ sơ (FormBody, thanh đầu, thanh cuối) */
+.flow-panel{--flow-form-w:72rem}
+/* Thang nền của biểu mẫu (xám lạnh theo sắc chữ, không pha màu nhấn) — mỗi lớp lồng nhau đậm/nhạt hơn một bậc:
+   trang trắng → nhóm câu hỏi (2) → cột tên nhóm, rãnh nút (3); ô nhập, nút chọn, thẻ là nền trắng (1) nổi lên trên.
+   Màu nhấn xanh chỉ dành cho trạng thái đã chọn / đang chọn. */
+:root{--surface-2:#f2f5f8;--surface-3:#e5eaf0;--control-border:#b4c0cc;--elev-1:0 1px 2px rgb(15 34 51/0.06),0 0 0 1px rgb(15 34 51/0.07)}
+/* Ô nhập trong nhóm câu hỏi (nền xám) luôn nền trắng để nổi lên */
+.flow-panel :is([data-slot=input],[data-slot=textarea],[data-slot=select-trigger],[data-slot=month-picker]){background-color:var(--surface)}
+/* Nút trong luồng hồ sơ đổi màu tức thì: bỏ chuyển màu kiểu lò xo (nhìn như nhấp nháy), chỉ giữ hiệu ứng nhấn */
+[data-flow-motion] [data-slot=button]{transition-property:transform,scale,box-shadow}
+@media (prefers-reduced-motion:reduce){[data-flow-motion],[data-flow-motion] *{animation-duration:1ms!important;animation-delay:0ms!important;transition-duration:1ms!important}}

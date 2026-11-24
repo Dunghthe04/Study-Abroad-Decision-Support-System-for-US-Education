@@ -204,7 +204,7 @@ public class UniversityDetailTests
     {
         var repo = new FakeRepository(CreateData());
         var controller = new UniversitiesController(new UniversityDetailService(repo));
-        var query = new UniversitySearchQuery(Search: "Test", State: "CA", Page: 1, PageSize: 10);
+        var query = new UniversitySearchQuery(Search: "Test", State: "CA", MinTuitionUsd: 15000, MaxTuitionUsd: 50000, MinTotalCostUsd: 25000, MaxTotalCostUsd: 70000, Page: 1, PageSize: 10);
         var response = await controller.Search(query, default);
         var ok = Assert.IsType<OkObjectResult>(response.Result);
         var result = Assert.IsType<PagedResult<UniversityListItemDto>>(ok.Value);
@@ -272,6 +272,83 @@ public class UniversityDetailTests
         Assert.Contains("JOIN", sql);
     }
 
+    [Fact]
+    public void RepositorySearchFiltersTranslateToPostgres()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=translation_only;Username=unused;Password=unused")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        using var db = new AppDbContext(options);
+        var repository = new UniversityDetailRepository(db);
+        var method = typeof(UniversityDetailRepository).GetMethod("BuildSearchQuery", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var searchQuery = new UniversitySearchQuery(
+            Search: "Boston",
+            State: "MA",
+            Region: "northeast",
+            Control: "private",
+            Major: "Computer Science",
+            MinTuitionUsd: 10000,
+            MaxTuitionUsd: 60000,
+            MinTotalCostUsd: 20000,
+            MaxTotalCostUsd: 85000,
+            MinLivingUsd: 8000,
+            MaxLivingUsd: 25000,
+            MaxApplicationFeeUsd: 80,
+            MaxMinIelts: 7.0m,
+            MaxMinToefl: 100,
+            MaxMinDuolingo: 130,
+            MaxMinGpa4: 3.5m,
+            MinAvgGpa4: 3.2m,
+            MaxAvgGpa4: 4.0m,
+            MinSat: 1200,
+            MaxSat: 1550,
+            MinAct: 25,
+            MaxAct: 35,
+            SatPolicy: "optional",
+            ActPolicy: "optional",
+            DeadlineRound: "RD",
+            C7TestImportance: "considered",
+            C7EcImportance: "important",
+            MinAcceptanceRate: 0.05m,
+            MaxAcceptanceRate: 0.5m,
+            MinIntlAcceptanceRate: 0.05m,
+            MaxIntlAcceptanceRate: 0.5m,
+            MinStudentFacultyRatio: 5,
+            MaxStudentFacultyRatio: 20,
+            MinRetentionRate: 0.8m,
+            MaxRetentionRate: 1.0m,
+            MinGradRate6Yr: 0.7m,
+            MaxGradRate6Yr: 1.0m,
+            MinIntlStudents: 100,
+            MaxIntlStudents: 5000,
+            IntlAidPolicy: "need_and_merit",
+            MinIntlAidAvgUsd: 10000,
+            MaxIntlAidAvgUsd: 60000,
+            MinFyOnCampusPct: 0.5m,
+            MaxFyOnCampusPct: 1.0m,
+            HousingType: "Coed residence halls",
+            Activity: "International Student Organization",
+            IsIvy: false,
+            TestOptional: true,
+            HasIntlAid: true,
+            HasScholarship: true,
+            IntlHousing: true,
+            CampusSetting: "city",
+            MaxRank: 50);
+
+        IReadOnlyList<string> generalListIds = ["USN27-NU"];
+        var query = Assert.IsAssignableFrom<IQueryable>(method.Invoke(repository, [searchQuery, generalListIds]));
+        var sql = query.ToQueryString();
+        Assert.Contains("us_states", sql);
+        Assert.Contains("scholarships", sql);
+        Assert.Contains("deadlines_json", sql);
+        Assert.Contains("housing_types", sql);
+        Assert.Contains("activities", sql);
+    }
+
     private static UniversityDetailData CreateData() => new(
         new University { Code = "TEST", Name = "Test University", State = "CA", LastEditedByUserId = Guid.NewGuid() },
         "California", [], [], [], [], []);
@@ -302,7 +379,7 @@ public class UniversityDetailTests
                     data.University.Id, data.University.Code, data.University.Name,
                     data.University.City, data.University.State, data.StateName,
                     data.University.Control, data.University.AcceptanceRate, data.University.IsIvy,
-                    null, null, 45000, 60000, 6.5m, 80, 105, 10, "US News", "optional", "need_and_merit", []));
+                    null, null, 45000, 60000, 6.5m, 80, 105, 10, "US News", "optional", "optional", "need_and_merit", []));
             }
             return Task.FromResult(new PagedResult<UniversityListItemDto>(items, query.Page, query.PageSize, items.Count));
         }
@@ -314,8 +391,12 @@ public class UniversityDetailTests
             return Task.FromResult(new UniversityFilterOptionsDto(
                 [new("CA", "California (CA)")],
                 [new("public", "Công lập (Public)"), new("private", "Tư thục (Private)")],
-                ["Computer Science"],
-                10000, 60000, 15000, 85000));
+                [new("Computer Science", "Khoa học máy tính")],
+                10000, 60000, 15000, 85000,
+                [new("USN27-NU", "National Universities")],
+                new UniversityFilterRangesDto(9000, 25000, 900, 1550, 18, 35, 6, 25, 10, 5000, 100000),
+                ["Coed residence halls"],
+                ["Model UN"]));
         }
     }
 }

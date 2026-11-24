@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDownIcon, SendIcon, XIcon } from "lucide-react";
+import { ChevronDownIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { profileFlowApi } from "@/lib/profile-flow-api";
@@ -350,7 +350,7 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
   };
 
   return (
-    <div className="mt-2.5 space-y-3 rounded-xl border border-line bg-surface p-3">
+    <div className="mt-3 space-y-3 rounded-xl border border-[var(--control-border)]/60 bg-[var(--surface-2)] p-3.5">
       <div className="grid gap-3 sm:grid-cols-2">
         {shown.map((f) =>
           f.kind === "check" ? (
@@ -399,9 +399,8 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
           disabled={!onPick || !ready}
           title={firstError ?? undefined}
           onClick={submit}
-          className="shrink-0 rounded-full bg-brand px-3.5 text-xs font-semibold text-white hover:bg-brand-ink"
+          className="shrink-0 rounded-lg bg-brand px-3.5 text-xs font-semibold text-white hover:bg-brand-ink"
         >
-          <SendIcon className="size-3.5" />
           Gửi
         </Button>
       </div>

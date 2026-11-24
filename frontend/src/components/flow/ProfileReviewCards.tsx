@@ -47,57 +47,51 @@ export function normalizeProfileDetails(details: Partial<ProfileFlowDraft> | nul
   };
 }
 
-/** Một thẻ: eyebrow + nút Sửa (chỉ khi có onEdit), nội dung bên dưới, lỗi của bước (nếu có) ở cuối */
-function ReviewCard({
+/** Một mục hồ sơ: tên mục + nút Sửa (chỉ khi có onEdit), nội dung bên dưới, lỗi của bước (nếu có) ở cuối */
+function ReviewSection({
   icon: Icon,
-  eyebrow,
+  title,
   onEdit,
   errors,
-  className,
   children,
 }: {
   icon: LucideIcon;
-  eyebrow: string;
+  title: string;
   onEdit?: () => void;
   errors?: string[];
-  className?: string;
   children: React.ReactNode;
 }) {
   const hasErrors = Boolean(errors && errors.length > 0);
   return (
-    <div
-      className={cn(
-        "rounded-2xl border bg-surface p-5 transition-colors",
-        hasErrors ? "border-destructive/60" : "border-line hover:border-brand/40",
-        className
-      )}
-    >
-      <div className="flex min-h-7 items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-          <Icon className="size-3.5 text-brand" />
-          {eyebrow}
-        </div>
+    <section className="py-6">
+      <div className="flex min-h-8 items-center justify-between gap-3">
+        <h3 className={cn("flex items-center gap-2 text-sm font-semibold", hasErrors ? "text-destructive" : "text-ink")}>
+          <Icon aria-hidden className="size-4 text-ink-2" />
+          {title}
+        </h3>
         {onEdit && (
           <Button
+            type="button"
             variant="ghost"
             size="sm"
             onClick={onEdit}
-            className="gap-1 px-2 text-xs font-semibold text-brand hover:bg-brand-wash"
+            aria-label={`Sửa ${title.toLowerCase()}`}
+            className="gap-1 px-2 text-brand hover:bg-brand-wash"
           >
             <Edit3Icon className="size-3.5" />
             Sửa
           </Button>
         )}
       </div>
-      <div className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted-foreground">{children}</div>
+      <div className="mt-2 space-y-1.5 text-sm leading-relaxed text-ink-2">{children}</div>
       {hasErrors && (
-        <ul className="mt-3 space-y-1 border-t border-destructive/20 pt-2 text-xs font-medium text-destructive">
+        <ul role="alert" className="mt-3 space-y-1 text-xs font-medium text-destructive">
           {errors!.map((e, i) => (
             <li key={i}>{e}</li>
           ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -113,10 +107,11 @@ interface ProfileReviewCardsProps {
   onEditStep?: (stepNumber: number) => void;
   /** Lỗi BE theo từng bước, hiện ở thẻ của bước đó */
   errorsByStep?: Record<number, string[]>;
+  className?: string;
 }
 
-/** 5 thẻ hồ sơ (bước 1–5) — dùng ở bước 6, thẻ hồ sơ trang Tài khoản và "Con của tôi" */
-export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditStep, errorsByStep }: ProfileReviewCardsProps) {
+/** 5 mục hồ sơ (bước 1–5) — dùng ở bước 6, thẻ hồ sơ trang Tài khoản và "Con của tôi" */
+export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditStep, errorsByStep, className }: ProfileReviewCardsProps) {
   useGradeScale(); // GPA thang 4 quy đổi theo bảng moderator sửa, vẽ lại khi bảng tải xong
   const { step1, step2, step3, step4, step5 } = draft;
   const edit = (step: number) => (onEditStep ? () => onEditStep(step) : undefined);
@@ -162,9 +157,9 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
   const awardsCount = step5.activities.filter((a) => a.category === "achievement").length;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <ReviewCard icon={GraduationCapIcon} eyebrow="Bạn & mục tiêu" onEdit={edit(1)} errors={errorsByStep?.[1]}>
-        <div className="text-sm font-semibold text-foreground">
+    <div className={cn("divide-y divide-dashed divide-line", className)}>
+      <ReviewSection icon={GraduationCapIcon} title="Mục tiêu của bạn" onEdit={edit(1)} errors={errorsByStep?.[1]}>
+        <div className="text-sm font-semibold text-ink">
           {labelOf(EDUCATION_LEVEL_OPTIONS, step1.currentEducationLevel) || "Chưa chọn"}
           {step1.currentGrade && ` · ${step1.currentGrade}`}
           {" → "}
@@ -174,52 +169,51 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
         {step1.currentSchool && <div>{step1.currentSchool}</div>}
         {step1.currentEducationLevel === "high_school" && step1.educationSystem && (
           <div>
-            <strong className="text-foreground">Hệ chương trình: </strong>
+            <strong className="text-ink">Hệ chương trình: </strong>
             {labelOf(EDUCATION_SYSTEM_OPTIONS, step1.educationSystem)}
           </div>
         )}
         <div>
-          <strong className="text-foreground">Ngành: </strong>
-          {majorLabel || (step1.majorUndecided ? "Chưa rõ" : "Chưa chọn")}
+          <strong className="text-ink">Ngành: </strong>
+          {majorLabel || (step1.majorUndecided ? "Cần tư vấn thêm" : "Chưa chọn")}
         </div>
         <div>
-          <strong className="text-foreground">Bang: </strong>
+          <strong className="text-ink">Bang: </strong>
           {stateNames || "Không lọc"}
           {step1.targetSchoolType && step1.targetSchoolType !== "all" && ` · ${labelOf(SCHOOL_TYPE_OPTIONS, step1.targetSchoolType)}`}
         </div>
         {step1.expectedGraduationYear && (
           <div>
-            <strong className="text-foreground">Tốt nghiệp dự kiến: </strong>
+            <strong className="text-ink">Tốt nghiệp dự kiến: </strong>
             {step1.expectedGraduationYear}
           </div>
         )}
-      </ReviewCard>
+      </ReviewSection>
 
-      <ReviewCard icon={FileTextIcon} eyebrow="Bảng điểm" onEdit={edit(2)} errors={errorsByStep?.[2]}>
+      <ReviewSection icon={FileTextIcon} title="Bảng điểm" onEdit={edit(2)} errors={errorsByStep?.[2]}>
         <div className="space-y-2">
           {draftTranscript && (
-            <div className="flex items-center gap-1 text-xs text-ok">
-              <CheckCircle2Icon className="size-3" />
+            <div className="flex items-center gap-1.5 text-ok">
+              <CheckCircle2Icon aria-hidden className="size-3.5" />
               Đã tải tệp: {draftTranscript.originalFileName}
             </div>
           )}
-          <div className="mx-auto w-fit rounded-xl bg-brand-wash px-3 py-1.5 text-center">
-            <div className="text-xs font-semibold text-brand-ink">Điểm TB tự tính</div>
-            <div className="text-numeric text-base font-bold text-brand">{gpa10Text}</div>
-            <div className="text-xs text-brand-ink">thang 4 (tham khảo): {gpa}</div>
+          <div>
+            <strong className="text-ink">Điểm TB tự tính: </strong>
+            <span className="text-numeric">{gpa10Text}</span> · thang 4 (tham khảo): <span className="text-numeric">{gpa}</span>
           </div>
           {yearsWithSubjects.length > 0 && (
-            <details className="group rounded-lg border border-line">
-              <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-1.5 font-semibold text-foreground">
+            <details className="group">
+              <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 font-medium text-brand">
                 Xem điểm từng môn
                 <ChevronDownIcon className="size-3.5 transition-transform group-open:rotate-180" />
               </summary>
-              <div className="space-y-3 border-t border-line px-3 py-2">
+              <div className="mt-2 space-y-3">
                 {yearsWithSubjects.map((year, yi) => (
                   <table key={`${year.gradeName}-${yi}`} className="w-full text-left">
-                    <caption className="pb-1 text-left font-semibold text-foreground">{year.gradeName}</caption>
+                    <caption className="pb-1 text-left font-semibold text-ink">{year.gradeName}</caption>
                     <thead>
-                      <tr className="text-muted-foreground">
+                      <tr className="text-ink-2">
                         <th className="font-medium">Môn</th>
                         <th className="w-12 text-right font-medium">HK1</th>
                         <th className="w-12 text-right font-medium">HK2</th>
@@ -230,7 +224,7 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
                         .filter((s) => s.subjectName)
                         .map((s, si) => (
                           <tr key={`${s.subjectName}-${si}`} className="border-t border-line/60">
-                            <td className="py-0.5 text-foreground">{s.subjectName}</td>
+                            <td className="py-0.5 text-ink">{s.subjectName}</td>
                             <td className="text-numeric text-right">{formatScore(s.semester1Score)}</td>
                             <td className="text-numeric text-right">{formatScore(s.semester2Score)}</td>
                           </tr>
@@ -242,12 +236,12 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
             </details>
           )}
         </div>
-      </ReviewCard>
+      </ReviewSection>
 
-      <ReviewCard icon={BookOpenIcon} eyebrow="Chứng chỉ" onEdit={edit(3)} errors={errorsByStep?.[3]}>
+      <ReviewSection icon={BookOpenIcon} title="Chứng chỉ" onEdit={edit(3)} errors={errorsByStep?.[3]}>
         {step3.certifications.length > 0 ? (
           step3.certifications.map((cert) => (
-            <div key={cert.id} className="text-foreground">
+            <div key={cert.id} className="text-ink">
               {formatCertSummary(cert, findCertType(certificationTypes, cert.type))}
             </div>
           ))
@@ -256,39 +250,38 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
         )}
         {step3.englishPlanned && <div>Tiếng Anh: chưa thi và chưa có dự định thi</div>}
         {step3.standardizedPlanned && <div>Bài thi chuẩn hóa: chưa thi và chưa có dự định thi</div>}
-      </ReviewCard>
+      </ReviewSection>
 
-      <ReviewCard icon={DollarSignIcon} eyebrow="Tài chính" onEdit={edit(4)} errors={errorsByStep?.[4]}>
-        <div className="text-sm font-semibold text-foreground">{budgetTierLabel} / năm</div>
+      <ReviewSection icon={DollarSignIcon} title="Tài chính" onEdit={edit(4)} errors={errorsByStep?.[4]}>
+        <div className="text-sm font-semibold text-ink">{budgetTierLabel} / năm</div>
         <div>
-          <strong className="text-foreground">Học bổng: </strong>
+          <strong className="text-ink">Học bổng: </strong>
           {financialNeedLabel}
         </div>
         {step4.fundingSource && (
           <div>
-            <strong className="text-foreground">Nguồn chi trả: </strong>
+            <strong className="text-ink">Nguồn chi trả: </strong>
             {labelOf(FUNDING_SOURCE_OPTIONS, step4.fundingSource)}
           </div>
         )}
-      </ReviewCard>
+      </ReviewSection>
 
-      <ReviewCard
+      <ReviewSection
         icon={TrophyIcon}
-        eyebrow="Hoạt động & giải thưởng"
+        title="Hoạt động & giải thưởng"
         onEdit={edit(5)}
         errors={errorsByStep?.[5]}
-        className="sm:col-span-2"
       >
         {step5.activities.length > 0 ? (
           <>
-            <div className="text-sm font-semibold text-foreground">
+            <div className="text-sm font-semibold text-ink">
               {activitiesCount} hoạt động · {awardsCount} giải
             </div>
             <ul className="space-y-2">
               {step5.activities.map((a, i) => (
                 <li key={a.id ?? i} className="space-y-0.5">
                   <div>
-                    <strong className="text-foreground">{a.name}</strong>
+                    <strong className="text-ink">{a.name}</strong>
                     {" · "}
                     {labelOf(IMPACT_LEVEL_OPTIONS, a.impactLevel) || "Chưa chọn phạm vi"}
                     {a.category === "activity"
@@ -296,7 +289,7 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
                       : ` · Năm ${a.year ?? "?"}`}
                   </div>
                   {a.description && (
-                    <p className="text-xs text-muted-foreground italic pl-2 border-l border-brand/40">
+                    <p className="text-xs italic text-ink-2">
                       &ldquo;{a.description}&rdquo;
                     </p>
                   )}
@@ -307,7 +300,7 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
         ) : (
           <div>Chưa có hoạt động ngoại khóa</div>
         )}
-      </ReviewCard>
+      </ReviewSection>
     </div>
   );
 }

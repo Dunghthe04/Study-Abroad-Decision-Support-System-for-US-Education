@@ -206,8 +206,8 @@ export function ReviewWidget({ data }: { data?: Record<string, unknown> | null }
   if (rows.length === 0) return null;
 
   return (
-    <div className="mt-2.5 overflow-hidden rounded-xl border border-line bg-surface">
-      <div className="border-b border-line bg-ground px-3 py-2 text-xs font-semibold text-muted-foreground">
+    <div className="mt-3 overflow-hidden rounded-xl border border-[var(--control-border)]/60 bg-[var(--surface-2)]">
+      <div className="border-b border-line bg-[var(--surface-3)]/60 px-3 py-2 text-xs font-semibold text-ink-2">
         Hồ sơ của bạn
       </div>
       <dl className="divide-y divide-line text-[13px]">
@@ -248,7 +248,7 @@ export function CurrentValues({ current }: { current?: unknown }) {
   if (rows.length === 0) return null;
 
   return (
-    <div className="mt-2.5 rounded-xl border border-dashed border-line bg-ground px-3 py-2 text-[13px]">
+    <div className="mt-3 rounded-xl border border-dashed border-[var(--control-border)]/70 bg-[var(--surface-2)] px-3 py-2 text-[13px]">
       <div className="text-xs font-semibold text-muted-foreground">Hiện tại</div>
       <dl className="mt-1 space-y-0.5">
         {rows.map((r) => (

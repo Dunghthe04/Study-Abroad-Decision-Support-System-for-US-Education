@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircleIcon, CheckIcon, Loader2Icon, MessageCircleIcon, XIcon } from "lucide-react";
+import { AlertCircleIcon, CheckIcon, HomeIcon, Loader2Icon, MessageCircleIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -11,7 +11,11 @@ import {
   useAssistantPageContext,
   useAssistantProfileChanged,
 } from "@/components/assistant/AssistantProvider";
-import { FLOW_STEPS, ProfileFlowStepper } from "./ProfileFlowStepper";
+import { FLOW_STEPS, ProfileFlowStepper, type NeedsEntry } from "./ProfileFlowStepper";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { FlowChromeProvider } from "./StepChrome";
+import { NeedsIntro } from "./NeedsIntro";
 import { Step1Goal } from "./Step1Goal";
 import { Step2Transcript } from "./Step2Transcript";
 import { Step3Certifications } from "./Step3Certifications";
@@ -23,6 +27,7 @@ import { migrateLegacyStep3 } from "@/lib/certification-utils";
 import { recommendationApi } from "@/lib/recommendation-api";
 import {
   EDIT_ONLY,
+  FORM_GOAL_OPTIONS,
   GOALS_CHANGED_EVENT,
   GOALS_KEY,
   goalsNeedMajor,
@@ -100,7 +105,8 @@ function stepReady(step: number, draft: ProfileFlowDraft, goals: FormGoal[]): bo
       return draft.step2.calculatedGpa4Scale != null || draft.step2.manualGpa10Scale != null;
     case 3: {
       // tiếng Anh và bài thi học thuật: mỗi mục có điểm hoặc tích "chưa thi" (giống nút Tiếp tục của bước 3)
-      const certs = draft.step3.certifications ?? [];
+      // Thẻ sửa trực tiếp nên có thể còn thẻ trống (chưa chọn loại): chưa tính là đã điền
+      const certs = (draft.step3.certifications ?? []).filter((c) => Boolean(c.type));
       const english = certs.some((c) => c.category === "english") || draft.step3.englishPlanned;
       const tests =
         certs.some((c) => ["standardized", "graduate"].includes(c.category)) || draft.step3.standardizedPlanned;
@@ -117,6 +123,16 @@ function stepReady(step: number, draft: ProfileFlowDraft, goals: FormGoal[]): bo
 
 // Phải khớp CONTINUE_CHAT trong advisor/app/services/intake.py
 const CONTINUE_CHAT = "Tiếp tục bằng chat";
+const railAction = "w-full justify-start gap-2 px-3 text-white/80 hover:bg-white/10 hover:text-white";
+
+function scrollToTop() {
+  if (typeof window === "undefined") return;
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const behavior = reduced ? "auto" : "smooth";
+  window.scrollTo({ top: 0, behavior });
+  // Từ 1024px chỉ vùng câu hỏi cuộn
+  document.getElementById("flow-scroll")?.scrollTo({ top: 0, behavior });
+}
 
 export function ProfileFlowWizard() {
   const router = useRouter();
@@ -124,6 +140,10 @@ export function ProfileFlowWizard() {
   const { open: assistantOpen, openPanel: openAssistant } = useAssistant();
 
   const [currentStep, setCurrentStep] = useState(1);
+  // intro: màn chọn nhu cầu lúc mới vào; flow: sidebar + các bước. editingNeeds: sửa nhu cầu giữa chừng
+  const [phase, setPhase] = useState<"intro" | "flow">("intro");
+  const [editingNeeds, setEditingNeeds] = useState(false);
+  const [hasCommittedProfile, setHasCommittedProfile] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [draft, setDraft] = useState<ProfileFlowDraft>(INITIAL_DRAFT);
   const [draftTranscript, setDraftTranscript] = useState<DraftTranscriptFile | null>(null);
@@ -133,7 +153,7 @@ export function ProfileFlowWizard() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error" | "idle">("idle");
+  const [, setSaveStatus] = useState<"saved" | "saving" | "error" | "idle">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // Mở form từ chat (?from=chat): bước 6 lưu hồ sơ rồi quay về chat trả lời câu học sinh đã hỏi, không gợi ý trường
   const [fromChat, setFromChat] = useState(false);
@@ -170,19 +190,19 @@ export function ProfileFlowWizard() {
   useEffect(() => {
     currentStepRef.current = currentStep;
   }, [currentStep]);
-  const lastCompletedStep = completedSteps.length ? Math.max(...completedSteps) : 0;
   // Trang 1 có ô mục tiêu thì phải tích ít nhất 1 (mở từ chat không có goal= thì ẩn ô này)
   const showGoals = !fromChat || goals.length > 0;
-  // Bước đầu tiên còn thiếu mục bắt buộc (6 = đủ hết). Quay lại xoá một mục bắt buộc thì
-  // các bước sau khoá ngay, dù trước đó đã đi qua
-  const firstNotReady =
-    [1, 2, 3, 4, 5].find((s) => !stepReady(s, draft, goals) || (s === 1 && showGoals && goals.length === 0)) ?? 6;
-  const unlockedThrough = Math.min(lastCompletedStep, firstNotReady - 1);
+  // Bước nào đã đủ mục bắt buộc; bước đầu tiên còn thiếu (6 = đủ hết, mở "Xem lại và gửi")
+  const readySteps = [1, 2, 3, 4, 5].filter((s) => stepReady(s, draft, goals) && !(s === 1 && showGoals && goals.length === 0));
+  const firstNotReady = [1, 2, 3, 4, 5].find((s) => !readySteps.includes(s)) ?? 6;
 
   const stepTitle = FLOW_STEPS.find((s) => s.step === currentStep)?.title ?? "";
+  const choosingNeeds = phase === "intro" || editingNeeds;
   useAssistantPageContext({
-    label: `Bước ${currentStep}/6 · ${stepTitle}`,
-    suggestions: ["Bước này điền thế nào?", "Kiểm tra bước này giúp mình", STEP_SUGGESTIONS[currentStep]].filter(Boolean),
+    label: choosingNeeds ? "Nhu cầu của bạn" : `Bước ${currentStep}/6 · ${stepTitle}`,
+    suggestions: choosingNeeds
+      ? ["Nên chọn nhu cầu nào?"]
+      : ["Bước này điền thế nào?", "Kiểm tra bước này giúp mình", STEP_SUGGESTIONS[currentStep]].filter(Boolean),
     studyLevel: draft.step1.targetDegreeLevel ?? null,
   });
 
@@ -213,8 +233,6 @@ export function ProfileFlowWizard() {
         // Link "Sửa hồ sơ" (Tổng quan, Tài khoản...) gửi ?goal=chi_sua: tích sẵn "Chỉ sửa hồ sơ" khi đã có hồ sơ
         const wantEditOnly = !openedFromChat && parseGoals(params.get("goal")).includes(EDIT_ONLY);
         setGoals(startGoals);
-        // Vào form trực tiếp mà chưa tích mục tiêu (nháp cũ đang ở bước sau): mở trang 1 để chọn trước
-        const startStep = (saved: number) => (!openedFromChat && startGoals.length === 0 ? 1 : saved);
         const editing = params.get("edit") === "1" || openedFromChat;
         // Tải metadata động song song với trạng thái nháp
         const [metaData, stateData, latest] = await Promise.all([
@@ -233,11 +251,12 @@ export function ProfileFlowWizard() {
         if (metaData) setMetadata(metaData);
 
         if (stateData) {
+          setHasCommittedProfile(Boolean(stateData.hasCommittedProfile));
           if (wantEditOnly && stateData.hasCommittedProfile) {
             startGoals = [EDIT_ONLY];
             setGoals(startGoals);
           }
-          setCurrentStep(startStep(stateData.currentStep || 1));
+          setCurrentStep(stateData.currentStep || 1);
           setCompletedSteps(stateData.completedSteps ?? []);
           setDraftTranscript(stateData.draftTranscript ?? null);
           setBudgetLockedUsd(stateData.budgetLockedUsd ?? null);
@@ -252,13 +271,15 @@ export function ProfileFlowWizard() {
             try {
               const parsed = JSON.parse(localDraftStr);
               if (parsed?.draft) setDraft(mergeDraft(INITIAL_DRAFT, parsed.draft));
-              if (parsed?.currentStep) setCurrentStep(startStep(parsed.currentStep));
+              if (parsed?.currentStep) setCurrentStep(parsed.currentStep);
               if (Array.isArray(parsed?.completedSteps)) setCompletedSteps(parsed.completedSteps);
             } catch {
               // ignore
             }
           }
         }
+        // Đã có nhu cầu (chat, cùng tab, sửa hồ sơ) thì vào thẳng các bước; không thì hỏi nhu cầu trước
+        setPhase(openedFromChat || startGoals.length > 0 ? "flow" : "intro");
       } catch (err: unknown) {
         console.error("Lỗi khi tải dữ liệu ban đầu cho luồng hồ sơ:", err);
       } finally {
@@ -298,6 +319,9 @@ export function ProfileFlowWizard() {
   // thì đợi (đánh dấu reloadWantedRef), để không xoá chữ đang gõ. Chỉ setDraft, không tự lưu lại
   const reloadWantedRef = useRef(false);
   const formRef = useRef<HTMLDivElement>(null);
+  // Chỗ gắn thanh đầu / thanh cuối bước, nằm ngoài vùng cuộn để chỉ phần câu hỏi có thanh cuộn
+  const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
+  const [navSlot, setNavSlot] = useState<HTMLDivElement | null>(null);
   const reloadFromChat = useCallback(async (_keys?: string[], formStep?: number | null) => {
     if (!user) return;
     // Chỉ xét ô của form; ô gõ chat của trợ lý luôn đang được chọn sau khi gửi
@@ -475,38 +499,55 @@ export function ProfileFlowWizard() {
       .then(() => setSaveStatus("saved"))
       .catch(() => setSaveStatus("error"));
 
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
+    scrollToTop();
   };
 
   // Điều hướng về bước trước
   const handlePrev = () => {
     const prevStep = Math.max(1, currentStep - 1);
     setCurrentStep(prevStep);
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
+    scrollToTop();
   };
 
   // Nhảy tới bước cụ thể từ stepper hoặc nút Sửa
   const handleSelectStep = (stepNumber: number) => {
-    // Không cho nhảy qua bước còn thiếu: dừng ở bước đó để điền trước
-    setCurrentStep(stepNumber > firstNotReady ? firstNotReady : stepNumber);
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    // Bước 1–5 nhảy tự do; "Xem lại và gửi" còn khoá thì đưa tới bước đầu tiên còn thiếu
+    const to = stepNumber === 6 && firstNotReady < 6 ? firstNotReady : stepNumber;
+    setCurrentStep(to);
+    scrollToTop();
+  };
+
+  // Chọn nhu cầu lần đầu (intro) hoặc sửa giữa chừng. Chỉ đổi nhu cầu, không đụng nháp
+  const handleConfirmNeeds = (next: FormGoal[]) => {
+    updateGoals(next);
+    setEditingNeeds(false);
+    setPhase("flow");
+    // Nhu cầu mới cần ngành thật mà chưa có ngành: đưa về bước 1 để chọn
+    if (goalsNeedMajor(next) && !draft.step1.targetMajor && currentStep > 1) {
+      setCurrentStep(1);
     }
   };
 
-  // Thoát khỏi luồng
-  const handleExit = () => {
-    router.push(backPath ?? "/");
-  };
+  // Đổi bước (hoặc vào/ra màn nhu cầu): đưa focus về h1 của bước để trình đọc màn hình đọc tiêu đề mới
+  useEffect(() => {
+    if (isLoading || choosingNeeds) return;
+    document.querySelector<HTMLElement>("[data-step-heading]")?.focus({ preventScroll: true });
+  }, [currentStep, isLoading, choosingNeeds]);
 
   // Xác nhận commit ở bước 6
   // Chỉ tích "Gợi ý trường" (hoặc chưa tích gì, như form cũ) thì sang trang gợi ý trường;
   // "Chỉ sửa hồ sơ" thì lưu rồi quay về trang cũ; còn lại về chat
   const backToChat = fromChat || (goals.length > 0 && !onlySchoolList(goals) && !editOnly);
+  // Nhãn nút gửi nói đúng việc học sinh sẽ nhận: mở từ chat thì quay về chat, còn lại theo nhu cầu đã chọn
+  const chatLabel = fromChat
+    ? "Lưu và quay về chat"
+    : goals.includes("danh_gia") && goals.includes("lo_trinh")
+      ? "Lưu và xem đánh giá, lộ trình"
+      : goals.includes("danh_gia")
+        ? "Lưu và xem đánh giá hồ sơ"
+        : goals.includes("lo_trinh")
+          ? "Lưu và xem lộ trình"
+          : "Lưu và quay về chat";
   const handleSubmitCommit = async () => {
     setErrorMessage(null);
     // Còn bước thiếu mục bắt buộc (vd. quay lại xoá rồi nhảy thẳng tới đây): đưa về bước đó
@@ -587,73 +628,106 @@ export function ProfileFlowWizard() {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-3">
         <Loader2Icon className="size-8 animate-spin text-brand" />
-        <p className="text-sm text-muted-foreground">Đang khôi phục hồ sơ nháp của bạn...</p>
+        <p className="text-sm text-muted-foreground">Đang mở hồ sơ…</p>
       </div>
     );
   }
 
-  const stepper = (variant: "sidebar" | "strip") => (
-    <ProfileFlowStepper
-      variant={variant}
-      draft={draft}
-      metadata={metadata}
-      currentStep={currentStep}
-      lastCompletedStep={unlockedThrough}
-      onSelectStep={handleSelectStep}
-    />
-  );
+  if (choosingNeeds) {
+    return (
+      <NeedsIntro
+        key={editingNeeds ? "edit" : goals.join()}
+        mode={editingNeeds ? "edit" : "start"}
+        initialGoals={goals}
+        draftStep={currentStep > 1 || completedSteps.length > 0 ? currentStep : null}
+        hasCommittedProfile={hasCommittedProfile}
+        onConfirm={handleConfirmNeeds}
+        onCancel={() => setEditingNeeds(false)}
+      />
+    );
+  }
 
-  return (
-    <div className="pb-16">
-      {/* Trạng thái lưu nháp + Thoát */}
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <span className="text-xs font-semibold text-muted-foreground">Hồ sơ chọn trường</span>
-        <div className="flex items-center gap-3 text-xs">
-          <SaveStatus status={saveStatus} />
-          {/* Mục 1: chuyển sang trả lời trong chat, chat hỏi tiếp các mục còn thiếu */}
-          {user && (
-            <button
-              type="button"
-              onClick={() => openAssistant(CONTINUE_CHAT)}
-              className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 font-medium text-brand hover:bg-brand-wash focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
-            >
-              <MessageCircleIcon className="size-3.5" />
-              {CONTINUE_CHAT}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={handleExit}
-            className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
-          >
-            <XIcon className="size-3.5" />
-            Thoát
-          </button>
-        </div>
+  // Mục "Nhu cầu" ở thanh bước: mở từ chat thì chỉ đọc; chat không gửi nhu cầu thì ẩn
+  const needs: NeedsEntry | null =
+    goalsLocked || showGoals
+      ? {
+          labels: FORM_GOAL_OPTIONS.filter((o) => goals.includes(o.value))
+            .map((o) => o.label)
+            .join(" · "),
+          ...(goalsLocked
+            ? { note: goals.includes(EDIT_ONLY) ? "Bạn đang sửa hồ sơ từ chat" : "Theo câu bạn hỏi trong chat" }
+            : { onEdit: () => setEditingNeeds(true) }),
+        }
+      : null;
+
+  const stepperProps = {
+    currentStep,
+    readySteps,
+    onSelectStep: handleSelectStep,
+    needs,
+    // Nháp tự lưu sau 1 giây; bấm nút thì lưu ngay phần còn chờ rồi về trang chủ
+    footer: (
+      <div className="flex flex-col gap-1">
+        {/* Chuyển sang trả lời trong chat, chat hỏi tiếp các mục còn thiếu */}
+        {user && (
+          <Button type="button" variant="ghost" className={railAction} onClick={() => openAssistant(CONTINUE_CHAT)}>
+            <MessageCircleIcon className="size-4" />
+            {CONTINUE_CHAT}
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          className={railAction}
+          onClick={async () => {
+            await savePending();
+            router.push("/");
+          }}
+        >
+          <HomeIcon className="size-4" />
+          Lưu và về trang chủ
+        </Button>
       </div>
+    ),
+  };
 
-      {savedNotice && (
-        <Alert className="mb-6">
-          <CheckIcon className="size-4" />
-          <AlertTitle>Đã lưu hồ sơ</AlertTitle>
-          <AlertDescription className="text-xs">Đang quay về trang trước...</AlertDescription>
-        </Alert>
-      )}
+  const notice =
+    savedNotice || (errorMessage && currentStep !== 6) ? (
+      <>
+        {savedNotice && (
+          <Alert>
+            <CheckIcon className="size-4" />
+            <AlertTitle>Đã lưu hồ sơ</AlertTitle>
+            <AlertDescription className="text-xs">Đang quay về trang trước...</AlertDescription>
+          </Alert>
+        )}
+        {/* Lỗi khi gửi hồ sơ hiện ở bước 6, cạnh thẻ của từng bước */}
+        {errorMessage && currentStep !== 6 && (
+          <Alert variant="destructive">
+            <AlertCircleIcon className="size-4" />
+            <AlertTitle>Không thể lưu hồ sơ</AlertTitle>
+            <AlertDescription className="text-xs">{errorMessage}</AlertDescription>
+          </Alert>
+        )}
+      </>
+    ) : null;
 
-      {/* Lỗi khi gửi hồ sơ hiện ở bước 6, cạnh thẻ của từng bước */}
-      {errorMessage && currentStep !== 6 && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertCircleIcon className="size-4" />
-          <AlertTitle>Không thể lưu hồ sơ</AlertTitle>
-          <AlertDescription className="text-xs">{errorMessage}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* Khung trợ lý đóng: cột form + thanh bước bên phải; mở: dải bước ngang trên form */}
-      <div className="flex flex-wrap items-start gap-6">
-        <div className="min-w-0 flex-[999_1_560px] space-y-5">
-          {assistantOpen && stepper("strip")}
-          <div ref={formRef} className="rounded-xl border border-line bg-surface p-[18px] sm:p-7">
+  // Khung trợ lý đóng: thanh bước bên trái từ 1024px (dưới đó là thanh dính); khung trợ lý mở: luôn là thanh dính
+  return (
+    <div data-flow-motion className="bg-surface lg:h-[calc(100dvh-var(--header-h))] lg:overflow-hidden lg:bg-brand">
+      <div className="flex min-h-[calc(100dvh-var(--header-h))] lg:h-full lg:min-h-0">
+        {!assistantOpen && <ProfileFlowStepper variant="sidebar" {...stepperProps} />}
+        <section className={cn("flow-panel flex min-w-0 flex-1 flex-col bg-surface lg:my-3 lg:mr-3 lg:min-h-0 lg:overflow-hidden lg:rounded-2xl", assistantOpen && "lg:ml-3")}>
+          <ProfileFlowStepper
+            variant="compact"
+            {...stepperProps}
+            sheetSide={assistantOpen ? "left" : "bottom"}
+            className={assistantOpen ? undefined : "lg:hidden"}
+          />
+          <div ref={setHeaderSlot} />
+          <FlowChromeProvider value={{ headerSlot, navSlot, notice, title: stepTitle, compactBar: assistantOpen }}>
+          <div id="flow-scroll" className="min-h-0 flex-1 lg:overflow-y-auto">
+          <div ref={formRef} key={currentStep}>
             {currentStep === 1 && (
               <Step1Goal
                 data={draft.step1}
@@ -661,9 +735,7 @@ export function ProfileFlowWizard() {
                 onUpdate={updateStep1}
                 onNext={handleNext}
                 goals={goals}
-                goalsLocked={goalsLocked}
-                showGoals={showGoals}
-                onGoalsChange={updateGoals}
+                onEditNeeds={goalsLocked ? undefined : () => setEditingNeeds(true)}
               />
             )}
 
@@ -723,47 +795,19 @@ export function ProfileFlowWizard() {
                 onSubmit={handleSubmitCommit}
                 backToChat={backToChat}
                 editOnly={editOnly}
+                chatLabel={chatLabel}
                 isSubmitting={isSubmitting || savedNotice}
                 submitError={errorMessage}
               />
             )}
           </div>
-        </div>
-
-        {!assistantOpen && (
-          <div className="min-w-0 flex-[1_1_300px] lg:sticky lg:top-[76px] lg:max-w-[400px]">{stepper("sidebar")}</div>
-        )}
+          </div>
+          </FlowChromeProvider>
+          <div ref={setNavSlot} className="sticky bottom-0 z-10 lg:static" />
+        </section>
       </div>
     </div>
   );
-}
-
-function SaveStatus({ status }: { status: "saved" | "saving" | "error" | "idle" }) {
-  if (status === "saving") {
-    return (
-      <span className="inline-flex items-center gap-1 text-muted-foreground">
-        <Loader2Icon className="size-3.5 animate-spin text-brand" />
-        Đang lưu nháp...
-      </span>
-    );
-  }
-  if (status === "saved") {
-    return (
-      <span className="inline-flex items-center gap-1 font-medium text-ok">
-        <CheckIcon className="size-3.5" />
-        Đã lưu nháp
-      </span>
-    );
-  }
-  if (status === "error") {
-    return (
-      <span className="inline-flex items-center gap-1 font-medium text-warn">
-        <AlertCircleIcon className="size-3.5" />
-        Chưa lưu được nháp
-      </span>
-    );
-  }
-  return <span className="text-muted-foreground">Tự động lưu nháp</span>;
 }
 
 // Gộp draft nhận về (BE hoặc localStorage) lên khung mặc định để không thiếu field nào

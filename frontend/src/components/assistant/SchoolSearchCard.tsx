@@ -88,7 +88,7 @@ export function SchoolSearchCard({ data }: { data: SchoolSearchData }) {
   const shown = data.items.slice(0, data.visible);
   const more = data.total - shown.length;
   return (
-    <div className="mt-2.5 space-y-2 rounded-xl border border-line bg-surface p-3 text-sm">
+    <div className="mt-3 space-y-2 rounded-xl border border-[var(--control-border)]/60 bg-[var(--surface-2)] p-3.5 text-sm">
       <div className="space-y-0.5">
         <p className="text-[13px] font-bold text-brand">
           Có {data.total} trường {data.summary}

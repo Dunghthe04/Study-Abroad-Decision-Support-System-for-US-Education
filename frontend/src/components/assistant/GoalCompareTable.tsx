@@ -195,8 +195,8 @@ export function GoalCompareTable({ result, basisLabel }: { result: SchoolGoalRes
   const lines = goalCompareLines(result);
   const simulated = result.basis === "simulated";
   return (
-    <div className="mt-2 space-y-2 rounded-xl border border-line bg-surface p-3 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="mt-3 space-y-2 rounded-xl border border-[var(--control-border)]/60 bg-[var(--surface-2)] p-3.5 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[13px] font-bold text-foreground">Bạn so với {result.name}</p>
         <BasisBadge kind={simulated ? "simulated" : "real"} label={simulated ? basisLabel : null} />
       </div>

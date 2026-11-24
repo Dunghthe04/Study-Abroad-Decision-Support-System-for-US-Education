@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { isAdminRoute } from "@/lib/admin-nav";
+import { useHeaderHidden } from "@/lib/header-visibility";
 import { isAuthRoute, isFullRoute, isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
 import { SiteFooter } from "@/components/layout/SiteFooter";
@@ -16,13 +17,19 @@ import { useAssistant } from "./AssistantProvider";
 export function AppShell({ children }: { children: React.ReactNode }) {
   useAutoHideScrollbar();
   const pathname = usePathname();
-  const { open, wide } = useAssistant();
+  const { open, panelMode } = useAssistant();
   const visible = useAssistantVisible();
   const adminRoute = isAdminRoute(pathname);
   const authRoute = isAuthRoute(pathname);
   const lockedViewport = pathname === "/universities";
   const showAssistant = !adminRoute && !authRoute;
-  const pushed = showAssistant && open && visible;
+  const docked = panelMode === "compact" || panelMode === "half";
+  const pushed = showAssistant && open && visible && docked;
+
+  // Trang phân tích cho ẩn thanh trên cùng để dành chỗ cho biểu mẫu; nút ở thanh đầu bước bật/tắt
+  const hideable = pathname.startsWith("/analysis");
+  const headerHidden = useHeaderHidden();
+  const collapsed = hideable && headerHidden;
 
   return (
     <div
@@ -32,7 +39,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       )}
       style={
         {
-          "--assistant-w": wide ? "clamp(400px, calc(100vw - 600px), 680px)" : "400px",
+          "--assistant-w": panelMode === "half" ? "50vw" : "400px",
+          ...(collapsed && { "--header-h": "0px" }),
         } as React.CSSProperties
       }
     >
@@ -41,10 +49,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           "flex flex-1 flex-col transition-[padding] duration-200",
           lockedViewport && "lg:min-h-0 lg:overflow-hidden",
           pushed && "min-[900px]:pr-(--assistant-w)",
+          // Trang phân tích: khung chat nổi trên nền xanh đậm cùng màu thanh bước
+          pushed && hideable && "min-[900px]:bg-brand",
         )}
       >
-        {!adminRoute && !authRoute && <SiteHeader />}
-        {!adminRoute && !authRoute && <ActingAsBanner />}
+        {!adminRoute && !authRoute && !collapsed && <SiteHeader />}
+        {!adminRoute && !authRoute && !collapsed && <ActingAsBanner />}
         <div id="page-banner-slot" />
         <main
           className={cn(
@@ -63,7 +73,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {(pathname === "/" || pathname === "/methodology") && <SiteFooter />}
       </div>
       {showAssistant && <AssistantPanel />}
-      {showAssistant && <AssistantLauncher />}
+      {/* Trang phân tích có nút chat ở thanh bước; nút nổi sẽ che nút "Tiếp tục" */}
+      {showAssistant && !hideable && <AssistantLauncher />}
       <Toaster />
     </div>
   );

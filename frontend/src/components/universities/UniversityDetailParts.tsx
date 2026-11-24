@@ -42,7 +42,7 @@ export function DetailSection({
   className?: string;
 }) {
   return (
-    <section id={id} aria-label={title} className={cn("scroll-mt-32 space-y-4", className)}>
+    <section id={id} aria-label={title} className={cn("scroll-mt-[calc(var(--header-h)+3.5rem)] space-y-4", className)}>
       <div className="space-y-1">
         <div className="flex items-center gap-4">
           <h2 className="font-sans text-xl font-semibold tracking-tight text-ink">{title}</h2>
