@@ -120,7 +120,7 @@
   --chart-4: #5b6f86;
   --chart-5: #b98a3e;
   --radius: 0.5rem;
-  --header-h: 6.5rem; /* thanh đầu 2 hàng (56px + 48px + viền), để ảnh đầu trang chủ nằm dưới nó */
+  --header-h: 6rem; /* thanh đầu 2 hàng (52px + 44px), khớp mép dưới header để sticky nav không hở khe */
   /* Thông số chuyển động & độ mờ nút theo claude-ui (không đổi bảng màu) */
   --cds-dur-fast: 60ms;
   --cds-dur-snap: 120ms;

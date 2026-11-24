@@ -82,7 +82,7 @@ export function UniversityDetailView({ university }: { university: UniversityDet
 
   useEffect(() => {
     const handleScroll = () => {
-      const scrollPosition = window.scrollY + 140;
+      const scrollPosition = window.scrollY + 160;
       for (let i = navigation.length - 1; i >= 0; i--) {
         const item = navigation[i];
         const element = document.getElementById(item.id);

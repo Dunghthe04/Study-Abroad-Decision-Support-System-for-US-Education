@@ -43,8 +43,8 @@ export function UniversitySortSelect({
       : rankingLists[0]?.value;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+    <div className="flex flex-wrap items-center gap-2.5">
+      <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">
         Sắp xếp theo
       </span>
       <Select
@@ -54,12 +54,12 @@ export function UniversitySortSelect({
         }}
         items={SORT_OPTIONS}
       >
-        <SelectTrigger className="h-9 w-[210px] border-line bg-surface text-xs font-medium shadow-xs">
+        <SelectTrigger className="h-9! w-[240px] border-line bg-surface px-3 text-sm font-medium shadow-xs">
           <SelectValue placeholder="Sắp xếp theo..." />
         </SelectTrigger>
         <SelectContent align="end" className="min-w-64 w-max">
           {SORT_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value} className="text-xs">
+            <SelectItem key={opt.value} value={opt.value} className="text-sm">
               {opt.label}
             </SelectItem>
           ))}
@@ -68,8 +68,8 @@ export function UniversitySortSelect({
 
       {showRankList && (
         <>
-          <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-            của BXH
+          <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            trong BXH
           </span>
           <Select
             value={activeRankList}
@@ -78,12 +78,12 @@ export function UniversitySortSelect({
             }}
             items={rankingLists}
           >
-            <SelectTrigger className="h-9 w-[220px] border-line bg-surface text-xs font-medium shadow-xs sm:w-[250px]">
+            <SelectTrigger className="h-9! w-[240px] border-line bg-surface px-3 text-sm font-medium shadow-xs sm:w-[270px]">
               <SelectValue placeholder="Chọn bảng xếp hạng..." />
             </SelectTrigger>
             <SelectContent align="end" className="min-w-64 max-w-[90vw] w-max">
               {rankingLists.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                <SelectItem key={opt.value} value={opt.value} className="text-sm">
                   {opt.label}
                 </SelectItem>
               ))}

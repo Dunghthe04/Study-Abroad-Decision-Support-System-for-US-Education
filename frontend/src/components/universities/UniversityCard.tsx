@@ -4,9 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Building2Icon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { AddTargetSchoolButton } from "@/components/target-schools/AddTargetSchoolButton";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   MISSING_UNIVERSITY_DATA,
   schoolControlLabel,
@@ -76,84 +74,73 @@ export function UniversityCard({ university, sortBy }: UniversityCardProps) {
   const hasBadges = university.bestRank != null || university.isIvy;
 
   return (
-    <Card className="group gap-0 py-0">
-      <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
-        {coverUrl ? (
-          <Image
-            src={coverUrl}
-            alt={university.name}
-            fill
-            sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
-            className="object-cover transition-transform duration-300 group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-brand-wash">
-            <Building2Icon className="size-10 text-brand/30" />
-          </div>
-        )}
+    <Link
+      href={detailHref}
+      className="group block h-full rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+    >
+      <Card className="h-full gap-0 py-0 transition-[box-shadow,ring-color] duration-150 group-hover:ring-brand/45 group-hover:shadow-sm">
+        <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
+          {coverUrl ? (
+            <Image
+              src={coverUrl}
+              alt={university.name}
+              fill
+              sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+              className="object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-brand-wash">
+              <Building2Icon className="size-10 text-brand/30" />
+            </div>
+          )}
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
-        <div className="absolute bottom-3 left-3 right-3 flex items-end gap-3">
-          <div className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
-            {logoUrl ? (
-              <Image src={logoUrl} alt={`Logo ${university.name}`} fill sizes="64px" className="object-contain p-1.5" />
-            ) : (
-              <Building2Icon className="size-7 text-brand" />
-            )}
-          </div>
-          <div className="min-w-0">
-            <Link
-              href={detailHref}
-              className="line-clamp-2 font-heading text-lg font-bold leading-snug text-white hover:underline"
-              title={university.name}
-            >
-              {university.name}
-            </Link>
-            {subtitleParts.length > 0 && (
-              <p className="truncate text-xs text-white/85">{subtitleParts.join(" · ")}</p>
-            )}
+          <div className="absolute bottom-3 left-3 right-3 flex items-end gap-3">
+            <div className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
+              {logoUrl ? (
+                <Image src={logoUrl} alt={`Logo ${university.name}`} fill sizes="64px" className="object-contain p-1.5" />
+              ) : (
+                <Building2Icon className="size-7 text-brand" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <span
+                className="line-clamp-2 font-heading text-lg font-bold leading-snug text-white group-hover:underline"
+                title={university.name}
+              >
+                {university.name}
+              </span>
+              {subtitleParts.length > 0 && (
+                <p className="truncate text-xs text-white/85">{subtitleParts.join(" · ")}</p>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      <CardContent className="flex flex-1 flex-col gap-3 py-4">
-        {hasBadges && (
-          <div className="flex flex-wrap gap-1.5">
-            {university.bestRank != null && (
-              <Badge variant="brand" title={university.bestRankList ?? undefined}>
-                #{university.bestRank}
-                {university.bestRankList && <span className="font-normal">{university.bestRankList}</span>}
-              </Badge>
-            )}
-            {university.isIvy && <Badge variant="brand">Ivy League</Badge>}
-          </div>
-        )}
+        <CardContent className="flex flex-1 flex-col gap-3 py-4">
+          {hasBadges && (
+            <div className="flex flex-wrap gap-1.5">
+              {university.bestRank != null && (
+                <Badge variant="brand" title={university.bestRankList ?? undefined}>
+                  #{university.bestRank}
+                  {university.bestRankList && <span className="font-normal">{university.bestRankList}</span>}
+                </Badge>
+              )}
+              {university.isIvy && <Badge variant="brand">Ivy League</Badge>}
+            </div>
+          )}
 
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
-          <StatItem label="Học phí/năm" value={tuition} emphasize={!byTotalCost && byTuition} />
-          <StatItem label="Tổng chi phí/năm" value={totalCost} emphasize={byTotalCost} />
-          <StatItem label="Tỷ lệ nhận" value={acceptance} />
-          <StatItem label="Yêu cầu tiếng Anh" value={english} />
-          <StatItem label="SAT" value={satPolicy} />
-          <StatItem label="ACT" value={actPolicy} />
-        </dl>
-      </CardContent>
-
-      <CardFooter className="grid grid-cols-2 gap-2 bg-transparent py-3">
-        <Link href={detailHref} className={cn(buttonVariants({ variant: "default" }), "w-full")}>
-          Xem chi tiết
-        </Link>
-        <AddTargetSchoolButton
-          universityId={university.id}
-          universityCode={university.code}
-          universityName={university.name}
-          universityCity={university.city}
-          universityState={university.state}
-          variant="outline"
-          className="w-full"
-        />
-      </CardFooter>
-    </Card>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+            <StatItem label="Học phí/năm" value={tuition} emphasize={!byTotalCost && byTuition} />
+            <StatItem label="Tổng chi phí/năm" value={totalCost} emphasize={byTotalCost} />
+            <StatItem label="Tỷ lệ nhận" value={acceptance} />
+            <StatItem label="Yêu cầu tiếng Anh" value={english} />
+            <StatItem label="SAT" value={satPolicy} />
+            <StatItem label="ACT" value={actPolicy} />
+          </dl>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
