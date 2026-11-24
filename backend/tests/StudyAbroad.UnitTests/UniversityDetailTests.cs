@@ -204,7 +204,7 @@ public class UniversityDetailTests
     {
         var repo = new FakeRepository(CreateData());
         var controller = new UniversitiesController(new UniversityDetailService(repo));
-        var query = new UniversitySearchQuery(Search: "Test", State: "CA", Page: 1, PageSize: 10);
+        var query = new UniversitySearchQuery(Search: "Test", State: "CA", MinTuitionUsd: 15000, MaxTuitionUsd: 50000, MinTotalCostUsd: 25000, MaxTotalCostUsd: 70000, Page: 1, PageSize: 10);
         var response = await controller.Search(query, default);
         var ok = Assert.IsType<OkObjectResult>(response.Result);
         var result = Assert.IsType<PagedResult<UniversityListItemDto>>(ok.Value);
@@ -314,8 +314,9 @@ public class UniversityDetailTests
             return Task.FromResult(new UniversityFilterOptionsDto(
                 [new("CA", "California (CA)")],
                 [new("public", "Công lập (Public)"), new("private", "Tư thục (Private)")],
-                ["Computer Science"],
-                10000, 60000, 15000, 85000));
+                [new("Computer Science", "Khoa học máy tính")],
+                10000, 60000, 15000, 85000,
+                [new("USN27-NU", "National Universities")]));
         }
     }
 }

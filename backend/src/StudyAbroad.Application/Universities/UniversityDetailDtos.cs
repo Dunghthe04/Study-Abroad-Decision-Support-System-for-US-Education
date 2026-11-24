@@ -52,7 +52,9 @@ public record UniversitySearchQuery(
     string? State = null,
     string? Control = null,
     string? Major = null,
+    decimal? MinTuitionUsd = null,
     decimal? MaxTuitionUsd = null,
+    decimal? MinTotalCostUsd = null,
     decimal? MaxTotalCostUsd = null,
     decimal? MaxMinIelts = null,
     decimal? MaxMinToefl = null,
@@ -65,6 +67,7 @@ public record UniversitySearchQuery(
     string? CampusSetting = null,
     int? MaxRank = null,
     string? SortBy = null,
+    string? RankListId = null,
     string? StudyLevel = "undergraduate",
     int Page = 1,
     int PageSize = 12);
@@ -98,8 +101,9 @@ public record UniversityFilterOptionItem(string Value, string Label);
 public record UniversityFilterOptionsDto(
     IReadOnlyList<UniversityFilterOptionItem> States,
     IReadOnlyList<UniversityFilterOptionItem> Controls,
-    IReadOnlyList<string> Majors,
+    IReadOnlyList<UniversityFilterOptionItem> Majors,
     decimal MinTuitionUsd,
     decimal MaxTuitionUsd,
     decimal MinTotalCostUsd,
-    decimal MaxTotalCostUsd);
+    decimal MaxTotalCostUsd,
+    IReadOnlyList<UniversityFilterOptionItem> RankingLists);

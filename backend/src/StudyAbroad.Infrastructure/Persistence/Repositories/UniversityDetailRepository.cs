@@ -122,21 +122,24 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
 
         var studyLevel = query.StudyLevel;
 
-        if (query.MaxTuitionUsd.HasValue)
-        {
-            q = q.Where(u => db.UniversityOfferings.Any(o =>
-                o.UniversityId == u.Id &&
-                (studyLevel == null || o.StudyLevel == studyLevel) &&
-                o.TuitionUsd != null && o.TuitionUsd <= query.MaxTuitionUsd.Value));
-        }
-
-        if (query.MaxTotalCostUsd.HasValue)
+        if (query.MinTuitionUsd.HasValue || query.MaxTuitionUsd.HasValue)
         {
             q = q.Where(u => db.UniversityOfferings.Any(o =>
                 o.UniversityId == u.Id &&
                 (studyLevel == null || o.StudyLevel == studyLevel) &&
                 o.TuitionUsd != null &&
-                (o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)) <= query.MaxTotalCostUsd.Value));
+                (!query.MinTuitionUsd.HasValue || o.TuitionUsd >= query.MinTuitionUsd.Value) &&
+                (!query.MaxTuitionUsd.HasValue || o.TuitionUsd <= query.MaxTuitionUsd.Value)));
+        }
+
+        if (query.MinTotalCostUsd.HasValue || query.MaxTotalCostUsd.HasValue)
+        {
+            q = q.Where(u => db.UniversityOfferings.Any(o =>
+                o.UniversityId == u.Id &&
+                (studyLevel == null || o.StudyLevel == studyLevel) &&
+                o.TuitionUsd != null &&
+                (!query.MinTotalCostUsd.HasValue || (o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)) >= query.MinTotalCostUsd.Value) &&
+                (!query.MaxTotalCostUsd.HasValue || (o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)) <= query.MaxTotalCostUsd.Value)));
         }
 
         if (query.MaxMinIelts.HasValue)
@@ -210,9 +213,32 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
 
         var total = await q.CountAsync(ct);
 
-        IQueryable<University> sorted = (query.SortBy?.ToLowerInvariant()) switch
+        var selectedRankListId = string.IsNullOrWhiteSpace(query.RankListId) ? null : query.RankListId.Trim();
+        if (selectedRankListId != null && !await db.RankingLists.AsNoTracking().AnyAsync(l => l.Id == selectedRankListId, ct))
         {
-            "name" => q.OrderBy(u => u.Name),
+            selectedRankListId = null;
+        }
+
+        var sortBy = query.SortBy?.ToLowerInvariant();
+        IQueryable<University> sorted = sortBy switch
+        {
+            "rank" => selectedRankListId != null
+                ? q
+                    .OrderBy(u => db.UniversityRankings
+                        .Where(r => r.UniversityId == u.Id && r.ListId == selectedRankListId)
+                        .Min(r => (int?)r.Rank) == null)
+                    .ThenBy(u => db.UniversityRankings
+                        .Where(r => r.UniversityId == u.Id && r.ListId == selectedRankListId)
+                        .Min(r => (int?)r.Rank))
+                    .ThenBy(u => u.Name)
+                : q
+                    .OrderBy(u => db.UniversityRankings
+                        .Where(r => r.UniversityId == u.Id && generalListIds.Contains(r.ListId))
+                        .Min(r => (int?)r.Rank) == null)
+                    .ThenBy(u => db.UniversityRankings
+                        .Where(r => r.UniversityId == u.Id && generalListIds.Contains(r.ListId))
+                        .Min(r => (int?)r.Rank))
+                    .ThenBy(u => u.Name),
             "tuition_asc" => q
                 .OrderBy(u => db.UniversityOfferings
                     .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
@@ -254,14 +280,7 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                 .OrderBy(u => u.AcceptanceRate == null || u.AcceptanceRate > 1)
                 .ThenByDescending(u => u.AcceptanceRate)
                 .ThenBy(u => u.Name),
-            _ => q
-                .OrderBy(u => db.UniversityRankings
-                    .Where(r => r.UniversityId == u.Id && generalListIds.Contains(r.ListId))
-                    .Min(r => (int?)r.Rank) == null)
-                .ThenBy(u => db.UniversityRankings
-                    .Where(r => r.UniversityId == u.Id && generalListIds.Contains(r.ListId))
-                    .Min(r => (int?)r.Rank))
-                .ThenBy(u => u.Name),
+            _ => q.OrderBy(u => u.Name),
         };
 
         var page = query.Page < 1 ? 1 : query.Page;
@@ -314,15 +333,22 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                 g => (IReadOnlyList<string>)g.Select(x => x.MajorName).Distinct().OrderBy(n => n).Take(5).ToList(),
                 ct);
 
+        var activeRankListId = sortBy == "rank" ? selectedRankListId : null;
+        var badgeListIds = activeRankListId != null && !generalListIds.Contains(activeRankListId)
+            ? generalListIds.Append(activeRankListId).ToList()
+            : generalListIds;
+
         var allRankings = await db.UniversityRankings.AsNoTracking()
-            .Where(r => universityIds.Contains(r.UniversityId) && generalListIds.Contains(r.ListId))
-            .Join(db.RankingLists.AsNoTracking(), r => r.ListId, l => l.Id, (r, l) => new { r.UniversityId, r.Rank, ListName = l.Name })
+            .Where(r => universityIds.Contains(r.UniversityId) && badgeListIds.Contains(r.ListId))
+            .Join(db.RankingLists.AsNoTracking(), r => r.ListId, l => l.Id, (r, l) => new { r.UniversityId, r.ListId, r.Rank, ListName = l.Name })
             .OrderBy(x => x.Rank)
             .ToListAsync(ct);
 
         var bestRankByUni = allRankings
             .GroupBy(x => x.UniversityId)
-            .ToDictionary(g => g.Key, g => g.First());
+            .ToDictionary(
+                g => g.Key,
+                g => (activeRankListId != null ? g.FirstOrDefault(x => x.ListId == activeRankListId) : null) ?? g.First());
 
         var items = uList.Select(u =>
         {
@@ -397,12 +423,14 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
             new("private", "Tư thục (Private)")
         };
 
-        var majors = await db.UniversityOfferingMajors.AsNoTracking()
-            .Where(link => db.UniversityOfferings.Any(o => o.Id == link.UniversityOfferingId && db.Universities.Any(u => u.Id == o.UniversityId && u.IsActive)))
-            .Join(db.Majors.AsNoTracking(), link => link.MajorId, m => m.Id, (link, m) => m.Name)
-            .Distinct()
-            .OrderBy(n => n)
+        var majors = await db.Majors.AsNoTracking()
+            .Where(m => db.UniversityOfferingMajors.Any(link =>
+                link.MajorId == m.Id &&
+                db.UniversityOfferings.Any(o => o.Id == link.UniversityOfferingId &&
+                    db.Universities.Any(u => u.Id == o.UniversityId && u.IsActive))))
+            .OrderBy(m => m.NameVi ?? m.Name)
             .Take(100)
+            .Select(m => new UniversityFilterOptionItem(m.Name, m.NameVi ?? m.Name))
             .ToListAsync(ct);
 
         var costs = await db.UniversityOfferings.AsNoTracking()
@@ -419,6 +447,25 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
         var minTotal = costs.Count > 0 ? costs.Min(c => c.Total) : 0m;
         var maxTotal = costs.Count > 0 ? costs.Max(c => c.Total) : 120000m;
 
+        var activeListIds = await db.UniversityRankings.AsNoTracking()
+            .Where(r => db.Universities.Any(u => u.Id == r.UniversityId && u.IsActive))
+            .Select(r => r.ListId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var rawRankingLists = await db.RankingLists.AsNoTracking()
+            .Where(l => activeListIds.Contains(l.Id))
+            .Select(l => new { l.Id, l.Name, l.ListGroup })
+            .ToListAsync(ct);
+
+        string[] groupOrder = [RecommendationRepository.GeneralRankingGroup, "Nhóm con", "Giá trị", "Theo ngành", "Khu vực"];
+        var rankingLists = rawRankingLists
+            .OrderBy(l => Array.IndexOf(groupOrder, l.ListGroup) is var idx and >= 0 ? idx : groupOrder.Length)
+            .ThenBy(l => l.Id == "USN27-NU" ? 0 : l.Id == "USN27-LAC" ? 1 : 2)
+            .ThenBy(l => l.Name)
+            .Select(l => new UniversityFilterOptionItem(l.Id, l.Name))
+            .ToList();
+
         return new UniversityFilterOptionsDto(
             states,
             controls,
@@ -426,7 +473,8 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
             minTuition,
             maxTuition,
             minTotal,
-            maxTotal);
+            maxTotal,
+            rankingLists);
     }
 }
 
