@@ -62,7 +62,7 @@ export function LandingHero() {
         <div className="lg:col-span-4 lg:justify-self-end">
           <div className="w-full max-w-md rounded-xl bg-surface p-5 text-ink">
             {/* Hàng 3 chỉ số hồ sơ mẫu */}
-            <div className="grid grid-cols-3 gap-3 pb-4">
+            <div className="grid grid-cols-[1fr_1fr_1.7fr] gap-3 pb-4">
               <div>
                 <p className="text-xs text-ink-2">GPA</p>
                 <p className="text-numeric text-2xl font-semibold text-ink">
@@ -77,7 +77,7 @@ export function LandingHero() {
               </div>
               <div>
                 <p className="text-xs text-ink-2">Ngân sách</p>
-                <p className="text-numeric text-2xl font-semibold text-ink whitespace-nowrap">
+                <p className="text-numeric text-xl font-semibold text-ink whitespace-nowrap sm:text-2xl">
                   {`> $${SAMPLE_PROFILE.budgetUsd.toLocaleString("vi-VN")}`}
                 </p>
               </div>
