@@ -181,11 +181,7 @@ export function ScholarshipListView({ data, params, today }: ScholarshipListView
         </aside>
 
         <div ref={resultsRef} className="space-y-4 pt-1.5 lg:h-full lg:overflow-y-auto lg:px-1.5 lg:pb-8">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="mr-2 text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground tabular-nums">{data.totalCount.toLocaleString("vi-VN")}</span> học bổng
-              {data.totalPages > 1 && <span className="tabular-nums"> · trang {data.page}/{data.totalPages}</span>}
-            </p>
+          <div className={cn("flex flex-wrap items-center gap-2", chips.length === 0 && "hidden")}>
             {chips.map((chip) => (
               <span
                 key={chip.key}
