@@ -34,7 +34,8 @@ public interface IParentLinkService
     /// Không chặn học sinh dưới 16 tuổi vì đặc tả cho phép tự xóa tài khoản.
     /// Không gửi email: trả danh sách thông báo để người gọi gửi sau khi transaction commit.
     /// </summary>
-    Task<List<ParentLinkRevokeNotice>> RevokeAllForAccountDeletionAsync(Guid userId, CancellationToken ct = default);
+    /// <param name="requestedBy">[UC-75 1a / UC-111 3a] Người đại diện yêu cầu xóa tài khoản của con: liên kết của họ ghi là phụ huynh thu hồi, không gửi mail "đã hủy liên kết" cho họ (họ nhận mail xác nhận riêng).</param>
+    Task<List<ParentLinkRevokeNotice>> RevokeAllForAccountDeletionAsync(Guid userId, CancellationToken ct = default, ParentDeletionRequester? requestedBy = null);
 
     /// <summary>
     /// [UC-75 / UC-115] Phụ huynh vừa xác thực email tài khoản mới: gắn tài khoản vào các liên kết đã đồng ý qua link mail
@@ -377,7 +378,7 @@ public class ParentLinkService(
             await profileShare.PrepareMatchAfterLinkAsync(parent.Id, linked, ct);
     }
 
-    public async Task<List<ParentLinkRevokeNotice>> RevokeAllForAccountDeletionAsync(Guid userId, CancellationToken ct = default)
+    public async Task<List<ParentLinkRevokeNotice>> RevokeAllForAccountDeletionAsync(Guid userId, CancellationToken ct = default, ParentDeletionRequester? requestedBy = null)
     {
         var notices = new List<ParentLinkRevokeNotice>();
         var user = await users.GetUserById(userId, ct);
@@ -400,7 +401,8 @@ public class ParentLinkService(
                 if (consent != null)
                     consent.Granted = false;
             }
-            MarkRevoked(link, userId, now);
+            var byRequester = requestedBy != null && link.StudentUserId == userId && IsRequesterLink(link, requestedBy);
+            MarkRevoked(link, byRequester ? requestedBy!.ParentUserId : userId, now);
 
             try
             {
@@ -412,7 +414,7 @@ public class ParentLinkService(
                 continue;
             }
 
-            if (!wasActive)
+            if (!wasActive || byRequester)
                 continue;
 
             var isStudentSide = link.StudentUserId == userId;
@@ -660,6 +662,11 @@ public class ParentLinkService(
     private static bool CanStudentRevoke(ParentStudentLink link, User student) =>
         link.Status != ParentLinkStatuses.Active ||
         AgeOf(student) is not { } age || age >= AgeGroups.ChildMaxAgeExclusive;
+
+    private static bool IsRequesterLink(ParentStudentLink link, ParentDeletionRequester requester) =>
+        requester.ParentUserId is { } pid
+            ? link.ParentUserId == pid
+            : string.Equals(link.ParentEmail, requester.ParentEmail, StringComparison.OrdinalIgnoreCase);
 
     private static void MarkRevoked(ParentStudentLink link, Guid? byUserId, DateTime now)
     {

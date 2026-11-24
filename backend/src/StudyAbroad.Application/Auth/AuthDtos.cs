@@ -82,7 +82,11 @@ namespace StudyAbroad.Application.Auth
     public record RestoreAccountRequest(string Email, string RestoreToken);
 
     // [UC-80] Thông tin trả về khi đăng nhập vào tài khoản đang chờ xóa
-    public record PendingDeletionInfo(DateTime DeletionDate, string RestoreToken);
+    // [UC-75 4b] RequestedByParent: người đại diện đã yêu cầu xóa tài khoản học sinh dưới 16, không cấp mã khôi phục (RestoreToken null)
+    public record PendingDeletionInfo(DateTime DeletionDate, string? RestoreToken, bool RequestedByParent = false);
+
+    /// <summary>[UC-75 1a / UC-111 3a] Người đại diện yêu cầu xóa tài khoản của con dưới 16: email nhận mail đồng ý, tài khoản phụ huynh nếu có.</summary>
+    public record ParentDeletionRequester(string ParentEmail, Guid? ParentUserId);
 
     // [USAS-362] Hộp trả kết quả từ AuthService
     public record AuthResult(UserDto? User, AuthResponse? Response = null, AuthError Error = AuthError.None, string? Message = null,

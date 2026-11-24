@@ -50,6 +50,15 @@ namespace StudyAbroad.Application.Auth
         Task<AuthResult> RestoreAccountAsync(RestoreAccountRequest request, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
     }
 
+    /// <summary>
+    /// [UC-75 1a / UC-111 3a] Xóa tài khoản học sinh dưới 16 theo yêu cầu người đại diện. Tách khỏi IAuthService để
+    /// dịch vụ liên kết phụ huynh gọi được mà không phụ thuộc vòng; AuthService cài đặt.
+    /// </summary>
+    public interface IParentRequestedDeletion
+    {
+        Task<AuthResult> DeleteChildAccountByParentAsync(Guid studentUserId, ParentDeletionRequester requester, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
+    }
+
     public class AuthService(
         IUserRepository users,
         IPasswordHasher hasher,
@@ -66,7 +75,7 @@ namespace StudyAbroad.Application.Auth
         // [UC-104] Đồng ý Điều khoản và Chính sách bảo mật lúc đăng ký; null trong test cũ thì bỏ qua
         StudyAbroad.Application.Policies.IRegistrationConsent? registrationConsent = null,
         // [SC-10 / UC-113] Gửi thông báo khi Admin cập nhật ngày sinh
-        StudyAbroad.Application.Notifications.INotificationService? notifications = null) : IAuthService
+        StudyAbroad.Application.Notifications.INotificationService? notifications = null) : IAuthService, IParentRequestedDeletion
     {
         private readonly AccountDeletionOptions _accountDeletion = accountDeletion ?? new AccountDeletionOptions();
 
@@ -359,8 +368,17 @@ namespace StudyAbroad.Application.Auth
                 if (!hasher.VerifyPassword(user.PasswordHash, request.Password) || !IsWithinRetention(user, DateTime.UtcNow))
                     return AuthResult.Fail(AuthError.InvalidCredentials, InvalidCredentialsMessage);
 
-                var restoreToken = await IssueRestoreTokenAsync(user.Id, ct);
                 var deletionDate = user.DeletedAt!.Value + _accountDeletion.RetentionPeriod;
+
+                // [UC-75 4b] Người đại diện yêu cầu xóa và học sinh còn dưới 16: không cấp mã, chỉ người đại diện khôi phục được.
+                //            Đủ 16 trong thời gian chờ thì tự khôi phục như bình thường (4c).
+                if (IsParentRequestedChildDeletion(user))
+                    return AuthResult.PendingDeletionFail(
+                        $"Người đại diện của bạn đã yêu cầu xóa tài khoản này. Dữ liệu sẽ bị xóa vĩnh viễn vào ngày {deletionDate.AddHours(7):dd/MM/yyyy}. " +
+                        "Vì bạn chưa đủ 16 tuổi nên không tự khôi phục được; hãy nhờ người đại diện bấm nút khôi phục trong email hệ thống đã gửi cho họ.",
+                        new PendingDeletionInfo(deletionDate, null, RequestedByParent: true));
+
+                var restoreToken = await IssueRestoreTokenAsync(user.Id, ct);
                 return AuthResult.PendingDeletionFail(
                     "Tài khoản đang chờ xóa. Bạn có thể khôi phục tài khoản trước khi dữ liệu bị xóa vĩnh viễn.",
                     new PendingDeletionInfo(deletionDate, restoreToken));
@@ -422,6 +440,14 @@ namespace StudyAbroad.Application.Auth
             return new AuthResponse(token, expiresAt, await ToDtoAsync(user, ct), refreshToken, session.ExpiresAt);
         }
 
+        /// <summary>[UC-75 4b/4c] Tài khoản bị xóa theo yêu cầu người đại diện và học sinh vẫn dưới 16 (chưa biết ngày sinh coi như dưới 16).</summary>
+        private static bool IsParentRequestedChildDeletion(User user) =>
+            user.DeletionRequestedByEmail != null && !IsAtLeast16(user);
+
+        private static bool IsAtLeast16(User user) =>
+            user.DateOfBirth is { } dob &&
+            AgePolicy.GetAge(dob, AgePolicy.TodayInVietnam(DateTime.UtcNow)) >= AgeGroups.ChildMaxAgeExclusive;
+
         /// <summary>[UC-80] Tài khoản đã xóa mềm còn trong thời hạn khôi phục.</summary>
         private bool IsWithinRetention(User user, DateTime now) =>
             user.DeletedAt is { } deletedAt && now < deletedAt + _accountDeletion.RetentionPeriod;
@@ -464,7 +490,8 @@ namespace StudyAbroad.Application.Auth
 
             var user = await users.GetUserByEmail(NormalizeEmail(request.Email), ct);
             var now = DateTime.UtcNow;
-            if (user == null || user.Status != UserStatuses.Deleted || !IsWithinRetention(user, now))
+            if (user == null || user.Status != UserStatuses.Deleted || !IsWithinRetention(user, now) ||
+                IsParentRequestedChildDeletion(user))
                 return AuthResult.Fail(AuthError.OtpInvalid, RestoreTokenInvalidMessage);
 
             if (!await TryConsumeOtpAsync(user.Id, OtpPurposes.RestoreAccount, request.RestoreToken, ct))
@@ -475,11 +502,20 @@ namespace StudyAbroad.Application.Auth
             {
                 await unitOfWork.ExecuteInTransactionAsync(async txCt =>
                 {
+                    var byParent = user.DeletionRequestedByEmail != null;
                     user.Status = UserStatuses.Active;
                     user.DeletedAt = null;
+                    user.DeletionRequestedByEmail = null;
                     user.FailedLoginAttempts = 0;
                     user.LockoutEnd = null;
                     await users.UpdateUserAsync(user, txCt);
+
+                    // [UC-75 4c] Học sinh đủ 16 tự khôi phục: hai nút trong mail người đại diện hết tác dụng
+                    if (byParent)
+                    {
+                        await users.InvalidateOtpsAsync(user.Id, OtpPurposes.ParentRestoreReconsent, txCt);
+                        await users.InvalidateOtpsAsync(user.Id, OtpPurposes.ParentRestoreOnly, txCt);
+                    }
 
                     await auditLogs.AddAsync(new AuditLog
                     {
@@ -1246,7 +1282,85 @@ namespace StudyAbroad.Application.Auth
                 return AuthResult.Fail(AuthError.RoleNotAllowed, message);
             }
 
+            await SoftDeleteAsync(user, DateTime.UtcNow, user.Id, "user.delete_account", "request_account_deletion",
+                requester: null, inTransaction: null, ipAddress, userAgent, ct);
+
+            return AuthResult.Ok("Tài khoản đã chuyển sang chờ xóa. Trong 30 ngày bạn có thể đăng nhập để khôi phục.");
+        }
+
+        /// <summary>
+        /// [UC-75 1a / UC-111 3a] Người đại diện rút đồng ý và yêu cầu xóa tài khoản học sinh dưới 16: xóa mềm như UC-80,
+        /// ghi email người yêu cầu để học sinh không tự khôi phục được, cấp hai mã một lần cho hai nút trong mail
+        /// ("Hủy xóa và đồng ý lại cho con", "Chỉ hủy xóa"), hết hạn đúng ngày xóa vĩnh viễn.
+        /// Bên gọi (dịch vụ liên kết) đã kiểm người yêu cầu có quyền với học sinh này.
+        /// </summary>
+        public async Task<AuthResult> DeleteChildAccountByParentAsync(
+            Guid studentUserId,
+            ParentDeletionRequester requester,
+            string? ipAddress = null,
+            string? userAgent = null,
+            CancellationToken ct = default)
+        {
+            var user = await users.GetUserById(studentUserId, ct);
+            if (user is null || user.Role != UserRoles.Student)
+                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản học sinh.");
+            if (user.Status == UserStatuses.Deleted)
+                return AuthResult.Fail(AuthError.Validation, "Tài khoản của con đang chờ xóa.");
+            if (IsAtLeast16(user))
+                return AuthResult.Fail(AuthError.Validation, "Con đã đủ 16 tuổi và tự quản lý tài khoản. Bạn chỉ rút được đồng ý, không xóa được tài khoản của con.");
+
             var now = DateTime.UtcNow;
+            var deletionDate = now + _accountDeletion.RetentionPeriod;
+            string reconsentToken = "", restoreOnlyToken = "";
+
+            await SoftDeleteAsync(user, now, requester.ParentUserId, "user.delete_account_by_parent", "parent_requested_child_deletion",
+                requester,
+                async txCt =>
+                {
+                    reconsentToken = await IssueParentRestoreTokenAsync(user.Id, OtpPurposes.ParentRestoreReconsent, deletionDate, txCt);
+                    restoreOnlyToken = await IssueParentRestoreTokenAsync(user.Id, OtpPurposes.ParentRestoreOnly, deletionDate, txCt);
+                },
+                ipAddress, userAgent, ct);
+
+            await emailSender.SendChildAccountDeletedByParentEmailAsync(user.Email, user.FullName, deletionDate, ct);
+            await emailSender.SendParentChildDeletionConfirmedEmailAsync(requester.ParentEmail, user.FullName, deletionDate, reconsentToken, restoreOnlyToken, ct);
+
+            return AuthResult.Ok($"Đã rút đồng ý và yêu cầu xóa tài khoản của {user.FullName}. Tài khoản sẽ bị xóa vĩnh viễn vào ngày {deletionDate.AddHours(7):dd/MM/yyyy}.");
+        }
+
+        /// <summary>[UC-75 4b] Mã dài ngẫu nhiên cho nút trong mail người đại diện, lưu dạng băm, hết hạn lúc xóa hẳn.</summary>
+        private async Task<string> IssueParentRestoreTokenAsync(Guid userId, string purpose, DateTime expiresAt, CancellationToken ct)
+        {
+            await users.InvalidateOtpsAsync(userId, purpose, ct);
+            var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+                .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            await users.SaveOtpAsync(new OtpToken
+            {
+                UserId = userId,
+                Purpose = purpose,
+                CodeHash = HashOtp(token),
+                ExpiresAt = expiresAt,
+                Attempts = 0
+            }, ct);
+            return token;
+        }
+
+        /// <summary>
+        /// [UC-80] Lõi xóa mềm dùng chung cho tự xóa và xóa theo yêu cầu người đại diện: tất cả trong một transaction,
+        /// email báo bên còn lại và hook thanh toán chạy sau commit.
+        /// </summary>
+        private async Task SoftDeleteAsync(
+            User user,
+            DateTime now,
+            Guid? actorUserId,
+            string auditAction,
+            string detailAction,
+            ParentDeletionRequester? requester,
+            Func<CancellationToken, Task>? inTransaction,
+            string? ipAddress,
+            string? userAgent,
+            CancellationToken ct)
+        {
             List<ParentLinkRevokeNotice> notices = [];
             Func<CancellationToken, Task>? billingAfterCommit = null;
 
@@ -1255,6 +1369,7 @@ namespace StudyAbroad.Application.Auth
                 // 1. Xóa mềm: chặn đăng nhập thường, giữ dữ liệu để khôi phục
                 user.Status = UserStatuses.Deleted;
                 user.DeletedAt = now;
+                user.DeletionRequestedByEmail = requester?.ParentEmail;
                 user.FailedLoginAttempts = 0;
                 user.LockoutEnd = null;
                 await users.UpdateUserAsync(user, txCt);
@@ -1267,7 +1382,7 @@ namespace StudyAbroad.Application.Auth
                 await users.InvalidateOtpsAsync(user.Id, "reset_password", txCt);
 
                 // 4. Hủy liên kết phụ huynh (cả 2 phía) và rút consent
-                notices = await parentLinkService.RevokeAllForAccountDeletionAsync(user.Id, txCt);
+                notices = await parentLinkService.RevokeAllForAccountDeletionAsync(user.Id, txCt, requester);
 
                 // 5. Thu hồi yêu cầu liên hệ còn mở (new/contacted); lead đã hoàn tất giữ nguyên
                 var withdrawnLeads = await leadWithdrawals.WithdrawOpenLeadsAsync(user.Id, now, txCt);
@@ -1276,10 +1391,13 @@ namespace StudyAbroad.Application.Auth
                 if (billingHooks is not null)
                     billingAfterCommit = await billingHooks.OnAccountSoftDeletedAsync(user.Id, now, txCt);
 
+                if (inTransaction is not null)
+                    await inTransaction(txCt);
+
                 // 6. Ghi vết kiểm toán, không lưu email hay tên
                 var detailJson = JsonSerializer.Serialize(new
                 {
-                    action = "request_account_deletion",
+                    action = detailAction,
                     userId = user.Id,
                     deletedAt = now,
                     revokedParentLinks = notices.Count,
@@ -1288,8 +1406,8 @@ namespace StudyAbroad.Application.Auth
 
                 await auditLogs.AddAsync(new AuditLog
                 {
-                    ActorUserId = user.Id,
-                    Action = "user.delete_account",
+                    ActorUserId = actorUserId,
+                    Action = auditAction,
                     EntityType = "user",
                     EntityId = user.Id.ToString(),
                     DetailJson = detailJson,
@@ -1305,8 +1423,6 @@ namespace StudyAbroad.Application.Auth
             // Thông báo chủ nhóm và hủy link thanh toán ở cổng: cũng chỉ sau commit
             if (billingAfterCommit is not null)
                 await billingAfterCommit(ct);
-
-            return AuthResult.Ok("Tài khoản đã chuyển sang chờ xóa. Trong 30 ngày bạn có thể đăng nhập để khôi phục.");
         }
     }
 }

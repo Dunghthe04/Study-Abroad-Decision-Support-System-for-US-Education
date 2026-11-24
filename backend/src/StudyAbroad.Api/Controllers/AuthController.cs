@@ -88,7 +88,10 @@ namespace StudyAbroad.Api.Controllers
         {
             var problem = ProblemDetailsFactory.CreateProblemDetails(
                 HttpContext, StatusCodes.Status403Forbidden, title: "Tài khoản đang chờ xóa", detail: result.Message);
-            problem.Extensions["code"] = "account_pending_deletion";
+            // [UC-75 4b] Người đại diện yêu cầu xóa, học sinh dưới 16: giao diện không hiện nút khôi phục
+            problem.Extensions["code"] = result.PendingDeletion?.RequestedByParent == true
+                ? "account_pending_deletion_by_parent"
+                : "account_pending_deletion";
             problem.Extensions["deletionDate"] = result.PendingDeletion?.DeletionDate;
             problem.Extensions["restoreToken"] = result.PendingDeletion?.RestoreToken;
             return new ObjectResult(problem) { StatusCode = StatusCodes.Status403Forbidden };

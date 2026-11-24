@@ -334,6 +334,73 @@ namespace StudyAbroad.Infrastructure.Auth
             await SendEmailAsync(toEmail, subject, body, ct);
         }
 
+        // [UC-75 1a / UC-111 3a] Ngày xóa tính theo giờ Việt Nam
+        public async Task SendChildAccountDeletedByParentEmailAsync(string toEmail, string studentName, DateTime deletionDateUtc, CancellationToken ct = default)
+        {
+            var student = WebUtility.HtmlEncode(studentName);
+            var date = deletionDateUtc.AddHours(7).ToString("dd/MM/yyyy");
+            var subject = "[USAS] Người đại diện đã yêu cầu xóa tài khoản của bạn";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #dc2626; margin-bottom: 16px;">Tài khoản của bạn đang chờ xóa</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Chào <strong>{student}</strong>, người đại diện của bạn (cha, mẹ hoặc người giám hộ) đã rút lại sự đồng ý và yêu cầu xóa tài khoản USAS của bạn. Bạn đã bị đăng xuất khỏi mọi thiết bị.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Tài khoản và dữ liệu sẽ bị xóa vĩnh viễn vào ngày <strong>{date}</strong>. Vì bạn chưa đủ 16 tuổi nên không tự khôi phục được; nếu muốn giữ tài khoản, hãy nhờ người đại diện bấm nút khôi phục trong email hệ thống đã gửi cho họ.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Nếu bạn đủ 16 tuổi trước ngày xóa, bạn có thể đăng nhập để tự khôi phục.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
+        // [UC-75 4b / UC-109 3b] Hai nút dùng một lần, hiệu lực đến ngày xóa vĩnh viễn
+        public async Task SendParentChildDeletionConfirmedEmailAsync(string toEmail, string studentName, DateTime deletionDateUtc, string reconsentToken, string restoreOnlyToken, CancellationToken ct = default)
+        {
+            var baseUrl = _options.AppBaseUrl.TrimEnd('/');
+            var reconsentLink = $"{baseUrl}/parent-consent/restore?token={Uri.EscapeDataString(reconsentToken)}";
+            var restoreOnlyLink = $"{baseUrl}/parent-consent/restore?token={Uri.EscapeDataString(restoreOnlyToken)}";
+            var student = WebUtility.HtmlEncode(studentName);
+            var date = deletionDateUtc.AddHours(7).ToString("dd/MM/yyyy");
+            var subject = "[USAS] Xác nhận bạn đã rút đồng ý và yêu cầu xóa tài khoản của con";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">Đã rút đồng ý và yêu cầu xóa tài khoản</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Bạn đã rút lại sự đồng ý và yêu cầu xóa tài khoản của học sinh <strong>{student}</strong>. Tài khoản đã bị khóa đăng nhập và sẽ bị xóa vĩnh viễn vào ngày <strong>{date}</strong>. Hãy giữ lại email này.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Nếu đổi ý trước ngày đó, bạn có thể hủy yêu cầu xóa bằng một trong hai nút bên dưới, không cần đăng nhập:</p>
+                    <div style="text-align: center; margin: 24px 0;">
+                        <a href="{WebUtility.HtmlEncode(reconsentLink)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 8px; margin: 4px;">Hủy xóa và đồng ý lại cho con</a>
+                        <a href="{WebUtility.HtmlEncode(restoreOnlyLink)}" style="display: inline-block; background-color: #ffffff; color: #2563eb; border: 1px solid #2563eb; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 8px; margin: 4px;">Chỉ hủy xóa</a>
+                    </div>
+                    <p style="font-size: 13px; color: #64748b; line-height: 1.5;">"Hủy xóa và đồng ý lại cho con": khôi phục tài khoản và ghi lại sự đồng ý của bạn, con dùng lại được các chức năng cần hồ sơ. "Chỉ hủy xóa": khôi phục tài khoản nhưng không đồng ý lại, con tạm chưa dùng được các chức năng cần hồ sơ. Mỗi nút dùng được một lần.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
+        public async Task SendChildAccountRestoredByParentEmailAsync(string toEmail, string studentName, bool reconsented, CancellationToken ct = default)
+        {
+            var student = WebUtility.HtmlEncode(studentName);
+            var subject = "[USAS] Tài khoản của bạn đã được khôi phục";
+            var detail = reconsented
+                ? "Người đại diện cũng đã đồng ý lại, bạn dùng lại được đầy đủ các chức năng."
+                : "Người đại diện chưa đồng ý lại nên bạn tạm chưa dùng được các chức năng cần hồ sơ. Bạn có thể gửi lại lời mời trong trang Tài khoản.";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">Tài khoản đã được khôi phục</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Chào <strong>{student}</strong>, người đại diện của bạn đã hủy yêu cầu xóa tài khoản. Bạn có thể đăng nhập lại như bình thường.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">{detail}</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
         // [UC-116] Giống thư mời UC-115: hai nút mở trang xác nhận, mở link không đổi trạng thái
         public async Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<string> sharedFields, string confirmToken, int expiryDays, CancellationToken ct = default)
         {

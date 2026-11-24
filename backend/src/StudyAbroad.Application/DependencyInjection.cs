@@ -43,6 +43,8 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewModerationService, StudyAbroad.Application.StudyCenters.CenterReviewModerationService>();
         services.AddScoped<ICenterDeletionService, CenterDeletionService>();   // [UC-93] Admin xử lý yêu cầu xóa trung tâm
         services.AddScoped<IAuthService, AuthService>();
+        // [UC-75 1a] Cùng một AuthService trong scope, để dịch vụ liên kết gọi xóa tài khoản của con
+        services.AddScoped<IParentRequestedDeletion>(sp => (AuthService)sp.GetRequiredService<IAuthService>());
         services.AddScoped<SessionRefreshService>();   // gia hạn phiên bằng refresh token (đổi token mỗi lần)
         services.AddScoped<IAccountPurgeService, AccountPurgeService>();   // [UC-80] job xóa hẳn tài khoản gọi qua scope
         // [Q11] Liên kết phụ huynh–học sinh và sự đồng ý xử lý dữ liệu trẻ em

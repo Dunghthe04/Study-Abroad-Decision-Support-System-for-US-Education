@@ -322,6 +322,25 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
+    public Task SendChildAccountDeletedByParentEmailAsync(string toEmail, string studentName, DateTime deletionDateUtc, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "child_deleted_by_parent", deletionDateUtc.ToString("O")));
+        return Task.CompletedTask;
+    }
+
+    // Detail = "mã đồng ý lại|mã chỉ hủy xóa" để test lấy hai mã trong mail
+    public Task SendParentChildDeletionConfirmedEmailAsync(string toEmail, string studentName, DateTime deletionDateUtc, string reconsentToken, string restoreOnlyToken, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "parent_child_deletion_confirmed", reconsentToken + "|" + restoreOnlyToken));
+        return Task.CompletedTask;
+    }
+
+    public Task SendChildAccountRestoredByParentEmailAsync(string toEmail, string studentName, bool reconsented, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "child_restored_by_parent", reconsented ? "reconsent" : "restore_only"));
+        return Task.CompletedTask;
+    }
+
     public Task SendAccountLockedEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
     {
         SentEmails.Add((toEmail, "account_locked_notice", reason));
