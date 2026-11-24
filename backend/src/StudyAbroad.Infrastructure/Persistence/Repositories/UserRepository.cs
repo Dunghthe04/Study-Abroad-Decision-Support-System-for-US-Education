@@ -138,6 +138,11 @@ public class UserRepository(AppDbContext db) : IUserRepository
             .ExecuteUpdateAsync(o => o.SetProperty(x => x.UsedAt, DateTime.UtcNow), cancellationToken);
     }
 
+    public Task<OtpToken?> FindUnusedOtpByHashAsync(string codeHash, IReadOnlyCollection<string> purposes, CancellationToken cancellationToken = default) =>
+        db.OtpTokens
+            .Where(o => o.CodeHash == codeHash && purposes.Contains(o.Purpose) && o.UsedAt == null)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public Task<int> CountOtpRequestsInLastHourAsync(Guid userId, string purpose, CancellationToken cancellationToken = default)
     {
         var oneHourAgo = DateTime.UtcNow.AddHours(-1);

@@ -5096,6 +5096,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
+                    b.Property<string>("DeletionRequestedByEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("deletion_requested_by_email");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(256)

@@ -13,5 +13,11 @@ namespace StudyAbroad.Domain.Constants
 
         /// <summary>[UC-80] Mã khôi phục tài khoản đang chờ xóa, cấp sau khi đăng nhập đúng mật khẩu.</summary>
         public const string RestoreAccount = "restore_account";
+
+        /// <summary>[UC-75 4b / UC-109 3b] Nút "Hủy xóa và đồng ý lại cho con" trong mail gửi người đại diện. Hết hạn khi tài khoản bị xóa hẳn.</summary>
+        public const string ParentRestoreReconsent = "parent_restore_reconsent";
+
+        /// <summary>[UC-75 4b] Nút "Chỉ hủy xóa" trong mail gửi người đại diện. Hết hạn khi tài khoản bị xóa hẳn.</summary>
+        public const string ParentRestoreOnly = "parent_restore_only";
     }
 }

@@ -122,6 +122,9 @@ internal sealed class FakeUserRepository : IUserRepository
             .OrderByDescending(o => o.CreatedAt)
             .FirstOrDefault());
 
+    public Task<OtpToken?> FindUnusedOtpByHashAsync(string codeHash, IReadOnlyCollection<string> purposes, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Otps.FirstOrDefault(o => o.CodeHash == codeHash && purposes.Contains(o.Purpose) && o.UsedAt == null));
+
     public Task InvalidateOtpsAsync(Guid userId, string purpose, CancellationToken cancellationToken = default)
     {
         foreach (var o in Otps.Where(x => x.UserId == userId && x.Purpose == purpose && x.UsedAt == null))

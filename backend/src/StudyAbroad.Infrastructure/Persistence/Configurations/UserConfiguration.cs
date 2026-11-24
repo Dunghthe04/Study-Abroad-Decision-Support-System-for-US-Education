@@ -28,6 +28,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Configurations
             builder.Property(x => x.LockoutEnd);
             // UC-80: thời điểm yêu cầu xóa tài khoản, null = chưa yêu cầu
             builder.Property(x => x.DeletedAt);
+            // UC-75 1a: email người đại diện yêu cầu xóa tài khoản con dưới 16, null = tự xóa
+            builder.Property(x => x.DeletionRequestedByEmail).HasMaxLength(256);
             // Legal Hold: đóng băng tài khoản khi có điều tra gian lận (căn cứ pháp lý do BA/pháp chế xác nhận; xem ghi chú ở User.IsLegalHold)
             builder.Property(x => x.IsLegalHold).HasDefaultValue(false).IsRequired();
             builder.Property(x => x.LegalHoldReason).HasMaxLength(500);

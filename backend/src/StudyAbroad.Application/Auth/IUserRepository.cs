@@ -37,6 +37,8 @@ namespace StudyAbroad.Application.Auth
         Task UpdateOtpAsync(OtpToken token, CancellationToken cancellationToken = default);
         Task<OtpToken?> GetLatestOtpAsync(Guid userId, string purpose, CancellationToken cancellationToken = default);
         Task InvalidateOtpsAsync(Guid userId, string purpose, CancellationToken cancellationToken = default);
+        /// <summary>[UC-75 4b] Mã chưa dùng có hash và mục đích khớp; dùng cho link trong mail không kèm id người dùng.</summary>
+        Task<OtpToken?> FindUnusedOtpByHashAsync(string codeHash, IReadOnlyCollection<string> purposes, CancellationToken cancellationToken = default);
         Task<int> CountOtpRequestsInLastHourAsync(Guid userId, string purpose, CancellationToken cancellationToken = default);
 
         // [USAS-362] Quản lý tác vụ chạy nền (Background Scheduled Jobs)
