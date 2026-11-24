@@ -3,6 +3,24 @@ namespace StudyAbroad.Application.ParentLinks;
 /// <summary>[UC-117] Thông tin hiện trên trang rút đồng ý qua link trong mail.</summary>
 public record ParentRevokeInfo(string StudentName, DateTime? AcceptedAt);
 
+/// <summary>[UC-75 4b] Hai nút trong mail xác nhận người đại diện yêu cầu xóa tài khoản của con.</summary>
+public static class ParentRestoreModes
+{
+    /// <summary>"Hủy xóa và đồng ý lại cho con": khôi phục và ghi đồng ý mới.</summary>
+    public const string Reconsent = "reconsent";
+    /// <summary>"Chỉ hủy xóa": khôi phục, đồng ý vẫn đã rút.</summary>
+    public const string RestoreOnly = "restore_only";
+}
+
+/// <summary>
+/// [UC-75 4b] Nội dung trang khôi phục mở từ nút trong mail. <see cref="CanReconsent"/> = false khi con đã đủ 16 tuổi
+/// (tự quyết định việc đồng ý, người đại diện chỉ hủy xóa được).
+/// </summary>
+public record ParentRestoreInfo(string StudentName, DateTime DeletionDate, string Mode, bool CanReconsent, string PolicyVersion);
+
+/// <summary>[UC-75 4b] Người đại diện xác nhận khôi phục; <see cref="IsGuardian"/> và <see cref="PolicyVersion"/> chỉ cần khi đồng ý lại.</summary>
+public record ParentRestoreRequest(string Token, bool IsGuardian = false, string? PolicyVersion = null);
+
 /// <summary>[UC-115] Trạng thái link mời nhìn từ trang của phụ huynh.</summary>
 public static class ParentInviteStates
 {

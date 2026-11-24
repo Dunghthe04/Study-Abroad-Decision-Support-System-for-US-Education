@@ -221,4 +221,136 @@ public class ParentRequestedDeletionTests
         Assert.False(string.IsNullOrEmpty(login.PendingDeletion.RestoreToken));
         Assert.Equal("user.delete_account", _auditLogs.Entries.Single().Action);
     }
+
+    // ===== [UC-75 4b] Người đại diện bấm nút trong mail để hủy yêu cầu xóa =====
+
+    private ChildAccountDeletionService CreateRestoreService() =>
+        new(_repo, new ParentLinkService(_links, _repo, _emails, _auditLogs), new FakeUnitOfWork(), _auditLogs, _emails);
+
+    /// <summary>Xóa theo yêu cầu phụ huynh rồi trả hai mã trong mail (đồng ý lại, chỉ hủy xóa).</summary>
+    private async Task<(User Student, User Parent, string Reconsent, string RestoreOnly)> DeletedFamilyAsync(int studentAge = 14)
+    {
+        var (student, parent, _) = Family(studentAge);
+        await CreateService().DeleteChildAccountByParentAsync(student.Id, Requester(parent));
+        var codes = _emails.SentEmails.Single(e => e.Purpose == "parent_child_deletion_confirmed").Code.Split('|');
+        _emails.SentEmails.Clear();
+        _auditLogs.Entries.Clear();
+        return (student, parent, codes[0], codes[1]);
+    }
+
+    [Fact]
+    public async Task RestoreLookup_ShowsStudentModeAndDeletionDate()
+    {
+        var (student, _, reconsent, restoreOnly) = await DeletedFamilyAsync();
+        var service = CreateRestoreService();
+
+        var a = await service.GetRestoreInfoAsync(reconsent);
+        var b = await service.GetRestoreInfoAsync(restoreOnly);
+
+        Assert.Equal(student.FullName, a.Value!.StudentName);
+        Assert.Equal(ParentRestoreModes.Reconsent, a.Value.Mode);
+        Assert.True(a.Value.CanReconsent);
+        Assert.Equal(student.DeletedAt!.Value.AddDays(30), a.Value.DeletionDate);
+        Assert.Equal(ParentRestoreModes.RestoreOnly, b.Value!.Mode);
+        Assert.Equal(ParentLinkError.NotFound, (await service.GetRestoreInfoAsync("ma-sai")).Error);
+    }
+
+    [Fact]
+    public async Task RestoreReconsent_ReactivatesAndCreatesNewLinkWithRequesterOnly()
+    {
+        var (student, parent, reconsent, restoreOnly) = await DeletedFamilyAsync();
+        var dad = AddUser("dad@test.com", UserRoles.Parent, 42);
+
+        var result = await CreateRestoreService().RestoreAsync(reconsent, isGuardian: true, seenPolicyVersion: null, "1.2.3.4");
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal(UserStatuses.Active, student.Status);
+        Assert.Null(student.DeletedAt);
+        Assert.Null(student.DeletionRequestedByEmail);
+        var active = Assert.Single(_links.Links, l => l.Status == ParentLinkStatuses.Active);
+        Assert.Equal(parent.Id, active.ParentUserId);
+        Assert.NotNull(active.RevokeTokenHash);
+        var consent = _links.Consents.Single(c => c.Id == active.ConsentId);
+        Assert.True(consent.Granted);
+        Assert.Equal("1.2.3.4", consent.GrantedIp);
+        Assert.DoesNotContain(_links.Links, l => l.ParentUserId == dad.Id);
+        Assert.Contains(_emails.SentEmails, e => e.To == parent.Email && e.Purpose == "parent_consent_confirmed");
+        Assert.Contains(_emails.SentEmails, e => e.To == student.Email && e.Purpose == "child_restored_by_parent" && e.Code == "reconsent");
+        var log = Assert.Single(_auditLogs.Entries);
+        Assert.Equal(ChildAccountDeletionService.RestoreAuditAction, log.Action);
+        Assert.Equal(parent.Id, log.ActorUserId);
+        // Nút còn lại hết tác dụng
+        Assert.Equal(ParentLinkError.NotFound, (await CreateRestoreService().RestoreAsync(restoreOnly, false, null, null)).Error);
+    }
+
+    [Fact]
+    public async Task RestoreOnly_ReactivatesWithoutConsent_AndStudentCanLogin()
+    {
+        var (student, _, reconsent, restoreOnly) = await DeletedFamilyAsync();
+
+        var result = await CreateRestoreService().RestoreAsync(restoreOnly, isGuardian: false, seenPolicyVersion: null, null);
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal(UserStatuses.Active, student.Status);
+        Assert.DoesNotContain(_links.Links, l => l.Status == ParentLinkStatuses.Active);
+        Assert.False(await _links.HasGrantedConsentAsync(student.Id));
+        Assert.Contains(_emails.SentEmails, e => e.To == student.Email && e.Purpose == "child_restored_by_parent" && e.Code == "restore_only");
+        Assert.Equal(AuthError.None, (await CreateService().LoginAsync(new LoginRequest(student.Email, "password123"))).Error);
+        Assert.Equal(ParentLinkError.NotFound, (await CreateRestoreService().GetRestoreInfoAsync(reconsent)).Error);
+    }
+
+    [Fact]
+    public async Task RestoreReconsent_RequiresGuardianTick_AndCurrentPolicyVersion()
+    {
+        var (student, _, reconsent, _) = await DeletedFamilyAsync();
+        var service = CreateRestoreService();
+
+        var noTick = await service.RestoreAsync(reconsent, isGuardian: false, seenPolicyVersion: null, null);
+        var oldPolicy = await service.RestoreAsync(reconsent, isGuardian: true, seenPolicyVersion: "ban-cu", null);
+
+        Assert.Equal(ParentLinkError.Validation, noTick.Error);
+        Assert.Equal(ParentLinkError.Validation, oldPolicy.Error);
+        Assert.Equal(UserStatuses.Deleted, student.Status);
+        // Mã chưa bị dùng mất khi bấm lỗi
+        Assert.Equal(ParentLinkError.None, (await service.GetRestoreInfoAsync(reconsent)).Error);
+    }
+
+    [Fact]
+    public async Task RestoreReconsent_StudentTurned16_Refused_RestoreOnlyStillWorks()
+    {
+        var (student, _, reconsent, restoreOnly) = await DeletedFamilyAsync();
+        student.DateOfBirth = BornYearsAgo(16);
+        var service = CreateRestoreService();
+
+        Assert.False((await service.GetRestoreInfoAsync(reconsent)).Value!.CanReconsent);
+        Assert.Equal(ParentLinkError.Forbidden, (await service.RestoreAsync(reconsent, true, null, null)).Error);
+        Assert.Equal(ParentLinkError.None, (await service.RestoreAsync(restoreOnly, false, null, null)).Error);
+        Assert.Equal(UserStatuses.Active, student.Status);
+    }
+
+    [Fact]
+    public async Task Restore_AfterStudentSelfRestoredAt16_ParentButtonsDead()
+    {
+        var (student, _, reconsent, restoreOnly) = await DeletedFamilyAsync();
+        student.DateOfBirth = BornYearsAgo(16);
+        var auth = CreateService();
+        var login = await auth.LoginAsync(new LoginRequest(student.Email, "password123"));
+        await auth.RestoreAccountAsync(new RestoreAccountRequest(student.Email, login.PendingDeletion!.RestoreToken!));
+
+        Assert.Equal(ParentLinkError.NotFound, (await CreateRestoreService().GetRestoreInfoAsync(reconsent)).Error);
+        Assert.Equal(ParentLinkError.NotFound, (await CreateRestoreService().RestoreAsync(restoreOnly, false, null, null)).Error);
+    }
+
+    [Fact]
+    public async Task Restore_ExpiredToken_NotFound()
+    {
+        var (student, _, _, restoreOnly) = await DeletedFamilyAsync();
+        foreach (var otp in _repo.Otps.Where(o => o.UserId == student.Id))
+            otp.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+
+        var result = await CreateRestoreService().RestoreAsync(restoreOnly, false, null, null);
+
+        Assert.Equal(ParentLinkError.NotFound, result.Error);
+        Assert.Equal(UserStatuses.Deleted, student.Status);
+    }
 }

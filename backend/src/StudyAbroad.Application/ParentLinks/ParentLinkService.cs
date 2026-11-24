@@ -42,6 +42,16 @@ public interface IParentLinkService
     /// cùng email, báo học sinh. Bản ghi đồng ý giữ nguyên (bằng chứng là email lúc đồng ý).
     /// </summary>
     Task LinkParentAccountAsync(User parent, CancellationToken ct = default);
+
+    /// <summary>
+    /// [UC-75 4b] Người đại diện bấm "Hủy xóa và đồng ý lại cho con": tạo liên kết mới đã đồng ý với đúng email người bấm,
+    /// ghi consent mới (phiên bản đang hiệu lực, IP) và link rút đồng ý mới. Chạy trong transaction của bên gọi,
+    /// trả việc gửi mail và thông báo để bên gọi chạy sau commit.
+    /// </summary>
+    Task<Func<CancellationToken, Task>> GrantConsentAfterRestoreAsync(User student, string parentEmail, string? ipAddress, CancellationToken ct = default);
+
+    /// <summary>Phiên bản "Đồng ý của phụ huynh" đang hiệu lực (UC-103), để trang khôi phục hiện và kiểm tra.</summary>
+    Task<string> GetConsentPolicyVersionAsync(CancellationToken ct = default);
 }
 
 /// <summary>UC-80: thư báo hủy liên kết gửi cho bên còn lại (gửi sau commit).</summary>
@@ -376,6 +386,52 @@ public class ParentLinkService(
 
         if (linked.Count > 0 && profileShare != null)
             await profileShare.PrepareMatchAfterLinkAsync(parent.Id, linked, ct);
+    }
+
+    public Task<string> GetConsentPolicyVersionAsync(CancellationToken ct = default) => CurrentConsentVersionAsync(ct);
+
+    public async Task<Func<CancellationToken, Task>> GrantConsentAfterRestoreAsync(
+        User student, string parentEmail, string? ipAddress, CancellationToken ct = default)
+    {
+        var email = AuthService.NormalizeEmail(parentEmail);
+        var parentAccount = await FindParentAccountAsync(email, ct);
+        var now = DateTime.UtcNow;
+
+        // Liên kết cũ đã hủy giữ nguyên làm lịch sử; tạo liên kết mới như phụ huynh vừa đồng ý qua link mời
+        var link = new ParentStudentLink
+        {
+            StudentUserId = student.Id,
+            ParentEmail = email,
+            ParentUserId = parentAccount?.Id,
+        };
+        await links.AddAsync(link, ct);
+
+        var consent = new Consent
+        {
+            UserId = student.Id,
+            Purpose = ConsentPurposes.ChildDataProcessing,
+            Granted = true,
+            PolicyVersion = await CurrentConsentVersionAsync(ct),
+            GrantedByUserId = parentAccount?.Id,
+            GrantedByEmail = email,
+            GrantedIp = Truncate(ipAddress, 45),
+            CreatedAt = now,
+        };
+        var revokeToken = ParentInvite.GenerateToken();
+        link.Status = ParentLinkStatuses.Active;
+        link.AcceptedAt = now;
+        link.ConsentId = consent.Id;
+        link.RevokeTokenHash = ParentInvite.HashToken(revokeToken);
+        await links.SaveAcceptAsync(link, consent, ct);
+
+        var parentLabel = parentAccount?.FullName ?? email;
+        return async sendCt =>
+        {
+            await emailSender.SendParentConsentConfirmedEmailAsync(email, student.FullName, revokeToken, sendCt);
+            await emailSender.SendChildAccountRestoredByParentEmailAsync(student.Email, student.FullName, reconsented: true, sendCt);
+            await NotifyAsync(student.Id, StudyAbroad.Application.Notifications.NotificationTypes.ParentLinkLinked, "Tài khoản đã được khôi phục",
+                $"{parentLabel} đã hủy yêu cầu xóa và đồng ý lại cho tài khoản của bạn.", sendCt);
+        };
     }
 
     public async Task<List<ParentLinkRevokeNotice>> RevokeAllForAccountDeletionAsync(Guid userId, CancellationToken ct = default, ParentDeletionRequester? requestedBy = null)
