@@ -75,7 +75,7 @@ public static class DbSeeder
     {
         SubscriptionPlan[] plans =
         [
-            new() { Code = "free", Name = "Miễn phí", Kind = PlanKinds.Free, PriceVnd = 0, DurationDays = null, QuotaPeriodDays = null, TokenQuota = 120_000, DisplayOrder = 0,
+            new() { Code = "free", Name = "Miễn phí", Kind = PlanKinds.Free, PriceVnd = 0, DurationDays = null, QuotaPeriodDays = null, TokenQuota = 50_000, DisplayOrder = 0,
                 Description = "Hỏi đáp kiến thức du học, làm mới đầu mỗi tháng." },
             new() { Code = "personal-1m", Name = "Cá nhân 1 tháng", Kind = PlanKinds.Personal, PriceVnd = 79_000, DurationDays = 30, QuotaPeriodDays = 30, TokenQuota = 500_000, DisplayOrder = 1,
                 Description = "USDSS Premium cho 1 tài khoản trong 30 ngày." },

@@ -11,10 +11,17 @@ public class KnowledgeWorkbookReaderTests
 {
     private const string Ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
-    /// <summary>Giống file thật: id là ô số, có cột tiêu đề trống (L1) và dòng trống ở cuối.</summary>
-    private static MemoryStream RealShapedWorkbook(string sheetName = "knowledge_base")
+    /// <summary>
+    /// Giống file thật: id là ô số, có cột tiêu đề trống và dòng trống ở cuối.
+    /// withImageColumn: file cũ còn cột image_url (11 cột); false là file mới 10 cột.
+    /// </summary>
+    private static MemoryStream RealShapedWorkbook(string sheetName = "knowledge_base", bool withImageColumn = true, string? imageValue = null)
     {
         static string Inline(string cell, string text) => $"<c r=\"{cell}\" t=\"inlineStr\"><is><t>{text}</t></is></c>";
+        var headerTail = withImageColumn
+            ? Inline("J1", "image_url") + Inline("K1", "note") + "<c r=\"L1\"/>"
+            : Inline("J1", "note") + "<c r=\"K1\"/>";
+        var imageCell = withImageColumn && imageValue is not null ? Inline("J2", imageValue) : "";
         var stream = new MemoryStream();
         using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
@@ -28,10 +35,10 @@ public class KnowledgeWorkbookReaderTests
                 $"<worksheet xmlns=\"{Ns}\"><sheetData>" +
                 "<row r=\"1\">" + Inline("A1", "id") + Inline("B1", "doc_type") + Inline("C1", "label") + Inline("D1", "Question") +
                 Inline("E1", "answer") + Inline("F1", "source") + Inline("G1", "source_url") + Inline("H1", "retrieved_at") +
-                Inline("I1", "topic_code") + Inline("J1", "image_url") + Inline("K1", "note") + "<c r=\"L1\"/></row>" +
+                Inline("I1", "topic_code") + headerTail + "</row>" +
                 "<row r=\"2\"><c r=\"A2\"><v>1</v></c>" + Inline("B2", "faq") + Inline("C2", "LABEL_VISA_F1") +
                 Inline("D2", "OPT là gì?") + Inline("E2", "Trả lời") + Inline("F2", "Nguồn\nMã: EXP-KB-1") +
-                Inline("H2", "2026-11-01") + "</row>" +
+                Inline("H2", "2026-11-01") + imageCell + "</row>" +
                 "<row r=\"3\"><c r=\"A3\"/><c r=\"B3\"/></row>" +
                 "</sheetData></worksheet>");
         }
@@ -53,6 +60,32 @@ public class KnowledgeWorkbookReaderTests
         Assert.Equal(
             new KnowledgeImportRow(2, "1", "faq", "LABEL_VISA_F1", "OPT là gì?", "Trả lời", "Nguồn\nMã: EXP-KB-1", null, "2026-11-01", null, null, null),
             row);
+    }
+
+    [Fact]
+    public void Read_NewTenColumnFile_WithoutImageUrl_IsAccepted()
+    {
+        var row = Assert.Single(new KnowledgeWorkbookReader().Read(RealShapedWorkbook(withImageColumn: false)));
+
+        Assert.Equal("OPT là gì?", row.Question);
+        Assert.Null(row.ImageUrl);
+    }
+
+    [Fact]
+    public void Read_OldFileWithAnImageUrl_IgnoresTheColumn_BecauseTheKnowledgeBaseIsTextOnly()
+    {
+        var row = Assert.Single(new KnowledgeWorkbookReader().Read(RealShapedWorkbook(imageValue: "https://example.org/i20.png")));
+
+        Assert.Null(row.ImageUrl);
+    }
+
+    [Fact]
+    public void Template_HasTheTenColumnsOfUc117_AndNoImageUrl()
+    {
+        var sheet = XlsxPackage.Read(new MemoryStream(new KnowledgeTemplateWriter().Build()), n => n == KnowledgeWorkbookReader.SheetName).Single();
+
+        Assert.Equal(10, sheet.Headers.Count);
+        Assert.DoesNotContain("image_url", sheet.Headers);
     }
 
     [Fact]

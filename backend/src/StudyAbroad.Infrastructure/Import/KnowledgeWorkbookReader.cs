@@ -5,8 +5,10 @@ namespace StudyAbroad.Infrastructure.Import;
 public class KnowledgeWorkbookReader : IKnowledgeWorkbookReader
 {
     public const string SheetName = "knowledge_base";
+    // Kho tri thức chỉ trả lời bằng chữ: file có 10 cột (UC-117), không còn image_url.
+    // File cũ còn cột image_url (hoặc cột thừa khác) vẫn nhập được: cột thừa bị bỏ qua, không đọc.
     public static readonly string[] RequiredHeaders =
-        ["id", "doc_type", "label", "question", "answer", "source", "source_url", "retrieved_at", "topic_code", "image_url", "note"];
+        ["id", "doc_type", "label", "question", "answer", "source", "source_url", "retrieved_at", "topic_code", "note"];
 
     public IReadOnlyList<KnowledgeImportRow> Read(Stream workbook, CancellationToken ct = default)
     {
@@ -22,7 +24,7 @@ public class KnowledgeWorkbookReader : IKnowledgeWorkbookReader
             .Select(row => new KnowledgeImportRow(
                 row.RowNumber, row.Get("id"), row.Get("doc_type"), row.Get("label"), row.Get("question"),
                 row.Get("answer"), row.Get("source"), row.Get("source_url"), row.Get("retrieved_at"),
-                row.Get("topic_code"), row.Get("image_url"), row.Get("note")))
+                row.Get("topic_code"), null, row.Get("note")))
             .ToList();
     }
 }

@@ -23,7 +23,6 @@ public class KnowledgeTemplateWriter : IKnowledgeTemplateWriter
                 "2026-11-01",
                 null,
                 null,
-                null,
             ],
             [
                 "2",
@@ -35,7 +34,6 @@ public class KnowledgeTemplateWriter : IKnowledgeTemplateWriter
                 "https://studyinthestates.dhs.gov/students/prepare/students-and-the-form-i-20",
                 "2026-11-01",
                 "I-20",
-                null,
                 null,
             ],
         ];
@@ -51,7 +49,6 @@ public class KnowledgeTemplateWriter : IKnowledgeTemplateWriter
         guide.Add(["source, source_url", "tên nguồn, link", "Cần ít nhất một trong hai. Nhiều link cách nhau bởi dấu ;."]);
         guide.Add(["retrieved_at", "yyyy-mm-dd", "Bắt buộc."]);
         guide.Add(["topic_code", "tối đa 64 ký tự", "Bắt buộc với doc_type bắt đầu bằng proc_."]);
-        guide.Add(["image_url", "link http(s)", "Không bắt buộc."]);
 
         return XlsxPackage.Write(
         [
