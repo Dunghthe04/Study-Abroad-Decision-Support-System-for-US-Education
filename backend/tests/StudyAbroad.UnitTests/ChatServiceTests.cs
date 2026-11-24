@@ -1071,9 +1071,10 @@ public class ChatServiceTests
         Assert.False(advisor.LastRequest.Profile!.Value.TryGetProperty("transcript", out _));
     }
 
-    // Mốc GPA / tiếng Anh tính từ trường cùng bậc học mục tiêu, gửi riêng cạnh hồ sơ
+    // Mốc GPA / tiếng Anh tính từ trường đại học, gửi riêng cạnh hồ sơ. Bậc học cố định là đại học (UC-08):
+    // form cũ còn gửi bậc khác thì vẫn tính mốc đại học
     [Fact]
-    public async Task SendsBenchmarksOfTargetLevel()
+    public async Task SendsBenchmarksOfUndergraduate_EvenIfTheDraftStillCarriesAnotherLevel()
     {
         var flow = new FakeProfileFlow { Draft = new ProfileFlowDraftDto(Step1: new FlowGoalDraftDto(TargetDegreeLevel: "master")) };
         var marks = new FakeBenchmarks([new BenchmarkRow(3.6m, 6.5m, null, null)]);
@@ -1081,7 +1082,7 @@ public class ChatServiceTests
 
         await new ChatService(advisor, new FakeSessions(), flow, benchmarks: marks).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
 
-        Assert.Equal("master", marks.Level);
+        Assert.Equal("undergraduate", marks.Level);
         var sent = advisor.LastRequest!.Benchmarks!.Value;
         Assert.Equal(3.6m, sent.GetProperty("gpa4").GetDecimal());
         Assert.Equal(6.5m, sent.GetProperty("english").GetProperty("ielts").GetDecimal());

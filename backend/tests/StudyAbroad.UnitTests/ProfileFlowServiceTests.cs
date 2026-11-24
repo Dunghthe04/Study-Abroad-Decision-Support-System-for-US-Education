@@ -604,6 +604,26 @@ public class ProfileFlowServiceTests
         Assert.Equal(string.IsNullOrWhiteSpace(major) ? null : major, profile!.IntendedMajor);
     }
 
+    // Bậc học cố định là đại học (UC-08): bản nháp không có bậc học vẫn lưu được; có bậc khác (form cũ) thì vẫn lưu đại học
+    [Theory]
+    [InlineData(null)]
+    [InlineData("  ")]
+    [InlineData("master")]
+    [InlineData("phd")]
+    public async Task CommitFlowAsync_TargetLevelIsAlwaysUndergraduate_WhateverTheDraftSays(string? level)
+    {
+        var repo = new InMemoryProfileFlowRepository();
+        var service = new ProfileFlowService(repo, new FakeFileStorageService());
+        var userId = Guid.NewGuid();
+        var draft = FullDraft();
+        draft = draft with { Step1 = draft.Step1! with { TargetDegreeLevel = level } };
+
+        await service.CommitFlowAsync(userId, new CommitProfileFlowRequest(draft));
+
+        var profile = await repo.GetProfileByUserIdAsync(userId);
+        Assert.Equal(StudyLevels.Undergraduate, profile!.TargetLevel);
+    }
+
     [Fact]
     public async Task CommitFlowAsync_TwoIelts_AreBothStored_AndTickWithCertificatesIsDropped()
     {

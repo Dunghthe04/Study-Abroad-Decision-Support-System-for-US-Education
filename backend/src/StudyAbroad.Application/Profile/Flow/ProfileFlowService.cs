@@ -640,8 +640,6 @@ public class ProfileFlowService(
 
         // Bước 1
         var step1 = draft.Step1;
-        if (!StudyLevels.IsValid(step1?.TargetDegreeLevel))
-            errors.Add("Bước 1: chưa chọn bậc học muốn theo học.");
         if (step1?.CurrentEducationLevel is null || !EducationLevelCodes.Contains(step1.CurrentEducationLevel))
             errors.Add("Bước 1: chưa chọn cấp học hiện tại.");
         if (step1?.EducationSystem is { } system && !EducationSystems.IsValid(system))
@@ -999,7 +997,8 @@ public class ProfileFlowService(
     {
         // Bước 1
         var step1 = draft.Step1!;
-        profile.TargetLevel = step1.TargetDegreeLevel!.Trim();
+        // Hệ thống chỉ phục vụ bậc đại học (UC-08): bậc học cố định, không lấy từ người dùng
+        profile.TargetLevel = StudyLevels.Undergraduate;
         profile.CurrentEducationLevel = step1.CurrentEducationLevel;
         profile.CurrentGrade = NullIfBlank(step1.CurrentGrade);
         // Hệ chương trình chỉ có nghĩa với học sinh cấp 3
