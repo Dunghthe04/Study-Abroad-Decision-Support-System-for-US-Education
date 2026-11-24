@@ -62,7 +62,8 @@ export function KnowledgeImportDialog({ open, onOpenChange, onImported }: Props)
   }, [errors]);
 
   const totalRows = preview?.totalRows ?? 0;
-  const validRows = Math.max(0, totalRows - messagesByRow.size);
+  const pendingRows = preview?.pending ?? 0;
+  const validRows = Math.max(0, totalRows - messagesByRow.size - pendingRows);
   const canImport = file !== null && preview !== null && !previewing && !importing && !completed && validRows > 0;
 
   useEffect(() => () => activeRequest.current?.controller.abort(), []);
@@ -176,7 +177,7 @@ export function KnowledgeImportDialog({ open, onOpenChange, onImported }: Props)
         <DialogHeader className="shrink-0 flex-row items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-1.5">
             <DialogTitle className="text-lg">Nhập tri thức từ Excel</DialogTitle>
-            <DialogDescription>Kiểm tra dữ liệu xem trước rồi mới nhập. Dòng hợp lệ vào trạng thái Chờ duyệt; dòng trùng câu hỏi được bỏ qua.</DialogDescription>
+            <DialogDescription>Kiểm tra dữ liệu xem trước rồi mới nhập. Dòng có id chưa có thì được thêm, id đã có thì được cập nhật. Dòng có note bắt đầu bằng &ldquo;CHỜ DUYỆT&rdquo; bị bỏ qua, chưa vào kho.</DialogDescription>
           </div>
           <DialogClose disabled={importing} render={<Button type="button" variant="ghost" size="icon-sm" aria-label="Đóng" />}>
             <XIcon />
@@ -194,6 +195,7 @@ export function KnowledgeImportDialog({ open, onOpenChange, onImported }: Props)
                 <Badge variant="neutral">{totalRows} dòng</Badge>
                 <Badge variant="ok">{validRows} hợp lệ</Badge>
                 <Badge variant={messagesByRow.size > 0 ? "risk" : "neutral"}>{messagesByRow.size} dòng lỗi</Badge>
+                {pendingRows > 0 && <Badge variant="neutral">{pendingRows} dòng chờ duyệt (bỏ qua)</Badge>}
               </span>
             )}
           </div>

@@ -17,14 +17,12 @@ import {
   type TableRow,
 } from "@/components/admin/shared/EditableTable";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
-import { SlmSampleHistory } from "@/components/admin/slm-samples/SlmSampleHistory";
 import { SlmStatusBadge } from "@/components/admin/slm-samples/SlmStatusBadge";
 import { adminSlmSampleApi } from "@/lib/slm-sample-api";
 import { useFetched } from "@/lib/use-fetched";
 import {
   canSubmit,
   formatDateTime,
-  isFromChat,
   isReady,
   jsonArrayProblem,
   optionalJsonProblem,
@@ -239,7 +237,7 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
           value={form.source}
           maxLength={256}
           placeholder="Nhập tay"
-          disabled={inputsOff || (sample !== null && isFromChat(sample))}
+          disabled={inputsOff}
           onChange={(event) => patch({ source: event.target.value })}
         />
       ),
@@ -327,7 +325,7 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
     { label: "Nguồn", value: SOURCE_LABELS[sample.source] ?? sample.source },
     { label: "Câu hệ thống đã hỏi", value: sample.pendingQuestion ?? "—" },
     { label: "Nhãn rà soát", value: sample.sourceReview ?? "—" },
-    { label: "Người tạo", value: sample.createdByName ?? (isFromChat(sample) ? "Hệ thống" : "—") },
+    { label: "Người tạo", value: sample.createdByName ?? "—" },
     { label: "Ngày tạo", value: formatDateTime(sample.createdAt) },
     { label: "Cập nhật", value: formatDateTime(sample.updatedAt ?? sample.createdAt) },
   ];
@@ -345,19 +343,13 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
     { label: "Ngữ cảnh", text: sample.context },
   ];
 
-  const touchedByMe = detail.data?.history.some((item) => item.actorUserId === currentUserId && (item.action === "create" || item.action === "edit" || item.action === "submit"));
-  const canReview = sample.reviewStatus === "pending" && currentUserId !== undefined && sample.createdByUserId !== currentUserId && detail.data !== undefined && !touchedByMe;
+  const canReview = sample.reviewStatus === "pending" && currentUserId !== undefined && sample.createdByUserId !== currentUserId;
   const ready = isReady(sample.intents);
   const busy = saving || editing !== null;
 
   return (
     <DetailPanel title="Chi tiết mẫu huấn luyện" description={sampleTypeLabel(sample.sampleType)} onClose={onClose} closeDisabled={saving}>
       <div className="space-y-5">
-        {isFromChat(sample) && sample.reviewStatus === "draft" && (
-          <Alert>
-            <AlertDescription>Câu hỏi này lấy từ chat mà hệ thống chưa trả lời được. Hãy gán ý định rồi gửi duyệt, hoặc xóa nếu không phù hợp.</AlertDescription>
-          </Alert>
-        )}
         {actionError && <Alert variant="destructive"><AlertDescription>{actionError}</AlertDescription></Alert>}
         {detail.error && <Alert variant="destructive"><AlertDescription>{detail.error}</AlertDescription></Alert>}
 
@@ -399,7 +391,6 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
             ))
           )}
         </TableFrame>
-        <SlmSampleHistory history={detail.data?.history ?? []} />
       </div>
     </DetailPanel>
   );

@@ -25,4 +25,15 @@ public interface IAdvisorClient
     Task<PendingQuestionDto> PendingQuestionAsync(AdvisorPendingQuestionRequest request, CancellationToken ct = default) =>
         Task.FromResult(PendingQuestionDto.None);
 
+    /// <summary>
+    /// Nhờ advisor tạo vector cho các dòng kho tri thức còn thiếu (chạy nền, trả lời ngay). Gọi sau khi moderator nhập hoặc sửa dòng.
+    /// Mặc định (bộ giả trong test, bản advisor chưa có API này) ném NotSupportedException; chỗ gọi phải chịu được lỗi.
+    /// </summary>
+    Task<KnowledgeEmbedDto> EmbedKnowledgeAsync(CancellationToken ct = default) =>
+        throw new NotSupportedException("Advisor chưa hỗ trợ tạo vector cho kho tri thức.");
+
+    /// <summary>Hỏi tiến độ tạo vector (chỉ đọc, không bắt đầu gì). Started luôn false. Mặc định ném NotSupportedException như trên.</summary>
+    Task<KnowledgeEmbedDto> GetKnowledgeEmbedStatusAsync(CancellationToken ct = default) =>
+        throw new NotSupportedException("Advisor chưa hỗ trợ hỏi tiến độ tạo vector.");
+
 }

@@ -77,4 +77,28 @@ public class ExchangeRateProviderTests
         Assert.Equal(26000m, await provider.GetVndPerUsdAsync());
         Assert.Equal(2, handler.Calls);
     }
+
+    [Fact]
+    public async Task Quote_ReadsAsOfDateAndSource()
+    {
+        var provider = Provider(new FakeHandler("""{"rates":{"VND":25805.8},"time_last_update_unix":1795305600}"""));
+
+        var quote = await ((StudyAbroad.Application.Profile.Flow.IExchangeRateProvider)provider).GetQuoteAsync();
+
+        Assert.Equal(25805.8m, quote.VndPerUsd);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1795305600), quote.AsOf);
+        Assert.Equal(ExchangeRateProvider.SourceName, quote.Source);
+        Assert.False(quote.IsFallback);
+    }
+
+    [Fact]
+    public async Task Quote_NetworkErrorWithNoHistory_IsMarkedFallback()
+    {
+        var provider = Provider(new FakeHandler((string?)null));
+
+        var quote = await ((StudyAbroad.Application.Profile.Flow.IExchangeRateProvider)provider).GetQuoteAsync();
+
+        Assert.True(quote.IsFallback);
+        Assert.Null(quote.AsOf);
+    }
 }

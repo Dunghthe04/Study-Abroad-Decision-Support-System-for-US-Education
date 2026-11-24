@@ -27,6 +27,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Major> Majors => Set<Major>();
     public DbSet<UniversityOfferingMajor> UniversityOfferingMajors => Set<UniversityOfferingMajor>();
     public DbSet<UsState> UsStates => Set<UsState>();
+    public DbSet<StateLivingCost> StateLivingCosts => Set<StateLivingCost>();
     public DbSet<RankingList> RankingLists => Set<RankingList>();
     public DbSet<UniversityRanking> UniversityRankings => Set<UniversityRanking>();
     public DbSet<Scholarship> Scholarships => Set<Scholarship>();
@@ -44,9 +45,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ReviewVerdict> ReviewVerdicts => Set<ReviewVerdict>();
     public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
     public DbSet<SlmTrainingSample> SlmTrainingSamples => Set<SlmTrainingSample>();
-    public DbSet<SlmSampleHistory> SlmSampleHistory => Set<SlmSampleHistory>();
-    public DbSet<KnowledgeBaseEntry> KnowledgeBaseEntries => Set<KnowledgeBaseEntry>();
-    public DbSet<KnowledgeBaseEntryHistory> KnowledgeBaseEntryHistory => Set<KnowledgeBaseEntryHistory>();
     public DbSet<AiCall> AiCalls => Set<AiCall>();
     public DbSet<EvalCase> EvalCases => Set<EvalCase>();
     public DbSet<EvalRun> EvalRuns => Set<EvalRun>();

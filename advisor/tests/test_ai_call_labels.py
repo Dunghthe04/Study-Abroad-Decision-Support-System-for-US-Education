@@ -204,6 +204,8 @@ KNOWN_AI_CALL_SITES = {
     "services/transcript_reader.py": "usage_meter.purpose(PURPOSE_READ / PURPOSE_PARSE)",
     "services/slm_classifier.py": "usage_meter.purpose(prompt_name, version) = slm_intents",
     "services/skills/skill_tra_loi.py": "gọi embed(); OllamaClient.embed tự gắn nhãn embedding",
+    "services/accent_restorer.py": "usage_meter.purpose(PURPOSE) = khoi_phuc_dau quanh chat_json",
+    "services/knowledge_embedding.py": "usage_meter.purpose('embedding') quanh embed() khi tạo vector cho kho kiến thức",
 }
 CALL = re.compile(r"\.(chat_json|chat_json_scored|embed)\(")
 

@@ -1,3 +1,5 @@
+using StudyAbroad.Application.Policies;
+
 namespace StudyAbroad.Application.StudyCenters;
 
 public record RegisterCenterRequest(
@@ -9,7 +11,9 @@ public record RegisterCenterRequest(
     string RegistrantName,
     string? RegistrantPosition = null,
     bool AgreeTerms = false,
-    bool AgreeTruthfulnessCommitment = false);
+    bool AgreeTruthfulnessCommitment = false,
+    // [UC-104] Điều khoản và Chính sách bảo mật đã đọc, kèm đúng phiên bản
+    IReadOnlyList<AcceptPolicyItem>? AcceptedPolicies = null);
 
 public record VerifyCenterEmailRequest(string Email, string Code);
 

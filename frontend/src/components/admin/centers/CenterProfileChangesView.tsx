@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CheckIcon, EyeOffIcon, ExternalLinkIcon, ShieldOffIcon, XIcon } from "lucide-react";
+import { CheckIcon, EyeOffIcon, ExternalLinkIcon, XIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
@@ -24,7 +24,6 @@ import { CenterStatusBadge, CenterVisibilityBadge } from "@/components/centers/C
 import { ApiError, centerProfileChangesApi, studyCentersApi } from "@/lib/api";
 import { formatDateTime } from "@/lib/ai-usage-format";
 import { useFetched } from "@/lib/use-fetched";
-import { cn } from "cn";
 import type { CenterProfileChangeDto, CenterProfileChangeFilter } from "@/types/api";
 
 const PAGE_SIZE = 20;
@@ -189,7 +188,13 @@ export function CenterProfileChangesView() {
                 <TableRow key={item.id}>
                   <TableCell className="tabular whitespace-nowrap">{formatDateTime(item.createdAt)}</TableCell>
                   <TableCell>
-                    <span className="block font-medium">{item.studyCenterName}</span>
+                    <Link
+                      href={`/admin/centers/${encodeURIComponent(item.studyCenterId)}`}
+                      className="block font-medium hover:underline text-brand hover:text-brand/80"
+                      title="Xem chi tiết trung tâm"
+                    >
+                      {item.studyCenterName}
+                    </Link>
                     <span className="mt-1 flex flex-wrap gap-1">
                       <CenterStatusBadge status={item.centerVerificationStatus} />
                       <CenterVisibilityBadge active={item.centerIsActive} />
@@ -225,13 +230,6 @@ export function CenterProfileChangesView() {
                           Ẩn trung tâm
                         </Button>
                       ) : null}
-                      <Link
-                        href={`/admin/centers/${encodeURIComponent(item.studyCenterId)}`}
-                        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1")}
-                      >
-                        <ShieldOffIcon className="size-3.5" />
-                        Mở trung tâm (thu hồi xác minh)
-                      </Link>
                     </div>
                   </TableCell>
                 </TableRow>

@@ -11,12 +11,17 @@ public class ForumPostConfiguration : IEntityTypeConfiguration<ForumPost>
         b.HasKey(x => x.Id);
         b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull);
         b.HasOne<ForumPost>().WithMany().HasForeignKey(x => x.ParentPostId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne<ForumPost>().WithMany().HasForeignKey(x => x.ReplyToPostId).OnDelete(DeleteBehavior.SetNull);
         b.Property(x => x.Title).HasMaxLength(300);
         b.Property(x => x.StudyLevel).HasMaxLength(32);
         b.Property(x => x.Category).HasMaxLength(32);
         b.Property(x => x.Content).IsRequired();
+        b.Property(x => x.AttachmentUrl).HasMaxLength(500);
+        b.Property(x => x.AttachmentPublicId).HasMaxLength(200);
         b.Property(x => x.Status).HasMaxLength(16).IsRequired();
+        b.HasIndex(x => x.ReplyToPostId);
         b.HasIndex(x => new { x.ParentPostId, x.CreatedAt });
         b.HasIndex(x => new { x.StudyLevel, x.Status });
+        b.HasIndex(x => new { x.Category, x.Status, x.CreatedAt });
     }
 }

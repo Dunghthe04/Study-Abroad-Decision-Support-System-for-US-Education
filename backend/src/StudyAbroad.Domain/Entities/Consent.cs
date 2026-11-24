@@ -6,7 +6,10 @@ namespace StudyAbroad.Domain.Entities;
 public class Consent : BaseEntity
 {
     public Guid UserId { get; set; }
-    /// <summary>privacy | share_with_center | forum_rules | child_data_processing</summary>
+    /// <summary>
+    /// privacy | share_with_center | forum_rules | child_data_processing | terms_of_use | privacy_policy (hai loại cuối: UC-104).
+    /// Mỗi lần đồng ý hoặc từ chối là một dòng MỚI, không sửa dòng cũ; dòng mới nhất là tình trạng hiện tại.
+    /// </summary>
     public string Purpose { get; set; } = string.Empty;
     public bool Granted { get; set; }
     public string? PolicyVersion { get; set; }

@@ -45,7 +45,8 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
                 u.IsActive,
                 db.UniversityOfferings.Where(o => o.UniversityId == u.Id).Select(o => o.StudyLevel).ToList(),
                 db.UniversityOfferings.Where(o => o.UniversityId == u.Id).Max(o => o.RetrievedAt),
-                db.Media.Where((m) => m.EntityType == "University" && m.EntityId == u.Id && m.Type == "logo").Select(m => m.Url).FirstOrDefault()))
+                db.Media.Where((m) => m.EntityType == "University" && m.EntityId == u.Id && m.Type == "logo").Select(m => m.Url).FirstOrDefault(),
+                db.Scholarships.Count(s => s.UniversityId == u.Id)))
             .ToListAsync(ct);
 
         return new PagedResult<AdminUniversityListItemDto>(items, query.Page, query.PageSize, total);

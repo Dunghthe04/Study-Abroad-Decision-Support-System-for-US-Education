@@ -33,7 +33,11 @@ public record UniversityOfferingDto(
     decimal? HousingDepositUsd = null,
     int? StudentFacultyRatio = null,
     string? Activities = null,
-    string? CampusSetting = null);
+    string? CampusSetting = null,
+    string? ActPolicy = null,
+    decimal? ActSubmitPct = null,
+    decimal? ApplicationFeeUsd = null,
+    decimal? TuitionInStateUsd = null);
 
 public record UniversityRankingDto(
     string Publisher, string Name, int Rank, bool IsTie, string RankDisplay,

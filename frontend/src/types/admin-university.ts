@@ -10,6 +10,7 @@ export interface AdminUniversityListItem {
   studyLevels: string[];
   latestRetrievedAt: string | null;
   logoUrl?: string | null;
+  scholarshipCount?: number;
 }
 
 export interface AdminUniversityOffering {
@@ -20,6 +21,7 @@ export interface AdminUniversityOffering {
   livingUsd: number | null;
   feesUsd: number | null;
   otherExpensesUsd: number | null;
+  healthInsuranceUsd: number | null;
   minGpa4: number | null;
   minIelts: number | null;
   minToefl: number | null;
@@ -40,6 +42,10 @@ export interface AdminUniversityOffering {
   sourceReliability: string | null;
   updatedAt: string | null;
   lastEditedBy: string | null;
+  applicationFeeUsd: number | null;
+  tuitionInStateUsd: number | null;
+  actPolicy: string | null;
+  actSubmitPct: number | null;
 }
 
 export interface AdminOfferingMajor {
@@ -110,6 +116,9 @@ export interface UpdateOfferingRequest {
   livingUsd: number | null;
   feesUsd: number | null;
   otherExpensesUsd: number | null;
+  healthInsuranceUsd: number | null;
+  applicationFeeUsd: number | null;
+  tuitionInStateUsd: number | null;
   minGpa4: number | null;
   minIelts: number | null;
   minToefl: number | null;
@@ -120,6 +129,8 @@ export interface UpdateOfferingRequest {
   act25: number | null;
   act75: number | null;
   satPolicy: string | null;
+  actPolicy: string | null;
+  actSubmitPct: number | null;
   sourceUrl: string | null;
   retrievedAt: string | null;
   sourceReliability: string | null;

@@ -44,7 +44,7 @@ public class SlmTrainingSample : BaseEntity
     /// <summary>Người tạo hoặc import dòng này. Null với câu lấy tự động từ chat.</summary>
     public Guid? CreatedByUserId { get; set; }
 
-    /// <summary>Nguồn của mẫu: manual, excel, chat-unanswered hoặc nguồn tham khảo do người tạo ghi.</summary>
+    /// <summary>Nguồn của mẫu: manual, excel hoặc nguồn tham khảo do người tạo ghi.</summary>
     public string Source { get; set; } = "manual";
 
     public DateTime? DeletedAt { get; set; }

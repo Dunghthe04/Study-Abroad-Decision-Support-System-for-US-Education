@@ -5,7 +5,8 @@ namespace StudyAbroad.Infrastructure.Import;
 public class KnowledgeWorkbookReader : IKnowledgeWorkbookReader
 {
     public const string SheetName = "knowledge_base";
-    public static readonly string[] RequiredHeaders = ["id", "label", "level", "question", "answer", "source"];
+    public static readonly string[] RequiredHeaders =
+        ["id", "doc_type", "label", "question", "answer", "source", "source_url", "retrieved_at", "topic_code", "image_url", "note"];
 
     public IReadOnlyList<KnowledgeImportRow> Read(Stream workbook, CancellationToken ct = default)
     {
@@ -19,8 +20,9 @@ public class KnowledgeWorkbookReader : IKnowledgeWorkbookReader
 
         return sheet.Rows
             .Select(row => new KnowledgeImportRow(
-                row.RowNumber, row.Get("id"), row.Get("label"), row.Get("level"),
-                row.Get("question"), row.Get("answer"), row.Get("source")))
+                row.RowNumber, row.Get("id"), row.Get("doc_type"), row.Get("label"), row.Get("question"),
+                row.Get("answer"), row.Get("source"), row.Get("source_url"), row.Get("retrieved_at"),
+                row.Get("topic_code"), row.Get("image_url"), row.Get("note")))
             .ToList();
     }
 }

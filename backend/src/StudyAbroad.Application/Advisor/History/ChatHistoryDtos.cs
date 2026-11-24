@@ -12,8 +12,9 @@ public record ChatSessionPageDto(IReadOnlyList<ChatSessionSummaryDto> Items, str
 /// <summary>
 /// Một tin trong lịch sử của phiên: chỉ có chữ (nút, công cụ, thẻ số liệu không được lưu nên không hiện lại).
 /// Role: user (học sinh), assistant (trợ lý), system (lượt hệ thống không phản hồi). Citations: nguồn trích dẫn nếu có.
+/// Media: ảnh minh họa của câu trả lời (link https), rỗng nếu không có.
 /// </summary>
-public record ChatHistoryMessageDto(Guid Id, string Role, string Content, DateTime CreatedAt, IReadOnlyList<Citation> Citations);
+public record ChatHistoryMessageDto(Guid Id, string Role, string Content, DateTime CreatedAt, IReadOnlyList<Citation> Citations, IReadOnlyList<MediaItem> Media);
 
 /// <summary>
 /// Các tin của một phiên, cũ trước mới sau. Mặc định là các tin MỚI NHẤT của phiên; OlderCursor đưa vào lần gọi sau để lấy
@@ -31,4 +32,4 @@ public record RenamedChatSessionDto(Guid Id, string Title);
 
 public record ChatSessionRow(Guid Id, string? Title, DateTime CreatedAt, DateTime LastActivityAt, int MessageCount);
 
-public record ChatHistoryMessageRow(Guid Id, string Role, string Content, DateTime CreatedAt, string? SourcesJson);
+public record ChatHistoryMessageRow(Guid Id, string Role, string Content, DateTime CreatedAt, string? SourcesJson, string? MediaJson = null);

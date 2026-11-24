@@ -17,6 +17,23 @@ export interface AdminScholarship {
   isActive: boolean;
   updatedAt: string | null;
   lastEditedBy: string | null;
+  kind: string | null;
+  amountType: string | null;
+  amountMinUsd: number | null;
+  amountMaxUsd: number | null;
+  durationYears: number | null;
+  renewable: boolean | null;
+  renewalCriteria: string | null;
+  intlEligible: boolean | null;
+  vnEligible: boolean | null;
+  needBased: boolean | null;
+  meritBased: boolean | null;
+  minSat: number | null;
+  minAct: number | null;
+  minToefl: number | null;
+  majorRestriction: string | null;
+  applicationMethod: string | null;
+  applyUrl: string | null;
 }
 
 export interface SaveScholarshipRequest {
@@ -33,6 +50,23 @@ export interface SaveScholarshipRequest {
   sourceUrl: string | null;
   retrievedAt: string | null;
   sourceReliability: string | null;
+  kind: string | null;
+  amountType: string | null;
+  amountMinUsd: number | null;
+  amountMaxUsd: number | null;
+  durationYears: number | null;
+  renewable: boolean | null;
+  renewalCriteria: string | null;
+  intlEligible: boolean | null;
+  vnEligible: boolean | null;
+  needBased: boolean | null;
+  meritBased: boolean | null;
+  minSat: number | null;
+  minAct: number | null;
+  minToefl: number | null;
+  majorRestriction: string | null;
+  applicationMethod: string | null;
+  applyUrl: string | null;
 }
 
 export interface AdminScholarshipFilters {

@@ -26,7 +26,24 @@ public record AdminScholarshipDto(
     string? SourceReliability,
     bool IsActive,
     DateTime? UpdatedAt,
-    string? LastEditedBy);
+    string? LastEditedBy,
+    string? Kind = null,
+    string? AmountType = null,
+    decimal? AmountMinUsd = null,
+    decimal? AmountMaxUsd = null,
+    int? DurationYears = null,
+    bool? Renewable = null,
+    string? RenewalCriteria = null,
+    bool? IntlEligible = null,
+    bool? VnEligible = null,
+    bool? NeedBased = null,
+    bool? MeritBased = null,
+    int? MinSat = null,
+    int? MinAct = null,
+    decimal? MinToefl = null,
+    string? MajorRestriction = null,
+    string? ApplicationMethod = null,
+    string? ApplyUrl = null);
 
 /// <summary>Dùng cho cả thêm mới và sửa; gửi đủ mọi trường.</summary>
 public record SaveScholarshipRequest(
@@ -42,6 +59,23 @@ public record SaveScholarshipRequest(
     string? EligibilityNotes,
     string? SourceUrl,
     DateOnly? RetrievedAt,
-    string? SourceReliability);
+    string? SourceReliability,
+    string? Kind = null,
+    string? AmountType = null,
+    decimal? AmountMinUsd = null,
+    decimal? AmountMaxUsd = null,
+    int? DurationYears = null,
+    bool? Renewable = null,
+    string? RenewalCriteria = null,
+    bool? IntlEligible = null,
+    bool? VnEligible = null,
+    bool? NeedBased = null,
+    bool? MeritBased = null,
+    int? MinSat = null,
+    int? MinAct = null,
+    decimal? MinToefl = null,
+    string? MajorRestriction = null,
+    string? ApplicationMethod = null,
+    string? ApplyUrl = null);
 
 public record SetScholarshipVisibilityRequest(bool IsActive, string? Reason = null);

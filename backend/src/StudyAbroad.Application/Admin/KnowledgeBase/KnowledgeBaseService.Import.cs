@@ -1,11 +1,8 @@
 using System.Globalization;
-using System.Text;
-using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.Admin.KnowledgeBase;
 
-/// <summary>Xem trước và nhập file Excel. Hai lần tải lên độc lập (không giữ file giữa hai bước), giống trang mẫu SLM.</summary>
 public partial class KnowledgeBaseService
 {
     public const int MaxPreviewRows = 100;
@@ -15,12 +12,21 @@ public partial class KnowledgeBaseService
         var rows = ReadRows(workbook, ct);
 
         var errors = new List<KnowledgeImportErrorDto>();
+        var seen = new HashSet<int>();
+        var pending = 0;
         foreach (var row in rows)
         {
             ct.ThrowIfCancellationRequested();
+            if (IsPending(row.Note))
+            {
+                pending++;
+                continue;
+            }
             try
             {
-                ValidateRow(row);
+                var (_, entryNo) = ValidateRow(row);
+                if (!seen.Add(entryNo))
+                    throw new ArgumentException($"id {entryNo} bị lặp trong file.");
             }
             catch (ArgumentException ex)
             {
@@ -28,82 +34,73 @@ public partial class KnowledgeBaseService
             }
         }
 
-        return Task.FromResult(new KnowledgeImportPreviewDto(rows.Count, rows.Take(MaxPreviewRows).ToList(), errors));
+        return Task.FromResult(new KnowledgeImportPreviewDto(rows.Count, rows.Take(MaxPreviewRows).ToList(), errors, pending));
     }
 
-    public async Task<KnowledgeImportResultDto> ImportAsync(Stream workbook, Guid actorUserId, CancellationToken ct = default)
+    public async Task<KnowledgeImportResultDto> ImportAsync(Stream workbook, CancellationToken ct = default)
     {
         var rows = ReadRows(workbook, ct);
 
-        // Gồm cả mục đã xóa: nhập lại file cũ không hồi sinh mục đã bị xóa
-        var questions = new HashSet<string>();
-        var questionByNo = new Dictionary<int, string>();
-        foreach (var key in await repository.ExistingKeysAsync(ct))
-        {
-            var question = QuestionKey(key.Question);
-            questions.Add(question);
-            questionByNo[key.EntryNo] = question;
-        }
-
-        var toInsert = new List<KnowledgeBaseEntry>();
         var errors = new List<KnowledgeImportErrorDto>();
-        var duplicates = 0;
-
+        var valid = new List<(int EntryNo, ValidDocument Document)>();
+        var seen = new HashSet<int>();
+        var pending = 0;
         foreach (var row in rows)
         {
             ct.ThrowIfCancellationRequested();
-
-            ValidEntry valid;
-            int? entryNo;
+            if (IsPending(row.Note))
+            {
+                pending++;
+                continue;
+            }
             try
             {
-                (valid, entryNo) = ValidateRow(row);
+                var (document, entryNo) = ValidateRow(row);
+                if (!seen.Add(entryNo))
+                    throw new ArgumentException($"id {entryNo} bị lặp trong file.");
+                valid.Add((entryNo, document));
             }
             catch (ArgumentException ex)
             {
                 errors.Add(new KnowledgeImportErrorDto(row.RowNumber, ex.Message));
-                continue;
             }
-
-            var question = QuestionKey(valid.Question);
-            if (entryNo is { } no && questionByNo.TryGetValue(no, out var usedBy))
-            {
-                if (usedBy == question)
-                    duplicates++;
-                else
-                    errors.Add(new KnowledgeImportErrorDto(row.RowNumber, $"Mã {no} đã dùng cho câu hỏi khác."));
-                continue;
-            }
-            if (!questions.Add(question))
-            {
-                duplicates++;
-                continue;
-            }
-
-            // File đã đủ nội dung nên vào thẳng pending; người khác duyệt theo lô
-            var entry = NewEntry(valid, KnowledgeReviewStatuses.Pending, KnowledgeOrigins.Excel, actorUserId);
-            if (entryNo is { } given)
-            {
-                entry.EntryNo = given;
-                questionByNo[given] = question;
-            }
-            toInsert.Add(entry);
         }
 
-        // Dòng không có id: cấp số tiếp sau số lớn nhất (trong DB và trong file), tránh đụng số file đã dùng
-        var next = questionByNo.Keys.DefaultIfEmpty(0).Max();
-        foreach (var entry in toInsert.Where(e => e.EntryNo == 0))
-            entry.EntryNo = ++next;
-
-        if (toInsert.Count > 0)
+        var existing = await repository.TrackedByEntryNosAsync(valid.Select(x => x.EntryNo).ToList(), ct);
+        var added = new List<KnowledgeDocument>();
+        var reembed = new List<Guid>();
+        var unchanged = 0;
+        var updated = 0;
+        foreach (var (entryNo, document) in valid)
         {
-            var history = toInsert
-                .Select(e => History(KnowledgeHistoryActions.Create, actorUserId, null, e.ReviewStatus, e.Id))
-                .ToList();
-            await repository.AddRangeAsync(toInsert, history, ct);
+            if (!existing.TryGetValue(entryNo, out var current))
+            {
+                var created = new KnowledgeDocument { EntryNo = entryNo };
+                Apply(created, document);
+                added.Add(created);
+            }
+            else if (ValidDocument.From(current) == document)
+            {
+                unchanged++;
+            }
+            else
+            {
+                if (current.Question != document.Question)
+                    reembed.Add(current.Id);
+                Apply(current, document);
+                current.UpdatedAt = DateTime.UtcNow;
+                updated++;
+            }
         }
 
-        return new KnowledgeImportResultDto(rows.Count, toInsert.Count, duplicates, errors);
+        if (added.Count > 0 || updated > 0)
+            await repository.SaveImportAsync(added, ct);
+        if (reembed.Count > 0)
+            await repository.ClearEmbeddingsAsync(reembed, ct);
+
+        // Gọi cả khi lần nhập này không đổi gì: dòng thiếu vector từ lần nhập trước (advisor tắt) cũng được tạo bù
+        var (started, warning) = valid.Count > 0 ? await StartEmbeddingAsync(ct) : (false, null);
+        return new KnowledgeImportResultDto(rows.Count, added.Count, updated, unchanged, errors, pending, started, warning);
     }
 
     private IReadOnlyList<KnowledgeImportRow> ReadRows(Stream workbook, CancellationToken ct)
@@ -114,38 +111,28 @@ public partial class KnowledgeBaseService
         return rows;
     }
 
-    /// <summary>Một dòng file phải đủ nội dung như khi gửi duyệt. Cột level dùng tên tiếng Việt, nhiều bậc cách nhau bởi dấu ;.</summary>
-    // Chặn id quá lớn để không làm sequence entry_no tràn int
-    private const int MaxEntryNo = 1_000_000;
-
-    private static (ValidEntry Entry, int? EntryNo) ValidateRow(KnowledgeImportRow row)
+    private static (ValidDocument Document, int EntryNo) ValidateRow(KnowledgeImportRow row)
     {
-        int? entryNo = null;
-        if (Clean(row.Id) is { } rawId)
-        {
-            // Excel lưu id dạng số: "1" hoặc "1.0"
-            if (!decimal.TryParse(rawId, NumberStyles.Number, CultureInfo.InvariantCulture, out var number)
-                || number < 1 || number > MaxEntryNo || number != decimal.Truncate(number))
-                throw new ArgumentException($"Cột id \"{rawId}\" phải là số nguyên từ 1 đến {MaxEntryNo}.");
-            entryNo = (int)number;
-        }
+        var rawId = Clean(row.Id) ?? throw new ArgumentException("Cột id không được để trống.");
+        if (!decimal.TryParse(rawId, NumberStyles.Number, CultureInfo.InvariantCulture, out var number)
+            || number != decimal.Truncate(number) || number < 1 || number > MaxEntryNo)
+            throw new ArgumentException($"Cột id \"{rawId}\" phải là số nguyên từ 1 đến {MaxEntryNo}.");
 
-        var levels = new List<string>();
-        foreach (var part in (row.Level ?? "").Split(';'))
-        {
-            var name = Clean(part)?.Normalize(NormalizationForm.FormC);
-            if (name is null)
-                continue;
-            var code = KnowledgeLevels.All.FirstOrDefault(c =>
-                string.Equals(KnowledgeLevels.Names[c], name, StringComparison.OrdinalIgnoreCase));
-            if (code is null)
-                throw new ArgumentException(
-                    $"Bậc học \"{name}\" không hợp lệ. Dùng: {string.Join(", ", KnowledgeLevels.Names.Values)}.");
-            levels.Add(code);
-        }
+        var document = Validate(new SaveKnowledgeEntryRequest(
+            (int)number, row.DocType, row.Label, row.Question, row.Answer, row.Source, row.SourceUrl,
+            ParseDate(row.RetrievedAt), row.TopicCode, row.ImageUrl, row.Note));
+        return (document, (int)number);
+    }
 
-        var valid = Validate(new SaveKnowledgeEntryRequest(row.Label, levels, row.Question, row.Answer, row.Source, Submit: true));
-        EnsureReady(valid);
-        return (valid, entryNo);
+    private static DateOnly? ParseDate(string? raw)
+    {
+        var text = Clean(raw);
+        if (text is null)
+            return null;
+        if (DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+            return date;
+        if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var serial) && serial is > 1 and < 100000)
+            return DateOnly.FromDateTime(DateTime.FromOADate(serial));
+        throw new ArgumentException($"retrieved_at \"{text}\" phải có dạng yyyy-mm-dd.");
     }
 }

@@ -19,7 +19,8 @@ public record AdminUniversityListItemDto(
     bool IsActive,
     IReadOnlyList<string> StudyLevels,
     DateOnly? LatestRetrievedAt,
-    string? LogoUrl = null);
+    string? LogoUrl = null,
+    int ScholarshipCount = 0);
 
 public record AdminUniversityDetailDto(
     Guid Id,
@@ -68,7 +69,12 @@ public record AdminUniversityOfferingDto(
     DateOnly? RetrievedAt,
     string? SourceReliability,
     DateTime? UpdatedAt,
-    string? LastEditedBy);
+    string? LastEditedBy,
+    decimal? HealthInsuranceUsd = null,
+    decimal? ApplicationFeeUsd = null,
+    decimal? TuitionInStateUsd = null,
+    string? ActPolicy = null,
+    decimal? ActSubmitPct = null);
 
 public record AdminMajorOptionDto(Guid Id, string Name, string? CipCode);
 
@@ -126,7 +132,12 @@ public record UpdateOfferingRequest(
     DateOnly? RetrievedAt,
     string? SourceReliability,
     string? Notes,
-    IReadOnlyList<UpdateOfferingMajor>? Majors);
+    IReadOnlyList<UpdateOfferingMajor>? Majors,
+    decimal? HealthInsuranceUsd = null,
+    decimal? ApplicationFeeUsd = null,
+    decimal? TuitionInStateUsd = null,
+    string? ActPolicy = null,
+    decimal? ActSubmitPct = null);
 
 public record SetUniversityVisibilityRequest(bool IsActive, string? Reason = null);
 

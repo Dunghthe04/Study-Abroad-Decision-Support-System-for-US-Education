@@ -82,6 +82,23 @@ public class AdvisorClient(HttpClient http) : IAdvisorClient
     public Task<PendingQuestionDto> PendingQuestionAsync(AdvisorPendingQuestionRequest request, CancellationToken ct = default) =>
         PostAsync<AdvisorPendingQuestionRequest, PendingQuestionDto>("api/v1/chat/pending-question", request, ct);
 
+    public async Task<KnowledgeEmbedDto> EmbedKnowledgeAsync(CancellationToken ct = default)
+    {
+        using var response = await http.PostAsync("api/v1/knowledge/embed-missing", null, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<KnowledgeEmbedDto>(AdvisorJson, ct)
+               ?? throw new InvalidOperationException("Advisor trả về rỗng.");
+    }
+
+    public async Task<KnowledgeEmbedDto> GetKnowledgeEmbedStatusAsync(CancellationToken ct = default)
+    {
+        using var response = await http.GetAsync("api/v1/knowledge/embed-status", ct);
+        response.EnsureSuccessStatusCode();
+        // advisor không trả trường started ở đường này (mặc định false)
+        return await response.Content.ReadFromJsonAsync<KnowledgeEmbedDto>(AdvisorJson, ct)
+               ?? throw new InvalidOperationException("Advisor trả về rỗng.");
+    }
+
     private async Task<TResponse> PostAsync<TRequest, TResponse>(string url, TRequest request, CancellationToken ct)
     {
         using var response = await http.PostAsJsonAsync(url, request, AdvisorJson, ct);

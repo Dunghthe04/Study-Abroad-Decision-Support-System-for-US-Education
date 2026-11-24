@@ -1,7 +1,7 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using StudyAbroad.Api.Controllers;
 using StudyAbroad.Application.Admin.KnowledgeBase;
 using StudyAbroad.Domain.Constants;
@@ -12,32 +12,41 @@ namespace StudyAbroad.UnitTests;
 
 public class AdminKnowledgeBaseControllerTests
 {
-    private static readonly Guid ActorId = Guid.NewGuid();
-
     private static SaveKnowledgeEntryRequest Request() =>
-        new("LABEL_VISA_F1", [KnowledgeLevels.DaiHoc], "OPT là gì?", "Trả lời", "Nguồn");
+        new(7, "faq", "LABEL_VISA_F1", "OPT là gì?", "Trả lời", "Nguồn", null, new DateOnly(2026, 11, 1), null, null, null);
 
-    private static AdminKnowledgeBaseController Controller(FakeKnowledgeRepository repo, bool withUser = true) =>
-        new(new KnowledgeBaseService(repo, new FakeKnowledgeReader()), new KnowledgeTemplateWriter())
-        {
-            ControllerContext = new ControllerContext
-            {
-                HttpContext = new DefaultHttpContext
-                {
-                    User = withUser
-                        ? new ClaimsPrincipal(new ClaimsIdentity(
-                            [new Claim(ClaimTypes.NameIdentifier, ActorId.ToString()),
-                             new Claim(ClaimTypes.Role, UserRoles.Moderator)], "TestAuth"))
-                        : new ClaimsPrincipal(new ClaimsIdentity()),
-                },
-            },
-        };
+    private static AdminKnowledgeBaseController Controller(FakeKnowledgeRepository repo) =>
+        new(new KnowledgeBaseService(repo, new FakeKnowledgeReader(), new FakeKnowledgeAdvisor(), NullLogger<KnowledgeBaseService>.Instance), new KnowledgeTemplateWriter());
 
     private static IFormFile File(string name, int length) =>
         new FormFile(new MemoryStream(new byte[length]), 0, length, "file", name);
 
     [Fact]
-    public async Task Create_Returns201_ThenSameQuestionReturns409WithExistingId()
+    public async Task EmbedStatus_And_StartEmbed_Return200WithTheAdvisorNumbers()
+    {
+        var controller = Controller(new FakeKnowledgeRepository());
+
+        var status = Assert.IsType<OkObjectResult>((await controller.EmbedStatus(CancellationToken.None)).Result);
+        var started = Assert.IsType<OkObjectResult>((await controller.StartEmbed(CancellationToken.None)).Result);
+
+        Assert.Equal(494, Assert.IsType<KnowledgeEmbedStatusDto>(status.Value).Pending);
+        Assert.True(Assert.IsType<KnowledgeEmbedStatusDto>(started.Value).Started);
+    }
+
+    [Fact]
+    public void TheEmbedRoutes_AreOnlyForModeratorAndAdmin_LikeTheRestOfTheController()
+    {
+        var authorize = typeof(AdminKnowledgeBaseController).GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>().Single();
+
+        Assert.Contains(UserRoles.Moderator, authorize.Roles!);
+        Assert.Equal("embed-status", typeof(AdminKnowledgeBaseController).GetMethod(nameof(AdminKnowledgeBaseController.EmbedStatus))!
+            .GetCustomAttributes(typeof(HttpGetAttribute), true).Cast<HttpGetAttribute>().Single().Template);
+        Assert.Equal("embed", typeof(AdminKnowledgeBaseController).GetMethod(nameof(AdminKnowledgeBaseController.StartEmbed))!
+            .GetCustomAttributes(typeof(HttpPostAttribute), true).Cast<HttpPostAttribute>().Single().Template);
+    }
+
+    [Fact]
+    public async Task Create_Returns201_ThenSameEntryNoReturns409WithExistingId()
     {
         var controller = Controller(new FakeKnowledgeRepository());
 
@@ -49,17 +58,15 @@ public class AdminKnowledgeBaseControllerTests
     }
 
     [Fact]
-    public async Task Create_InvalidReturns400_AndWithoutUserReturns401()
+    public async Task Create_InvalidReturns400()
     {
         var bad = await Controller(new FakeKnowledgeRepository()).Create(Request() with { Question = " " }, CancellationToken.None);
-        var anonymous = await Controller(new FakeKnowledgeRepository(), withUser: false).Create(Request(), CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(bad.Result);
-        Assert.IsType<UnauthorizedResult>(anonymous.Result);
     }
 
     [Fact]
-    public async Task UnknownId_Returns404_ForGetUpdateDeleteRestore()
+    public async Task UnknownId_Returns404_ForGetUpdateDelete()
     {
         var controller = Controller(new FakeKnowledgeRepository());
         var id = Guid.NewGuid();
@@ -67,7 +74,6 @@ public class AdminKnowledgeBaseControllerTests
         Assert.IsType<NotFoundResult>((await controller.Get(id, CancellationToken.None)).Result);
         Assert.IsType<NotFoundResult>((await controller.Update(id, Request(), CancellationToken.None)).Result);
         Assert.IsType<NotFoundResult>(await controller.Delete(id, CancellationToken.None));
-        Assert.IsType<NotFoundResult>((await controller.Restore(id, CancellationToken.None)).Result);
     }
 
     [Theory]
@@ -85,7 +91,7 @@ public class AdminKnowledgeBaseControllerTests
     public async Task GetPage_UnknownSort_Returns400()
     {
         var result = await Controller(new FakeKnowledgeRepository())
-            .GetPage(null, null, null, null, null, null, sort: "random", ct: CancellationToken.None);
+            .GetPage(null, null, null, null, sort: "random", ct: CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
     }

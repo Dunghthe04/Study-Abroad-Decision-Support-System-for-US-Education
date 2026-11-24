@@ -22,4 +22,27 @@ public class Scholarship : BaseEntity
     public string? SourceReliability { get; set; }
     public Guid? LastEditedByUserId { get; set; }
     public bool IsActive { get; set; } = true;
+
+    // ---- [USAS-2067] Cột của bộ dữ liệu học bổng. Null = chưa rõ. ----
+
+    /// <summary>merit | need | merit_and_need | athletic | program | external | other</summary>
+    public string? Kind { get; set; }
+    /// <summary>fixed | range | percent_tuition | full_tuition | full_ride | varies</summary>
+    public string? AmountType { get; set; }
+    public decimal? AmountMinUsd { get; set; }
+    public decimal? AmountMaxUsd { get; set; }
+    public int? DurationYears { get; set; }
+    public bool? Renewable { get; set; }
+    public string? RenewalCriteria { get; set; }
+    public bool? IntlEligible { get; set; }
+    public bool? VnEligible { get; set; }
+    public bool? NeedBased { get; set; }
+    public bool? MeritBased { get; set; }
+    public int? MinSat { get; set; }
+    public int? MinAct { get; set; }
+    public decimal? MinToefl { get; set; }
+    public string? MajorRestriction { get; set; }
+    /// <summary>automatic | separate_application | nomination | unknown</summary>
+    public string? ApplicationMethod { get; set; }
+    public string? ApplyUrl { get; set; }
 }

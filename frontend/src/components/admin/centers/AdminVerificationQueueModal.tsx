@@ -169,6 +169,8 @@ export function AdminVerificationQueueModal({
                 const isPending = req.status === "pending_review";
                 const isVerified = req.status === "verified";
                 const isRejected = req.status === "rejected";
+                const isChangesRequested = req.status === "changes_requested";
+                const isSuspended = req.status === "suspended";
 
                 return (
                   <div
@@ -186,6 +188,12 @@ export function AdminVerificationQueueModal({
                             Chờ duyệt
                           </Badge>
                         )}
+                        {isChangesRequested && (
+                          <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[11px] gap-1">
+                            <RotateCcwIcon className="h-3 w-3" />
+                            Yêu cầu bổ sung
+                          </Badge>
+                        )}
                         {isVerified && (
                           <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[11px] gap-1">
                             <CheckCircle2Icon className="h-3 w-3" />
@@ -196,6 +204,12 @@ export function AdminVerificationQueueModal({
                           <Badge variant="outline" className="border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300 text-[11px] gap-1">
                             <AlertCircleIcon className="h-3 w-3" />
                             Bị từ chối
+                          </Badge>
+                        )}
+                        {isSuspended && (
+                          <Badge variant="outline" className="border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300 text-[11px] gap-1">
+                            <AlertCircleIcon className="h-3 w-3" />
+                            Tạm ngưng
                           </Badge>
                         )}
                       </div>

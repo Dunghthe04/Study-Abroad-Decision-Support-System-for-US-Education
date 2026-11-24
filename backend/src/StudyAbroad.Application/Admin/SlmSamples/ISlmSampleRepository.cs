@@ -12,28 +12,19 @@ public interface ISlmSampleRepository
     /// <summary>Một dòng để đọc, không theo dõi thay đổi. Null nếu không có hoặc đã xóa.</summary>
     Task<SlmTrainingSample?> FindAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Lịch sử của một mẫu, cũ trước, kèm tên người thao tác.</summary>
-    Task<IReadOnlyList<SlmSampleHistoryRow>> HistoryAsync(Guid sampleId, CancellationToken ct = default);
-
     Task<IReadOnlyDictionary<Guid, string>> UserNamesAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
 
-    /// <summary>Thêm mẫu và dòng lịch sử trong một lần lưu.</summary>
-    Task AddAsync(SlmTrainingSample sample, SlmSampleHistory history, CancellationToken ct = default);
+    Task AddAsync(SlmTrainingSample sample, CancellationToken ct = default);
 
-    /// <summary>Thêm nhiều mẫu và lịch sử trong một lần lưu: hoặc thêm hết, hoặc không thêm gì.</summary>
-    Task AddRangeAsync(
-        IReadOnlyList<SlmTrainingSample> samples, IReadOnlyList<SlmSampleHistory> history, CancellationToken ct = default);
+    /// <summary>Thêm nhiều mẫu trong một lần lưu: hoặc thêm hết, hoặc không thêm gì.</summary>
+    Task AddRangeAsync(IReadOnlyList<SlmTrainingSample> samples, CancellationToken ct = default);
 
     /// <summary>
-    /// Gọi apply cho từng dòng còn tồn tại trong ids rồi lưu một lần. apply trả dòng lịch sử nếu dòng đổi (khi đó UpdatedAt được ghi), null nếu không đổi.
+    /// Gọi apply cho từng dòng còn tồn tại trong ids rồi lưu một lần. apply trả true nếu dòng đổi (khi đó UpdatedAt được ghi), false nếu không đổi.
     /// Trả số dòng tìm thấy.
     /// </summary>
     Task<int> UpdateManyAsync(
-        IReadOnlyList<Guid> ids, Func<SlmTrainingSample, SlmSampleHistory?> apply, CancellationToken ct = default);
-
-    /// <summary>Người đã tạo, sửa hoặc gửi duyệt từng mẫu (theo lịch sử), để chặn tự duyệt.</summary>
-    Task<IReadOnlyList<(Guid SampleId, Guid ActorUserId)>> ContributorsAsync(
-        IReadOnlyList<Guid> sampleIds, CancellationToken ct = default);
+        IReadOnlyList<Guid> ids, Func<SlmTrainingSample, bool> apply, CancellationToken ct = default);
 
     Task<IReadOnlyList<SlmSampleCountRow>> CountsAsync(CancellationToken ct = default);
 

@@ -55,7 +55,7 @@ public class AdminSlmSamplesController(ISlmSampleService samples, ISlmTemplateWr
     public async Task<ActionResult<IReadOnlyList<SlmSampleCreatorDto>>> GetCreators(CancellationToken ct) =>
         Ok(await samples.GetCreatorsAsync(ct));
 
-    /// <summary>Chi tiết một mẫu kèm lịch sử sửa và duyệt.</summary>
+    /// <summary>Chi tiết một mẫu kèm tên người duyệt.</summary>
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<SlmSampleDetailDto>> Get(Guid id, CancellationToken ct)
     {
@@ -107,7 +107,7 @@ public class AdminSlmSamplesController(ISlmSampleService samples, ISlmTemplateWr
         }
     }
 
-    /// <summary>Xóa mềm: dòng không còn hiện và không được xuất, lịch sử vẫn giữ.</summary>
+    /// <summary>Xóa mềm: dòng không còn hiện và không được xuất.</summary>
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {

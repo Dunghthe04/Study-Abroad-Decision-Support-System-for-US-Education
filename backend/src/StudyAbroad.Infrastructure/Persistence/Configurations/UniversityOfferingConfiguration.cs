@@ -16,6 +16,9 @@ public class UniversityOfferingConfiguration : IEntityTypeConfiguration<Universi
         b.Property(x => x.LivingUsd).HasPrecision(12, 2);
         b.Property(x => x.FeesUsd).HasPrecision(12, 2);
         b.Property(x => x.OtherExpensesUsd).HasPrecision(12, 2);
+        b.Property(x => x.HealthInsuranceUsd).HasPrecision(12, 2);
+        b.Property(x => x.ApplicationFeeUsd).HasPrecision(12, 2);
+        b.Property(x => x.TuitionInStateUsd).HasPrecision(12, 2);
         b.Property(x => x.MinGpa4).HasPrecision(3, 2);
         b.Property(x => x.MinIelts).HasPrecision(3, 1);
         b.Property(x => x.MinToefl).HasPrecision(5, 1);
@@ -32,6 +35,7 @@ public class UniversityOfferingConfiguration : IEntityTypeConfiguration<Universi
                 + "AND (act25 IS NULL OR act75 IS NULL OR act25 <= act75)");
         });
         b.Property(x => x.SatPolicy).HasMaxLength(16);
+        b.Property(x => x.ActPolicy).HasMaxLength(16);
 
         // Số liệu cho công thức gợi ý trường. Tên cột trùng với khóa trong file Excel thu thập dữ liệu.
         b.Property(x => x.IntlAcceptanceRate).HasPrecision(5, 4);
@@ -39,6 +43,7 @@ public class UniversityOfferingConfiguration : IEntityTypeConfiguration<Universi
         b.Property(x => x.C7TestImportance).HasMaxLength(16).HasColumnName("c7_test_importance");
         b.Property(x => x.C7EcImportance).HasMaxLength(16).HasColumnName("c7_ec_importance");
         b.Property(x => x.SatSubmitPct).HasPrecision(5, 4);
+        b.Property(x => x.ActSubmitPct).HasPrecision(5, 4);
         b.Property(x => x.GpaSubmitPct).HasPrecision(5, 4);
         b.Property(x => x.GpaPct40).HasPrecision(5, 4).HasColumnName("gpa_pct_4_0");
         b.Property(x => x.GpaPct375To399).HasPrecision(5, 4).HasColumnName("gpa_pct_375_399");

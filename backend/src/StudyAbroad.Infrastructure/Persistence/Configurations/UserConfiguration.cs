@@ -33,6 +33,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Configurations
             builder.Property(x => x.LegalHoldReason).HasMaxLength(500);
             // Ngày sinh (kiểu date), null với tài khoản cũ / center / admin
             builder.Property(x => x.DateOfBirth);
+            builder.Property(x => x.ForumRestrictedUntil);
+            builder.Property(x => x.ForumRestrictionReason);
+            builder.Property(x => x.ForumRestrictedByUserId);
             // Npgsql ánh xạ uint IsRowVersion vào cột hệ thống xmin (không tạo cột mới)
             builder.Property(x => x.Version).IsRowVersion();
         }

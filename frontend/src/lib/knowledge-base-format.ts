@@ -1,5 +1,5 @@
 import type { LabeledOption } from "@/lib/admin-university-display";
-import type { KnowledgeEntry, KnowledgeLevel, SaveKnowledgeEntryRequest } from "@/types/knowledge-base";
+import type { KnowledgeDocType } from "@/types/knowledge-base";
 
 /** 27 nhãn, cùng danh sách với KnowledgeLabels.All ở backend. Thêm nhãn: thêm ở cả hai nơi. */
 export const KNOWLEDGE_LABELS: { id: string; label: string }[] = [
@@ -32,23 +32,24 @@ export const KNOWLEDGE_LABELS: { id: string; label: string }[] = [
   { id: "LABEL_PHONG_VAN_TUYEN_SINH", label: "Phỏng vấn tuyển sinh" },
 ];
 
-export const KNOWLEDGE_LEVELS: { id: KnowledgeLevel; label: string }[] = [
-  { id: "chung", label: "Chung" },
-  { id: "thcs", label: "THCS" },
-  { id: "thpt", label: "THPT" },
-  { id: "dai_hoc", label: "Đại học" },
-  { id: "thac_si", label: "Thạc sĩ" },
-  { id: "tien_si", label: "Tiến sĩ" },
+export const KNOWLEDGE_DOC_TYPES: { id: KnowledgeDocType; label: string }[] = [
+  { id: "faq", label: "Hỏi đáp" },
+  { id: "glossary", label: "Thuật ngữ" },
+  { id: "proc_overview", label: "Thủ tục: tổng quan" },
+  { id: "proc_prepare", label: "Thủ tục: chuẩn bị" },
+  { id: "proc_steps", label: "Thủ tục: các bước" },
+  { id: "proc_checklist", label: "Thủ tục: danh sách kiểm tra" },
+  { id: "proc_mistakes", label: "Thủ tục: lỗi hay gặp" },
+  { id: "timeline", label: "Mốc thời gian" },
+  { id: "compare", label: "So sánh" },
+  { id: "situation", label: "Tình huống" },
+  { id: "data_table", label: "Bảng số liệu" },
+  { id: "resource", label: "Công cụ và link" },
+  { id: "notice", label: "Quy định và cảnh báo" },
 ];
 
 export const LABEL_OPTIONS: LabeledOption[] = KNOWLEDGE_LABELS.map((item) => ({ value: item.id, label: item.label }));
-export const LEVEL_OPTIONS: LabeledOption[] = KNOWLEDGE_LEVELS.map((item) => ({ value: item.id, label: item.label }));
-
-export const ORIGIN_LABELS: Record<string, string> = {
-  manual: "Nhập tay",
-  excel: "File Excel",
-  "chat-unanswered": "Chat chưa trả lời",
-};
+export const DOC_TYPE_OPTIONS: LabeledOption[] = KNOWLEDGE_DOC_TYPES.map((item) => ({ value: item.id, label: item.label }));
 
 export const SORT_OPTIONS: LabeledOption[] = [
   { value: "newest", label: "Mới tạo trước" },
@@ -57,44 +58,13 @@ export const SORT_OPTIONS: LabeledOption[] = [
   { value: "updated", label: "Mới sửa trước" },
 ];
 
-export const labelName = (id: string | null) => (id ? (KNOWLEDGE_LABELS.find((item) => item.id === id)?.label ?? id) : "—");
+export const labelName = (id: string) => KNOWLEDGE_LABELS.find((item) => item.id === id)?.label ?? id;
 
-export const levelName = (id: string) => KNOWLEDGE_LEVELS.find((item) => item.id === id)?.label ?? id;
+export const docTypeName = (id: string) => KNOWLEDGE_DOC_TYPES.find((item) => item.id === id)?.label ?? id;
+
+export const isProcedure = (docType: string) => docType.startsWith("proc_");
 
 /** Dòng đầu của trích dẫn nguồn (thường là tên nhà cung cấp). */
 export const firstLine = (text: string | null) => (text ? text.split("\n")[0] : "—");
 
-/** Giống KnowledgeBaseService.IsReady ở backend. */
-export function isReady(entry: Pick<KnowledgeEntry, "label" | "levels" | "answer" | "source">): boolean {
-  return entry.label !== null && entry.levels.length > 0 && !!entry.answer?.trim() && !!entry.source?.trim();
-}
-
-export function entryToRequest(entry: KnowledgeEntry): SaveKnowledgeEntryRequest {
-  return { label: entry.label, levels: entry.levels, question: entry.question, answer: entry.answer, source: entry.source };
-}
-
-const HISTORY_ACTIONS: Record<string, string> = {
-  create: "Tạo",
-  edit: "Sửa",
-  submit: "Gửi duyệt",
-  review: "Duyệt",
-  delete: "Xóa",
-  restore: "Khôi phục",
-  capture: "Lấy từ chat",
-  migrate: "Chuyển từ mẫu SLM",
-};
-
-export const historyActionLabel = (action: string) => HISTORY_ACTIONS[action] ?? action;
-
-const FIELD_LABELS: Record<string, string> = {
-  label: "nhãn",
-  levels: "bậc học",
-  question: "câu hỏi",
-  answer: "câu trả lời",
-  source: "nguồn",
-};
-
-export const fieldLabels = (fields: string[]) => fields.map((field) => FIELD_LABELS[field] ?? field).join(", ");
-
-// Trạng thái và ngày giờ: dùng lại của mẫu SLM (cùng 5 giá trị)
-export { REVIEW_STATUSES, canSubmit, formatDateTime, statusLabel } from "@/lib/slm-sample-format";
+export { formatDateTime } from "@/lib/slm-sample-format";

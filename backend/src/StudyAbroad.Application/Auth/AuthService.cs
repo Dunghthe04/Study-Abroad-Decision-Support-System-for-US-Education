@@ -19,7 +19,8 @@ namespace StudyAbroad.Application.Auth
 {
     public interface IAuthService
     {
-        Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken ct = default);
+        /// <param name="ipAddress">IP người đăng ký, ghi kèm bằng chứng đồng ý điều khoản (UC-104).</param>
+        Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken ct = default, string? ipAddress = null);
         /// <summary>Mở phiên đăng nhập cho tài khoản đã được xác thực ở luồng khác (dùng cho trung tâm sau khi xác thực email).</summary>
         Task<AuthResult> StartSessionAsync(User user, CancellationToken ct = default);
         Task<AuthResult> VerifyEmailAsync(VerifyEmailRequest request, CancellationToken ct = default);
@@ -61,7 +62,11 @@ namespace StudyAbroad.Application.Auth
         StudyAbroad.Application.Leads.ILeadWithdrawalRepository leadWithdrawals,
         IStudyCenterRepository? studyCenters = null,
         AccountDeletionOptions? accountDeletion = null,
-        StudyAbroad.Application.Billing.IBillingAccountHooks? billingHooks = null) : IAuthService
+        StudyAbroad.Application.Billing.IBillingAccountHooks? billingHooks = null,
+        // [UC-104] Đồng ý Điều khoản và Chính sách bảo mật lúc đăng ký; null trong test cũ thì bỏ qua
+        StudyAbroad.Application.Policies.IRegistrationConsent? registrationConsent = null,
+        // [SC-10 / UC-113] Gửi thông báo khi Admin cập nhật ngày sinh
+        StudyAbroad.Application.Notifications.INotificationService? notifications = null) : IAuthService
     {
         private readonly AccountDeletionOptions _accountDeletion = accountDeletion ?? new AccountDeletionOptions();
 
@@ -144,7 +149,7 @@ namespace StudyAbroad.Application.Auth
         // Hash giả để so mật khẩu khi email không tồn tại: thời gian phản hồi như khi email có thật
         private static string? _dummyPasswordHash;
 
-        public async Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken ct = default)
+        public async Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken ct = default, string? ipAddress = null)
         {
             var email = NormalizeEmail(request.Email);
             var fullName = request.FullName?.Trim() ?? string.Empty;
@@ -181,6 +186,11 @@ namespace StudyAbroad.Application.Auth
             if (ageError != null)
                 return AuthResult.Fail(AuthError.Validation, ageError);
 
+            // [UC-104] Chưa đồng ý đúng bản Điều khoản và Chính sách bảo mật đang hiệu lực thì không tạo tài khoản.
+            // Lỗi này không phụ thuộc email đã tồn tại hay chưa nên không làm lộ tài khoản.
+            if (registrationConsent != null && await registrationConsent.ValidateAsync(request.AcceptedPolicies, ct) is { } consentError)
+                return AuthResult.Fail(AuthError.Validation, consentError);
+
             // Luôn hash mật khẩu trước khi kiểm trùng: thời gian xử lý như nhau dù email đã có tài khoản hay chưa
             var passwordHash = hasher.Hash(request.Password);
             var successMessage = $"Đăng ký thành công. Mã xác thực OTP đã được gửi đến email {email} (hiệu lực {OtpExpiryMinutes} phút).";
@@ -213,13 +223,7 @@ namespace StudyAbroad.Application.Auth
                 FailedLoginAttempts = 0,
                 LockoutEnd = null
             };
-            await users.AddAsync(user, ct);
-
-            // Ghi lại email phụ huynh; mail mời chỉ gửi sau khi học sinh xác thực email (tránh tài khoản rác gửi mail cho người lạ)
-            if (parentEmail != null)
-                await parentLinks.AddAsync(new ParentStudentLink { StudentUserId = user.Id, ParentEmail = parentEmail }, ct);
-
-            // Sinh mã OTP 6 số và gửi qua Email thật (hiệu lực 5 phút)
+            // Sinh mã OTP 6 số (hiệu lực 5 phút)
             var otpCode = GenerateOtpCode();
             var otp = new OtpToken
             {
@@ -229,7 +233,22 @@ namespace StudyAbroad.Application.Auth
                 ExpiresAt = DateTime.UtcNow.AddMinutes(OtpExpiryMinutes),
                 Attempts = 0
             };
-            await users.SaveOtpAsync(otp, ct);
+
+            // Tài khoản, email phụ huynh, bằng chứng đồng ý điều khoản và OTP cùng một giao dịch: lỗi giữa chừng thì không
+            // còn tài khoản thiếu bằng chứng. Mail chỉ gửi sau khi lưu xong.
+            await unitOfWork.ExecuteInTransactionAsync(async token =>
+            {
+                await users.AddAsync(user, token);
+
+                // Ghi lại email phụ huynh; mail mời chỉ gửi sau khi học sinh xác thực email (tránh tài khoản rác gửi mail cho người lạ)
+                if (parentEmail != null)
+                    await parentLinks.AddAsync(new ParentStudentLink { StudentUserId = user.Id, ParentEmail = parentEmail }, token);
+
+                if (registrationConsent != null)
+                    await registrationConsent.RecordAsync(user.Id, request.AcceptedPolicies, ipAddress, token);
+
+                await users.SaveOtpAsync(otp, token);
+            }, ct);
 
             await emailSender.SendVerificationEmailAsync(user.Email, user.FullName, otpCode, OtpExpiryMinutes, ct);
 
@@ -1074,6 +1093,25 @@ namespace StudyAbroad.Application.Auth
                     newAge,
                 }),
             }, ct);
+
+            // [SC-10 / UC-113] Gửi thông báo trong hệ thống cho người dùng khi Administrator cập nhật ngày sinh
+            if (notifications is not null)
+            {
+                try
+                {
+                    await notifications.NotifyAsync(
+                        user.Id,
+                        "user_birth_date_updated",
+                        "Ngày sinh của bạn đã được cập nhật",
+                        $"Administrator đã cập nhật ngày sinh của bạn thành {newDob:dd/MM/yyyy}. Lý do: {reason}",
+                        "/account",
+                        ct);
+                }
+                catch
+                {
+                    // Nuốt lỗi thông báo để không chặn luồng chính
+                }
+            }
 
             return AuthResult.Ok(await ToDtoAsync(user, ct), $"Đã sửa ngày sinh. Tuổi hiện tại: {newAge}.");
         }

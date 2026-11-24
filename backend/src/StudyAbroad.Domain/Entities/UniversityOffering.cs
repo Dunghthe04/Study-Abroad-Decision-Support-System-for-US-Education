@@ -13,6 +13,12 @@ public class UniversityOffering : BaseEntity
     public decimal? LivingUsd { get; set; }
     public decimal? FeesUsd { get; set; }
     public decimal? OtherExpensesUsd { get; set; }
+    /// <summary>[USAS-2029] Bảo hiểm y tế bắt buộc cho sinh viên quốc tế (USD/năm). Null: chưa có số liệu hoặc đã nằm trong FeesUsd.</summary>
+    public decimal? HealthInsuranceUsd { get; set; }
+    /// <summary>[USAS-2067] Phí nộp hồ sơ first-year của du học sinh (USD, một lần). Không nằm trong tổng chi phí hằng năm.</summary>
+    public decimal? ApplicationFeeUsd { get; set; }
+    /// <summary>[USAS-2067] Học phí in-state (USD/năm), chỉ trường công. Chỉ để tham khảo: DSS vẫn dùng TuitionUsd (nonresident).</summary>
+    public decimal? TuitionInStateUsd { get; set; }
     public decimal? MinGpa4 { get; set; }
     public decimal? MinIelts { get; set; }
     public decimal? MinToefl { get; set; }
@@ -35,6 +41,8 @@ public class UniversityOffering : BaseEntity
     public int? IntlAdmitted { get; set; }
     /// <summary>required | optional | not_accepted</summary>
     public string? SatPolicy { get; set; }
+    /// <summary>required | optional | not_accepted</summary>
+    public string? ActPolicy { get; set; }
     /// <summary>danh sách vòng nộp và ngày: ED, EA, RD, Spring...</summary>
     public string? DeadlinesJson { get; set; }
 
@@ -50,6 +58,8 @@ public class UniversityOffering : BaseEntity
     public string? C7EcImportance { get; set; }
     /// <summary>Tỉ lệ sinh viên trúng tuyển có nộp SAT (CDS C9). Dưới 0,5 thì L của SAT × 0,5.</summary>
     public decimal? SatSubmitPct { get; set; }
+    /// <summary>Tỉ lệ sinh viên trúng tuyển có nộp ACT (CDS C9), dạng 0–1.</summary>
+    public decimal? ActSubmitPct { get; set; }
     /// <summary>Tỉ lệ sinh viên trúng tuyển có nộp GPA (CDS C11).</summary>
     public decimal? GpaSubmitPct { get; set; }
     /// <summary>Phân phối GPA sinh viên trúng tuyển (CDS C11): tỉ lệ trong từng khoảng.</summary>

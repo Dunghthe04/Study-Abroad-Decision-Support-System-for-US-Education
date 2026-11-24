@@ -1,5 +1,8 @@
 using System.Text;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using StudyAbroad.Application.Admin.KnowledgeBase;
+using StudyAbroad.Application.Advisor;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using StudyAbroad.Infrastructure.Persistence.Repositories;
@@ -9,196 +12,451 @@ namespace StudyAbroad.UnitTests;
 
 public class KnowledgeBaseServiceTests
 {
-    private static readonly Guid Actor = Guid.NewGuid();
-    private static readonly Guid Reviewer = Guid.NewGuid();
-
     private static KnowledgeBaseService Svc(FakeKnowledgeRepository repo, params KnowledgeImportRow[] rows) =>
-        new(repo, new FakeKnowledgeReader(rows));
+        Svc(repo, new FakeKnowledgeAdvisor(), rows);
 
-    private static SaveKnowledgeEntryRequest Full(string question = "OPT là gì?", bool submit = false) =>
-        new("LABEL_VISA_F1", [KnowledgeLevels.DaiHoc], question, "OPT là thời gian thực tập sau tốt nghiệp.", "Hội đồng Chuyên gia DSS", submit);
+    private static KnowledgeBaseService Svc(FakeKnowledgeRepository repo, FakeKnowledgeAdvisor advisor, params KnowledgeImportRow[] rows) =>
+        new(repo, new FakeKnowledgeReader(rows), advisor, NullLogger<KnowledgeBaseService>.Instance);
 
-    private static KnowledgeImportRow Row(int rowNumber, string? id, string question, string level = "Đại học; Thạc sĩ") =>
-        new(rowNumber, id, "label_visa_f1", level, question, "Câu trả lời đủ dài.", "Nguồn\nMã: EXP-KB-1");
+    private static SaveKnowledgeEntryRequest Full(string question = "OPT là gì?", int? entryNo = null) =>
+        new(entryNo, "faq", "LABEL_VISA_F1", question, "OPT là thời gian thực tập sau tốt nghiệp.", "Study in the States", null,
+            new DateOnly(2026, 11, 1), null, null, null);
+
+    private static KnowledgeImportRow Row(int rowNumber, string? id, string question = "OPT là gì?") =>
+        new(rowNumber, id, "faq", "label_visa_f1", question, "Câu trả lời.", null, "https://studyinthestates.dhs.gov",
+            "2026-11-01", null, null, null);
 
     [Fact]
-    public async Task CreateAsync_DraftNeedsOnlyQuestion_AndNormalizesText()
+    public async Task CreateAsync_WithoutEntryNo_TakesMaxPlusOne_AndNormalizesText()
     {
         var repo = new FakeKnowledgeRepository();
+        repo.Add(entryNo: 41);
         var nfd = "Học   bổng là gì?".Normalize(NormalizationForm.FormD);
 
-        var created = await Svc(repo).CreateAsync(new SaveKnowledgeEntryRequest(null, null, $"  {nfd} ", null, null), Actor);
+        var created = await Svc(repo).CreateAsync(Full(nfd));
 
-        Assert.Equal(KnowledgeReviewStatuses.Draft, created.ReviewStatus);
+        Assert.Equal(42, created.EntryNo);
         Assert.Equal("Học bổng là gì?", created.Question);
         Assert.True(created.Question.IsNormalized(NormalizationForm.FormC));
-        Assert.Equal(Actor, Assert.Single(repo.Items).CreatedByUserId);
-        Assert.Equal(KnowledgeHistoryActions.Create, Assert.Single(repo.History).Action);
+        Assert.Equal(2, repo.Items.Count);
     }
 
     [Fact]
-    public async Task CreateAsync_SubmitWithoutAnswerLabelLevelsSource_IsRejected()
+    public async Task CreateAsync_UsedEntryNo_ThrowsDuplicateWithExistingId()
     {
         var repo = new FakeKnowledgeRepository();
+        var existing = repo.Add(entryNo: 7);
 
-        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
-            Svc(repo).CreateAsync(new SaveKnowledgeEntryRequest(null, null, "OPT là gì?", null, null, Submit: true), Actor));
-
-        Assert.Contains("nhãn", error.Message);
-        Assert.Empty(repo.Items);
-    }
-
-    [Theory]
-    [InlineData("LABEL_KHONG_CO", "dai_hoc")]
-    [InlineData("LABEL_VISA_F1", "dai_hoc_2")]
-    [InlineData("LABEL_VISA_F1", "chung,dai_hoc")]
-    public async Task CreateAsync_RejectsUnknownLabelOrLevelAndChungWithOthers(string label, string levels)
-    {
-        var request = new SaveKnowledgeEntryRequest(label, levels.Split(','), "OPT là gì?", "Trả lời", "Nguồn");
-
-        await Assert.ThrowsAsync<ArgumentException>(() => Svc(new FakeKnowledgeRepository()).CreateAsync(request, Actor));
-    }
-
-    [Fact]
-    public async Task CreateAsync_PhoneInAnswer_IsRejected_ButUrlInSourceIsFine()
-    {
-        var service = Svc(new FakeKnowledgeRepository());
-
-        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAsync(
-            Full() with { Answer = "Gọi 0912 345 678 để được tư vấn." }, Actor));
-        var ok = await service.CreateAsync(Full() with { Source = "U.S. Department of State\nURL: https://travel.state.gov" }, Actor);
-        Assert.Contains("https://", ok.Source);
-    }
-
-    [Fact]
-    public async Task CreateAsync_SameQuestionIgnoringCase_ThrowsWithExistingId()
-    {
-        var repo = new FakeKnowledgeRepository();
-        var existing = repo.Add(KnowledgeReviewStatuses.Approved, "OPT là gì?");
-
-        var error = await Assert.ThrowsAsync<KnowledgeDuplicateEntryException>(() =>
-            Svc(repo).CreateAsync(Full("opt LÀ GÌ?"), Actor));
+        var error = await Assert.ThrowsAsync<KnowledgeDuplicateEntryException>(() => Svc(repo).CreateAsync(Full(entryNo: 7)));
 
         Assert.Equal(existing.Id, error.ExistingId);
     }
 
-    [Fact]
-    public async Task UpdateAsync_ChangingSourceOfApprovedEntry_GoesBackToPending()
+    [Theory]
+    [InlineData("doc_type", "bang")]
+    [InlineData("label", "LABEL_KHONG_CO")]
+    [InlineData("question", " ")]
+    [InlineData("answer", null)]
+    [InlineData("retrieved_at", null)]
+    [InlineData("source", null)]
+    [InlineData("topic_code", "proc")]
+    [InlineData("image_url", "ảnh.png")]
+    [InlineData("source_url", "javascript:alert(1)")]
+    [InlineData("source_url", "https://ok.com;javascript:x")]
+    [InlineData("source_url", ";;;")]
+    public async Task CreateAsync_RejectsInvalidFields(string field, string? value)
     {
-        var repo = new FakeKnowledgeRepository();
-        var approved = repo.Add(KnowledgeReviewStatuses.Approved);
+        var request = field switch
+        {
+            "doc_type" => Full() with { DocType = value },
+            "label" => Full() with { Label = value },
+            "question" => Full() with { Question = value },
+            "answer" => Full() with { Answer = value },
+            "retrieved_at" => Full() with { RetrievedAt = null },
+            "source" => Full() with { Source = null, SourceUrl = null },
+            "source_url" => Full() with { SourceUrl = value },
+            "topic_code" => Full() with { DocType = "proc_steps", TopicCode = null },
+            _ => Full() with { ImageUrl = value },
+        };
 
-        var updated = await Svc(repo).UpdateAsync(approved.Id, Full() with { Source = "Nguồn mới" }, Actor);
-
-        Assert.Equal(KnowledgeReviewStatuses.Pending, updated!.ReviewStatus);
-        Assert.Null(updated.ReviewedByUserId);
-        var history = Assert.Single(repo.History);
-        Assert.Equal(("edit", "source"), (history.Action, history.ChangedFields));
+        await Assert.ThrowsAsync<ArgumentException>(() => Svc(new FakeKnowledgeRepository()).CreateAsync(request));
     }
 
     [Fact]
-    public async Task UpdateAsync_SubmitDraftWithoutChanges_RecordsSubmit()
+    public async Task UpdateAsync_ChangedQuestion_ClearsEmbeddingAndKeepsEntryNo()
     {
         var repo = new FakeKnowledgeRepository();
-        var draft = repo.Add(KnowledgeReviewStatuses.Draft);
+        var existing = repo.Add(entryNo: 5);
+        existing.EmbeddingHash = "abc";
+        existing.IngestedAt = DateTime.UtcNow;
 
-        var updated = await Svc(repo).UpdateAsync(draft.Id, Full(submit: true), Actor);
+        var updated = await Svc(repo).UpdateAsync(existing.Id, Full("OPT kéo dài bao lâu?", entryNo: 99));
 
-        Assert.Equal(KnowledgeReviewStatuses.Pending, updated!.ReviewStatus);
-        Assert.Equal(KnowledgeHistoryActions.Submit, Assert.Single(repo.History).Action);
+        Assert.Equal(5, updated!.EntryNo);
+        Assert.Null(existing.EmbeddingHash);
+        Assert.Null(existing.IngestedAt);
+        Assert.Equal([existing.Id], repo.ClearedEmbeddings);
     }
 
     [Fact]
-    public async Task ReviewAsync_SkipsOwnNotPendingAndRequiresNoteForReject()
+    public async Task UpdateAsync_SameQuestion_KeepsEmbedding_AndUnknownIdReturnsNull()
     {
         var repo = new FakeKnowledgeRepository();
-        var mine = repo.Add(KnowledgeReviewStatuses.Pending, "Câu 1?", createdBy: Reviewer);
-        var draft = repo.Add(KnowledgeReviewStatuses.Draft, "Câu 2?");
-        var ok = repo.Add(KnowledgeReviewStatuses.Pending, "Câu 3?");
-        var service = Svc(repo);
+        var existing = repo.Add();
+        existing.EmbeddingHash = "abc";
 
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            service.ReviewAsync(new ReviewKnowledgeEntriesRequest([ok.Id], KnowledgeReviewStatuses.Rejected, " "), Reviewer));
-        var result = await service.ReviewAsync(
-            new ReviewKnowledgeEntriesRequest([mine.Id, draft.Id, ok.Id, Guid.NewGuid()], KnowledgeReviewStatuses.Approved, null), Reviewer);
+        await Svc(repo).UpdateAsync(existing.Id, Full(existing.Question) with { Answer = "Câu trả lời mới." });
 
-        Assert.Equal(new ReviewKnowledgeEntriesResultDto(1, 1, 1, 0, 1), result);
-        Assert.Equal((KnowledgeReviewStatuses.Approved, Reviewer), (ok.ReviewStatus, ok.ReviewedByUserId));
+        Assert.Equal("abc", existing.EmbeddingHash);
+        Assert.Empty(repo.ClearedEmbeddings);
+        Assert.Null(await Svc(repo).UpdateAsync(Guid.NewGuid(), Full()));
     }
 
     [Fact]
-    public async Task DeleteThenRestore_KeepsStatus_AndRestoreConflictsWithLiveDuplicate()
+    public async Task DeleteAsync_RemovesTheRow_AndFalseWhenMissing()
     {
         var repo = new FakeKnowledgeRepository();
-        var entry = repo.Add(KnowledgeReviewStatuses.Approved, "Visa F-1 là gì?");
-        var service = Svc(repo);
+        var existing = repo.Add();
 
-        Assert.True(await service.DeleteAsync(entry.Id, Actor));
-        Assert.NotNull(entry.DeletedAt);
-        var again = repo.Add(KnowledgeReviewStatuses.Draft, "Visa F-1 là gì?");
-        await Assert.ThrowsAsync<KnowledgeDuplicateEntryException>(() => service.RestoreAsync(entry.Id, Actor));
-
-        await service.DeleteAsync(again.Id, Actor);
-        var restored = await service.RestoreAsync(entry.Id, Actor);
-
-        Assert.Equal(KnowledgeReviewStatuses.Approved, restored!.ReviewStatus);
-        Assert.Null(entry.DeletedAt);
-        Assert.Null(await service.RestoreAsync(Guid.NewGuid(), Actor));
-    }
-
-    [Fact]
-    public async Task ImportAsync_InsertsPending_CountsDuplicates_AndReportsIdCollisions()
-    {
-        var repo = new FakeKnowledgeRepository();
-        repo.Add(KnowledgeReviewStatuses.Approved, "Câu đã có?", entryNo: 5);
-        var service = Svc(repo,
-            Row(2, "1.0", "Câu một?"),
-            Row(3, null, "Câu hai?", level: "Chung"),
-            Row(4, "5", "Câu đã có?"),          // cùng mã, cùng câu: trùng
-            Row(5, "5", "Câu khác hẳn?"),       // cùng mã, khác câu: lỗi
-            Row(6, null, "câu MỘT?"),           // trùng câu ở dòng trên
-            Row(7, "x", "Câu ba?"),             // id sai
-            Row(8, null, "Câu bốn?", level: "Chung; THPT"));
-
-        var result = await service.ImportAsync(Stream.Null, Actor);
-
-        Assert.Equal((7, 2, 2), (result.TotalRows, result.Inserted, result.Duplicates));
-        Assert.Equal([5, 7, 8], result.Errors.Select(e => e.RowNumber));
-        var inserted = repo.Items.Where(e => e.Origin == KnowledgeOrigins.Excel).ToList();
-        Assert.All(inserted, e => Assert.Equal(KnowledgeReviewStatuses.Pending, e.ReviewStatus));
-        Assert.Equal([1, 6], inserted.Select(e => e.EntryNo));    // dòng không id nhận số sau số lớn nhất (5)
-        Assert.Equal([KnowledgeLevels.DaiHoc, KnowledgeLevels.ThacSi], inserted[0].Levels);
-        Assert.Equal("LABEL_VISA_F1", inserted[0].Label);
-    }
-
-    [Fact]
-    public async Task PreviewAsync_CapsRowsAt100_ReportsAllErrors_AndWritesNothing()
-    {
-        var repo = new FakeKnowledgeRepository();
-        var rows = Enumerable.Range(2, 150).Select(n => Row(n, null, n % 50 == 0 ? "" : $"Câu {n}?")).ToArray();
-
-        var preview = await Svc(repo, rows).PreviewAsync(Stream.Null);
-
-        Assert.Equal((150, 100, 3), (preview.TotalRows, preview.Rows.Count, preview.Errors.Count));
+        Assert.True(await Svc(repo).DeleteAsync(existing.Id));
+        Assert.False(await Svc(repo).DeleteAsync(existing.Id));
         Assert.Empty(repo.Items);
     }
 
     [Fact]
-    public async Task CaptureUnansweredAsync_CollapsesSpaces_SkipsContactsAndDuplicatesIncludingDeleted()
+    public async Task GetPageAsync_FiltersByDocTypeLabelAndTopic_AndRejectsUnknownValues()
     {
         var repo = new FakeKnowledgeRepository();
-        var deleted = repo.Add(KnowledgeReviewStatuses.Draft, "Câu đã xóa?");
-        deleted.DeletedAt = DateTime.UtcNow;
-        var service = Svc(repo);
+        repo.Add(entryNo: 1);
+        var proc = repo.Add(entryNo: 2);
+        proc.DocType = "proc_steps";
+        proc.TopicCode = "I-20";
 
-        Assert.True(await service.CaptureUnansweredAsync("  em   muốn hỏi  "));
-        Assert.False(await service.CaptureUnansweredAsync("em muốn hỏi"));
-        Assert.False(await service.CaptureUnansweredAsync("zalo em 0912345678"));
-        Assert.False(await service.CaptureUnansweredAsync("câu đã xóa?"));
+        var page = await Svc(repo).GetPageAsync(new KnowledgeEntryFilter(DocType: "proc_steps", TopicCode: "I-20"), 1, 20);
 
-        var captured = repo.Items.Single(e => e.Origin == KnowledgeOrigins.ChatUnanswered);
-        Assert.Equal(("em muốn hỏi", KnowledgeReviewStatuses.Draft, (Guid?)null), (captured.Question, captured.ReviewStatus, captured.CreatedByUserId));
+        Assert.Equal(proc.Id, Assert.Single(page.Items).Id);
+        await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo).GetPageAsync(new KnowledgeEntryFilter(DocType: "x"), 1, 20));
+        await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo).GetPageAsync(new KnowledgeEntryFilter(Sort: "random"), 1, 20));
     }
+
+    [Fact]
+    public async Task ImportAsync_UpsertsByEntryNo_CountsCreatedUpdatedUnchanged()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var same = repo.Add(entryNo: 1, question: "OPT là gì?");
+        same.Label = "LABEL_VISA_F1";
+        same.Answer = "Câu trả lời.";
+        same.Source = null;
+        same.SourceUrl = "https://studyinthestates.dhs.gov";
+        same.Note = null;
+        var changed = repo.Add(entryNo: 2, question: "Câu cũ?");
+        changed.EmbeddingHash = "abc";
+        var rows = new[] { Row(2, "1"), Row(3, "2", "Câu mới?"), Row(4, "3", "Dòng thêm?") };
+
+        var result = await Svc(repo, rows).ImportAsync(new MemoryStream());
+
+        Assert.Equal((3, 1, 1, 1), (result.TotalRows, result.Created, result.Updated, result.Unchanged));
+        Assert.Empty(result.Errors);
+        Assert.Equal([1, 2, 3], repo.Items.Select(x => x.EntryNo).Order());
+        Assert.Equal("Câu mới?", changed.Question);
+        Assert.Null(changed.EmbeddingHash);
+        Assert.Equal([changed.Id], repo.ClearedEmbeddings);
+    }
+
+    [Fact]
+    public async Task ImportAsync_BadRowsAreReportedWithRowNumber_AndDuplicateIdsInFileAreSkipped()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var rows = new[]
+        {
+            Row(2, "1"),
+            Row(3, "1", "Trùng id?"),
+            Row(4, null),
+            Row(5, "abc"),
+            Row(6, "7") with { RetrievedAt = "01/11/2026" },
+            Row(7, "8") with { DocType = "proc_steps" },
+        };
+
+        var result = await Svc(repo, rows).ImportAsync(new MemoryStream());
+        var preview = await Svc(repo, rows).PreviewAsync(new MemoryStream());
+
+        Assert.Equal(1, result.Created);
+        Assert.Equal([3, 4, 5, 6, 7], result.Errors.Select(e => e.RowNumber));
+        Assert.Equal(result.Errors.Select(e => e.RowNumber), preview.Errors.Select(e => e.RowNumber));
+        Assert.Single(repo.Items);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("oldest")]
+    [InlineData("entryNo")]
+    [InlineData("updated")]
+    public void RepositoryQueries_TranslateToSql(string? sort)
+    {
+        var options = new DbContextOptionsBuilder<StudyAbroad.Infrastructure.Persistence.AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=usas_schema_check")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        using var db = new StudyAbroad.Infrastructure.Persistence.AppDbContext(options);
+        var filter = new KnowledgeEntryFilter("100%_", "proc_steps", "LABEL_VISA_F1", "I-20", sort);
+
+        var sql = KnowledgeBaseRepository.Sorted(KnowledgeBaseRepository.Filtered(db.KnowledgeDocuments, filter), sort).ToQueryString();
+
+        Assert.Contains("ILIKE", sql);
+        Assert.Contains("ORDER BY", sql);
+    }
+
+    [Fact]
+    public async Task ImportAsync_SkipsPendingRows_WithoutValidatingOrSaving_AndCountsThem()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var rows = new[]
+        {
+            Row(2, "1"),
+            Row(3, "2", "Dòng đỏ?") with { Note = "CHỜ DUYỆT: chưa có nguồn thật", Source = null, SourceUrl = null },   // thiếu nguồn mà không báo lỗi
+            Row(4, "3", "Viết thường?") with { Note = "  chờ duyệt: đã đổi nội dung" },
+            Row(5, "abc") with { Note = "CHỜ DUYỆT" },                                                                  // id sai cũng chỉ bị bỏ qua
+        };
+
+        var result = await Svc(repo, rows).ImportAsync(new MemoryStream());
+        var preview = await Svc(repo, rows).PreviewAsync(new MemoryStream());
+
+        Assert.Equal((4, 1, 3), (result.TotalRows, result.Created, result.Pending));
+        Assert.Empty(result.Errors);
+        Assert.Equal([1], repo.Items.Select(x => x.EntryNo));
+        Assert.Equal(3, preview.Pending);
+        Assert.Empty(preview.Errors);
+    }
+
+    [Theory]
+    [InlineData("CHỜ DUYỆT: thiếu nguồn", true)]
+    [InlineData("chờ duyệt", true)]
+    [InlineData("Đã duyệt, trước đây ghi CHỜ DUYỆT", false)]   // chỉ tính khi nằm ở đầu note
+    [InlineData("Ghi chú thường", false)]
+    [InlineData(null, false)]
+    public void IsPending_OnlyWhenNoteStartsWithPendingMark(string? note, bool expected) =>
+        Assert.Equal(expected, KnowledgeBaseService.IsPending(note));
+
+    [Fact]
+    public async Task CreateAsync_RejectsPendingNote_SoSingleEditCannotBypassTheRule()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var request = Full() with { Note = "CHỜ DUYỆT: chưa rà" };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo).CreateAsync(request));
+
+        Assert.Empty(repo.Items);
+    }
+
+    // --- tạo vector sau khi lưu: chat chỉ thấy dòng đã có vector ---
+
+    [Fact]
+    public async Task ImportAsync_AsksAdvisorForVectorsOnce_AfterTheRowsAreSaved()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var advisor = new FakeKnowledgeAdvisor { OnCall = () => repo.Items.Count };
+        var rows = new[] { Row(2, "1"), Row(3, "2", "Câu hai?") };
+
+        var result = await Svc(repo, advisor, rows).ImportAsync(new MemoryStream());
+
+        Assert.Equal(1, advisor.Calls);
+        Assert.Equal(2, advisor.RowsSavedWhenCalled);   // gọi SAU khi lưu, không phải trước
+        Assert.True(result.VectorsStarted);
+        Assert.Null(result.VectorWarning);
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenAdvisorIsDown_StillSavesRowsAndOnlyWarns()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var advisor = new FakeKnowledgeAdvisor { Error = new HttpRequestException("advisor tắt") };
+
+        var result = await Svc(repo, advisor, Row(2, "1")).ImportAsync(new MemoryStream());
+
+        Assert.Equal(1, result.Created);
+        Assert.Single(repo.Items);
+        Assert.False(result.VectorsStarted);
+        Assert.Equal(KnowledgeBaseService.EmbedWarning, result.VectorWarning);
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenAdvisorHasNoSuchApi_StillSavesRowsAndOnlyWarns()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var advisor = new FakeKnowledgeAdvisor { Error = new NotSupportedException() };   // bản mặc định của IAdvisorClient
+
+        var result = await Svc(repo, advisor, Row(2, "1")).ImportAsync(new MemoryStream());
+
+        Assert.Single(repo.Items);
+        Assert.NotNull(result.VectorWarning);
+    }
+
+    [Fact]
+    public async Task ImportAsync_WithNoValidRow_DoesNotBotherAdvisor()
+    {
+        var advisor = new FakeKnowledgeAdvisor();
+        var rows = new[] { Row(2, null), Row(3, "x") };
+
+        var result = await Svc(new FakeKnowledgeRepository(), advisor, rows).ImportAsync(new MemoryStream());
+
+        Assert.Equal(0, advisor.Calls);
+        Assert.False(result.VectorsStarted);
+        Assert.Null(result.VectorWarning);
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenNothingChanged_StillAsksSoRowsMissedByAnEarlierFailureGetVectors()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var same = repo.Add(entryNo: 1, question: "OPT là gì?");
+        same.Label = "LABEL_VISA_F1";
+        same.Answer = "Câu trả lời.";
+        same.Source = null;
+        same.SourceUrl = "https://studyinthestates.dhs.gov";
+        var advisor = new FakeKnowledgeAdvisor();
+
+        var result = await Svc(repo, advisor, Row(2, "1")).ImportAsync(new MemoryStream());
+
+        Assert.Equal(1, result.Unchanged);
+        Assert.Equal(1, advisor.Calls);
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenTheRequestIsCancelled_DoesNotSwallowIt()
+    {
+        using var cts = new CancellationTokenSource();
+        var advisor = new FakeKnowledgeAdvisor { OnCall = () => { cts.Cancel(); cts.Token.ThrowIfCancellationRequested(); return 0; } };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => Svc(new FakeKnowledgeRepository(), advisor, Row(2, "1")).ImportAsync(new MemoryStream(), cts.Token));
+    }
+
+    [Fact]
+    public async Task CreateAsync_AsksAdvisor_AndAdvisorFailureDoesNotFailTheCreate()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var advisor = new FakeKnowledgeAdvisor { Error = new HttpRequestException() };
+
+        var created = await Svc(repo, advisor).CreateAsync(Full());
+
+        Assert.Equal(1, advisor.Calls);
+        Assert.Equal("OPT là gì?", created.Question);
+        Assert.Single(repo.Items);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_AsksAdvisorOnlyWhenTheQuestionChanged()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var document = repo.Add();
+        var advisor = new FakeKnowledgeAdvisor();
+        var svc = Svc(repo, advisor);
+
+        await svc.UpdateAsync(document.Id, Full(question: document.Question));   // chỉ đổi chỗ khác: vector còn đúng
+        Assert.Equal(0, advisor.Calls);
+
+        await svc.UpdateAsync(document.Id, Full(question: "Câu hỏi mới?"));
+        Assert.Equal(1, advisor.Calls);
+    }
+
+    // --- tiến độ tạo vector cho trang admin ---
+
+    [Fact]
+    public async Task GetEmbedStatus_MapsTheAdvisorAnswer_WithoutStartingAnything()
+    {
+        var advisor = new FakeKnowledgeAdvisor { Status = new KnowledgeEmbedDto(494, true, 12, null, false) };
+
+        var status = await Svc(new FakeKnowledgeRepository(), advisor).GetEmbedStatusAsync();
+
+        Assert.Equal(new KnowledgeEmbedStatusDto(true, 494, true, 12, null, false), status);
+        Assert.Equal(1, advisor.StatusCalls);
+        Assert.Equal(0, advisor.Calls);   // chỉ hỏi, không bắt đầu tạo
+    }
+
+    [Fact]
+    public async Task GetEmbedStatus_WhenAdvisorIsDown_ReportsUnavailableInsteadOfThrowing()
+    {
+        var advisor = new FakeKnowledgeAdvisor { Error = new HttpRequestException("advisor tắt") };
+
+        var status = await Svc(new FakeKnowledgeRepository(), advisor).GetEmbedStatusAsync();
+
+        Assert.False(status.Available);
+        Assert.Equal((0, false), (status.Pending, status.Running));
+    }
+
+    [Fact]
+    public async Task StartEmbed_AsksAdvisorToStart_AndReportsItsAnswer()
+    {
+        var advisor = new FakeKnowledgeAdvisor();   // trả Started = true
+
+        var status = await Svc(new FakeKnowledgeRepository(), advisor).StartEmbedAsync();
+
+        Assert.Equal(1, advisor.Calls);
+        Assert.True(status.Available && status.Started);
+    }
+
+    [Fact]
+    public async Task StartEmbed_WhenAdvisorHasNoSuchApi_ReportsUnavailable()
+    {
+        var advisor = new FakeKnowledgeAdvisor { Error = new NotSupportedException() };
+
+        var status = await Svc(new FakeKnowledgeRepository(), advisor).StartEmbedAsync();
+
+        Assert.False(status.Available);
+    }
+
+    [Fact]
+    public async Task GetEmbedStatus_WhenTheRequestIsCancelled_DoesNotSwallowIt()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var advisor = new FakeKnowledgeAdvisor { Error = new OperationCanceledException(cts.Token) };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => Svc(new FakeKnowledgeRepository(), advisor).GetEmbedStatusAsync(cts.Token));
+    }
+
+    [Fact]
+    public async Task ImportAsync_EmptySheet_Throws()
+    {
+        await Assert.ThrowsAsync<InvalidDataException>(() => Svc(new FakeKnowledgeRepository()).ImportAsync(new MemoryStream()));
+    }
+}
+
+// Advisor giả chỉ biết tạo vector; mọi việc khác không được gọi
+internal sealed class FakeKnowledgeAdvisor : IAdvisorClient
+{
+    public int Calls { get; private set; }
+    public Exception? Error { get; init; }
+    public Func<int>? OnCall { get; init; }   // chạy khi được gọi; kết quả ghi vào RowsSavedWhenCalled
+    public int RowsSavedWhenCalled { get; private set; }
+    public KnowledgeEmbedDto Status { get; init; } = new(494, true, 12, null, false);
+    public int StatusCalls { get; private set; }
+
+    public Task<KnowledgeEmbedDto> GetKnowledgeEmbedStatusAsync(CancellationToken ct = default)
+    {
+        StatusCalls++;
+        if (Error is not null)
+            throw Error;
+        return Task.FromResult(Status);
+    }
+
+    public Task<KnowledgeEmbedDto> EmbedKnowledgeAsync(CancellationToken ct = default)
+    {
+        Calls++;
+        if (OnCall is not null)
+            RowsSavedWhenCalled = OnCall();
+        if (Error is not null)
+            throw Error;
+        return Task.FromResult(new KnowledgeEmbedDto(2, true, 0, null, true));
+    }
+
+    public Task<AdvisorChatResponse> ChatAsync(AdvisorChatRequest request, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ExplainResponseDto> ExplainAsync(ExplainRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<GoalNoteResponseDto> WriteGoalNoteAsync(GoalNoteRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<ScenarioNoteResponseDto> WriteScenarioNoteAsync(ScenarioNoteRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<CompareNoteResponseDto> WriteCompareNoteAsync(CompareNoteRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<RecommendNoteResponseDto> WriteRecommendNoteAsync(RecommendNoteRequestDto request, CancellationToken ct = default) => throw new NotSupportedException();
 }
 
 internal class FakeKnowledgeReader(params KnowledgeImportRow[] rows) : IKnowledgeWorkbookReader
@@ -208,97 +466,72 @@ internal class FakeKnowledgeReader(params KnowledgeImportRow[] rows) : IKnowledg
 
 internal class FakeKnowledgeRepository : IKnowledgeBaseRepository
 {
-    public List<KnowledgeBaseEntry> Items { get; } = [];
-    public List<KnowledgeBaseEntryHistory> History { get; } = [];
+    public List<KnowledgeDocument> Items { get; } = [];
+    public List<Guid> ClearedEmbeddings { get; } = [];
 
-    private IEnumerable<KnowledgeBaseEntry> Live => Items.Where(x => x.DeletedAt == null);
-
-    /// <summary>Mục đủ nội dung ở trạng thái cho trước.</summary>
-    public KnowledgeBaseEntry Add(string status, string question = "OPT là gì?", Guid? createdBy = null, int entryNo = 0)
+    public KnowledgeDocument Add(string question = "OPT là gì?", int entryNo = 0)
     {
-        var entry = new KnowledgeBaseEntry
+        var document = new KnowledgeDocument
         {
             EntryNo = entryNo == 0 ? Items.Count + 100 : entryNo,
+            DocType = "faq",
             Label = "LABEL_VISA_F1",
-            Levels = [KnowledgeLevels.DaiHoc],
             Question = question,
             Answer = "OPT là thời gian thực tập sau tốt nghiệp.",
-            Source = "Hội đồng Chuyên gia DSS",
-            ReviewStatus = status,
-            CreatedByUserId = createdBy,
+            Source = "Study in the States",
+            RetrievedAt = new DateOnly(2026, 11, 1),
         };
-        Items.Add(entry);
-        return entry;
+        Items.Add(document);
+        return document;
     }
 
-    // Không dùng Search/Source trong test: EF.Functions.ILike chỉ chạy được trên database
-    public Task<(IReadOnlyList<KnowledgeEntryListRow> Rows, int Total)> PageAsync(
+    public Task<(IReadOnlyList<KnowledgeDocument> Rows, int Total)> PageAsync(
         KnowledgeEntryFilter filter, int skip, int take, CancellationToken ct = default)
     {
-        var source = filter.Deleted ? Items.Where(x => x.DeletedAt != null) : Live;
-        var all = KnowledgeBaseRepository.Sorted(KnowledgeBaseRepository.Filtered(source.AsQueryable(), filter), filter.Sort).ToList();
-        IReadOnlyList<KnowledgeEntryListRow> rows = all.Skip(skip).Take(take).Select(x => new KnowledgeEntryListRow(x, null)).ToList();
-        return Task.FromResult((rows, all.Count));
+        var all = KnowledgeBaseRepository.Sorted(KnowledgeBaseRepository.Filtered(Items.AsQueryable(), filter), filter.Sort).ToList();
+        return Task.FromResult(((IReadOnlyList<KnowledgeDocument>)all.Skip(skip).Take(take).ToList(), all.Count));
     }
 
-    public Task<KnowledgeBaseEntry?> FindAsync(Guid id, bool includeDeleted = false, CancellationToken ct = default) =>
-        Task.FromResult((includeDeleted ? Items : Live).FirstOrDefault(x => x.Id == id));
+    public Task<KnowledgeDocument?> FindAsync(Guid id, CancellationToken ct = default) =>
+        Task.FromResult(Items.FirstOrDefault(x => x.Id == id));
 
-    public Task<IReadOnlyList<KnowledgeEntryHistoryRow>> HistoryAsync(Guid entryId, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<KnowledgeEntryHistoryRow>>(
-            History.Where(h => h.EntryId == entryId).Select(h => new KnowledgeEntryHistoryRow(h, null)).ToList());
+    public Task<int> MaxEntryNoAsync(CancellationToken ct = default) =>
+        Task.FromResult(Items.Select(x => x.EntryNo).DefaultIfEmpty(0).Max());
 
-    public Task<IReadOnlyDictionary<Guid, string>> UserNamesAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string>());
+    public Task<Guid?> FindIdByEntryNoAsync(int entryNo, CancellationToken ct = default) =>
+        Task.FromResult(Items.FirstOrDefault(x => x.EntryNo == entryNo)?.Id);
 
-    public Task AddAsync(KnowledgeBaseEntry entry, KnowledgeBaseEntryHistory history, CancellationToken ct = default)
+    public Task AddAsync(KnowledgeDocument document, CancellationToken ct = default)
     {
-        Items.Add(entry);
-        History.Add(history);
+        Items.Add(document);
         return Task.CompletedTask;
     }
 
-    public Task AddRangeAsync(
-        IReadOnlyList<KnowledgeBaseEntry> entries, IReadOnlyList<KnowledgeBaseEntryHistory> history, CancellationToken ct = default)
+    public Task<bool> UpdateAsync(Guid id, Action<KnowledgeDocument> apply, CancellationToken ct = default)
     {
-        Items.AddRange(entries);
-        History.AddRange(history);
+        var document = Items.FirstOrDefault(x => x.Id == id);
+        if (document is not null)
+            apply(document);
+        return Task.FromResult(document is not null);
+    }
+
+    public Task<bool> DeleteAsync(Guid id, CancellationToken ct = default) =>
+        Task.FromResult(Items.RemoveAll(x => x.Id == id) > 0);
+
+    public Task<IReadOnlyDictionary<int, KnowledgeDocument>> TrackedByEntryNosAsync(
+        IReadOnlyCollection<int> entryNos, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<int, KnowledgeDocument>>(
+            Items.Where(x => entryNos.Contains(x.EntryNo)).ToDictionary(x => x.EntryNo));
+
+    public Task SaveImportAsync(IReadOnlyList<KnowledgeDocument> added, CancellationToken ct = default)
+    {
+        Items.AddRange(added);
         return Task.CompletedTask;
     }
 
-    public Task<int> UpdateManyAsync(
-        IReadOnlyList<Guid> ids, Func<KnowledgeBaseEntry, KnowledgeBaseEntryHistory?> apply,
-        bool includeDeleted = false, CancellationToken ct = default)
+    public Task ClearEmbeddingsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
     {
-        var matched = (includeDeleted ? Items : Live).Where(x => ids.Contains(x.Id)).ToList();
-        foreach (var entry in matched)
-        {
-            if (apply(entry) is not { } history)
-                continue;
-            history.EntryId = entry.Id;
-            History.Add(history);
-        }
-        return Task.FromResult(matched.Count);
+        ClearedEmbeddings.AddRange(ids);
+        return Task.CompletedTask;
     }
-
-    public Task<IReadOnlyList<(Guid EntryId, Guid ActorUserId)>> ContributorsAsync(
-        IReadOnlyList<Guid> entryIds, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<(Guid, Guid)>>(History
-            .Where(h => entryIds.Contains(h.EntryId) && h.ActorUserId != null
-                        && h.Action is KnowledgeHistoryActions.Create or KnowledgeHistoryActions.Edit or KnowledgeHistoryActions.Submit)
-            .Select(h => (h.EntryId, h.ActorUserId!.Value)).Distinct().ToList());
-
-    public Task<IReadOnlyList<KnowledgeKeyRow>> ExistingKeysAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<KnowledgeKeyRow>>(Items.Select(x => new KnowledgeKeyRow(x.EntryNo, x.Question)).ToList());
-
-    public bool Fail { get; init; }
-
-    public Task<IReadOnlyList<KnowledgeBaseEntry>> SameQuestionAsync(string question, bool includeDeleted, CancellationToken ct = default) =>
-        Fail
-            ? throw new InvalidOperationException("db down")
-            : Task.FromResult<IReadOnlyList<KnowledgeBaseEntry>>(
-                KnowledgeBaseRepository.SameQuestion((includeDeleted ? Items : Live).AsQueryable(), question).ToList());
-
-    public Task<IReadOnlyList<KnowledgeCreatorDto>> CreatorsAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<KnowledgeCreatorDto>>([]);
 }

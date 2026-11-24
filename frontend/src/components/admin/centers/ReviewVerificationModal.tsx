@@ -83,7 +83,7 @@ export function ReviewVerificationModal({
 
   if (!isOpen) return null;
 
-  const handleAction = async (action: "approve" | "reject" | "changes_requested" | "revoke") => {
+  const handleAction = async (action: "approve" | "reject" | "revoke") => {
     if (!requestId) return;
     setError(null);
 
@@ -94,7 +94,7 @@ export function ReviewVerificationModal({
       }
     } else {
       if (!rejectionReason.trim()) {
-        setError("Vui lòng nhập lý do từ chối / nội dung yêu cầu bổ sung.");
+        setError("Vui lòng nhập lý do từ chối duyệt hồ sơ.");
         return;
       }
     }
@@ -352,11 +352,11 @@ export function ReviewVerificationModal({
 
                 <div>
                   <label className="text-xs font-semibold text-ink block mb-1">
-                    Lý do từ chối / Nội dung yêu cầu bổ sung (Bắt buộc nếu Từ chối hoặc Yêu cầu bổ sung)
+                    Lý do từ chối (Bắt buộc nếu từ chối duyệt)
                   </label>
                   <Textarea
                     rows={2}
-                    placeholder="Nêu rõ lý do để gửi thông báo cho trung tâm cập nhật..."
+                    placeholder="Nêu rõ lý do từ chối để gửi thông báo cho trung tâm..."
                     value={rejectionReason}
                     onChange={(e) => setRejectionReason(e.target.value)}
                   />
@@ -373,17 +373,6 @@ export function ReviewVerificationModal({
           </Button>
 
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={submitting}
-              onClick={() => handleAction("changes_requested")}
-              className="text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
-            >
-              Yêu cầu bổ sung
-            </Button>
-
             <Button
               type="button"
               variant="outline"

@@ -31,8 +31,8 @@ public class DbContextSchemaTests
             "User", "UserSession", "OtpToken", "Consent", "ParentStudentLink",
             // Phân hệ 2: Hồ sơ & Học bạ (4)
             "StudentProfile", "TranscriptScore", "ProfileActivity", "RoadmapStep",
-            // Phân hệ 3: Trường, Tuyển sinh & Chi phí (4)
-            "University", "UniversityOffering", "Scholarship", "TargetSchool",
+            // Phân hệ 3: Trường, Tuyển sinh & Chi phí (5)
+            "University", "UniversityOffering", "Scholarship", "TargetSchool", "StateLivingCost",
             // Phân hệ 4: Mô hình DSS & Mô phỏng (6)
             "AppSetting", "AnalysisResult", "Recommendation", "RecommendationItem", "ExpertRule", "WhatIfSimulation",
             // Phân hệ 5: Trung tâm tư vấn (4)

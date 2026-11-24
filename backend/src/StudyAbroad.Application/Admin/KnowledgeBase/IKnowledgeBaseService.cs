@@ -9,40 +9,26 @@ public interface IKnowledgeBaseService
 
     Task<KnowledgeEntryDto?> GetAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Chi tiết kèm lịch sử. Mục đã xóa vẫn xem được (để khôi phục).</summary>
-    Task<KnowledgeEntryDetailDto?> GetDetailAsync(Guid id, CancellationToken ct = default);
+    /// <summary>Dữ liệu sai thì ArgumentException; entry_no đã dùng thì KnowledgeDuplicateEntryException. Bỏ trống entry_no thì lấy số lớn nhất cộng 1.</summary>
+    Task<KnowledgeEntryDto> CreateAsync(SaveKnowledgeEntryRequest request, CancellationToken ct = default);
 
-    Task<IReadOnlyList<KnowledgeCreatorDto>> GetCreatorsAsync(CancellationToken ct = default);
+    /// <summary>Sửa mọi trường trừ entry_no. Null nếu không có dòng. Câu hỏi đổi thì vector bị xóa để tạo lại.</summary>
+    Task<KnowledgeEntryDto?> UpdateAsync(Guid id, SaveKnowledgeEntryRequest request, CancellationToken ct = default);
 
-    /// <summary>Tạo ở trạng thái draft, hoặc pending nếu Submit. Dữ liệu sai thì ArgumentException; trùng câu hỏi thì KnowledgeDuplicateEntryException.</summary>
-    Task<KnowledgeEntryDto> CreateAsync(SaveKnowledgeEntryRequest request, Guid actorUserId, CancellationToken ct = default);
-
-    /// <summary>Sửa và ghi lịch sử. Mục approved đổi bất kỳ trường nào thì về pending. Null nếu không có. Lỗi như CreateAsync.</summary>
-    Task<KnowledgeEntryDto?> UpdateAsync(Guid id, SaveKnowledgeEntryRequest request, Guid actorUserId, CancellationToken ct = default);
-
-    /// <summary>Xóa mềm. False nếu không có hoặc đã xóa.</summary>
-    Task<bool> DeleteAsync(Guid id, Guid actorUserId, CancellationToken ct = default);
-
-    /// <summary>Khôi phục mục đã xóa. Null nếu không có mục đã xóa đó; câu hỏi đã trùng một mục còn sống thì KnowledgeDuplicateEntryException.</summary>
-    Task<KnowledgeEntryDto?> RestoreAsync(Guid id, Guid actorUserId, CancellationToken ct = default);
-
-    /// <summary>
-    /// Duyệt theo lô (tối đa 500) sang approved, rejected hoặc needs_fix; từ chối và yêu cầu sửa phải có ghi chú.
-    /// Bỏ qua mục do chính người duyệt tạo, sửa hoặc gửi duyệt, mục không ở pending, và mục chưa đủ nội dung khi duyệt.
-    /// </summary>
-    Task<ReviewKnowledgeEntriesResultDto> ReviewAsync(ReviewKnowledgeEntriesRequest request, Guid actorUserId, CancellationToken ct = default);
+    /// <summary>Xóa hẳn. False nếu không có dòng.</summary>
+    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>Đọc file xlsx, kiểm tra mọi dòng, trả 100 dòng đầu và mọi lỗi. Không ghi gì. File hỏng thì InvalidDataException.</summary>
     Task<KnowledgeImportPreviewDto> PreviewAsync(Stream workbook, CancellationToken ct = default);
 
-    /// <summary>Thêm các dòng hợp lệ, chưa trùng, ở trạng thái pending trong một transaction; dòng lỗi được báo và bỏ qua.</summary>
-    Task<KnowledgeImportResultDto> ImportAsync(Stream workbook, Guid actorUserId, CancellationToken ct = default);
+    /// <summary>Thêm hoặc cập nhật theo entry_no trong một transaction; dòng lỗi được báo và bỏ qua.</summary>
+    Task<KnowledgeImportResultDto> ImportAsync(Stream workbook, CancellationToken ct = default);
 
-    /// <summary>
-    /// UC-53: lưu câu chat chưa trả lời được thành mục nháp, chỉ có câu hỏi. Bỏ qua nếu trống, quá dài,
-    /// có thông tin liên hệ hoặc link, hoặc trùng câu đã có (kể cả đã xóa). Trả true nếu đã thêm.
-    /// </summary>
-    Task<bool> CaptureUnansweredAsync(string? question, CancellationToken ct = default);
+    /// <summary>Tiến độ tạo vector. Không hỏi được advisor thì trả Available = false chứ không ném lỗi.</summary>
+    Task<KnowledgeEmbedStatusDto> GetEmbedStatusAsync(CancellationToken ct = default);
+
+    /// <summary>Nhờ advisor tạo vector cho dòng còn thiếu (nút "Thử lại"). Không nhờ được thì trả Available = false.</summary>
+    Task<KnowledgeEmbedStatusDto> StartEmbedAsync(CancellationToken ct = default);
 }
 
 /// <summary>Đọc sheet knowledge_base của file xlsx thành các dòng thô, chưa kiểm tra nội dung.</summary>

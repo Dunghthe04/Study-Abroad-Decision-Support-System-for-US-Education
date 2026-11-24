@@ -127,8 +127,36 @@ public class AiUsageCollectorTests
         Assert.Empty(basket.Snapshot());
     }
 
+    [Fact]
+    public async Task TheEmbedKnowledgeCall_IsForwardedToTheRealClient_NotLeftAtTheThrowingDefault()
+    {
+        var basket = new AiUsageCollector();
+        var advisor = new UsageCollectingAdvisorClient(new StubAdvisor(), basket);
+
+        var result = await advisor.EmbedKnowledgeAsync();
+
+        Assert.True(result.Started);
+        Assert.Empty(basket.Snapshot());
+    }
+
+    [Fact]
+    public async Task TheEmbedStatusCall_IsForwardedToTheRealClient_NotLeftAtTheThrowingDefault()
+    {
+        var advisor = new UsageCollectingAdvisorClient(new StubAdvisor(), new AiUsageCollector());
+
+        var result = await advisor.GetKnowledgeEmbedStatusAsync();
+
+        Assert.Equal(7, result.Done);
+    }
+
     private sealed class StubAdvisor : IAdvisorClient
     {
+        public Task<KnowledgeEmbedDto> GetKnowledgeEmbedStatusAsync(CancellationToken ct = default) =>
+            Task.FromResult(new KnowledgeEmbedDto(1, false, 7, null, false));
+
+        public Task<KnowledgeEmbedDto> EmbedKnowledgeAsync(CancellationToken ct = default) =>
+            Task.FromResult(new KnowledgeEmbedDto(1, true, 0, null, true));
+
         public Exception? Error { get; init; }
         public PendingQuestionDto Pending { get; init; } = PendingQuestionDto.None;
 

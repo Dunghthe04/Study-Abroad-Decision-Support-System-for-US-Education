@@ -12,6 +12,7 @@ from app.services.compare_writer import CompareWriter
 from app.services.ec_reader import EcReader
 from app.services.explainer import Explainer
 from app.services.goal_writer import GoalWriter
+from app.services.knowledge_embedding import KnowledgeEmbedJob
 from app.services.ollama import OllamaClient
 from app.services.recommend_writer import RecommendWriter
 from app.services.scenario_writer import ScenarioWriter
@@ -75,3 +76,11 @@ def get_scenario_writer(request: Request) -> ScenarioWriter:
 
 def get_chat_flow(request: Request) -> ChatFlow:
     return request.app.state.chat_flow
+
+
+# Việc tạo vector cho kho kiến thức; không có DB thì không có việc này (503, backend coi như chưa tạo được vector)
+def get_embed_job(request: Request) -> KnowledgeEmbedJob:
+    job = getattr(request.app.state, "embed_job", None)
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Chưa kết nối database.")
+    return job

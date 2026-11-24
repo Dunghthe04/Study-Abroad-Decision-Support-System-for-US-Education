@@ -39,17 +39,6 @@ public static class SlmSampleSources
 {
     public const string Manual = "manual";
     public const string Excel = "excel";
-    public const string ChatUnanswered = "chat-unanswered";
 
-    public static readonly IReadOnlyList<string> All = new[] { Manual, Excel, ChatUnanswered };
-}
-
-public static class SlmSampleHistoryActions
-{
-    public const string Create = "create";
-    public const string Edit = "edit";
-    public const string Submit = "submit";
-    public const string Review = "review";
-    public const string Delete = "delete";
-    public const string Capture = "capture";
+    public static readonly IReadOnlyList<string> All = new[] { Manual, Excel };
 }

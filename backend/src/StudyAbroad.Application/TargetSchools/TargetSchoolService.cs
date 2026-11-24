@@ -1,5 +1,6 @@
 using System.Text.Json;
 using StudyAbroad.Application.Audit;
+using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
@@ -10,7 +11,8 @@ namespace StudyAbroad.Application.TargetSchools;
 /// </summary>
 public class TargetSchoolService(
     ITargetSchoolRepository repository,
-    IAuditLogRepository auditLogs) : ITargetSchoolService
+    IAuditLogRepository auditLogs,
+    IRecommendationHistoryRepository? recommendationHistory = null) : ITargetSchoolService
 {
     private static readonly HashSet<string> ValidCategories = ["reach", "match", "safety"];
 
@@ -37,6 +39,7 @@ public class TargetSchoolService(
             return AddTargetSchoolResult.Fail("Trường này đã có trong danh sách mục tiêu của bạn.");
 
         // 3. Chuẩn hóa Category (reach / match / safety)
+        // [SC-34 / UC-33] Nhóm mặc định lấy từ kết quả gợi ý gần nhất; đánh dấu nhóm do người dùng tự chọn
         string? category = null;
         if (!string.IsNullOrWhiteSpace(request.Category))
         {
@@ -44,6 +47,60 @@ public class TargetSchoolService(
             if (!ValidCategories.Contains(normalized))
                 return AddTargetSchoolResult.Fail("Phân loại trường mục tiêu phải là: reach (với), match (vừa sức), hoặc safety (an toàn).");
             category = normalized;
+        }
+        else if (recommendationHistory is not null)
+        {
+            try
+            {
+                var recs = await recommendationHistory.ListByUserAsync(userId, 1, ct);
+                var latest = recs.FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(latest?.ItemsJson))
+                {
+                    using var doc = JsonDocument.Parse(latest.ItemsJson);
+                    var root = doc.RootElement;
+                    if (root.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var group in new[] { "reach", "match", "safety" })
+                        {
+                            if (root.TryGetProperty(group, out var groupProp) && groupProp.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var elem in groupProp.EnumerateArray())
+                                {
+                                    var matchCode = elem.TryGetProperty("code", out var cp) && string.Equals(cp.GetString(), university.Code, StringComparison.OrdinalIgnoreCase);
+                                    var matchId = elem.TryGetProperty("universityId", out var ip) && ip.TryGetGuid(out var gid) && gid == university.Id;
+                                    if (matchCode || matchId)
+                                    {
+                                        category = group;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (category is not null) break;
+                        }
+                    }
+                    else if (root.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var elem in root.EnumerateArray())
+                        {
+                            var matchCode = elem.TryGetProperty("code", out var cp) && string.Equals(cp.GetString(), university.Code, StringComparison.OrdinalIgnoreCase);
+                            var matchId = elem.TryGetProperty("universityId", out var ip) && ip.TryGetGuid(out var gid) && gid == university.Id;
+                            if (matchCode || matchId)
+                            {
+                                if (elem.TryGetProperty("category", out var catProp) && catProp.GetString() is { } catStr)
+                                {
+                                    var normalized = catStr.Trim().ToLowerInvariant();
+                                    if (ValidCategories.Contains(normalized)) category = normalized;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Không chặn luồng nếu đọc lịch sử gợi ý gặp lỗi
+            }
         }
 
         // 4. Xác định ApplicationRound và Deadline

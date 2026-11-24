@@ -27,7 +27,7 @@ import { SlmSampleFormPanel } from "@/components/admin/slm-samples/SlmSampleForm
 import { slmSampleColumns } from "@/components/admin/slm-samples/slm-sample-columns";
 import { useAuth } from "@/contexts/AuthContext";
 import { adminSlmSampleApi } from "@/lib/slm-sample-api";
-import { CHAT_UNANSWERED_SOURCE, REVIEW_STATUSES, SAMPLE_TYPE_OPTIONS, SPLIT_OPTIONS, sampleToRequest } from "@/lib/slm-sample-format";
+import { REVIEW_STATUSES, SAMPLE_TYPE_OPTIONS, SPLIT_OPTIONS, sampleToRequest } from "@/lib/slm-sample-format";
 import { useFetched } from "@/lib/use-fetched";
 import type { SaveSlmSampleRequest, SlmImportResult, SlmReviewStatus, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
 
@@ -41,7 +41,6 @@ const SOURCE_FILTER_OPTIONS = [
   { value: "", label: "Mọi nguồn" },
   { value: "manual", label: "Nhập tay" },
   { value: "excel", label: "File Excel" },
-  { value: CHAT_UNANSWERED_SOURCE, label: "Chat chưa trả lời" },
 ];
 
 const TAB_TRIGGER_CLASS =
@@ -412,7 +411,7 @@ export function SlmSampleListView() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Xóa mẫu này?</AlertDialogTitle>
-            <AlertDialogDescription>Mẫu sẽ bị ẩn khỏi danh sách và không được xuất ra nữa. Lịch sử của mẫu vẫn được giữ lại.</AlertDialogDescription>
+            <AlertDialogDescription>Mẫu sẽ bị ẩn khỏi danh sách và không được xuất ra nữa.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteBusy}>Hủy</AlertDialogCancel>

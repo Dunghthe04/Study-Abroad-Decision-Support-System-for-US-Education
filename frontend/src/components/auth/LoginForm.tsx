@@ -29,7 +29,7 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [lockType, setLockType] = useState<"temp_locked" | "unverified" | "pending_deletion" | null>(null);
+  const [lockType, setLockType] = useState<"temp_locked" | "admin_locked" | "unverified" | "pending_deletion" | null>(null);
   // [UC-80] Mã khôi phục server trả kèm khi đăng nhập vào tài khoản đang chờ xóa
   const [restoreToken, setRestoreToken] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -76,8 +76,14 @@ export function LoginForm() {
           setRestoreToken(pending.restoreToken);
           setError(`Tài khoản đang chờ xóa và sẽ bị xóa hẳn vào ngày ${formatDate(pending.deletionDate)}. Bạn có thể khôi phục để dùng tiếp.`);
         } else if (err.status === 423) {
-          setLockType("temp_locked");
-          setError("Tài khoản của bạn đã bị khóa do nhập sai mật khẩu quá 5 lần liên tiếp.");
+          const isTempLock = err.message?.includes("5 lần");
+          setLockType(isTempLock ? "temp_locked" : "admin_locked");
+          setError(
+            err.message ||
+              (isTempLock
+                ? "Tài khoản của bạn đã bị khóa do nhập sai mật khẩu quá 5 lần liên tiếp."
+                : "Tài khoản của bạn đã bị khóa bởi Quản trị viên.")
+          );
         } else if (err.status === 403 && (err.message.includes("chưa được kích hoạt") || err.message.toLowerCase().includes("unverified"))) {
           setError(err.message);
           setLockType("unverified");
@@ -125,10 +131,32 @@ export function LoginForm() {
             <p>{error}</p>
 
             {lockType === "temp_locked" && (
-              <p className="mt-1.5 flex items-start gap-1.5 text-xs font-medium">
+              <p className="mt-2 flex items-start gap-1.5 text-xs font-medium">
                 <ShieldAlertIcon className="size-3.5 shrink-0 mt-0.5" aria-hidden="true" />
                 <span>
-                  Chỉ Quản trị viên (Admin) mới có quyền mở khóa tài khoản này. Vui lòng liên hệ ban quản trị để được hỗ trợ.
+                  Chỉ Quản trị viên (Admin) mới có quyền mở khóa tài khoản này. Vui lòng liên hệ qua{" "}
+                  <a
+                    href="mailto:support@usas.edu.vn?subject=[Yêu cầu mở khóa tài khoản]"
+                    className="font-semibold text-brand underline underline-offset-2 hover:opacity-80"
+                  >
+                    support@usas.edu.vn
+                  </a>{" "}
+                  để được hỗ trợ.
+                </span>
+              </p>
+            )}
+
+            {lockType === "admin_locked" && (
+              <p className="mt-2 flex items-start gap-1.5 text-xs font-medium">
+                <ShieldAlertIcon className="size-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>
+                  Nếu bạn là đại diện trung tâm muốn rút lại yêu cầu xóa hoặc cần hỗ trợ mở lại tài khoản, vui lòng phản hồi email thông báo duyệt xóa hoặc gửi thư trực tiếp tới{" "}
+                  <a
+                    href="mailto:support@usas.edu.vn?subject=[Yêu cầu mở lại tài khoản trung tâm]"
+                    className="font-semibold text-brand underline underline-offset-2 hover:opacity-80"
+                  >
+                    support@usas.edu.vn
+                  </a>.
                 </span>
               </p>
             )}

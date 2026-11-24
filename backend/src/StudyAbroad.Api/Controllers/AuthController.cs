@@ -19,7 +19,7 @@ namespace StudyAbroad.Api.Controllers
         [EnableRateLimiting(AuthRateLimit.PolicyName)]
         public async Task<IActionResult> Register(RegisterRequest request, CancellationToken ct)
         {
-            var result = await auth.RegisterAsync(request, ct);
+            var result = await auth.RegisterAsync(request, ct, HttpContext.Connection.RemoteIpAddress?.ToString());
             return result.Error switch
             {
                 AuthError.None => StatusCode(StatusCodes.Status201Created, new { message = result.Message }),

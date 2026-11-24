@@ -37,7 +37,6 @@ namespace StudyAbroad.Application.Advisor
         IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null,
         IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null,
         IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null, AiPricing? pricing = null,
-        StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeBaseService? knowledgeBase = null,
         StudyAbroad.Application.Billing.IEntitlementService? entitlements = null) : History.IChatPendingQuestion
     {
         //Dữ liệu FE gửi lên
@@ -206,12 +205,12 @@ namespace StudyAbroad.Application.Advisor
             // Phiên đã lưu (khóa ngoại của tin nhắn cần phiên có sẵn): ghi tin hỏi và tin trả lời cho admin xem
             // Đến đây mọi lần gọi advisor của lượt đã xong: lấy cả giỏ số đo (không chỉ lần gọi chat đầu) để outcome, meta_json và ai_calls đủ
             var turnSignals = advisorSignals with { Usage = TurnUsage(advisorSignals.Usage) };
+            // Ảnh chỉ đi tiếp khi link hợp lệ (https): kiểm một lần ở đây rồi cùng giá trị đó được lưu và trả trình duyệt
+            response = response with { Media = ChatMedia.Clean(response.Media) };
             var replyId = await RecordTurnAsync(session, request, response, turnSignals, turnClock.ElapsedMilliseconds, ct);
             // Token ghi sau tin trả lời để nối được (chat_message_id). Tin không lưu (tắt công tắc hoặc lỗi) thì vẫn ghi token, chỉ không có liên kết
             // ai_calls.user_id là người trả (hạn mức Free đếm theo user_id), không phải chủ phiên chat
             await RecordAiCallsAsync(payerId, replyId, turnSignals.Usage, charge, ct);
-            if (ChatTurn.Outcome(turnSignals.Slm, turnSignals.Usage, response.NoBasis == true) == ChatOutcomes.NoAnswer)
-                await CaptureUnansweredAsync(request, ct);
 
             //Trả về trình duyệt: có mã phiên, ko lộ trạng thái nội bôk.
             // ProfileChanged để form biết mà nạp lại nháp (D2)
@@ -301,26 +300,6 @@ namespace StudyAbroad.Application.Advisor
             };
         }
 
-        private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(1);
-
-        // UC-53: câu chưa trả lời được vào kho tri thức ở dạng nháp, chỉ có câu hỏi. Theo công tắc Chat:StoreMessages
-        // (messages null khi tắt). Lỗi không làm hỏng lượt chat
-        private async Task CaptureUnansweredAsync(AdvisorChatRequest request, CancellationToken ct)
-        {
-            if (knowledgeBase is null || messages is null || request.Messages.LastOrDefault(m => m.Role == "user")?.Content is not { Length: > 0 } asked)
-                return;
-            try
-            {
-                using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                bounded.CancelAfter(CaptureTimeout);
-                await knowledgeBase.CaptureUnansweredAsync(asked, bounded.Token);
-            }
-            catch (Exception ex)
-            {
-                logger?.LogWarning(ex, "Không lưu được câu chưa trả lời vào kho tri thức");
-            }
-        }
-
         // Tín hiệu của advisor ở lượt này, chụp trước khi .NET xử lý tiếp: lúc học sinh hỏi, nhãn model gán, số đo từng lần gọi AI, hành động, skill đã chạy
         private record TurnSignals(
             DateTime AskedAt, AdvisorSlmDto? Slm, IReadOnlyList<AiUsageDto>? Usage, string? Action, IReadOnlyList<string>? Skills);
@@ -358,6 +337,7 @@ namespace StudyAbroad.Application.Advisor
                     SourcesJson = response.Citations is { Count: > 0 } cites
                         ? JsonSerializer.Serialize(cites.Select(c => new { title = c.Title, url = c.Url, retrievedAt = c.RetrievedAt }))
                         : null,
+                    MediaJson = ChatMedia.ToJson(response.Media),
                     Outcome = outcome,
                     ReviewStatus = ChatTurn.ReviewStatus(outcome),
                     MetaJson = ChatTurn.ReplyMeta(signals.Usage, signals.Action, signals.Skills, turnMs),
@@ -809,6 +789,7 @@ namespace StudyAbroad.Application.Advisor
             {
                 Answer = answer,
                 Citations = clearKb ? [] : response.Citations,
+                Media = clearKb ? null : response.Media,   // số liệu từ cơ sở dữ liệu thay câu của kho: ảnh của dòng kho không còn hợp
                 Disclaimer = clearKb ? null : response.Disclaimer,
                 QuickReplies = null,
             };

@@ -1,5 +1,5 @@
 // Trang làm việc dùng khung rộng như demo; các trang đọc giữ bề rộng cũ
-const WIDE_PREFIXES = ["/account", "/analysis", "/recommendations", "/admin", "/centers", "/center", "/universities", "/university/", "/target-schools", "/plans", "/orders"];
+const WIDE_PREFIXES = ["/account", "/analysis", "/recommendations", "/admin", "/centers", "/center", "/universities", "/scholarships", "/university/", "/target-schools", "/plans", "/orders", "/community"];
 
 export function isWideRoute(pathname: string) {
   if (pathname === "/") return true;

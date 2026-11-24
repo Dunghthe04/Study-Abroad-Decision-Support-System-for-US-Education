@@ -11,6 +11,7 @@ Không đăng ký ngoai_le và ket_thuc: hai skill tạm đó đã có sẵn tro
 
 from typing import Any
 
+from app.services.accent_restorer import AccentRestorer
 from app.services.centers import CenterFinder
 from app.services.chat_flow import SkillHandler
 from app.services.knowledge import KnowledgeRetriever
@@ -38,7 +39,9 @@ def build_handlers(
     handlers["skill_ho_so"] = HoSoHandler(llm, model)
     handlers["skill_explain"] = ExplainHandler(llm, model)
     if knowledge is not None:
-        handlers["skill_tra_loi"] = TraLoiHandler(llm, model, knowledge, min_score, embedder)
+        handlers["skill_tra_loi"] = TraLoiHandler(
+            llm, model, knowledge, min_score, embedder, AccentRestorer(llm)
+        )
     if centers is not None:
         handlers["skill_chuyen_trung_tam"] = ChuyenTrungTamHandler(llm, model, centers)
     return handlers

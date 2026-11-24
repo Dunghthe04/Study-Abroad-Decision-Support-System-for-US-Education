@@ -142,6 +142,7 @@ export function UniversityDetailView({ university }: { university: UniversityDet
                 universityName={university.name}
                 universityCity={university.city}
                 universityState={university.state}
+                deadlinesJson={university.offerings?.find((o) => o.deadlinesJson)?.deadlinesJson ?? null}
                 size="lg"
                 className="!border-transparent !bg-brand-wash !text-brand-ink hover:!bg-brand-wash/70"
               />

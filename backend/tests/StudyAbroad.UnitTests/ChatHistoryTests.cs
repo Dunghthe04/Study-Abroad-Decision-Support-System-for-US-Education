@@ -27,8 +27,8 @@ public class ChatHistoryTests
     private static ChatSession Session(int n, Guid owner, DateTime created, DateTime? updated = null, string? title = null) =>
         new() { Id = Id(n), UserId = owner, CreatedAt = created, UpdatedAt = updated, Title = title };
 
-    private static ChatMessageEntity Msg(int n, int session, string role, DateTime at, string content = "x", string? sources = null) =>
-        new() { Id = Id(1000 + n), ChatSessionId = Id(session), Role = role, CreatedAt = at, Content = content, SourcesJson = sources };
+    private static ChatMessageEntity Msg(int n, int session, string role, DateTime at, string content = "x", string? sources = null, string? media = null) =>
+        new() { Id = Id(1000 + n), ChatSessionId = Id(session), Role = role, CreatedAt = at, Content = content, SourcesJson = sources, MediaJson = media };
 
     // ---- tiêu đề
 
@@ -252,6 +252,24 @@ public class ChatHistoryTests
         var citation = Assert.Single(items[0].Citations);
         Assert.Equal(("Kho kiến thức", "https://a.edu", new DateOnly(2026, 11, 1)), (citation.Title, citation.Url, citation.RetrievedAt));
         Assert.Empty(items[1].Citations);
+    }
+
+    [Fact]
+    public async Task GetMessages_ReadsTheMedia_ReCheckingTheStoredLinks_AndIgnoresBrokenJson()
+    {
+        var sessions = new List<ChatSession> { Session(1, Me, At(1)) };
+        var messages = new List<ChatMessageEntity>
+        {
+            Msg(1, 1, "assistant", At(1), media: """[{"kind":"image","url":"https://a.edu/i20.png","alt":"Mẫu I-20"},{"kind":"image","url":"http://a.edu/cu.png","alt":"link http cũ"}]"""),
+            Msg(2, 1, "assistant", At(1, 13), media: "{không phải json"),
+            Msg(3, 1, "assistant", At(1, 14)),
+        };
+        var items = (await new ChatHistoryService(new MemoryRepository(sessions, messages)).GetMessagesAsync(Me, Id(1), null, 50))!.Items;
+
+        var image = Assert.Single(items[0].Media);
+        Assert.Equal(("image", "https://a.edu/i20.png", "Mẫu I-20"), (image.Kind, image.Url, image.Alt));   // link http bị bỏ dù đã lưu
+        Assert.Empty(items[1].Media);   // json hỏng: bỏ ảnh, lịch sử vẫn mở được
+        Assert.Empty(items[2].Media);   // tin cũ không có cột này
     }
 
     [Fact]

@@ -11,7 +11,7 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 
 from app.api.deps import require_api_key
-from app.api.routes import chat, health, profile, recommend
+from app.api.routes import chat, health, knowledge, profile, recommend
 from app.core.config import get_settings
 from app.core.db import open_pool
 from app.services.advice_writer import AdviceWriter
@@ -25,6 +25,7 @@ from app.services.embedding import OpenAiEmbeddingClient
 from app.services.explainer import Explainer
 from app.services.goal_writer import GoalWriter
 from app.services.knowledge import KnowledgeRetriever
+from app.services.knowledge_embedding import KnowledgeEmbedJob
 from app.services.ollama import OllamaClient
 from app.services.recommend_writer import RecommendWriter
 from app.services.scenario_writer import ScenarioWriter
@@ -99,8 +100,7 @@ async def lifespan(app: FastAPI):
         app.state.db_pool = await asyncio.to_thread(open_pool, settings.database_url)
         knowledge = None
         if app.state.db_pool is not None:
-            statuses = [s.strip() for s in settings.knowledge_statuses.split(",") if s.strip()]
-            knowledge = KnowledgeRetriever(app.state.db_pool, statuses, settings.knowledge_top_k)
+            knowledge = KnowledgeRetriever(app.state.db_pool, settings.knowledge_top_k)
         centers = CenterFinder(backend_http) if settings.backend_base_url else None
         # Claude viết câu trả lời cho mọi skill; Ollama (app.state.llm) chỉ còn embedding cho kho kiến thức
         # Embedding chạy trên dịch vụ tương thích OpenAI nếu có cấu hình, không thì dùng Ollama (app.state.llm)
@@ -109,6 +109,12 @@ async def lifespan(app: FastAPI):
             if settings.embedding_base_url
             else app.state.llm
         )
+        # Tạo vector cho dòng mới của kho (backend gọi sau khi moderator import): dùng cùng bộ embedding với chat
+        app.state.embed_job = (
+            KnowledgeEmbedJob(app.state.db_pool, embedder) if app.state.db_pool is not None else None
+        )
+        if app.state.embed_job is not None and settings.knowledge_embed_sweep_seconds > 0:
+            app.state.embed_job.start_sweeper(settings.knowledge_embed_sweep_seconds)
         skills = build_handlers(
             claude, settings.anthropic_model, knowledge, settings.knowledge_min_score, centers, embedder
         )
@@ -130,6 +136,8 @@ async def lifespan(app: FastAPI):
         what_if_writer = WhatIfWriter(claude, settings.anthropic_model)
         app.state.chat_flow = ChatFlow(slm, build_branches(skills, writer, what_if_writer))
         yield
+        if app.state.embed_job is not None:
+            await app.state.embed_job.stop()
         if app.state.db_pool is not None:
             await asyncio.to_thread(app.state.db_pool.close)
 
@@ -187,6 +195,7 @@ def create_app() -> FastAPI:
     app.include_router(profile.router, dependencies=[Depends(require_api_key)])
     app.include_router(recommend.router, dependencies=[Depends(require_api_key)])
     app.include_router(chat.router, dependencies=[Depends(require_api_key)])  # thêm
+    app.include_router(knowledge.router, dependencies=[Depends(require_api_key)])
 
     # Mặc định uvicorn chỉ ghi "422 Unprocessable Content", không nói trường nào sai. Ghi vị trí và lý do, KHÔNG ghi giá trị
     # (giá trị có thể là chữ của học sinh), rồi trả đúng câu trả lời 422 mặc định

@@ -303,6 +303,36 @@ public class AdminUniversityServiceTests
     }
 
     [Fact]
+    public async Task UpdateOfferingAsync_BadApplicationFeeActPolicyOrActSubmitPct_ReturnsErrors()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo);
+
+        var result = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id,
+            OfferingRequest(repo) with { ApplicationFeeUsd = -1, TuitionInStateUsd = -1, ActPolicy = "maybe", ActSubmitPct = 1.5m }, Actor);
+
+        foreach (var key in new[] { "applicationFeeUsd", "tuitionInStateUsd", "actPolicy", "actSubmitPct" })
+            Assert.Contains(key, result.Errors.Keys);
+        Assert.Equal(0, repo.SaveCount);
+    }
+
+    [Fact]
+    public async Task UpdateOfferingAsync_NewCostAndActFields_SavedAndAudited()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo);
+
+        var result = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id,
+            OfferingRequest(repo) with { ApplicationFeeUsd = 75m, TuitionInStateUsd = 12000m, ActPolicy = "Optional", ActSubmitPct = 0.4m }, Actor);
+
+        Assert.True(result.Success);
+        Assert.Equal(75m, repo.Offering.ApplicationFeeUsd);
+        Assert.Equal("optional", repo.Offering.ActPolicy);
+        Assert.Equal(0.4m, result.Value!.ActSubmitPct);
+        Assert.Contains("applicationFeeUsd", Assert.Single(repo.Audits).DetailJson);
+    }
+
+    [Fact]
     public async Task UpdateOfferingAsync_ChangedReliability_RecordsEditorAndAudit()
     {
         var repo = new FakeRepository();

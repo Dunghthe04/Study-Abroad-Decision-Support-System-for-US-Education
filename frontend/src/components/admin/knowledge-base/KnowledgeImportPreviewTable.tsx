@@ -31,11 +31,13 @@ export function KnowledgeImportPreviewTable({ rows, messagesByRow }: { rows: Kno
           <TableRow>
             <TableHead scope="col" className="text-right">Dòng</TableHead>
             <TableHead scope="col" className="text-right">Mã</TableHead>
+            <TableHead scope="col">Loại</TableHead>
             <TableHead scope="col">Nhãn</TableHead>
-            <TableHead scope="col">Bậc học</TableHead>
             <TableHead scope="col">Câu hỏi</TableHead>
             <TableHead scope="col">Câu trả lời</TableHead>
             <TableHead scope="col">Nguồn</TableHead>
+            <TableHead scope="col">Ngày thu thập</TableHead>
+            <TableHead scope="col">Mã chủ đề</TableHead>
             <TableHead scope="col">Kiểm tra</TableHead>
           </TableRow>
         </TableHeader>
@@ -46,11 +48,13 @@ export function KnowledgeImportPreviewTable({ rows, messagesByRow }: { rows: Kno
               <TableRow key={row.rowNumber}>
                 <TableCell className="tabular text-right">{row.rowNumber}</TableCell>
                 <TableCell className="tabular text-right">{row.id ?? "—"}</TableCell>
+                <TableCell><TextCell value={row.docType} className="max-w-32" /></TableCell>
                 <TableCell><TextCell value={row.label} /></TableCell>
-                <TableCell><TextCell value={row.level} className="max-w-32" /></TableCell>
                 <TableCell><TextCell value={row.question} className="max-w-72" /></TableCell>
                 <TableCell><TextCell value={row.answer} className="max-w-72" /></TableCell>
-                <TableCell><TextCell value={row.source} /></TableCell>
+                <TableCell><TextCell value={row.source ?? row.sourceUrl} /></TableCell>
+                <TableCell><TextCell value={row.retrievedAt} className="max-w-28" /></TableCell>
+                <TableCell><TextCell value={row.topicCode} className="max-w-28" /></TableCell>
                 <TableCell>
                   {messages ? (
                     <div className="max-w-64 truncate text-risk" title={messages.join("\n")}>{messages.join("; ")}</div>
