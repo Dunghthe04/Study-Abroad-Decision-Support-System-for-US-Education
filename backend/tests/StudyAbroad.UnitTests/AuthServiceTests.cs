@@ -1117,13 +1117,33 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task Login_TempLockedUser_NeverAutoUnlocksAtRuntime_RequiresAdminToUnlock()
+    public async Task Login_TempLockExpired_AutoUnlocksAndLogsIn()
+    {
+        // [UC-03 E2] Hết 15 phút khóa tạm: đăng nhập đúng mật khẩu được ngay, bộ đếm sai về 0
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.TempLocked;
+        user.FailedLoginAttempts = 5;
+        user.LockoutEnd = DateTime.UtcNow.AddMinutes(-1);
+
+        var loginResult = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+
+        Assert.Equal(AuthError.None, loginResult.Error);
+        Assert.Equal(UserStatuses.Active, user.Status);
+        Assert.Equal(0, user.FailedLoginAttempts);
+        Assert.Null(user.LockoutEnd);
+    }
+
+    [Fact]
+    public async Task Login_TempLockNotExpired_StillBlocked()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
         var user = _repo.Users[0];
         user.Status = UserStatuses.TempLocked;
         user.FailedLoginAttempts = 5;
+        user.LockoutEnd = DateTime.UtcNow.AddMinutes(10);
 
         var loginResult = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
 
@@ -1469,7 +1489,7 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task Login_WrongPassword5Times_LocksUser_AndRequiresAdminToUnlock()
+    public async Task Login_WrongPassword5Times_TempLocks15Minutes()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
@@ -1489,7 +1509,8 @@ public class AuthServiceTests
         var lockRes = await service.LoginAsync(new LoginRequest("a@test.com", "wrongpass"));
         Assert.Equal(AuthError.TempLocked, lockRes.Error);
         Assert.Equal(UserStatuses.TempLocked, user.Status);
-        Assert.Null(user.LockoutEnd);
+        Assert.NotNull(user.LockoutEnd);
+        Assert.InRange(user.LockoutEnd!.Value, DateTime.UtcNow.AddMinutes(14), DateTime.UtcNow.AddMinutes(15));
 
         // Kiểm tra email thông báo đã được gửi (không chứa mã OTP mở khóa)
         Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "temp_locked_notice");
@@ -1507,24 +1528,25 @@ public class AuthServiceTests
         var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
 
         Assert.Equal(AuthError.TempLocked, result.Error);
-        Assert.Contains("liên hệ Quản trị viên", result.Message!);
+        Assert.Contains("15 phút", result.Message!);
     }
 
     [Fact]
-    public async Task Login_TempLockedUser_NeverAutoUnlocks_RequiresAdminUnlock()
+    public async Task Login_TempLockedUser_AdminCanUnlockEarly()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
         var user = _repo.Users[0];
         user.Status = UserStatuses.TempLocked;
         user.FailedLoginAttempts = 5;
+        user.LockoutEnd = DateTime.UtcNow.AddMinutes(10);
 
-        // Thử đăng nhập vẫn bị chặn
+        // Còn trong 15 phút: đăng nhập vẫn bị chặn
         var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
         Assert.Equal(AuthError.TempLocked, result.Error);
         Assert.Equal(UserStatuses.TempLocked, user.Status);
 
-        // Chỉ khi Admin mở khóa thì mới đăng nhập được
+        // Admin mở khóa sớm thì đăng nhập được ngay
         var adminId = Guid.NewGuid();
         var unlockResult = await service.UnlockUserAccountAsync(user.Id, new UnlockUserAccountRequest("Admin mở khóa"), adminId);
         Assert.Equal(AuthError.None, unlockResult.Error);
@@ -1961,7 +1983,8 @@ public class AuthServiceTests
 
         Assert.Equal(AuthError.TempLocked, lockRes.Error);
         Assert.Equal(UserStatuses.TempLocked, user.Status);
-        Assert.Null(user.LockoutEnd);
+        Assert.NotNull(user.LockoutEnd);
+        Assert.InRange(user.LockoutEnd!.Value, DateTime.UtcNow.AddMinutes(14), DateTime.UtcNow.AddMinutes(15));
         Assert.All(_repo.Sessions, s => Assert.True(s.IsRevoked));
         Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "temp_locked_notice");
     }

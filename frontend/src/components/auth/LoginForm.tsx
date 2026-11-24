@@ -81,7 +81,7 @@ export function LoginForm() {
           setError(
             err.message ||
               (isTempLock
-                ? "Tài khoản của bạn đã bị khóa do nhập sai mật khẩu quá 5 lần liên tiếp."
+                ? "Tài khoản tạm khóa 15 phút do nhập sai mật khẩu 5 lần liên tiếp."
                 : "Tài khoản của bạn đã bị khóa bởi Quản trị viên.")
           );
         } else if (err.status === 403 && (err.message.includes("chưa được kích hoạt") || err.message.toLowerCase().includes("unverified"))) {
@@ -134,14 +134,13 @@ export function LoginForm() {
               <p className="mt-2 flex items-start gap-1.5 text-xs font-medium">
                 <ShieldAlertIcon className="size-3.5 shrink-0 mt-0.5" aria-hidden="true" />
                 <span>
-                  Chỉ Quản trị viên (Admin) mới có quyền mở khóa tài khoản này. Vui lòng liên hệ qua{" "}
+                  Tài khoản tự mở khóa sau 15 phút. Nếu cần mở sớm, vui lòng liên hệ Quản trị viên qua{" "}
                   <a
                     href="mailto:support@usas.edu.vn?subject=[Yêu cầu mở khóa tài khoản]"
                     className="font-semibold text-brand underline underline-offset-2 hover:opacity-80"
                   >
                     support@usas.edu.vn
-                  </a>{" "}
-                  để được hỗ trợ.
+                  </a>.
                 </span>
               </p>
             )}
