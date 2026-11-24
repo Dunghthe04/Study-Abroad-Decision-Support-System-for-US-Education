@@ -6,15 +6,10 @@ from pathlib import Path
 import pytest
 
 from app.services.skills import validators as v
-from app.services.skills.commit_rules import STUDY_LEVELS
 from app.services.skills.skill_bac_hoc import CURRENT_LEVELS, MAX_MAJOR_LEN
 
 RULES_PATH = Path(__file__).resolve().parents[2] / "shared" / "profile_rules.json"
 RULES = json.loads(RULES_PATH.read_text(encoding="utf-8"))
-
-
-def test_study_levels():
-    assert STUDY_LEVELS == set(RULES["studyLevels"])
 
 
 def test_current_education_levels():

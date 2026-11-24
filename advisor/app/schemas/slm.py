@@ -20,7 +20,6 @@ Intent = Literal[
 PROFILE_KEYS = (
     "current_level",
     "current_grade",
-    "target_level",
     "major",
     "intake",
     "education_system",
@@ -55,8 +54,10 @@ ENTITY_KEYS = {
 PROFILE_TASKS = ("edit", "status", "restart")
 # profile_review: tư vấn theo hồ sơ của chính học sinh. Một câu có thể hỏi nhiều việc ("đánh giá hồ sơ và cho em lộ trình") nên đây là
 # danh sách không lặp. Rỗng hoặc vắng = chưa rõ muốn gì, hệ thống hỏi lại bằng nút. compare cần schools từ hai trường;
-# explain_school có schools (hoặc lấy từ ngữ cảnh)
-REVIEW_TASKS = ("assessment", "school_list", "roadmap", "compare", "explain_school")
+# explain_school có schools (hoặc lấy từ ngữ cảnh): trường này có hợp em không, có nên nộp không.
+# explain_fit (v14): vì sao kết quả gợi ý ra như vậy (điểm phù hợp, nhóm Reach / Match / Safety) của một trường; kèm schools hoặc lấy từ ngữ cảnh.
+#   Hỏi cả hai thì tasks có cả explain_fit và explain_school
+REVIEW_TASKS = ("assessment", "school_list", "roadmap", "compare", "explain_school", "explain_fit")
 # knowledge: vắng = câu kiến thức chung. Câu hỏi số liệu trường dùng ba nhiệm vụ sau, hệ thống tra cơ sở dữ liệu theo đúng điều model trả,
 # không đoán lại bằng từ khóa:
 #   school_info: hỏi số liệu một trường ("học phí Harvard bao nhiêu"): schools (tên như học sinh gõ) và fields (các mục hỏi)
@@ -93,6 +94,17 @@ INFO_FIELDS = (
     "student_faculty_ratio",  # tỷ lệ sinh viên trên giảng viên, lớp đông hay nhỏ
     "student_activities",  # câu lạc bộ, đội nhóm, đời sống sinh viên
     "campus_setting",  # khuôn viên ở thành phố, ngoại ô, thị trấn hay nông thôn, quy mô
+    # v14: các mục mới (khớp InfoField bên .NET)
+    "tuition_in_state",  # học phí dành cho người trong bang (chỉ trường công)
+    "tuition_out_of_state",  # học phí ngoài bang, mức du học sinh thường phải trả
+    "living_cost",  # chi phí ăn ở, sinh hoạt mỗi năm
+    "insurance",  # bảo hiểm y tế bắt buộc cho du học sinh
+    "application_fee",  # lệ phí nộp hồ sơ (một lần)
+    "act_range",  # khoảng điểm ACT 25%-75% của sinh viên trúng tuyển
+    "sat_range",  # khoảng điểm SAT 25%-75% của sinh viên trúng tuyển
+    "sat_submit_rate",  # tỷ lệ sinh viên trúng tuyển có nộp SAT
+    "international_acceptance_rate",  # tỷ lệ nhận riêng của sinh viên quốc tế
+    "scholarships",  # liệt kê các học bổng có tên của trường (khác aid: chính sách và mức trung bình)
     "other",
 )
 # Điều kiện lọc trong filters. Giá trị dạng chữ là CHỮ HỌC SINH GÕ ("texas", "30 nghìn đô", "top 50"), code tự khớp và đổi đơn vị.

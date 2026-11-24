@@ -90,3 +90,36 @@ def test_the_schools_list_belongs_to_knowledge_and_profile_review_only():
     for kind in ("collect_profile", "center_referral", "scenario", "out_of_scope"):
         with pytest.raises(ValueError):
             check_entities(kind, {"schools": ["BU", "NYU"]})
+
+
+# ---------- v14: mã mục mới, explain_fit ----------
+
+NEW_V14_FIELDS = (
+    "tuition_in_state",
+    "tuition_out_of_state",
+    "living_cost",
+    "insurance",
+    "application_fee",
+    "act_range",
+    "sat_range",
+    "sat_submit_rate",
+    "international_acceptance_rate",
+    "scholarships",
+)
+
+
+@pytest.mark.parametrize("field", NEW_V14_FIELDS)
+def test_the_v14_field_codes_are_in_the_contract(field):
+    assert field in INFO_FIELDS
+    check_entities("knowledge", {"tasks": ["school_info"], "schools": ["Purdue"], "fields": [field]})
+
+
+def test_international_aid_was_merged_into_aid_and_is_no_longer_a_code():
+    assert "international_aid" not in INFO_FIELDS
+    with pytest.raises(ValueError):
+        check_entities("knowledge", {"fields": ["international_aid"]})
+
+
+@pytest.mark.parametrize("tasks", [["explain_fit"], ["explain_fit", "explain_school"]])
+def test_explain_fit_is_a_profile_review_task_alone_or_with_explain_school(tasks):
+    check_entities("profile_review", {"tasks": tasks, "schools": ["Purdue"]})

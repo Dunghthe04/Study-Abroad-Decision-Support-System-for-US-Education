@@ -54,7 +54,8 @@ TASK_MEANING = {
         "school_list": "Gợi ý danh sách trường theo hồ sơ",
         "roadmap": "Lộ trình chuẩn bị",
         "compare": "So sánh trường theo hồ sơ (cần schools từ hai tên)",
-        "explain_school": "Giải thích vì sao một trường thuộc nhóm đó",
+        "explain_school": "Trường này có hợp với hồ sơ em không, có nên nộp không",
+        "explain_fit": "Vì sao điểm phù hợp hoặc nhóm Reach, Match, Safety của một trường ra như vậy",
     },
     "knowledge": {
         "school_info": "Số liệu của một trường (schools, fields)",
@@ -89,6 +90,16 @@ FIELD_MEANING = {
     "student_faculty_ratio": "Tỷ lệ sinh viên trên giảng viên, sĩ số lớp",
     "student_activities": "Câu lạc bộ, đội nhóm, đời sống sinh viên",
     "campus_setting": "Khuôn viên ở thành phố, ngoại ô, thị trấn hay nông thôn",
+    "tuition_in_state": "Học phí dành cho người trong bang (chỉ trường công)",
+    "tuition_out_of_state": "Học phí ngoài bang, mức du học sinh thường phải trả",
+    "living_cost": "Chi phí ăn ở, sinh hoạt mỗi năm",
+    "insurance": "Bảo hiểm y tế bắt buộc cho du học sinh",
+    "application_fee": "Lệ phí nộp hồ sơ (một lần)",
+    "act_range": "Khoảng điểm ACT 25%-75% của sinh viên trúng tuyển",
+    "sat_range": "Khoảng điểm SAT 25%-75% của sinh viên trúng tuyển",
+    "sat_submit_rate": "Tỷ lệ sinh viên trúng tuyển có nộp SAT",
+    "international_acceptance_rate": "Tỷ lệ nhận riêng của sinh viên quốc tế",
+    "scholarships": "Liệt kê các học bổng có tên của trường",
     "other": "Điều hệ thống không lưu (việc làm...)",
 }
 FILTER_MEANING = {
@@ -142,7 +153,6 @@ GROUP_MEANING = {"reach": "Khó vào", "target": "Vừa sức", "safety": "An to
 PROFILE_MEANING = {
     "current_level": ("Đang học hay làm gì hiện tại", "B1.1"),
     "current_grade": ("Lớp đang học", "B1.1"),
-    "target_level": ("Bậc muốn học ở Mỹ", "B1.2"),
     "major": ("Ngành định học", "B1.3"),
     "intake": ("Kỳ nhập học dự kiến", "B1.4"),
     "education_system": ("Chương trình học (THPT Việt Nam, IB, A-level, AP)", "D1"),
