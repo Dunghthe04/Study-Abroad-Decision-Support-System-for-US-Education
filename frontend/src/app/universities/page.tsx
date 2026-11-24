@@ -32,25 +32,68 @@ export default async function UniversitiesPage({ searchParams }: UniversitiesPag
     return Number.isFinite(n) ? n : undefined;
   };
 
+  const getEnum = (val: string | string[] | undefined, allowed: string[]): string | undefined => {
+    const s = getString(val);
+    return s && allowed.includes(s) ? s : undefined;
+  };
+
+  const getBool = (val: string | string[] | undefined): true | undefined =>
+    getString(val) === "true" ? true : undefined;
+
   const sortBy = getString(raw.sortBy) || "name";
   const params: UniversitySearchParams = {
     search: getString(raw.search),
     state: getString(raw.state),
+    region: getEnum(raw.region, ["northeast", "midwest", "south", "west"]),
     control: getString(raw.control),
     major: getString(raw.major),
     minTuitionUsd: getNumber(raw.minTuitionUsd),
     maxTuitionUsd: getNumber(raw.maxTuitionUsd),
     minTotalCostUsd: getNumber(raw.minTotalCostUsd),
     maxTotalCostUsd: getNumber(raw.maxTotalCostUsd),
+    minLivingUsd: getNumber(raw.minLivingUsd),
+    maxLivingUsd: getNumber(raw.maxLivingUsd),
+    maxApplicationFeeUsd: getNumber(raw.maxApplicationFeeUsd),
     maxMinIelts: getNumber(raw.maxMinIelts),
+    maxMinToefl: getNumber(raw.maxMinToefl),
+    maxMinDuolingo: getNumber(raw.maxMinDuolingo),
+    maxMinGpa4: getNumber(raw.maxMinGpa4),
+    minAvgGpa4: getNumber(raw.minAvgGpa4),
+    maxAvgGpa4: getNumber(raw.maxAvgGpa4),
+    minSat: getNumber(raw.minSat),
+    maxSat: getNumber(raw.maxSat),
+    minAct: getNumber(raw.minAct),
+    maxAct: getNumber(raw.maxAct),
+    satPolicy: getEnum(raw.satPolicy, ["required", "optional", "not_accepted"]),
+    actPolicy: getEnum(raw.actPolicy, ["required", "optional", "not_accepted"]),
+    deadlineRound: getEnum(raw.deadlineRound, ["ED", "EA", "RD", "RollingFinal"]),
+    c7TestImportance: getEnum(raw.c7TestImportance, ["very_important", "important", "considered", "not_considered"]),
+    c7EcImportance: getEnum(raw.c7EcImportance, ["very_important", "important", "considered", "not_considered"]),
     minAcceptanceRate: getNumber(raw.minAcceptanceRate),
     maxAcceptanceRate: getNumber(raw.maxAcceptanceRate),
-    isIvy: getString(raw.isIvy) === "true" ? true : undefined,
-    testOptional: getString(raw.testOptional) === "true" ? true : undefined,
-    hasIntlAid: getString(raw.hasIntlAid) === "true" ? true : undefined,
-    campusSetting: ["city", "suburb", "town", "rural"].includes(getString(raw.campusSetting) ?? "")
-      ? getString(raw.campusSetting)
-      : undefined,
+    minIntlAcceptanceRate: getNumber(raw.minIntlAcceptanceRate),
+    maxIntlAcceptanceRate: getNumber(raw.maxIntlAcceptanceRate),
+    minStudentFacultyRatio: getNumber(raw.minStudentFacultyRatio),
+    maxStudentFacultyRatio: getNumber(raw.maxStudentFacultyRatio),
+    minRetentionRate: getNumber(raw.minRetentionRate),
+    maxRetentionRate: getNumber(raw.maxRetentionRate),
+    minGradRate6Yr: getNumber(raw.minGradRate6Yr),
+    maxGradRate6Yr: getNumber(raw.maxGradRate6Yr),
+    minIntlStudents: getNumber(raw.minIntlStudents),
+    maxIntlStudents: getNumber(raw.maxIntlStudents),
+    intlAidPolicy: getEnum(raw.intlAidPolicy, ["need_and_merit", "merit_only", "need_only", "none"]),
+    minIntlAidAvgUsd: getNumber(raw.minIntlAidAvgUsd),
+    maxIntlAidAvgUsd: getNumber(raw.maxIntlAidAvgUsd),
+    minFyOnCampusPct: getNumber(raw.minFyOnCampusPct),
+    maxFyOnCampusPct: getNumber(raw.maxFyOnCampusPct),
+    housingType: getString(raw.housingType),
+    activity: getString(raw.activity),
+    isIvy: getBool(raw.isIvy),
+    testOptional: getBool(raw.testOptional),
+    hasIntlAid: getBool(raw.hasIntlAid),
+    hasScholarship: getBool(raw.hasScholarship),
+    intlHousing: getBool(raw.intlHousing),
+    campusSetting: getEnum(raw.campusSetting, ["city", "suburb", "town", "rural"]),
     maxRank: getNumber(raw.maxRank),
     sortBy,
     rankListId: sortBy === "rank" ? getString(raw.rankListId) || "USN27-NU" : undefined,
