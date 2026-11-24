@@ -177,25 +177,24 @@ export function AssistantPanel() {
       inert={!open || undefined}
       onClickCapture={onPanelClickCapture}
       className={cn(
-        "fixed inset-0 z-50 flex overflow-hidden bg-surface transition-[transform,opacity,width,height,top,right,bottom,left,border-radius] duration-250 ease-out motion-reduce:transition-none",
+        "fixed inset-0 z-50 flex overflow-hidden bg-surface motion-reduce:transition-none",
+        windowMode
+          ? "transition-none"
+          : "transition-[transform,opacity,width,height,top,right,bottom,left,border-radius] duration-250 ease-out",
         fullScreen ? "flex-row" : "flex-col",
         // Màn rộng: tùy chế độ Nhỏ / Nửa màn hình / Toàn màn hình / Cửa sổ
         docked && "min-[900px]:left-auto min-[900px]:w-(--assistant-w) min-[900px]:border-l min-[900px]:border-line",
         windowMode &&
-          "origin-bottom-right min-[900px]:top-auto min-[900px]:right-5 min-[900px]:bottom-5 min-[900px]:left-auto min-[900px]:h-[min(640px,calc(100dvh-2.5rem))] min-[900px]:w-[420px] min-[900px]:rounded-2xl min-[900px]:border min-[900px]:border-line min-[900px]:shadow-2xl",
+          "min-[900px]:top-auto min-[900px]:right-5 min-[900px]:bottom-5 min-[900px]:left-auto min-[900px]:h-[min(640px,calc(100dvh-2.5rem))] min-[900px]:w-[420px] min-[900px]:rounded-2xl min-[900px]:border min-[900px]:border-line min-[900px]:shadow-2xl",
         // Trang phân tích: khung chat bo góc, nổi trên nền xanh đậm như bảng câu hỏi
         floating &&
           "min-[900px]:top-3 min-[900px]:right-3 min-[900px]:bottom-3 min-[900px]:w-[calc(var(--assistant-w)-0.75rem)] min-[900px]:rounded-2xl min-[900px]:border-0 min-[900px]:shadow-lg",
-        // Hiệu ứng mở/đóng riêng theo từng chế độ
+        // Hiệu ứng mở/đóng cho thanh bên phải và toàn màn hình; chế độ Cửa sổ hiện/ẩn trực tiếp
         open
-          ? "translate-x-0 translate-y-0 scale-100 opacity-100"
+          ? "translate-x-0 scale-100 opacity-100"
           : cn(
               "pointer-events-none opacity-0",
-              windowMode
-                ? "translate-y-4 scale-95"
-                : fullScreen
-                  ? "scale-[0.985]"
-                  : "translate-x-full",
+              windowMode ? "hidden" : fullScreen ? "scale-[0.985]" : "translate-x-full",
             ),
       )}
     >
@@ -281,14 +280,7 @@ export function AssistantPanel() {
               {chatTitle}
             </h2>
             <div className="flex shrink-0 items-center justify-self-end rounded-full border border-line bg-[var(--surface-2)] p-0.5">
-              <PanelModeMenu
-                mode={panelMode}
-                onSelect={setPanelMode}
-                onHide={() => {
-                  setPeekDismissed(true);
-                  closePanel();
-                }}
-              />
+              <PanelModeMenu mode={panelMode} onSelect={setPanelMode} />
               <IconButton label="Đóng trợ lý" onClick={closePanel} className="size-8 rounded-full">
                 <XIcon className="size-4" />
               </IconButton>
@@ -560,7 +552,7 @@ export function AssistantPanel() {
   );
 }
 
-function PanelModeIcon({ kind }: { kind: AssistantPanelMode | "hide" }) {
+function PanelModeIcon({ kind }: { kind: AssistantPanelMode }) {
   return (
     <svg aria-hidden viewBox="0 0 22 16" className="h-4 w-5.5 shrink-0" fill="none">
       <rect x="0.75" y="0.75" width="20.5" height="14.5" rx="3.25" stroke="currentColor" strokeWidth="1.5" />
@@ -568,7 +560,6 @@ function PanelModeIcon({ kind }: { kind: AssistantPanelMode | "hide" }) {
       {kind === "half" && <rect x="10.75" y="2.25" width="9" height="11.5" rx="1.75" fill="currentColor" opacity="0.28" />}
       {kind === "full" && <rect x="2.25" y="2.25" width="17.5" height="11.5" rx="1.75" fill="currentColor" opacity="0.28" />}
       {kind === "window" && <rect x="12.5" y="6" width="7.25" height="7.75" rx="1.75" fill="currentColor" opacity="0.28" />}
-      {kind === "hide" && <circle cx="17.5" cy="11.75" r="1.5" fill="currentColor" />}
     </svg>
   );
 }
@@ -582,11 +573,9 @@ const DOCKED_MODES: { mode: AssistantPanelMode; label: string }[] = [
 function PanelModeMenu({
   mode,
   onSelect,
-  onHide,
 }: {
   mode: AssistantPanelMode;
   onSelect: (mode: AssistantPanelMode) => void;
-  onHide: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -632,23 +621,13 @@ function PanelModeMenu({
           <PanelModeIcon kind="window" />
           <span>Cửa sổ</span>
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setMenuOpen(false);
-            onHide();
-          }}
-          className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-ink transition-colors hover:bg-ground"
-        >
-          <PanelModeIcon kind="hide" />
-          <span>Ẩn</span>
-        </button>
       </PopoverContent>
     </Popover>
   );
 }
 
 function QuotaAlertBadge({ subscription, onNavigate }: { subscription: SubscriptionSummaryDto; onNavigate?: () => void }) {
+  const [now] = useState(() => Date.now());
   const activePool =
     subscription.chargingPool === "personal"
       ? subscription.personal
@@ -659,7 +638,7 @@ function QuotaAlertBadge({ subscription, onNavigate }: { subscription: Subscript
   const remainingPct = Math.max(0, Math.min(100, Math.round(100 - usedPct)));
   const isLowQuota = subscription.lowQuota;
   const endsAt = activePool?.endsAt;
-  const daysLeft = endsAt ? Math.max(0, Math.ceil((new Date(endsAt).getTime() - Date.now()) / 86_400_000)) : null;
+  const daysLeft = endsAt ? Math.max(0, Math.ceil((new Date(endsAt).getTime() - now) / 86_400_000)) : null;
   const pillLabel = isLowQuota
     ? remainingPct > 0
       ? `Còn ${remainingPct}% lượt hỏi`
@@ -955,6 +934,23 @@ export function setPeekDismissed(dismissed: boolean) {
   peekListeners.forEach((fn) => fn());
 }
 
+const LAUNCHER_DOTS = [
+  { radius: 28, count: 28, dotR: 1.6, opacity: 0.8, offset: 0 },
+  { radius: 24, count: 24, dotR: 1.15, opacity: 0.48, offset: Math.PI / 24 },
+  { radius: 20, count: 20, dotR: 0.8, opacity: 0.22, offset: Math.PI / 20 },
+].flatMap((ring, ringIdx) =>
+  Array.from({ length: ring.count }, (_, i) => {
+    const angle = ring.offset + (i * 2 * Math.PI) / ring.count;
+    return {
+      key: `${ringIdx}-${i}`,
+      cx: (28 + ring.radius * Math.cos(angle)).toFixed(2),
+      cy: (28 + ring.radius * Math.sin(angle)).toFixed(2),
+      r: ring.dotR,
+      opacity: ring.opacity,
+    };
+  }),
+);
+
 /**
  * Lối vào trợ lý ở góc dưới phải khi khung lớn đang đóng.
  * Lần đầu vào: thẻ nhỏ "USDSS Advisor · Tôi có thể giúp gì cho bạn?" có sẵn ô hỏi; gửi câu thì mở khung lớn và hỏi luôn.
@@ -985,9 +981,24 @@ export function AssistantLauncher() {
         onClick={() => openPanel()}
         aria-label="Mở USDSS Advisor"
         title="USDSS Advisor"
-        className="fixed right-5 bottom-5 z-30 flex size-14 cursor-pointer items-center justify-center rounded-full border border-brand/25 bg-white shadow-[inset_0_0_14px_2px_color-mix(in_srgb,var(--brand)_28%,transparent)] outline-none transition-[border-color,box-shadow,transform] hover:border-brand/45 hover:shadow-[inset_0_0_16px_3px_color-mix(in_srgb,var(--brand)_36%,transparent)] focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200 print:hidden"
+        className="group fixed right-5 bottom-5 z-30 flex size-14 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-brand/30 bg-white outline-none transition-[border-color,transform] hover:border-brand/55 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200 print:hidden"
       >
-        <Image src="/icons/USDSS.png" alt="" width={40} height={40} className="size-10 object-contain" />
+        <svg
+          aria-hidden
+          viewBox="0 0 56 56"
+          className="pointer-events-none absolute inset-0 size-full text-brand opacity-85 transition-opacity group-hover:opacity-100"
+        >
+          {LAUNCHER_DOTS.map((d) => (
+            <circle key={d.key} cx={d.cx} cy={d.cy} r={d.r} fill="currentColor" fillOpacity={d.opacity} />
+          ))}
+        </svg>
+        <Image
+          src="/icons/USDSS.png"
+          alt=""
+          width={40}
+          height={40}
+          className="relative z-10 size-10 object-contain transition-transform duration-200 group-hover:scale-105"
+        />
       </button>
     );
   }

@@ -220,10 +220,11 @@ export function ChatHistorySidebar({
   onGoHome: () => void;
 }) {
   const state = useHistoryList(currentSessionId, onSelect, onRenamed, onDeleted);
+  const loadHistory = state.load;
 
   useEffect(() => {
-    if (open) void state.load(null);
-  }, [open, currentSessionId, state.load]);
+    if (open) void loadHistory(null);
+  }, [open, currentSessionId, loadHistory]);
 
   return (
     <div
