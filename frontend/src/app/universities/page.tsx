@@ -43,6 +43,12 @@ export default async function UniversitiesPage({ searchParams }: UniversitiesPag
     minAcceptanceRate: getNumber(raw.minAcceptanceRate),
     maxAcceptanceRate: getNumber(raw.maxAcceptanceRate),
     isIvy: getString(raw.isIvy) === "true" ? true : undefined,
+    testOptional: getString(raw.testOptional) === "true" ? true : undefined,
+    hasIntlAid: getString(raw.hasIntlAid) === "true" ? true : undefined,
+    campusSetting: ["city", "suburb", "town", "rural"].includes(getString(raw.campusSetting) ?? "")
+      ? getString(raw.campusSetting)
+      : undefined,
+    maxRank: getNumber(raw.maxRank),
     sortBy: getString(raw.sortBy) || "rank",
     studyLevel: getString(raw.studyLevel) || "undergraduate",
     page: getNumber(raw.page) || 1,

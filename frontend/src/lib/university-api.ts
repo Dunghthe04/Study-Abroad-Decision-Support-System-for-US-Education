@@ -38,6 +38,12 @@ export async function searchUniversities(
   if (params?.maxAcceptanceRate !== undefined)
     query.set("maxAcceptanceRate", params.maxAcceptanceRate.toString());
   if (params?.isIvy !== undefined) query.set("isIvy", params.isIvy.toString());
+  if (params?.testOptional === true) query.set("testOptional", "true");
+  if (params?.hasIntlAid === true) query.set("hasIntlAid", "true");
+  if (params?.campusSetting && ["city", "suburb", "town", "rural"].includes(params.campusSetting))
+    query.set("campusSetting", params.campusSetting);
+  if (params?.maxRank !== undefined && params.maxRank > 0)
+    query.set("maxRank", params.maxRank.toString());
   if (params?.sortBy) query.set("sortBy", params.sortBy);
   if (params?.studyLevel) query.set("studyLevel", params.studyLevel);
   if (params?.page) query.set("page", params.page.toString());

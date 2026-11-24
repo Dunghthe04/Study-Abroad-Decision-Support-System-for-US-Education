@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Building2Icon,
   RotateCcwIcon,
+  SearchIcon,
   SlidersHorizontalIcon,
   XIcon,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetContent,
@@ -30,6 +32,13 @@ import type {
 import { schoolControlLabel } from "@/lib/university-display";
 import { cn } from "@/lib/utils";
 
+const CAMPUS_LABELS: Record<string, string> = {
+  city: "Thành phố",
+  suburb: "Ngoại ô",
+  town: "Thị trấn",
+  rural: "Nông thôn",
+};
+
 interface UniversityListViewProps {
   initialData: PagedResult<UniversityListItem>;
   options: UniversityFilterOptions;
@@ -45,6 +54,13 @@ export function UniversityListView({
   const [isPending, startTransition] = useTransition();
 
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+
+  // Chuyển trang / đổi bộ lọc: đưa cột kết quả về đầu (cột này tự cuộn ở >= lg)
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const paramsKey = JSON.stringify(currentParams);
+  useEffect(() => {
+    resultsRef.current?.scrollTo({ top: 0 });
+  }, [paramsKey]);
 
   const applyParams = (next: Partial<UniversitySearchParams>, resetPage = true) => {
     const updated: UniversitySearchParams = {
@@ -69,6 +85,10 @@ export function UniversityListView({
     if (updated.maxAcceptanceRate !== undefined)
       qs.set("maxAcceptanceRate", updated.maxAcceptanceRate.toString());
     if (updated.isIvy === true) qs.set("isIvy", "true");
+    if (updated.testOptional === true) qs.set("testOptional", "true");
+    if (updated.hasIntlAid === true) qs.set("hasIntlAid", "true");
+    if (updated.campusSetting) qs.set("campusSetting", updated.campusSetting);
+    if (updated.maxRank && updated.maxRank > 0) qs.set("maxRank", updated.maxRank.toString());
     if (updated.sortBy && updated.sortBy !== "rank") qs.set("sortBy", updated.sortBy);
     if (updated.page && updated.page > 1) qs.set("page", updated.page.toString());
 
@@ -122,15 +142,23 @@ export function UniversityListView({
   if (currentParams.maxTuitionUsd) {
     activeChips.push({
       key: "tuition",
-      label: `Học phí <= $${currentParams.maxTuitionUsd.toLocaleString()}`,
+      label: `Học phí ≤ $${currentParams.maxTuitionUsd.toLocaleString("en-US")}`,
       onRemove: () => applyParams({ maxTuitionUsd: undefined }),
+    });
+  }
+
+  if (currentParams.maxTotalCostUsd) {
+    activeChips.push({
+      key: "totalCost",
+      label: `Tổng chi phí ≤ $${currentParams.maxTotalCostUsd.toLocaleString("en-US")}`,
+      onRemove: () => applyParams({ maxTotalCostUsd: undefined }),
     });
   }
 
   if (currentParams.maxMinIelts) {
     activeChips.push({
       key: "ielts",
-      label: `IELTS <= ${currentParams.maxMinIelts}`,
+      label: `IELTS tối thiểu ≤ ${currentParams.maxMinIelts.toFixed(1)}`,
       onRemove: () => applyParams({ maxMinIelts: undefined }),
     });
   }
@@ -144,10 +172,50 @@ export function UniversityListView({
   }
 
   if (currentParams.minAcceptanceRate !== undefined || currentParams.maxAcceptanceRate !== undefined) {
+    const { minAcceptanceRate: min, maxAcceptanceRate: max } = currentParams;
+    const pct = (v: number) => `${Math.round(v * 100)}%`;
+    const range =
+      min !== undefined && max !== undefined
+        ? `${pct(min)} – ${pct(max)}`
+        : min !== undefined
+          ? `Trên ${pct(min)}`
+          : `Dưới ${pct(max!)}`;
     activeChips.push({
       key: "acceptanceRate",
-      label: "Tỷ lệ trúng tuyển",
+      label: `Tỷ lệ nhận: ${range}`,
       onRemove: () => applyParams({ minAcceptanceRate: undefined, maxAcceptanceRate: undefined }),
+    });
+  }
+
+  if (currentParams.maxRank) {
+    activeChips.push({
+      key: "rank",
+      label: `Top ${currentParams.maxRank}`,
+      onRemove: () => applyParams({ maxRank: undefined }),
+    });
+  }
+
+  if (currentParams.campusSetting) {
+    activeChips.push({
+      key: "campus",
+      label: `Campus: ${CAMPUS_LABELS[currentParams.campusSetting] ?? currentParams.campusSetting}`,
+      onRemove: () => applyParams({ campusSetting: undefined }),
+    });
+  }
+
+  if (currentParams.testOptional) {
+    activeChips.push({
+      key: "testOptional",
+      label: "Không bắt buộc SAT/ACT",
+      onRemove: () => applyParams({ testOptional: undefined }),
+    });
+  }
+
+  if (currentParams.hasIntlAid) {
+    activeChips.push({
+      key: "intlAid",
+      label: "Có hỗ trợ tài chính SV quốc tế",
+      onRemove: () => applyParams({ hasIntlAid: undefined }),
     });
   }
 
@@ -163,7 +231,32 @@ export function UniversityListView({
           />
         </aside>
 
-        <div className="space-y-5 lg:col-span-3 lg:h-full lg:overflow-y-auto lg:pr-1 lg:pb-8">
+        <div ref={resultsRef} className="space-y-5 lg:col-span-3 lg:h-full lg:overflow-y-auto lg:pr-1 lg:pb-8">
+          <form
+            role="search"
+            key={currentParams.search ?? ""}
+            className="flex gap-2 md:hidden"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const value = new FormData(e.currentTarget).get("search");
+              applyParams({ search: String(value ?? "").trim() || undefined });
+            }}
+          >
+            <label htmlFor="uni-page-search" className="sr-only">
+              Tìm theo tên trường hoặc thành phố
+            </label>
+            <Input
+              id="uni-page-search"
+              name="search"
+              type="search"
+              placeholder="Tìm theo tên trường hoặc thành phố"
+              defaultValue={currentParams.search ?? ""}
+            />
+            <Button type="submit" size="icon" aria-label="Tìm kiếm">
+              <SearchIcon className="size-4" />
+            </Button>
+          </form>
+
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="lg:hidden">
@@ -174,32 +267,34 @@ export function UniversityListView({
                     <SlidersHorizontalIcon className="size-4 text-brand" />
                     <span>Bộ lọc ({activeChips.length})</span>
                   </SheetTrigger>
-                  <SheetContent side="left" className="w-[320px] sm:w-[380px] p-0 overflow-y-auto">
+                  <SheetContent side="left" className="flex w-[320px] flex-col p-0 sm:w-[380px]">
                     <SheetHeader className="p-4 border-b border-line">
                       <SheetTitle className="text-base font-bold">Bộ lọc tìm trường</SheetTitle>
                       <SheetDescription className="text-xs">
                         Tùy chỉnh tiêu chí để tìm trường phù hợp nhất
                       </SheetDescription>
                     </SheetHeader>
-                    <div className="p-4">
+                    <div className="flex-1 overflow-y-auto p-4">
                       <UniversityFilters
                         options={options}
                         values={currentParams}
-                        onChange={(patch) => {
-                          applyParams(patch);
-                          setMobileFilterOpen(false);
-                        }}
+                        onChange={(patch) => applyParams(patch)}
                         onReset={() => {
                           handleResetFilters();
                           setMobileFilterOpen(false);
                         }}
                       />
                     </div>
+                    <div className="sticky bottom-0 border-t border-line bg-background p-4">
+                      <Button type="button" className="w-full" onClick={() => setMobileFilterOpen(false)}>
+                        Xem {initialData.totalCount} trường
+                      </Button>
+                    </div>
                   </SheetContent>
                 </Sheet>
               </div>
 
-              <div className="text-sm font-medium text-foreground">
+              <div className="text-sm font-medium text-foreground" aria-live="polite">
                 <span className="font-bold text-brand">{initialData.totalCount}</span> trường phù hợp
                 {isPending && <span className="ml-2 text-xs text-muted-foreground animate-pulse">(Đang tải...)</span>}
               </div>
@@ -262,7 +357,13 @@ export function UniversityListView({
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div
+              aria-busy={isPending}
+              className={cn(
+                "grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-6",
+                isPending && "pointer-events-none opacity-60 transition-opacity",
+              )}
+            >
               {initialData.items.map((uni) => (
                 <UniversityCard key={uni.id} university={uni} sortBy={currentParams.sortBy} />
               ))}

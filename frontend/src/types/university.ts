@@ -128,6 +128,7 @@ export interface UniversityListItem {
   bestRank: number | null;
   bestRankList: string | null;
   satPolicy: string | null;
+  actPolicy: string | null;
   intlAidPolicy: string | null;
   majors: string[];
 }
@@ -160,6 +161,10 @@ export interface UniversitySearchParams {
   minAcceptanceRate?: number;
   maxAcceptanceRate?: number;
   isIvy?: boolean;
+  testOptional?: boolean;
+  hasIntlAid?: boolean;
+  campusSetting?: string;
+  maxRank?: number;
   sortBy?: string;
   studyLevel?: string;
   page?: number;

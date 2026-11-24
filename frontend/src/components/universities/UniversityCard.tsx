@@ -8,6 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { AddTargetSchoolButton } from "@/components/target-schools/AddTargetSchoolButton";
 import {
+  MISSING_UNIVERSITY_DATA,
   schoolControlLabel,
   universityMoney,
   universityPercent,
@@ -22,25 +23,35 @@ interface UniversityCardProps {
   university: UniversityListItem;
 }
 
+const presentOrNull = (s: string) => (s === MISSING_UNIVERSITY_DATA ? null : s);
+
 function englishRequirement(university: UniversityListItem): string | null {
-  if (university.minIelts) return `IELTS ${university.minIelts}+`;
+  if (university.minIelts) return `IELTS ${Number(university.minIelts).toFixed(1)}+`;
   if (university.minToefl) return `TOEFL ${university.minToefl}+`;
   if (university.minDuolingo) return `DET ${university.minDuolingo}+`;
   return null;
 }
 
-function satPolicyLabel(policy: string | null): string | null {
-  if (policy === "optional") return "Tùy chọn";
+function testPolicyLabel(policy: string | null): string | null {
+  if (policy === "optional") return "Không bắt buộc";
   if (policy === "required") return "Bắt buộc";
-  if (policy === "not_accepted") return "Không xét";
+  if (policy === "not_accepted") return "Không nhận điểm";
   return null;
 }
 
-function StatItem({ label, value, emphasize = false }: { label: string; value: string; emphasize?: boolean }) {
+function StatItem({ label, value, emphasize = false }: { label: string; value: string | null; emphasize?: boolean }) {
+  const missing = value == null;
   return (
     <div className="min-w-0">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={cn("truncate text-sm font-semibold", emphasize ? "text-brand" : "text-foreground")}>{value}</dd>
+      <dd
+        className={cn(
+          "truncate text-sm font-semibold",
+          missing ? "font-normal text-muted-foreground/40" : emphasize ? "text-brand" : "text-foreground",
+        )}
+      >
+        {value ?? "-"}
+      </dd>
     </div>
   );
 }
@@ -56,11 +67,12 @@ export function UniversityCard({ university, sortBy }: UniversityCardProps) {
 
   const byTotalCost = sortBy === "total_cost_asc" || sortBy === "total_cost_desc";
   const byTuition = sortBy === "tuition_asc" || sortBy === "tuition_desc";
-  const tuition = university.tuitionUsd != null ? universityMoney(university.tuitionUsd) : "Chưa có";
-  const totalCost = university.totalCostUsd != null ? universityMoney(university.totalCostUsd) : "Chưa có";
-  const acceptance = university.acceptanceRate != null ? universityPercent(university.acceptanceRate) : "Chưa có";
-  const english = englishRequirement(university) ?? "Chưa có";
-  const satPolicy = satPolicyLabel(university.satPolicy) ?? "Chưa có";
+  const tuition = presentOrNull(universityMoney(university.tuitionUsd));
+  const totalCost = presentOrNull(universityMoney(university.totalCostUsd));
+  const acceptance = presentOrNull(universityPercent(university.acceptanceRate));
+  const english = englishRequirement(university);
+  const satPolicy = testPolicyLabel(university.satPolicy);
+  const actPolicy = testPolicyLabel(university.actPolicy);
   const hasBadges = university.bestRank != null || university.isIvy;
 
   return (
@@ -83,11 +95,11 @@ export function UniversityCard({ university, sortBy }: UniversityCardProps) {
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
         <div className="absolute bottom-3 left-3 right-3 flex items-end gap-3">
-          <div className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white">
+          <div className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
             {logoUrl ? (
-              <Image src={logoUrl} alt={`Logo ${university.name}`} fill sizes="44px" className="object-contain p-1" />
+              <Image src={logoUrl} alt={`Logo ${university.name}`} fill sizes="64px" className="object-contain p-1.5" />
             ) : (
-              <Building2Icon className="size-5 text-brand" />
+              <Building2Icon className="size-7 text-brand" />
             )}
           </div>
           <div className="min-w-0">
@@ -123,7 +135,8 @@ export function UniversityCard({ university, sortBy }: UniversityCardProps) {
           <StatItem label="Tổng chi phí/năm" value={totalCost} emphasize={byTotalCost} />
           <StatItem label="Tỷ lệ nhận" value={acceptance} />
           <StatItem label="Yêu cầu tiếng Anh" value={english} />
-          <StatItem label="SAT/ACT" value={satPolicy} />
+          <StatItem label="SAT" value={satPolicy} />
+          <StatItem label="ACT" value={actPolicy} />
         </dl>
       </CardContent>
 

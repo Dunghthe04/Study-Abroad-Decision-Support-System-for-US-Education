@@ -4,7 +4,6 @@ import { useId, useState } from "react";
 import { RotateCcwIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Combobox,
@@ -47,10 +46,34 @@ const TUITION_OPTIONS = [
 
 const IELTS_OPTIONS = [
   { value: ALL, label: "Tất cả" },
-  { value: "6", label: "Tối đa 6.0" },
-  { value: "6.5", label: "Tối đa 6.5" },
-  { value: "7", label: "Tối đa 7.0" },
-  { value: "7.5", label: "Tối đa 7.5" },
+  { value: "5.5", label: "5.5" },
+  { value: "6", label: "6.0" },
+  { value: "6.5", label: "6.5" },
+  { value: "7", label: "7.0" },
+  { value: "7.5", label: "7.5" },
+];
+
+const TOTAL_COST_OPTIONS = [
+  { value: ALL, label: "Tất cả" },
+  { value: "40000", label: "Dưới $40,000" },
+  { value: "60000", label: "Dưới $60,000" },
+  { value: "80000", label: "Dưới $80,000" },
+  { value: "100000", label: "Dưới $100,000" },
+];
+
+const RANK_OPTIONS = [
+  { value: ALL, label: "Tất cả" },
+  { value: "20", label: "Top 20" },
+  { value: "50", label: "Top 50" },
+  { value: "100", label: "Top 100" },
+];
+
+const CAMPUS_OPTIONS = [
+  { value: ALL, label: "Tất cả" },
+  { value: "city", label: "Thành phố" },
+  { value: "suburb", label: "Ngoại ô" },
+  { value: "town", label: "Thị trấn" },
+  { value: "rural", label: "Nông thôn" },
 ];
 
 const ACCEPT_RATE_OPTIONS = [
@@ -61,43 +84,49 @@ const ACCEPT_RATE_OPTIONS = [
   { value: "very_selective", label: "Dưới 10%", min: undefined, max: 0.1 },
 ];
 
-function FilterSection({ title, children }: { title: string; children: React.ReactNode }) {
+function FilterSection({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
     <fieldset>
       <legend className="mb-1.5 text-sm font-semibold text-foreground">{title}</legend>
+      {hint && <p className="-mt-1 mb-2 text-xs text-muted-foreground">{hint}</p>}
       {children}
     </fieldset>
   );
 }
 
-interface RadioFilterProps {
-  name: string;
+interface CheckboxChoiceFilterProps {
   options: { value: string; label: string }[];
   value: string;
   onValueChange: (value: string) => void;
 }
 
-function RadioFilter({ name, options, value, onValueChange }: RadioFilterProps) {
+// Single-choice list rendered as checkboxes: checking sets it, unchecking clears (back to ALL).
+function CheckboxChoiceFilter({ options, value, onValueChange }: CheckboxChoiceFilterProps) {
   const baseId = useId();
   return (
-    <RadioGroup
-      name={name}
-      value={value}
-      onValueChange={(next) => onValueChange(String(next))}
-      className="gap-2"
-    >
+    <div className={cn("flex flex-col gap-2", options.length > 6 && "max-h-56 overflow-y-auto pr-1")}>
       {options.map((option) => {
         const id = `${baseId}-${option.value}`;
         return (
           <div key={option.value} className="flex items-center gap-2.5">
-            <RadioGroupItem id={id} value={option.value} />
+            <Checkbox
+              id={id}
+              checked={value === option.value}
+              onCheckedChange={(checked) => {
+                if (option.value === ALL) {
+                  if (checked) onValueChange(ALL); // already-checked "Tất cả" does nothing
+                } else {
+                  onValueChange(checked ? option.value : ALL);
+                }
+              }}
+            />
             <Label htmlFor={id} className="cursor-pointer text-sm font-normal">
               {option.label}
             </Label>
           </div>
         );
       })}
-    </RadioGroup>
+    </div>
   );
 }
 
@@ -129,7 +158,7 @@ function SearchableFilter({ items, value, placeholder, onValueChange }: Searchab
       <ComboboxInput placeholder={placeholder} showClear={selected !== null} className="h-9 w-full bg-surface" />
       <ComboboxContent>
         <ComboboxEmpty>Không tìm thấy</ComboboxEmpty>
-        <ComboboxList>
+        <ComboboxList className="max-h-64 [scrollbar-width:thin]!">
           {(item: UniversityFilterOptionItem) => (
             <ComboboxItem key={item.value} value={item}>
               {item.label}
@@ -150,6 +179,8 @@ function acceptRateValue(values: UniversitySearchParams): string {
 
 export function UniversityFilters({ options, values, onChange, onReset, className }: UniversityFiltersProps) {
   const ivyId = useId();
+  const testOptionalId = useId();
+  const intlAidId = useId();
   const majorItems = options.majors.map((major) => ({ value: major, label: major }));
 
   const hasActiveFilter =
@@ -158,6 +189,11 @@ export function UniversityFilters({ options, values, onChange, onReset, classNam
     Boolean(values.major) ||
     Boolean(values.maxTuitionUsd) ||
     Boolean(values.maxMinIelts) ||
+    Boolean(values.maxTotalCostUsd) ||
+    Boolean(values.maxRank) ||
+    Boolean(values.campusSetting) ||
+    values.testOptional === true ||
+    values.hasIntlAid === true ||
     values.isIvy === true ||
     values.minAcceptanceRate !== undefined ||
     values.maxAcceptanceRate !== undefined;
@@ -195,8 +231,7 @@ export function UniversityFilters({ options, values, onChange, onReset, classNam
       </FilterSection>
 
       <FilterSection title="Loại trường">
-        <RadioFilter
-          name="control"
+        <CheckboxChoiceFilter
           options={CONTROL_OPTIONS}
           value={values.control ?? ALL}
           onValueChange={(next) => onChange({ control: next === ALL ? undefined : next })}
@@ -204,17 +239,15 @@ export function UniversityFilters({ options, values, onChange, onReset, classNam
       </FilterSection>
 
       <FilterSection title="Học phí tối đa mỗi năm">
-        <RadioFilter
-          name="maxTuitionUsd"
+        <CheckboxChoiceFilter
           options={TUITION_OPTIONS}
           value={values.maxTuitionUsd ? String(values.maxTuitionUsd) : ALL}
           onValueChange={(next) => onChange({ maxTuitionUsd: next === ALL ? undefined : Number(next) })}
         />
       </FilterSection>
 
-      <FilterSection title="Yêu cầu IELTS của trường">
-        <RadioFilter
-          name="maxMinIelts"
+      <FilterSection title="IELTS của bạn">
+        <CheckboxChoiceFilter
           options={IELTS_OPTIONS}
           value={values.maxMinIelts ? String(values.maxMinIelts) : ALL}
           onValueChange={(next) => onChange({ maxMinIelts: next === ALL ? undefined : Number(next) })}
@@ -222,14 +255,37 @@ export function UniversityFilters({ options, values, onChange, onReset, classNam
       </FilterSection>
 
       <FilterSection title="Tỷ lệ nhận">
-        <RadioFilter
-          name="acceptanceRate"
+        <CheckboxChoiceFilter
           options={ACCEPT_RATE_OPTIONS}
           value={acceptRateValue(values)}
           onValueChange={(next) => {
             const option = ACCEPT_RATE_OPTIONS.find((item) => item.value === next);
             onChange({ minAcceptanceRate: option?.min, maxAcceptanceRate: option?.max });
           }}
+        />
+      </FilterSection>
+
+      <FilterSection title="Tổng chi phí tối đa mỗi năm">
+        <CheckboxChoiceFilter
+          options={TOTAL_COST_OPTIONS}
+          value={values.maxTotalCostUsd ? String(values.maxTotalCostUsd) : ALL}
+          onValueChange={(next) => onChange({ maxTotalCostUsd: next === ALL ? undefined : Number(next) })}
+        />
+      </FilterSection>
+
+      <FilterSection title="Xếp hạng">
+        <CheckboxChoiceFilter
+          options={RANK_OPTIONS}
+          value={values.maxRank ? String(values.maxRank) : ALL}
+          onValueChange={(next) => onChange({ maxRank: next === ALL ? undefined : Number(next) })}
+        />
+      </FilterSection>
+
+      <FilterSection title="Môi trường campus">
+        <CheckboxChoiceFilter
+          options={CAMPUS_OPTIONS}
+          value={values.campusSetting ?? ALL}
+          onValueChange={(next) => onChange({ campusSetting: next === ALL ? undefined : next })}
         />
       </FilterSection>
 
@@ -241,6 +297,28 @@ export function UniversityFilters({ options, values, onChange, onReset, classNam
         />
         <Label htmlFor={ivyId} className="cursor-pointer text-sm font-normal">
           Chỉ trường Ivy League
+        </Label>
+      </div>
+
+      <div className="flex items-center gap-2.5">
+        <Checkbox
+          id={testOptionalId}
+          checked={values.testOptional === true}
+          onCheckedChange={(checked) => onChange({ testOptional: checked ? true : undefined })}
+        />
+        <Label htmlFor={testOptionalId} className="cursor-pointer text-sm font-normal">
+          Không bắt buộc SAT/ACT
+        </Label>
+      </div>
+
+      <div className="flex items-center gap-2.5">
+        <Checkbox
+          id={intlAidId}
+          checked={values.hasIntlAid === true}
+          onCheckedChange={(checked) => onChange({ hasIntlAid: checked ? true : undefined })}
+        />
+        <Label htmlFor={intlAidId} className="cursor-pointer text-sm font-normal">
+          Có hỗ trợ tài chính cho SV quốc tế
         </Label>
       </div>
     </div>

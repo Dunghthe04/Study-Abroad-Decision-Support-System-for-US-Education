@@ -133,6 +133,7 @@ function fallbackToUniversityListItem(s: LandingSchool, idx: number): University
     bestRank: null,
     bestRankList: null,
     satPolicy: null,
+    actPolicy: null,
     intlAidPolicy: null,
     majors: s.majors,
   };
