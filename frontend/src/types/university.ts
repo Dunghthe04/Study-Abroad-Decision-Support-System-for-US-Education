@@ -141,11 +141,12 @@ export interface UniversityFilterOptionItem {
 export interface UniversityFilterOptions {
   states: UniversityFilterOptionItem[];
   controls: UniversityFilterOptionItem[];
-  majors: string[];
+  majors: UniversityFilterOptionItem[];
   minTuitionUsd: number;
   maxTuitionUsd: number;
   minTotalCostUsd: number;
   maxTotalCostUsd: number;
+  rankingLists: UniversityFilterOptionItem[];
 }
 
 export interface UniversitySearchParams {
@@ -153,7 +154,9 @@ export interface UniversitySearchParams {
   state?: string;
   control?: string;
   major?: string;
+  minTuitionUsd?: number;
   maxTuitionUsd?: number;
+  minTotalCostUsd?: number;
   maxTotalCostUsd?: number;
   maxMinIelts?: number;
   maxMinToefl?: number;
@@ -166,6 +169,7 @@ export interface UniversitySearchParams {
   campusSetting?: string;
   maxRank?: number;
   sortBy?: string;
+  rankListId?: string;
   studyLevel?: string;
   page?: number;
   pageSize?: number;

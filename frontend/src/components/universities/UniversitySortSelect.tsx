@@ -1,6 +1,5 @@
 "use client";
 
-import { ArrowUpDownIcon } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -8,15 +7,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { UniversityFilterOptionItem } from "@/types/university";
 
 interface UniversitySortSelectProps {
   value: string;
   onValueChange: (value: string) => void;
+  rankingLists?: UniversityFilterOptionItem[];
+  rankListId?: string;
+  onRankListChange?: (rankListId: string) => void;
 }
 
 export const SORT_OPTIONS = [
-  { value: "rank", label: "Thứ hạng tốt nhất" },
   { value: "name", label: "Tên trường (A → Z)" },
+  { value: "rank", label: "Thứ hạng tốt nhất" },
   { value: "tuition_asc", label: "Học phí: Thấp đến cao" },
   { value: "tuition_desc", label: "Học phí: Cao đến thấp" },
   { value: "total_cost_asc", label: "Tổng chi phí: Thấp đến cao" },
@@ -25,21 +28,33 @@ export const SORT_OPTIONS = [
   { value: "acceptance_desc", label: "Dễ trúng tuyển (Tỷ lệ nhận cao)" },
 ];
 
-export function UniversitySortSelect({ value, onValueChange }: UniversitySortSelectProps) {
+export function UniversitySortSelect({
+  value,
+  onValueChange,
+  rankingLists = [],
+  rankListId,
+  onRankListChange,
+}: UniversitySortSelectProps) {
+  const activeSort = value || "name";
+  const showRankList = activeSort === "rank" && rankingLists.length > 0;
+  const activeRankList =
+    rankListId && rankingLists.some((r) => r.value === rankListId)
+      ? rankListId
+      : rankingLists[0]?.value;
+
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap hidden sm:inline-flex items-center gap-1">
-        <ArrowUpDownIcon className="size-3.5" />
-        Sắp xếp:
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+        Sắp xếp theo
       </span>
       <Select
-        value={value || "rank"}
+        value={activeSort}
         onValueChange={(val) => {
           if (val !== null) onValueChange(val);
         }}
         items={SORT_OPTIONS}
       >
-        <SelectTrigger className="h-9 w-[220px] text-xs font-medium bg-background">
+        <SelectTrigger className="h-9 w-[210px] border-line bg-surface text-xs font-medium shadow-xs">
           <SelectValue placeholder="Sắp xếp theo..." />
         </SelectTrigger>
         <SelectContent align="end" className="min-w-64 w-max">
@@ -50,6 +65,32 @@ export function UniversitySortSelect({ value, onValueChange }: UniversitySortSel
           ))}
         </SelectContent>
       </Select>
+
+      {showRankList && (
+        <>
+          <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+            của BXH
+          </span>
+          <Select
+            value={activeRankList}
+            onValueChange={(val) => {
+              if (val !== null) onRankListChange?.(val);
+            }}
+            items={rankingLists}
+          >
+            <SelectTrigger className="h-9 w-[220px] border-line bg-surface text-xs font-medium shadow-xs sm:w-[250px]">
+              <SelectValue placeholder="Chọn bảng xếp hạng..." />
+            </SelectTrigger>
+            <SelectContent align="end" className="min-w-64 max-w-[90vw] w-max">
+              {rankingLists.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </>
+      )}
     </div>
   );
 }

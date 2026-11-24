@@ -4,9 +4,11 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Building2Icon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ListFilterIcon,
   RotateCcwIcon,
   SearchIcon,
-  SlidersHorizontalIcon,
   XIcon,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -19,7 +21,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { UniversityCard } from "./UniversityCard";
 import { UniversityFilters } from "./UniversityFilters";
 import { UniversitySortSelect } from "./UniversitySortSelect";
@@ -54,6 +55,7 @@ export function UniversityListView({
   const [isPending, startTransition] = useTransition();
 
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [desktopFilterOpen, setDesktopFilterOpen] = useState(true);
 
   // Chuyển trang / đổi bộ lọc: đưa cột kết quả về đầu (cột này tự cuộn ở >= lg)
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -74,8 +76,12 @@ export function UniversityListView({
     if (updated.state && updated.state !== "all") qs.set("state", updated.state);
     if (updated.control && updated.control !== "all") qs.set("control", updated.control);
     if (updated.major && updated.major !== "all") qs.set("major", updated.major);
+    if (updated.minTuitionUsd && updated.minTuitionUsd > 0)
+      qs.set("minTuitionUsd", updated.minTuitionUsd.toString());
     if (updated.maxTuitionUsd && updated.maxTuitionUsd > 0)
       qs.set("maxTuitionUsd", updated.maxTuitionUsd.toString());
+    if (updated.minTotalCostUsd && updated.minTotalCostUsd > 0)
+      qs.set("minTotalCostUsd", updated.minTotalCostUsd.toString());
     if (updated.maxTotalCostUsd && updated.maxTotalCostUsd > 0)
       qs.set("maxTotalCostUsd", updated.maxTotalCostUsd.toString());
     if (updated.maxMinIelts && updated.maxMinIelts > 0)
@@ -89,7 +95,8 @@ export function UniversityListView({
     if (updated.hasIntlAid === true) qs.set("hasIntlAid", "true");
     if (updated.campusSetting) qs.set("campusSetting", updated.campusSetting);
     if (updated.maxRank && updated.maxRank > 0) qs.set("maxRank", updated.maxRank.toString());
-    if (updated.sortBy && updated.sortBy !== "rank") qs.set("sortBy", updated.sortBy);
+    if (updated.sortBy && updated.sortBy !== "name") qs.set("sortBy", updated.sortBy);
+    if (updated.sortBy === "rank" && updated.rankListId) qs.set("rankListId", updated.rankListId);
     if (updated.page && updated.page > 1) qs.set("page", updated.page.toString());
 
     startTransition(() => {
@@ -132,26 +139,43 @@ export function UniversityListView({
   }
 
   if (currentParams.major && currentParams.major !== "all") {
+    const majorObj = options.majors.find((m) => m.value === currentParams.major);
     activeChips.push({
       key: "major",
-      label: `Ngành: ${currentParams.major}`,
+      label: `Ngành: ${majorObj?.label ?? currentParams.major}`,
       onRemove: () => applyParams({ major: undefined }),
     });
   }
 
-  if (currentParams.maxTuitionUsd) {
+  if (currentParams.minTuitionUsd !== undefined || currentParams.maxTuitionUsd !== undefined) {
+    const { minTuitionUsd: min, maxTuitionUsd: max } = currentParams;
+    const usd = (v: number) => `$${v.toLocaleString("en-US")}`;
+    const range =
+      min !== undefined && max !== undefined
+        ? `${usd(min)} – ${usd(max)}`
+        : min !== undefined
+          ? `≥ ${usd(min)}`
+          : `≤ ${usd(max!)}`;
     activeChips.push({
       key: "tuition",
-      label: `Học phí ≤ $${currentParams.maxTuitionUsd.toLocaleString("en-US")}`,
-      onRemove: () => applyParams({ maxTuitionUsd: undefined }),
+      label: `Học phí: ${range}`,
+      onRemove: () => applyParams({ minTuitionUsd: undefined, maxTuitionUsd: undefined }),
     });
   }
 
-  if (currentParams.maxTotalCostUsd) {
+  if (currentParams.minTotalCostUsd !== undefined || currentParams.maxTotalCostUsd !== undefined) {
+    const { minTotalCostUsd: min, maxTotalCostUsd: max } = currentParams;
+    const usd = (v: number) => `$${v.toLocaleString("en-US")}`;
+    const range =
+      min !== undefined && max !== undefined
+        ? `${usd(min)} – ${usd(max)}`
+        : min !== undefined
+          ? `≥ ${usd(min)}`
+          : `≤ ${usd(max!)}`;
     activeChips.push({
       key: "totalCost",
-      label: `Tổng chi phí ≤ $${currentParams.maxTotalCostUsd.toLocaleString("en-US")}`,
-      onRemove: () => applyParams({ maxTotalCostUsd: undefined }),
+      label: `Tổng chi phí: ${range}`,
+      onRemove: () => applyParams({ minTotalCostUsd: undefined, maxTotalCostUsd: undefined }),
     });
   }
 
@@ -221,8 +245,19 @@ export function UniversityListView({
 
   return (
     <div className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
-      <div className="grid grid-cols-1 items-start gap-8 lg:min-h-0 lg:flex-1 lg:grid-cols-4 lg:items-stretch">
-        <aside className="hidden lg:col-span-1 lg:block lg:h-full lg:overflow-y-auto lg:pr-2 lg:pb-6">
+      <div
+        className={cn(
+          "grid grid-cols-1 items-start gap-8 lg:min-h-0 lg:flex-1 lg:items-stretch",
+          desktopFilterOpen && "lg:grid-cols-[272px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)]",
+        )}
+      >
+        <aside
+          id="university-filters-sidebar"
+          className={cn(
+            "hidden lg:h-full lg:overflow-y-auto lg:overflow-x-hidden lg:px-2 lg:pb-6 [scrollbar-width:thin]",
+            desktopFilterOpen && "lg:block",
+          )}
+        >
           <UniversityFilters
             options={options}
             values={currentParams}
@@ -231,7 +266,7 @@ export function UniversityListView({
           />
         </aside>
 
-        <div ref={resultsRef} className="space-y-5 lg:col-span-3 lg:h-full lg:overflow-y-auto lg:pr-1 lg:pb-8">
+        <div ref={resultsRef} className="space-y-5 lg:h-full lg:overflow-y-auto lg:pr-1 lg:pb-8">
           <form
             role="search"
             key={currentParams.search ?? ""}
@@ -262,10 +297,18 @@ export function UniversityListView({
               <div className="lg:hidden">
                 <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
                   <SheetTrigger
-                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-2")}
+                    className={cn(
+                      buttonVariants({ variant: "outline" }),
+                      "h-9 gap-2 border-line bg-surface px-3.5 text-sm font-medium shadow-xs hover:bg-muted",
+                    )}
                   >
-                    <SlidersHorizontalIcon className="size-4 text-brand" />
-                    <span>Bộ lọc ({activeChips.length})</span>
+                    <ListFilterIcon className="size-4" />
+                    <span>Bộ lọc</span>
+                    {activeChips.length > 0 && (
+                      <span className="rounded-full bg-brand-wash px-1.5 py-0.5 text-xs font-semibold text-brand-ink tabular-nums">
+                        {activeChips.length}
+                      </span>
+                    )}
                   </SheetTrigger>
                   <SheetContent side="left" className="flex w-[320px] flex-col p-0 sm:w-[380px]">
                     <SheetHeader className="p-4 border-b border-line">
@@ -278,6 +321,7 @@ export function UniversityListView({
                       <UniversityFilters
                         options={options}
                         values={currentParams}
+                        hideTitle
                         onChange={(patch) => applyParams(patch)}
                         onReset={() => {
                           handleResetFilters();
@@ -294,15 +338,47 @@ export function UniversityListView({
                 </Sheet>
               </div>
 
-              <div className="text-sm font-medium text-foreground" aria-live="polite">
-                <span className="font-bold text-brand">{initialData.totalCount}</span> trường phù hợp
-                {isPending && <span className="ml-2 text-xs text-muted-foreground animate-pulse">(Đang tải...)</span>}
-              </div>
+              <Button
+                type="button"
+                variant="outline"
+                aria-expanded={desktopFilterOpen}
+                aria-controls="university-filters-sidebar"
+                onClick={() => setDesktopFilterOpen((open) => !open)}
+                className="hidden h-9 gap-2 border-line bg-surface px-3.5 text-sm font-medium shadow-xs hover:bg-muted lg:inline-flex"
+              >
+                <ListFilterIcon className="size-4" />
+                <span>Bộ lọc</span>
+                {activeChips.length > 0 && (
+                  <span className="rounded-full bg-brand-wash px-1.5 py-0.5 text-xs font-semibold text-brand-ink tabular-nums">
+                    {activeChips.length}
+                  </span>
+                )}
+              </Button>
+
+              {isPending && (
+                <span className="text-xs text-muted-foreground animate-pulse" aria-live="polite">
+                  Đang tải...
+                </span>
+              )}
             </div>
 
             <UniversitySortSelect
-              value={currentParams.sortBy || "rank"}
-              onValueChange={(sortBy) => applyParams({ sortBy }, false)}
+              value={currentParams.sortBy || "name"}
+              onValueChange={(sortBy) =>
+                applyParams(
+                  {
+                    sortBy,
+                    rankListId:
+                      sortBy === "rank"
+                        ? currentParams.rankListId || options.rankingLists[0]?.value || "USN27-NU"
+                        : undefined,
+                  },
+                  false,
+                )
+              }
+              rankingLists={options.rankingLists}
+              rankListId={currentParams.rankListId || options.rankingLists[0]?.value || "USN27-NU"}
+              onRankListChange={(rankListId) => applyParams({ sortBy: "rank", rankListId }, false)}
             />
           </div>
 
@@ -360,7 +436,7 @@ export function UniversityListView({
             <div
               aria-busy={isPending}
               className={cn(
-                "grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-6",
+                "grid grid-cols-[repeat(auto-fill,minmax(min(100%,270px),1fr))] gap-6",
                 isPending && "pointer-events-none opacity-60 transition-opacity",
               )}
             >
@@ -371,15 +447,30 @@ export function UniversityListView({
           )}
 
           {initialData.totalPages > 1 && (
-            <div className="pt-6 border-t border-line">
-              <TablePagination
-                page={initialData.page}
-                totalPages={initialData.totalPages}
-                totalCount={initialData.totalCount}
-                itemLabel="trường đại học"
-                disabled={isPending}
-                onPageChange={(nextPage) => applyParams({ page: nextPage }, false)}
-              />
+            <div className="flex items-center justify-center gap-4 pt-4 sm:justify-end sm:gap-5">
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="border-line bg-surface px-5 text-foreground shadow-xs hover:bg-muted"
+                disabled={isPending || initialData.page <= 1}
+                onClick={() => applyParams({ page: initialData.page - 1 }, false)}
+              >
+                <ChevronLeftIcon /> Trước
+              </Button>
+              <span className="text-sm font-medium text-muted-foreground tabular-nums">
+                Trang {initialData.page} / {Math.max(initialData.totalPages, 1)}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="border-line bg-surface px-5 text-foreground shadow-xs hover:bg-muted"
+                disabled={isPending || initialData.page >= initialData.totalPages}
+                onClick={() => applyParams({ page: initialData.page + 1 }, false)}
+              >
+                Sau <ChevronRightIcon />
+              </Button>
             </div>
           )}
         </div>

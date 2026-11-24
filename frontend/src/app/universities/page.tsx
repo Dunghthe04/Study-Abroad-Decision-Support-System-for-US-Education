@@ -32,12 +32,15 @@ export default async function UniversitiesPage({ searchParams }: UniversitiesPag
     return Number.isFinite(n) ? n : undefined;
   };
 
+  const sortBy = getString(raw.sortBy) || "name";
   const params: UniversitySearchParams = {
     search: getString(raw.search),
     state: getString(raw.state),
     control: getString(raw.control),
     major: getString(raw.major),
+    minTuitionUsd: getNumber(raw.minTuitionUsd),
     maxTuitionUsd: getNumber(raw.maxTuitionUsd),
+    minTotalCostUsd: getNumber(raw.minTotalCostUsd),
     maxTotalCostUsd: getNumber(raw.maxTotalCostUsd),
     maxMinIelts: getNumber(raw.maxMinIelts),
     minAcceptanceRate: getNumber(raw.minAcceptanceRate),
@@ -49,7 +52,8 @@ export default async function UniversitiesPage({ searchParams }: UniversitiesPag
       ? getString(raw.campusSetting)
       : undefined,
     maxRank: getNumber(raw.maxRank),
-    sortBy: getString(raw.sortBy) || "rank",
+    sortBy,
+    rankListId: sortBy === "rank" ? getString(raw.rankListId) || "USN27-NU" : undefined,
     studyLevel: getString(raw.studyLevel) || "undergraduate",
     page: getNumber(raw.page) || 1,
     pageSize: getNumber(raw.pageSize) || 12,
@@ -65,7 +69,7 @@ export default async function UniversitiesPage({ searchParams }: UniversitiesPag
     ]);
     data = fetchedData;
     options = fetchedOptions;
-  } catch (err) {
+  } catch {
     data = null;
     options = null;
   }

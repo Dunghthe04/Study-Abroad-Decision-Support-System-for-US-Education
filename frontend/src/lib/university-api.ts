@@ -23,8 +23,12 @@ export async function searchUniversities(
   if (params?.state && params.state !== "all") query.set("state", params.state);
   if (params?.control && params.control !== "all") query.set("control", params.control);
   if (params?.major && params.major !== "all") query.set("major", params.major);
+  if (params?.minTuitionUsd !== undefined && params.minTuitionUsd > 0)
+    query.set("minTuitionUsd", params.minTuitionUsd.toString());
   if (params?.maxTuitionUsd !== undefined && params.maxTuitionUsd > 0)
     query.set("maxTuitionUsd", params.maxTuitionUsd.toString());
+  if (params?.minTotalCostUsd !== undefined && params.minTotalCostUsd > 0)
+    query.set("minTotalCostUsd", params.minTotalCostUsd.toString());
   if (params?.maxTotalCostUsd !== undefined && params.maxTotalCostUsd > 0)
     query.set("maxTotalCostUsd", params.maxTotalCostUsd.toString());
   if (params?.maxMinIelts !== undefined && params.maxMinIelts > 0)
@@ -45,6 +49,7 @@ export async function searchUniversities(
   if (params?.maxRank !== undefined && params.maxRank > 0)
     query.set("maxRank", params.maxRank.toString());
   if (params?.sortBy) query.set("sortBy", params.sortBy);
+  if (params?.sortBy === "rank" && params?.rankListId) query.set("rankListId", params.rankListId);
   if (params?.studyLevel) query.set("studyLevel", params.studyLevel);
   if (params?.page) query.set("page", params.page.toString());
   if (params?.pageSize) query.set("pageSize", params.pageSize.toString());
