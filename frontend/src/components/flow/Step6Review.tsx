@@ -3,6 +3,7 @@
 import { AlertCircleIcon, Loader2Icon, MessageCircleIcon, SaveIcon, SparklesIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProfileReviewCards } from "@/components/flow/ProfileReviewCards";
+import { FormBody, FormGroup } from "./FormKit";
 import { StepHeader, StepNav } from "./StepChrome";
 import type { DraftTranscriptFile, ProfileFlowDraft, ProfileMetadataResponse } from "@/types/profile-flow";
 
@@ -35,6 +36,8 @@ interface Step6ReviewProps {
   backToChat?: boolean;
   /** Tích "Chỉ sửa hồ sơ": nút chỉ lưu, không gợi ý trường, không về chat */
   editOnly?: boolean;
+  /** Nhãn nút gửi khi kết quả trả lời trong chat, theo việc học sinh cần (xem đánh giá, xem lộ trình, quay về chat) */
+  chatLabel?: string;
   isSubmitting: boolean;
   /** Lỗi BE trả về khi gửi hồ sơ */
   submitError?: string | null;
@@ -49,45 +52,48 @@ export function Step6Review({
   onSubmit,
   backToChat = false,
   editOnly = false,
+  chatLabel = "Lưu và quay về chat",
   isSubmitting,
   submitError,
 }: Step6ReviewProps) {
   const stepErrors = splitStepErrors(submitError);
 
+  const hasNote = !backToChat && !editOnly;
   return (
-    <div className="flow-stagger space-y-10">
-      <StepHeader title="Xem lại hồ sơ của bạn" lede="Kiểm tra lại một lượt trước khi gửi." />
+    <>
+      <StepHeader title="Xem lại hồ sơ của bạn" />
+      <FormBody lede="Kiểm tra lại một lượt trước khi gửi.">
+        <FormGroup title="Hồ sơ của bạn">
+        <ProfileReviewCards
+          draft={draft}
+          metadata={metadata}
+          draftTranscript={draftTranscript}
+          onEditStep={onEditStep}
+          errorsByStep={stepErrors.byStep}
+        />
 
-      <ProfileReviewCards
-        draft={draft}
-        metadata={metadata}
-        draftTranscript={draftTranscript}
-        onEditStep={onEditStep}
-        errorsByStep={stepErrors.byStep}
-      />
-
-      {!backToChat && !editOnly && (
-        <p className="text-body-s text-ink-2">
-          Bạn sẽ chọn ưu tiên (chi phí, học bổng, danh tiếng) ở trang kết quả.
-        </p>
-      )}
-
-      {/* Lỗi khi gửi: lỗi theo bước đã hiện ở thẻ bên trên, ở đây nhắc lại và hiện lỗi chung */}
-      {submitError && (
-        <div className="flex gap-2 rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-xs font-medium text-destructive">
-          <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
-          <div className="space-y-1">
-            {Object.keys(stepErrors.byStep).length > 0 && (
-              <div>Hồ sơ còn lỗi ở các mục viền đỏ bên trên. Bấm &quot;Sửa&quot; ở mục đó để chỉnh lại.</div>
+        {(hasNote || submitError) && (
+          <div className="space-y-4 py-6 text-sm">
+            {hasNote && <p className="text-ink-2">Bạn sẽ chọn ưu tiên (chi phí, học bổng, danh tiếng) ở trang kết quả.</p>}
+            {/* Lỗi khi gửi: lỗi theo bước đã hiện ở mục của bước đó, ở đây nhắc lại và hiện lỗi chung */}
+            {submitError && (
+              <div role="alert" className="flex gap-2 font-medium text-destructive">
+                <AlertCircleIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
+                <div className="space-y-1">
+                  {Object.keys(stepErrors.byStep).length > 0 && (
+                    <div>Hồ sơ còn lỗi ở các mục có chữ đỏ bên trên. Bấm &quot;Sửa&quot; ở mục đó để chỉnh lại.</div>
+                  )}
+                  {stepErrors.other.map((e, i) => (
+                    <div key={i}>{e}</div>
+                  ))}
+                </div>
+              </div>
             )}
-            {stepErrors.other.map((e, i) => (
-              <div key={i}>{e}</div>
-            ))}
           </div>
-        </div>
-      )}
+        )}
+        </FormGroup>
+      </FormBody>
 
-      {/* Bottom Actions */}
       <StepNav onPrev={onPrev}>
         <Button onClick={onSubmit} disabled={isSubmitting} size="lg" className="gap-2 px-6 font-semibold">
           {isSubmitting ? (
@@ -103,7 +109,7 @@ export function Step6Review({
           ) : backToChat ? (
             <>
               <MessageCircleIcon className="size-4" />
-              Lưu và quay về chat
+              {chatLabel}
             </>
           ) : (
             <>
@@ -113,6 +119,6 @@ export function Step6Review({
           )}
         </Button>
       </StepNav>
-    </div>
+    </>
   );
 }

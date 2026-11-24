@@ -1,14 +1,11 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { CheckIcon, ListIcon, ListChecksIcon, PencilIcon } from "lucide-react";
+import { CheckIcon, ChevronRightIcon, ListIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { useGradeScale } from "@/hooks/use-grade-scale";
 import { cn } from "@/lib/utils";
-import { findCertType, getCertDisplayName } from "@/lib/certification-utils";
-import { DEFAULT_BUDGET_TIERS, draftGpa, gpaModeOf } from "@/lib/profile-flow-options";
-import type { CurrentEducationLevel, ProfileFlowDraft, ProfileMetadataResponse } from "@/types/profile-flow";
+import { HeaderToggle } from "./StepChrome";
 
 export interface StepMeta {
   step: number;
@@ -49,68 +46,6 @@ export const FLOW_STEPS: StepMeta[] = [
   },
 ];
 
-const SHORT_LEVEL_LABELS: Record<CurrentEducationLevel, string> = {
-  middle_school: "THCS",
-  high_school: "THPT",
-  college_university: "Cao đẳng / Đại học",
-  master: "Thạc sĩ",
-};
-
-/** Tóm tắt dữ liệu đã điền của một bước; null khi bước chưa có gì → hiện subtitle mặc định */
-function stepSummary(step: number, draft: ProfileFlowDraft, metadata: ProfileMetadataResponse | null): string | null {
-  switch (step) {
-    case 1: {
-      const { currentEducationLevel, currentGrade, targetDegreeLevel } = draft.step1;
-      if (!currentEducationLevel) return null;
-      const target = metadata?.studyLevels.find((l) => l.key === targetDegreeLevel)?.label;
-      return [SHORT_LEVEL_LABELS[currentEducationLevel], currentGrade].filter(Boolean).join(" · ") + (target ? ` → ${target}` : "");
-    }
-    case 2: {
-      const { gpa10, gpa4 } = draftGpa(draft.step2);
-      if (gpaModeOf(draft.step2) === "overall") {
-        if (gpa10 !== null) return `GPA ${gpa10.toFixed(1)} / thang 10`;
-        return gpa4 !== null ? `GPA ${gpa4.toFixed(2)} / thang 4` : null;
-      }
-      if (gpa10 === null) return null;
-      const years = draft.step2.academicYears ?? [];
-      const grades = years.map((y) => y.gradeName.replace(/^Lớp\s*/, "")).join(", ");
-      return `Lớp ${grades} · TB ${gpa10.toFixed(1)} / thang 10`;
-    }
-    case 3: {
-      const certs = draft.step3.certifications ?? [];
-      if (certs.length === 0) return draft.step3.englishPlanned ? "Chưa thi, chưa có dự định thi" : null;
-      const types = metadata?.certificationTypes ?? [];
-      return certs
-        .map((c) => {
-          const name = getCertDisplayName(c, findCertType(types, c.type));
-          const label = c.overall != null ? `${name} ${c.overall}` : name;
-          return c.isTarget ? `${label} (dự định)` : label;
-        })
-        .join(" · ");
-    }
-    case 4: {
-      const tier = draft.step4.annualBudgetTier;
-      if (!tier) return null;
-      // UC-94: có số tiền tối đa/năm chính xác (phụ huynh nhập) thì ghi đúng số đó
-      const exactUsd = draft.step4.annualBudgetUsd;
-      if (exactUsd != null) return `Tối đa ${exactUsd.toLocaleString("vi-VN")} USD/năm`;
-      return (
-        metadata?.budgetTiers.find((t) => t.key === tier)?.label ??
-        DEFAULT_BUDGET_TIERS.find((t) => t.key === tier)?.label ??
-        null
-      );
-    }
-    case 5: {
-      const items = draft.step5.activities ?? [];
-      if (items.length === 0) return null;
-      const awards = items.filter((a) => a.category === "achievement").length;
-      return `${items.length - awards} hoạt động · ${awards} giải`;
-    }
-    default:
-      return null;
-  }
-}
-
 /** Mục "Nhu cầu" trên đầu danh sách bước: onEdit có thì bấm để sửa, không có thì chỉ đọc kèm ghi chú */
 export interface NeedsEntry {
   labels: string;
@@ -121,13 +56,12 @@ export interface NeedsEntry {
 interface ProfileFlowStepperProps {
   /** sidebar: cột trái từ 1024px; compact: thanh dính trên đầu + ngăn kéo (màn hẹp hoặc khung trợ lý đang mở) */
   variant?: "sidebar" | "compact";
-  draft: ProfileFlowDraft;
-  metadata: ProfileMetadataResponse | null;
   currentStep: number;
-  lastCompletedStep: number;
+  /** Các bước 1–5 đã điền đủ mục bắt buộc */
+  readySteps: number[];
   onSelectStep: (step: number) => void;
   needs?: NeedsEntry | null;
-  /** Trạng thái lưu, "Tiếp tục bằng chat", Thoát */
+  /** Nội dung đáy thanh bên (hiện không dùng) */
   footer?: ReactNode;
   /** compact: ngăn kéo mở từ dưới, hoặc từ trái khi khung trợ lý đang mở */
   sheetSide?: "bottom" | "left";
@@ -137,64 +71,33 @@ interface ProfileFlowStepperProps {
 
 export function ProfileFlowStepper({
   variant = "sidebar",
-  draft,
-  metadata,
   currentStep,
-  lastCompletedStep,
+  readySteps,
   onSelectStep,
   needs,
   footer,
   sheetSide = "bottom",
   className,
 }: ProfileFlowStepperProps) {
-  useGradeScale(); // GPA thang 4 quy đổi theo bảng moderator sửa, vẽ lại khi bảng tải xong
   const [sheetOpen, setSheetOpen] = useState(false);
+  // Bước 1–5 mở tự do, điền theo thứ tự nào cũng được; "Xem lại và gửi" chỉ mở khi cả 5 bước đã đủ.
+  // Dấu tích theo dữ liệu thật của bước; vòng quay ở bước đang mở mà chưa đủ
+  const reviewUnlocked = [1, 2, 3, 4, 5].every((s) => readySteps.includes(s));
   const stateOf = (step: number) => ({
-    isCompleted: step < currentStep || step <= lastCompletedStep,
+    isCompleted: readySteps.includes(step),
+    isWorking: step === currentStep && !readySteps.includes(step),
     isCurrent: step === currentStep,
-    isClickable: step <= Math.max(currentStep, lastCompletedStep + 1),
+    isClickable: step < 6 || reviewUnlocked,
   });
 
   const list = (afterPick?: () => void) => (
     <nav aria-label="Tiến trình hồ sơ">
-      {needs && (
-        <div className="mb-6 flex items-start gap-3">
-          <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-wash text-brand">
-            <ListChecksIcon className="size-4" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold leading-8 text-ink">Nhu cầu</div>
-            <div className="text-xs leading-snug text-ink-2">{needs.labels}</div>
-            {needs.note && <div className="mt-0.5 text-xs leading-snug text-ink-2">{needs.note}</div>}
-          </div>
-          {needs.onEdit && (
-            <button
-              type="button"
-              onClick={() => {
-                afterPick?.();
-                needs.onEdit?.();
-              }}
-              className="mt-1 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-2 hover:bg-brand-wash hover:text-brand focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              <PencilIcon className="size-3.5" aria-hidden />
-              <span className="sr-only">Sửa nhu cầu</span>
-            </button>
-          )}
-        </div>
-      )}
-      <ol>
-        {FLOW_STEPS.map((s, i) => {
-          const { isCompleted, isCurrent, isClickable } = stateOf(s.step);
-          const done = isCompleted && !isCurrent;
-          const summary = stepSummary(s.step, draft, metadata);
+      <ol className="space-y-1">
+        {FLOW_STEPS.map((s) => {
+          const { isCompleted, isWorking, isCurrent, isClickable } = stateOf(s.step);
+          const done = isCompleted;
           return (
-            <li key={s.step} className="relative pb-6 last:pb-0">
-              {i < FLOW_STEPS.length - 1 && (
-                <span
-                  aria-hidden
-                  className={cn("absolute top-9 -bottom-1 left-[14px] w-1 rounded-full", isCompleted ? "bg-ok/45" : "bg-ok-wash")}
-                />
-              )}
+            <li key={s.step} className="relative">
               <button
                 type="button"
                 disabled={!isClickable}
@@ -204,34 +107,18 @@ export function ProfileFlowStepper({
                   onSelectStep(s.step);
                   afterPick?.();
                 }}
-                className="group flex w-full items-start gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default"
+                className={cn(
+                  "group relative flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-[background-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-white/50 disabled:cursor-default",
+                  isCurrent ? "bg-white/12 ring-1 ring-white/20" : isClickable && "hover:bg-white/8",
+                )}
               >
-                <span
-                  className={cn(
-                    "relative flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors",
-                    done && "bg-ok text-white",
-                    isCurrent && "bg-brand text-brand-foreground ring-4 ring-brand-wash",
-                    !done && !isCurrent && "border-2 border-line bg-surface text-ink-2",
-                    !isClickable && "opacity-(--cds-opacity-disabled)"
-                  )}
-                >
-                  {done ? <CheckIcon className="flow-pop size-4 stroke-[2.5]" aria-hidden /> : s.step}
-                </span>
+                <StepIcon state={done ? "done" : isWorking ? "current" : "todo"} />
                 <span className={cn("min-w-0 flex-1", !isClickable && "opacity-(--cds-opacity-disabled)")}>
-                  <span
-                    className={cn(
-                      "block text-sm font-semibold leading-8 transition-colors",
-                      isCurrent ? "text-brand" : isClickable ? "text-ink group-hover:text-brand" : "text-ink-2"
-                    )}
-                  >
+                  <span className={cn("block truncate font-heading text-[0.9375rem]", isCurrent ? "font-semibold text-white" : done ? "font-medium text-white" : "text-white/70")}>
                     {s.title}
                   </span>
-                  {(summary || isCurrent) && (
-                    <span className="-mt-1 block text-xs leading-snug text-ink-2 line-clamp-2">
-                      {summary ?? s.subtitle}
-                    </span>
-                  )}
                 </span>
+                {isCurrent && <ChevronRightIcon aria-hidden className="size-4 shrink-0 text-white/70" />}
               </button>
             </li>
           );
@@ -240,39 +127,95 @@ export function ProfileFlowStepper({
     </nav>
   );
 
+  const needsBlock = needs && (
+    <div className="flex items-center gap-3 rounded-xl border border-dashed border-white/30 px-3.5 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="text-xs text-white/65">Nhu cầu của bạn</div>
+        <div className="mt-0.5 font-heading text-[0.9375rem] text-white">{needs.labels}</div>
+        {needs.note && <div className="mt-0.5 text-xs text-white/65">{needs.note}</div>}
+      </div>
+      {needs.onEdit && (
+        <Button
+          type="button"
+          size="sm"
+          onClick={needs.onEdit}
+          aria-label="Đổi nhu cầu"
+          className="shrink-0 bg-brand-wash text-brand hover:bg-white"
+        >
+          Đổi
+        </Button>
+      )}
+    </div>
+  );
+
   if (variant === "compact") {
     const current = FLOW_STEPS.find((s) => s.step === currentStep);
     return (
-      <div className={cn("sticky top-(--header-h) z-20 border-b border-line bg-surface/95 px-4 py-3 backdrop-blur", className)}>
-        <div className="flex items-center justify-between gap-3">
-          <p className="min-w-0 truncate text-sm font-semibold text-ink">
-            Bước {currentStep}/{FLOW_STEPS.length} · {current?.title}
-          </p>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setSheetOpen(true)} className="gap-1.5">
+      <div
+        className={cn(
+          // Bản ngang thu gọn của thanh bước bên trái: nền xanh đậm nhạt hơn một bậc, cùng biểu tượng bước.
+          // Màn hẹp dính dưới thanh trên cùng; từ 1024px trang không cuộn nên để yên ở đầu bảng
+          "@container sticky top-(--header-h) z-20 bg-[color-mix(in_oklab,var(--brand),white_14%)] px-3 py-2 text-white lg:static",
+          className,
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setSheetOpen(true)}
+            aria-label={`Các bước – đang ở ${current?.title ?? ""}`}
+            className="shrink-0 gap-1.5 text-white hover:bg-white/10 hover:text-white"
+          >
             <ListIcon className="size-4" aria-hidden />
-            Các bước
+            <span className="hidden sm:inline">Các bước</span>
           </Button>
-        </div>
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-ok-wash">
-          <div
-            className="h-full rounded-full bg-ok transition-[width] duration-300"
-            style={{ width: `${(currentStep / FLOW_STEPS.length) * 100}%` }}
-          />
+          <ol aria-label="Tiến trình hồ sơ" className="flex min-w-0 flex-1 items-center justify-center-safe gap-1 overflow-x-auto">
+            {FLOW_STEPS.map((s) => {
+              const { isCompleted, isWorking, isCurrent, isClickable } = stateOf(s.step);
+              return (
+                <li key={s.step} className={cn(isCurrent && "min-w-0")}>
+                  <button
+                    type="button"
+                    disabled={!isClickable}
+                    aria-current={isCurrent ? "step" : undefined}
+                    aria-label={s.title}
+                    onClick={() => isClickable && onSelectStep(s.step)}
+                    className={cn(
+                      "flex min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-white/50 disabled:cursor-default",
+                      isCurrent ? "bg-white/12 ring-1 ring-white/20" : isClickable && "hover:bg-white/8",
+                      !isClickable && "opacity-(--cds-opacity-disabled)",
+                    )}
+                  >
+                    <StepIcon state={isCompleted ? "done" : isWorking ? "current" : "todo"} />
+                    {/* Đủ chỗ thì hiện tên mọi bước; hẹp thì chỉ bước đang mở có tên, các bước khác còn biểu tượng */}
+                    <span
+                      className={cn(
+                        "truncate font-heading text-sm",
+                        isCurrent ? "text-white" : "hidden text-white/80 @5xl:inline",
+                      )}
+                    >
+                      {s.title}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+          <HeaderToggle tone="inverse" />
         </div>
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetContent
             side={sheetSide}
-            className={cn("overflow-y-auto bg-ground px-5 pb-6", sheetSide === "bottom" ? "max-h-[85dvh] rounded-t-2xl pt-4" : "pt-4")}
+            className={cn("overflow-y-auto bg-brand px-4 pb-6 text-white", sheetSide === "bottom" ? "max-h-[85dvh] rounded-t-2xl pt-4" : "pt-4")}
           >
-            <SheetHeader className="px-0">
-              <SheetTitle className="text-label">Hồ sơ chọn trường</SheetTitle>
+            <SheetHeader className="px-1">
+              <SheetTitle className="text-base font-semibold text-white">Hồ sơ chọn trường</SheetTitle>
             </SheetHeader>
             {list(() => setSheetOpen(false))}
-            {footer && (
-              <div onClick={() => setSheetOpen(false)} className="mt-2 flex flex-col items-start gap-3 border-t border-line pt-4">
-                {footer}
-              </div>
-            )}
+            {needsBlock && <div className="mt-6" onClick={() => setSheetOpen(false)}>{needsBlock}</div>}
+            {footer && <div className="mt-6">{footer}</div>}
           </SheetContent>
         </Sheet>
       </div>
@@ -280,10 +223,37 @@ export function ProfileFlowStepper({
   }
 
   return (
-    <aside className="flow-rail-enter hidden border-r border-line bg-ground px-5 py-8 lg:sticky lg:top-(--header-h) lg:flex lg:h-[calc(100dvh-var(--header-h))] lg:flex-col lg:overflow-y-auto">
-      <h2 className="text-label mb-6">Hồ sơ chọn trường</h2>
-      {list()}
-      {footer && <div className="mt-auto flex flex-col items-start gap-3 pt-8">{footer}</div>}
+    <aside className="flow-rail-enter hidden w-[300px] shrink-0 flex-col bg-brand px-5 py-6 text-white lg:flex lg:h-full lg:overflow-y-auto">
+      <h2 className="font-heading text-2xl leading-snug text-white">Hồ sơ chọn trường</h2>
+      <p className="mt-2 text-sm leading-relaxed text-white/70">
+        Cho chúng tôi biết điểm số, chứng chỉ và ngân sách của bạn để tìm ra những trường Mỹ phù hợp nhất.
+      </p>
+      <div className="mt-6">{list()}</div>
+      <div className="mt-auto space-y-4 pt-6">
+        {needsBlock}
+        {footer}
+      </div>
     </aside>
   );
+}
+
+/** Biểu tượng trạng thái bước: xong = vòng đỏ có dấu tích, đang làm = vòng đỏ quay quanh chấm đỏ, chưa tới = vòng rỗng */
+function StepIcon({ state }: { state: "done" | "current" | "todo" }) {
+  if (state === "done") {
+    return (
+      <span aria-hidden className="flow-pop flex size-5 shrink-0 items-center justify-center rounded-full bg-risk text-white">
+        <CheckIcon className="size-3 stroke-[3]" />
+      </span>
+    );
+  }
+  if (state === "current") {
+    return (
+      <span aria-hidden className="relative flex size-5 shrink-0 items-center justify-center">
+        {/* Vòng đỏ quay quanh chấm đỏ: bước đang làm; giảm chuyển động thì vòng đứng yên */}
+        <span className="absolute inset-0 animate-spin rounded-full border-2 border-risk/30 border-t-risk [animation-duration:1.2s] motion-reduce:animate-none" />
+        <span className="size-2.5 rounded-full bg-risk" />
+      </span>
+    );
+  }
+  return <span aria-hidden className="size-5 shrink-0 rounded-full border-2 border-white/35 bg-brand" />;
 }

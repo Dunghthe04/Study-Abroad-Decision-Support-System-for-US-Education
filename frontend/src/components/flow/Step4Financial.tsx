@@ -4,11 +4,8 @@ import { useId, useState } from "react";
 import { ArrowRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RequiredMark } from "./RequiredMark";
-import { CHOICE_CARD, StepHeader, StepNav } from "./StepChrome";
-import { cn } from "@/lib/utils";
+import { ChoiceCards, ChoicePicker, Field, FormBody, FormGroup, FormSection, PrefixInput } from "./FormKit";
+import { StepHeader, StepNav } from "./StepChrome";
 import { useAuth } from "@/contexts/AuthContext";
 import { MAX_BUDGET_VND, MIN_BUDGET_VND } from "@/lib/parent-preference-api";
 import {
@@ -31,6 +28,11 @@ interface Step4FinancialProps {
 }
 
 type Currency = "vnd" | "usd";
+
+const CURRENCY_OPTIONS: { value: Currency; label: string }[] = [
+  { value: "vnd", label: "VNĐ" },
+  { value: "usd", label: "USD" },
+];
 
 export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onPrev, onNext }: Step4FinancialProps) {
   // Lỗi của từng câu, hiện ngay dưới câu đó
@@ -87,7 +89,6 @@ export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onP
     }
   };
 
-  const selectedTierLabel = budgetTiers.find((t) => t.key === data.annualBudgetTier)?.label;
 
   const vndOutOfRange = (v: number) => v < MIN_BUDGET_VND || v > MAX_BUDGET_VND;
   const rangeMessage = `Số tiền phải từ ${MIN_BUDGET_VND.toLocaleString("vi-VN")} đến ${MAX_BUDGET_VND.toLocaleString("vi-VN")} VNĐ.`;
@@ -156,221 +157,161 @@ export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onP
     onNext();
   };
 
+  const budgetOptions = budgetTiers.map((t) => ({ value: t.key, label: t.label, description: t.description }));
+  const aidOptions = needOptions.map((o) => ({ value: o.key, label: o.title, description: o.description }));
+
   return (
-    <div className="flow-stagger space-y-10">
+    <>
       <StepHeader
         title={
           exactAsk
             ? "Gia đình chi trả được tối đa bao nhiêu cho một năm học?"
             : "Gia đình bạn dự định chi bao nhiêu cho một năm học?"
         }
-        lede={
-          exactAsk
-            ? "Nhập số tiền tối đa bằng VNĐ. Hệ thống chỉ giữ những trường nằm trong mức này."
-            : "Chọn mức gần nhất hoặc nhập số cụ thể. Trường vượt ngân sách sẽ được loại."
-        }
       />
-
-      {lockedUsd != null ? (
-      // UC-94: phụ huynh đã nhập số tiền chính xác → cố định theo phụ huynh, chỉ xem
-      <section id={budgetSectionId} className="space-y-3">
-        <h2 className="text-h3 font-sans text-foreground">Số tiền tối đa chi trả được mỗi năm</h2>
-        <div className="rounded-xl border border-line bg-ground/50 px-4 py-3.5 text-sm">
-          <p>
-            <strong className="font-semibold text-foreground">{lockedUsd.toLocaleString("vi-VN")} USD/năm</strong>{" "}
-            <span className="text-muted-foreground">(≈ {(lockedUsd * RATE).toLocaleString("vi-VN")} VNĐ theo tỷ giá hôm nay)</span>
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Phụ huynh đã nhập số này nên bạn không sửa được. Cần đổi, hãy nhờ phụ huynh.
-          </p>
-        </div>
-      </section>
-      ) : exactAsk && !unsure ? (
-      <section id={budgetSectionId} className="space-y-3">
-        <div>
-          <Label htmlFor="exactBudgetVnd" className="text-h3 text-foreground">
-            Số tiền tối đa chi trả được mỗi năm (VNĐ) <RequiredMark />
-          </Label>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Gồm học phí và chi phí ăn ở mỗi năm (chưa gồm vé máy bay). Từ 100 triệu đến 10 tỷ đồng.
-          </p>
-        </div>
-        <Input
-          id="exactBudgetVnd"
-          inputMode="numeric"
-          placeholder="VD: 1.300.000.000"
-          value={vndText}
-          onChange={(e) => applyExactVnd(e.target.value)}
-          aria-invalid={budgetError ? true : undefined}
-          className="h-9 max-w-xs bg-surface"
-        />
-        <p className="text-xs text-muted-foreground">
-          {exactVnd != null && !vndOutOfRange(exactVnd) ? (
-            <>
-              ≈ <strong className="font-semibold text-foreground">{Math.round(exactVnd / RATE).toLocaleString("vi-VN")} USD</strong>{" "}
-              mỗi năm theo tỷ giá hôm nay (1 USD = {RATE.toLocaleString("vi-VN")} VNĐ). Số USD chốt theo tỷ giá lúc lưu hồ sơ.
-            </>
-          ) : exactVnd == null && savedUsd != null ? (
-            <>
-              Đã lưu: <strong className="font-semibold text-foreground">{savedUsd.toLocaleString("vi-VN")} USD/năm</strong>{" "}
-              (≈ {(savedUsd * RATE).toLocaleString("vi-VN")} VNĐ theo tỷ giá hôm nay). Để trống thì giữ số này.
-            </>
-          ) : null}
-        </p>
-        {budgetError && <p className="text-xs font-medium text-destructive">{budgetError}</p>}
-        <Button type="button" variant="outline" size="sm" onClick={switchToTiers} className="cursor-pointer">
-          Chưa biết chính xác
-        </Button>
-      </section>
-      ) : (
-      // Question 1: Annual Budget Tiers
-      <fieldset id={budgetSectionId} role="radiogroup" className="min-w-0 space-y-4">
-        <legend className="text-h3 mb-1 text-foreground">
-          Ngân sách mỗi năm <RequiredMark />
-        </legend>
-        <p className="text-xs text-muted-foreground">
-          Gồm học phí và chi phí ăn ở mỗi năm (chưa gồm vé máy bay).
-        </p>
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {budgetTiers.map((tier) => (
-            <button
-              key={tier.key}
-              type="button"
-              role="radio"
-              aria-checked={data.annualBudgetTier === tier.key}
-              onClick={() => {
-                setBudgetError(null);
-                setAmountText("");
-                onUpdate({ annualBudgetTier: tier.key });
-              }}
-              className={cn(CHOICE_CARD, "flex h-full flex-col items-start")}
-            >
-              <span className="text-sm font-semibold text-foreground">{tier.label}</span>
-              <span className="mt-1 line-clamp-2 text-xs text-ink-2">{tier.description}</span>
-            </button>
-          ))}
-        </div>
-        {budgetError && <p className="text-xs font-medium text-destructive">{budgetError}</p>}
-
-        {exactAsk ? (
-          // Phụ huynh chưa biết số chính xác: hạng chỉ là ước tính
-          <div className="space-y-2 rounded-xl bg-ground/50 px-4 py-3.5 text-xs text-muted-foreground">
-            <p>
-              Chọn theo mức là ước tính: hệ thống lấy trần của mức để lọc trường. Khi biết số chính xác, hãy cập nhật để kết quả sát hơn.
-            </p>
-            <Button type="button" variant="outline" size="sm" onClick={switchToExact} className="cursor-pointer">
-              Nhập số tiền chính xác
-            </Button>
-          </div>
-        ) : (
-        /* Nhập số tiền cụ thể → tự chọn mức tương ứng */
-        <div className="space-y-2.5 rounded-xl bg-ground/50 px-4 py-3.5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Label htmlFor="budgetAmount" className="text-sm font-semibold text-foreground">
-              Hoặc nhập số tiền cụ thể
-            </Label>
-            <div className="inline-flex rounded-lg border border-line bg-surface p-0.5 text-xs font-medium">
-              {(["vnd", "usd"] as const).map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  aria-pressed={currency === c}
-                  onClick={() => {
-                    setCurrency(c);
-                    applyAmount(amountText, c);
-                  }}
-                  className={cn(
-                    "cursor-pointer rounded-md px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default",
-                    currency === c ? "bg-brand text-brand-foreground" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {c === "vnd" ? "VNĐ" : "USD"}
-                </button>
-              ))}
+      <FormBody>
+        <FormGroup
+          id={budgetSectionId}
+          title="Ngân sách"
+          description={
+            lockedUsd != null
+              ? "Số tiền tối đa gia đình chi trả được mỗi năm."
+              : exactAsk && !unsure
+                ? "Số tiền tối đa chi trả được mỗi năm, gồm học phí và chi phí ăn ở (chưa gồm vé máy bay). Từ 100 triệu đến 10 tỷ đồng."
+                : "Gồm học phí và chi phí ăn ở mỗi năm (chưa gồm vé máy bay)."
+          }
+          required={lockedUsd == null}
+          error={budgetError}
+        >
+          {lockedUsd != null ? (
+            // UC-94: phụ huynh đã nhập số tiền chính xác → cố định theo phụ huynh, chỉ xem
+            <div className="space-y-1 py-6 text-sm">
+              <p>
+                <strong className="font-semibold text-ink">{lockedUsd.toLocaleString("vi-VN")} USD/năm</strong>{" "}
+                <span className="text-ink-2">(≈ {(lockedUsd * RATE).toLocaleString("vi-VN")} VNĐ theo tỷ giá hôm nay)</span>
+              </p>
+              <p className="text-xs text-ink-2">Phụ huynh đã nhập số này nên bạn không sửa được. Cần đổi, hãy nhờ phụ huynh.</p>
             </div>
-          </div>
-          <Input
-            id="budgetAmount"
-            inputMode="numeric"
-            placeholder={currency === "vnd" ? "VD: 900.000.000" : "VD: 36.000"}
-            value={amount > 0 ? amount.toLocaleString("vi-VN") : amountText.replace(/\D/g, "")}
-            onChange={(e) => applyAmount(e.target.value, currency)}
-            className="h-9 max-w-xs bg-surface"
-          />
-          <p className="text-xs text-muted-foreground">
-            {amount > 0 ? (
-              <>
-                {currency === "vnd" ? (
-                  <>
-                    ≈ <strong className="font-semibold text-foreground">{amountUsd.toLocaleString("vi-VN")} USD</strong>{" "}
-                    mỗi năm (tỉ giá 1 USD = {RATE.toLocaleString("vi-VN")} VNĐ)
-                  </>
-                ) : (
-                  <>{amountUsd.toLocaleString("vi-VN")} USD mỗi năm</>
+          ) : exactAsk && !unsure ? (
+            <div className="space-y-4 py-6">
+              <Field
+                label="Số tiền (VNĐ)"
+                htmlFor="exactBudgetVnd"
+                hint={
+                  exactVnd != null && !vndOutOfRange(exactVnd) ? (
+                    <>
+                      ≈ <strong className="font-semibold text-ink">{Math.round(exactVnd / RATE).toLocaleString("vi-VN")} USD</strong>{" "}
+                      mỗi năm theo tỷ giá hôm nay (1 USD = {RATE.toLocaleString("vi-VN")} VNĐ). Số USD chốt theo tỷ giá lúc lưu hồ sơ.
+                    </>
+                  ) : exactVnd == null && savedUsd != null ? (
+                    <>
+                      Đã lưu: <strong className="font-semibold text-ink">{savedUsd.toLocaleString("vi-VN")} USD/năm</strong>{" "}
+                      (≈ {(savedUsd * RATE).toLocaleString("vi-VN")} VNĐ theo tỷ giá hôm nay). Để trống thì giữ số này.
+                    </>
+                  ) : undefined
+                }
+              >
+                <Input
+                  id="exactBudgetVnd"
+                  inputMode="numeric"
+                  placeholder="VD: 1.300.000.000"
+                  value={vndText}
+                  onChange={(e) => applyExactVnd(e.target.value)}
+                  aria-invalid={budgetError ? true : undefined}
+                  className="h-10 sm:max-w-xs"
+                />
+              </Field>
+              <Button type="button" variant="outline" onClick={switchToTiers}>
+                Chưa biết chính xác
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4 py-6">
+                <ChoiceCards
+                  ariaLabel="Ngân sách mỗi năm"
+                  columns={3}
+                  options={budgetOptions}
+                  value={data.annualBudgetTier}
+                  onChange={(v) => {
+                    setBudgetError(null);
+                    setAmountText("");
+                    onUpdate({ annualBudgetTier: v });
+                  }}
+                />
+                {exactAsk && (
+                  // Phụ huynh chưa biết số chính xác: hạng chỉ là ước tính
+                  <div className="space-y-3">
+                    <p className="text-sm text-ink-2">
+                      Chọn theo mức là ước tính: hệ thống lấy trần của mức để lọc trường. Khi biết số chính xác, hãy cập nhật để kết quả sát hơn.
+                    </p>
+                    <Button type="button" variant="outline" onClick={switchToExact}>
+                      Nhập số tiền chính xác
+                    </Button>
+                  </div>
                 )}
-                {selectedTierLabel && <> · đã tự chọn mức {selectedTierLabel}</>}
-              </>
-            ) : (
-              "Hệ thống sẽ tự chọn mức gần nhất."
-            )}
-          </p>
-        </div>
-        )}
-      </fieldset>
-      )}
+              </div>
+              {!exactAsk && (
+                /* Nhập số tiền cụ thể → tự chọn mức tương ứng */
+                <FormSection title="Hoặc nhập số tiền cụ thể">
+                  <PrefixInput
+                    id="budgetAmount"
+                    side="end"
+                    inputMode="numeric"
+                    ariaLabel="Số tiền cụ thể"
+                    prefixLabel="đơn vị tiền"
+                    prefixes={CURRENCY_OPTIONS}
+                    prefix={currency}
+                    onPrefixChange={(c) => {
+                      setCurrency(c as Currency);
+                      applyAmount(amountText, c as Currency);
+                    }}
+                    placeholder={currency === "vnd" ? "VD: 900.000.000" : "VD: 36.000"}
+                    value={amount > 0 ? amount.toLocaleString("vi-VN") : amountText.replace(/\D/g, "")}
+                    onChange={(t) => applyAmount(t, currency)}
+                  />
+                  {amount > 0 && (
+                    // Chỉ hiện số đã quy đổi; tỉ giá để trong chú thích khi rê chuột
+                    <p
+                      className="text-right text-sm font-semibold tabular-nums text-ink"
+                      title={`Tỉ giá 1 USD = ${RATE.toLocaleString("vi-VN")} VNĐ`}
+                    >
+                      ≈{" "}
+                      {currency === "vnd"
+                        ? `${amountUsd.toLocaleString("vi-VN")} USD`
+                        : `${(amount * RATE).toLocaleString("vi-VN")} VNĐ`}
+                    </p>
+                  )}
+                </FormSection>
+              )}
+            </>
+          )}
+        </FormGroup>
 
-      {/* Question 2: Scholarship Need */}
-      <fieldset id={aidSectionId} role="radiogroup" className="min-w-0 space-y-4">
-        <legend className="text-h3 mb-4 text-foreground">
-          Bạn có cần học bổng không? <RequiredMark />
-        </legend>
+        <FormGroup title="Học bổng và chi trả">
+        <FormSection id={aidSectionId} title="Bạn có cần học bổng không?" required error={aidError}>
+          <ChoiceCards
+            ariaLabel="Nhu cầu học bổng"
+            columns={1}
+            options={aidOptions}
+            value={data.needFinancialAid}
+            onChange={(v) => {
+              setAidError(null);
+              onUpdate({ needFinancialAid: v });
+            }}
+          />
+        </FormSection>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          {needOptions.map((opt) => (
-            <button
-              key={opt.key}
-              type="button"
-              role="radio"
-              aria-checked={data.needFinancialAid === opt.key}
-              onClick={() => {
-                setAidError(null);
-                onUpdate({ needFinancialAid: opt.key });
-              }}
-              className={cn(CHOICE_CARD, "flex h-full flex-col items-start")}
-            >
-              <span className="text-sm font-semibold text-foreground">{opt.title}</span>
-              <span className="mt-1 text-xs text-ink-2">{opt.description}</span>
-            </button>
-          ))}
-        </div>
-        {aidError && <p className="text-xs font-medium text-destructive">{aidError}</p>}
-      </fieldset>
-
-      {/* Question 3: Funding Source — không bắt buộc, giống câu F3 bên chat */}
-      <section className="space-y-3">
-        <Label htmlFor="fundingSource" className="text-h3 text-foreground">
-          Ai chi trả chính? (không bắt buộc)
-        </Label>
-        <div className="sm:max-w-sm">
-          <Select
-            value={data.fundingSource || null}
-            onValueChange={(v) => onUpdate({ fundingSource: (v || null) as FundingSource | null })}
-            items={FUNDING_SOURCE_OPTIONS}
-          >
-            <SelectTrigger id="fundingSource" className="h-9 w-full bg-surface">
-              <SelectValue placeholder="Chưa chọn" />
-            </SelectTrigger>
-            <SelectContent className="w-max min-w-(--anchor-width)">
-              {FUNDING_SOURCE_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </section>
+        <FormSection title="Ai chi trả chính?">
+          <ChoicePicker
+            ariaLabel="Nguồn chi trả chính"
+            options={FUNDING_SOURCE_OPTIONS}
+            value={data.fundingSource}
+            onChange={(v) => onUpdate({ fundingSource: (v || null) as FundingSource | null })}
+          />
+        </FormSection>
+        </FormGroup>
+      </FormBody>
 
       <StepNav onPrev={onPrev}>
         <Button onClick={handleNextClick} size="lg" className="gap-1.5">
@@ -378,6 +319,6 @@ export function Step4Financial({ data, metadata, lockedUsd = null, onUpdate, onP
           <ArrowRightIcon className="size-4" />
         </Button>
       </StepNav>
-    </div>
+    </>
   );
 }

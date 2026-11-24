@@ -62,6 +62,7 @@ export function MonthPicker({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
+        data-slot="month-picker"
         id={id}
         disabled={disabled}
         className={cn(

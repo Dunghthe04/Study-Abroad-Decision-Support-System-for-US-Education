@@ -3,10 +3,13 @@
 import { useState } from "react";
 import { ArrowRightIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { findCertType, newCertId, validatePlanConflicts } from "@/lib/certification-utils";
-import { cn } from "@/lib/utils";
+import {
+  findCertType,
+  isPlanOverdue,
+  newCertId,
+  validateCertification,
+  validatePlanConflicts,
+} from "@/lib/certification-utils";
 import type {
   CertificationCategory,
   CertificationDraft,
@@ -14,8 +17,7 @@ import type {
   CertificationTypeOption,
 } from "@/types/profile-flow";
 import { CertificationCard } from "./certifications/CertificationCard";
-import { CertificationForm } from "./certifications/CertificationForm";
-import { RequiredMark } from "./RequiredMark";
+import { ActionList, ActionRow, FormBody, FormGroup } from "./FormKit";
 import { StepHeader, StepNav } from "./StepChrome";
 
 interface Step3CertificationsProps {
@@ -29,10 +31,10 @@ interface Step3CertificationsProps {
 
 interface SectionConfig {
   key: "english" | "tests";
+  /** Tên nhóm, cũng là câu hỏi duy nhất của nhóm */
   title: string;
   hint: string;
-  addLabel: string;
-  formTitle: string;
+  noneLabel: string;
   categories: CertificationCategory[];
 }
 
@@ -41,207 +43,137 @@ const SECTIONS: SectionConfig[] = [
     key: "english",
     title: "Chứng chỉ tiếng Anh",
     hint: "Hầu hết trường Mỹ yêu cầu với học sinh quốc tế",
-    addLabel: "Thêm chứng chỉ hoặc dự định thi tiếng Anh",
-    formTitle: "Thêm chứng chỉ tiếng Anh",
+    noneLabel: "Tôi chưa thi tiếng Anh và chưa có dự định thi",
     categories: ["english"],
   },
   {
     key: "tests",
-    title: "Bài thi chuẩn hóa và học thuật",
+    title: "Bài thi chuẩn hóa",
     hint: "SAT, ACT, AP, IB, A-Level...",
-    addLabel: "Thêm bài thi hoặc dự định thi",
-    formTitle: "Thêm bài thi",
+    noneLabel: "Tôi chưa thi bài thi chuẩn hóa và chưa có dự định thi",
     categories: ["standardized", "graduate"],
   },
 ];
 
-// Mỗi lúc chỉ mở 1 form: thêm mới ở một mục, hoặc sửa một thẻ.
-// Sửa có thể mở với bản khác thẻ (dự định quá hạn bấm "Đã thi rồi" / "Đổi tháng")
-type EditingState =
-  | { mode: "add"; section: SectionConfig["key"]; draft: CertificationItem }
-  | { mode: "edit"; id: string; initial?: CertificationItem };
+const MISSING = "Thêm chứng chỉ, hoặc chọn “chưa thi và chưa có dự định thi”.";
 
 export function Step3Certifications({ data, certificationTypes, onUpdate, onPrev, onNext }: Step3CertificationsProps) {
   const certifications = data.certifications ?? [];
-  const [editing, setEditing] = useState<EditingState | null>(null);
   // Thẻ đã thi và thẻ dự định thi đều tính là đã khai mục đó
   const hasEnglish = certifications.some((c) => c.category === "english");
   const hasStandardized = certifications.some((c) => ["standardized", "graduate"].includes(c.category));
-  // Mỗi mục phải có 1 trong 2: thẻ (đã thi hoặc dự định thi) hoặc tích "chưa thi và chưa có dự định thi".
-  // Chỉ báo đỏ sau khi đã bấm Tiếp tục; điền xong mục nào thì mục đó tự hết đỏ
+  // Mỗi mục phải có 1 trong 2: thẻ (đã thi hoặc dự định thi) hoặc chọn "chưa thi và chưa có dự định thi".
+  // Chỉ báo lỗi sau khi đã bấm Tiếp tục; điền xong mục nào thì mục đó tự hết đỏ
   const [triedNext, setTriedNext] = useState(false);
-  const englishMissing = triedNext && !hasEnglish && !data.englishPlanned;
-  const testsMissing = triedNext && !hasStandardized && !data.standardizedPlanned;
-
-  const startAdd = (section: SectionConfig) => {
-    setEditing({
-      mode: "add",
-      section: section.key,
-      draft: { id: newCertId(), category: section.categories[0], type: "" },
-    });
+  const missing = {
+    english: triedNext && !hasEnglish && !data.englishPlanned,
+    tests: triedNext && !hasStandardized && !data.standardizedPlanned,
   };
 
-  const handleSave = (cert: CertificationItem) => {
-    const exists = certifications.some((c) => c.id === cert.id);
-    const englishAdded = cert.category === "english";
-    const standardizedAdded = ["standardized", "graduate"].includes(cert.category);
+  // Kiểm tra từng thẻ như lúc bấm "Lưu" trước đây: luật theo metadata, rồi so với các thẻ khác
+  const check = (cert: CertificationItem) => {
+    const type = findCertType(certificationTypes, cert.type);
+    const errors = validateCertification(cert, type);
+    const conflict = Object.keys(errors).length === 0 ? validatePlanConflicts(cert, certifications, type) : null;
+    return { errors, conflict };
+  };
+
+  const addCert = (section: SectionConfig) => {
     // Có thẻ thì mục đó không còn "chưa thi và chưa có dự định thi"
     onUpdate({
-      certifications: exists
-        ? certifications.map((c) => (c.id === cert.id ? cert : c))
-        : [...certifications, cert],
-      ...(englishAdded && data.englishPlanned ? { englishPlanned: false } : {}),
-      ...(standardizedAdded && data.standardizedPlanned ? { standardizedPlanned: false } : {}),
+      certifications: [...certifications, { id: newCertId(), category: section.categories[0], type: "" }],
+      ...(section.key === "english" && data.englishPlanned ? { englishPlanned: false } : {}),
+      ...(section.key === "tests" && data.standardizedPlanned ? { standardizedPlanned: false } : {}),
     });
-    setEditing(null);
   };
 
-  const handleRemove = (id: string) => {
-    onUpdate({ certifications: certifications.filter((c) => c.id !== id) });
-    if (editing?.mode === "edit" && editing.id === id) setEditing(null);
-  };
+  const handleChange = (cert: CertificationItem) =>
+    onUpdate({ certifications: certifications.map((c) => (c.id === cert.id ? cert : c)) });
+
+  const handleRemove = (id: string) => onUpdate({ certifications: certifications.filter((c) => c.id !== id) });
 
   const handleNextClick = () => {
-    if ((!hasEnglish && !data.englishPlanned) || (!hasStandardized && !data.standardizedPlanned)) {
+    const incomplete = (!hasEnglish && !data.englishPlanned) || (!hasStandardized && !data.standardizedPlanned);
+    const invalid = certifications.some((c) => {
+      const { errors, conflict } = check(c);
+      return Object.keys(errors).length > 0 || conflict;
+    });
+    if (incomplete || invalid) {
       setTriedNext(true);
+      // Chờ lỗi hiện ra rồi cuộn tới lỗi đầu tiên
+      requestAnimationFrame(() =>
+        document
+          .querySelector("#step3-english [role=alert], #step3-tests [role=alert]")
+          ?.scrollIntoView({ block: "center", behavior: "smooth" }),
+      );
       return;
     }
     onNext();
   };
 
-  const checkConflict = (cert: CertificationItem) =>
-    validatePlanConflicts(cert, certifications, findCertType(certificationTypes, cert.type));
-
   const renderSection = (section: SectionConfig) => {
     const items = certifications.filter((c) => section.categories.includes(c.category));
-    const isAddingHere = editing?.mode === "add" && editing.section === section.key;
+    const planned = section.key === "english" ? data.englishPlanned : data.standardizedPlanned;
 
     return (
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2 className="text-h3 font-sans text-foreground">
-            {section.title} <RequiredMark />
-          </h2>
-          <span className="text-xs text-muted-foreground">{section.hint}</span>
-        </div>
-
-        {items.map((cert) => {
-          if (editing?.mode === "edit" && editing.id === cert.id) {
-            const initial = editing.initial ?? cert;
+      <FormGroup
+        id={`step3-${section.key}`}
+        title={section.title}
+        description={section.hint}
+        required
+        error={missing[section.key] ? MISSING : null}
+      >
+        <div className="py-6">
+        <ActionList>
+          {items.map((cert, i) => {
+            const { errors, conflict } = check(cert);
             return (
-              <CertificationForm
+              <CertificationCard
                 key={cert.id}
-                title={initial.isTarget ? "Sửa dự định thi" : "Sửa chứng chỉ"}
-                initial={initial}
+                index={i + 1}
+                cert={cert}
                 types={certificationTypes}
                 categories={section.categories}
                 otherCategory={section.categories[0]}
-                onSave={handleSave}
-                onCancel={() => setEditing(null)}
-                checkConflict={checkConflict}
+                // dự định đã qua tháng dự kiến luôn báo; lỗi khác chỉ báo sau khi bấm Tiếp tục
+                errors={triedNext ? errors : isPlanOverdue(cert) && errors.testDate ? { testDate: errors.testDate } : {}}
+                conflict={triedNext ? conflict : null}
+                onChange={handleChange}
+                onRemove={() => handleRemove(cert.id)}
               />
             );
-          }
-          return (
-            <CertificationCard
-              key={cert.id}
-              cert={cert}
-              type={findCertType(certificationTypes, cert.type)}
-              disabled={editing !== null}
-              onEdit={() => setEditing({ mode: "edit", id: cert.id })}
-              onRemove={() => handleRemove(cert.id)}
-              onTaken={() =>
-                setEditing({
-                  mode: "edit",
-                  id: cert.id,
-                  // tháng dự kiến đã qua thường là tháng đã thi; điểm mục tiêu không phải điểm thật nên bỏ
-                  initial: { ...cert, isTarget: false, overall: null, scaleText: null, sections: null },
-                })
-              }
-              onChangeMonth={() => setEditing({ mode: "edit", id: cert.id, initial: { ...cert, testDate: null } })}
-            />
-          );
-        })}
-
-        {isAddingHere ? (
-          <CertificationForm
-            key={editing.draft.id}
-            title={section.formTitle}
-            initial={editing.draft}
-            types={certificationTypes}
-            categories={section.categories}
-            otherCategory={section.categories[0]}
-            onSave={handleSave}
-            onCancel={() => setEditing(null)}
-            checkConflict={checkConflict}
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => startAdd(section)}
-            disabled={editing !== null}
-            className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-line px-4 py-3 text-sm font-medium text-brand transition-colors hover:border-brand/50 hover:bg-brand-wash/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default disabled:opacity-50"
-          >
-            <PlusIcon className="size-4" />
-            {section.addLabel}
-          </button>
-        )}
-      </section>
+          })}
+          <ActionRow icon={<PlusIcon />} onClick={() => addCert(section)}>
+            Thêm chứng chỉ
+          </ActionRow>
+          {items.length === 0 && (
+            <ActionRow
+              checked={Boolean(planned)}
+              onClick={() => onUpdate(section.key === "english" ? { englishPlanned: !planned } : { standardizedPlanned: !planned })}
+            >
+              {section.noneLabel}
+            </ActionRow>
+          )}
+        </ActionList>
+        </div>
+      </FormGroup>
     );
   };
 
-  // Tick "chưa thi và chưa có dự định thi" — chỉ hỏi khi mục chưa có thẻ nào
-  const renderNoPlanTick = (checked: boolean, onChange: (value: boolean) => void, label: string) => (
-    <Label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-line bg-surface p-4 text-sm font-medium text-foreground transition-colors hover:border-brand/40">
-      <Checkbox checked={checked} onCheckedChange={(value) => onChange(Boolean(value))} />
-      {label}
-    </Label>
-  );
-
   return (
-    <div className="flow-stagger space-y-10">
-      <StepHeader
-        title="Chứng chỉ của bạn"
-        lede="Thêm chứng chỉ đã có hoặc bài bạn định thi. Chưa có thì tích ô cuối mỗi mục."
-      />
-
-      <div className={cn("space-y-4", englishMissing && "rounded-xl border border-destructive p-4")}>
+    <>
+      <StepHeader title="Chứng chỉ của bạn" />
+      <FormBody>
         {renderSection(SECTIONS[0])}
-        {!hasEnglish &&
-          renderNoPlanTick(
-            Boolean(data.englishPlanned),
-            (value) => onUpdate({ englishPlanned: value }),
-            "Tôi chưa thi tiếng Anh và chưa có dự định thi"
-          )}
-        {englishMissing && (
-          <p className="text-xs font-medium text-destructive">
-            Thêm chứng chỉ tiếng Anh, dự định thi, hoặc tích “chưa thi và chưa có dự định thi”.
-          </p>
-        )}
-      </div>
-
-      <div className={cn("space-y-4", testsMissing && "rounded-xl border border-destructive p-4")}>
         {renderSection(SECTIONS[1])}
-        {!hasStandardized &&
-          renderNoPlanTick(
-            Boolean(data.standardizedPlanned),
-            (value) => onUpdate({ standardizedPlanned: value }),
-            "Tôi chưa thi bài thi chuẩn hóa và chưa có dự định thi"
-          )}
-        {testsMissing && (
-          <p className="text-xs font-medium text-destructive">
-            Thêm bài thi đã có điểm, dự định thi, hoặc tích “chưa thi và chưa có dự định thi”.
-          </p>
-        )}
-      </div>
-
-      {/* Bottom Actions — mỗi mục phải có thẻ hoặc tích "chưa thi và chưa có dự định thi" mới đi tiếp được */}
+      </FormBody>
+      {/* mỗi mục phải có thẻ hợp lệ hoặc chọn "chưa thi và chưa có dự định thi" mới đi tiếp được */}
       <StepNav onPrev={onPrev}>
         <Button onClick={handleNextClick} size="lg" className="gap-1.5">
           Tiếp tục
           <ArrowRightIcon className="size-4" />
         </Button>
       </StepNav>
-    </div>
+    </>
   );
 }
