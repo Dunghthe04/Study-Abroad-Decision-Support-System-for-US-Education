@@ -1915,6 +1915,27 @@ public class AuthServiceTests
         Assert.DoesNotContain(_emailSender.SentEmails, e => e.To == "nobody@test.com");
     }
 
+    // AUTH-126: tài khoản chưa kích hoạt hoặc bị khóa xin đặt lại mật khẩu thì nhận cùng thông báo chung nhưng không có mã
+    [Theory]
+    [InlineData(UserStatuses.Unverified)]
+    [InlineData(UserStatuses.Locked)]
+    public async Task ForgotPassword_UnverifiedOrLocked_SameMessage_NoResetCode(string status)
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = status;
+        var unknown = await service.ForgotPasswordAsync(new ForgotPasswordRequest("nobody@test.com"));
+
+        var forgot = await service.ForgotPasswordAsync(new ForgotPasswordRequest("a@test.com"));
+        var resend = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.ResetPassword));
+
+        Assert.Equal(AuthError.None, forgot.Error);
+        Assert.Equal(unknown.Message, forgot.Message);
+        Assert.Equal(AuthError.None, resend.Error);
+        Assert.DoesNotContain(_repo.Otps, o => o.Purpose == OtpPurposes.ResetPassword);
+        Assert.DoesNotContain(_emailSender.SentEmails, e => e.Purpose == OtpPurposes.ResetPassword);
+    }
+
     [Theory]
     [InlineData("short")]
     [InlineData(null)]

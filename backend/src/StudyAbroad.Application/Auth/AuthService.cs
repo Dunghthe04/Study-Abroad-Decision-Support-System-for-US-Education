@@ -297,6 +297,8 @@ namespace StudyAbroad.Application.Auth
 
             if (request.Purpose == OtpPurposes.VerifyEmail && user.Status != UserStatuses.Unverified)
                 return AuthResult.Ok(genericMessage);
+            if (request.Purpose == OtpPurposes.ResetPassword && !CanResetPassword(user))
+                return AuthResult.Ok(genericMessage);
 
             if (!await CanSendOtpAsync(user.Id, request.Purpose, ct))
                 return AuthResult.Ok(genericMessage);
@@ -507,8 +509,7 @@ namespace StudyAbroad.Application.Auth
 
             // Anti-enumeration: Luôn trả về thông báo thành công dù email có tồn tại hay không.
             // Mail đi qua hàng đợi nền nên thời gian phản hồi cũng như nhau.
-            if (user != null && user.Status != UserStatuses.Locked && user.Status != UserStatuses.TempLocked &&
-                user.Status != UserStatuses.Managed &&
+            if (user != null && CanResetPassword(user) &&
                 await CanSendOtpAsync(user.Id, OtpPurposes.ResetPassword, ct))
             {
                 var otpCode = await IssueOtpAsync(user.Id, OtpPurposes.ResetPassword, ct);
@@ -518,6 +519,15 @@ namespace StudyAbroad.Application.Auth
             return AuthResult.Ok($"Nếu email tồn tại trong hệ thống, mã xác thực đặt lại mật khẩu đã được gửi đến hộp thư (hiệu lực {OtpExpiryMinutes} phút).");
         }
 
+        /// <summary>
+        /// [UC-05] Chỉ tài khoản đã kích hoạt, không bị khóa mới được đặt lại mật khẩu. Tài khoản bị khóa,
+        /// chưa kích hoạt (AUTH-126), con do phụ huynh quản lý hay đã xóa thì không nhận mã, vẫn nhận thông báo chung.
+        /// </summary>
+        private static bool CanResetPassword(User user) =>
+            user.Status != UserStatuses.Locked && user.Status != UserStatuses.TempLocked &&
+            user.Status != UserStatuses.Managed && user.Status != UserStatuses.Unverified &&
+            user.Status != UserStatuses.Deleted;
+
         public async Task<AuthResult> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default)
         {
             var passwordError = ValidatePassword(request.NewPassword, "Mật khẩu mới");
@@ -526,8 +536,7 @@ namespace StudyAbroad.Application.Auth
 
             var email = NormalizeEmail(request.Email);
             var user = await users.GetUserByEmail(email, ct);
-            if (user == null || user.Status == UserStatuses.Locked || user.Status == UserStatuses.TempLocked ||
-                user.Status == UserStatuses.Managed)
+            if (user == null || !CanResetPassword(user))
                 return AuthResult.Fail(AuthError.OtpInvalid, OtpFailedMessage);
 
             if (!await TryConsumeOtpAsync(user.Id, OtpPurposes.ResetPassword, request.OtpCode, ct))
