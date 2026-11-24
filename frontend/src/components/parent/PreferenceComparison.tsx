@@ -183,33 +183,80 @@ function Views({
 // ---------------------------------------------------------------- ngân sách hai bên
 
 // Ngân sách cha mẹ nhập: số đồng và số USD quy theo tỷ giá. Ngân sách của con không hiện vì form chỉ chọn một khoảng.
+// Khoảng ngân sách trong hồ sơ con: "20.000 – 40.000 USD/năm", chỉ có mức trên hoặc mức dưới thì ghi "tới" / "từ"
+function studentBudgetText(min: number | null | undefined, max: number | null | undefined): string | null {
+  if (min != null && max != null) return min === max ? `${formatUsd(max)}/năm` : `${formatUsd(min)} – ${formatUsd(max)}/năm`;
+  if (max != null) return `Tới ${formatUsd(max)}/năm`;
+  if (min != null) return `Từ ${formatUsd(min)}/năm`;
+  return null;
+}
+
+// [UC-76, LNK-019/022/033] Ngân sách hai bên cạnh nhau và câu nêu chỗ khác. Cha mẹ nhập một con số chốt (VND),
+// con chọn một mức trong hồ sơ (khoảng USD): nằm trong khoảng là giống, thấp hơn mức dưới / cao hơn mức trên là khác.
+function budgetDiff(
+  parentUsd: number | null,
+  min: number | null | undefined,
+  max: number | null | undefined,
+  parentOwner: string,
+  you: string,
+): { same: boolean; text: string } | null {
+  if (parentUsd == null || (min == null && max == null)) return null;
+  if (min != null && parentUsd < min)
+    return { same: false, text: `Ngân sách của ${parentOwner} thấp hơn mức ${you} chọn trong hồ sơ.` };
+  if (max != null && parentUsd > max)
+    return { same: false, text: `Ngân sách của ${parentOwner} cao hơn mức ${you} chọn trong hồ sơ.` };
+  return { same: true, text: `Ngân sách của ${parentOwner} nằm trong mức ${you} chọn, hai bên không khác.` };
+}
+
 function BudgetBox({ data, parentName, you }: { data: PreferenceCompareDto; parentName: string; you: string }) {
   const self = parentName === "Bạn";
+  const parentOwner = self ? "bạn" : parentName;
   const pb = data.parentBudgetUsd;
   const vnd = data.parentBudgetVnd;
   const rate = data.vndPerUsd;
+  const studentText = studentBudgetText(data.studentBudgetMinUsd, data.studentBudgetMaxUsd);
+  const diff = budgetDiff(pb, data.studentBudgetMinUsd, data.studentBudgetMaxUsd, parentOwner, you);
 
   return (
-    <section aria-label="Ngân sách cha mẹ nhập" className="space-y-1 rounded-2xl border border-line bg-surface p-4">
-      <p className="text-xs font-semibold text-muted-foreground">
-        {self ? "Ngân sách bạn nhập" : `Ngân sách ${parentName} nhập`}
-      </p>
-      {pb != null && vnd != null ? (
-        <>
-          <p className="text-lg font-bold text-foreground">
-            {VND.format(vnd)} đồng/năm ≈ {formatUsd(pb)}/năm
+    <section aria-label="Ngân sách hai bên" className="space-y-3 rounded-2xl border border-line bg-surface p-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1">
+          <p className="text-xs font-semibold text-muted-foreground">Ngân sách trong hồ sơ của {you}</p>
+          <p className="text-lg font-bold text-foreground">{studentText ?? "Chưa nhập"}</p>
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs font-semibold text-muted-foreground">
+            {self ? "Ngân sách bạn nhập" : `Ngân sách ${parentName} nhập`}
           </p>
-          <p className="text-xs text-muted-foreground">
-            {rate != null && `Theo tỷ giá ${VND.format(Math.round(rate))} VND/USD ${data.isPreview ? "hôm nay" : "lúc lưu"}. `}
-            Con số chốt, không có mức dư: trường vượt dù ít là sang nhóm Cần học bổng, trường không có học bổng cho du
-            học sinh thì bị loại.
-          </p>
-        </>
-      ) : (
-        <>
-          <p className="text-lg font-bold text-foreground">Chưa nhập</p>
-          <p className="text-xs text-muted-foreground">Danh sách theo cha mẹ dùng ngân sách của {you}.</p>
-        </>
+          {pb != null && vnd != null ? (
+            <>
+              <p className="text-lg font-bold text-foreground">
+                {VND.format(vnd)} đồng/năm ≈ {formatUsd(pb)}/năm
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {rate != null && `Theo tỷ giá ${VND.format(Math.round(rate))} VND/USD ${data.isPreview ? "hôm nay" : "lúc lưu"}. `}
+                Con số chốt, không có mức dư: trường vượt dù ít là sang nhóm Cần học bổng, trường không có học bổng cho du
+                học sinh thì bị loại.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-bold text-foreground">Chưa nhập</p>
+              <p className="text-xs text-muted-foreground">Danh sách theo cha mẹ dùng ngân sách của {you}.</p>
+            </>
+          )}
+        </div>
+      </div>
+      {diff && (
+        <p
+          role="status"
+          className={cn(
+            "rounded-xl px-3 py-2 text-sm",
+            diff.same ? "bg-muted text-ink-2" : "border border-warn/30 bg-warn-wash font-medium text-warn",
+          )}
+        >
+          {diff.text}
+        </p>
       )}
     </section>
   );
