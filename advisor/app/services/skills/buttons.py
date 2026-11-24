@@ -88,12 +88,6 @@ IMPACT_LABELS = {
 
 # Câu hỏi → các nút đi kèm
 BUTTONS = {
-    "B1.2": (
-        Button("Đại học", {"target_level": confirmed("undergraduate")}),
-        Button("Cao đẳng cộng đồng", {"target_level": confirmed("community_college")}),
-        Button("Thạc sĩ", {"target_level": confirmed("master")}),
-        Button("Tiến sĩ", {"target_level": confirmed("phd")}),
-    ),
     "B1.3": (Button("Em chưa rõ ngành", {"major": UNKNOWN}),),
     # Chưa thi bài nào thì chỉ ghi chưa có chứng chỉ; dự định thi hỏi tiếp ở E2 / E3 như mục của form
     "D3": (Button("Em chưa thi bài nào", {"sat": NONE, "act": NONE}),),

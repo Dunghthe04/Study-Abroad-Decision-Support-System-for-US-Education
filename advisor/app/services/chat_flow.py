@@ -63,7 +63,6 @@ QUESTIONS = {
     "B0.1": "Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",
     "B0.2": "Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",
     "B1.1": "Hiện bạn đang học lớp mấy, hoặc đang làm gì?",
-    "B1.2": "Bạn muốn sang Mỹ học bậc nào?",
     "B1.3": "Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",
     "B1.4": "Bạn dự định nhập học khoảng khi nào?",
     "D1": "Bạn học chương trình nào: THPT Việt Nam, IB, A-level hay AP?",

@@ -466,12 +466,12 @@ async def test_back_from_a_finished_form_with_nothing_waiting_asks_nothing():
 
 async def test_back_from_a_half_filled_form_asks_only_the_missing_required_items():
     flow, _ = make_flow(tin("knowledge"))
-    profile = confirmed("current_level", *[k for k in REQUIRED_B3 if k != "target_level"])
+    profile = confirmed("current_level", *[k for k in REQUIRED_B3 if k != "gpa"])
 
     res = await flow.reply(request(CONTINUE_CHAT, current_step="B3", profile=profile))
 
-    # thiếu bậc học muốn theo: hỏi B1.2, không hỏi các câu tùy chọn như kỳ nhập học (B1.4)
-    assert res.answer == QUESTIONS["B1.2"]
+    # thiếu GPA: hỏi D2, không hỏi các câu tùy chọn như kỳ nhập học (B1.4)
+    assert res.answer == QUESTIONS["D2"]
     assert res.state.required_only == ["current_level", *REQUIRED_B3]
 
 

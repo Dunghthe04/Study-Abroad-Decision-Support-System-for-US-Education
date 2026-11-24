@@ -48,7 +48,6 @@ PLANNED = "dự định"
 # Bảng mục 2: (tên dòng, khóa ho_so, khóa tinh_san hoặc chữ cố định cho cột Mức). Thứ tự giống form
 ROWS = (
     ("Hệ đang học", "education_system", None),
-    ("Bậc muốn học", "target_level", None),
     ("Kỳ nhập học", "intake", "timeline"),
     ("GPA", "gpa", "gpa_level"),
     ("Tiếng Anh", "english", "english_level"),

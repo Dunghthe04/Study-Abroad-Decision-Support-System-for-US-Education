@@ -41,11 +41,10 @@ def test_only_keys_the_form_manages_count_as_a_profile():
 
 
 def test_next_question_asks_what_b3_needs_first_in_asking_order():
-    assert next_question({}) == ("B1", "B1.2")  # bậc học trước
-    assert next_question(profile("target_level")) == ("B2", "D2")
-    assert next_question(profile("target_level", "gpa")) == ("B2", "E1")
-    assert next_question(profile("target_level", "gpa", "english")) == ("B2", "D3")  # SAT/ACT
-    assert next_question(profile("target_level", "gpa", "english", "sat")) == ("B2", "F1")
+    assert next_question({}) == ("B2", "D2")  # GPA trước, không hỏi bậc học
+    assert next_question(profile("gpa")) == ("B2", "E1")
+    assert next_question(profile("gpa", "english")) == ("B2", "D3")  # SAT/ACT
+    assert next_question(profile("gpa", "english", "sat")) == ("B2", "F1")
     assert next_question(profile("target_level", "gpa", "english", "sat", "budget")) == (
         "B2",
         "F2",

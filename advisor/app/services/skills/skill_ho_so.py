@@ -115,7 +115,7 @@ FORM_SAVED = f"{SAVED} Bạn muốn mình tư vấn gì tiếp?"
 # Ô chọn "sửa mục nào" khi bấm Cần sửa: tên nhóm → các câu hỏi của nhóm. Câu B1 viết thẳng mã vì skill_bac_hoc
 # đã import file này. Tên nhóm không có dấu phẩy vì ô chọn nối các nhóm đã tích bằng ", "
 EDIT_SECTIONS = {
-    "Mục tiêu": ("B1.1", "B1.2", "B1.3", "B1.4"),
+    "Mục tiêu": ("B1.1", "B1.3", "B1.4"),
     "Học lực (GPA)": ("D1", "D2"),
     "Tiếng Anh": ("E1", "E2"),
     "SAT/ACT": ("D3", "E3"),
@@ -123,8 +123,8 @@ EDIT_SECTIONS = {
     "Hoạt động và giải thưởng": ("D4", "D5"),
     "Nguyện vọng": ("N2", "N3", "N1"),
 }
-# Thứ tự hỏi khi sửa: câu bậc học rồi câu hồ sơ theo thứ tự form. Không có N4 (visa) vì chat không hỏi câu đó
-EDIT_ORDER = ("B1.1", "B1.2", "B1.3", "B1.4", *QUESTION_ORDER)
+# Thứ tự hỏi khi sửa: câu mục tiêu (cấp học, ngành, kỳ nhập học) rồi câu hồ sơ theo thứ tự form. Không có N4 (visa) vì chat không hỏi câu đó
+EDIT_ORDER = ("B1.1", "B1.3", "B1.4", *QUESTION_ORDER)
 EDIT_MENU = (
     "Bạn muốn sửa những mục nào? Bạn chọn một hoặc nhiều mục rồi bấm Gửi, mình sẽ hỏi lại lần lượt từng mục. "
     'Bạn cũng có thể nhắn thẳng mục và giá trị mới, ví dụ "sửa SAT thành 1450".'
@@ -794,11 +794,7 @@ def confirm(state: ChatState) -> SkillOutput:
         # Sang B3: hồ sơ đủ để tư vấn (nhánh tư vấn dựng skill từ khuôn rồi nhờ Claude viết)
         go_to(state, "B3")
         return SkillOutput(SAVED)
-    if missing[0] == "target_level":
-        go_to(state, "B1")
-        output = buttons.ask_with_buttons(state, "B1.2")
-    else:
-        output = ask_question(state, FIELD_QUESTION[missing[0]])
+    output = ask_question(state, FIELD_QUESTION[missing[0]])
     output.answer = f"{NEED_PROFILE} {output.answer}"
     return output
 

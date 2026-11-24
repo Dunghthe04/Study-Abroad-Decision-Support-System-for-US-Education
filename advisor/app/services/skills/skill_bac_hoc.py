@@ -27,14 +27,6 @@ CURRENT_LEVELS = tuple(GRADE_OPTIONS)
 ALL_GRADES = tuple(dict.fromkeys(g for grades in GRADE_OPTIONS.values() for g in grades))
 # Độ dài tối đa của ngành (giống ValidateForCommit)
 MAX_MAJOR_LEN = 128
-# Qwen trả tên dễ đọc, code đổi sang mã StudyLevels của .NET
-TARGET_LEVELS = {
-    "college": "community_college",
-    "bachelor": "undergraduate",
-    "master": "master",
-    "phd": "phd",
-    UNKNOWN: UNKNOWN,
-}
 # Kỳ nhập học dạng "Fall 2027"
 INTAKE_PATTERN = re.compile(r"(Fall|Spring|Summer) 20\d\d")
 # Những cách Qwen có thể viết "chưa rõ ngành"
@@ -43,24 +35,22 @@ UNKNOWN_MAJORS = {UNKNOWN, "undecided", "chưa rõ", "chưa biết"}
 # Câu hỏi B1 → thông tin câu đó cần, theo thứ tự hỏi
 QUESTION_FIELDS = {
     "B1.1": ["current_level"],
-    "B1.2": ["target_level"],
     "B1.3": ["major"],
     "B1.4": ["intake"],
 }
-READ_FIELDS = ("current_level", "current_grade", "target_level", "major", "intake")
-# Câu bắt buộc giống form, hỏi tới khi học sinh trả lời: cấp học hiện tại, bậc học muốn theo (lưu hồ sơ cần hai mục này),
-# ngành (hoặc bấm "Em chưa rõ ngành", nút "Chưa rõ" của form)
-REQUIRED_QUESTIONS = ("B1.1", "B1.2", "B1.3")
+READ_FIELDS = ("current_level", "current_grade", "major", "intake")
+# Câu bắt buộc giống form, hỏi tới khi học sinh trả lời: cấp học hiện tại, ngành (hoặc bấm "Em chưa rõ ngành", nút "Chưa rõ" của form).
+# Bậc học luôn là đại học nên không hỏi (UC-08)
+REQUIRED_QUESTIONS = ("B1.1", "B1.3")
 # Ô form không bắt buộc: có nút "Bỏ qua", bấm thì không hỏi lại
 SKIPPABLE_QUESTIONS = ("B1.4",)
 
 SCHEMA = {
     "type": "object",
-    "required": ["current_level", "current_grade", "target_level", "major", "intake"],
+    "required": ["current_level", "current_grade", "major", "intake"],
     "properties": {
         "current_level": {"enum": [*CURRENT_LEVELS, None]},
         "current_grade": {"enum": [*ALL_GRADES, None]},
-        "target_level": {"enum": [*TARGET_LEVELS, None]},
         "major": {"type": ["string", "null"]},
         "intake": {"type": ["string", "null"]},
     },
@@ -72,7 +62,6 @@ SCHEMA = {
 class BacHocRead:
     current_level: str | None = None
     current_grade: str | None = None
-    target_level: str | None = None
     major: str | None = None
     intake: str | None = None
     ai_used: bool = False
@@ -110,10 +99,6 @@ def check_read(raw: dict[str, Any]) -> BacHocRead:
         raise ValueError(f"current_level lạ: {current_level}")
     current_level, grade = check_grade(current_level, raw.get("current_grade"))
 
-    target = raw.get("target_level")
-    if target is not None and target not in TARGET_LEVELS:
-        raise ValueError(f"target_level lạ: {target}")
-
     intake = raw.get("intake")
     if intake is not None and not INTAKE_PATTERN.fullmatch(intake):
         raise ValueError(f"intake sai dạng: {intake}")
@@ -121,7 +106,6 @@ def check_read(raw: dict[str, Any]) -> BacHocRead:
     return BacHocRead(
         current_level=current_level,
         current_grade=grade,
-        target_level=TARGET_LEVELS[target] if target is not None else None,
         major=clean_major(raw.get("major")),
         intake=intake,
         ai_used=True,

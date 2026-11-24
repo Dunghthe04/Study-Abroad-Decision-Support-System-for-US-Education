@@ -27,7 +27,6 @@ def confirmed(value):
 def minimal(**changes):
     profile = {
         "current_level": confirmed("high_school"),
-        "target_level": confirmed("undergraduate"),
         "gpa": confirmed({"value": 8.5, "scale": 10}),
         "budget": confirmed("tier_20k_35k"),
     }
@@ -68,7 +67,6 @@ def test_target_english_past_date_blocks():
 def test_empty_profile_lists_required_in_ask_order():
     assert commit_blockers({}, today=TODAY) == [
         "current_level",
-        "target_level",
         "gpa",
         "budget",
     ]
@@ -94,7 +92,6 @@ def test_none_and_unknown_are_ok_for_optional():
     [
         ({"current_level": confirmed("phd")}, "current_level"),
         ({"current_grade": confirmed("Năm 2")}, "current_grade"),  # không thuộc high_school
-        ({"target_level": ProfileField(value="unknown", status="unknown")}, "target_level"),
         ({"major": confirmed("x" * 129)}, "major"),
         ({"gpa": confirmed({"value": 85, "scale": 10})}, "gpa"),
         ({"english": confirmed({"type": "ielts", "value": 6.3, "date": None})}, "english"),

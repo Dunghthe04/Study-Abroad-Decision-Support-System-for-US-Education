@@ -7,14 +7,14 @@ Hồ sơ đủ để tư vấn khi có các mục trong REQUIRED_B3 (đánh giá
 from app.schemas.chat import ProfileField
 
 # Thông tin bắt buộc theo mốc, theo thứ tự hỏi (framework mục 4.1)
-# B3 (đánh giá hồ sơ): bậc học muốn theo, GPA, tiếng Anh, SAT/ACT, ngân sách, học bổng. Chưa cần ngành.
+# B3 (đánh giá hồ sơ): GPA, tiếng Anh, SAT/ACT, ngân sách, học bổng. Chưa cần ngành. Bậc học luôn là đại học (UC-08), không hỏi.
 # sat đại diện cả câu SAT/ACT: có ACT hoặc chứng chỉ chuẩn hóa khác cũng tính là đã trả lời (xem missing_fields)
-REQUIRED_B3 = ["target_level", "gpa", "english", "sat", "budget", "scholarship"]
+REQUIRED_B3 = ["gpa", "english", "sat", "budget", "scholarship"]
 # B4 (lộ trình, gợi ý trường): thêm ngành (để lọc trường)
 REQUIRED_B4 = [*REQUIRED_B3, "major"]
 # Phải có giá trị đã xác nhận, không được bỏ qua hay "chưa rõ".
 # major: B3 không đòi ngành nên "chưa rõ" vẫn qua B3, nhưng B4 đòi ngành thật.
-MUST_HAVE_VALUE = {"target_level", "gpa", "budget", "major"}
+MUST_HAVE_VALUE = {"gpa", "budget", "major"}
 
 
 # Kiểm tra thông tin

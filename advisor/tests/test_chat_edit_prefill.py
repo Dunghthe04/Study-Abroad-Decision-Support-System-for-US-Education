@@ -58,8 +58,8 @@ def test_list_question_only_shows_current():
 
 
 def test_button_question_writes_old_value_in_text():
-    out = profile_handler.ask_edit_question(editing(target_level=field("master")), "B1.2")
-    assert out.answer.endswith("Hiện tại: Thạc sĩ.")
+    out = profile_handler.ask_edit_question(editing(school_type=field("public")), "N3")
+    assert out.answer.endswith("Hiện tại: Công lập.")
     assert keep_shown(out)
 
 

@@ -140,11 +140,10 @@ async def test_what_if_filter_factors_offer_edit_buttons():
         **what_if(
             {"factor": "major", "value": "CS"},
             {"factor": "school_type", "value": "public"},
-            {"factor": "target_level", "value": "graduate"},
         ),
     )
 
-    assert out.answer.startswith("Ngành, loại trường và bậc học là điều kiện lọc trường")
+    assert out.answer.startswith("Ngành và loại trường là điều kiện lọc trường")
     assert "gợi ý trường lại" in out.answer
     assert [(r.label, r.value) for r in out.quick_replies] == [
         ("Sửa Mục tiêu", "Em muốn sửa Mục tiêu"),
@@ -585,10 +584,10 @@ async def test_advice_on_the_opening_question_offers_chat_or_form():
 
 
 async def test_advice_with_a_partial_profile_says_how_many_items_are_missing():
-    out = await new_advice([]).run(ChatState(profile=filled(["target_level"])), "x",
+    out = await new_advice([]).run(ChatState(profile=filled(["gpa"])), "x",
                                                          tin("profile_review"))  # fmt: skip
 
-    assert "còn thiếu 5 mục" in out.answer  # GPA, tiếng Anh, SAT/ACT, ngân sách, học bổng
+    assert "còn thiếu 4 mục" in out.answer  # tiếng Anh, SAT/ACT, ngân sách, học bổng
 
 
 async def test_advice_while_answering_in_chat_keeps_asking_the_missing_items():

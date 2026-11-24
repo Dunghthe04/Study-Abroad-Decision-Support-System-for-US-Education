@@ -8,7 +8,6 @@ from app.schemas.chat import ProfileField
 DRAFT_KEYS = {
     "current_level",
     "current_grade",
-    "target_level",
     "major",
     "gpa",
     "sat",

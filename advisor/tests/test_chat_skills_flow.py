@@ -355,7 +355,7 @@ async def test_all_questions_done_shows_review_with_buttons():
     assert res.state.question_id == "X1"
     assert res.widget.type == "review"
     assert res.widget.data["profile"]["budget"] == {"value": "tier_35k_50k", "status": "confirmed"}
-    assert res.widget.data["missing"] == ["target_level", "gpa"]  # said_in_B0 chưa xác nhận
+    assert res.widget.data["missing"] == ["gpa"]  # said_in_B0 chưa xác nhận
     assert [r.label for r in res.quick_replies] == ["Đúng rồi", "Cần sửa"]
 
 
@@ -494,22 +494,6 @@ async def test_required_question_cannot_be_skipped():
     assert "Bỏ qua" not in [r.label for r in res.quick_replies]
 
 
-async def test_target_level_button_in_b1():
-    llm = FakeLLM()
-    res = await turn(
-        llm,
-        "Thạc sĩ",
-        current_step="B1",
-        question_id="B1.2",
-        profile={"current_level": field("college_university")},
-    )
-
-    assert llm.calls == []
-    assert res.state.profile["target_level"] == field("master")
-    assert res.state.question_id == "B1.3"
-    assert [r.label for r in res.quick_replies] == ["Em chưa rõ ngành"]
-
-
 async def test_current_level_select_saves_level_and_grade_without_qwen():
     llm = FakeLLM()
     res = await turn(llm, "Trung học phổ thông, Lớp 11", current_step="B1", question_id="B1.1")
@@ -517,7 +501,7 @@ async def test_current_level_select_saves_level_and_grade_without_qwen():
     assert llm.calls == []
     assert res.state.profile["current_level"] == field("high_school")
     assert res.state.profile["current_grade"] == field("Lớp 11")
-    assert res.state.question_id == "B1.2"
+    assert res.state.question_id == "B1.3"  # không hỏi bậc học
 
 
 async def test_intake_select_saves_intake_without_qwen():
@@ -534,13 +518,7 @@ async def test_intake_select_saves_intake_without_qwen():
 
 
 async def test_major_question_comes_with_major_widget():
-    res = await turn(
-        FakeLLM(),
-        "Thạc sĩ",
-        current_step="B1",
-        question_id="B1.2",
-        profile={"current_level": field("college_university")},
-    )
+    res = await turn(FakeLLM(), "Trung học phổ thông, Lớp 11", current_step="B1", question_id="B1.1")
 
     assert res.widget.type == "major"
 
@@ -548,10 +526,10 @@ async def test_major_question_comes_with_major_widget():
 async def test_select_questions_come_with_form_fields():
     res = await turn(
         FakeLLM(),
-        "Thạc sĩ",
+        "Em chưa rõ ngành",
         current_step="B1",
-        question_id="B1.2",
-        profile={"current_level": field("college_university"), "major": field("CS")},
+        question_id="B1.3",
+        profile={"current_level": field("college_university")},
     )
 
     assert res.state.question_id == "B1.4"
@@ -786,7 +764,7 @@ async def test_edit_button_after_results_skips_slm():
     res = await flow.reply(req)
 
     assert res.state.question_id == "B1.1"
-    assert res.state.edit_queue == ["B1.2", "B1.3", "B1.4"]
+    assert res.state.edit_queue == ["B1.3", "B1.4"]
 
 
 # Hồ sơ đã có từ trước (DB / form): chỉ hỏi mục bắt buộc còn thiếu, không hỏi câu tùy chọn

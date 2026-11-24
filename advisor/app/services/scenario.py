@@ -31,7 +31,6 @@ LABELS = {
     "english": "điểm tiếng Anh",
     "current_level": "trình độ hiện tại",
     "current_grade": "lớp đang học",
-    "target_level": "bậc học",
     "major": "ngành",
     "intake": "kỳ nhập học",
     "education_system": "hệ học",
@@ -49,7 +48,6 @@ LABELS = {
 # không thử tạm được. Mỗi mục kèm nhóm của ô chọn sửa hồ sơ (skill_ho_so.EDIT_SECTIONS) để gắn nút sửa
 FILTER_FACTORS = {
     "major": "Mục tiêu",
-    "target_level": "Mục tiêu",
     "preferred_states": "Nguyện vọng",
     "school_type": "Nguyện vọng",
 }
