@@ -52,14 +52,14 @@ export function NeedsIntro({ mode, initialGoals, draftStep, hasCommittedProfile,
       data-flow-motion
       className="flex min-h-[calc(100dvh-var(--header-h))] items-center justify-center bg-(--surface-2) px-4 py-12"
     >
-      <div className="flow-stagger w-full max-w-[720px] space-y-8">
+      <div className="w-full max-w-[720px] space-y-8">
         <div className="space-y-3">
           <h1 id={labelId} className="font-heading text-4xl leading-tight text-foreground sm:text-5xl">
             Nhu cầu của bạn là
           </h1>
           <p className="text-base text-ink-2 sm:text-lg">{lede}</p>
         </div>
-        <div role="group" aria-labelledby={labelId} className="flow-stagger space-y-3">
+        <div role="group" aria-labelledby={labelId} className="space-y-3">
           {options.map((opt) => {
             const isSelected = selected.includes(opt.value);
             const { icon: Icon, tint } = GOAL_ICONS[opt.value];

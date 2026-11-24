@@ -144,8 +144,6 @@ export function ProfileFlowWizard() {
   const [phase, setPhase] = useState<"intro" | "flow">("intro");
   const [editingNeeds, setEditingNeeds] = useState(false);
   const [hasCommittedProfile, setHasCommittedProfile] = useState(false);
-  // Hướng chuyển bước, để trượt nội dung vào đúng phía
-  const [stepDir, setStepDir] = useState<"forward" | "back">("forward");
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [draft, setDraft] = useState<ProfileFlowDraft>(INITIAL_DRAFT);
   const [draftTranscript, setDraftTranscript] = useState<DraftTranscriptFile | null>(null);
@@ -366,7 +364,6 @@ export function ProfileFlowWizard() {
     const ready = [1, 2, 3, 4, 5].filter((s) => s < to && stepReady(s, nextDraft, goalsRef.current));
     const nextCompleted = [...new Set([...completedStepsRef.current, ...ready])].sort((a, b) => a - b);
     setCompletedSteps(nextCompleted);
-    setStepDir(to < from ? "back" : "forward");
     setCurrentStep(to);
     setSaveStatus("saving");
     persistDraft(to, nextCompleted, nextDraft)
@@ -492,7 +489,6 @@ export function ProfileFlowWizard() {
       : [...completedSteps, currentStep].sort((a, b) => a - b);
 
     setCompletedSteps(nextCompleted);
-    setStepDir("forward");
     setCurrentStep(nextStep);
 
     // Lưu nháp ngay khi đổi bước; huỷ lượt auto-save đang chờ để nó không ghi đè bước cũ
@@ -509,7 +505,6 @@ export function ProfileFlowWizard() {
   // Điều hướng về bước trước
   const handlePrev = () => {
     const prevStep = Math.max(1, currentStep - 1);
-    setStepDir("back");
     setCurrentStep(prevStep);
     scrollToTop();
   };
@@ -518,7 +513,6 @@ export function ProfileFlowWizard() {
   const handleSelectStep = (stepNumber: number) => {
     // Bước 1–5 nhảy tự do; "Xem lại và gửi" còn khoá thì đưa tới bước đầu tiên còn thiếu
     const to = stepNumber === 6 && firstNotReady < 6 ? firstNotReady : stepNumber;
-    setStepDir(to < currentStep ? "back" : "forward");
     setCurrentStep(to);
     scrollToTop();
   };
@@ -530,7 +524,6 @@ export function ProfileFlowWizard() {
     setPhase("flow");
     // Nhu cầu mới cần ngành thật mà chưa có ngành: đưa về bước 1 để chọn
     if (goalsNeedMajor(next) && !draft.step1.targetMajor && currentStep > 1) {
-      setStepDir("back");
       setCurrentStep(1);
     }
   };
@@ -734,7 +727,7 @@ export function ProfileFlowWizard() {
           <div ref={setHeaderSlot} />
           <FlowChromeProvider value={{ headerSlot, navSlot, notice, title: stepTitle, compactBar: assistantOpen }}>
           <div id="flow-scroll" className="min-h-0 flex-1 lg:overflow-y-auto">
-          <div ref={formRef} key={currentStep} data-dir={stepDir} className="flow-step">
+          <div ref={formRef} key={currentStep}>
             {currentStep === 1 && (
               <Step1Goal
                 data={draft.step1}

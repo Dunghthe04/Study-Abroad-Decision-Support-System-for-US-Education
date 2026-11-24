@@ -284,20 +284,7 @@
   animation: shiny-text 3.5s infinite;
 }
 
-/* Luồng hồ sơ /analysis: chuyển động nhẹ, tắt hẳn khi người dùng chọn giảm chuyển động */
-@keyframes flow-rise{from{opacity:0;transform:translateY(8px)}}
-@keyframes flow-in-x{from{opacity:0;transform:translateX(var(--flow-dx,16px))}}
-@keyframes flow-pop{from{transform:scale(.6)}}
-.flow-stagger>*{animation:flow-rise 320ms cubic-bezier(.22,1,.36,1) backwards}
-.flow-stagger>:nth-child(2){animation-delay:60ms}
-.flow-stagger>:nth-child(3){animation-delay:120ms}
-.flow-stagger>:nth-child(4){animation-delay:180ms}
-.flow-stagger>:nth-child(5){animation-delay:240ms}
-.flow-stagger>:nth-child(n+6){animation-delay:300ms}
-.flow-step{animation:flow-in-x 280ms cubic-bezier(.22,1,.36,1) backwards}
-.flow-step[data-dir=back]{--flow-dx:-16px}
-.flow-rail-enter{--flow-dx:-12px;animation:flow-in-x 450ms cubic-bezier(.22,1,.36,1) backwards}
-.flow-pop{animation:flow-pop 300ms var(--cds-btn-spring,cubic-bezier(.34,1.56,.64,1)) backwards}
+/* Luồng hồ sơ /analysis: tắt chuyển động khi người dùng chọn giảm chuyển động */
 /* Bề rộng tối đa của cột câu hỏi trong luồng hồ sơ (FormBody, thanh đầu, thanh cuối) */
 .flow-panel{--flow-form-w:72rem}
 /* Thang nền của biểu mẫu (xám lạnh theo sắc chữ, không pha màu nhấn) — mỗi lớp lồng nhau đậm/nhạt hơn một bậc:

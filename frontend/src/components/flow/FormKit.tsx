@@ -30,7 +30,7 @@ export function FormBody({ lede, children }: { lede?: ReactNode; children: React
   return (
     <div className="mx-auto w-full max-w-(--flow-form-w) px-4 pt-6 pb-10 sm:px-8 sm:pt-8">
       {lede && <p className="mb-6 text-sm text-ink-2">{lede}</p>}
-      <div className="flow-stagger space-y-6">{children}</div>
+      <div className="space-y-6">{children}</div>
     </div>
   );
 }

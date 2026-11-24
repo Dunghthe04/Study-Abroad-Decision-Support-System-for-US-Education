@@ -223,7 +223,7 @@ export function ProfileFlowStepper({
   }
 
   return (
-    <aside className="flow-rail-enter hidden w-[300px] shrink-0 flex-col bg-brand px-5 py-6 text-white lg:flex lg:h-full lg:overflow-y-auto">
+    <aside className="hidden w-[300px] shrink-0 flex-col bg-brand px-5 py-6 text-white lg:flex lg:h-full lg:overflow-y-auto">
       <h2 className="font-heading text-2xl leading-snug text-white">Hồ sơ chọn trường</h2>
       <p className="mt-2 text-sm leading-relaxed text-white/70">
         Cho chúng tôi biết điểm số, chứng chỉ và ngân sách của bạn để tìm ra những trường Mỹ phù hợp nhất.
@@ -241,7 +241,7 @@ export function ProfileFlowStepper({
 function StepIcon({ state }: { state: "done" | "current" | "todo" }) {
   if (state === "done") {
     return (
-      <span aria-hidden className="flow-pop flex size-5 shrink-0 items-center justify-center rounded-full bg-risk text-white">
+      <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-full bg-risk text-white">
         <CheckIcon className="size-3 stroke-[3]" />
       </span>
     );
