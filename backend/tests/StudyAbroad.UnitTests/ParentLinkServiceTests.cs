@@ -416,6 +416,61 @@ public class ParentLinkServiceTests
         Assert.Contains(_emails.SentEmails, e => e.To == student.Email && e.Purpose == "parent_unlinked");
     }
 
+    // ===== [UC-111 bước 5] Rút đồng ý của học sinh dưới 16: thu hồi yêu cầu liên hệ còn mở, báo trung tâm =====
+
+    private readonly FakeLeadWithdrawalRepository _withdrawals = new();
+    private readonly RecordingNotifications _notifications = new();
+
+    private ParentLinkService CreateServiceWithLeads() =>
+        new(_links, _users, _emails, _audit, notifications: _notifications, leadWithdrawals: _withdrawals);
+
+    [Fact]
+    public async Task RevokeByToken_Under16_WithdrawsOpenLeads_AndNotifiesCenters()
+    {
+        var (student, _, _) = await AcceptedLinkAsync(studentAge: 14);
+        var centerOwner = Guid.NewGuid();
+        _withdrawals.OwnersToReturn.Add(centerOwner);
+
+        var result = await CreateServiceWithLeads().RevokeByTokenAsync(_revokeToken, null);
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal(student.Id, Assert.Single(_withdrawals.UserIds));
+        Assert.Contains(_notifications.Sent, n => n.UserId == centerOwner
+            && n.Type == StudyAbroad.Application.Notifications.NotificationTypes.LeadStatusChanged && n.Link == "/center/leads");
+    }
+
+    [Fact]
+    public async Task Revoke_ByParentUnder16_WithdrawsOpenLeads()
+    {
+        var (student, parent, link) = await AcceptedLinkAsync(studentAge: 14);
+
+        await CreateServiceWithLeads().RevokeAsync(parent.Id, link.Id);
+
+        Assert.Equal(student.Id, Assert.Single(_withdrawals.UserIds));
+    }
+
+    [Fact]
+    public async Task Revoke_ByParent_Student16Plus_KeepsLeads()
+    {
+        var (_, parent, link) = await AcceptedLinkAsync(studentAge: 16);
+
+        await CreateServiceWithLeads().RevokeAsync(parent.Id, link.Id);
+
+        Assert.Empty(_withdrawals.UserIds);
+    }
+
+    [Fact]
+    public async Task Revoke_Under16_OtherParentStillConsents_KeepsLeads()
+    {
+        var (student, parent, link) = await AcceptedLinkAsync(studentAge: 14);
+        var (_, otherToken) = AddPendingLink(student, "mom2@test.com");
+        await CreateService().AcceptAsync(otherToken, isGuardian: true, null);
+
+        await CreateServiceWithLeads().RevokeAsync(parent.Id, link.Id);
+
+        Assert.Empty(_withdrawals.UserIds);
+    }
+
     [Fact]
     public async Task Revoke_StudentUnder16_CannotRevokeActiveLink()
     {

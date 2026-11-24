@@ -10,7 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
-const INVALID_LINK = "Link rút đồng ý không hợp lệ hoặc đã được sử dụng.";
+const INVALID_LINK = "Liên kết rút đồng ý không hợp lệ hoặc đã được sử dụng.";
 const NETWORK_ERROR = "Có lỗi kết nối máy chủ. Vui lòng thử lại sau.";
 
 /** 403 là con đã đủ 16 tuổi: hiện câu của máy chủ; lỗi khác dùng một câu chung, không lộ thông tin. */

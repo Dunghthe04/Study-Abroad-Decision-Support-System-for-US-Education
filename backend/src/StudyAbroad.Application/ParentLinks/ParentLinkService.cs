@@ -60,7 +60,9 @@ public class ParentLinkService(
     IParentProfileShareService? profileShare = null,
     StudyAbroad.Application.Notifications.INotificationService? notifications = null,
     // Phiên bản "Đồng ý của phụ huynh" đang hiệu lực (UC-103); null trong test cũ thì dùng hằng số dự phòng
-    StudyAbroad.Application.Admin.Policies.IPolicyVersionLookup? policyVersions = null) : IParentLinkService
+    StudyAbroad.Application.Admin.Policies.IPolicyVersionLookup? policyVersions = null,
+    // [UC-111 bước 5] Thu hồi yêu cầu liên hệ còn mở khi học sinh dưới 16 không còn đồng ý; null trong test cũ
+    StudyAbroad.Application.Leads.ILeadWithdrawalRepository? leadWithdrawals = null) : IParentLinkService
 {
     /// <summary>[UC-117] Action ghi audit khi phụ huynh rút đồng ý qua link trong mail.</summary>
     public const string RevokeByEmailAuditAction = "parent_link.revoke_by_email";
@@ -75,7 +77,7 @@ public class ParentLinkService(
     private const string PolicyChangedMessage = "Nội dung đồng ý vừa được cập nhật. Vui lòng tải lại trang và đọc lại trước khi đồng ý.";
     private const string ConflictMessage = "Liên kết vừa được cập nhật bởi một thao tác khác. Vui lòng tải lại trang.";
     private const string NotFoundMessage = "Không tìm thấy liên kết.";
-    private const string InvalidRevokeLinkMessage = "Link rút đồng ý không hợp lệ hoặc đã được sử dụng.";
+    private const string InvalidRevokeLinkMessage = "Liên kết rút đồng ý không hợp lệ hoặc đã được sử dụng.";
     private const string StudentAccountMessage = "Email này là tài khoản học sinh nên không thể làm phụ huynh. Bạn hãy bấm Từ chối để học sinh đổi sang email khác của phụ huynh.";
     private const string OtherAccountMessage = "Email này đã dùng cho tài khoản không phải phụ huynh nên không thể làm phụ huynh. Bạn hãy bấm Từ chối để học sinh đổi sang email khác của phụ huynh.";
     private const string RevokeLinkAgeMessage = "Học sinh đã đủ 16 tuổi nên link này không còn dùng được. Từ 16 tuổi, học sinh tự quyết định việc đồng ý xử lý dữ liệu của mình.";
@@ -336,6 +338,8 @@ public class ParentLinkService(
             if (otherId is { } oid)
                 await NotifyAsync(oid, StudyAbroad.Application.Notifications.NotificationTypes.ParentLinkRevoked, "Liên kết phụ huynh đã bị hủy",
                     $"Liên kết giữa {parentLabel} và {student.FullName} đã bị hủy.", ct);
+            // [UC-111 1a] Phụ huynh rút đồng ý ở mục Con của tôi: xử lý như rút qua email
+            await WithdrawLeadsIfConsentGoneAsync(student, ct);
         }
 
         return ParentLinkResult<ParentLinkDto>.Ok(
@@ -464,6 +468,7 @@ public class ParentLinkService(
         // [UC-110 / UC-75] Phụ huynh rút đồng ý qua email: báo học sinh
         await NotifyAsync(student.Id, StudyAbroad.Application.Notifications.NotificationTypes.ParentLinkRevoked, "Phụ huynh đã rút lại sự đồng ý",
             $"{parent?.FullName ?? link.ParentEmail} đã hủy liên kết với tài khoản của bạn.", ct);
+        await WithdrawLeadsIfConsentGoneAsync(student, ct);
 
         return ParentLinkResult<ParentRevokeInfo>.Ok(new ParentRevokeInfo(student.FullName, link.AcceptedAt), "Đã rút lại sự đồng ý.");
     }
@@ -489,6 +494,29 @@ public class ParentLinkService(
             return (null, null, ParentLinkError.Forbidden);
 
         return (link, student, ParentLinkError.None);
+    }
+
+    /// <summary>
+    /// [UC-111 bước 5] Học sinh dưới 16 không còn đồng ý nào của phụ huynh: yêu cầu liên hệ chưa kết thúc chuyển Đã thu hồi
+    /// (trung tâm chỉ còn thấy mã, trạng thái, ngày; nhắn tin bị khóa), yêu cầu còn chờ phụ huynh bị hủy, trung tâm nhận thông báo.
+    /// Còn phụ huynh khác đang đồng ý thì giữ nguyên.
+    /// </summary>
+    private async Task WithdrawLeadsIfConsentGoneAsync(User student, CancellationToken ct)
+    {
+        if (leadWithdrawals is null || AgeOf(student) is not { } age || age >= AgeGroups.ChildMaxAgeExclusive)
+            return;
+        if (await links.HasGrantedConsentAsync(student.Id, ct))
+            return;
+
+        var centerOwners = await leadWithdrawals.ListCenterOwnersOfOpenLeadsAsync(student.Id, ct);
+        await leadWithdrawals.WithdrawOpenLeadsAsync(student.Id, DateTime.UtcNow, ct);
+        if (notifications is null)
+            return;
+        foreach (var ownerId in centerOwners)
+            await notifications.NotifyAsync(ownerId, StudyAbroad.Application.Notifications.NotificationTypes.LeadStatusChanged,
+                "Yêu cầu liên hệ đã bị thu hồi",
+                "Người đại diện của học sinh đã rút đồng ý nên yêu cầu liên hệ đã bị thu hồi. Dữ liệu của học sinh không còn hiển thị.",
+                "/center/leads", ct);
     }
 
     private static ParentLinkResult<ParentRevokeInfo> RevokeFail(ParentLinkError error) =>

@@ -4,14 +4,14 @@ using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 
-/// <summary>[UC-80] Thu hồi lead còn mở bằng một câu UPDATE, chạy chung transaction của bước xóa tài khoản.</summary>
+/// <summary>[UC-80] Thu hồi lead còn mở bằng một câu UPDATE, chạy chung transaction của bước xóa tài khoản. [UC-111] Dùng lại khi phụ huynh rút đồng ý.</summary>
 public class LeadWithdrawalRepository(AppDbContext db) : ILeadWithdrawalRepository
 {
     public async Task<int> WithdrawOpenLeadsAsync(Guid userId, DateTime now, CancellationToken ct = default)
     {
         var withdrawn = await db.Leads
             .Where(l => l.UserId == userId
-                && (l.Status == LeadStatuses.New || l.Status == LeadStatuses.Contacted))
+                && (l.Status == LeadStatuses.New || l.Status == LeadStatuses.Accepted || l.Status == LeadStatuses.Contacted))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(l => l.Status, LeadStatuses.Withdrawn)
                 .SetProperty(l => l.UpdatedAt, now), ct);
@@ -26,4 +26,14 @@ public class LeadWithdrawalRepository(AppDbContext db) : ILeadWithdrawalReposito
 
         return withdrawn;
     }
+
+    public async Task<IReadOnlyList<Guid>> ListCenterOwnersOfOpenLeadsAsync(Guid userId, CancellationToken ct = default) =>
+        await db.Leads
+            .Where(l => l.UserId == userId
+                && (l.Status == LeadStatuses.New || l.Status == LeadStatuses.Accepted || l.Status == LeadStatuses.Contacted))
+            .Join(db.StudyCenters, l => l.StudyCenterId, c => c.Id, (l, c) => c.OwnerUserId)
+            .Where(owner => owner != null)
+            .Select(owner => owner!.Value)
+            .Distinct()
+            .ToListAsync(ct);
 }

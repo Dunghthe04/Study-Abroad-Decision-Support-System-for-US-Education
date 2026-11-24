@@ -521,11 +521,16 @@ internal sealed class FakeLeadWithdrawalRepository : StudyAbroad.Application.Lea
     public List<Guid> UserIds { get; } = [];
     public int CountToReturn { get; set; }
 
+    public List<Guid> OwnersToReturn { get; } = [];
+
     public Task<int> WithdrawOpenLeadsAsync(Guid userId, DateTime now, CancellationToken ct = default)
     {
         UserIds.Add(userId);
         return Task.FromResult(CountToReturn);
     }
+
+    public Task<IReadOnlyList<Guid>> ListCenterOwnersOfOpenLeadsAsync(Guid userId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Guid>>(OwnersToReturn);
 }
 
 internal sealed class FakeUnitOfWork : IUnitOfWork
