@@ -117,7 +117,7 @@ public record ExplainSchoolDto(
     double? Ps,
     double? Cost,
     double? Gap,
-    // Điểm năm thành phần và trọng số (UC-24). Advisor bỏ qua trường này; thẻ giải thích trong chat dùng để hiện.
+    // Điểm năm thành phần và trọng số (UC-24). Thẻ giải thích trong chat dùng để hiện, và advisor đưa cho AI diễn giải (UC-153).
     FitBreakdownDto? Fit = null);
 
 // Basis: giả định học sinh đang xem ("GPA 3.6, SAT 1500"); null là hồ sơ thật. Số liệu của Student và School đã tính theo gốc này

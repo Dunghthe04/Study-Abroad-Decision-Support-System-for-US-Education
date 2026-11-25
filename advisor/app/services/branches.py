@@ -36,6 +36,7 @@ from app.services.replies import (
     EDIT_SECTION_VALUE,
     EXPLAIN_ASK_SCHOOL,
     FILTER_TEXT,
+    FIT_METHOD,
     GOAL_SEEK_WORKING,
     GREETING_REPLY,
     GROUP_NEED_RESULTS,
@@ -389,6 +390,25 @@ SCHOOL_LIST_WORDS = (
 MAX_SUGGESTED = 6
 
 
+# Câu explain_fit hỏi cách tính điểm phù hợp ("fit score tính thế nào"), không hỏi về một trường (UC-153 1a)
+FIT_METHOD_WORDS = (
+    "tinh the nao",
+    "tinh nhu the nao",
+    "tinh nhu nao",
+    "tinh ra sao",
+    "tinh sao",
+    "tinh kieu gi",
+    "cach tinh",
+    "cong thuc",
+    "duoc tinh",
+)
+
+
+def asks_how_fit_is_computed(text: str) -> bool:
+    folded = plain(text)
+    return any(word in folded for word in FIT_METHOD_WORDS)
+
+
 def asks_for_school_list(text: str) -> bool:
     folded = plain(text)
     return any(word in folded for word in SCHOOL_LIST_WORDS)
@@ -414,6 +434,14 @@ def others_only_output(
                 "kb_answer": LOOKING_UP,
             },
         )
+    # UC-153 1a: hỏi cách tính điểm phù hợp, không nêu trường: giải thích cách tính, dẫn tới trang tham số, không dùng số của trường nào
+    if (
+        "explain_fit" in tasks
+        and not school_list_words
+        and not single_school(y.entities)
+        and asks_how_fit_is_computed(y.span)
+    ):
+        return SkillOutput(FIT_METHOD, quick_replies=[ABOUT_SYSTEM_PAGE_BUTTON.model_copy()])
     if not school_list_words and not single_school(y.entities):
         # Ô chọn trường (chọn xong .NET giải thích trường đó), hiện sẵn vài trường đầu danh sách gợi ý nếu có
         suggested = [s.code for s in (state.schools if state else None) or []][:MAX_SUGGESTED]

@@ -85,6 +85,15 @@ RECOMMENDING = "Mình lọc danh sách trường phù hợp với hồ sơ và n
 # Tin "Đúng rồi" khi hồ sơ vừa đủ mà học sinh chưa hỏi câu tư vấn nào: đánh giá hồ sơ như trước đây
 DEFAULT_QUESTION = "Đánh giá hồ sơ của em giúp em."
 ASK_WHICH_SCHOOLS = "Bạn muốn mình giải thích trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé."
+# UC-153 1a: hỏi cách tính điểm phù hợp mà không nêu trường. Câu cố định, không số liệu của trường nào và không con số trọng số (để khỏi lệch
+# với bảng công bố); trọng số và ngưỡng cụ thể ở trang Căn cứ tham số (UC-83)
+FIT_METHOD = (
+    "Điểm phù hợp của một trường gồm năm phần: vừa tầm học thuật (hồ sơ của bạn so với sinh viên của trường), ngân sách, "
+    "chất lượng trường (theo xếp hạng), học bổng cho du học sinh và tiếng Anh. Mỗi phần được chấm trên thang 100, nhân với "
+    "trọng số của phần đó rồi cộng lại. Điểm này chỉ dùng để sắp xếp các trường trong cùng một nhóm, không làm trường đổi nhóm. "
+    "Nếu bạn chỉnh các nút ưu tiên (chi phí thấp, học bổng, danh tiếng) thì trọng số đổi theo. "
+    "Trọng số và các ngưỡng cụ thể được công bố ở trang Căn cứ tham số."
+)
 NEXT_AFTER_SAVE = "Bạn muốn mình làm gì tiếp?"
 NEXT_AFTER_SAVE_REPLIES = [
     QuickReply(label="Gợi ý trường", value="Gợi ý trường cho em"),

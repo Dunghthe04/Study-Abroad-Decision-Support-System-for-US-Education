@@ -17,6 +17,7 @@ from app.services.branches import (
     ASK_SCHOOL,
     ASK_WHICH_SCHOOLS,
     CANNOT_ANSWER,
+    FIT_METHOD,
     GREETING_REPLY,
     HANDOFF_INTRO,
     LOOKING_UP,
@@ -885,6 +886,47 @@ async def test_explaining_a_school_without_its_name_asks_which_school():
     assert out.widget.type == "school" and out.widget.data["kind"] == "explain"
     assert out.widget.data["suggested"] is None  # chưa có danh sách gợi ý nào
     assert writer.skills == []
+
+
+# UC-153 1a: câu explain_fit hỏi cách tính điểm phù hợp, không nêu trường: giải thích cách tính, dẫn tới trang tham số
+@pytest.mark.parametrize(
+    "question",
+    [
+        "fit score tính thế nào",
+        "điểm phù hợp được tính ra sao",
+        "cong thuc tinh diem hop la gi",
+        "cách tính điểm phù hợp",
+    ],
+)
+async def test_explain_fit_about_the_method_explains_the_score_and_points_to_the_parameters_page(question):
+    writer = FakeWriter()
+
+    out = await new_advice([], writer=writer).run(
+        ChatState(profile=filled(REQUIRED_B4)),
+        question,
+        tin(("profile_review", {"tasks": ["explain_fit"]}, question)),
+    )
+
+    assert out.answer == FIT_METHOD and out.action is None and out.widget is None
+    assert [(b.label, b.href) for b in out.quick_replies] == [("Xem căn cứ tham số", "/methodology")]
+    assert writer.skills == []  # câu cố định, không gọi Claude, không dùng số liệu của trường nào
+
+
+async def test_explain_fit_that_is_not_about_the_method_still_asks_which_school():
+    question = "vì sao điểm hợp thấp thế"
+
+    out = await new_advice([], writer=FakeWriter()).run(
+        ChatState(profile=filled(REQUIRED_B4)),
+        question,
+        tin(("profile_review", {"tasks": ["explain_fit"]}, question)),
+    )
+
+    assert out.answer == ASK_WHICH_SCHOOLS
+    assert out.widget.type == "school"
+
+
+def test_the_fit_method_text_has_no_numbers_that_could_drift_from_the_published_weights():
+    assert not any(ch.isdigit() for ch in FIT_METHOD.replace("100", ""))
 
 
 async def test_the_explain_picker_suggests_the_first_schools_of_the_list():
