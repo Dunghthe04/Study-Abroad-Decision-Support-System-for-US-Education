@@ -165,6 +165,9 @@ public class AdminBirthDateChangeService(
         // [UC-150 bước 4] Học sinh từ 16 trở lên (hoặc chưa có ngày sinh) về dưới 16
         var droppedUnder16 = user.Role == UserRoles.Student && newAge < AgeGroups.ChildMaxAgeExclusive
             && (oldAge is null || oldAge >= AgeGroups.ChildMaxAgeExclusive);
+        // [UC-150 bước 5] Học sinh dưới 16 lên từ 16: yêu cầu liên hệ còn chờ phụ huynh không cần phụ huynh nữa
+        var roseTo16 = user.Role == UserRoles.Student && newAge >= AgeGroups.ChildMaxAgeExclusive
+            && oldAge is { } before && before < AgeGroups.ChildMaxAgeExclusive;
         var hasConsent = false;
         Func<CancellationToken, Task>? sendInvite = null;
 
@@ -219,6 +222,9 @@ public class AdminBirthDateChangeService(
             await sendInvite(ct);
         else if (droppedUnder16 && hasConsent && leadHolds is not null)
             await leadHolds.SendHeldLeadConfirmationsAsync(user, ct);
+        // Sau commit; lỗi ở đây thì job hằng ngày trả lại
+        if (roseTo16 && leadHolds is not null)
+            await leadHolds.ReleaseParentHoldAsync(user, now, ct);
 
         evidenceStorage.Delete(entity.EvidencePath);
         entity.Status = BirthDateChangeStatuses.Approved;

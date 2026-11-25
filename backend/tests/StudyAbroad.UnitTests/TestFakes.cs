@@ -604,4 +604,15 @@ internal sealed class RecordingLeadHolds : StudyAbroad.Application.Leads.ILeadPa
         Withdrawals.Add(student.Id);
         return Task.CompletedTask;
     }
+
+    public List<Guid> Releases { get; } = [];
+
+    public Task<int> ReleaseParentHoldAsync(User student, DateTime now, CancellationToken ct = default)
+    {
+        Releases.Add(student.Id);
+        return Task.FromResult(1);
+    }
+
+    public Task<StudyAbroad.Application.Leads.LeadHoldJobSummary> RunDailyAsync(DateTime now, CancellationToken ct = default) =>
+        Task.FromResult(new StudyAbroad.Application.Leads.LeadHoldJobSummary(0, 0));
 }

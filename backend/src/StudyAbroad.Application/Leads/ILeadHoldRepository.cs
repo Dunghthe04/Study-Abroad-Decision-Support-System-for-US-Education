@@ -23,4 +23,22 @@ public interface ILeadHoldRepository
 
     /// <summary>Lead đang giữ của học sinh chuyển "withdrawn" (giữ <see cref="Lead.HeldFromStatus"/> làm dấu trung tâm đã từng nhận), xóa hash token.</summary>
     Task<int> WithdrawHeldAsync(Guid userId, DateTime now, CancellationToken ct = default);
+
+    /// <summary>[UC-110] Mọi yêu cầu còn chờ phụ huynh của học sinh (gửi lúc dưới 16, hoặc đang giữ).</summary>
+    Task<IReadOnlyList<Lead>> ListPendingParentAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// [UC-110] Học sinh đủ 16: yêu cầu còn chờ phụ huynh chuyển <paramref name="status"/>, ghi thời gian chờ, xóa dấu giữ và token phụ huynh.
+    /// Chỉ ghi khi còn chờ; false nếu phụ huynh vừa trả lời.
+    /// </summary>
+    Task<bool> ReleaseAsync(Guid leadId, string status, long pausedSeconds, DateTime now, CancellationToken ct = default);
+
+    /// <summary>[UC-110] Học sinh chưa xóa có yêu cầu còn chờ phụ huynh và sinh từ <paramref name="bornOnOrBefore"/> trở về trước (đã đủ 16).</summary>
+    Task<IReadOnlyList<Guid>> ListStudentsToReleaseAsync(DateOnly bornOnOrBefore, CancellationToken ct = default);
+
+    /// <summary>[UC-110] Yêu cầu đang giữ đã quá hạn phụ huynh xác nhận.</summary>
+    Task<IReadOnlyList<Lead>> ListHeldPastDeadlineAsync(DateTime now, CancellationToken ct = default);
+
+    /// <summary>[UC-110] Thu hồi một yêu cầu đang giữ (chỉ khi còn chờ); false nếu đã được xử lý.</summary>
+    Task<bool> WithdrawHeldLeadAsync(Guid leadId, DateTime now, CancellationToken ct = default);
 }

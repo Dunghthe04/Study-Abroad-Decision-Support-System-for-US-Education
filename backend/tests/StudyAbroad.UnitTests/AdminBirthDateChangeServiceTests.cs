@@ -387,4 +387,20 @@ public class AdminBirthDateChangeServiceTests
 
         Assert.Empty(_holds.Held);
     }
+
+    [Theory]
+    [InlineData(15, 16, true)]
+    [InlineData(15, 18, true)]
+    [InlineData(14, 15, false)]
+    [InlineData(17, 18, false)]
+    public async Task Approve_StudentRisesTo16_ReleasesParentHold(int oldAge, int newAge, bool released)
+    {
+        var student = AddUser(UserRoles.Student, BornAgo(oldAge));
+        var request = AddRequest(student, BornAgo(newAge));
+
+        await Service().ApproveAsync(request.Id, AdminId, Info);
+
+        Assert.Equal(released, _holds.Releases.Contains(student.Id));
+        Assert.Empty(_holds.Held);
+    }
 }

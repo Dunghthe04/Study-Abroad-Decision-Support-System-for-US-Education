@@ -2643,7 +2643,7 @@ public class LeadServiceTests
     // ===== [UC-110 / UC-150] Admin sửa ngày sinh về dưới 16: giữ yêu cầu liên hệ chờ phụ huynh xác nhận =====
 
     /// <summary>Như LeadHoldRepository nhưng chạy trên danh sách trong bộ nhớ.</summary>
-    private sealed class FakeHoldRepo(FakeLeadRepo repo) : ILeadHoldRepository
+    private sealed class FakeHoldRepo(FakeLeadRepo repo, FakeUserRepository users) : ILeadHoldRepository
     {
         private static readonly string[] Open = [LeadStatuses.New, LeadStatuses.Accepted, LeadStatuses.Contacted];
 
@@ -2676,6 +2676,42 @@ public class LeadServiceTests
             return Task.FromResult(true);
         }
 
+        public Task<IReadOnlyList<Lead>> ListPendingParentAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Lead>>(repo.Leads.Where(l => l.UserId == userId && l.Status == LeadStatuses.PendingParent).ToList());
+
+        public Task<bool> ReleaseAsync(Guid leadId, string status, long pausedSeconds, DateTime now, CancellationToken ct = default)
+        {
+            var lead = repo.Leads.FirstOrDefault(l => l.Id == leadId && l.Status == LeadStatuses.PendingParent);
+            if (lead is null) return Task.FromResult(false);
+            lead.Status = status;
+            lead.PausedSeconds = pausedSeconds;
+            lead.HeldFromStatus = null;
+            lead.HeldAt = null;
+            lead.ParentTokenHash = null;
+            lead.ParentTokenExpiresAt = null;
+            return Task.FromResult(true);
+        }
+
+        public Task<IReadOnlyList<Guid>> ListStudentsToReleaseAsync(DateOnly bornOnOrBefore, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Guid>>(repo.Leads
+                .Where(l => l.Status == LeadStatuses.PendingParent && l.UserId != null)
+                .Select(l => users.Users.FirstOrDefault(u => u.Id == l.UserId))
+                .Where(u => u is { Role: UserRoles.Student, DeletedAt: null, DateOfBirth: not null } && u.DateOfBirth <= bornOnOrBefore)
+                .Select(u => u!.Id).Distinct().ToList());
+
+        public Task<IReadOnlyList<Lead>> ListHeldPastDeadlineAsync(DateTime now, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Lead>>(repo.Leads
+                .Where(l => l.Status == LeadStatuses.PendingParent && l.HeldFromStatus != null && l.ParentTokenExpiresAt <= now).ToList());
+
+        public Task<bool> WithdrawHeldLeadAsync(Guid leadId, DateTime now, CancellationToken ct = default)
+        {
+            var lead = repo.Leads.FirstOrDefault(l => l.Id == leadId && l.Status == LeadStatuses.PendingParent && l.HeldFromStatus != null);
+            if (lead is null) return Task.FromResult(false);
+            lead.Status = LeadStatuses.Withdrawn;
+            lead.ParentTokenHash = null;
+            return Task.FromResult(true);
+        }
+
         public Task<int> WithdrawHeldAsync(Guid userId, DateTime now, CancellationToken ct = default)
         {
             var held = repo.Leads.Where(l => l.UserId == userId && l.Status == LeadStatuses.PendingParent && l.HeldFromStatus != null).ToList();
@@ -2696,7 +2732,8 @@ public class LeadServiceTests
 
         public HoldSetup()
         {
-            Holds = new LeadParentHoldService(new FakeHoldRepo(P.S.LeadRepo), P.S.LeadRepo, P.S.LinkRepo, P.S.CenterRepo, P.Emails, P.Notifications);
+            Holds = new LeadParentHoldService(new FakeHoldRepo(P.S.LeadRepo, P.S.UserRepo), P.S.LeadRepo, P.S.LinkRepo, P.S.CenterRepo,
+                P.Emails, P.Notifications, P.S.UserRepo);
             P.S.CenterRepo.Centers.Single().OwnerUserId = OwnerId;
         }
 
@@ -2806,5 +2843,105 @@ public class LeadServiceTests
         Assert.Equal(LeadStatuses.Withdrawn, lead.Status);
         Assert.Single(h.P.Emails.SentEmails, e => e.Purpose == "lead_parent_decision" && e.Code == LeadStatuses.Withdrawn);
         Assert.Contains(h.P.Notifications.Sent, n => n.UserId == h.OwnerId);
+    }
+
+    // ===== [UC-110 / UC-150 bước 5] Học sinh đủ 16: yêu cầu chờ phụ huynh tự tới trung tâm =====
+
+    /// <summary>Đặt ngày sinh để học sinh vừa đủ 16 hôm nay theo giờ Việt Nam.</summary>
+    private static void Turn16Today(User student) =>
+        student.DateOfBirth = AgePolicy.TodayInVietnam(DateTime.UtcNow).AddYears(-AgeGroups.ChildMaxAgeExclusive);
+
+    [Fact]
+    public async Task Release_NormalPendingParent_BecomesNew_DeadlinesFromRelease_CenterToldNewLead()
+    {
+        var h = new HoldSetup();
+        await h.P.Send();
+        var lead = h.P.Stored;
+        lead.CreatedAt = DateTime.UtcNow.AddDays(-3);
+        var token = h.P.TokenFor(h.P.Mom);
+
+        Assert.Equal(1, await h.Holds.ReleaseParentHoldAsync(h.P.Student, DateTime.UtcNow));
+
+        Assert.Equal(LeadStatuses.New, lead.Status);
+        Assert.InRange(lead.PausedSeconds, 3 * 86400 - 5, 3 * 86400 + 60);
+        Assert.True(lead.ActiveSince > DateTime.UtcNow.AddMinutes(-1));
+        Assert.Null(lead.ParentTokenExpiresAt);
+        Assert.False(LeadParentConfirm.IsHiddenFromCenter(lead));
+        Assert.Contains(h.P.Notifications.Sent, n => n.UserId == h.OwnerId && n.Type == NotificationTypes.LeadNew);
+        Assert.Contains(h.P.Notifications.Sent, n => n.UserId == h.P.Student.Id && n.Type == NotificationTypes.LeadStatusChanged);
+        // Link cũ trong mail phụ huynh không còn dùng được
+        await Assert.ThrowsAnyAsync<Exception>(() => h.P.Confirm.AcceptAsync(token, null));
+
+        // Học sinh rút lại sau đó: trung tâm đã nhận nên vẫn thấy "Đã thu hồi"
+        lead.Status = LeadStatuses.Withdrawn;
+        Assert.False(LeadParentConfirm.IsHiddenFromCenter(lead));
+    }
+
+    [Fact]
+    public async Task Release_HeldLead_ReturnsToPreviousStatus_PausedAdded()
+    {
+        var h = new HoldSetup();
+        var lead = h.AddLead(LeadStatuses.Accepted, 5);
+        await h.Holds.HoldOpenLeadsAsync(h.P.Student.Id, DateTime.UtcNow.AddDays(-1));
+
+        await h.Holds.ReleaseParentHoldAsync(h.P.Student, DateTime.UtcNow);
+
+        Assert.Equal(LeadStatuses.Accepted, lead.Status);
+        Assert.Null(lead.HeldFromStatus);
+        Assert.InRange(lead.PausedSeconds, 86400 - 5, 86400 + 60);
+        Assert.Contains(h.P.Notifications.Sent, n => n.UserId == h.OwnerId && n.Type == NotificationTypes.LeadStatusChanged);
+        Assert.DoesNotContain(h.P.Notifications.Sent, n => n.Type == NotificationTypes.LeadNew);
+    }
+
+    [Fact]
+    public async Task Release_PastDeadline_LeftAlone()
+    {
+        var h = new HoldSetup();
+        await h.P.Send();
+        h.P.Stored.ParentTokenExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+
+        Assert.Equal(0, await h.Holds.ReleaseParentHoldAsync(h.P.Student, DateTime.UtcNow));
+        Assert.Equal(LeadStatuses.PendingParent, h.P.Stored.Status);
+    }
+
+    [Fact]
+    public async Task Daily_ReleasesStudentsTurned16_WithdrawsHeldPastDeadline_SkipsUnder16()
+    {
+        var h = new HoldSetup();
+        // Học sinh 1 (đang 14 tuổi): yêu cầu thường chờ phụ huynh, hôm nay đủ 16
+        await h.P.Send();
+        var normal = h.P.Stored;
+        Turn16Today(h.P.Student);
+
+        // Học sinh 2 vẫn 15: yêu cầu đang giữ đã quá hạn
+        var other = h.P.S.AddStudent(15);
+        other.Email = "other@test.com";
+        var held = new Lead
+        {
+            UserId = other.Id, SubmittedByUserId = other.Id, StudyCenterId = h.P.S.CenterId, Status = LeadStatuses.Accepted,
+            SharedFields = [LeadSharedFields.Contact], CreatedAt = DateTime.UtcNow.AddDays(-20),
+        };
+        h.P.S.LeadRepo.Leads.Add(held);
+        await h.Holds.HoldOpenLeadsAsync(other.Id, DateTime.UtcNow.AddDays(-8));
+        // Học sinh 3 vẫn 15: yêu cầu đang giữ còn hạn, không bị động tới
+        var third = h.P.S.AddStudent(15);
+        var stillHeld = new Lead
+        {
+            UserId = third.Id, SubmittedByUserId = third.Id, StudyCenterId = h.P.S.CenterId, Status = LeadStatuses.New,
+            SharedFields = [LeadSharedFields.Contact], CreatedAt = DateTime.UtcNow.AddDays(-2),
+        };
+        h.P.S.LeadRepo.Leads.Add(stillHeld);
+        await h.Holds.HoldOpenLeadsAsync(third.Id, DateTime.UtcNow.AddDays(-1));
+
+        var summary = await h.Holds.RunDailyAsync(DateTime.UtcNow);
+
+        Assert.Equal(new LeadHoldJobSummary(1, 1), summary);
+        Assert.Equal(LeadStatuses.New, normal.Status);
+        Assert.Equal(LeadStatuses.Withdrawn, held.Status);
+        Assert.Single(h.P.Emails.SentEmails, e => e.Purpose == "lead_parent_decision" && e.Code == LeadStatuses.Withdrawn && e.To == "other@test.com");
+        Assert.Equal(LeadStatuses.PendingParent, stillHeld.Status);
+
+        // Chạy lại không làm gì thêm
+        Assert.Equal(new LeadHoldJobSummary(0, 0), await h.Holds.RunDailyAsync(DateTime.UtcNow));
     }
 }
