@@ -225,6 +225,48 @@ public class AdminUniversityServiceTests
     }
 
     [Fact]
+    public async Task UpdateOfferingAsync_SavesAdmissionAidAndCampusFields_AndAuditsChanges()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo);
+
+        var request = OfferingRequest(repo) with
+        {
+            ApplicantsTotal = 1000, AdmittedTotal = 200, GpaPct40 = 0.651m, C7GpaImportance = "very_important",
+            IntlAidPolicy = "need_and_merit", IntlAidAvgUsd = 56639m, IntlAidRecipients = 231,
+            CampusSetting = "City: Large", FyOnCampusPct = 0.99m, IntlHousing = false, HousingTypes = "Apartments",
+        };
+        var result = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id, request, Actor);
+
+        Assert.True(result.Success);
+        Assert.Equal(0.651m, repo.Offering.GpaPct40);
+        Assert.Equal("need_and_merit", repo.Offering.IntlAidPolicy);
+        Assert.Equal(231, result.Value!.IntlAidRecipients);
+        Assert.Equal("City: Large", result.Value.CampusSetting);
+        Assert.Equal(false, result.Value.IntlHousing);
+        Assert.Contains("gpaPct40", Assert.Single(repo.Audits).DetailJson);
+    }
+
+    [Fact]
+    public async Task UpdateOfferingAsync_InvalidAdmissionAidFields_ReturnErrors()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo);
+
+        var request = OfferingRequest(repo) with
+        {
+            GpaPct40 = 1.5m, ApplicantsTotal = 10, AdmittedTotal = 20, IntlAidPolicy = "all", C7TestImportance = "huge",
+            IntlAidAvgUsd = -1m, AvgGpaWeighted = 6m,
+        };
+        var result = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id, request, Actor);
+
+        Assert.Equal(
+            ["admittedTotal", "avgGpaWeighted", "c7TestImportance", "gpaPct40", "intlAidAvgUsd", "intlAidPolicy"],
+            result.Errors.Keys.OrderBy(k => k).ToArray());
+        Assert.Equal(0, repo.SaveCount);
+    }
+
+    [Fact]
     public async Task UpdateOfferingAsync_UnknownMajor_ReturnsError()
     {
         var repo = new FakeRepository();
