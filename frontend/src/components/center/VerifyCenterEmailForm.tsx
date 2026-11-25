@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { clearPendingEmail, usePendingEmail } from "@/lib/pending-email";
+import { emailError, otpError } from "@/lib/auth-validation";
 
 export function VerifyCenterEmailForm() {
   const router = useRouter();
@@ -40,12 +41,9 @@ export function VerifyCenterEmailForm() {
     setSuccessMessage(null);
 
     const cleanOtp = otpCode.trim();
-    if (!email.trim()) {
-      setError("Vui lòng nhập địa chỉ email.");
-      return;
-    }
-    if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
-      setError("Mã OTP phải gồm đúng 6 chữ số.");
+    const inputError = emailError(email) ?? otpError(cleanOtp);
+    if (inputError) {
+      setError(inputError);
       return;
     }
 

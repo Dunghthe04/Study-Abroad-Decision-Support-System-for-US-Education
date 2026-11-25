@@ -285,6 +285,24 @@ public class ParentPreferenceServiceTests
         Assert.True(d.ProfileChangedAfterRun);
     }
 
+    // 17b [LNK-019/022/033] Ngân sách trong hồ sơ con đi kèm để đặt cạnh ngân sách cha mẹ
+    [Fact]
+    public async Task Compare_IncludesStudentBudgetRange()
+    {
+        Setup();
+        ChildRun(DateTime.UtcNow.AddHours(-2));
+        _profiles.Profile = new StudentProfile
+        {
+            UserId = _child, UpdatedAt = DateTime.UtcNow.AddHours(-3), BudgetMinUsd = 20_000m, BudgetMaxUsd = 40_000m,
+        };
+
+        var d = (await CreateService().CompareForParentAsync(_parent, _child, [4, 0, 2], 1_300_000_000, CancellationToken.None)).Value!;
+
+        Assert.Equal(20_000m, d.StudentBudgetMinUsd);
+        Assert.Equal(40_000m, d.StudentBudgetMaxUsd);
+        Assert.Equal(50_000m, d.ParentBudgetUsd);
+    }
+
     // 18
     [Fact]
     public async Task Compare_ChildNotRunYet_Message()

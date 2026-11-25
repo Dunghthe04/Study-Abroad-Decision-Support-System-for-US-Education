@@ -79,7 +79,7 @@ const NAV_GROUPS: NavGroupMeta[] = [
 ];
 
 // Mục đang mở lưu trên hash (#password...) để tải lại trang hoặc gửi link vẫn mở đúng mục.
-// Giữ nguyên hash được yêu cầu: mục "family" chỉ có sau khi tải GET subscription, nên mục đang mở được suy ra khi render.
+// Giữ nguyên hash được yêu cầu: các mục theo vai trò chỉ có khi đã biết user, nên mục đang mở được suy ra khi render.
 function readHash(): string {
   const hash = typeof window === "undefined" ? "" : window.location.hash.slice(1);
   return hash === "orders" ? "subscription" : hash; // Lịch sử giao dịch nay nằm trong mục Gói dịch vụ
@@ -92,7 +92,8 @@ export function AccountView() {
 
   const isStudentOrParent = Boolean(user && (user.role === "student" || user.role === "parent"));
 
-  // Mục Chia sẻ cho gia đình chỉ hiện khi GET subscription có family hoặc kỳ Gia đình (chủ hoặc thành viên).
+  // [UC-105 bước 2] Mục Chia sẻ cho gia đình luôn có với Học sinh, Phụ huynh; có gói Gia đình (family hoặc kỳ Gia đình,
+  // chủ hoặc thành viên) thì hiện thành viên, chưa có thì mời mua gói.
   // Đổi gì trong gói Gia đình thì tăng billingVersion để tải lại cả subscription lẫn family.
   const [billingVersion, setBillingVersion] = useState(0);
   const reloadBilling = useCallback(() => setBillingVersion((v) => v + 1), []);
@@ -110,17 +111,16 @@ export function AccountView() {
   const sections: SectionItem[] = [
     { id: "personal", label: "Thông tin cá nhân", icon: UserIcon, filledIcon: UserFilledIcon, group: "account" },
     { id: "password", label: "Bảo mật tài khoản", icon: KeyRoundIcon, filledIcon: KeyRoundFilledIcon, group: "account" },
-    // [UC-104] Lịch sử đồng ý Điều khoản và Chính sách bảo mật; admin, moderator không phải đồng ý nên không có mục này
-    ...(user && ["student", "parent", "center"].includes(user.role)
+    // Lịch sử đồng ý Điều khoản và Chính sách bảo mật: chỉ Học sinh, Phụ huynh (UC-105 bước 2); Trung tâm, Moderator, Admin
+    // chỉ có Thông tin cá nhân và Bảo mật tài khoản
+    ...(user && ["student", "parent"].includes(user.role)
       ? [{ id: "policies" as const, label: "Điều khoản đã đồng ý", icon: FileTextIcon, filledIcon: FileTextFilledIcon, group: "account" as const }]
       : []),
     ...(isStudentOrParent
       ? [
           { id: "subscription" as const, label: "Gói dịch vụ", icon: CreditCardIcon, filledIcon: CreditCardFilledIcon, group: "billing" as const },
           { id: "quota" as const, label: "Hạn mức", icon: GaugeIcon, filledIcon: GaugeFilledIcon, group: "billing" as const },
-          ...(hasFamily
-            ? [{ id: "family" as const, label: "Chia sẻ cho gia đình", icon: HeartHandshakeIcon, filledIcon: HeartHandshakeFilledIcon, group: "billing" as const }]
-            : []),
+          { id: "family" as const, label: "Chia sẻ cho gia đình", icon: HeartHandshakeIcon, filledIcon: HeartHandshakeFilledIcon, group: "billing" as const },
           { id: "academic" as const, label: "Học bạ", icon: BookOpenIcon, filledIcon: BookOpenFilledIcon, group: "profile" as const },
           {
             id: "parent-links" as const,
@@ -341,7 +341,13 @@ export function AccountView() {
           {activeSection === "personal" && <PersonalInfoCard />}
           {activeSection === "subscription" && <SubscriptionCard sub={sub} expired={expired} />}
           {activeSection === "quota" && <QuotaCard sub={sub} />}
-          {activeSection === "family" && <FamilyCard version={billingVersion} onChanged={reloadBilling} familyCycleCount={familyCycleCount} />}
+          {activeSection === "family" && <FamilyCard
+              version={billingVersion}
+              onChanged={reloadBilling}
+              familyCycleCount={familyCycleCount}
+              // Đang tải subscription: chờ; tải lỗi: để FamilyCard tự hỏi GET family và báo lỗi của nó
+              hasFamily={sub.data ? hasFamily : sub.error ? true : sub.loading ? undefined : false}
+            />}
           {activeSection === "academic" &&
             (parentOverview ? (
               <ParentAcademicSection overview={parentOverview} onChanged={reloadProfile} />

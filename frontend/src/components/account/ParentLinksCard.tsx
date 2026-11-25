@@ -9,6 +9,7 @@ import {
   MailIcon,
   SendIcon,
   UnlinkIcon,
+  Trash2Icon,
   UserPlusIcon,
   XIcon,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import type { ParentLinkDto } from "@/types/api";
 import { parentChildrenApi } from "@/lib/parent-children-api";
 import { useFetched } from "@/lib/use-fetched";
 import { AccountSectionHeader } from "@/components/account/AccountSectionHeader";
+import { RevokeAndDeleteChildDialog, RevokeConsentDialog } from "@/components/account/ParentConsentDialogs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +63,9 @@ export function ParentLinksCard() {
   const [newParentEmail, setNewParentEmail] = useState("");
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<ParentLinkDto | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ParentLinkDto | null>(null);
+  // Giữ tên con cho tiêu đề khi hộp thoại đang đóng dần (deleteTarget đã về null)
+  const [deleteName, setDeleteName] = useState("");
 
   // UC-76: nút So sánh ưu tiên chỉ cho con có tài khoản thật (getMine có thể trả cả con managed)
   const { data: children } = useFetched(isStudent ? "no-children" : "parent-children", () =>
@@ -127,6 +132,14 @@ export function ParentLinksCard() {
     const target = revokeTarget;
     setRevokeTarget(null);
     await run(`revoke-${target.id}`, () => parentLinksApi.revoke(target.id), "Không thể hủy liên kết.");
+  };
+
+  // [UC-75 1a] Rút đồng ý kèm xóa tài khoản con dưới 16 (chưa biết tuổi coi như dưới 16, máy chủ kiểm lại)
+  const handleRevokeAndDelete = async () => {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    await run(`delete-${target.id}`, () => parentLinksApi.revokeAndDelete(target.id), "Không thể xóa tài khoản của con.");
   };
 
   if (!user || (user.role !== "student" && user.role !== "parent")) return null;
@@ -234,6 +247,11 @@ export function ParentLinksCard() {
                             Đồng ý ngày {new Date(link.acceptedAt).toLocaleDateString("vi-VN")}
                           </div>
                         )}
+                        {link.status === "revoked" && (
+                          <div className="text-xs text-ink-3">
+                            Phụ huynh đã rút đồng ý. Gửi lại yêu cầu để phụ huynh xác nhận qua email mới.
+                          </div>
+                        )}
                         {link.status === "pending" && link.tokenExpiresAt && (
                           <div className="text-xs text-ink-3">
                             Lời mời hết hạn {new Date(link.tokenExpiresAt).toLocaleString("vi-VN")}
@@ -243,12 +261,19 @@ export function ParentLinksCard() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      {link.status === "active" ? (
+                      {link.status === "active" && link.consentStatus === "not_required" ? (
+                        <>
+                          <Badge variant="ok"><CheckIcon aria-hidden />Đã liên kết</Badge>
+                          <Badge variant="neutral">Không còn yêu cầu đồng ý</Badge>
+                        </>
+                      ) : link.status === "active" ? (
                         <Badge variant="ok"><CheckIcon aria-hidden />Đã đồng ý</Badge>
                       ) : link.status === "rejected" ? (
                         <Badge variant="warn"><XIcon aria-hidden />Phụ huynh đã từ chối</Badge>
                       ) : link.status === "expired" ? (
                         <Badge variant="warn"><HourglassIcon aria-hidden />Lời mời hết hạn</Badge>
+                      ) : link.status === "revoked" ? (
+                        <Badge variant="warn"><UnlinkIcon aria-hidden />Đã thu hồi</Badge>
                       ) : (
                         <Badge variant="warn"><HourglassIcon aria-hidden />Chờ phụ huynh xác nhận</Badge>
                       )}
@@ -264,6 +289,23 @@ export function ParentLinksCard() {
                         >
                           <MailIcon data-icon="inline-start" aria-hidden />
                           Gửi lại
+                        </Button>
+                      )}
+
+                      {/* [UC-111] Phụ huynh đã rút đồng ý: gửi yêu cầu mới tới cùng email (link cũ không dùng lại) */}
+                      {isStudent && link.status === "revoked" && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={busy !== null}
+                          onClick={() =>
+                            run("reinvite", () => parentLinksApi.changeParentEmail(link.parentEmail), "Không thể gửi lại yêu cầu.")
+                          }
+                          loading={busy === "reinvite"}
+                        >
+                          <MailIcon data-icon="inline-start" aria-hidden />
+                          Gửi lại yêu cầu
                         </Button>
                       )}
 
@@ -288,6 +330,24 @@ export function ParentLinksCard() {
                         >
                           <UnlinkIcon data-icon="inline-start" aria-hidden />
                           {link.status !== "active" ? "Hủy lời mời" : isStudent ? "Hủy liên kết" : "Rút đồng ý"}
+                        </Button>
+                      )}
+
+                      {!isStudent && link.status === "active" && (link.studentAge == null || link.studentAge < 16) && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-risk hover:bg-risk-wash hover:text-risk"
+                          disabled={busy !== null}
+                          onClick={() => {
+                            setDeleteName(link.studentName);
+                            setDeleteTarget(link);
+                          }}
+                          loading={busy === `delete-${link.id}`}
+                        >
+                          <Trash2Icon data-icon="inline-start" aria-hidden />
+                          Rút đồng ý và xóa tài khoản
                         </Button>
                       )}
                     </div>
@@ -367,24 +427,28 @@ export function ParentLinksCard() {
         </DialogContent>
       </Dialog>
 
-      {/* Hộp thoại xác nhận hủy liên kết / rút đồng ý */}
-      <Dialog open={revokeTarget !== null} onOpenChange={(open) => !open && setRevokeTarget(null)}>
+      {/* Phụ huynh rút đồng ý: hộp thoại dùng chung với Con của tôi */}
+      <RevokeConsentDialog
+        open={!isStudent && revokeTarget?.status === "active"}
+        onCancel={() => setRevokeTarget(null)}
+        onConfirm={handleRevoke}
+      />
+
+      {/* Hộp thoại xác nhận hủy liên kết (học sinh) / hủy lời mời */}
+      <Dialog
+        open={revokeTarget !== null && (isStudent || revokeTarget.status !== "active")}
+        onOpenChange={(open) => !open && setRevokeTarget(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {revokeTarget && revokeTarget.status !== "active"
-                ? "Hủy lời mời?"
-                : isStudent
-                  ? "Hủy liên kết phụ huynh?"
-                  : "Rút lại sự đồng ý?"}
+              {revokeTarget && revokeTarget.status !== "active" ? "Hủy lời mời?" : "Hủy liên kết phụ huynh?"}
             </DialogTitle>
           </DialogHeader>
           <DialogDescription>
             {revokeTarget && revokeTarget.status !== "active"
               ? "Link trong mail mời sẽ không dùng được nữa."
-              : isStudent
-                ? "Phụ huynh sẽ không còn liên kết với tài khoản của bạn và sẽ nhận email thông báo."
-                : "Hệ thống sẽ ngừng xử lý dữ liệu của con; con dưới 16 tuổi quay về chế độ hạn chế cho tới khi có đồng ý mới."}
+              : "Phụ huynh sẽ không còn liên kết với tài khoản của bạn và sẽ nhận email thông báo."}
           </DialogDescription>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setRevokeTarget(null)}>
@@ -396,6 +460,14 @@ export function ParentLinksCard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* [UC-75 1a] Hộp thoại xác nhận rút đồng ý kèm xóa tài khoản con dưới 16 */}
+      <RevokeAndDeleteChildDialog
+        open={deleteTarget !== null}
+        childName={deleteName}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={handleRevokeAndDelete}
+      />
     </div>
   );
 }

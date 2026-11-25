@@ -28,7 +28,7 @@ public class CenterLeadMapperTests
 
     private static CenterReceivedLeadDto Map(params string[] fields) =>
         CenterLeadMapper.ToCenterDto(
-            new Lead { SharedFields = [.. fields], ContactPhone = "0912345678" },
+            new Lead { UserId = Guid.NewGuid(), SharedFields = [.. fields], ContactPhone = "0912345678" },
             "Trung Tâm Test",
             "Nguyen Van A",
             "a@example.com",
@@ -60,6 +60,7 @@ public class CenterLeadMapperTests
         var dto = CenterLeadMapper.ToCenterDto(
             new Lead
             {
+                UserId = Guid.NewGuid(),
                 SharedFields = [LeadSharedFields.Contact, LeadSharedFields.Academic, LeadSharedFields.Goals],
                 SharedProfile = true,
                 ContactPhone = "0912345678",
@@ -77,6 +78,41 @@ public class CenterLeadMapperTests
         Assert.Null(dto.StudyLevel);
         Assert.Null(dto.ProfileSummary);
         Assert.False(dto.SharedProfile);
+    }
+
+    // [UC-111 bước 5] Phụ huynh rút đồng ý của học sinh dưới 16: yêu cầu Đã hoàn tất cũng ẩn; đồng ý lại thì hiện lại
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Closed_ConsentRevoked_HidesData_ReconsentShowsAgain(bool revoked)
+    {
+        var lead = new Lead
+        {
+            UserId = Guid.NewGuid(),
+            SharedFields = [LeadSharedFields.Contact, LeadSharedFields.Academic],
+            ContactPhone = "0912345678",
+            Status = LeadStatuses.Closed,
+        };
+
+        var dto = CenterLeadMapper.ToCenterDto(lead, "Trung Tâm Test", "Nguyen Van A", "a@example.com", Profile, Certifications, consentRevoked: revoked);
+
+        Assert.Equal(revoked, dto.DataHidden);
+        Assert.Equal(revoked, dto.ConsentRevoked);
+        Assert.Equal(LeadStatuses.Closed, dto.Status);
+        Assert.Equal(revoked ? null : "Nguyen Van A", dto.StudentName);
+        Assert.Equal(revoked, dto.ProfileSummary is null);
+    }
+
+    // [UC-75 bước 4, UC-111 bước 5] Thu hồi khi còn chờ phụ huynh: trung tâm chưa từng nhận nên không thấy;
+    // thu hồi sau khi phụ huynh đã đồng ý thì trung tâm vẫn thấy dòng Đã thu hồi
+    [Fact]
+    public void WithdrawnWhilePendingParent_HiddenFromCenter_WithdrawnAfterConsent_Visible()
+    {
+        var expires = DateTime.UtcNow.AddDays(3);
+        Assert.True(LeadParentConfirm.IsHiddenFromCenter(new Lead { Status = LeadStatuses.Withdrawn, ParentTokenExpiresAt = expires }));
+        Assert.False(LeadParentConfirm.IsHiddenFromCenter(new Lead { Status = LeadStatuses.Withdrawn, ParentTokenExpiresAt = expires, ParentDecidedAt = DateTime.UtcNow }));
+        Assert.False(LeadParentConfirm.IsHiddenFromCenter(new Lead { Status = LeadStatuses.Withdrawn }));
+        Assert.True(LeadParentConfirm.IsHiddenFromCenter(new Lead { Status = LeadStatuses.PendingParent }));
     }
 
     [Fact]
@@ -127,7 +163,7 @@ public class CenterLeadMapperTests
         ];
 
         var dto = CenterLeadMapper.ToCenterDto(
-            new Lead { SharedFields = [LeadSharedFields.Tests] }, "Trung Tâm Test", "Nguyen Van A", "a@example.com", profile, certs);
+            new Lead { UserId = Guid.NewGuid(), SharedFields = [LeadSharedFields.Tests] }, "Trung Tâm Test", "Nguyen Van A", "a@example.com", profile, certs);
 
         var p = Assert.IsType<SharedProfileSummaryDto>(dto.ProfileSummary);
         Assert.Null(p.EnglishScore);
@@ -145,7 +181,7 @@ public class CenterLeadMapperTests
         IReadOnlyList<ProfileCertification> certs = [new() { TestType = "sat", OverallScore = 1500m, IsTarget = true }];
 
         var dto = CenterLeadMapper.ToCenterDto(
-            new Lead { SharedFields = [LeadSharedFields.Goals] }, "Trung Tâm Test", null, null, Profile, certs);
+            new Lead { UserId = Guid.NewGuid(), SharedFields = [LeadSharedFields.Goals] }, "Trung Tâm Test", null, null, Profile, certs);
 
         Assert.Null(dto.ProfileSummary!.PlannedTests);
         Assert.Null(dto.ProfileSummary.SatScore);
@@ -164,7 +200,7 @@ public class CenterLeadMapperTests
         ];
 
         var dto = CenterLeadMapper.ToCenterDto(
-            new Lead { SharedFields = [LeadSharedFields.Tests] }, "Trung Tâm Test", null, null, Profile, certs);
+            new Lead { UserId = Guid.NewGuid(), SharedFields = [LeadSharedFields.Tests] }, "Trung Tâm Test", null, null, Profile, certs);
 
         var p = Assert.IsType<SharedProfileSummaryDto>(dto.ProfileSummary);
         Assert.Equal("toefl", p.EnglishTestType);
@@ -175,7 +211,7 @@ public class CenterLeadMapperTests
     public void GroupsChosenButNoProfile_ProfileSummaryNull()
     {
         var dto = CenterLeadMapper.ToCenterDto(
-            new Lead { SharedFields = [.. LeadSharedFields.All] }, "Trung Tâm Test", "Nguyen Van A", "a@example.com", null);
+            new Lead { UserId = Guid.NewGuid(), SharedFields = [.. LeadSharedFields.All] }, "Trung Tâm Test", "Nguyen Van A", "a@example.com", null);
 
         Assert.Equal("Nguyen Van A", dto.StudentName);
         Assert.Null(dto.ProfileSummary);
@@ -186,7 +222,7 @@ public class CenterLeadMapperTests
     {
         var lead = new Lead
         {
-            Id = Guid.NewGuid(), StudyCenterId = Guid.NewGuid(), Status = "accepted", ContactPhone = "0912345678",
+            Id = Guid.NewGuid(), UserId = Guid.NewGuid(), StudyCenterId = Guid.NewGuid(), Status = "accepted", ContactPhone = "0912345678",
             Message = "Em hỏi", SharedProfile = true, SharedFields = [LeadSharedFields.Contact],
             CreatedAt = DateTime.UtcNow.AddDays(-(CenterLeadMapper.DataVisibleDays + 1)),
         };
@@ -194,6 +230,7 @@ public class CenterLeadMapperTests
         var dto = CenterLeadMapper.ToCenterDto(lead, "TT", "Nguyễn Văn A", "a@example.com", null);
 
         Assert.True(dto.DataHidden);
+        Assert.False(dto.ConsentRevoked);
         Assert.Null(dto.StudentName);
         Assert.Null(dto.StudentEmail);
         Assert.Null(dto.ContactPhone);
@@ -204,5 +241,18 @@ public class CenterLeadMapperTests
         var visible = CenterLeadMapper.ToCenterDto(lead, "TT", "Nguyễn Văn A", "a@example.com", null);
         Assert.False(visible.DataHidden);
         Assert.Equal("Nguyễn Văn A", visible.StudentName);
+    }
+
+    [Fact]
+    public void ToCenterDto_SenderDeleted_HidesSharedData()
+    {
+        // [UC-75 lớp 1b] Người gửi đã bị xóa hẳn: lead chỉ còn để giữ tin nhắn
+        var dto = CenterLeadMapper.ToCenterDto(
+            new Lead { UserId = null, SharedFields = [.. LeadSharedFields.All], ContactPhone = "0912345678" },
+            "Trung Tâm Test", null, null, Profile, Certifications);
+
+        Assert.Null(dto.StudentName);
+        Assert.Null(dto.ContactPhone);
+        Assert.Null(dto.ProfileSummary);
     }
 }

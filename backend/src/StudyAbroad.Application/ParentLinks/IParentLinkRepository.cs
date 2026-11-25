@@ -22,6 +22,9 @@ public interface IParentLinkRepository
     /// <summary>Các link đang hiệu lực của phụ huynh (con đã liên kết).</summary>
     Task<List<ParentStudentLink>> GetActiveByParentAsync(Guid parentUserId, CancellationToken ct = default);
 
+    /// <summary>[UC-75 quy tắc] Các link đã bị chính phụ huynh này thu hồi (gồm link tới con managed bị xóa cùng lúc khi phụ huynh xóa tài khoản).</summary>
+    Task<List<ParentStudentLink>> GetRevokedByParentAsync(Guid parentUserId, CancellationToken ct = default);
+
     /// <summary>[UC-115] Liên kết đã đồng ý qua link mail nhưng chưa gắn tài khoản phụ huynh, theo email nhận thư mời.</summary>
     Task<List<ParentStudentLink>> GetActiveWithoutParentAccountAsync(string parentEmail, CancellationToken ct = default);
 
@@ -32,7 +35,7 @@ public interface IParentLinkRepository
 
     /// <summary>Phụ huynh chấp nhận: thêm consent và cập nhật link trong cùng một lần lưu (một transaction).
     /// Ném <see cref="Common.ConcurrencyConflictException"/> khi link vừa bị sửa.</summary>
-    Task SaveAcceptAsync(ParentStudentLink link, Consent consent, CancellationToken ct = default);
+    Task SaveAcceptAsync(ParentStudentLink link, Consent? consent, CancellationToken ct = default);
 
     /// <summary>Rút đồng ý / hủy liên kết: cập nhật link và consent (nếu có) trong cùng một lần lưu.</summary>
     Task SaveRevokeAsync(ParentStudentLink link, Consent? consent, CancellationToken ct = default);

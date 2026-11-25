@@ -103,6 +103,7 @@ public class CenterReviewInteractionsTests
         public Task<int> CleanupExpiredOtpsAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<List<User>> GetAllUsersAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<PagedResult<User>> GetAdminUserAccountListAsync(AdminUserAccountListQuery query, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<OtpToken?> FindUnusedOtpByHashAsync(string codeHash, IReadOnlyCollection<string> purposes, CancellationToken cancellationToken = default) => throw new NotImplementedException();
     }
 
     private sealed class FakeParentLinks : IParentLinkRepository
@@ -117,6 +118,7 @@ public class CenterReviewInteractionsTests
         public Task<ParentStudentLink?> GetByTokenHashAsync(string tokenHash, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<ParentStudentLink>> GetByStudentAsync(Guid studentUserId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<ParentStudentLink>> GetActiveByParentAsync(Guid parentUserId, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<List<ParentStudentLink>> GetRevokedByParentAsync(Guid parentUserId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<ParentStudentLink>> GetActiveWithoutParentAccountAsync(string parentEmail, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<Consent?> GetConsentAsync(Guid consentId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task SaveAcceptAsync(ParentStudentLink link, Consent consent, CancellationToken ct = default) => throw new NotImplementedException();

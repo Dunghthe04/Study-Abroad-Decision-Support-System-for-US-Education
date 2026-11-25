@@ -47,6 +47,15 @@ namespace StudyAbroad.Domain.Entities
         /// <summary>UC-80: thời điểm yêu cầu xóa tài khoản (UTC). Null = chưa yêu cầu. Hết thời hạn xóa mềm thì job xóa hẳn.</summary>
         public DateTime? DeletedAt { get; set; }
 
+        /// <summary>
+        /// [UC-75 1a / UC-111 3a] Email người đại diện đã "Rút đồng ý và xóa tài khoản của con" (học sinh dưới 16).
+        /// Null = tự xóa (UC-80) hoặc không chờ xóa. Khác null thì học sinh dưới 16 không tự khôi phục được (4b),
+        /// chỉ người đại diện khôi phục bằng nút trong mail; đủ 16 trong thời gian chờ thì tự khôi phục như 4a (4c).
+        /// Cột riêng thay vì suy ra từ mã trong otp_tokens: mã bị dùng hoặc bị job dọn đi thì mất dấu ai đã yêu cầu xóa.
+        /// Dòng user bị xóa hẳn khi hết thời hạn nên email này cũng mất theo.
+        /// </summary>
+        public string? DeletionRequestedByEmail { get; set; }
+
         /// <summary>Legal Hold: đóng băng tài khoản khi có khiếu nại, tố cáo lừa đảo hoặc cơ quan điều tra yêu cầu. Job dọn dẹp không xóa tài khoản này. Căn cứ: Luật 91/2025/QH15 Điều 14 khoản 2 (không thực hiện yêu cầu xóa trong các trường hợp Điều 19) và Điều 19 khoản 1 điểm a, b; bên kiểm soát có trách nhiệm chứng minh trường hợp này nên phải ghi LegalHoldReason. Không xóa được thì phải thông báo cho chủ thể dữ liệu (Điều 14 khoản 5). Nghị định 13/2023/NĐ-CP đã hết hiệu lực từ 01/01/2026 (Điều 42 Nghị định 356/2025/NĐ-CP).</summary>
         public bool IsLegalHold { get; set; } = false;
 

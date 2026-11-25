@@ -10,7 +10,8 @@ public record CenterReviewReplyDto(
 public record CenterReviewDto(
     Guid Id,
     string ReviewerName,
-    string ReviewerRole,
+    /// <summary>student | parent; null khi người đánh giá đã bị xóa hẳn tài khoản [UC-75 lớp 3].</summary>
+    string? ReviewerRole,
     bool IsVerified,
     DateTime CreatedAt,
     int Rating,

@@ -47,10 +47,13 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewReplyService, StudyAbroad.Application.StudyCenters.CenterReviewReplyService>();   // [UC-152] trung tâm phản hồi đánh giá
         services.AddScoped<ICenterDeletionService, CenterDeletionService>();   // [UC-93] Admin xử lý yêu cầu xóa trung tâm
         services.AddScoped<IAuthService, AuthService>();
+        // [UC-75 1a] Cùng một AuthService trong scope, để dịch vụ liên kết gọi xóa tài khoản của con
+        services.AddScoped<IParentRequestedDeletion>(sp => (AuthService)sp.GetRequiredService<IAuthService>());
         services.AddScoped<SessionRefreshService>();   // gia hạn phiên bằng refresh token (đổi token mỗi lần)
         services.AddScoped<IAccountPurgeService, AccountPurgeService>();   // [UC-80] job xóa hẳn tài khoản gọi qua scope
         // [Q11] Liên kết phụ huynh–học sinh và sự đồng ý xử lý dữ liệu trẻ em
         services.AddScoped<IParentLinkService, ParentLinkService>();
+        services.AddScoped<IChildAccountDeletionService, ChildAccountDeletionService>();   // [UC-75 1a/4b] người đại diện xóa / khôi phục tài khoản con dưới 16
         services.AddScoped<IParentProfileShareService, ParentProfileShareService>();
         services.AddScoped<IFinancialProfileService, FinancialProfileService>();
         // [USAS-365] Đăng ký service phân tích điểm học thuật

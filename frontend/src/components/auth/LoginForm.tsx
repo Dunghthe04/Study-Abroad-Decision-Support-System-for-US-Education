@@ -10,9 +10,11 @@ import type { PendingDeletionProblem } from "@/types/api";
 import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
+import { Spinner } from "@/components/ui/spinner";
+import { NETWORK_ERROR, emailError } from "@/lib/auth-validation";
 
 export function LoginForm() {
   const router = useRouter();
@@ -27,6 +29,8 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // [UC-03 AC-1] Lỗi tiếng Việt dưới từng ô bắt buộc thay cho bong bóng mặc định của trình duyệt (AUTH-077–079)
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [lockType, setLockType] = useState<"temp_locked" | "admin_locked" | "unverified" | "pending_deletion" | null>(null);
@@ -53,10 +57,14 @@ export function LoginForm() {
     setLockType(null);
     setRestoreToken(null);
 
-    if (!email.trim() || !password) {
-      setError("Vui lòng nhập đầy đủ email và mật khẩu.");
-      return;
+    const errors: { email?: string; password?: string } = {};
+    const emailProblem = emailError(email);
+    if (emailProblem) errors.email = emailProblem;
+    if (!password) {
+      errors.password = "Vui lòng nhập mật khẩu.";
     }
+    setFieldErrors(errors);
+    if (errors.email || errors.password) return;
 
     setIsSubmitting(true);
     try {
@@ -71,7 +79,10 @@ export function LoginForm() {
     } catch (err) {
       if (err instanceof ApiError) {
         const pending = getPendingDeletion(err);
-        if (pending) {
+        if (isPendingDeletionByParent(err)) {
+          // [UC-75 4b] Người đại diện yêu cầu xóa, học sinh dưới 16: không tự khôi phục được, chỉ hiện câu của máy chủ
+          setError(err.message || "Người đại diện của bạn đã yêu cầu xóa tài khoản này.");
+        } else if (pending) {
           setLockType("pending_deletion");
           setRestoreToken(pending.restoreToken);
           setError(`Tài khoản đang chờ xóa và sẽ bị xóa hẳn vào ngày ${formatDate(pending.deletionDate)}. Bạn có thể khôi phục để dùng tiếp.`);
@@ -81,7 +92,7 @@ export function LoginForm() {
           setError(
             err.message ||
               (isTempLock
-                ? "Tài khoản của bạn đã bị khóa do nhập sai mật khẩu quá 5 lần liên tiếp."
+                ? "Tài khoản tạm khóa 15 phút do nhập sai mật khẩu 5 lần liên tiếp."
                 : "Tài khoản của bạn đã bị khóa bởi Quản trị viên.")
           );
         } else if (err.status === 403 && (err.message.includes("chưa được kích hoạt") || err.message.toLowerCase().includes("unverified"))) {
@@ -91,7 +102,7 @@ export function LoginForm() {
           setError(err.message || "Sai tài khoản hoặc mật khẩu.");
         }
       } else {
-        setError("Có lỗi kết nối máy chủ. Vui lòng thử lại sau.");
+        setError(NETWORK_ERROR);
       }
     } finally {
       setIsSubmitting(false);
@@ -109,13 +120,23 @@ export function LoginForm() {
       setRestoreToken(null);
       await refreshUser();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Có lỗi kết nối máy chủ. Vui lòng thử lại sau.");
+      setError(err instanceof ApiError ? err.message : NETWORK_ERROR);
       setLockType(null);
       setRestoreToken(null);
     } finally {
       setIsRestoring(false);
     }
   };
+
+  // [AUTH-099] Chưa biết đã đăng nhập hay chưa, hoặc đã đăng nhập và đang chuyển đi: không hiện form
+  if (isLoading || user) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-ink-2" role="status">
+        <Spinner />
+        Đang tải...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -134,14 +155,13 @@ export function LoginForm() {
               <p className="mt-2 flex items-start gap-1.5 text-xs font-medium">
                 <ShieldAlertIcon className="size-3.5 shrink-0 mt-0.5" aria-hidden="true" />
                 <span>
-                  Chỉ Quản trị viên (Admin) mới có quyền mở khóa tài khoản này. Vui lòng liên hệ qua{" "}
+                  Tài khoản tự mở khóa sau 15 phút. Nếu cần mở sớm, vui lòng liên hệ Quản trị viên qua{" "}
                   <a
                     href="mailto:support@usas.edu.vn?subject=[Yêu cầu mở khóa tài khoản]"
                     className="font-semibold text-brand underline underline-offset-2 hover:opacity-80"
                   >
                     support@usas.edu.vn
-                  </a>{" "}
-                  để được hỗ trợ.
+                  </a>.
                 </span>
               </p>
             )}
@@ -182,10 +202,10 @@ export function LoginForm() {
         </Button>
       )}
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         <FieldGroup>
           {/* Email của bạn */}
-          <Field>
+          <Field data-invalid={Boolean(fieldErrors.email)}>
             <FieldLabel htmlFor="email">Email của bạn</FieldLabel>
             <Input
               id="email"
@@ -193,24 +213,36 @@ export function LoginForm() {
               required
               maxLength={100}
               autoComplete="email"
+              aria-invalid={Boolean(fieldErrors.email)}
+              aria-describedby={fieldErrors.email ? "email-error" : undefined}
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setFieldErrors((prev) => ({ ...prev, email: undefined }));
+              }}
               placeholder="example@gmail.com"
             />
+            {fieldErrors.email && <FieldError id="email-error">{fieldErrors.email}</FieldError>}
           </Field>
 
           {/* Mật khẩu */}
-          <Field>
+          <Field data-invalid={Boolean(fieldErrors.password)}>
             <FieldLabel htmlFor="password">Mật khẩu</FieldLabel>
             <PasswordInput
               id="password"
               required
               maxLength={100}
               autoComplete="current-password"
+              aria-invalid={Boolean(fieldErrors.password)}
+              aria-describedby={fieldErrors.password ? "password-error" : undefined}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setFieldErrors((prev) => ({ ...prev, password: undefined }));
+              }}
               placeholder="••••••••"
             />
+            {fieldErrors.password && <FieldError id="password-error">{fieldErrors.password}</FieldError>}
           </Field>
 
           <Button type="submit" size="xl" disabled={isSubmitting} className="w-full" loading={isSubmitting}>
@@ -242,6 +274,12 @@ function getPendingDeletion(err: ApiError): PendingDeletionProblem | null {
   const body = err.body as Partial<PendingDeletionProblem> | null;
   if (err.status !== 403 || body?.code !== "account_pending_deletion" || !body.restoreToken) return null;
   return { code: body.code, deletionDate: body.deletionDate ?? "", restoreToken: body.restoreToken };
+}
+
+/** [UC-75 4b] Tài khoản bị xóa theo yêu cầu người đại diện khi học sinh dưới 16: không có nút khôi phục */
+function isPendingDeletionByParent(err: ApiError): boolean {
+  const body = err.body as { code?: string } | null;
+  return err.status === 403 && body?.code === "account_pending_deletion_by_parent";
 }
 
 function formatDate(iso: string): string {

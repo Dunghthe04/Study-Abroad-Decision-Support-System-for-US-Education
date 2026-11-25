@@ -21,13 +21,15 @@ public record ParentPreferenceDto(
 // IsPreview: danh sách cha mẹ vừa tính từ giá trị chưa lưu (kéo thanh, hoặc cha mẹ chưa lưu lần nào → [2,2,2]).
 // ProfileChangedAfterRun: con sửa hồ sơ sau lần nhận gợi ý mới nhất, hai bên có thể lệch vì hồ sơ chứ không vì ưu tiên.
 // StudentItems / ParentItems: hai danh sách cùng khuôn ItemsJson, chỉ giữ số liệu các trường được xếp nhóm, để frontend vẽ thẻ trường như trang Gợi ý.
+// StudentBudgetMinUsd / MaxUsd: khoảng ngân sách trong hồ sơ con (theo mức đã chọn), để đặt cạnh ngân sách cha mẹ và nêu chỗ khác (LNK-019/022/033).
 public record PreferenceCompareDto(
     bool StudentHasRun, IReadOnlyList<int>? StudentPref, IReadOnlyList<int> ParentPref,
     long? ParentBudgetVnd, decimal? ParentBudgetUsd, decimal? VndPerUsd,
     bool ParentHasPref, bool IsPreview, bool ProfileChangedAfterRun,
     DateTime? StudentRunAt, DateTime? SavedAt, DateTime? ComputedAt,
     PreferenceComparison? Comparison, string? Message,
-    JsonElement? StudentItems = null, JsonElement? ParentItems = null);
+    JsonElement? StudentItems = null, JsonElement? ParentItems = null,
+    decimal? StudentBudgetMinUsd = null, decimal? StudentBudgetMaxUsd = null);
 
 // Trang của con: các cha/mẹ liên kết thật (ô chọn Bố / Mẹ) và so sánh của người đang chọn
 public record ParentOption(Guid Id, string Name, bool HasPref);
@@ -328,7 +330,7 @@ public class ParentPreferenceService(
         var comparison = PreferenceComparer.Compare(studentItems, parentItems, studentPref, parentPref, budgetUsd);
         return new PreferenceCompareDto(true, studentPref, parentPref, budgetVnd, budgetUsd, vndPerUsd,
             parentHasPref, isPreview, changed, latest.CreatedAt, savedAt, computedAt, comparison, null,
-            Picked(studentItems), Picked(parentItems));
+            Picked(studentItems), Picked(parentItems), profile?.BudgetMinUsd, profile?.BudgetMaxUsd);
     }
 
     private static readonly string[] Blocks = ["reach", "match", "safety", "aid", "other"];

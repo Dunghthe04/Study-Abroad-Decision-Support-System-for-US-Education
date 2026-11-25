@@ -11,7 +11,8 @@ public class LeadMessageConfiguration : IEntityTypeConfiguration<LeadMessage>
         b.ToTable("lead_messages");
         b.HasKey(x => x.Id);
         b.HasOne<Lead>().WithMany().HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.Cascade);
-        b.HasOne<User>().WithMany().HasForeignKey(x => x.SenderUserId).OnDelete(DeleteBehavior.Cascade);
+        // [UC-75 lớp 1b] Xóa hẳn người gửi: tin còn giữ tới mốc 90 ngày / báo cáo xử lý xong, người gửi hiện "Người dùng đã xóa tài khoản"
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.SenderUserId).OnDelete(DeleteBehavior.SetNull);
         b.HasOne<User>().WithMany().HasForeignKey(x => x.RemovedByUserId).OnDelete(DeleteBehavior.SetNull);
         b.Property(x => x.Content).HasMaxLength(4000).IsRequired();
         b.HasOne<User>().WithMany().HasForeignKey(x => x.ReportedByUserId).OnDelete(DeleteBehavior.SetNull);

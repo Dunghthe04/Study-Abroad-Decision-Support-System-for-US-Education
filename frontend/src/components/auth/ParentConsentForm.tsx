@@ -105,6 +105,9 @@ export function ParentConsentForm() {
     }
   };
 
+  // [UC-109] Học sinh 16–17 đã tự đồng ý: đây chỉ là lời mời liên kết để phụ huynh theo dõi, không có văn bản đồng ý xử lý dữ liệu
+  const linkOnly = invite?.studentAge != null && invite.studentAge >= 16;
+
   if (isLoadingInvite) {
     return (
       <div className="flex items-center gap-2 text-sm text-ink-2">
@@ -118,10 +121,12 @@ export function ParentConsentForm() {
     <div className="space-y-6">
       <div className="space-y-1">
         <h1 className="font-heading text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-          Phụ huynh xác nhận đồng ý
+          {linkOnly ? "Lời mời liên kết tài khoản với con" : "Phụ huynh xác nhận đồng ý"}
         </h1>
         <p className="text-sm text-ink-2">
-          Cho phép hệ thống xử lý dữ liệu học tập của con. Bạn không cần tài khoản để trả lời.
+          {linkOnly
+            ? "Liên kết để theo dõi hồ sơ du học của con. Bạn không cần tài khoản để trả lời."
+            : "Cho phép hệ thống xử lý dữ liệu học tập của con. Bạn không cần tài khoản để trả lời."}
         </p>
       </div>
 
@@ -134,18 +139,24 @@ export function ParentConsentForm() {
         <div className="space-y-6">
           <Alert variant="success" role="status">
             <CheckIcon aria-hidden />
-            <AlertTitle>Đã ghi nhận bạn đồng ý</AlertTitle>
+            <AlertTitle>{linkOnly ? "Đã liên kết tài khoản với con" : "Đã ghi nhận bạn đồng ý"}</AlertTitle>
+            {linkOnly ? (
+              <AlertDescription>
+                Bạn đã chấp nhận liên kết với {invite.studentName} lúc {formatDate(invite.decidedAt)}.
+              </AlertDescription>
+            ) : (
             <AlertDescription>
               Bạn đã đồng ý cho hệ thống xử lý dữ liệu của {invite.studentName} lúc {formatDate(invite.decidedAt)}. Chúng tôi đã gửi tới{" "}
               {invite.parentEmail} một email xác nhận có link <strong>Rút đồng ý</strong>, dùng được bất cứ lúc nào mà không cần đăng nhập.
             </AlertDescription>
+            )}
           </Alert>
           {invite.hasParentAccount ? (
             // Email đã có tài khoản phụ huynh: liên kết đã gắn vào tài khoản đó, chỉ cần đăng nhập
             <>
               <p className="text-sm text-ink-2">
                 Email {invite.parentEmail} đã có tài khoản phụ huynh nên {invite.studentName} đã được liên kết vào tài khoản này.
-                Đăng nhập để xem hồ sơ của con và quản lý đồng ý.
+                Đăng nhập để xem hồ sơ của con{linkOnly ? "." : " và quản lý đồng ý."}
               </p>
               <Link href="/login" className={buttonVariants({ size: "xl", variant: "outline", className: "w-full" })}>
                 Đăng nhập
@@ -154,7 +165,7 @@ export function ParentConsentForm() {
           ) : (
             <>
               <p className="text-sm text-ink-2">
-                Muốn xem các con đã liên kết và quản lý đồng ý trên web? Đăng ký tài khoản phụ huynh bằng đúng email{" "}
+                Muốn xem các con đã liên kết{linkOnly ? "" : " và quản lý đồng ý"} trên web? Đăng ký tài khoản phụ huynh bằng đúng email{" "}
                 {invite.parentEmail}, hệ thống sẽ tự liên kết.
               </p>
               {/* Trang đăng ký chọn sẵn Phụ huynh; email truyền qua sessionStorage, không đặt trên URL */}
@@ -179,7 +190,8 @@ export function ParentConsentForm() {
           <XIcon aria-hidden />
           <AlertTitle>Đã ghi nhận bạn từ chối</AlertTitle>
           <AlertDescription>
-            Bạn đã từ chối lúc {formatDate(invite.decidedAt)}. Hệ thống không xử lý dữ liệu học tập của {invite.studentName}. Nếu bấm nhầm,
+            Bạn đã từ chối lúc {formatDate(invite.decidedAt)}.{" "}
+            {linkOnly ? `Tài khoản của bạn không liên kết với ${invite.studentName}.` : `Hệ thống không xử lý dữ liệu học tập của ${invite.studentName}.`} Nếu bấm nhầm,
             hãy nhờ con gửi lại lời mời từ trang Tài khoản.
           </AlertDescription>
         </Alert>
@@ -202,6 +214,15 @@ export function ParentConsentForm() {
 
           <Separator />
 
+          {linkOnly ? (
+            <div className="space-y-1 text-sm">
+              <p className="text-ink-2">
+                {invite.studentName} đã đủ 16 tuổi nên tự đồng ý và đã dùng được hệ thống. Khi chấp nhận liên kết, bạn theo dõi được
+                hồ sơ du học và các gợi ý trường của con.
+              </p>
+            </div>
+          ) : (
+          <>
           {/* Nội dung đồng ý: bản đang hiệu lực do admin công bố (UC-103); phiên bản được lưu kèm bản ghi đồng ý */}
           <div className="space-y-3 text-sm">
             <h2 className="flex items-center gap-2 font-semibold text-ink">
@@ -247,11 +268,16 @@ export function ParentConsentForm() {
             </div>
               </>
             )}
-            <p className="text-body-s text-ink-3">
-              Căn cứ: Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15 (Điều 24) và Nghị định 356/2025/NĐ-CP. Hệ thống lưu thời điểm,
-              email nhận thư mời và địa chỉ IP khi bạn trả lời.
-            </p>
+            {/* Văn bản do admin công bố đã có dòng căn cứ; chỉ ghi khi dùng nội dung dự phòng để không lặp */}
+            {policy === null && (
+              <p className="text-body-s text-ink-3">
+                Căn cứ: Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15 (Điều 24) và Nghị định 356/2025/NĐ-CP. Hệ thống lưu thời điểm,
+                email nhận thư mời và địa chỉ IP khi bạn trả lời.
+              </p>
+            )}
           </div>
+          </>
+          )}
 
           <Separator />
 
@@ -279,7 +305,7 @@ export function ParentConsentForm() {
             <div className="flex items-start gap-2">
               <Checkbox id="parent-consent-guardian" checked={isGuardian} onCheckedChange={(checked) => setIsGuardian(Boolean(checked))} />
               <Label htmlFor="parent-consent-guardian" className="leading-snug text-ink">
-                Tôi là cha, mẹ hoặc người giám hộ hợp pháp của {invite.studentName}, đã đọc nội dung trên.
+                Tôi là cha, mẹ hoặc người giám hộ hợp pháp của {invite.studentName}{linkOnly ? "." : ", đã đọc nội dung trên."}
               </Label>
             </div>
             )}
@@ -289,11 +315,11 @@ export function ParentConsentForm() {
                 type="button"
                 size="xl"
                 className="flex-1"
-                disabled={!isGuardian || submitting !== null || policy === undefined}
+                disabled={!isGuardian || submitting !== null || (!linkOnly && policy === undefined)}
                 onClick={() => decide("accept")}
                 loading={submitting === "accept"}
               >
-                {submitting === "accept" ? "Đang ghi nhận..." : "Đồng ý"}
+                {submitting === "accept" ? "Đang ghi nhận..." : linkOnly ? "Chấp nhận liên kết" : "Đồng ý"}
               </Button>
               )}
               <Button
@@ -309,8 +335,9 @@ export function ParentConsentForm() {
               </Button>
             </div>
             <p className="text-body-s text-ink-3">
-              Nếu bạn không phải phụ huynh của {invite.studentName}, hãy đóng trang này; hệ thống không xử lý dữ liệu của em khi chưa có
-              phụ huynh đồng ý.
+              {linkOnly
+                ? `Nếu bạn không phải phụ huynh của ${invite.studentName}, hãy đóng trang này.`
+                : `Nếu bạn không phải phụ huynh của ${invite.studentName}, hãy đóng trang này; hệ thống không xử lý dữ liệu của em khi chưa có phụ huynh đồng ý.`}
             </p>
           </div>
         </>

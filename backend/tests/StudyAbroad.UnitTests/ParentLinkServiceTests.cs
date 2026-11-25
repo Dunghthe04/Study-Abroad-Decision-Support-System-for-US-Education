@@ -69,7 +69,8 @@ public class ParentLinkServiceTests
         var (link, token) = AddPendingLink(student);
         var result = await CreateService().AcceptAsync(token, isGuardian: true, "1.2.3.4");
         Assert.Equal(ParentLinkError.None, result.Error);
-        _revokeToken = _emails.SentEmails.Single(e => e.Purpose == ParentConsentConfirmedPurpose).Code;
+        // Học sinh từ 16 tuổi không có mail xác nhận đồng ý nên không có token thu hồi (UC-109)
+        _revokeToken = _emails.SentEmails.Where(e => e.Purpose == ParentConsentConfirmedPurpose).Select(e => e.Code).SingleOrDefault() ?? "";
         _emails.SentEmails.Clear();
         return (student, parent, Stored(link.Id));
     }
@@ -246,6 +247,55 @@ public class ParentLinkServiceTests
         Assert.False(result.Value.HasParentAccount);
     }
 
+    // [UC-109, CON-051] Học sinh 16–17 đã tự đồng ý: phụ huynh chấp nhận chỉ là liên kết, không ghi đồng ý, không có link rút đồng ý
+    [Theory]
+    [InlineData(16)]
+    [InlineData(17)]
+    public async Task Accept_Student16Plus_LinksWithoutConsent_AndNoRevokeEmail(int age)
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, age);
+        var (link, token) = AddPendingLink(student);
+
+        var result = await CreateService().AcceptAsync(token, isGuardian: true, "1.2.3.4");
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal(ParentInviteStates.Accepted, result.Value!.State);
+        Assert.Empty(_links.Consents);
+        var stored = Stored(link.Id);
+        Assert.Equal(ParentLinkStatuses.Active, stored.Status);
+        Assert.Null(stored.ConsentId);
+        Assert.Contains(_emails.SentEmails, e => e.To == student.Email && e.Purpose == "parent_linked");
+        Assert.DoesNotContain(_emails.SentEmails, e => e.Purpose == ParentConsentConfirmedPurpose);
+    }
+
+    [Theory]
+    [InlineData(17, false)]
+    [InlineData(14, true)]
+    public async Task Resend_InviteIsConsentRequestOnlyUnder16(int age, bool expected)
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, age);
+        AddPendingLink(student);
+
+        var result = await CreateService().ResendAsync(student.Id);
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal(expected, _emails.LastInviteIsConsentRequest);
+    }
+
+    [Theory]
+    [InlineData(17, false)]
+    [InlineData(14, true)]
+    public async Task ChangeParentEmail_InviteIsConsentRequestOnlyUnder16(int age, bool expected)
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, age);
+        AddPendingLink(student);
+
+        var result = await CreateService().ChangeParentEmailAsync(student.Id, "dad@test.com");
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal(expected, _emails.LastInviteIsConsentRequest);
+    }
+
     [Fact]
     public async Task Accept_EmailIsParentAccount_LinksAccount()
     {
@@ -414,6 +464,80 @@ public class ParentLinkServiceTests
         Assert.NotNull(stored.RevokedAt);
         Assert.False(Assert.Single(_links.Consents).Granted);
         Assert.Contains(_emails.SentEmails, e => e.To == student.Email && e.Purpose == "parent_unlinked");
+    }
+
+    // ===== [UC-111 bước 5] Rút đồng ý của học sinh dưới 16: thu hồi yêu cầu liên hệ còn mở, báo trung tâm =====
+
+    private readonly FakeLeadWithdrawalRepository _withdrawals = new();
+    private readonly RecordingNotifications _notifications = new();
+
+    private ParentLinkService CreateServiceWithLeads() =>
+        new(_links, _users, _emails, _audit, notifications: _notifications, leadWithdrawals: _withdrawals);
+
+    [Fact]
+    public async Task RevokeByToken_Under16_WithdrawsOpenLeads_AndNotifiesCenters()
+    {
+        var (student, _, _) = await AcceptedLinkAsync(studentAge: 14);
+        var centerOwner = Guid.NewGuid();
+        _withdrawals.OwnersToReturn.Add(centerOwner);
+
+        var result = await CreateServiceWithLeads().RevokeByTokenAsync(_revokeToken, null);
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal(student.Id, Assert.Single(_withdrawals.UserIds));
+        Assert.Contains(_notifications.Sent, n => n.UserId == centerOwner
+            && n.Type == StudyAbroad.Application.Notifications.NotificationTypes.LeadStatusChanged && n.Link == "/center/leads");
+    }
+
+    [Fact]
+    public async Task Revoke_ByParentUnder16_WithdrawsOpenLeads()
+    {
+        var (student, parent, link) = await AcceptedLinkAsync(studentAge: 14);
+
+        await CreateServiceWithLeads().RevokeAsync(parent.Id, link.Id);
+
+        Assert.Equal(student.Id, Assert.Single(_withdrawals.UserIds));
+    }
+
+    [Fact]
+    public async Task Revoke_ByParent_Student16Plus_KeepsLeads()
+    {
+        var (_, parent, link) = await AcceptedLinkAsync(studentAge: 16);
+
+        await CreateServiceWithLeads().RevokeAsync(parent.Id, link.Id);
+
+        Assert.Empty(_withdrawals.UserIds);
+    }
+
+    [Fact]
+    public async Task Revoke_Under16_OtherParentStillConsents_KeepsLeads()
+    {
+        var (student, parent, link) = await AcceptedLinkAsync(studentAge: 14);
+        var (_, otherToken) = AddPendingLink(student, "mom2@test.com");
+        await CreateService().AcceptAsync(otherToken, isGuardian: true, null);
+
+        await CreateServiceWithLeads().RevokeAsync(parent.Id, link.Id);
+
+        Assert.Empty(_withdrawals.UserIds);
+    }
+
+    // [UC-01, UC-111 E2; CON-046] Học sinh tròn 16: liên kết vẫn hoạt động nhưng không còn yêu cầu đồng ý, cả hai phía cùng thấy
+    [Theory]
+    [InlineData(16, ParentLinkConsentStatuses.NotRequired)]
+    [InlineData(17, ParentLinkConsentStatuses.NotRequired)]
+    [InlineData(15, ParentLinkStatuses.Active)]
+    public async Task GetMine_ActiveLink_ConsentStatusByStudentAge(int studentAge, string expected)
+    {
+        var (student, parent, link) = await AcceptedLinkAsync(studentAge: 15);
+        student.DateOfBirth = BornYearsAgo(studentAge);
+
+        var byStudent = Assert.Single((await CreateService().GetMineAsync(student.Id)).Value!);
+        var byParent = Assert.Single((await CreateService().GetMineAsync(parent.Id)).Value!);
+
+        Assert.Equal(ParentLinkStatuses.Active, byStudent.Status);
+        Assert.Equal(expected, byStudent.ConsentStatus);
+        Assert.Equal(expected, byParent.ConsentStatus);
+        Assert.Equal(ParentLinkStatuses.Active, Stored(link.Id).Status);
     }
 
     [Fact]
@@ -663,6 +787,34 @@ public class ParentLinkServiceTests
         Assert.Equal(parent.FullName, a.ParentName);
         Assert.False(a.CanRevoke); // dưới 16 không tự rút đồng ý
         Assert.True(result.Value.Single(l => l.Id == pending.Id).CanRevoke);
+    }
+
+    [Fact]
+    public async Task GetMine_Student_AfterParentRevokes_SeesRevokedLink_NoRevokeButton()
+    {
+        var (student, parent, link) = await AcceptedLinkAsync(studentAge: 14);
+        var service = CreateService();
+        await service.RevokeAsync(parent.Id, link.Id);
+
+        var result = await service.GetMineAsync(student.Id);
+
+        var shown = Assert.Single(result.Value!);
+        Assert.Equal(link.Id, shown.Id);
+        Assert.Equal(ParentLinkStatuses.Revoked, shown.Status);
+        Assert.False(shown.CanRevoke);
+    }
+
+    [Fact]
+    public async Task GetMine_Student_RevokedThenReinvited_SeesOnlyNewInvite()
+    {
+        var (student, parent, link) = await AcceptedLinkAsync(studentAge: 14);
+        var service = CreateService();
+        await service.RevokeAsync(parent.Id, link.Id);
+        await service.ChangeParentEmailAsync(student.Id, link.ParentEmail);
+
+        var result = await service.GetMineAsync(student.Id);
+
+        Assert.Equal(ParentLinkStatuses.Pending, Assert.Single(result.Value!).Status);
     }
 
     [Fact]

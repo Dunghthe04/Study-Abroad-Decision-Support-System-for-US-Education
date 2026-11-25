@@ -34,6 +34,7 @@ import { DetailPanel } from "@/components/admin/shared/DetailPanel";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
 import { cn } from "@/lib/utils";
+import { PASSWORD_RULE_HINT, checkPhone, emailError, fullNameError, passwordRuleError } from "@/lib/auth-validation";
 import {
   Dialog,
   DialogContent,
@@ -42,16 +43,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-/** Chuẩn hóa SĐT VN (khớp quy tắc backend). */
-function normalizeVietnamesePhone(raw: string): { ok: true; value: string } | { ok: false } {
-  const cleaned = raw.trim().replace(/[\s.\-()]/g, "");
-  let normalized = cleaned;
-  if (normalized.startsWith("+84")) normalized = "0" + normalized.slice(3);
-  else if (normalized.startsWith("84") && normalized.length === 11) normalized = "0" + normalized.slice(2);
-  const regex = /^0(3|5|7|8|9)\d{8}$/;
-  return regex.test(normalized) ? { ok: true, value: normalized } : { ok: false };
-}
 
 const ACCOUNT_LIST_PAGE_SIZE = 20;
 
@@ -62,6 +53,7 @@ const ACCOUNT_STATUS_OPTIONS = [
   { value: "pending", label: "Chờ duyệt" },
   { value: "temp_locked", label: "Tạm khóa" },
   { value: "locked", label: "Đã khóa" },
+  // [UC-56 bước 2, UC-80] Tài khoản đã yêu cầu xóa, đang trong 30 ngày chờ xóa hẳn
   { value: "deleted", label: "Chờ xóa" },
 ] as const;
 
@@ -69,6 +61,8 @@ const ACCOUNT_STATUS_OPTIONS = [
 function canAdminLock(target: UserDto, currentUserRole?: string, currentUserId?: string): boolean {
   if (currentUserId && target.id === currentUserId) return false;
   if (target.status === "locked") return false;
+  // [UC-80] Tài khoản chờ xóa không khóa được (server cũng chặn)
+  if (target.status === "deleted") return false;
   if (target.role === "admin") return false;
 
   return currentUserRole === "admin";
@@ -148,7 +142,7 @@ function removeLockReasonCache(userId: string): void {
 
 function statusBadgeVariant(status: string): "ok" | "warn" | "risk" | "neutral" {
   if (status === "active") return "ok";
-  if (status === "unverified" || status === "pending") return "warn";
+  if (status === "unverified" || status === "pending" || status === "deleted") return "warn";
   if (status === "locked" || status === "temp_locked") return "risk";
   return "neutral";
 }
@@ -484,32 +478,15 @@ export function AdminUsersView() {
     const trimmedEmail = email.trim();
     const trimmedName = fullName.trim();
 
-    if (!trimmedName) {
-      setFormError("Họ và tên không được để trống.");
+    // [UC-01] Cùng luật kiểm lỗi với đăng ký (khớp backend): họ tên tối đa 100 ký tự
+    const phoneCheck = checkPhone(phone);
+    const inputError =
+      fullNameError(trimmedName) ?? emailError(trimmedEmail) ?? passwordRuleError(password) ?? phoneCheck.error;
+    if (inputError) {
+      setFormError(inputError);
       return;
     }
-    if (trimmedName.length > 128) {
-      setFormError("Họ tên tối đa 128 ký tự.");
-      return;
-    }
-    if (!trimmedEmail) {
-      setFormError("Vui lòng nhập email.");
-      return;
-    }
-    if (password.length < 8) {
-      setFormError("Mật khẩu tối thiểu 8 ký tự.");
-      return;
-    }
-
-    let phonePayload: string | null = null;
-    if (phone.trim()) {
-      const parsed = normalizeVietnamesePhone(phone);
-      if (!parsed.ok) {
-        setFormError("Số điện thoại không đúng định dạng Việt Nam (vd: 0912345678).");
-        return;
-      }
-      phonePayload = parsed.value;
-    }
+    const phonePayload = phoneCheck.normalized;
 
     setIsSubmitting(true);
     try {
@@ -1070,7 +1047,7 @@ export function AdminUsersView() {
                   required
                   minLength={8}
                 />
-                <FieldDescription>Tối thiểu 8 ký tự.</FieldDescription>
+                <FieldDescription>{PASSWORD_RULE_HINT}.</FieldDescription>
               </Field>
 
               <Field>

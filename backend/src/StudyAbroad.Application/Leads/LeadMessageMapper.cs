@@ -10,7 +10,7 @@ namespace StudyAbroad.Application.Leads;
 public sealed record RawLeadMessageRow(
     Guid Id,
     Guid LeadId,
-    Guid SenderUserId,
+    Guid? SenderUserId,
     string Content,
     string? AttachmentUrl,
     string Status,
@@ -29,6 +29,8 @@ public static class LeadMessageMapper
     public const string RemovedContentPlaceholder = "Tin đã bị gỡ do vi phạm";
     public const string AnonymousStudentName = "Học sinh / Phụ huynh (Ẩn danh)";
     public const string DefaultCenterName = "Trung tâm tư vấn";
+    /// <summary>[UC-75 lớp 1b, lớp 3] Tên người gửi / người đánh giá đã bị xóa hẳn tài khoản.</summary>
+    public const string DeletedUserName = "Người dùng đã xóa tài khoản";
 
     /// <summary>
     /// Xác định vai trò thuộc phía trung tâm hoặc đội ngũ quản trị/kiểm duyệt hệ thống.
@@ -95,7 +97,9 @@ public static class LeadMessageMapper
         string? centerName)
     {
         var isFromCenter = IsStaffOrCenterRole(row.SenderRole);
-        var senderName = ResolveSenderDisplayName(row.SenderRole, row.SenderFullName, sharedProfile, centerName);
+        var senderName = row.SenderUserId is null
+            ? DeletedUserName
+            : ResolveSenderDisplayName(row.SenderRole, row.SenderFullName, sharedProfile, centerName);
         var isRemoved = string.Equals(row.Status, "removed", StringComparison.OrdinalIgnoreCase);
         var showPaymentReminder = isFromCenter && !isRemoved && LeadMessageContentFilter.IsPaymentSolicitation(row.Content);
 

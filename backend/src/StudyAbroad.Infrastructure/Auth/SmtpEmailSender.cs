@@ -60,14 +60,18 @@ namespace StudyAbroad.Infrastructure.Auth
         public async Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 0, CancellationToken ct = default)
         {
             var subject = "[USAS] Cảnh báo bảo mật: Tài khoản đã bị khóa do nhập sai mật khẩu";
+            // [UC-03 E2] Khóa tạm có thời hạn thì tự mở; Quản trị viên vẫn mở sớm được
+            var unlockNote = lockoutMinutes > 0
+                ? $"Tài khoản sẽ <strong>tự động mở khóa sau {lockoutMinutes} phút</strong>. Nếu cần mở sớm, vui lòng liên hệ <strong>Quản trị viên hệ thống</strong>."
+                : "Vui lòng liên hệ <strong>Quản trị viên hệ thống</strong> để được hỗ trợ xác minh danh tính và mở khóa tài khoản.";
             var body = $"""
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #fecaca; border-radius: 12px; background-color: #ffffff;">
                     <h2 style="color: #b91c1c; margin-bottom: 16px;">⚠️ Cảnh báo: Tài khoản đã bị khóa</h2>
                     <p style="font-size: 15px; color: #334155;">Xin chào <strong>{WebUtility.HtmlEncode(fullName)}</strong>,</p>
                     <p style="font-size: 14px; color: #475569; line-height: 1.6;">Hệ thống phát hiện tài khoản của bạn đã bị <strong>nhập sai mật khẩu liên tiếp 5 lần</strong>. Để bảo vệ dữ liệu và an toàn tài khoản, hệ thống đã chuyển tài khoản sang trạng thái khóa.</p>
                     <div style="background-color: #fff7ed; border-left: 4px solid #f97316; padding: 14px; margin: 20px 0; border-radius: 4px;">
-                        <p style="margin: 0; font-size: 14px; color: #9a3412; font-weight: 600;">Yêu cầu mở khóa tài khoản:</p>
-                        <p style="margin: 6px 0 0; font-size: 13px; color: #7c2d12;">Để bảo đảm an toàn, tài khoản sẽ <strong>không tự động mở khóa</strong>. Vui lòng liên hệ trực tiếp với <strong>Quản trị viên hệ thống (Admin)</strong> để được hỗ trợ xác minh danh tính và mở khóa tài khoản.</p>
+                        <p style="margin: 0; font-size: 14px; color: #9a3412; font-weight: 600;">Thời gian khóa:</p>
+                        <p style="margin: 6px 0 0; font-size: 13px; color: #7c2d12;">{unlockNote}</p>
                     </div>
                     <p style="font-size: 13px; color: #64748b; line-height: 1.5;">Nếu đây không phải thao tác của bạn, có thể tài khoản của bạn đang có nguy cơ bị xâm nhập. Vui lòng thông báo ngay cho ban quản trị khi yêu cầu mở khóa.</p>
                     <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
@@ -132,11 +136,16 @@ namespace StudyAbroad.Infrastructure.Auth
 
         // [UC-115] Phụ huynh không cần tài khoản: link một lần là xác thực. Hai nút cùng dẫn tới trang xác nhận
         // (không đổi trạng thái chỉ bằng mở link, tránh máy quét link trong hộp thư tự bấm).
-        public async Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, CancellationToken ct = default)
+        public async Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, bool isConsentRequest, CancellationToken ct = default)
         {
             var link = $"{_options.AppBaseUrl.TrimEnd('/')}/parent-consent?token={Uri.EscapeDataString(inviteToken)}";
             var rejectLink = link + "&choice=reject";
             var student = WebUtility.HtmlEncode(studentName);
+            if (!isConsentRequest)
+            {
+                await SendParentLinkInviteEmailAsync(toEmail, student, link, rejectLink, expiryDays, ct);
+                return;
+            }
             var subject = "[USAS] Phụ huynh xác nhận đồng ý cho con dùng USAS";
             var body = $"""
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
@@ -159,6 +168,30 @@ namespace StudyAbroad.Infrastructure.Auth
                     </div>
                     <p style="font-size: 13px; color: #475569; line-height: 1.5;">Sau khi đồng ý, bạn nhận thêm một email xác nhận có link <strong>Rút đồng ý</strong>: bấm link đó bất cứ lúc nào để hệ thống ngừng xử lý dữ liệu của con, không cần đăng nhập.</p>
                     <p style="font-size: 13px; color: #94a3b8; line-height: 1.5;">Nếu bạn không phải phụ huynh của em {student}, hãy bỏ qua email này; hệ thống không xử lý dữ liệu của em khi chưa có phụ huynh đồng ý.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
+        // [UC-109] Học sinh 16–17 tự đồng ý được và đã dùng hệ thống: thư chỉ mời phụ huynh liên kết để theo dõi,
+        // không có câu luật, không có văn bản đồng ý xử lý dữ liệu, không có link rút đồng ý
+        private async Task SendParentLinkInviteEmailAsync(string toEmail, string student, string link, string rejectLink, int expiryDays, CancellationToken ct)
+        {
+            var subject = "[USAS] Lời mời liên kết tài khoản với con";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">Lời mời liên kết tài khoản với con</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Học sinh <strong>{student}</strong> đang dùng Hệ thống Hỗ trợ Ra quyết định Du học Mỹ (USAS) và khai địa chỉ email này là email của phụ huynh.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Em đã đủ 16 tuổi nên tự đồng ý và đã dùng được hệ thống. Khi chấp nhận liên kết, bạn theo dõi được hồ sơ du học và các gợi ý trường của con. Bạn không cần tạo tài khoản để trả lời.</p>
+                    <div style="text-align: center; margin: 24px 0;">
+                        <a href="{WebUtility.HtmlEncode(link)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 8px; margin: 4px;">Chấp nhận liên kết</a>
+                        <a href="{WebUtility.HtmlEncode(rejectLink)}" style="display: inline-block; background-color: #ffffff; color: #b91c1c; text-decoration: none; font-weight: 600; padding: 11px 23px; border-radius: 8px; border: 1px solid #fca5a5; margin: 4px;">Từ chối</a>
+                        <p style="margin: 8px 0 0; font-size: 13px; color: #64748b;">Hai nút mở trang xác nhận để bạn đọc lại và bấm chọn. Link có hiệu lực trong <strong>{expiryDays} ngày</strong> và chỉ trả lời được một lần.</p>
+                    </div>
+                    <p style="font-size: 13px; color: #94a3b8; line-height: 1.5;">Nếu bạn không phải phụ huynh của em {student}, hãy bỏ qua email này.</p>
                     <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
                     <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
                 </div>
@@ -330,23 +363,98 @@ namespace StudyAbroad.Infrastructure.Auth
             await SendEmailAsync(toEmail, subject, body, ct);
         }
 
+        // [UC-75 1a / UC-111 3a] Ngày xóa tính theo giờ Việt Nam
+        public async Task SendChildAccountDeletedByParentEmailAsync(string toEmail, string studentName, DateTime deletionDateUtc, CancellationToken ct = default)
+        {
+            var student = WebUtility.HtmlEncode(studentName);
+            var date = deletionDateUtc.AddHours(7).ToString("dd/MM/yyyy");
+            var subject = "[USAS] Người đại diện đã yêu cầu xóa tài khoản của bạn";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #dc2626; margin-bottom: 16px;">Tài khoản của bạn đang chờ xóa</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Chào <strong>{student}</strong>, người đại diện của bạn (cha, mẹ hoặc người giám hộ) đã rút lại sự đồng ý và yêu cầu xóa tài khoản USAS của bạn. Bạn đã bị đăng xuất khỏi mọi thiết bị.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Tài khoản và dữ liệu sẽ bị xóa vĩnh viễn vào ngày <strong>{date}</strong>. Vì bạn chưa đủ 16 tuổi nên không tự khôi phục được; nếu muốn giữ tài khoản, hãy nhờ người đại diện bấm nút khôi phục trong email hệ thống đã gửi cho họ.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Nếu bạn đủ 16 tuổi trước ngày xóa, bạn có thể đăng nhập để tự khôi phục.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
+        // [UC-75 4b / UC-109 3b] Hai nút dùng một lần, hiệu lực đến ngày xóa vĩnh viễn
+        public async Task SendParentChildDeletionConfirmedEmailAsync(string toEmail, string studentName, DateTime deletionDateUtc, string reconsentToken, string restoreOnlyToken, CancellationToken ct = default)
+        {
+            var baseUrl = _options.AppBaseUrl.TrimEnd('/');
+            var reconsentLink = $"{baseUrl}/parent-consent/restore?token={Uri.EscapeDataString(reconsentToken)}";
+            var restoreOnlyLink = $"{baseUrl}/parent-consent/restore?token={Uri.EscapeDataString(restoreOnlyToken)}";
+            var student = WebUtility.HtmlEncode(studentName);
+            var date = deletionDateUtc.AddHours(7).ToString("dd/MM/yyyy");
+            var subject = "[USAS] Xác nhận bạn đã rút đồng ý và yêu cầu xóa tài khoản của con";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">Đã rút đồng ý và yêu cầu xóa tài khoản</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Bạn đã rút lại sự đồng ý và yêu cầu xóa tài khoản của học sinh <strong>{student}</strong>. Tài khoản đã bị khóa đăng nhập và sẽ bị xóa vĩnh viễn vào ngày <strong>{date}</strong>. Hãy giữ lại email này.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Nếu đổi ý trước ngày đó, bạn có thể hủy yêu cầu xóa bằng một trong hai nút bên dưới, không cần đăng nhập:</p>
+                    <div style="text-align: center; margin: 24px 0;">
+                        <a href="{WebUtility.HtmlEncode(reconsentLink)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 8px; margin: 4px;">Hủy xóa và đồng ý lại cho con</a>
+                        <a href="{WebUtility.HtmlEncode(restoreOnlyLink)}" style="display: inline-block; background-color: #ffffff; color: #2563eb; border: 1px solid #2563eb; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 8px; margin: 4px;">Chỉ hủy xóa</a>
+                    </div>
+                    <p style="font-size: 13px; color: #64748b; line-height: 1.5;">"Hủy xóa và đồng ý lại cho con": khôi phục tài khoản và ghi lại sự đồng ý của bạn, con dùng lại được các chức năng cần hồ sơ. "Chỉ hủy xóa": khôi phục tài khoản nhưng không đồng ý lại, con tạm chưa dùng được các chức năng cần hồ sơ. Mỗi nút dùng được một lần.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
+        public async Task SendChildAccountRestoredByParentEmailAsync(string toEmail, string studentName, bool reconsented, CancellationToken ct = default)
+        {
+            var student = WebUtility.HtmlEncode(studentName);
+            var subject = "[USAS] Tài khoản của bạn đã được khôi phục";
+            var detail = reconsented
+                ? "Người đại diện cũng đã đồng ý lại, bạn dùng lại được đầy đủ các chức năng."
+                : "Người đại diện chưa đồng ý lại nên bạn tạm chưa dùng được các chức năng cần hồ sơ. Bạn có thể gửi lại lời mời trong trang Tài khoản.";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">Tài khoản đã được khôi phục</h2>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Chào <strong>{student}</strong>, người đại diện của bạn đã hủy yêu cầu xóa tài khoản. Bạn có thể đăng nhập lại như bình thường.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">{detail}</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
         // [UC-116] Giống thư mời UC-115: hai nút mở trang xác nhận, mở link không đổi trạng thái
-        public async Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<string> sharedFields, string confirmToken, int expiryDays, CancellationToken ct = default)
+        public async Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<StudyAbroad.Application.Leads.LeadSharedPreviewGroup> preview, string confirmToken, int expiryDays, CancellationToken ct = default)
         {
             var link = $"{_options.AppBaseUrl.TrimEnd('/')}/parent-consent/lead?token={Uri.EscapeDataString(confirmToken)}";
             var rejectLink = link + "&choice=reject";
             var student = WebUtility.HtmlEncode(studentName);
             var center = WebUtility.HtmlEncode(centerName);
-            var fields = string.Concat(sharedFields.Select(f =>
-                $"<li>{WebUtility.HtmlEncode(StudyAbroad.Application.Leads.LeadParentConfirm.FieldLabel(f))}</li>"));
+            // [UC-110 bước 1] Tóm tắt hồ sơ: mỗi nhóm con đã chọn kèm giá trị thật, đúng như trung tâm sẽ thấy
+            var fields = string.Concat(preview.Select(g =>
+                $"""<p style="font-size: 14px; color: #0f172a; font-weight: 600; margin: 12px 0 4px;">{WebUtility.HtmlEncode(g.Title)}</p>"""
+                + """<table style="font-size: 14px; color: #475569; line-height: 1.6; border-collapse: collapse; width: 100%;">"""
+                + string.Concat(g.Items.Select(i =>
+                    $"""<tr><td style="padding: 2px 12px 2px 0; width: 40%; vertical-align: top;">{WebUtility.HtmlEncode(i.Label)}</td><td style="padding: 2px 0; color: #0f172a; white-space: pre-line;">{WebUtility.HtmlEncode(i.Value)}</td></tr>"""))
+                + "</table>"));
             var subject = "[USAS] Con muốn gửi yêu cầu liên hệ tới trung tâm tư vấn";
             var body = $"""
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
                     <h2 style="color: #2563eb; margin-bottom: 16px;">Phụ huynh xác nhận gửi yêu cầu liên hệ</h2>
                     <p style="font-size: 14px; color: #475569; line-height: 1.6;">Học sinh <strong>{student}</strong> muốn gửi yêu cầu liên hệ tới trung tâm tư vấn du học <strong>{center}</strong> trên USAS. Vì con dưới 16 tuổi, trung tâm chỉ nhận yêu cầu khi phụ huynh đồng ý.</p>
-                    <p style="font-size: 14px; color: #0f172a; font-weight: 600; margin-bottom: 4px;">Dữ liệu sẽ chia sẻ cho trung tâm</p>
-                    <ul style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0; padding-left: 20px;">{fields}</ul>
-                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Trung tâm sẽ dùng thông tin này để liên hệ tư vấn cho con. Bạn không cần tài khoản để trả lời.</p>
+                    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin: 16px 0;">
+                        <p style="font-size: 15px; color: #0f172a; font-weight: 700; margin: 0;">Tóm tắt hồ sơ sẽ chia sẻ cho trung tâm</p>
+                        {fields}
+                    </div>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;"><strong>Mục đích chia sẻ:</strong> trung tâm {center} dùng các thông tin trên để liên hệ và tư vấn du học Mỹ cho con. Trung tâm chỉ thấy đúng những mục trong bản tóm tắt này.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Bạn không cần tài khoản để trả lời.</p>
                     <div style="text-align: center; margin: 24px 0;">
                         <a href="{WebUtility.HtmlEncode(link)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 8px; margin: 4px;">Đồng ý</a>
                         <a href="{WebUtility.HtmlEncode(rejectLink)}" style="display: inline-block; background-color: #ffffff; color: #b91c1c; text-decoration: none; font-weight: 600; padding: 11px 23px; border-radius: 8px; border: 1px solid #fca5a5; margin: 4px;">Từ chối</a>

@@ -11,6 +11,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { clearPendingEmail, usePendingEmail } from "@/lib/pending-email";
+import { NETWORK_ERROR, PASSWORD_RULE_HINT, confirmPasswordError, emailError, otpError, passwordRuleError } from "@/lib/auth-validation";
 
 export function ResetPasswordForm() {
   const router = useRouter();
@@ -44,24 +45,20 @@ export function ResetPasswordForm() {
     setSuccessMessage(null);
 
     const cleanOtp = otpCode.trim();
-    if (!email.trim()) {
-      setError("Vui lòng nhập địa chỉ email.");
+    const inputError = emailError(email) ?? otpError(cleanOtp);
+    if (inputError) {
+      setError(inputError);
       return;
     }
-    if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
-      setError("Mã OTP phải gồm đúng 6 chữ số.");
+    // [UC-01] Cùng luật mật khẩu với đăng ký (khớp backend)
+    const passwordError = passwordRuleError(newPassword, "Mật khẩu mới");
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
-    if (newPassword.length < 8) {
-      setError("Mật khẩu mới phải có tối thiểu 8 ký tự.");
-      return;
-    }
-    if (newPassword.length > 100) {
-      setError("Mật khẩu không được vượt quá 100 ký tự.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError("Mật khẩu xác nhận không khớp.");
+    const confirmError = confirmPasswordError(newPassword, confirmPassword);
+    if (confirmError) {
+      setError(confirmError);
       return;
     }
 
@@ -82,7 +79,7 @@ export function ResetPasswordForm() {
       if (err instanceof ApiError) {
         setError(err.message || "Mã xác thực không hợp lệ hoặc đã hết hạn.");
       } else {
-        setError("Có lỗi kết nối máy chủ. Vui lòng thử lại sau.");
+        setError(NETWORK_ERROR);
       }
     } finally {
       setIsSubmitting(false);
@@ -94,8 +91,9 @@ export function ResetPasswordForm() {
     setError(null);
     setSuccessMessage(null);
 
-    if (!email.trim()) {
-      setError("Vui lòng nhập địa chỉ email để gửi lại mã.");
+    const emailProblem = emailError(email);
+    if (emailProblem) {
+      setError(emailProblem);
       return;
     }
 
@@ -191,7 +189,7 @@ export function ResetPasswordForm() {
               autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="Tối thiểu 8 ký tự"
+              placeholder={PASSWORD_RULE_HINT}
             />
           </Field>
 

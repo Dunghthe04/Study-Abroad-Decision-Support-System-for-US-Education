@@ -19,7 +19,7 @@ public record CreateLeadRequest(
 
 public record LeadDto(
     Guid Id,
-    Guid UserId,
+    Guid? UserId,
     Guid StudyCenterId,
     string? StudyCenterName,
     Guid? ConsentId,
@@ -108,6 +108,10 @@ public record CenterReceivedLeadDto(
 {
     /// <summary>[UC-73] Yêu cầu đã thu hồi hoặc quá 90 ngày: trung tâm không còn xem được dữ liệu người gửi đã chia sẻ.</summary>
     public bool DataHidden { get; init; }
+
+    /// <summary>[UC-111 bước 5] Dữ liệu bị ẩn vì phụ huynh đã rút đồng ý của học sinh dưới 16 (không phải vì quá 90 ngày).</summary>
+    public bool ConsentRevoked { get; init; }
+
     /// <summary>[UC-68] Thời hạn 7 ngày để trung tâm phản hồi yêu cầu ở trạng thái Mới (UTC).</summary>
     public DateTime? ExpiresAt { get; init; }
     /// <summary>[UC-68] Số ngày còn lại trước khi yêu cầu ở trạng thái Mới tự hết hạn.</summary>
@@ -143,7 +147,7 @@ public record UpdateLeadStatusRequest(string Status);
 public record LeadMessageDto(
     Guid Id,
     Guid LeadId,
-    Guid SenderUserId,
+    Guid? SenderUserId,
     string SenderName,
     string SenderRole,
     bool IsFromCenter,
@@ -176,7 +180,7 @@ public record AdminLeadMessageReportDto(
     Guid LeadId,
     Guid StudyCenterId,
     string StudyCenterName,
-    Guid SenderUserId,
+    Guid? SenderUserId,
     string SenderName,
     string? SenderEmail,
     string SenderRole,
@@ -198,7 +202,7 @@ public record AdminLeadMessageReportDto(
 /// <summary>[UC-58] Một tin trong phần ngữ cảnh quanh tin bị báo cáo. <paramref name="IsReported"/> đánh dấu chính tin bị báo cáo.</summary>
 public record AdminReportContextMessageDto(
     Guid Id,
-    Guid SenderUserId,
+    Guid? SenderUserId,
     string SenderName,
     bool IsFromCenter,
     string Content,

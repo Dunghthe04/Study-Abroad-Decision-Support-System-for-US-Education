@@ -11,7 +11,7 @@ namespace StudyAbroad.Api.Controllers
     // [Q11] Liên kết phụ huynh–học sinh và sự đồng ý xử lý dữ liệu trẻ em (Luật BVDLCN 91/2025 Điều 24)
     [ApiController]
     [Route("api/v1/parent-links")]
-    public class ParentLinksController(IParentLinkService parentLinks) : ControllerBase
+    public class ParentLinksController(IParentLinkService parentLinks, IChildAccountDeletionService childDeletion) : ControllerBase
     {
         // [UC-115] Phụ huynh mở link mời trong mail, không cần tài khoản: link một lần là xác thực. Token trong body để không nằm trong log URL.
         [AllowAnonymous]
@@ -52,6 +52,47 @@ namespace StudyAbroad.Api.Controllers
         {
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
             return ToResult(await parentLinks.RevokeByTokenAsync(request.Token, ip, ct));
+        }
+
+        // [UC-75 4b] Người đại diện bấm nút trong mail xác nhận yêu cầu xóa tài khoản của con, không cần đăng nhập
+        [AllowAnonymous]
+        [HttpPost("restore/lookup")]
+        [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        public async Task<IActionResult> LookupRestore(InviteTokenRequest request, CancellationToken ct) =>
+            ToResult(await childDeletion.GetRestoreInfoAsync(request.Token, ct));
+
+        [AllowAnonymous]
+        [HttpPost("restore")]
+        [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        public async Task<IActionResult> Restore(ParentRestoreRequest request, CancellationToken ct)
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var userAgent = Request.Headers.UserAgent.ToString();
+            return ToResult(await childDeletion.RestoreAsync(request.Token, request.IsGuardian, request.PolicyVersion, ip, userAgent, ct));
+        }
+
+        // [UC-111 3a] Link rút đồng ý trong email, lựa chọn thứ hai: rút đồng ý kèm xóa tài khoản con dưới 16
+        [AllowAnonymous]
+        [HttpPost("revoke-and-delete")]
+        [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        public async Task<IActionResult> RevokeAndDeleteByToken(InviteTokenRequest request, CancellationToken ct)
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var userAgent = Request.Headers.UserAgent.ToString();
+            return ToResult(await childDeletion.RevokeAndDeleteByTokenAsync(request.Token, ip, userAgent, ct));
+        }
+
+        // [UC-75 1a] Phụ huynh rút đồng ý kèm xóa tài khoản con dưới 16 trong "Con của tôi"
+        [Authorize(Roles = UserRoles.Parent)]
+        [HttpPost("{id:guid}/revoke-and-delete")]
+        public async Task<IActionResult> RevokeAndDelete(Guid id, CancellationToken ct)
+        {
+            if (User.GetUserId() is not { } userId)
+                return Unauthorized();
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var userAgent = Request.Headers.UserAgent.ToString();
+            return ToResult(await childDeletion.RevokeAndDeleteAsync(userId, id, ip, userAgent, ct));
         }
 
         [Authorize(Roles = UserRoles.Student)]

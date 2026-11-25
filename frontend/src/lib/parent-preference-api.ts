@@ -73,6 +73,9 @@ export interface PreferenceCompareDto {
   /** Hai danh sách cùng khuôn trang Gợi ý, chỉ có số liệu các trường được xếp nhóm. API cũ không có. */
   studentItems?: CompareItems | null;
   parentItems?: CompareItems | null;
+  /** Khoảng ngân sách trong hồ sơ con (USD/năm), để đặt cạnh ngân sách cha mẹ. API cũ không có. */
+  studentBudgetMinUsd?: number | null;
+  studentBudgetMaxUsd?: number | null;
 }
 
 export type CompareItems = Omit<RecommendationItems, "failed">;

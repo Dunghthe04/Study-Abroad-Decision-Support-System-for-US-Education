@@ -9,7 +9,8 @@ public class LeadConfiguration : IEntityTypeConfiguration<Lead>
     public void Configure(EntityTypeBuilder<Lead> b)
     {
         b.HasKey(x => x.Id);
-        b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        // [UC-75 lớp 1b] Xóa hẳn người gửi: giữ yêu cầu tới hết hạn giữ tin (job dọn sau), không xóa theo
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull);
         b.HasOne<StudyCenter>().WithMany().HasForeignKey(x => x.StudyCenterId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Consent>().WithMany().HasForeignKey(x => x.ConsentId).OnDelete(DeleteBehavior.SetNull);
         b.Property(x => x.StudyLevel).HasMaxLength(32);

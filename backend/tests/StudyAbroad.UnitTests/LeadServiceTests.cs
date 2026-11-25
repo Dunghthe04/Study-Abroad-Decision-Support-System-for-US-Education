@@ -1,6 +1,7 @@
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Leads;
+using StudyAbroad.Application.Notifications;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -139,7 +140,7 @@ public class LeadServiceTests
             CancellationToken ct = default)
         {
             var q = Leads
-                .Where(l => studentIds.Contains(l.UserId) || (submitterId != null && l.SubmittedByUserId == submitterId))
+                .Where(l => (l.UserId != null && studentIds.Contains(l.UserId.Value)) || (submitterId != null && l.SubmittedByUserId == submitterId))
                 .OrderByDescending(l => l.CreatedAt)
                 .ToList();
 
@@ -150,8 +151,8 @@ public class LeadServiceTests
                     l.Id, l.StudyCenterId, "Test Center",
                     l.Status == LeadStatuses.PendingParent && l.ParentTokenExpiresAt <= DateTime.UtcNow ? LeadStatuses.Expired : l.Status,
                     l.CreatedAt, l.SharedFields,
-                    l.StudyLevel, l.ContactPhone, l.Message, l.UserId,
-                    Users.TryGetValue(l.UserId, out var u) ? u.FullName : "Student",
+                    l.StudyLevel, l.ContactPhone, l.Message, l.UserId!.Value,
+                    l.UserId != null && Users.TryGetValue(l.UserId.Value, out var u) ? u.FullName : "Student",
                     l.SubmittedByUserId != null && l.SubmittedByUserId != l.UserId,
                     Messages.Count(m => m.LeadId == l.Id && m.Status == "visible"
                                      && m.SenderUserId != l.UserId && m.SenderUserId != l.SubmittedByUserId)))
@@ -204,6 +205,19 @@ public class LeadServiceTests
                 closedC));
         }
 
+        public Dictionary<Guid, StudentProfile> Profiles { get; } = [];
+
+        // [UC-110 bước 1] Như LeadRepository: dựng bằng CenterLeadMapper, không lọc lead chờ phụ huynh
+        public Task<CenterReceivedLeadDto?> GetSharedPreviewAsync(Guid leadId, CancellationToken ct = default)
+        {
+            var lead = Leads.FirstOrDefault(l => l.Id == leadId);
+            if (lead is null) return Task.FromResult<CenterReceivedLeadDto?>(null);
+            var name = lead.UserId is { } uid && Users.TryGetValue(uid, out var u) ? u.FullName : null;
+            var profile = lead.UserId is { } pid ? Profiles.GetValueOrDefault(pid) : null;
+            return Task.FromResult<CenterReceivedLeadDto?>(
+                CenterLeadMapper.ToCenterDto(lead, "Test Center", name, "student@example.com", profile, []));
+        }
+
         public Task<CenterReceivedLeadDto?> GetReceivedLeadDetailAsync(
             Guid leadId,
             Guid? restrictToCenterId,
@@ -242,7 +256,7 @@ public class LeadServiceTests
 
         public Task<IReadOnlyList<LeadMessageDto>> GetLeadMessagesAsync(
             Guid leadId,
-            Guid leadOwnerUserId,
+            Guid? leadOwnerUserId,
             bool sharedProfile,
             string centerName,
             CancellationToken ct = default)
@@ -252,7 +266,7 @@ public class LeadServiceTests
                 .OrderBy(m => m.CreatedAt)
                 .Select(m =>
                 {
-                    var (fullName, role) = Users.TryGetValue(m.SenderUserId, out var u)
+                    var (fullName, role) = m.SenderUserId != null && Users.TryGetValue(m.SenderUserId.Value, out var u)
                         ? u
                         : ("Người dùng", UserRoles.Student);
 
@@ -288,7 +302,7 @@ public class LeadServiceTests
             // Trung tâm đọc thì đánh dấu tin của học sinh / phụ huynh, và ngược lại
             var marked = Messages
                 .Where(m => m.LeadId == leadId && m.ReadAt == null && m.Status == "visible"
-                            && (Users.TryGetValue(m.SenderUserId, out var u) && LeadMessageMapper.IsStaffOrCenterRole(u.Item2)) != readerIsCenterSide)
+                            && (m.SenderUserId != null && Users.TryGetValue(m.SenderUserId.Value, out var u) && LeadMessageMapper.IsStaffOrCenterRole(u.Item2)) != readerIsCenterSide)
                 .ToList();
             foreach (var m in marked) m.ReadAt = readAt;
             return Task.FromResult<IReadOnlyList<Guid>>(marked.Select(m => m.Id).ToList());
@@ -799,11 +813,11 @@ public class LeadServiceTests
     public async Task AcceptOrRejectReceivedLead_NotNewOtherCenterOrExpired_IsRejected()
     {
         var (service, repo, _, ownerId, centerId) = DecisionSetup();
-        var accepted = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = "accepted" };
+        var accepted = new Lead { Id = Guid.NewGuid(), UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = "accepted" };
         var other = new Lead { Id = Guid.NewGuid(), StudyCenterId = Guid.NewGuid(), Status = "new" };
-        var old = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = "new", CreatedAt = DateTime.UtcNow.AddDays(-91) };
-        var withdrawn = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.Withdrawn };
-        var pendingParent = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.PendingParent };
+        var old = new Lead { Id = Guid.NewGuid(), UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = "new", CreatedAt = DateTime.UtcNow.AddDays(-91) };
+        var withdrawn = new Lead { Id = Guid.NewGuid(), UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.Withdrawn };
+        var pendingParent = new Lead { Id = Guid.NewGuid(), UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.PendingParent };
         repo.Leads.AddRange([accepted, other, old, withdrawn, pendingParent]);
 
         var notNew = await Assert.ThrowsAsync<LeadRuleException>(() => service.RejectReceivedLeadAsync(ownerId, null, UserRoles.Center, accepted.Id));
@@ -2044,15 +2058,18 @@ public class LeadServiceTests
     }
 
     [Fact]
-    public async Task GetReceivedLeadMessagesForCenter_WithdrawnLead_ReturnsEmptyThread()
+    public async Task GetReceivedLeadMessagesForCenter_WithdrawnLead_KeepsHistoryButHidesName()
     {
+        // [UC-44 E1] Lead đã thu hồi vẫn xem được lịch sử tin nhắn; [UC-73] tên người gửi bị ẩn
         var (repo, service, ownerId, leadId) = WithdrawnCenterSetup();
         repo.Messages.Add(new LeadMessage { LeadId = leadId, SenderUserId = repo.Leads[0].UserId, Content = "Tin cũ", Status = "visible" });
 
         var thread = await service.GetReceivedLeadMessagesForCenterUserAsync(ownerId, "owner@center.com", UserRoles.Center, leadId);
 
         Assert.Equal(LeadStatuses.Withdrawn, thread.LeadStatus);
-        Assert.Empty(thread.Messages);
+        var message = Assert.Single(thread.Messages);
+        Assert.Equal("Tin cũ", message.Content);
+        Assert.Contains("Ẩn danh", message.SenderName);
     }
 
     [Fact]
@@ -2069,10 +2086,20 @@ public class LeadServiceTests
 
     // ===== [UC-116] Học sinh dưới 16 gửi yêu cầu liên hệ: phụ huynh xác nhận qua link mail =====
 
+    // [UC-110 bước 3] Phiên bản văn bản admin đã công bố theo từng loại
+    private sealed class PublishedPolicy : StudyAbroad.Application.Admin.Policies.IPolicyVersionLookup
+    {
+        public Dictionary<string, string> Versions { get; } = [];
+        public Task<string?> GetPublishedVersionAsync(string kind, CancellationToken ct = default) =>
+            Task.FromResult(Versions.TryGetValue(kind, out var v) ? v : null);
+    }
+
     private sealed class ParentConfirmSetup
     {
         public CreateLeadSetup S { get; } = new();
         public FakeEmailSender Emails { get; } = new();
+        public ParentPreferenceServiceTests.FakeNotifications Notifications { get; } = new();
+        public PublishedPolicy Policies { get; } = new();
         public LeadService Leads { get; }
         public LeadParentConfirmService Confirm { get; }
         public User Student { get; }
@@ -2082,7 +2109,7 @@ public class LeadServiceTests
         public ParentConfirmSetup()
         {
             Leads = new LeadService(S.LeadRepo, S.CenterRepo, S.UserRepo, S.LinkRepo, null, Emails);
-            Confirm = new LeadParentConfirmService(S.LeadRepo, S.LinkRepo, S.UserRepo, S.CenterRepo, Emails);
+            Confirm = new LeadParentConfirmService(S.LeadRepo, S.LinkRepo, S.UserRepo, S.CenterRepo, Emails, Policies, Notifications);
             Student = S.AddStudent(14);
             Student.Email = "kid@test.com";
             Student.FullName = "Con";
@@ -2124,6 +2151,12 @@ public class LeadServiceTests
         Assert.Equal(["dad@test.com", "mom@test.com"], mails.Select(m => m.To).Order());
         Assert.NotEqual(mails[0].Code, mails[1].Code);
         Assert.DoesNotContain(mails, m => m.Code.Contains(p.Stored.ParentTokenHash!));
+        // [UC-110 bước 1] Mail có bản xem trước Tóm tắt hồ sơ theo đúng các nhóm con đã chọn
+        Assert.NotNull(p.Emails.LastLeadPreview);
+        Assert.Equal(
+            p.Stored.SharedFields.Count,
+            p.Emails.LastLeadPreview!.Count(g => g.Title != "Lời nhắn gửi trung tâm"));
+        Assert.All(p.Emails.LastLeadPreview!, g => Assert.NotEmpty(g.Items));
     }
 
     [Fact]
@@ -2176,6 +2209,50 @@ public class LeadServiceTests
         Assert.Equal("mom@test.com", consent.GrantedByEmail);
         Assert.Equal(p.Student.Id, consent.UserId);
         Assert.Contains(p.Emails.SentEmails, e => e.To == "kid@test.com" && e.Purpose == "lead_parent_decision" && e.Code == LeadStatuses.New);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_Accept_ConsentRecordsPublishedChildConsentVersion_AndNotifiesStudentAndCenter()
+    {
+        var p = new ParentConfirmSetup();
+        p.Policies.Versions[PolicyKinds.ChildDataConsent] = "2027-01";
+        p.Policies.Versions[PolicyKinds.PrivacyPolicy] = "v9.9";
+        var owner = Guid.NewGuid();
+        p.S.CenterRepo.Centers.Single().OwnerUserId = owner;
+        await p.Send();
+
+        await p.Confirm.AcceptAsync(p.TokenFor(p.Mom), null);
+
+        Assert.Equal("2027-01", Assert.Single(p.S.LeadRepo.Consents).PolicyVersion);
+        Assert.Single(p.Notifications.Sent, n => n.UserId == p.Student.Id && n.Type == NotificationTypes.LeadStatusChanged && n.LinkUrl == "/account");
+        Assert.Single(p.Notifications.Sent, n => n.UserId == owner && n.Type == NotificationTypes.LeadNew);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_Accept_NoPublishedVersion_FallsBackToChildConsentDefault()
+    {
+        var p = new ParentConfirmSetup();
+        await p.Send();
+
+        await p.Confirm.AcceptAsync(p.TokenFor(p.Mom), null);
+
+        Assert.Equal(ConsentPurposes.ChildDataPolicyVersion, Assert.Single(p.S.LeadRepo.Consents).PolicyVersion);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_RejectAndExpire_StudentGetsInAppNotification_CenterNot()
+    {
+        var p = new ParentConfirmSetup();
+        await p.Send();
+        await p.Confirm.RejectAsync(p.TokenFor(p.Dad), null);
+        Assert.Single(p.Notifications.Sent);
+        Assert.Equal((p.Student.Id, NotificationTypes.LeadStatusChanged), (p.Notifications.Sent[0].UserId, p.Notifications.Sent[0].Type));
+
+        var q = new ParentConfirmSetup();
+        await q.Send();
+        q.Stored.ParentTokenExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+        await Assert.ThrowsAsync<LeadRuleException>(() => q.Confirm.LookupAsync(q.TokenFor(q.Mom)));
+        Assert.Single(q.Notifications.Sent, n => n.UserId == q.Student.Id && n.Type == NotificationTypes.LeadStatusChanged);
     }
 
     [Fact]

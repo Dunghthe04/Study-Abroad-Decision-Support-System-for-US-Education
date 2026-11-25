@@ -6,7 +6,8 @@ namespace StudyAbroad.Domain.Entities;
 public class LeadMessage : BaseEntity
 {
     public Guid LeadId { get; set; }
-    public Guid SenderUserId { get; set; }
+    /// <summary>[UC-75 lớp 1b] Null khi người gửi đã bị xóa hẳn; hiển thị "Người dùng đã xóa tài khoản".</summary>
+    public Guid? SenderUserId { get; set; }
     public string Content { get; set; } = string.Empty;
     public bool IsFlagged { get; set; } = false;
     public string? FlagReason { get; set; }

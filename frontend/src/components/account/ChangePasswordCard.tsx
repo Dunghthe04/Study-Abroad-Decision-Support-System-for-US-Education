@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { PasswordInput } from "@/components/auth/PasswordInput";
+import { NETWORK_ERROR, PASSWORD_RULE_HINT, confirmPasswordError, passwordRuleError } from "@/lib/auth-validation";
 
 // [UC-06] Đổi mật khẩu khi đã đăng nhập: bắt buộc nhập mật khẩu hiện tại.
 // Thành công thì phiên này giữ nguyên, các thiết bị khác bị đăng xuất.
@@ -31,20 +32,19 @@ export function ChangePasswordCard() {
       setError("Vui lòng nhập mật khẩu hiện tại.");
       return;
     }
-    if (newPassword.length < 8) {
-      setError("Mật khẩu mới phải có ít nhất 8 ký tự.");
-      return;
-    }
-    if (newPassword.length > 100) {
-      setError("Mật khẩu mới không được vượt quá 100 ký tự.");
+    // [UC-01] Cùng luật mật khẩu với đăng ký (khớp backend)
+    const passwordError = passwordRuleError(newPassword, "Mật khẩu mới");
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
     if (newPassword === currentPassword) {
       setError("Mật khẩu mới phải khác mật khẩu hiện tại.");
       return;
     }
-    if (newPassword !== confirmPassword) {
-      setError("Mật khẩu xác nhận không khớp.");
+    const confirmError = confirmPasswordError(newPassword, confirmPassword);
+    if (confirmError) {
+      setError(confirmError);
       return;
     }
 
@@ -66,7 +66,7 @@ export function ChangePasswordCard() {
       } else if (err instanceof ApiError) {
         setError(err.message || "Không thể đổi mật khẩu. Vui lòng thử lại.");
       } else {
-        setError("Có lỗi kết nối máy chủ. Vui lòng thử lại sau.");
+        setError(NETWORK_ERROR);
       }
     } finally {
       setIsSubmitting(false);
@@ -123,7 +123,7 @@ export function ChangePasswordCard() {
                 autoComplete="new-password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Tối thiểu 8 ký tự"
+                placeholder={PASSWORD_RULE_HINT}
                 className="h-10"
               />
               <FieldDescription>Từ 8 đến 100 ký tự, khác mật khẩu hiện tại.</FieldDescription>

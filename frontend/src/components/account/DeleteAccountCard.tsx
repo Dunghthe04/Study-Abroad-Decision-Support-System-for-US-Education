@@ -117,7 +117,7 @@ export function DeleteAccountCard() {
             </li>
             <li>
               Gói của bạn dừng khi tài khoản bị xóa hẳn sau 30 ngày. Nếu bạn là chủ gói Gia đình, các thành viên vẫn dùng được tới lúc đó hoặc tới khi gói hết
-              hạn. Lịch sử giao dịch được giữ ẩn danh.
+              hạn. Thông tin đơn hàng (mã đơn, số tiền, họ tên, email) được giữ 10 năm, chỉ dùng để đối soát và hoàn tiền.
             </li>
             <li>
               Nhật ký trò chuyện với trợ lý tư vấn đã được che thông tin cá nhân và tự xóa sau {CHAT_LOG_KEEP_DAYS} ngày.

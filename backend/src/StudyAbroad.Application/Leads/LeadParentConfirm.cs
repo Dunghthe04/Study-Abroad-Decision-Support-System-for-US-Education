@@ -35,6 +35,16 @@ public static class LeadParentConfirm
     public static bool IsPastDeadline(Lead lead, DateTime utcNow) =>
         lead.Status == LeadStatuses.PendingParent && lead.ParentTokenExpiresAt <= utcNow;
 
+    /// <summary>
+    /// Trung tâm chưa từng nhận lead này: còn chờ phụ huynh / bị từ chối / hết hạn, hoặc đã thu hồi khi đang chờ phụ huynh
+    /// (có hạn link nhưng chưa ai bấm đồng ý) [UC-75 bước 4, UC-111 bước 5].
+    /// </summary>
+    public static bool IsHiddenFromCenter(Lead lead) =>
+        LeadStatuses.IsHiddenFromCenter(lead.Status) || WithdrawnBeforeCenter(lead.Status, lead.ParentTokenExpiresAt, lead.ParentDecidedAt);
+
+    public static bool WithdrawnBeforeCenter(string? status, DateTime? parentTokenExpiresAt, DateTime? parentDecidedAt) =>
+        status == LeadStatuses.Withdrawn && parentTokenExpiresAt != null && parentDecidedAt == null;
+
     /// <summary>Tên nhóm dữ liệu chia sẻ để ghi trong mail cho phụ huynh.</summary>
     public static string FieldLabel(string key) => key switch
     {
@@ -44,5 +54,118 @@ public static class LeadParentConfirm
         LeadSharedFields.Goals => "Mục tiêu: bậc học, ngành dự định",
         LeadSharedFields.Budget => "Mức ngân sách, mức hoạt động ngoại khóa",
         _ => key,
+    };
+
+    /// <summary>
+    /// [UC-110 bước 3] Phiên bản văn bản đang hiệu lực ghi vào bằng chứng đồng ý chia sẻ. Đồng ý của người đại diện cho con dưới 16
+    /// theo văn bản đồng ý của phụ huynh (như <c>ParentLinkService</c>); người từ 16 tuổi tự đồng ý theo Chính sách bảo mật.
+    /// Chưa công bố bản nào thì dùng hằng số mặc định.
+    /// </summary>
+    public static async Task<string> ConsentPolicyVersionAsync(
+        StudyAbroad.Application.Admin.Policies.IPolicyVersionLookup? lookup, bool byGuardian, CancellationToken ct)
+    {
+        var kind = byGuardian ? PolicyKinds.ChildDataConsent : PolicyKinds.PrivacyPolicy;
+        var published = lookup is null ? null : await lookup.GetPublishedVersionAsync(kind, ct);
+        return published ?? (byGuardian ? ConsentPurposes.ChildDataPolicyVersion : "v1.0");
+    }
+
+    private const string Missing = "Chưa cập nhật";
+
+    /// <summary>
+    /// [UC-110 bước 1] Bản xem trước Tóm tắt hồ sơ cho mail phụ huynh, dựng từ đúng dữ liệu trung tâm sẽ thấy
+    /// (<see cref="CenterLeadMapper.ToCenterDto"/>): chỉ có các nhóm con đã chọn, mỗi nhóm kèm giá trị thật.
+    /// </summary>
+    public static IReadOnlyList<LeadSharedPreviewGroup> BuildPreview(CenterReceivedLeadDto view, IReadOnlyList<string> sharedFields)
+    {
+        var s = view.ProfileSummary;
+        var groups = new List<LeadSharedPreviewGroup>();
+        foreach (var key in LeadSharedFields.All.Where(sharedFields.Contains))
+        {
+            IReadOnlyList<LeadSharedPreviewItem> items = key switch
+            {
+                LeadSharedFields.Contact =>
+                [
+                    new("Họ tên", Text(view.StudentName)),
+                    new("Email", Text(view.StudentEmail)),
+                    new("Số điện thoại", Text(view.ContactPhone, "Không nhập")),
+                ],
+                LeadSharedFields.Academic =>
+                [
+                    new("GPA tích lũy", s?.OverallGpa is { } gpa ? $"{gpa:0.0#} / 4.0" : Missing),
+                    new("Hệ học", EducationSystemLabel(s?.EducationSystem)),
+                    new("Lớp hiện tại", Text(s?.CurrentGrade)),
+                ],
+                LeadSharedFields.Tests =>
+                [
+                    new("Tiếng Anh", s?.EnglishTestType is { } type ? $"{type.ToUpperInvariant()}: {s.EnglishScore?.ToString("0.#") ?? "chưa có điểm"}" : "Chưa có"),
+                    new("SAT", s?.SatScore?.ToString("0") ?? "Chưa có"),
+                    new("ACT", s?.ActScore?.ToString("0") ?? "Chưa có"),
+                ],
+                LeadSharedFields.Goals =>
+                [
+                    new("Bậc học", TargetLevelLabel(s?.TargetLevel)),
+                    new("Ngành dự định", Text(s?.IntendedMajor, "Chưa chọn ngành")),
+                ],
+                LeadSharedFields.Budget =>
+                [
+                    new("Mức ngân sách", BudgetTierLabel(s?.BudgetTier)),
+                    new("Mức hoạt động ngoại khóa", s?.ExtracurricularTier is { } tier ? $"Bậc {tier}" : "Chưa phân tích"),
+                ],
+                _ => [],
+            };
+            groups.Add(new LeadSharedPreviewGroup(GroupTitle(key), items));
+        }
+
+        if (!string.IsNullOrWhiteSpace(view.Message))
+            groups.Add(new LeadSharedPreviewGroup("Lời nhắn gửi trung tâm", [new("Lời nhắn", view.Message.Trim())]));
+        return groups;
+    }
+
+    private static string GroupTitle(string key) => key switch
+    {
+        LeadSharedFields.Contact => "Thông tin liên hệ",
+        LeadSharedFields.Academic => "Học lực",
+        LeadSharedFields.Tests => "Điểm thi",
+        LeadSharedFields.Goals => "Mục tiêu",
+        LeadSharedFields.Budget => "Ngân sách và ngoại khóa",
+        _ => key,
+    };
+
+    private static string Text(string? value, string fallback = Missing) =>
+        string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+
+    private static string EducationSystemLabel(string? value) => value switch
+    {
+        null or "" => Missing,
+        EducationSystems.Standard => "Công lập",
+        EducationSystems.Specialized => "Trường chuyên / năng khiếu",
+        EducationSystems.DualDegree => "Song bằng",
+        EducationSystems.International => "Quốc tế",
+        EducationSystems.Private => "Tư thục",
+        EducationSystems.Other => "Khác",
+        _ => value,
+    };
+
+    private static string TargetLevelLabel(string? value) => value switch
+    {
+        null or "" => Missing,
+        StudyLevels.Secondary => "THCS/THPT",
+        StudyLevels.CommunityCollege => "Cao đẳng cộng đồng",
+        StudyLevels.Undergraduate => "Đại học",
+        StudyLevels.Master => "Thạc sĩ",
+        StudyLevels.Phd => "Tiến sĩ",
+        _ => value,
+    };
+
+    // Cùng nhãn với màn trung tâm (CenterLeadsListView.formatBudgetTier)
+    private static string BudgetTierLabel(string? value) => value switch
+    {
+        null or "" => "Chưa xác định",
+        "tier_under_20k" => "Dưới $20,000 / năm",
+        "tier_20k_35k" => "$20,000 - $35,000 / năm",
+        "tier_35k_50k" => "$35,000 - $50,000 / năm",
+        "tier_50k_70k" => "$50,000 - $70,000 / năm",
+        "tier_above_70k" => "Trên $70,000 / năm",
+        _ => value,
     };
 }

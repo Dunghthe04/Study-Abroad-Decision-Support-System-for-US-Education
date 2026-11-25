@@ -207,7 +207,8 @@ export function CenterReviewList({
             <div className="flex items-start justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold text-sm text-ink">
-                  {rev.reviewerName} ({rev.reviewerRole === "parent" ? "Phụ huynh" : "Học sinh"})
+                  {rev.reviewerName}
+                  {rev.reviewerRole && ` (${rev.reviewerRole === "parent" ? "Phụ huynh" : "Học sinh"})`}
                 </span>
                 {rev.isVerified && (
                   <Badge variant="ok" className="text-xs py-0">

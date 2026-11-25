@@ -29,8 +29,11 @@ namespace StudyAbroad.Application.Auth
         /// </summary>
         Task SendCenterVerificationOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? reason, IReadOnlyList<string>? unmetConditions, CancellationToken ct = default);
 
-        /// <summary>Mời phụ huynh liên kết và đồng ý cho hệ thống xử lý dữ liệu của học sinh; link chứa token dùng một lần.</summary>
-        Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, CancellationToken ct = default);
+        /// <summary>
+        /// Mời phụ huynh liên kết; link chứa token dùng một lần. <paramref name="isConsentRequest"/>: học sinh dưới 16 thì thư xin đồng ý
+        /// xử lý dữ liệu; học sinh 16–17 thì chỉ là lời mời liên kết để phụ huynh theo dõi (UC-109).
+        /// </summary>
+        Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, bool isConsentRequest, CancellationToken ct = default);
 
         /// <summary>Báo cho một bên khi liên kết phụ huynh–học sinh được xác nhận (<paramref name="linked"/> = true) hoặc bị hủy / rút đồng ý.</summary>
         Task SendParentLinkChangedEmailAsync(string toEmail, string studentName, string parentLabel, bool linked, CancellationToken ct = default);
@@ -44,8 +47,18 @@ namespace StudyAbroad.Application.Auth
         /// <summary>[UC-115] Báo học sinh: phụ huynh đã đồng ý qua mail nay đăng ký tài khoản Phụ huynh, hệ thống tự liên kết.</summary>
         Task SendParentAccountLinkedEmailAsync(string toEmail, string studentName, string parentName, CancellationToken ct = default);
 
+        /// <summary>[UC-75 1a / UC-111 3a] Báo học sinh dưới 16: người đại diện đã rút đồng ý và yêu cầu xóa tài khoản; học sinh không tự khôi phục được trước 16 tuổi.</summary>
+        Task SendChildAccountDeletedByParentEmailAsync(string toEmail, string studentName, DateTime deletionDateUtc, CancellationToken ct = default);
+
+        /// <summary>[UC-75 4b / UC-109 3b] Gửi người đại diện vừa yêu cầu xóa: ngày xóa vĩnh viễn và hai nút dùng một lần
+        /// "Hủy xóa và đồng ý lại cho con", "Chỉ hủy xóa", hiệu lực đến ngày xóa.</summary>
+        Task SendParentChildDeletionConfirmedEmailAsync(string toEmail, string studentName, DateTime deletionDateUtc, string reconsentToken, string restoreOnlyToken, CancellationToken ct = default);
+
+        /// <summary>[UC-75 4b] Báo học sinh: người đại diện đã hủy yêu cầu xóa; <paramref name="reconsented"/> = true nếu đồng ý lại luôn.</summary>
+        Task SendChildAccountRestoredByParentEmailAsync(string toEmail, string studentName, bool reconsented, CancellationToken ct = default);
+
         /// <summary>[UC-116] Học sinh dưới 16 gửi yêu cầu liên hệ: hỏi phụ huynh đồng ý chia sẻ cho trung tâm. Mỗi phụ huynh một link.</summary>
-        Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<string> sharedFields, string confirmToken, int expiryDays, CancellationToken ct = default);
+        Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<StudyAbroad.Application.Leads.LeadSharedPreviewGroup> preview, string confirmToken, int expiryDays, CancellationToken ct = default);
 
         /// <summary>[UC-116] Báo học sinh kết quả. outcome: "new" phụ huynh đồng ý (đã gửi trung tâm), "cancelled" từ chối, "expired" hết hạn.</summary>
         Task SendLeadParentDecisionEmailAsync(string toEmail, string studentName, string centerName, string outcome, CancellationToken ct = default);

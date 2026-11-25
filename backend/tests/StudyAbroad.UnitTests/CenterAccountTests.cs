@@ -60,7 +60,7 @@ public class CenterAccountTests
 
     private static RegisterCenterRequest Request(
         string email = "TrungTam@Example.com",
-        string password = "password123",
+        string password = "Password@123",
         string? confirm = null,
         string centerName = "Trung tâm Du học ABC",
         string phone = "0912345678",
@@ -81,7 +81,7 @@ public class CenterAccountTests
         Assert.Equal("trungtam@example.com", user.Email);
         Assert.Equal(UserRoles.Center, user.Role);
         Assert.Equal(UserStatuses.Unverified, user.Status);
-        Assert.Equal("hashed:password123", user.PasswordHash);
+        Assert.Equal("hashed:Password@123", user.PasswordHash);
         var center = Assert.Single(_centers.Centers);
         Assert.StartsWith("CTR_", center.Code);
         Assert.Equal(user.Id, center.OwnerUserId);
@@ -176,7 +176,7 @@ public class CenterAccountTests
     [Fact]
     public async Task RegisterCenter_PasswordConfirmationMismatch_IsRejected()
     {
-        var result = await Service().RegisterAsync(Request(password: "password123", confirm: "password124"));
+        var result = await Service().RegisterAsync(Request(password: "Password@123", confirm: "Password@124"));
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Empty(_users.Users);

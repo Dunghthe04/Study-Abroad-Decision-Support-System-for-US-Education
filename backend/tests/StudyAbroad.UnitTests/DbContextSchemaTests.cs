@@ -79,7 +79,7 @@ public class DbContextSchemaTests
         AssertForeignKey<WhatIfSimulation>(db, nameof(WhatIfSimulation.UserId), "users", DeleteBehavior.Cascade);
         AssertForeignKey<WhatIfSimulation>(db, nameof(WhatIfSimulation.StudentProfileId), "student_profiles", DeleteBehavior.Cascade);
         AssertForeignKey<LeadMessage>(db, nameof(LeadMessage.LeadId), "leads", DeleteBehavior.Cascade);
-        AssertForeignKey<LeadMessage>(db, nameof(LeadMessage.SenderUserId), "users", DeleteBehavior.Cascade);
+        AssertForeignKey<LeadMessage>(db, nameof(LeadMessage.SenderUserId), "users", DeleteBehavior.SetNull);   // [UC-75 lớp 1b] giữ tin tới mốc 90 ngày
         AssertForeignKey<LeadMessage>(db, nameof(LeadMessage.RemovedByUserId), "users", DeleteBehavior.SetNull);
         AssertForeignKey<CenterReview>(db, nameof(CenterReview.StudyCenterId), "study_centers", DeleteBehavior.Cascade);
         AssertForeignKey<CenterReview>(db, nameof(CenterReview.UserId), "users", DeleteBehavior.SetNull);   // [UC-41] giữ đánh giá khi người dùng xóa tài khoản

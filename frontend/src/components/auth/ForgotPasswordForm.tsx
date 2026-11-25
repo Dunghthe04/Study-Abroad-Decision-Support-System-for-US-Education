@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { NETWORK_ERROR, emailError } from "@/lib/auth-validation";
 
 export function ForgotPasswordForm() {
   const router = useRouter();
@@ -22,8 +23,9 @@ export function ForgotPasswordForm() {
     setError(null);
     setSuccessMessage(null);
 
-    if (!email.trim()) {
-      setError("Vui lòng nhập địa chỉ email của bạn.");
+    const emailProblem = emailError(email);
+    if (emailProblem) {
+      setError(emailProblem);
       return;
     }
 
@@ -39,7 +41,7 @@ export function ForgotPasswordForm() {
       if (err instanceof ApiError) {
         setError(err.message || "Không thể gửi yêu cầu đặt lại mật khẩu. Vui lòng thử lại sau.");
       } else {
-        setError("Có lỗi kết nối máy chủ. Vui lòng thử lại sau.");
+        setError(NETWORK_ERROR);
       }
     } finally {
       setIsSubmitting(false);

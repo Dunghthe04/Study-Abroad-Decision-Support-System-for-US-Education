@@ -122,6 +122,9 @@ internal sealed class FakeUserRepository : IUserRepository
             .OrderByDescending(o => o.CreatedAt)
             .FirstOrDefault());
 
+    public Task<OtpToken?> FindUnusedOtpByHashAsync(string codeHash, IReadOnlyCollection<string> purposes, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Otps.FirstOrDefault(o => o.CodeHash == codeHash && purposes.Contains(o.Purpose) && o.UsedAt == null));
+
     public Task InvalidateOtpsAsync(Guid userId, string purpose, CancellationToken cancellationToken = default)
     {
         foreach (var o in Otps.Where(x => x.UserId == userId && x.Purpose == purpose && x.UsedAt == null))
@@ -146,7 +149,11 @@ internal sealed class FakeUserRepository : IUserRepository
     public Task<int> CountOtpRequestsInLastHourAsync(Guid userId, string purpose, CancellationToken cancellationToken = default)
     {
         var oneHourAgo = DateTime.UtcNow.AddHours(-1);
-        return Task.FromResult(Otps.Count(o => o.UserId == userId && o.Purpose == purpose && o.CreatedAt >= oneHourAgo));
+        // Giống UserRepository: mã xác thực email đầu tiên (gửi lúc đăng ký) không tính vào giới hạn gửi lại
+        var registrationOtp = purpose == OtpPurposes.VerifyEmail
+            ? Otps.Where(o => o.UserId == userId && o.Purpose == purpose).OrderBy(o => o.CreatedAt).FirstOrDefault()
+            : null;
+        return Task.FromResult(Otps.Count(o => o.UserId == userId && o.Purpose == purpose && o.CreatedAt >= oneHourAgo && o != registrationOtp));
     }
 
     public Task<int> UnlockExpiredAccountsAsync(CancellationToken cancellationToken = default)
@@ -240,6 +247,7 @@ internal sealed class FakeAuditLogRepository : IAuditLogRepository
 internal sealed class FakeEmailSender : IEmailSender
 {
     public List<(string To, string Purpose, string Code)> SentEmails { get; } = [];
+    public IReadOnlyList<StudyAbroad.Application.Leads.LeadSharedPreviewGroup>? LastLeadPreview { get; private set; }
 
     public Task SendVerificationEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 5, CancellationToken ct = default)
     {
@@ -277,8 +285,12 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
-    public Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, CancellationToken ct = default)
+    /// <summary>Thư mời cuối cùng có phải thư xin đồng ý không (học sinh dưới 16).</summary>
+    public bool? LastInviteIsConsentRequest { get; private set; }
+
+    public Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, bool isConsentRequest, CancellationToken ct = default)
     {
+        LastInviteIsConsentRequest = isConsentRequest;
         SentEmails.Add((toEmail, "parent_invite", inviteToken));
         return Task.CompletedTask;
     }
@@ -301,8 +313,9 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
-    public Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<string> sharedFields, string confirmToken, int expiryDays, CancellationToken ct = default)
+    public Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<StudyAbroad.Application.Leads.LeadSharedPreviewGroup> preview, string confirmToken, int expiryDays, CancellationToken ct = default)
     {
+        LastLeadPreview = preview;
         SentEmails.Add((toEmail, "lead_parent_confirm", confirmToken));
         return Task.CompletedTask;
     }
@@ -316,6 +329,25 @@ internal sealed class FakeEmailSender : IEmailSender
     public Task SendParentAccountLinkedEmailAsync(string toEmail, string studentName, string parentName, CancellationToken ct = default)
     {
         SentEmails.Add((toEmail, "parent_account_linked", parentName));
+        return Task.CompletedTask;
+    }
+
+    public Task SendChildAccountDeletedByParentEmailAsync(string toEmail, string studentName, DateTime deletionDateUtc, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "child_deleted_by_parent", deletionDateUtc.ToString("O")));
+        return Task.CompletedTask;
+    }
+
+    // Detail = "mã đồng ý lại|mã chỉ hủy xóa" để test lấy hai mã trong mail
+    public Task SendParentChildDeletionConfirmedEmailAsync(string toEmail, string studentName, DateTime deletionDateUtc, string reconsentToken, string restoreOnlyToken, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "parent_child_deletion_confirmed", reconsentToken + "|" + restoreOnlyToken));
+        return Task.CompletedTask;
+    }
+
+    public Task SendChildAccountRestoredByParentEmailAsync(string toEmail, string studentName, bool reconsented, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "child_restored_by_parent", reconsented ? "reconsent" : "restore_only"));
         return Task.CompletedTask;
     }
 
@@ -414,6 +446,9 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
     public Task<List<ParentStudentLink>> GetActiveByParentAsync(Guid parentUserId, CancellationToken ct = default) =>
         Task.FromResult(Links.Where(l => l.ParentUserId == parentUserId && l.Status == ParentLinkStatuses.Active).Select(Clone).ToList());
 
+    public Task<List<ParentStudentLink>> GetRevokedByParentAsync(Guid parentUserId, CancellationToken ct = default) =>
+        Task.FromResult(Links.Where(l => l.ParentUserId == parentUserId && l.Status == ParentLinkStatuses.Revoked && l.RevokedByUserId == parentUserId).Select(Clone).ToList());
+
     public Task<List<ParentStudentLink>> GetActiveWithoutParentAccountAsync(string parentEmail, CancellationToken ct = default) =>
         Task.FromResult(Links.Where(l => l.ParentEmail == parentEmail && l.ParentUserId == null && l.Status == ParentLinkStatuses.Active)
             .Select(Clone).ToList());
@@ -429,10 +464,11 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
             PolicyVersion = c.PolicyVersion, GrantedByUserId = c.GrantedByUserId, GrantedByEmail = c.GrantedByEmail, GrantedIp = c.GrantedIp,
         }).FirstOrDefault());
 
-    public Task SaveAcceptAsync(ParentStudentLink link, Consent consent, CancellationToken ct = default)
+    public Task SaveAcceptAsync(ParentStudentLink link, Consent? consent, CancellationToken ct = default)
     {
         ThrowIfConflict();
-        Consents.Add(consent);
+        if (consent != null)
+            Consents.Add(consent);
         Replace(link);
         return Task.CompletedTask;
     }
@@ -521,11 +557,16 @@ internal sealed class FakeLeadWithdrawalRepository : StudyAbroad.Application.Lea
     public List<Guid> UserIds { get; } = [];
     public int CountToReturn { get; set; }
 
+    public List<Guid> OwnersToReturn { get; } = [];
+
     public Task<int> WithdrawOpenLeadsAsync(Guid userId, DateTime now, CancellationToken ct = default)
     {
         UserIds.Add(userId);
         return Task.FromResult(CountToReturn);
     }
+
+    public Task<IReadOnlyList<Guid>> ListCenterOwnersOfOpenLeadsAsync(Guid userId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Guid>>(OwnersToReturn);
 }
 
 internal sealed class FakeUnitOfWork : IUnitOfWork

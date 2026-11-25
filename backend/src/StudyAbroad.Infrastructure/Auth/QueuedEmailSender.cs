@@ -53,8 +53,8 @@ namespace StudyAbroad.Infrastructure.Auth
         public Task SendCenterVerificationOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? reason, IReadOnlyList<string>? unmetConditions, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendCenterVerificationOutcomeEmailAsync(toEmail, centerName, outcome, reason, unmetConditions, t));
 
-        public Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, CancellationToken ct = default) =>
-            Enqueue(toEmail, (s, t) => s.SendParentInviteEmailAsync(toEmail, studentName, inviteToken, expiryDays, t));
+        public Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, bool isConsentRequest, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendParentInviteEmailAsync(toEmail, studentName, inviteToken, expiryDays, isConsentRequest, t));
 
         public Task SendParentLinkChangedEmailAsync(string toEmail, string studentName, string parentLabel, bool linked, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendParentLinkChangedEmailAsync(toEmail, studentName, parentLabel, linked, t));
@@ -68,8 +68,17 @@ namespace StudyAbroad.Infrastructure.Auth
         public Task SendParentAccountLinkedEmailAsync(string toEmail, string studentName, string parentName, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendParentAccountLinkedEmailAsync(toEmail, studentName, parentName, t));
 
-        public Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<string> sharedFields, string confirmToken, int expiryDays, CancellationToken ct = default) =>
-            Enqueue(toEmail, (s, t) => s.SendLeadParentConfirmEmailAsync(toEmail, studentName, centerName, sharedFields, confirmToken, expiryDays, t));
+        public Task SendChildAccountDeletedByParentEmailAsync(string toEmail, string studentName, DateTime deletionDateUtc, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendChildAccountDeletedByParentEmailAsync(toEmail, studentName, deletionDateUtc, t));
+
+        public Task SendParentChildDeletionConfirmedEmailAsync(string toEmail, string studentName, DateTime deletionDateUtc, string reconsentToken, string restoreOnlyToken, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendParentChildDeletionConfirmedEmailAsync(toEmail, studentName, deletionDateUtc, reconsentToken, restoreOnlyToken, t));
+
+        public Task SendChildAccountRestoredByParentEmailAsync(string toEmail, string studentName, bool reconsented, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendChildAccountRestoredByParentEmailAsync(toEmail, studentName, reconsented, t));
+
+        public Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<StudyAbroad.Application.Leads.LeadSharedPreviewGroup> preview, string confirmToken, int expiryDays, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendLeadParentConfirmEmailAsync(toEmail, studentName, centerName, preview, confirmToken, expiryDays, t));
 
         public Task SendLeadParentDecisionEmailAsync(string toEmail, string studentName, string centerName, string outcome, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendLeadParentDecisionEmailAsync(toEmail, studentName, centerName, outcome, t));

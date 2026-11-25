@@ -1,58 +1,24 @@
 "use client";
 
-import React, { useState, useSyncExternalStore } from "react";
+import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2Icon, CheckIcon, GraduationCapIcon, InfoIcon, UsersIcon, XIcon } from "lucide-react";
+import { Building2Icon, GraduationCapIcon, InfoIcon, UsersIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
+import { NETWORK_ERROR, PASSWORD_RULE_HINT, checkPhone, confirmPasswordError, emailError, fullNameError, passwordRuleError } from "@/lib/auth-validation";
 import { useAccountPolicies } from "@/lib/use-account-policies";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
+import { PasswordMatchStatus, PasswordStrengthMeter } from "@/components/auth/PasswordFeedback";
 import { REGISTER_PARENT_EMAIL_KEY } from "@/components/auth/ParentConsentForm";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-
-// Đánh giá độ mạnh mật khẩu (1..4)
-function getPasswordStrength(pass: string): {
-  score: number;
-  label: string;
-  color: string;
-  barColor: string;
-} {
-  if (!pass) {
-    return { score: 0, label: "", color: "", barColor: "" };
-  }
-
-  let score = 0;
-  if (pass.length >= 8) score++;
-  if (pass.length >= 10 && /[A-Z]/.test(pass) && /[a-z]/.test(pass)) score++;
-  if (/\d/.test(pass)) score++;
-  if (/[^a-zA-Z0-9]/.test(pass)) score++;
-
-  const finalScore = Math.min(4, Math.max(1, score));
-
-  switch (finalScore) {
-    case 1:
-      return { score: 1, label: "Yếu", color: "text-destructive", barColor: "bg-destructive" };
-    case 2:
-      return { score: 2, label: "Trung bình", color: "text-amber-500", barColor: "bg-amber-500" };
-    case 3:
-      return { score: 3, label: "Khá mạnh", color: "text-blue-500", barColor: "bg-blue-500" };
-    case 4:
-    default:
-      return {
-        score: 4,
-        label: "Rất mạnh",
-        color: "text-emerald-600 dark:text-emerald-400",
-        barColor: "bg-emerald-600 dark:bg-emerald-500",
-      };
-  }
-}
 
 // [Q11] Ngưỡng tuổi theo luật VN (khớp AgeGroups ở backend; backend tính lại và là nơi quyết định)
 const STUDENT_MIN_AGE = 13;
@@ -112,7 +78,14 @@ interface FieldErrors {
 
 export function RegisterForm() {
   const router = useRouter();
-  const { register } = useAuth();
+  const { register, user, isLoading } = useAuth();
+
+  // [AUTH-059] Đã đăng nhập mà mở /register thì chuyển đi như /login: admin/moderator → /admin, còn lại → trang chủ
+  useEffect(() => {
+    if (!isLoading && user) {
+      router.replace(user.role === "admin" || user.role === "moderator" ? "/admin" : "/");
+    }
+  }, [isLoading, user, router]);
 
   const [fullName, setFullName] = useState("");
   // Mở từ trang phụ huynh đồng ý: ?role=parent chọn sẵn Phụ huynh, email lấy từ sessionStorage (không có trên URL).
@@ -125,6 +98,9 @@ export function RegisterForm() {
   const [chosenRole, setRole] = useState<"student" | "parent" | null>(null);
   const role = chosenRole ?? (urlRole === "parent" ? "parent" : "student");
   const [dateOfBirth, setDateOfBirth] = useState("");
+  // [AUTH-041] Ô ngày có chữ nhưng trình duyệt không đọc được (vd 31/02) → value rỗng, validity.badInput = true.
+  // Đọc lúc bấm gửi qua ref vì khi value giữ nguyên "" thì onChange không chạy.
+  const dobInputRef = useRef<HTMLInputElement>(null);
   const [parentEmail, setParentEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -136,7 +112,6 @@ export function RegisterForm() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const passwordStrength = getPasswordStrength(password);
   const isConfirmTouched = confirmPassword.length > 0;
   const isPasswordMatch = isConfirmTouched && password === confirmPassword;
   const isPasswordMismatch = isConfirmTouched && password !== confirmPassword;
@@ -155,23 +130,6 @@ export function RegisterForm() {
   const isMinorStudent = role === "student" && age !== null && age >= 0 && age < ADULT_AGE;
   const parentEmailRequired = isMinorStudent && age !== null && age < CHILD_MAX_AGE_EXCLUSIVE;
 
-  // Hàm kiểm tra và chuẩn hóa số điện thoại Việt Nam
-  const validateVietnamesePhone = (raw: string): { valid: boolean; normalized?: string } => {
-    const cleaned = raw.trim().replace(/[\s.\-()]/g, "");
-    let normalized = cleaned;
-    if (normalized.startsWith("+84")) {
-      normalized = "0" + normalized.slice(3);
-    } else if (normalized.startsWith("84") && normalized.length === 11) {
-      normalized = "0" + normalized.slice(2);
-    }
-    // Định dạng di động 10 số Việt Nam: 03x, 05x, 07x, 08x, 09x
-    const regex = /^0(3|5|7|8|9)\d{8}$/;
-    if (regex.test(normalized)) {
-      return { valid: true, normalized };
-    }
-    return { valid: false };
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -179,13 +137,12 @@ export function RegisterForm() {
     const errors: FieldErrors = {};
 
     // 1. Kiểm tra tính hợp lệ cơ bản ở phía client dưới từng ô
-    if (!fullName.trim()) {
-      errors.fullName = "Vui lòng nhập họ và tên.";
-    } else if (fullName.trim().length > 100) {
-      errors.fullName = "Họ và tên không được vượt quá 100 ký tự.";
-    }
+    const nameError = fullNameError(fullName);
+    if (nameError) errors.fullName = nameError;
 
-    if (!dateOfBirth) {
+    if (!dateOfBirth && dobInputRef.current?.validity.badInput) {
+      errors.dateOfBirth = "Ngày sinh không tồn tại.";
+    } else if (!dateOfBirth) {
       errors.dateOfBirth = "Vui lòng chọn ngày sinh.";
     } else if (dateOfBirth > todayInVietnam()) {
       errors.dateOfBirth = "Ngày sinh không được ở tương lai.";
@@ -197,49 +154,28 @@ export function RegisterForm() {
       errors.dateOfBirth = `Học sinh phải từ đủ ${STUDENT_MIN_AGE} tuổi để tự đăng ký. Với học sinh nhỏ hơn, vui lòng nhờ Phụ huynh đăng ký và quản lý hồ sơ.`;
     }
 
-    if (!email.trim()) {
-      errors.email = "Vui lòng nhập email.";
-    } else if (email.trim().length > 100) {
-      errors.email = "Email không được vượt quá 100 ký tự.";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      errors.email = "Email không đúng định dạng.";
+    const emailProblem = emailError(email);
+    if (emailProblem) errors.email = emailProblem;
+
+    const phoneCheck = checkPhone(phone);
+    if (phoneCheck.error) errors.phone = phoneCheck.error;
+    const normalizedPhone = phoneCheck.normalized;
+
+    // [UC-01] 8–100 ký tự, không toàn khoảng trắng, đủ chữ hoa, chữ thường, chữ số, ký tự đặc biệt (khớp backend)
+    const passwordError = passwordRuleError(password);
+    if (passwordError) {
+      errors.password = passwordError;
     }
 
-    let normalizedPhone: string | null = null;
-    if (phone.trim()) {
-      if (phone.trim().length > 20) {
-        errors.phone = "Số điện thoại không được vượt quá 20 ký tự.";
-      } else {
-        const phoneValidation = validateVietnamesePhone(phone);
-        if (!phoneValidation.valid) {
-          errors.phone = "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912 345 678 hoặc +84912345678).";
-        } else {
-          normalizedPhone = phoneValidation.normalized!;
-        }
-      }
-    }
-
-    if (!password) {
-      errors.password = "Vui lòng nhập mật khẩu.";
-    } else if (password.length < 8) {
-      errors.password = "Mật khẩu phải có tối thiểu 8 ký tự.";
-    } else if (password.length > 100) {
-      errors.password = "Mật khẩu không được vượt quá 100 ký tự.";
-    }
-
-    if (!confirmPassword) {
-      errors.confirmPassword = "Vui lòng xác nhận mật khẩu.";
-    } else if (password && confirmPassword !== password) {
-      errors.confirmPassword = "Mật khẩu xác nhận không khớp.";
-    }
+    const confirmError = confirmPasswordError(password, confirmPassword);
+    if (confirmError) errors.confirmPassword = confirmError;
 
     if (parentEmailRequired && !parentEmail.trim()) {
       errors.parentEmail = `Học sinh dưới ${CHILD_MAX_AGE_EXCLUSIVE} tuổi cần nhập email phụ huynh để phụ huynh đồng ý.`;
     } else if (parentEmail.trim()) {
-      if (parentEmail.trim().length > 100) {
-        errors.parentEmail = "Email phụ huynh không được vượt quá 100 ký tự.";
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail.trim())) {
-        errors.parentEmail = "Email phụ huynh không đúng định dạng.";
+      const parentEmailProblem = emailError(parentEmail, "Email phụ huynh", false);
+      if (parentEmailProblem) {
+        errors.parentEmail = parentEmailProblem;
       } else if (isMinorStudent && parentEmail.trim().toLowerCase() === email.trim().toLowerCase()) {
         errors.parentEmail = "Email phụ huynh phải khác email của học sinh.";
       }
@@ -285,16 +221,29 @@ export function RegisterForm() {
         const msg = err.message || "Đăng ký không thành công. Vui lòng thử lại.";
         if (msg.toLowerCase().includes("email đã được sử dụng") || msg.toLowerCase().includes("email already in use")) {
           setFieldErrors((prev) => ({ ...prev, email: msg }));
+        } else if (msg.toLowerCase().includes("số điện thoại")) {
+          // [UC-01 E6] Số điện thoại sai định dạng hoặc đã thuộc tài khoản khác: báo tại ô Số điện thoại
+          setFieldErrors((prev) => ({ ...prev, phone: msg }));
         } else {
           setError(msg);
         }
       } else {
-        setError("Có lỗi kết nối máy chủ. Vui lòng thử lại sau.");
+        setError(NETWORK_ERROR);
       }
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // [AUTH-059] Chưa biết đã đăng nhập hay chưa, hoặc đã đăng nhập và đang chuyển đi: không hiện form
+  if (isLoading || user) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-ink-2" role="status">
+        <Spinner />
+        Đang tải...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -376,6 +325,7 @@ export function RegisterForm() {
             </FieldLabel>
             <Input
               id="dateOfBirth"
+              ref={dobInputRef}
               type="date"
               max={todayInVietnam()}
               value={dateOfBirth}
@@ -485,29 +435,9 @@ export function RegisterForm() {
                 setPassword(e.target.value);
                 clearFieldError("password");
               }}
-              placeholder="Tối thiểu 8 ký tự, tối đa 100"
+              placeholder={PASSWORD_RULE_HINT}
             />
-            {password.length > 0 && (
-              <div className="space-y-1.5 pt-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Độ mạnh mật khẩu:</span>
-                  <span className={cn("font-medium", passwordStrength.color)}>
-                    {passwordStrength.label}
-                  </span>
-                </div>
-                <div className="grid grid-cols-4 gap-1.5" aria-hidden="true">
-                  {[1, 2, 3, 4].map((level) => (
-                    <div
-                      key={level}
-                      className={cn(
-                        "h-1.5 rounded-full transition-all duration-300",
-                        passwordStrength.score >= level ? passwordStrength.barColor : "bg-muted"
-                      )}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+            <PasswordStrengthMeter password={password} />
             {fieldErrors.password && <FieldError id="password-error">{fieldErrors.password}</FieldError>}
           </Field>
 
@@ -538,25 +468,7 @@ export function RegisterForm() {
               placeholder="Nhập lại mật khẩu"
             />
             {isConfirmTouched ? (
-              isPasswordMatch ? (
-                <div
-                  id="confirmPassword-status"
-                  role="status"
-                  className="flex items-center gap-1.5 pt-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
-                >
-                  <CheckIcon className="size-4 shrink-0" aria-hidden="true" />
-                  <span>Mật khẩu khớp</span>
-                </div>
-              ) : (
-                <div
-                  id="confirmPassword-error"
-                  role="alert"
-                  className="flex items-center gap-1.5 pt-1 text-xs font-medium text-destructive"
-                >
-                  <XIcon className="size-4 shrink-0" aria-hidden="true" />
-                  <span>Mật khẩu chưa khớp</span>
-                </div>
-              )
+              <PasswordMatchStatus matched={isPasswordMatch} id={isPasswordMatch ? "confirmPassword-status" : "confirmPassword-error"} />
             ) : (
               fieldErrors.confirmPassword && (
                 <FieldError id="confirmPassword-error">{fieldErrors.confirmPassword}</FieldError>
@@ -656,7 +568,7 @@ export function RegisterForm() {
             )}
           </Field>
 
-          <Button type="submit" size="xl" disabled={isSubmitting || !accountPolicies.ready} className="w-full" loading={isSubmitting}>
+          <Button type="submit" size="xl" disabled={isSubmitting || !accountPolicies.ready || !agreeTerms} className="w-full" loading={isSubmitting}>
             {isSubmitting ? "Đang xử lý..." : "Tạo tài khoản"}
           </Button>
         </FieldGroup>

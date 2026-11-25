@@ -22,7 +22,8 @@ public class LeadService(
     IEmailSender? emailSender = null,
     INotificationService? notifications = null,
     ILeadChatNotifier? chat = null,
-    ILeadChatPresence? presence = null) : ILeadService
+    ILeadChatPresence? presence = null,
+    StudyAbroad.Application.Admin.Policies.IPolicyVersionLookup? policyVersions = null) : ILeadService
 {
     public const int MaxMessageLength = 2000;
     public const int MaxReplyMessageLength = 4000;
@@ -109,7 +110,7 @@ public class LeadService(
 
         var lead = await leads.GetLeadForUpdateAsync(leadId, ct);
         // [UC-116] Lead chờ phụ huynh / bị từ chối / hết hạn: trung tâm chưa nhận, báo như không tồn tại
-        if (lead is null || LeadStatuses.IsHiddenFromCenter(lead.Status))
+        if (lead is null || LeadParentConfirm.IsHiddenFromCenter(lead))
             throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
 
         // [Chống IDOR] Trung tâm chỉ được đọc/trả lời các yêu cầu gửi tới đúng trung tâm mình
@@ -228,12 +229,15 @@ public class LeadService(
         var isParent = submitter.Role == UserRoles.Parent;
         // [UC-116] Học sinh dưới 16: chưa có đồng ý chia sẻ; bản ghi đồng ý tạo khi phụ huynh bấm Đồng ý trong mail
         var parentSecret = needsParentConfirm ? ParentInvite.GenerateToken() : null;
+        // [UC-42 4b / UC-110 bước 3] Ghi phiên bản văn bản đang hiệu lực: phụ huynh gửi thay con dưới 16 là đồng ý của người đại diện
+        var child = isParent ? await users.GetUserById(studentId, ct) : null;
+        var byGuardian = child?.DateOfBirth is { } childDob && AgePolicy.GetAge(childDob, today) < AgeGroups.ChildMaxAgeExclusive;
         var consent = needsParentConfirm ? null : new Consent
         {
             UserId = studentId,
             Purpose = AgeFeatures.ShareWithCenter,
             Granted = true,
-            PolicyVersion = "v1.0",
+            PolicyVersion = await LeadParentConfirm.ConsentPolicyVersionAsync(policyVersions, byGuardian, ct),
             GrantedByUserId = isParent ? submitter.Id : null,
             GrantedIp = clientIp,
         };
@@ -272,9 +276,14 @@ public class LeadService(
 
         var activeLinks = (await parentLinks.GetByStudentAsync(student.Id, ct))
             .Where(l => l.Status == ParentLinkStatuses.Active);
+        // [UC-110 bước 1] Bản xem trước dựng từ đúng dữ liệu trung tâm sẽ thấy khi phụ huynh đồng ý
+        var view = await leads.GetSharedPreviewAsync(lead.Id, ct);
+        var preview = view is null
+            ? lead.SharedFields.Select(f => new LeadSharedPreviewGroup(LeadParentConfirm.FieldLabel(f), [])).ToList()
+            : LeadParentConfirm.BuildPreview(view, lead.SharedFields);
         foreach (var link in activeLinks)
         {
-            await emailSender.SendLeadParentConfirmEmailAsync(link.ParentEmail, student.FullName, centerName, lead.SharedFields,
+            await emailSender.SendLeadParentConfirmEmailAsync(link.ParentEmail, student.FullName, centerName, preview,
                 LeadParentConfirm.ComposeToken(secret, link.Id), LeadParentConfirm.ExpiryDays, ct);
         }
     }
@@ -382,7 +391,7 @@ public class LeadService(
         {
             // [UC-44] Phụ huynh: lead mình bấm gửi (kể cả khi liên kết đã hủy), hoặc lead của con dưới 18 tuổi đang liên kết
             canView = lead.SubmittedByUserId == user.Id
-                      || (await GetLinkedMinorChildIdsAsync(user.Id, ct)).Contains(lead.UserId);
+                      || (lead.UserId is { } studentId && (await GetLinkedMinorChildIdsAsync(user.Id, ct)).Contains(studentId));
         }
         if (!canView)
             throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
@@ -460,7 +469,9 @@ public class LeadService(
     /// <summary>Người ở phía học sinh của lead: học sinh chủ lead và phụ huynh đã bấm gửi (nếu có).</summary>
     private static IReadOnlyList<Guid> StudentSideUserIds(Lead lead)
     {
-        var ids = new List<Guid> { lead.UserId };
+        // [UC-75 lớp 1b] Học sinh đã bị xóa hẳn (UserId null) thì không còn ai để báo
+        var ids = new List<Guid>();
+        if (lead.UserId is { } owner) ids.Add(owner);
         if (lead.SubmittedByUserId is { } submitted && submitted != lead.UserId) ids.Add(submitted);
         return ids;
     }
@@ -638,7 +649,7 @@ public class LeadService(
 
         var lead = await leads.GetLeadForUpdateAsync(leadId, ct);
         // [UC-116] Lead trung tâm chưa nhận: không đổi trạng thái được
-        if (lead is null || LeadStatuses.IsHiddenFromCenter(lead.Status))
+        if (lead is null || LeadParentConfirm.IsHiddenFromCenter(lead))
             throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
 
         // [Chống IDOR] Lead của trung tâm khác báo "không tìm thấy" như lead không tồn tại, để không lộ lead có thật
@@ -698,7 +709,7 @@ public class LeadService(
 
         var lead = await leads.GetLeadForUpdateAsync(leadId, ct);
         // [UC-116] Lead trung tâm chưa nhận; [Chống IDOR] lead của trung tâm khác báo "không tìm thấy"
-        if (lead is null || LeadStatuses.IsHiddenFromCenter(lead.Status)
+        if (lead is null || LeadParentConfirm.IsHiddenFromCenter(lead)
             || (centerId.HasValue && lead.StudyCenterId != centerId.Value))
             throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
 
@@ -730,7 +741,7 @@ public class LeadService(
                 centerName = (await studyCenters.GetByIdAsync(lead.StudyCenterId, ct))?.Name ?? "Trung tâm tư vấn";
 
             // Thông báo cho người bấm gửi, và học sinh nếu phụ huynh gửi thay
-            var recipients = new[] { lead.SubmittedByUserId ?? lead.UserId, lead.UserId }.Distinct().ToList();
+            var recipients = new[] { lead.SubmittedByUserId ?? lead.UserId, lead.UserId }.OfType<Guid>().Distinct().ToList();
             await leads.AddNotificationsAsync(recipients.Select(id => new Notification
             {
                 UserId = id,
@@ -758,12 +769,11 @@ public class LeadService(
     {
         var (lead, centerName) = await GetAuthorizedLeadForCenterAsync(userId, userEmail, userRole, leadId, ct);
 
-        // [UC-80] Lead đã thu hồi: trung tâm không xem lại nội dung trao đổi
-        if (string.Equals(lead.Status, LeadStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase))
-            return new LeadMessagesThreadDto(lead.Id, lead.Status, []);
-
+        // [UC-44 E1] Lead đã thu hồi vẫn xem được lịch sử tin nhắn; [UC-73] nhưng không lộ tên người gửi (dữ liệu cá nhân).
+        // [UC-75 lớp 1b] Người gửi đã bị xóa hẳn hiện "Người dùng đã xóa tài khoản" (LeadMessageMapper)
         // [UC-42] Hiện tên khi chia sẻ nhóm contact, cùng quy tắc với CenterLeadMapper
-        var showName = lead.SharedFields.Contains(LeadSharedFields.Contact);
+        var withdrawn = string.Equals(lead.Status, LeadStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase);
+        var showName = !withdrawn && lead.SharedFields.Contains(LeadSharedFields.Contact);
         var messages = await leads.GetLeadMessagesAsync(lead.Id, lead.UserId, showName, centerName, ct);
 
         return new LeadMessagesThreadDto(lead.Id, lead.Status, messages);
@@ -902,7 +912,7 @@ public class LeadService(
         var message = await leads.GetLeadMessageForUpdateAsync(lead.Id, messageId, ct)
             ?? throw new KeyNotFoundException("Không tìm thấy tin nhắn trong yêu cầu liên hệ này.");
 
-        var sender = await users.GetUserById(message.SenderUserId, ct);
+        var sender = message.SenderUserId is { } senderId ? await users.GetUserById(senderId, ct) : null;
         var senderIsCenterSide = LeadMessageMapper.IsStaffOrCenterRole(sender?.Role);
         if (senderIsCenterSide == reporterIsCenterSide)
             throw new ArgumentException(reporterIsCenterSide
@@ -1153,8 +1163,11 @@ public class LeadService(
         }, ct);
     }
 
-    private Task NotifyUserAsync(Guid userId, string type, string title, string body, CancellationToken ct) =>
-        leads.AddNotificationsAsync([new Notification { UserId = userId, Type = type, Title = title, Body = body }], ct);
+    // [UC-75 lớp 1b] userId null: người nhận đã bị xóa hẳn, không gửi
+    private Task NotifyUserAsync(Guid? userId, string type, string title, string body, CancellationToken ct) =>
+        userId is { } id
+            ? leads.AddNotificationsAsync([new Notification { UserId = id, Type = type, Title = title, Body = body }], ct)
+            : Task.CompletedTask;
 
     /// <summary>[UC-58] Bước 4 của luồng chính: báo kết quả xử lý cho người đã báo cáo.</summary>
     private Task NotifyReporterAsync(LeadMessage message, string outcome, CancellationToken ct) =>
@@ -1207,7 +1220,8 @@ public class LeadService(
 
         var message = await leads.GetLeadMessageForUpdateAsync(leadId, messageId, ct)
             ?? throw new KeyNotFoundException("Không tìm thấy tin nhắn trong yêu cầu liên hệ này.");
-        return message.SenderUserId;
+        // [UC-75 lớp 1b] Người gửi đã bị xóa hẳn: không còn tài khoản để khóa
+        return message.SenderUserId ?? throw new ArgumentException("Người gửi tin này đã xóa tài khoản.");
     }
 
     /// <summary>[UC-58] Sau khi Admin khóa tài khoản: gỡ toàn bộ tin nhắn của tài khoản đó và ghi nhật ký.</summary>

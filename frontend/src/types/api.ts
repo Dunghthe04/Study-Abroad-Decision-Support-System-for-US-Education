@@ -666,6 +666,18 @@ export interface ParentRevokeInfo {
   acceptedAt: string | null;
 }
 
+/** [UC-75 4b] Hai nút trong mail xác nhận người đại diện yêu cầu xóa tài khoản của con */
+export type ParentRestoreMode = "reconsent" | "restore_only";
+
+/** [UC-75 4b] Trang khôi phục mở từ nút trong mail. canReconsent = false khi con đã đủ 16 tuổi. */
+export interface ParentRestoreInfo {
+  studentName: string;
+  deletionDate: string;
+  mode: ParentRestoreMode;
+  canReconsent: boolean;
+  policyVersion: string;
+}
+
 export interface ParentLinkDto {
   id: string;
   status: ParentLinkStatus;
@@ -680,6 +692,8 @@ export interface ParentLinkDto {
   tokenExpiresAt: string | null;
   /** Server tính theo luật rút đồng ý (học sinh dưới 16 không tự rút liên kết đã đồng ý) */
   canRevoke: boolean;
+  /** [UC-01, UC-111 E2] "not_required" khi học sinh từ 16 tuổi, còn lại bằng status */
+  consentStatus: ParentLinkStatus | "not_required";
 }
 
 export interface ParentLinkResponse<T> {
@@ -760,6 +774,8 @@ export interface CenterReceivedLeadDto {
   profileSummary?: SharedProfileSummaryDto | null;
   /** [UC-73] Đã thu hồi hoặc quá 90 ngày: trung tâm không còn xem được dữ liệu đã chia sẻ. */
   dataHidden?: boolean;
+  /** [UC-111 bước 5] Ẩn vì phụ huynh đã rút đồng ý của học sinh dưới 16. */
+  consentRevoked?: boolean;
   /** [UC-68] Thời hạn 7 ngày để trung tâm phản hồi lead ở trạng thái Mới. */
   expiresAt?: string | null;
   daysUntilExpiry?: number | null;
@@ -882,7 +898,8 @@ export interface CenterReviewReplyDto {
 export interface CenterReviewDto {
   id: string;
   reviewerName: string;
-  reviewerRole: "student" | "parent";
+  /** null: người đánh giá đã xóa tài khoản (UC-75), tên là "Người dùng đã xóa tài khoản" */
+  reviewerRole: "student" | "parent" | null;
   isVerified: boolean;
   createdAt: string;
   rating: number;

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
@@ -138,11 +139,24 @@ public class UserRepository(AppDbContext db) : IUserRepository
             .ExecuteUpdateAsync(o => o.SetProperty(x => x.UsedAt, DateTime.UtcNow), cancellationToken);
     }
 
-    public Task<int> CountOtpRequestsInLastHourAsync(Guid userId, string purpose, CancellationToken cancellationToken = default)
+    public Task<OtpToken?> FindUnusedOtpByHashAsync(string codeHash, IReadOnlyCollection<string> purposes, CancellationToken cancellationToken = default) =>
+        db.OtpTokens
+            .Where(o => o.CodeHash == codeHash && purposes.Contains(o.Purpose) && o.UsedAt == null)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<int> CountOtpRequestsInLastHourAsync(Guid userId, string purpose, CancellationToken cancellationToken = default)
     {
         var oneHourAgo = DateTime.UtcNow.AddHours(-1);
-        return db.OtpTokens
-            .Where(o => o.UserId == userId && o.Purpose == purpose && o.CreatedAt >= oneHourAgo)
+        // [UC-02 quy tắc] Giới hạn là 5 lần GỬI LẠI mỗi giờ: mã xác thực email đầu tiên (gửi lúc đăng ký) không tính
+        var registrationOtpId = purpose == OtpPurposes.VerifyEmail
+            ? await db.OtpTokens
+                .Where(o => o.UserId == userId && o.Purpose == purpose)
+                .OrderBy(o => o.CreatedAt)
+                .Select(o => (Guid?)o.Id)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+        return await db.OtpTokens
+            .Where(o => o.UserId == userId && o.Purpose == purpose && o.CreatedAt >= oneHourAgo && o.Id != registrationOtpId)
             .CountAsync(cancellationToken);
     }
 
@@ -198,6 +212,9 @@ public class UserRepository(AppDbContext db) : IUserRepository
 
         // [1.5c] Con managed (phụ huynh nhập thay, email giả) không phải tài khoản thật: admin không thấy, kể cả khi lọc
         q = q.Where(u => u.Status != UserStatuses.Managed);
+        // Con managed bị xóa cùng phụ huynh (UC-75 quy tắc) mang trạng thái chờ xóa nhưng vẫn không phải tài khoản thật
+        var managedEmailSuffix = "@" + ManagedChildService.EmailDomain;
+        q = q.Where(u => !u.Email.EndsWith(managedEmailSuffix));
 
         if (!string.IsNullOrEmpty(query.Status))
             q = q.Where(u => u.Status == query.Status);

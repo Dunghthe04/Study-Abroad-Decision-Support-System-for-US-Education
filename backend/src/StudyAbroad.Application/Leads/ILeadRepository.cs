@@ -51,13 +51,19 @@ public interface ILeadRepository
         Guid? restrictToCenterId,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// [UC-110 bước 1] Dữ liệu trung tâm sẽ thấy khi nhận lead, dựng như <see cref="GetReceivedLeadDetailAsync"/> nhưng không lọc
+    /// lead chờ phụ huynh. Chỉ dùng để làm bản xem trước trong mail phụ huynh, không trả cho trung tâm.
+    /// </summary>
+    Task<CenterReceivedLeadDto?> GetSharedPreviewAsync(Guid leadId, CancellationToken ct = default);
+
     Task<Lead?> GetLeadForUpdateAsync(Guid leadId, CancellationToken ct = default);
     Task UpdateAsync(Lead lead, CancellationToken ct = default);
 
     // [USAS-2053 / UC-74] Đọc và gửi tin nhắn trao đổi trong yêu cầu liên hệ (bảng app.lead_messages)
     Task<IReadOnlyList<LeadMessageDto>> GetLeadMessagesAsync(
         Guid leadId,
-        Guid leadOwnerUserId,
+        Guid? leadOwnerUserId,
         bool sharedProfile,
         string centerName,
         CancellationToken ct = default);

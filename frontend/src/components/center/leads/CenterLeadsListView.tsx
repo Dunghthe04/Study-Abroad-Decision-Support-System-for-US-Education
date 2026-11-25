@@ -317,10 +317,10 @@ export function CenterLeadsListView() {
             Người dùng đã thu hồi
           </span>
         ) : lead.dataHidden ? (
-          // [UC-73] Quá 90 ngày: không còn xem được dữ liệu đã chia sẻ
+          // [UC-73] Quá 90 ngày / [UC-111 bước 5] phụ huynh rút đồng ý: không còn xem được dữ liệu đã chia sẻ
           <span className="text-ink-3 italic flex items-center gap-1 whitespace-nowrap text-xs">
             <LockIcon className="size-3 shrink-0" />
-            Quá 90 ngày, dữ liệu đã ẩn
+            {lead.consentRevoked ? "Phụ huynh đã rút đồng ý, dữ liệu đã ẩn" : "Quá 90 ngày, dữ liệu đã ẩn"}
           </span>
         ) : lead.sharedProfile && lead.studentName ? (
           <div>
@@ -687,13 +687,15 @@ export function CenterLeadsListView() {
               </DialogHeader>
 
               {selectedLead.status === "withdrawn" || selectedLead.dataHidden ? (
-                // [UC-80] Người gửi đã xóa tài khoản / [UC-73] quá 90 ngày: ẩn mọi dữ liệu đã chia sẻ
+                // [UC-80] Người gửi đã xóa tài khoản / [UC-73] quá 90 ngày / [UC-111 bước 5] rút đồng ý: ẩn mọi dữ liệu đã chia sẻ
                 <div className="my-2 rounded-lg border border-dashed p-4 text-center bg-muted/20">
                   <LockIcon className="size-5 text-muted-foreground mx-auto mb-1" />
                   <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
                     {selectedLead.status === "withdrawn"
                       ? "Người dùng đã thu hồi yêu cầu này. Thông tin liên hệ, hồ sơ và tin nhắn không còn hiển thị."
-                      : "Yêu cầu đã quá 90 ngày nên trung tâm không còn xem được dữ liệu người gửi đã chia sẻ."}
+                      : selectedLead.consentRevoked
+                        ? "Phụ huynh của học sinh đã rút đồng ý nên trung tâm không còn xem được dữ liệu người gửi đã chia sẻ."
+                        : "Yêu cầu đã quá 90 ngày nên trung tâm không còn xem được dữ liệu người gửi đã chia sẻ."}
                   </p>
                 </div>
               ) : (

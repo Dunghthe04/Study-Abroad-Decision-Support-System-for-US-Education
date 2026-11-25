@@ -42,7 +42,7 @@ public class AuthServiceTests
 
     private static RegisterRequest Request(
         string email = "a@test.com",
-        string password = "password123",
+        string password = "Password@123",
         string fullName = "Nguyen Van A",
         string role = UserRoles.Parent,
         DateOnly? dateOfBirth = null,
@@ -302,7 +302,7 @@ public class AuthServiceTests
     {
         var service = CreateService();
         var result = await service.CreateModeratorAccountAsync(
-            new CreateModeratorAccountRequest("mod@test.com", "password123", "Người kiểm duyệt", "0912345678"));
+            new CreateModeratorAccountRequest("mod@test.com", "Password@123", "Người kiểm duyệt", "0912345678"));
 
         Assert.Equal(AuthError.None, result.Error);
         Assert.NotNull(result.User);
@@ -319,9 +319,9 @@ public class AuthServiceTests
     {
         var service = CreateService();
         await service.CreateModeratorAccountAsync(
-            new CreateModeratorAccountRequest("mod@test.com", "password123", "Mod A"));
+            new CreateModeratorAccountRequest("mod@test.com", "Password@123", "Mod A"));
         var result = await service.CreateModeratorAccountAsync(
-            new CreateModeratorAccountRequest("MOD@test.com", "password123", "Mod B"));
+            new CreateModeratorAccountRequest("MOD@test.com", "Password@123", "Mod B"));
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Single(_repo.Users);
@@ -332,9 +332,9 @@ public class AuthServiceTests
     {
         var service = CreateService();
         await service.CreateModeratorAccountAsync(
-            new CreateModeratorAccountRequest("mod@test.com", "password123", "Mod User"));
+            new CreateModeratorAccountRequest("mod@test.com", "Password@123", "Mod User"));
 
-        var login = await service.LoginAsync(new LoginRequest("mod@test.com", "password123"));
+        var login = await service.LoginAsync(new LoginRequest("mod@test.com", "Password@123"));
 
         Assert.Equal(AuthError.None, login.Error);
         Assert.NotNull(login.Response);
@@ -349,7 +349,7 @@ public class AuthServiceTests
         await service.RegisterAsync(Request());
         _repo.Users[0].Status = UserStatuses.Active;
 
-        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
 
         var response = login.Response!;
         Assert.False(string.IsNullOrEmpty(response.RefreshToken));
@@ -363,6 +363,30 @@ public class AuthServiceTests
         Assert.InRange(session.ExpiresAt, DateTime.UtcNow.AddDays(7).AddMinutes(-1), DateTime.UtcNow.AddDays(7).AddMinutes(1));
     }
 
+    // [UC-03] AUTH-215: phiên Moderator chỉ sống 8 giờ tính từ lúc đăng nhập, cookie theo cùng mốc
+    [Fact]
+    public async Task Login_Moderator_SessionLasts8Hours()
+    {
+        var service = CreateService();
+        await service.CreateModeratorAccountAsync(
+            new CreateModeratorAccountRequest("mod@test.com", "Password@123", "Mod User"));
+
+        var login = await service.LoginAsync(new LoginRequest("mod@test.com", "Password@123"));
+
+        var session = Assert.Single(_repo.Sessions);
+        Assert.Equal(session.ExpiresAt, login.Response!.SessionExpiresAt);
+        Assert.InRange(session.ExpiresAt, DateTime.UtcNow.AddHours(8).AddMinutes(-1), DateTime.UtcNow.AddHours(8).AddMinutes(1));
+    }
+
+    [Theory]
+    [InlineData(UserRoles.Student, 7 * 24)]
+    [InlineData(UserRoles.Parent, 7 * 24)]
+    [InlineData(UserRoles.Center, 7 * 24)]
+    [InlineData(UserRoles.Moderator, 8)]
+    [InlineData(UserRoles.Admin, 8)]
+    public void LifetimeFor_FollowsRole(string role, int hours) =>
+        Assert.Equal(TimeSpan.FromHours(hours), RefreshTokens.LifetimeFor(role));
+
     [Fact]
     public async Task LockUserAccount_LocksStudent_WritesAuditAndRevokesSessions()
     {
@@ -371,7 +395,7 @@ public class AuthServiceTests
         await service.RegisterAsync(Request());
         _repo.Users[0].Status = UserStatuses.Active;
         var studentId = _repo.Users[0].Id;
-        await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
         Assert.Single(_repo.Sessions);
         Assert.False(_repo.Sessions[0].IsRevoked);
 
@@ -427,6 +451,26 @@ public class AuthServiceTests
             Guid.NewGuid());
 
         Assert.Equal(AuthError.Validation, result.Error);
+    }
+
+    // [UC-80] Tài khoản chờ xóa không khóa được: giữ trạng thái chờ xóa để tác vụ xóa hẳn vẫn xử lý
+    [Fact]
+    public async Task LockUserAccount_PendingDeletion_ReturnsValidation_StaysDeleted()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Deleted;
+        var deletedAt = DateTime.UtcNow.AddDays(-2);
+        user.DeletedAt = deletedAt;
+
+        var result = await service.LockUserAccountAsync(user.Id, new LockUserAccountRequest("lý do"), Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal(AuthService.LockPendingDeletionMessage, result.Message);
+        Assert.Equal(UserStatuses.Deleted, user.Status);
+        Assert.Equal(deletedAt, user.DeletedAt);
+        Assert.Empty(_auditLogs.Entries);
     }
 
     [Fact]
@@ -664,6 +708,68 @@ public class AuthServiceTests
         Assert.Contains("\"withdrawnLeads\":2", log.DetailJson);
     }
 
+    // [UC-75 quy tắc, UC-130] Phụ huynh xóa tài khoản: hồ sơ con chưa có tài khoản bị xóa mềm cùng lúc, không gửi mail tới con;
+    // con thật đã liên kết vẫn còn tài khoản và được báo
+    [Fact]
+    public async Task AnonymizeUserAccount_Parent_SoftDeletesManagedChildren_KeepsRealChild()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var parent = _repo.Users[0];
+        parent.Status = UserStatuses.Active;
+        var minh = new User { Email = "minh@noreply.usas.local", FullName = "Minh", Role = UserRoles.Student, Status = UserStatuses.Managed, PasswordHash = "" };
+        var realKid = new User { Email = "kid@test.com", FullName = "Kid", Role = UserRoles.Student, Status = UserStatuses.Active, PasswordHash = "x" };
+        _repo.Users.AddRange([minh, realKid]);
+        _links.Links.Add(new ParentStudentLink { StudentUserId = minh.Id, ParentUserId = parent.Id, ParentEmail = parent.Email, Status = ParentLinkStatuses.Active });
+        _links.Links.Add(new ParentStudentLink { StudentUserId = realKid.Id, ParentUserId = parent.Id, ParentEmail = parent.Email, Status = ParentLinkStatuses.Active });
+        await _repo.CreateSessionAsync(new UserSession { UserId = minh.Id, TokenHash = "acting", ExpiresAt = DateTime.UtcNow.AddHours(1) });
+        var mailsBefore = _emailSender.SentEmails.Count;
+
+        var result = await service.AnonymizeUserAccountAsync(parent.Id);
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(UserStatuses.Deleted, minh.Status);
+        Assert.NotNull(minh.DeletedAt);
+        Assert.InRange(minh.DeletedAt!.Value - parent.DeletedAt!.Value, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+        Assert.True(_repo.Sessions.Single(s => s.UserId == minh.Id).IsRevoked);
+        Assert.Equal(UserStatuses.Active, realKid.Status);
+        var mails = _emailSender.SentEmails.Skip(mailsBefore).ToList();
+        Assert.DoesNotContain(mails, e => e.To == minh.Email);
+        Assert.Contains(mails, e => e.To == realKid.Email);
+    }
+
+    // [UC-75 quy tắc] Phụ huynh khôi phục trong 30 ngày: con managed bị xóa cùng lúc được khôi phục theo, liên kết hiệu lực lại;
+    // con phụ huynh tự xóa trước đó vẫn ở trạng thái đã xóa
+    [Fact]
+    public async Task RestoreAccount_Parent_RestoresManagedChildrenDeletedTogether()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var parent = _repo.Users[0];
+        parent.Status = UserStatuses.Active;
+        parent.Role = UserRoles.Parent;
+        var minh = new User { Email = "managed-minh@noreply.usas.local", FullName = "Minh", Role = UserRoles.Student, Status = UserStatuses.Managed, PasswordHash = "" };
+        var earlier = DateTime.UtcNow.AddDays(-3);
+        var lan = new User { Email = "managed-lan@noreply.usas.local", FullName = "Lan", Role = UserRoles.Student, Status = UserStatuses.Deleted, DeletedAt = earlier, PasswordHash = "" };
+        _repo.Users.AddRange([minh, lan]);
+        _links.Links.Add(new ParentStudentLink { StudentUserId = minh.Id, ParentUserId = parent.Id, ParentEmail = parent.Email, Status = ParentLinkStatuses.Active });
+        _links.Links.Add(new ParentStudentLink { StudentUserId = lan.Id, ParentUserId = parent.Id, ParentEmail = parent.Email, Status = ParentLinkStatuses.Revoked, RevokedAt = earlier, RevokedByUserId = parent.Id });
+        await service.AnonymizeUserAccountAsync(parent.Id);
+        Assert.Equal(UserStatuses.Deleted, minh.Status);
+
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
+        var result = await service.RestoreAccountAsync(new RestoreAccountRequest("a@test.com", login.PendingDeletion!.RestoreToken));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(UserStatuses.Managed, minh.Status);
+        Assert.Null(minh.DeletedAt);
+        var minhLink = _links.Links.Single(l => l.StudentUserId == minh.Id);
+        Assert.Equal(ParentLinkStatuses.Active, minhLink.Status);
+        Assert.Null(minhLink.RevokedAt);
+        Assert.Equal(UserStatuses.Deleted, lan.Status);
+        Assert.Equal(ParentLinkStatuses.Revoked, _links.Links.Single(l => l.StudentUserId == lan.Id).Status);
+    }
+
     [Fact]
     public async Task AnonymizeUserAccount_AlreadyDeleted_ReturnsValidationError()
     {
@@ -735,7 +841,7 @@ public class AuthServiceTests
     {
         var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
 
-        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
 
         Assert.Equal(AuthError.PendingDeletion, result.Error);
         Assert.Null(result.Response);
@@ -766,7 +872,7 @@ public class AuthServiceTests
     {
         var (service, _) = await PendingDeletionSetup(TimeSpan.FromDays(31));
 
-        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
 
         Assert.Equal(AuthError.InvalidCredentials, result.Error);
         Assert.Null(result.PendingDeletion);
@@ -777,7 +883,7 @@ public class AuthServiceTests
     public async Task RestoreAccount_ValidToken_ActivatesCreatesSessionAndAudits()
     {
         var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
-        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
 
         var result = await service.RestoreAccountAsync(
             new RestoreAccountRequest("a@test.com", login.PendingDeletion!.RestoreToken));
@@ -796,7 +902,7 @@ public class AuthServiceTests
     public async Task RestoreAccount_WrongToken_Fails()
     {
         var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
-        await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
 
         var result = await service.RestoreAccountAsync(new RestoreAccountRequest("a@test.com", "sai-ma"));
 
@@ -805,11 +911,62 @@ public class AuthServiceTests
         Assert.Empty(_repo.Sessions);
     }
 
+    // [UC-05] AUTH-223: tài khoản đang chờ xóa còn trong 30 ngày đặt lại được mật khẩu, tài khoản vẫn chờ xóa;
+    // đăng nhập bằng mật khẩu mới đi vào luồng khôi phục (UC-03, 3c)
+    [Fact]
+    public async Task ResetPassword_PendingDeletion_Succeeds_StaysDeleted_LoginOffersRestore()
+    {
+        var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
+
+        await service.ForgotPasswordAsync(new ForgotPasswordRequest("a@test.com"));
+        var code = _emailSender.SentEmails.Last(e => e.Purpose == OtpPurposes.ResetPassword).Code;
+        var reset = await service.ResetPasswordAsync(new ResetPasswordRequest("a@test.com", code, "NewPassword@123"));
+
+        Assert.Equal(AuthError.None, reset.Error);
+        Assert.Equal(UserStatuses.Deleted, user.Status);
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "NewPassword@123"));
+        Assert.Equal(AuthError.PendingDeletion, login.Error);
+        Assert.False(string.IsNullOrEmpty(login.PendingDeletion!.RestoreToken));
+        Assert.Empty(_repo.Sessions);
+    }
+
+    // Học sinh dưới 16 bị người đại diện yêu cầu xóa: vẫn đặt lại được mật khẩu nhưng đăng nhập không có mã khôi phục (UC-75 4b)
+    [Fact]
+    public async Task ResetPassword_PendingDeletionRequestedByParent_Succeeds_LoginStillBlocked()
+    {
+        var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
+        user.DateOfBirth = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-14));
+        user.DeletionRequestedByEmail = "parent@test.com";
+
+        await service.ForgotPasswordAsync(new ForgotPasswordRequest("a@test.com"));
+        var code = _emailSender.SentEmails.Last(e => e.Purpose == OtpPurposes.ResetPassword).Code;
+        var reset = await service.ResetPasswordAsync(new ResetPasswordRequest("a@test.com", code, "NewPassword@123"));
+
+        Assert.Equal(AuthError.None, reset.Error);
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "NewPassword@123"));
+        Assert.True(login.PendingDeletion!.RequestedByParent);
+        Assert.Null(login.PendingDeletion.RestoreToken);
+    }
+
+    // Quá 30 ngày (job chưa kịp xóa hẳn) thì không nhận mã, vẫn thông báo chung
+    [Fact]
+    public async Task ForgotPassword_PendingDeletionPastRetention_NoResetCode()
+    {
+        var (service, _) = await PendingDeletionSetup(TimeSpan.FromDays(31));
+
+        var forgot = await service.ForgotPasswordAsync(new ForgotPasswordRequest("a@test.com"));
+        var resend = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.ResetPassword));
+
+        Assert.Equal(AuthError.None, forgot.Error);
+        Assert.Equal(AuthError.None, resend.Error);
+        Assert.DoesNotContain(_repo.Otps, o => o.Purpose == OtpPurposes.ResetPassword);
+    }
+
     [Fact]
     public async Task RestoreAccount_TokenUsedTwice_SecondFails()
     {
         var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
-        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
         var request = new RestoreAccountRequest("a@test.com", login.PendingDeletion!.RestoreToken);
         await service.RestoreAccountAsync(request);
         user.Status = UserStatuses.Deleted;
@@ -824,7 +981,7 @@ public class AuthServiceTests
     public async Task RestoreAccount_ExpiredToken_Fails()
     {
         var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
-        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
         _repo.Otps.Single(o => o.Purpose == OtpPurposes.RestoreAccount).ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
 
         var result = await service.RestoreAccountAsync(
@@ -838,7 +995,7 @@ public class AuthServiceTests
     public async Task RestoreAccount_PastRetention_Fails()
     {
         var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
-        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
         user.DeletedAt = DateTime.UtcNow.AddDays(-31);
 
         var result = await service.RestoreAccountAsync(
@@ -1072,7 +1229,7 @@ public class AuthServiceTests
         var service = CreateService();
         await service.RegisterAsync(Request());
 
-        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
 
         Assert.Equal(AuthError.Unverified, result.Error);
     }
@@ -1093,9 +1250,9 @@ public class AuthServiceTests
             Assert.Equal(UserStatuses.Active, _repo.Users[0].Status);
         }
 
-        // Lần thứ 5 nhập sai -> Tạm khóa tài khoản
+        // Lần thứ 5 nhập sai -> Tạm khóa tài khoản nhưng vẫn báo lỗi chung (UC-03 quy tắc)
         var fifthResult = await service.LoginAsync(new LoginRequest("a@test.com", "wrong-password"));
-        Assert.Equal(AuthError.TempLocked, fifthResult.Error);
+        Assert.Equal(AuthError.InvalidCredentials, fifthResult.Error);
         Assert.Equal(5, _repo.Users[0].FailedLoginAttempts);
         Assert.Equal(UserStatuses.TempLocked, _repo.Users[0].Status);
 
@@ -1111,21 +1268,59 @@ public class AuthServiceTests
         _repo.Users[0].Status = UserStatuses.TempLocked;
 
         // Kể cả nhập ĐÚNG mật khẩu
-        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
 
         Assert.Equal(AuthError.TempLocked, result.Error);
     }
 
     [Fact]
-    public async Task Login_TempLockedUser_NeverAutoUnlocksAtRuntime_RequiresAdminToUnlock()
+    public async Task Login_WhileTempLocked_WrongPassword_GetsGenericError_NotCounted()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
         var user = _repo.Users[0];
         user.Status = UserStatuses.TempLocked;
         user.FailedLoginAttempts = 5;
+        user.LockoutEnd = DateTime.UtcNow.AddMinutes(10);
 
-        var loginResult = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "wrong-password"));
+
+        // [UC-03 quy tắc] Mật khẩu sai không lộ trạng thái khóa
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+        Assert.Equal(5, user.FailedLoginAttempts);
+        Assert.Equal(UserStatuses.TempLocked, user.Status);
+    }
+
+    [Fact]
+    public async Task Login_TempLockExpired_AutoUnlocksAndLogsIn()
+    {
+        // [UC-03 E2] Hết 15 phút khóa tạm: đăng nhập đúng mật khẩu được ngay, bộ đếm sai về 0
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.TempLocked;
+        user.FailedLoginAttempts = 5;
+        user.LockoutEnd = DateTime.UtcNow.AddMinutes(-1);
+
+        var loginResult = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
+
+        Assert.Equal(AuthError.None, loginResult.Error);
+        Assert.Equal(UserStatuses.Active, user.Status);
+        Assert.Equal(0, user.FailedLoginAttempts);
+        Assert.Null(user.LockoutEnd);
+    }
+
+    [Fact]
+    public async Task Login_TempLockNotExpired_StillBlocked()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.TempLocked;
+        user.FailedLoginAttempts = 5;
+        user.LockoutEnd = DateTime.UtcNow.AddMinutes(10);
+
+        var loginResult = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
 
         Assert.Equal(AuthError.TempLocked, loginResult.Error);
         Assert.Equal(UserStatuses.TempLocked, user.Status);
@@ -1138,7 +1333,7 @@ public class AuthServiceTests
         await service.RegisterAsync(Request());
         _repo.Users[0].Status = UserStatuses.Locked; // Admin khóa vĩnh viễn
 
-        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
 
         Assert.Equal(AuthError.Locked, result.Error);
         Assert.Contains("Quản trị viên", result.Message!);
@@ -1153,7 +1348,7 @@ public class AuthServiceTests
         _repo.Users[0].Status = UserStatuses.Active;
 
         // Đăng nhập tạo session
-        await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
         Assert.Single(_repo.Sessions);
         Assert.False(_repo.Sessions[0].IsRevoked);
 
@@ -1164,7 +1359,7 @@ public class AuthServiceTests
         var resetOtpEmail = _emailSender.SentEmails.Last(e => e.Purpose == OtpPurposes.ResetPassword);
 
         // Đặt lại mật khẩu mới
-        var resetRes = await service.ResetPasswordAsync(new ResetPasswordRequest("a@test.com", resetOtpEmail.Code, "newPassword123"));
+        var resetRes = await service.ResetPasswordAsync(new ResetPasswordRequest("a@test.com", resetOtpEmail.Code, "NewPassword@123"));
         Assert.Equal(AuthError.None, resetRes.Error);
 
         // Session cũ đã bị thu hồi và chủ tài khoản nhận mail báo đổi mật khẩu
@@ -1172,7 +1367,7 @@ public class AuthServiceTests
         Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "password_changed_notice" && e.To == "a@test.com");
 
         // Mật khẩu mới đăng nhập được
-        var newLogin = await service.LoginAsync(new LoginRequest("a@test.com", "newPassword123"));
+        var newLogin = await service.LoginAsync(new LoginRequest("a@test.com", "NewPassword@123"));
         Assert.Equal(AuthError.None, newLogin.Error);
     }
 
@@ -1198,7 +1393,7 @@ public class AuthServiceTests
         await service.RegisterAsync(Request());
         _repo.Users[0].Status = UserStatuses.Locked;
 
-        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
 
         Assert.Equal(AuthError.Locked, result.Error);
     }
@@ -1245,12 +1440,64 @@ public class AuthServiceTests
         Assert.Contains("Mật khẩu không được vượt quá", result.Message!);
     }
 
+    // [UC-01 quy tắc mật khẩu] AUTH-020/185: 8 dấu cách bị từ chối, không tạo tài khoản
+    [Fact]
+    public async Task Register_PasswordOnlyWhitespace_ReturnsValidationError()
+    {
+        var service = CreateService();
+        var result = await service.RegisterAsync(Request(password: "        "));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Contains("khoảng trắng", result.Message!);
+        Assert.Empty(_repo.Users);
+    }
+
+    // [UC-01 quy tắc mật khẩu] AUTH-021: mật khẩu phải có chữ hoa, chữ thường, chữ số và ký tự đặc biệt
+    [Theory]
+    [InlineData("password@123", "chữ hoa")]
+    [InlineData("PASSWORD@123", "chữ thường")]
+    [InlineData("Password@abc", "chữ số")]
+    [InlineData("Password123", "ký tự đặc biệt")]
+    public async Task Register_PasswordMissingCharacterKind_ReturnsValidationError(string password, string missing)
+    {
+        var service = CreateService();
+        var result = await service.RegisterAsync(Request(password: password));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Contains("còn thiếu", result.Message!);
+        Assert.Contains(missing, result.Message!);
+        Assert.Empty(_repo.Users);
+    }
+
+    // [UC-01 quy tắc mật khẩu] Thiếu nhiều loại thì báo đủ các loại còn thiếu
+    [Fact]
+    public async Task Register_PasswordOnlyDigits_ListsAllMissingKinds()
+    {
+        var service = CreateService();
+        var result = await service.RegisterAsync(Request(password: "12345678"));
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Contains("chữ hoa, chữ thường, ký tự đặc biệt", result.Message!);
+        Assert.Empty(_repo.Users);
+    }
+
+    // [UC-01 quy tắc mật khẩu] Chữ có dấu tiếng Việt vẫn tính là chữ hoa, chữ thường
+    [Fact]
+    public async Task Register_PasswordWithVietnameseLetters_IsAccepted()
+    {
+        var service = CreateService();
+        var result = await service.RegisterAsync(Request(password: "Đàoxx@12"));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Single(_repo.Users);
+    }
+
     [Fact]
     public async Task Login_PayloadExceedsMaxLength_ReturnsInvalidCredentials()
     {
         var service = CreateService();
         var longEmail = new string('a', 101) + "@test.com";
-        var result = await service.LoginAsync(new LoginRequest(longEmail, "password123"));
+        var result = await service.LoginAsync(new LoginRequest(longEmail, "Password@123"));
 
         Assert.Equal(AuthError.InvalidCredentials, result.Error);
     }
@@ -1263,7 +1510,7 @@ public class AuthServiceTests
         _repo.Users[0].Status = UserStatuses.Active;
 
         var result = await service.LoginAsync(
-            new LoginRequest("a@test.com", "password123"),
+            new LoginRequest("a@test.com", "Password@123"),
             ipAddress: "127.0.0.1",
             userAgent: "Mozilla/5.0");
 
@@ -1283,7 +1530,7 @@ public class AuthServiceTests
         await service.RegisterAsync(Request());
         _repo.Users[0].Status = UserStatuses.Active;
 
-        var loginResult = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var loginResult = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
         var rawToken = loginResult.Response!.AccessToken;
 
         var logoutSuccess = await service.LogoutAsync(rawToken);
@@ -1338,17 +1585,19 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task Register_WithDuplicatePhone_ReturnsGenericSuccessAndMailsNewEmail()
+    public async Task Register_WithDuplicatePhone_FailsAtPhoneField_NoAccountNoMail()
     {
+        // [UC-01 E6] Số điện thoại đã thuộc tài khoản khác: báo lỗi tại ô Số điện thoại
         var service = CreateService();
         await service.RegisterAsync(Request(email: "user1@test.com", phone: "0912345678"));
+        var mailsBefore = _emailSender.SentEmails.Count;
 
         var result = await service.RegisterAsync(Request(email: "user2@test.com", phone: "+84 912 345 678"));
 
-        Assert.Equal(AuthError.None, result.Error);
-        Assert.Contains("user2@test.com", result.Message!);
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal(AuthService.PhoneInUseMessage, result.Message);
         Assert.Single(_repo.Users);
-        Assert.Equal(("user2@test.com", "phone_in_use_notice"), (_emailSender.SentEmails[^1].To, _emailSender.SentEmails[^1].Purpose));
+        Assert.Equal(mailsBefore, _emailSender.SentEmails.Count);
     }
 
     [Fact]
@@ -1446,8 +1695,8 @@ public class AuthServiceTests
         await service.RegisterAsync(Request());
         var user = _repo.Users[0];
 
-        // Giả lập đã có 5 OTP tokens được tạo trong 1 giờ qua
-        for (int i = 0; i < 4; i++)
+        // [UC-02] Mã lúc đăng ký + 5 lần gửi lại trong 1 giờ qua: lần gửi lại thứ 6 không gửi
+        for (int i = 0; i < 5; i++)
         {
             _repo.Otps.Add(new OtpToken
             {
@@ -1464,12 +1713,40 @@ public class AuthServiceTests
         var result = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.VerifyEmail));
 
         Assert.Equal(AuthError.None, result.Error);
-        Assert.Equal(5, _repo.Otps.Count); // không sinh thêm mã
+        Assert.Equal(6, _repo.Otps.Count); // không sinh thêm mã
         Assert.Single(_emailSender.SentEmails);
     }
 
     [Fact]
-    public async Task Login_WrongPassword5Times_LocksUser_AndRequiresAdminToUnlock()
+    public async Task ResendOtp_FifthResendInHour_StillSends_RegistrationCodeNotCounted()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        _repo.Otps[0].CreatedAt = DateTime.UtcNow.AddMinutes(-30);
+
+        // [UC-02] Đã gửi lại 4 lần (mã lúc đăng ký không tính): lần gửi lại thứ 5 vẫn được gửi
+        for (int i = 0; i < 4; i++)
+        {
+            _repo.Otps.Add(new OtpToken
+            {
+                UserId = user.Id,
+                Purpose = OtpPurposes.VerifyEmail,
+                CodeHash = "hash",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-20 + i),
+                ExpiresAt = DateTime.UtcNow.AddMinutes(5)
+            });
+        }
+
+        var result = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.VerifyEmail));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(6, _repo.Otps.Count);
+        Assert.Equal(2, _emailSender.SentEmails.Count);
+    }
+
+    [Fact]
+    public async Task Login_WrongPassword5Times_TempLocks15Minutes()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
@@ -1487,9 +1764,10 @@ public class AuthServiceTests
 
         // Nhập sai lần thứ 5 -> Khóa tài khoản
         var lockRes = await service.LoginAsync(new LoginRequest("a@test.com", "wrongpass"));
-        Assert.Equal(AuthError.TempLocked, lockRes.Error);
+        Assert.Equal(AuthError.InvalidCredentials, lockRes.Error);
         Assert.Equal(UserStatuses.TempLocked, user.Status);
-        Assert.Null(user.LockoutEnd);
+        Assert.NotNull(user.LockoutEnd);
+        Assert.InRange(user.LockoutEnd!.Value, DateTime.UtcNow.AddMinutes(14), DateTime.UtcNow.AddMinutes(15));
 
         // Kiểm tra email thông báo đã được gửi (không chứa mã OTP mở khóa)
         Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "temp_locked_notice");
@@ -1504,33 +1782,34 @@ public class AuthServiceTests
         user.Status = UserStatuses.TempLocked;
 
         // Kể cả gõ đúng mật khẩu vẫn bị chặn
-        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
 
         Assert.Equal(AuthError.TempLocked, result.Error);
-        Assert.Contains("liên hệ Quản trị viên", result.Message!);
+        Assert.Contains("15 phút", result.Message!);
     }
 
     [Fact]
-    public async Task Login_TempLockedUser_NeverAutoUnlocks_RequiresAdminUnlock()
+    public async Task Login_TempLockedUser_AdminCanUnlockEarly()
     {
         var service = CreateService();
         await service.RegisterAsync(Request());
         var user = _repo.Users[0];
         user.Status = UserStatuses.TempLocked;
         user.FailedLoginAttempts = 5;
+        user.LockoutEnd = DateTime.UtcNow.AddMinutes(10);
 
-        // Thử đăng nhập vẫn bị chặn
-        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        // Còn trong 15 phút: đăng nhập vẫn bị chặn
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
         Assert.Equal(AuthError.TempLocked, result.Error);
         Assert.Equal(UserStatuses.TempLocked, user.Status);
 
-        // Chỉ khi Admin mở khóa thì mới đăng nhập được
+        // Admin mở khóa sớm thì đăng nhập được ngay
         var adminId = Guid.NewGuid();
         var unlockResult = await service.UnlockUserAccountAsync(user.Id, new UnlockUserAccountRequest("Admin mở khóa"), adminId);
         Assert.Equal(AuthError.None, unlockResult.Error);
         Assert.Equal(UserStatuses.Active, user.Status);
 
-        var loginAfterAdminUnlock = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var loginAfterAdminUnlock = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
         Assert.Equal(AuthError.None, loginAfterAdminUnlock.Error);
         Assert.NotNull(loginAfterAdminUnlock.Response);
     }
@@ -1600,7 +1879,7 @@ public class AuthServiceTests
         }
 
         // Lần thứ 5 gõ ĐÚNG mật khẩu -> Thành công và reset về 0
-        var success = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var success = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
         Assert.Equal(AuthError.None, success.Error);
         Assert.NotNull(success.Response);
         Assert.Equal(0, user.FailedLoginAttempts);
@@ -1692,7 +1971,7 @@ public class AuthServiceTests
         await service.RegisterAsync(Request());
         // Tài khoản vừa đăng ký có status unverified
 
-        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
 
         Assert.Equal(AuthError.Unverified, result.Error);
         Assert.Contains("chưa được kích hoạt", result.Message!);
@@ -1712,7 +1991,7 @@ public class AuthServiceTests
         // Gõ sai OTP 5 lần
         for (int i = 1; i <= 5; i++)
         {
-            var fail = await service.ResetPasswordAsync(new ResetPasswordRequest("a@test.com", "000000", "newpassword123"));
+            var fail = await service.ResetPasswordAsync(new ResetPasswordRequest("a@test.com", "000000", "NewPassword@123"));
             Assert.Equal(AuthError.OtpInvalid, fail.Error);
         }
 
@@ -1768,7 +2047,7 @@ public class AuthServiceTests
         await service.RegisterAsync(Request());
         _repo.Users[0].Status = UserStatuses.Active;
 
-        var unknown = await service.LoginAsync(new LoginRequest("nobody@test.com", "password123"));
+        var unknown = await service.LoginAsync(new LoginRequest("nobody@test.com", "Password@123"));
         var wrong = await service.LoginAsync(new LoginRequest("a@test.com", "wrong-password"));
 
         Assert.Equal(AuthError.InvalidCredentials, unknown.Error);
@@ -1802,7 +2081,7 @@ public class AuthServiceTests
         _repo.UserConflictsToThrow = 1; // request khác vừa ghi bộ đếm
 
         // Kể cả mật khẩu đúng: không ghi được lần thử thì không được so mật khẩu
-        var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
 
         Assert.Equal(AuthError.InvalidCredentials, result.Error);
         Assert.Empty(_repo.Sessions);
@@ -1866,6 +2145,27 @@ public class AuthServiceTests
         Assert.DoesNotContain(_emailSender.SentEmails, e => e.To == "nobody@test.com");
     }
 
+    // AUTH-126: tài khoản chưa kích hoạt hoặc bị khóa xin đặt lại mật khẩu thì nhận cùng thông báo chung nhưng không có mã
+    [Theory]
+    [InlineData(UserStatuses.Unverified)]
+    [InlineData(UserStatuses.Locked)]
+    public async Task ForgotPassword_UnverifiedOrLocked_SameMessage_NoResetCode(string status)
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        _repo.Users[0].Status = status;
+        var unknown = await service.ForgotPasswordAsync(new ForgotPasswordRequest("nobody@test.com"));
+
+        var forgot = await service.ForgotPasswordAsync(new ForgotPasswordRequest("a@test.com"));
+        var resend = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.ResetPassword));
+
+        Assert.Equal(AuthError.None, forgot.Error);
+        Assert.Equal(unknown.Message, forgot.Message);
+        Assert.Equal(AuthError.None, resend.Error);
+        Assert.DoesNotContain(_repo.Otps, o => o.Purpose == OtpPurposes.ResetPassword);
+        Assert.DoesNotContain(_emailSender.SentEmails, e => e.Purpose == OtpPurposes.ResetPassword);
+    }
+
     [Theory]
     [InlineData("short")]
     [InlineData(null)]
@@ -1896,7 +2196,7 @@ public class AuthServiceTests
         var oldHash = _repo.Users[0].PasswordHash;
         _repo.Users[0].Status = UserStatuses.Locked;
 
-        var result = await service.ResetPasswordAsync(new ResetPasswordRequest("a@test.com", code, "newPassword123"));
+        var result = await service.ResetPasswordAsync(new ResetPasswordRequest("a@test.com", code, "NewPassword@123"));
 
         Assert.Equal(AuthError.OtpInvalid, result.Error);
         Assert.Equal(AuthService.OtpFailedMessage, result.Message);
@@ -1911,7 +2211,7 @@ public class AuthServiceTests
         var user = _repo.Users[0];
         user.Status = UserStatuses.Active;
 
-        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "Password@123"));
         var currentToken = login.Response!.AccessToken;
         await _repo.CreateSessionAsync(new UserSession { UserId = user.Id, TokenHash = "hash:other-device", ExpiresAt = DateTime.UtcNow.AddDays(7) });
         return (service, user, currentToken);
@@ -1922,10 +2222,10 @@ public class AuthServiceTests
     {
         var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
 
-        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("password123", "newPassword123"));
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("Password@123", "NewPassword@123"));
 
         Assert.Equal(AuthError.None, result.Error);
-        Assert.Equal("hashed:newPassword123", user.PasswordHash);
+        Assert.Equal("hashed:NewPassword@123", user.PasswordHash);
         Assert.False(_repo.Sessions.Single(s => s.TokenHash == "hash:" + currentToken).IsRevoked);
         Assert.True(_repo.Sessions.Single(s => s.TokenHash == "hash:other-device").IsRevoked);
         Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "password_changed_notice" && e.To == "a@test.com");
@@ -1936,11 +2236,11 @@ public class AuthServiceTests
     {
         var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
 
-        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("wrongpass", "newPassword123"));
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("wrongpass", "NewPassword@123"));
 
         Assert.Equal(AuthError.InvalidCredentials, result.Error);
         Assert.Equal(AuthService.WrongCurrentPasswordMessage, result.Message);
-        Assert.Equal("hashed:password123", user.PasswordHash);
+        Assert.Equal("hashed:Password@123", user.PasswordHash);
         Assert.Equal(1, user.FailedLoginAttempts);
         Assert.All(_repo.Sessions, s => Assert.False(s.IsRevoked));
         Assert.DoesNotContain(_emailSender.SentEmails, e => e.Purpose == "password_changed_notice");
@@ -1953,15 +2253,16 @@ public class AuthServiceTests
 
         for (int i = 1; i <= 4; i++)
         {
-            var res = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("wrongpass", "newPassword123"));
+            var res = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("wrongpass", "NewPassword@123"));
             Assert.Equal(AuthError.InvalidCredentials, res.Error);
         }
 
-        var lockRes = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("wrongpass", "newPassword123"));
+        var lockRes = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("wrongpass", "NewPassword@123"));
 
         Assert.Equal(AuthError.TempLocked, lockRes.Error);
         Assert.Equal(UserStatuses.TempLocked, user.Status);
-        Assert.Null(user.LockoutEnd);
+        Assert.NotNull(user.LockoutEnd);
+        Assert.InRange(user.LockoutEnd!.Value, DateTime.UtcNow.AddMinutes(14), DateTime.UtcNow.AddMinutes(15));
         Assert.All(_repo.Sessions, s => Assert.True(s.IsRevoked));
         Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "temp_locked_notice");
     }
@@ -1973,10 +2274,10 @@ public class AuthServiceTests
     {
         var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
 
-        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("password123", newPassword));
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("Password@123", newPassword));
 
         Assert.Equal(AuthError.Validation, result.Error);
-        Assert.Equal("hashed:password123", user.PasswordHash);
+        Assert.Equal("hashed:Password@123", user.PasswordHash);
         Assert.Equal(0, user.FailedLoginAttempts);
     }
 
@@ -1985,7 +2286,7 @@ public class AuthServiceTests
     {
         var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
 
-        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("password123", "password123"));
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("Password@123", "Password@123"));
 
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Equal(0, user.FailedLoginAttempts);
@@ -1998,10 +2299,10 @@ public class AuthServiceTests
         var (service, user, currentToken) = await ActiveUserWithTwoSessionsAsync();
         _repo.UserConflictsToThrow = 1;
 
-        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("password123", "newPassword123"));
+        var result = await service.ChangePasswordAsync(user.Id, currentToken, new ChangePasswordRequest("Password@123", "NewPassword@123"));
 
         Assert.Equal(AuthError.InvalidCredentials, result.Error);
-        Assert.Equal("hashed:password123", user.PasswordHash);
+        Assert.Equal("hashed:Password@123", user.PasswordHash);
         Assert.All(_repo.Sessions, s => Assert.False(s.IsRevoked));
     }
 
@@ -2250,7 +2551,7 @@ public class AuthServiceTests
 
         AuthResult result = null!;
         for (var i = 0; i < 6; i++)
-            result = await service.LoginAsync(new LoginRequest(child.Email, "password123"));
+            result = await service.LoginAsync(new LoginRequest(child.Email, "Password@123"));
 
         Assert.Equal(AuthError.InvalidCredentials, result.Error);
         Assert.Equal(UserStatuses.Managed, child.Status);
