@@ -83,13 +83,13 @@ MAX_ASK = 2
 # "chưa có dự định thi"; hỏi cả khi đã có chứng chỉ (dự định thi lại để nâng điểm)
 REQUIRED_QUESTIONS = ("D2", "E1", "E2", "D3", "E3", "F1", "F2")
 # Câu tùy chọn (có nút "Bỏ qua"): D1 chỉ hỏi học sinh cấp 3; N1 chỉ hỏi khi chưa có bang muốn học
-# (gợi ý bang theo người thân). N4 (visa) không hỏi ở B2: chỉ hỏi khi học sinh hỏi về visa / lộ trình.
-# N1, N4 không lưu vào form
-OPTIONAL_QUESTIONS = ("D1", "D4", "D5", "F3", "N1", "N2", "N3")
+# (gợi ý bang theo người thân). N4 (từng bị từ chối visa) hỏi một lần sau N1, luôn có nút "Bỏ qua" (UC-35, UC-08).
+# N1, N4 chỉ hỏi trong chat, không lưu vào form
+OPTIONAL_QUESTIONS = ("D1", "D4", "D5", "F3", "N1", "N2", "N3", "N4")
 # Thứ tự hỏi theo trang form: hỏi xong các câu của một trang mới sang trang sau, không quay lại trang trước.
 # Trang 1 mục tiêu (D1, N2, N3), 2 học bạ (D2), 3 tiếng Anh, SAT (E1, E2, D3, E3), 4 tài chính (F1-F3),
-# 5 hoạt động, giải thưởng (D4, D5). Hết form mới hỏi thông tin thêm không có trong form (N1 người thân)
-QUESTION_ORDER = ("D1", "N2", "N3", "D2", "E1", "E2", "D3", "E3", "F1", "F2", "F3", "D4", "D5", "N1")
+# 5 hoạt động, giải thưởng (D4, D5). Hết form mới hỏi hai thông tin thêm không có trong form: N1 người thân ở Mỹ, N4 visa
+QUESTION_ORDER = ("D1", "N2", "N3", "D2", "E1", "E2", "D3", "E3", "F1", "F2", "F3", "D4", "D5", "N1", "N4")
 # Thông tin bắt buộc → câu hỏi để hỏi lại khi học sinh xác nhận mà vẫn còn thiếu
 FIELD_QUESTION = {"gpa": "D2", "english": "E1", "sat": "D3", "budget": "F1", "scholarship": "F2"}
 # Những câu học sinh gõ (hoặc nút bấm gửi) để xác nhận hồ sơ ở X1
@@ -123,7 +123,7 @@ EDIT_SECTIONS = {
     "Hoạt động và giải thưởng": ("D4", "D5"),
     "Nguyện vọng": ("N2", "N3", "N1"),
 }
-# Thứ tự hỏi khi sửa: câu mục tiêu (cấp học, ngành, kỳ nhập học) rồi câu hồ sơ theo thứ tự form. Không có N4 (visa) vì chat không hỏi câu đó
+# Thứ tự hỏi khi sửa: câu mục tiêu (cấp học, ngành, kỳ nhập học) rồi câu hồ sơ theo thứ tự form
 EDIT_ORDER = ("B1.1", "B1.3", "B1.4", *QUESTION_ORDER)
 EDIT_MENU = (
     "Bạn muốn sửa những mục nào? Bạn chọn một hoặc nhiều mục rồi bấm Gửi, mình sẽ hỏi lại lần lượt từng mục. "

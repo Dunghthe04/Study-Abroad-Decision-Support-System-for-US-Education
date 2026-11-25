@@ -514,13 +514,13 @@ async def test_edit_on_form_sends_the_waiting_tasks():
     assert output.widget.data == {"goals": ["goi_y_truong"]}
 
 
-# Điền lại từ đầu: hỏi lại mọi câu theo thứ tự form, bắt đầu từ B1.1; không hỏi visa (N4)
+# Điền lại từ đầu: hỏi lại mọi câu theo thứ tự form, bắt đầu từ B1.1; câu visa (N4) hỏi sau cùng (UC-35)
 async def test_restart_asks_every_question_from_start():
     state = at_review()
     output = await make_handler(FakeLLM()).collect(state, "Điền lại từ đầu", MAC_DINH)
     assert state.question_id == "B1.1"
     assert state.edit_queue == list(skill_ho_so.EDIT_ORDER[1:])
-    assert "N4" not in state.edit_queue
+    assert state.edit_queue[-1] == "N4"
     assert KEEP in labels(output)
 
 
