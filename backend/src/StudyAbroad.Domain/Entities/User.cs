@@ -61,5 +61,15 @@ namespace StudyAbroad.Domain.Entities
 
         /// <summary>Lý do áp dụng Legal Hold.</summary>
         public string? LegalHoldReason { get; set; }
+
+        /// <summary>
+        /// [UC-03 3d] Khóa bí mật TOTP của Moderator, Administrator, đã mã hóa AES-GCM (không lưu bản rõ).
+        /// Cột trên users vì mỗi tài khoản chỉ có một khóa; mã khôi phục và phiếu bước 2 dùng lại bảng otp_tokens.
+        /// Có giá trị nhưng TotpEnabledAt trống = đang thiết lập dở (đã hiện QR, chưa nhập mã đầu tiên).
+        /// </summary>
+        public string? TotpSecret { get; set; }
+
+        /// <summary>[UC-03 3d] Thời điểm thiết lập TOTP xong (nhập đúng mã đầu tiên). Trống = chưa thiết lập.</summary>
+        public DateTime? TotpEnabledAt { get; set; }
     }
 }

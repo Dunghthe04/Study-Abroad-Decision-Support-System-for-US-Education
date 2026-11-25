@@ -33,6 +33,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Configurations
             // Legal Hold: đóng băng tài khoản khi có điều tra gian lận (căn cứ pháp lý do BA/pháp chế xác nhận; xem ghi chú ở User.IsLegalHold)
             builder.Property(x => x.IsLegalHold).HasDefaultValue(false).IsRequired();
             builder.Property(x => x.LegalHoldReason).HasMaxLength(500);
+            // [UC-03 3d] Khóa TOTP đã mã hóa (base64 của nonce + ciphertext + tag) và thời điểm thiết lập xong
+            builder.Property(x => x.TotpSecret).HasMaxLength(200);
+            builder.Property(x => x.TotpEnabledAt);
             // Ngày sinh (kiểu date), null với tài khoản cũ / center / admin
             builder.Property(x => x.DateOfBirth);
             builder.Property(x => x.ForumRestrictedUntil);

@@ -136,6 +136,14 @@ public static class DependencyInjection
         });
         services.AddSingleton<ITokenService, TokenService>();
 
+        // [UC-03 3d] TOTP cho Moderator, Administrator (Otp.NET); khóa mã hóa cột users.totp_secret từ TOTP_ENCRYPTION_KEY
+        services.Configure<TotpOptions>(options =>
+        {
+            configuration.GetSection("Totp").Bind(options);
+            options.EncryptionKey = NonEmpty(configuration["TOTP_ENCRYPTION_KEY"]) ?? options.EncryptionKey;
+        });
+        services.AddSingleton<ITotpService, TotpService>();
+
         // [USAS-12 / USAS-362] Đăng ký Smtp Email Service (Nạp từ configuration hoặc biến môi trường SMTP_*)
         services.Configure<SmtpOptions>(options =>
         {
