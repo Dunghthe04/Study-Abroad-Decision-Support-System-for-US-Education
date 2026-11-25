@@ -264,7 +264,12 @@ export function ParentLinksCard() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      {link.status === "active" ? (
+                      {link.status === "active" && link.consentStatus === "not_required" ? (
+                        <>
+                          <Badge variant="ok"><CheckIcon aria-hidden />Đã liên kết</Badge>
+                          <Badge variant="neutral">Không còn yêu cầu đồng ý</Badge>
+                        </>
+                      ) : link.status === "active" ? (
                         <Badge variant="ok"><CheckIcon aria-hidden />Đã đồng ý</Badge>
                       ) : link.status === "rejected" ? (
                         <Badge variant="warn"><XIcon aria-hidden />Phụ huynh đã từ chối</Badge>

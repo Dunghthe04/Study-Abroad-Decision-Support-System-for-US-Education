@@ -471,6 +471,25 @@ public class ParentLinkServiceTests
         Assert.Empty(_withdrawals.UserIds);
     }
 
+    // [UC-01, UC-111 E2; CON-046] Học sinh tròn 16: liên kết vẫn hoạt động nhưng không còn yêu cầu đồng ý, cả hai phía cùng thấy
+    [Theory]
+    [InlineData(16, ParentLinkConsentStatuses.NotRequired)]
+    [InlineData(17, ParentLinkConsentStatuses.NotRequired)]
+    [InlineData(15, ParentLinkStatuses.Active)]
+    public async Task GetMine_ActiveLink_ConsentStatusByStudentAge(int studentAge, string expected)
+    {
+        var (student, parent, link) = await AcceptedLinkAsync(studentAge: 15);
+        student.DateOfBirth = BornYearsAgo(studentAge);
+
+        var byStudent = Assert.Single((await CreateService().GetMineAsync(student.Id)).Value!);
+        var byParent = Assert.Single((await CreateService().GetMineAsync(parent.Id)).Value!);
+
+        Assert.Equal(ParentLinkStatuses.Active, byStudent.Status);
+        Assert.Equal(expected, byStudent.ConsentStatus);
+        Assert.Equal(expected, byParent.ConsentStatus);
+        Assert.Equal(ParentLinkStatuses.Active, Stored(link.Id).Status);
+    }
+
     [Fact]
     public async Task Revoke_StudentUnder16_CannotRevokeActiveLink()
     {

@@ -673,6 +673,8 @@ export interface ParentLinkDto {
   tokenExpiresAt: string | null;
   /** Server tính theo luật rút đồng ý (học sinh dưới 16 không tự rút liên kết đã đồng ý) */
   canRevoke: boolean;
+  /** [UC-01, UC-111 E2] "not_required" khi học sinh từ 16 tuổi, còn lại bằng status */
+  consentStatus: ParentLinkStatus | "not_required";
 }
 
 export interface ParentLinkResponse<T> {

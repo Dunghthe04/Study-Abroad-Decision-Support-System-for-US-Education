@@ -66,7 +66,17 @@ public record ParentLinkDto(
     DateTime? AcceptedAt,
     DateTime? LastInviteSentAt,
     DateTime? TokenExpiresAt,
-    bool CanRevoke);
+    bool CanRevoke,
+    // [UC-01, UC-111 E2] "not_required" khi học sinh từ 16 tuổi (tự đồng ý được), còn lại bằng Status. Tính lúc đọc, không ghi DB.
+    string ConsentStatus);
+
+public static class ParentLinkConsentStatuses
+{
+    public const string NotRequired = "not_required";
+
+    public static string For(string status, int? studentAge) =>
+        studentAge is { } age && age >= StudyAbroad.Domain.Constants.AgeGroups.ChildMaxAgeExclusive ? NotRequired : status;
+}
 
 // Token đi trong body (không nằm trên URL của API) để không lọt vào log truy cập
 public record InviteTokenRequest(string Token);

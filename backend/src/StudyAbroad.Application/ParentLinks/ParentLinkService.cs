@@ -740,9 +740,14 @@ public class ParentLinkService(
     private static string? Truncate(string? value, int max) =>
         value == null || value.Length <= max ? value : value[..max];
 
-    private static ParentLinkDto ToDto(ParentStudentLink link, User? parent, User? student, bool canRevoke) =>
-        new(link.Id, EffectiveStatus(link), link.ParentEmail, parent?.FullName, student?.FullName ?? string.Empty,
-            student == null ? null : AgeOf(student), link.StudentUserId, link.AcceptedAt, link.LastInviteSentAt, link.TokenExpiresAt, canRevoke);
+    private static ParentLinkDto ToDto(ParentStudentLink link, User? parent, User? student, bool canRevoke)
+    {
+        var status = EffectiveStatus(link);
+        var age = student == null ? null : AgeOf(student);
+        return new(link.Id, status, link.ParentEmail, parent?.FullName, student?.FullName ?? string.Empty,
+            age, link.StudentUserId, link.AcceptedAt, link.LastInviteSentAt, link.TokenExpiresAt, canRevoke,
+            ParentLinkConsentStatuses.For(status, age));
+    }
 
     private static ParentLinkResult<ParentLinkDto> Fail(ParentLinkError error, string message) =>
         ParentLinkResult<ParentLinkDto>.Fail(error, message);
