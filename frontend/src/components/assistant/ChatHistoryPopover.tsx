@@ -344,6 +344,10 @@ function SessionRow({ session, current, onOpen, onRenamed, onDeleted }: RowProps
       setError("Tên không được để trống.");
       return;
     }
+    if (title.length > MAX_TITLE) {
+      setError(`Tên tối đa ${MAX_TITLE} ký tự.`);
+      return;
+    }
     if (title === session.title) {
       cancel();
       return;
@@ -373,6 +377,10 @@ function SessionRow({ session, current, onOpen, onRenamed, onDeleted }: RowProps
     }
   };
 
+  // Thông báo dưới ô nhập: lỗi vừa gặp, hoặc cảnh báo ngay khi tên đã quá dài (chưa cần bấm Lưu)
+  const draftLength = draft.trim().length;
+  const hint = error ?? (draftLength > MAX_TITLE ? `Tên tối đa ${MAX_TITLE} ký tự (đang có ${draftLength}).` : null);
+
   if (mode === "edit") {
     return (
       <li className="px-1 py-1">
@@ -386,9 +394,12 @@ function SessionRow({ session, current, onOpen, onRenamed, onDeleted }: RowProps
           <Input
             autoFocus
             value={draft}
-            maxLength={MAX_TITLE}
+            aria-invalid={draftLength > MAX_TITLE}
             disabled={busy}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setError(null);   // UC-140: không chặn gõ hay dán; quá dài thì báo lỗi bên dưới và không cho lưu
+            }}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
                 event.stopPropagation();   // chỉ thoát sửa tên, không đóng cả danh sách
@@ -405,7 +416,7 @@ function SessionRow({ session, current, onOpen, onRenamed, onDeleted }: RowProps
             <XIcon className="size-4" />
           </RowAction>
         </form>
-        {error ? <p className="px-1 pt-1 text-xs text-risk">{error}</p> : null}
+        {hint ? <p className="px-1 pt-1 text-xs text-risk">{hint}</p> : null}
       </li>
     );
   }
