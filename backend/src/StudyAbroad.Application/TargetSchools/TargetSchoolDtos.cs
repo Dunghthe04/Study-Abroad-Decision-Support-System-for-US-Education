@@ -12,7 +12,8 @@ public record AddTargetSchoolRequest(
     string? Category = null,
     string? ApplicationRound = null,
     DateTime? Deadline = null,
-    string? Notes = null
+    string? Notes = null,
+    bool? IsUserCategory = null
 );
 
 /// <summary>
@@ -46,7 +47,10 @@ public record TargetSchoolDto(
     string? ApplicationRound,
     DateTime? Deadline,
     DateTime CreatedAt,
-    DateTime? UpdatedAt
+    DateTime? UpdatedAt,
+    decimal? EstimatedAnnualCostUsd = null,
+    bool IsCategoryUserSelected = false,
+    IReadOnlyList<string>? AvailableRounds = null
 );
 
 /// <summary>
@@ -61,12 +65,40 @@ public record UpdateApplicationRoundRequest(
 /// <summary>
 /// Kết quả thực hiện chọn vòng nộp hồ sơ.
 /// </summary>
-public record UpdateApplicationRoundResult(TargetSchoolDto? TargetSchool, string? ErrorMessage = null)
+public record UpdateApplicationRoundResult(TargetSchoolDto? TargetSchool, string? ErrorMessage = null, bool NotFound = false)
 {
     public bool Success => ErrorMessage is null && TargetSchool is not null;
     public static UpdateApplicationRoundResult Ok(TargetSchoolDto targetSchool) => new(targetSchool);
     public static UpdateApplicationRoundResult Fail(string message) => new(null, message);
+    public static UpdateApplicationRoundResult NotFoundError(string message) => new(null, message, NotFound: true);
 }
+
+/// <summary>
+/// [UC-33] Yêu cầu đổi nhóm phân loại (reach / match / safety) của trường mục tiêu đã lưu.
+/// </summary>
+public record UpdateTargetCategoryRequest(string Category);
+
+/// <summary>
+/// Kết quả đổi nhóm phân loại trường mục tiêu.
+/// </summary>
+public record UpdateTargetCategoryResult(TargetSchoolDto? TargetSchool, string? ErrorMessage = null, bool NotFound = false)
+{
+    public bool Success => ErrorMessage is null && TargetSchool is not null;
+    public static UpdateTargetCategoryResult Ok(TargetSchoolDto targetSchool) => new(targetSchool);
+    public static UpdateTargetCategoryResult Fail(string message) => new(null, message);
+    public static UpdateTargetCategoryResult NotFoundError(string message) => new(null, message, NotFound: true);
+}
+
+/// <summary>
+/// Thông tin mặc định khi mở hộp thoại thêm trường mục tiêu: nhóm gợi ý gần nhất và các vòng nộp trường hỗ trợ.
+/// </summary>
+public record TargetSchoolDefaultsDto(
+    string? RecommendedCategory,
+    IReadOnlyList<string> AvailableRounds,
+    bool IsScholarshipMandatory = false,
+    string? ExistingEdSchoolName = null,
+    string? ExistingEd2SchoolName = null
+);
 
 /// <summary>
 /// [UC-33] Tổng hợp danh sách trường mục tiêu kèm số lượng theo từng nhóm phân loại và hạn nộp gần nhất.
@@ -78,5 +110,6 @@ public record TargetSchoolSummaryDto(
     int MatchCount,
     int SafetyCount,
     int UndecidedCategoryCount,
-    DateTime? NextDeadline
+    DateTime? NextDeadline,
+    bool IsScholarshipMandatory = false
 );
