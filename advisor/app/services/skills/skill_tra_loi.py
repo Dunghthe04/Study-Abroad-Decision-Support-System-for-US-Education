@@ -115,9 +115,14 @@ def media_of(hit: KnowledgeHit) -> list[Media]:
     return media[:MAX_MEDIA]
 
 
+# Tên nguồn khi mục tri thức không ghi tên nguồn (UC-37)
+DEFAULT_SOURCE_NAME = "Kho kiến thức tư vấn du học"
+
+
 # lấy thông tin của một đoạn kiến thức và chuyển nó thành một đối tượng trích dẫn (Citation) để đính kèm vào câu trả lời cho người dùng.
+# Mục không có tên nguồn thì ghi DEFAULT_SOURCE_NAME (không lấy đường link làm tên); link vẫn đi kèm ở trường url, có thể nhiều link cách nhau bằng ";"
 def citation_of(hit: KnowledgeHit) -> Citation:
-    title = hit.source or hit.source_url or "Kho kiến thức tư vấn du học"
+    title = (hit.source or "").strip() or DEFAULT_SOURCE_NAME
     return Citation(
         title=title, url=hit.source_url, snippet=hit.answer[:SNIPPET_CHARS], retrieved_at=hit.retrieved_at
     )

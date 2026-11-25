@@ -25,7 +25,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { describeSimulation, resetSimulation, showSimulation } from "@/lib/simulation-link";
 import { sourceDateText } from "@/lib/source-date";
-import { httpLink } from "@/lib/university-display";
+import { citationLinks } from "@/lib/citation-links";
 import { ChatImages } from "@/components/assistant/ChatImages";
 import { useAuth } from "@/contexts/AuthContext";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
@@ -781,15 +781,31 @@ function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (va
       {turn.citations && turn.citations.length > 0 && (
         <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
           {turn.citations.map((c, j) => {
-            const link = httpLink(c.url?.split(";").map((s) => s.trim()).find(Boolean));
+            // UC-37: một liên kết thì tên nguồn là liên kết; nhiều liên kết thì hiển thị đủ, mỗi liên kết một nhãn tên miền
+            const links = citationLinks(c.url);
+            const only = links.length === 1 ? links[0] : null;
             return (
               <li key={j}>
-                {link ? (
-                  <a href={link.href} target="_blank" rel="noopener noreferrer" className="underline hover:text-brand">
+                {only ? (
+                  <a href={only.href} target="_blank" rel="noopener noreferrer" className="underline hover:text-brand">
                     {c.title}
                   </a>
                 ) : (
                   c.title
+                )}
+                {links.length > 1 && (
+                  <span>
+                    {" ("}
+                    {links.map((link, k) => (
+                      <span key={link.href}>
+                        {k > 0 ? ", " : ""}
+                        <a href={link.href} target="_blank" rel="noopener noreferrer" className="underline hover:text-brand">
+                          {link.label}
+                        </a>
+                      </span>
+                    ))}
+                    {")"}
+                  </span>
                 )}
                 <span className="text-ink-3"> · {sourceDateText(c.retrievedAt)}</span>
               </li>

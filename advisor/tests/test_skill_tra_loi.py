@@ -142,10 +142,29 @@ def test_check_choice_ignores_extra_keys_claude_may_still_send():
 # ---------- nguồn trích dẫn ----------
 
 
-def test_citation_prefers_the_source_then_the_url_then_a_generic_title():
+def test_citation_uses_the_source_name_or_else_the_generic_title():
     assert citation_of(hit(source="8 CFR 214.13", url="https://a.org")).title == "8 CFR 214.13"
-    assert citation_of(hit(source=None, url="https://a.org")).title == "https://a.org"
     assert citation_of(hit(source=None, url=None)).title == "Kho kiến thức tư vấn du học"
+
+
+def test_citation_without_a_source_name_is_titled_generically_never_by_its_link():
+    # UC-37: mục không có tên nguồn thì ghi "Kho kiến thức tư vấn du học"; đường link không phải là tên nguồn
+    cited = citation_of(hit(source=None, url="https://a.org"))
+
+    assert cited.title == "Kho kiến thức tư vấn du học"
+    assert cited.url == "https://a.org"  # link vẫn đi kèm để người dùng mở được
+
+
+def test_citation_with_a_blank_source_name_is_titled_generically():
+    assert citation_of(hit(source="   ", url="https://a.org")).title == "Kho kiến thức tư vấn du học"
+    assert citation_of(hit(source="", url=None)).title == "Kho kiến thức tư vấn du học"
+
+
+def test_citation_keeps_every_link_of_a_source_that_has_several():
+    # UC-37: mục có nhiều liên kết nguồn thì hiển thị đủ; backend chuyển nguyên chuỗi, giao diện tách theo ";"
+    cited = citation_of(hit(source="USCIS", url="https://a.org; https://b.gov/x"))
+
+    assert cited.url == "https://a.org; https://b.gov/x"
 
 
 def test_citation_carries_the_date_the_source_was_collected():
