@@ -186,7 +186,7 @@ public class AuthRegisterConsentTests
         registrationConsent: new RegistrationConsent(_published, _consents));
 
     private static RegisterRequest Request(IReadOnlyList<AcceptPolicyItem>? accepted, string email = "a@test.com") =>
-        new(email, "password123", "Nguyen Van A", UserRoles.Parent,
+        new(email, "Password@123", "Nguyen Van A", UserRoles.Parent,
             AgePolicy.TodayInVietnam(DateTime.UtcNow).AddYears(-30).AddDays(-10), AcceptedPolicies: accepted);
 
     private static List<AcceptPolicyItem> Both(string v = "2026-11") =>

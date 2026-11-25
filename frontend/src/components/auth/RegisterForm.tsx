@@ -7,7 +7,7 @@ import { Building2Icon, CheckIcon, GraduationCapIcon, InfoIcon, UsersIcon, XIcon
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
-import { passwordRuleError } from "@/lib/common-passwords";
+import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/password-rules";
 import { useAccountPolicies } from "@/lib/use-account-policies";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -233,7 +233,7 @@ export function RegisterForm() {
       }
     }
 
-    // [UC-01] 8–100 ký tự, không toàn khoảng trắng, không thuộc danh sách mật khẩu phổ biến (khớp backend)
+    // [UC-01] 8–100 ký tự, không toàn khoảng trắng, đủ chữ hoa, chữ thường, chữ số, ký tự đặc biệt (khớp backend)
     const passwordError = passwordRuleError(password);
     if (passwordError) {
       errors.password = passwordError;
@@ -511,7 +511,7 @@ export function RegisterForm() {
                 setPassword(e.target.value);
                 clearFieldError("password");
               }}
-              placeholder="Tối thiểu 8 ký tự, tối đa 100"
+              placeholder={PASSWORD_RULE_HINT}
             />
             {password.length > 0 && (
               <div className="space-y-1.5 pt-1">

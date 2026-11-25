@@ -11,6 +11,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { clearPendingEmail, usePendingEmail } from "@/lib/pending-email";
+import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/password-rules";
 
 export function ResetPasswordForm() {
   const router = useRouter();
@@ -52,12 +53,10 @@ export function ResetPasswordForm() {
       setError("Mã OTP phải gồm đúng 6 chữ số.");
       return;
     }
-    if (newPassword.length < 8) {
-      setError("Mật khẩu mới phải có tối thiểu 8 ký tự.");
-      return;
-    }
-    if (newPassword.length > 100) {
-      setError("Mật khẩu không được vượt quá 100 ký tự.");
+    // [UC-01] Cùng luật mật khẩu với đăng ký (khớp backend)
+    const passwordError = passwordRuleError(newPassword, "Mật khẩu mới");
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -191,7 +190,7 @@ export function ResetPasswordForm() {
               autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="Tối thiểu 8 ký tự"
+              placeholder={PASSWORD_RULE_HINT}
             />
           </Field>
 

@@ -801,14 +801,27 @@ namespace StudyAbroad.Application.Auth
             if (password.Length > MaxPasswordLength)
                 return $"{label} không được vượt quá {MaxPasswordLength} ký tự.";
 
-            // [UC-01] Không được toàn khoảng trắng, không thuộc danh sách mật khẩu phổ biến
+            // [UC-01] Không được toàn khoảng trắng
             if (string.IsNullOrWhiteSpace(password))
                 return $"{label} không được chỉ gồm khoảng trắng.";
 
-            if (CommonPasswords.Contains(password))
-                return $"{label} quá phổ biến, dễ đoán. Vui lòng chọn mật khẩu khác.";
+            // [UC-01] Phải có đủ chữ hoa, chữ thường, chữ số và ký tự đặc biệt (thay cho danh sách mật khẩu phổ biến)
+            var missing = MissingPasswordParts(password);
+            if (missing.Count > 0)
+                return $"{label} phải có ít nhất 1 chữ hoa, 1 chữ thường, 1 chữ số và 1 ký tự đặc biệt (còn thiếu: {string.Join(", ", missing)}).";
 
             return null;
+        }
+
+        /// <summary>Các loại ký tự mật khẩu còn thiếu. Ký tự đặc biệt: không phải chữ, số hay khoảng trắng (vd ! @ # $ %).</summary>
+        private static List<string> MissingPasswordParts(string password)
+        {
+            var missing = new List<string>(4);
+            if (!password.Any(char.IsUpper)) missing.Add("chữ hoa");
+            if (!password.Any(char.IsLower)) missing.Add("chữ thường");
+            if (!password.Any(char.IsDigit)) missing.Add("chữ số");
+            if (!password.Any(c => !char.IsLetterOrDigit(c) && !char.IsWhiteSpace(c))) missing.Add("ký tự đặc biệt");
+            return missing;
         }
 
         /// <summary>
