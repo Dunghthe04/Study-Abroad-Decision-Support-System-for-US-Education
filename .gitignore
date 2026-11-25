@@ -35,3 +35,7 @@ advisor/slm/results/bao_cao/
 advisor/slm/drive_package/
 advisor/drive_package/
 
+
+# Dữ liệu huấn luyện SLM sinh lại bằng: python -m slm.prepare.export_slm_chat (quá 100 MB, GitHub không nhận)
+advisor/slm/data/finetune/train.jsonl
+advisor/slm/data/finetune/val.jsonl
