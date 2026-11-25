@@ -196,7 +196,7 @@ export function ProfileSummary({ rec, onRerun }: ProfileSummaryProps) {
               type="button"
               variant="outline"
               onClick={onRerun}
-              title="Tính lại danh sách theo hồ sơ hiện tại. Dùng sau khi bạn sửa hồ sơ."
+              title="Tính lại danh sách theo hồ sơ hiện tại và mức ưu tiên bạn đang chọn. Dùng sau khi bạn sửa hồ sơ hoặc đổi ưu tiên."
               className="text-xs"
             >
               <RefreshCwIcon className="size-3.5" />

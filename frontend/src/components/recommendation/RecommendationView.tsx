@@ -150,6 +150,9 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
 
   // Chạy cả quy trình (lọc cứng, đọc ngoại khóa, chấm nhóm bằng code, lưu)
   const runNew = async () => {
+    // UC-25: mức ưu tiên đang kéo ở khung bên trái (chưa lưu) được lưu và áp dụng khi bấm Gợi ý lại.
+    // Không kéo thanh nào thì giữ mức ưu tiên của lần gợi ý trước. Phải đọc trước sim.resetAll() bên dưới.
+    const pref = sim.overrides.pref ?? rec?.criteria.pref;
     setProfileSaved(false);
     setFocusCode(null);
     setPhase("running");
@@ -157,7 +160,7 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
     setLocked(false);
     sim.resetAll();
     try {
-      setRec(await recommendationApi.create(rec?.criteria.pref));
+      setRec(await recommendationApi.create(pref));
     } catch (err) {
       if (isPremiumRequired(err)) setLocked(true);
       else setError(err instanceof Error ? err.message : "Chưa tạo được gợi ý.");
@@ -324,7 +327,7 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
   if (!rec || !view) return main;
   return (
     <div className="flex flex-col lg:flex-row lg:items-start">
-      <ProfileSimulator sim={sim} basePref={basePref} />
+      <ProfileSimulator sim={sim} basePref={basePref} onRerun={runNew} />
       {main}
     </div>
   );

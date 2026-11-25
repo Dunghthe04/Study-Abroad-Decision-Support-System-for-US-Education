@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, RefreshCwIcon } from "lucide-react";
 import { PremiumLockedCard } from "@/components/billing/PremiumLockedCard";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -32,10 +32,11 @@ const PREF_ROWS: { index: 0 | 1 | 2; label: string }[] = [
 interface ProfileSimulatorProps {
   sim: ProfileSimulation;
   basePref: Pref; // ưu tiên của lần gợi ý đã lưu
+  onRerun?: () => void; // Gợi ý lại: lưu mức ưu tiên đang chọn và tính lại danh sách thật (UC-25)
 }
 
 // Trình mô phỏng hồ sơ: kéo GPA, SAT, ngân sách... để xem danh sách trường đổi thế nào. Không đổi hồ sơ thật.
-export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
+export function ProfileSimulator({ sim, basePref, onRerun }: ProfileSimulatorProps) {
   const profile = sim.result?.profile ?? null;
   const o = sim.overrides;
 
@@ -193,7 +194,8 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
 
           <Section title="Ưu tiên của bạn" onReset={() => sim.reset(["pref"])} changed={o.pref != null}>
             <p className="text-xs text-muted-foreground">
-              Chỉ đổi thứ tự các trường trong cùng một nhóm, không đổi nhóm.
+              Chỉ đổi thứ tự các trường trong cùng một nhóm, không đổi nhóm. Kéo thanh để xem thử; bấm Gợi ý lại để lưu mức
+              ưu tiên mới và tính lại danh sách.
             </p>
             {PREF_ROWS.map((row) => (
               <SliderRow
@@ -210,6 +212,12 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
                 onChange={(v) => setPref(row.index, v)}
               />
             ))}
+            {o.pref != null && onRerun && (
+              <Button type="button" size="sm" onClick={onRerun} className="mt-1 w-full gap-1 text-xs">
+                <RefreshCwIcon className="size-3.5" />
+                Gợi ý lại với ưu tiên này
+              </Button>
+            )}
           </Section>
 
           <div className="sticky bottom-0 border-t border-line bg-surface px-4 py-3 text-center">
