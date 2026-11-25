@@ -154,6 +154,7 @@ namespace StudyAbroad.Application.Auth
         public const string OtpFailedMessage = "Mã OTP không đúng hoặc đã hết hạn. Vui lòng kiểm tra lại hoặc yêu cầu gửi mã mới.";
 
         public const string InvalidCredentialsMessage = "Sai tài khoản hoặc mật khẩu.";
+        public const string PhoneInUseMessage = "Số điện thoại đã thuộc một tài khoản khác.";
 
         // Hash giả để so mật khẩu khi email không tồn tại: thời gian phản hồi như khi email có thật
         private static string? _dummyPasswordHash;
@@ -204,7 +205,7 @@ namespace StudyAbroad.Application.Auth
             var passwordHash = hasher.Hash(request.Password);
             var successMessage = $"Đăng ký thành công. Mã xác thực OTP đã được gửi đến email {email} (hiệu lực {OtpExpiryMinutes} phút).";
 
-            // [Bảo mật UC-01] Trùng email/SĐT: trả cùng thông báo như đăng ký mới (chống dò tài khoản),
+            // [Bảo mật UC-01 E1] Trùng email: trả cùng thông báo như đăng ký mới (chống dò tài khoản),
             // chỉ chủ hộp thư mới biết qua mail
             var existing = await users.GetUserByEmail(email, ct);
             if (existing != null)
@@ -213,11 +214,9 @@ namespace StudyAbroad.Application.Auth
                 return AuthResult.Ok(successMessage);
             }
 
+            // [UC-01 E6] Số điện thoại đã thuộc tài khoản khác: báo lỗi tại ô Số điện thoại (đặc tả chỉ giấu với trùng email, E1)
             if (!string.IsNullOrEmpty(normalizedPhone) && await users.PhoneExistAsync(normalizedPhone, ct))
-            {
-                await emailSender.SendPhoneAlreadyInUseEmailAsync(email, ct);
-                return AuthResult.Ok(successMessage);
-            }
+                return AuthResult.Fail(AuthError.Validation, PhoneInUseMessage);
 
             // [USAS-12] Khởi tạo tài khoản với trạng thái unverified (chờ kích hoạt email qua OTP)
             var user = new User

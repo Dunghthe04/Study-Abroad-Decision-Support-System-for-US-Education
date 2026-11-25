@@ -297,6 +297,9 @@ export function RegisterForm() {
         const msg = err.message || "Đăng ký không thành công. Vui lòng thử lại.";
         if (msg.toLowerCase().includes("email đã được sử dụng") || msg.toLowerCase().includes("email already in use")) {
           setFieldErrors((prev) => ({ ...prev, email: msg }));
+        } else if (msg.toLowerCase().includes("số điện thoại")) {
+          // [UC-01 E6] Số điện thoại sai định dạng hoặc đã thuộc tài khoản khác: báo tại ô Số điện thoại
+          setFieldErrors((prev) => ({ ...prev, phone: msg }));
         } else {
           setError(msg);
         }

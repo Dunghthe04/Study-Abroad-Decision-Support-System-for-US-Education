@@ -1478,17 +1478,19 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task Register_WithDuplicatePhone_ReturnsGenericSuccessAndMailsNewEmail()
+    public async Task Register_WithDuplicatePhone_FailsAtPhoneField_NoAccountNoMail()
     {
+        // [UC-01 E6] Số điện thoại đã thuộc tài khoản khác: báo lỗi tại ô Số điện thoại
         var service = CreateService();
         await service.RegisterAsync(Request(email: "user1@test.com", phone: "0912345678"));
+        var mailsBefore = _emailSender.SentEmails.Count;
 
         var result = await service.RegisterAsync(Request(email: "user2@test.com", phone: "+84 912 345 678"));
 
-        Assert.Equal(AuthError.None, result.Error);
-        Assert.Contains("user2@test.com", result.Message!);
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal(AuthService.PhoneInUseMessage, result.Message);
         Assert.Single(_repo.Users);
-        Assert.Equal(("user2@test.com", "phone_in_use_notice"), (_emailSender.SentEmails[^1].To, _emailSender.SentEmails[^1].Purpose));
+        Assert.Equal(mailsBefore, _emailSender.SentEmails.Count);
     }
 
     [Fact]
