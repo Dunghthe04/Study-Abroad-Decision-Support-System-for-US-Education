@@ -65,6 +65,8 @@ export function ParentLinksCard() {
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<ParentLinkDto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ParentLinkDto | null>(null);
+  // Giữ tên con cho tiêu đề khi hộp thoại đang đóng dần (deleteTarget đã về null)
+  const [deleteName, setDeleteName] = useState("");
   const [deleteUnderstood, setDeleteUnderstood] = useState(false);
 
   // UC-76: nút So sánh ưu tiên chỉ cho con có tài khoản thật (getMine có thể trả cả con managed)
@@ -338,6 +340,7 @@ export function ParentLinksCard() {
                           disabled={busy !== null}
                           onClick={() => {
                             setDeleteUnderstood(false);
+                            setDeleteName(link.studentName);
                             setDeleteTarget(link);
                           }}
                           loading={busy === `delete-${link.id}`}
@@ -465,7 +468,7 @@ export function ParentLinksCard() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rút đồng ý và xóa tài khoản của {deleteTarget?.studentName}?</DialogTitle>
+            <DialogTitle className="pr-6">Rút đồng ý và xóa tài khoản của {deleteName}?</DialogTitle>
           </DialogHeader>
           <DialogDescription>Việc này khác với chỉ rút đồng ý:</DialogDescription>
           <ul className="list-disc space-y-1 pl-5 text-sm text-ink-2">
