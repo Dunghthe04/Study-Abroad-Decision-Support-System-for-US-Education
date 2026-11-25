@@ -173,11 +173,15 @@ CENTER_NONE_IN_CITY = (
 )
 CENTER_ELSEWHERE = "Hiện chưa có trung tâm đã xác minh ở {city}, các trung tâm dưới đây ở nơi khác:"
 CENTER_MORE = "Còn {count} trung tâm khác, bạn bấm Xem thêm để xem hết."
-# Việc model tách ra (tasks) mà hệ thống chưa làm được: nói rõ rồi vẫn gợi ý trung tâm theo dịch vụ
+# Việc model tách ra (tasks): đặt lịch và so sánh. Hệ thống không có lịch hẹn riêng (UC-39 4a): dẫn tới form liên hệ UC-42 với lời nhắn điền sẵn.
+# So sánh (UC-39 4b): chọn sẵn hai trung tâm đầu để mở bảng so sánh như UC-142. Cả hai vẫn kèm danh sách trung tâm theo dịch vụ
 CENTER_TASK_NOTES = {
-    "booking": "Lịch hẹn bạn trao đổi trực tiếp với trung tâm nhé. Bạn bấm Liên hệ trên thẻ trung tâm để gửi yêu cầu tư vấn, trung tâm sẽ phản hồi lại cho bạn. Mình gợi ý sẵn các trung tâm đã xác minh bên dưới.",
-    "compare": "Mỗi trung tâm mạnh một mảng riêng nên mình không chấm hơn thua giữa các nơi. Bạn bấm Chi tiết để xem dịch vụ và địa điểm của từng trung tâm, rồi chọn nơi hợp với mình nhé. Đây là các trung tâm đã xác minh.",
+    "booking": "Hệ thống không có lịch hẹn riêng: bạn gửi yêu cầu liên hệ, trung tâm sẽ phản hồi để hẹn lịch với bạn. Bạn bấm Liên hệ ở trung tâm muốn hẹn, lời nhắn đã điền sẵn dịch vụ và thành phố. Đây là các trung tâm đã xác minh.",
+    "compare": "Mình chọn sẵn hai trung tâm đầu để bạn mở bảng so sánh (dịch vụ, bậc học, địa điểm); bạn có thể tick thêm hoặc bỏ chọn. Bảng chỉ nêu thông tin, mình không chấm hơn thua giữa các nơi. Đây là các trung tâm đã xác minh.",
 }
+# Lời nhắn điền sẵn trong form liên hệ khi học sinh muốn đặt lịch (UC-39 4a)
+CENTER_BOOKING_NOTE = "Em muốn đặt lịch tư vấn về {label}"
+CENTER_BOOKING_NOTE_IN_CITY = "Em muốn đặt lịch tư vấn về {label} ở {city}"
 # Nút kèm câu "so sánh" và "đặt lịch": mở trang Trung tâm (bộ lọc, danh sách đầy đủ). value chỉ dùng khi nút không chuyển trang
 CENTER_PAGE_BUTTON = QuickReply(
     label="Trang Trung tâm", value="Em muốn xem trang trung tâm tư vấn", href="/centers"
