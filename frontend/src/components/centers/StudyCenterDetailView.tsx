@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { formatRating } from "@/lib/rating";
 import Link from "next/link";
 import {
@@ -12,9 +13,12 @@ import {
   UsersIcon,
   GraduationCapIcon,
   Building2Icon,
-  FlameIcon,
+  ExternalLinkIcon,
+  HelpCircleIcon,
+  AlertTriangleIcon,
 } from "lucide-react";
-import type { StudyCenter } from "@/types/api";
+import { studyCentersApi } from "@/lib/api";
+import type { CenterGuidanceCardsDto, StudyCenter } from "@/types/api";
 import { useCenterReviews } from "@/hooks/use-center-reviews";
 import { CenterReviewForm } from "./CenterReviewForm";
 import { CenterReviewList } from "./CenterReviewList";
@@ -48,6 +52,26 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
     average: reviewAverage,
   } = useCenterReviews(center.id);
   const isVerified = center.verificationStatus === "verified" || profile.center.verificationStatus === "verified";
+  const [guidanceCards, setGuidanceCards] = useState<CenterGuidanceCardsDto | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    studyCentersApi
+      .getGuidanceCards()
+      .then((res) => {
+        if (!cancelled) setGuidanceCards(res);
+      })
+      .catch(() => {
+        // Không có thẻ tri thức thì bỏ qua im lặng theo đặc tả UC-40
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const hasEnoughResponseSample = (center.responseSampleCount ?? 0) >= 5;
+  const formatMedianHours = (hours: number) =>
+    hours < 1 ? "< 1 giờ" : hours < 24 ? `${hours.toFixed(1)} giờ` : `${(hours / 24).toFixed(1)} ngày`;
 
   return (
     <article className="py-6 pb-16 space-y-6">
@@ -141,29 +165,44 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
         </div>
       </div>
 
-      {/* 4 Key Highlight Cards */}
-      {(profile.visaSuccessRate != null || profile.staffCount != null || profile.licenseNumber || profile.taxCode) && (
+      {/* Key Highlight Cards (UC-40: bỏ tỷ lệ đỗ Visa Mỹ, hiển thị chỉ số phản hồi 90 ngày gần nhất) */}
       <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-4">
-        {profile.visaSuccessRate != null && (
         <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0 border-line">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-ink-2 font-medium truncate">
-              Tỷ lệ đỗ Visa Mỹ
+              Phản hồi 90 ngày gần nhất
             </span>
             <div className="w-8 h-8 rounded-lg bg-ok-wash text-ok flex items-center justify-center shrink-0">
-              <FlameIcon className="w-4 h-4" />
+              <ClockIcon className="w-4 h-4" />
             </div>
           </div>
           <div className="min-w-0">
-            <div className="font-heading text-xl sm:text-2xl font-bold tracking-tight text-ink tabular-nums truncate">
-              {profile.visaSuccessRate}%
-            </div>
-            <div className="text-xs text-ink-3 truncate mt-0.5">
-              Do trung tâm công bố
-            </div>
+            {hasEnoughResponseSample && center.responseRatePercent != null ? (
+              <>
+                <div className="font-heading text-xl sm:text-2xl font-bold tracking-tight text-ink tabular-nums truncate">
+                  {center.responseRatePercent}%
+                  {center.medianResponseHours != null && (
+                    <span className="font-sans text-xs sm:text-sm font-normal text-ink-2 ml-1.5">
+                      (trung vị {formatMedianHours(center.medianResponseHours)})
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-ink-3 truncate mt-0.5">
+                  Tỷ lệ phản hồi · {center.responseSampleCount} yêu cầu
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="font-heading text-base sm:text-lg font-bold tracking-tight text-ink-2 truncate">
+                  Chưa đủ dữ liệu
+                </div>
+                <div className="text-xs text-ink-3 truncate mt-0.5">
+                  Cần tối thiểu 5 yêu cầu trong 90 ngày
+                </div>
+              </>
+            )}
           </div>
         </Card>
-        )}
 
         {profile.staffCount != null && (
         <Card className="p-3.5 sm:p-4 flex flex-col justify-between gap-3 min-w-0 border-line">
@@ -212,7 +251,6 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
         </Card>
         )}
       </div>
-      )}
 
       {/* Main Tabs Navigation */}
       <Tabs defaultValue="tong-quan" className="space-y-4">
@@ -291,6 +329,38 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-xs sm:text-sm">
+                {(center.website || center.fanpage) && (
+                  <div className="space-y-1.5">
+                    {center.website && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-ink-3">Website:</span>
+                        <a
+                          href={center.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 font-medium text-brand hover:underline break-all"
+                        >
+                          {center.website}
+                          <ExternalLinkIcon className="size-3 shrink-0" />
+                        </a>
+                      </div>
+                    )}
+                    {center.fanpage && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-ink-3">Fanpage:</span>
+                        <a
+                          href={center.fanpage}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 font-medium text-brand hover:underline break-all"
+                        >
+                          {center.fanpage}
+                          <ExternalLinkIcon className="size-3 shrink-0" />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="text-xs text-muted-foreground flex items-start gap-2 bg-muted/40 p-2.5 rounded-lg">
                   <ShieldCheckIcon className="w-4 h-4 text-brand shrink-0 mt-0.5" />
                   <span>
@@ -300,6 +370,38 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
               </CardContent>
             </Card>
           </div>
+
+          {/* [UC-40] Thẻ "Nên hỏi trung tâm" (CENTER_ASK) và "Dấu hiệu cảnh giác" (CENTER_WARNING) từ Kho tri thức */}
+          {(guidanceCards?.askCard || guidanceCards?.warningCard) && (
+            <div className="grid sm:grid-cols-2 gap-4">
+              {guidanceCards.askCard && (
+                <Card className="border-brand/25 bg-brand-wash/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2 text-brand-ink">
+                      <HelpCircleIcon className="w-4 h-4 text-brand shrink-0" />
+                      Nên hỏi trung tâm
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-xs sm:text-sm text-ink-2 whitespace-pre-line leading-relaxed">
+                    {guidanceCards.askCard.content}
+                  </CardContent>
+                </Card>
+              )}
+              {guidanceCards.warningCard && (
+                <Card className="border-amber-500/30 bg-amber-500/5">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2 text-amber-800 dark:text-amber-300">
+                      <AlertTriangleIcon className="w-4 h-4 text-amber-600 shrink-0" />
+                      Dấu hiệu cảnh giác
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-xs sm:text-sm text-ink-2 whitespace-pre-line leading-relaxed">
+                    {guidanceCards.warningCard.content}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
         </TabsContent>
 
         {/* TAB 2: DỊCH VỤ & KHÓA HỌC */}

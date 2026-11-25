@@ -9,6 +9,8 @@ public class TargetSchool : BaseEntity
     public Guid UniversityId { get; set; }
     /// <summary>reach | match | safety</summary>
     public string? Category { get; set; }
+    /// <summary>true khi người dùng tự chọn hoặc đổi nhóm; false thì mặc định lấy theo lần gợi ý gần nhất (UC-33).</summary>
+    public bool IsCategoryUserSelected { get; set; }
     /// <summary>considering | applying | submitted | admitted | rejected</summary>
     public string Status { get; set; } = "considering";
     public int Priority { get; set; }

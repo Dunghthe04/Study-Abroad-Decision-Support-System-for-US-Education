@@ -60,6 +60,8 @@ public class LeadService(
             throw new LeadRuleException("lead_rejected", 400, "Yêu cầu đã bị trung tâm từ chối, không nhắn tin được.");
         if (string.Equals(status, LeadStatuses.Cancelled, StringComparison.OrdinalIgnoreCase))
             throw new LeadRuleException("lead_cancelled", 400, "Yêu cầu đã bị hủy, không nhắn tin được.");
+        if (string.Equals(status, LeadStatuses.CenterInactive, StringComparison.OrdinalIgnoreCase))
+            throw new LeadRuleException("center_inactive", 400, "Trung tâm hiện tạm ngừng hoạt động, không thể tiếp tục nhắn tin.");
         if (string.Equals(status, LeadStatuses.Expired, StringComparison.OrdinalIgnoreCase)
             || CenterLeadMapper.IsDataHidden(lead))
             throw new LeadRuleException("lead_expired", 400, "Yêu cầu đã hết hạn, không nhắn tin được.");
@@ -309,12 +311,27 @@ public class LeadService(
 
         if (user.Role == UserRoles.Parent)
         {
-            var linked = await parentLinks.GetActiveByParentAsync(user.Id, ct);
-            var childIds = linked.Select(l => l.StudentUserId).Distinct().ToList();
-            return await leads.GetSentLeadsAsync(childIds, submitterId: user.Id, page, pageSize, ct);
+            // [UC-44] Phụ huynh xem được lead mình trực tiếp gửi + lead của con dưới 18 tuổi đang liên kết.
+            // Con từ đủ 18 tuổi trở lên có quyền riêng tư với các lead do chính con gửi.
+            var minorChildIds = await GetLinkedMinorChildIdsAsync(user.Id, ct);
+            return await leads.GetSentLeadsAsync(minorChildIds, submitterId: user.Id, page, pageSize, ct);
         }
 
         throw SentLeadsRoleNotAllowed();
+    }
+
+    private async Task<List<Guid>> GetLinkedMinorChildIdsAsync(Guid parentUserId, CancellationToken ct)
+    {
+        var linked = await parentLinks.GetActiveByParentAsync(parentUserId, ct);
+        var today = AgePolicy.TodayInVietnam(DateTime.UtcNow);
+        var minorIds = new List<Guid>();
+        foreach (var childId in linked.Select(l => l.StudentUserId).Distinct())
+        {
+            var child = await users.GetUserById(childId, ct);
+            if (child?.DateOfBirth is not { } dob || AgePolicy.GetAge(dob, today) < AgeGroups.AdultAge)
+                minorIds.Add(childId);
+        }
+        return minorIds;
     }
 
     /// <summary>
@@ -363,20 +380,10 @@ public class LeadService(
         }
         else
         {
-            // Phụ huynh: lead mình bấm gửi (kể cả khi liên kết đã hủy), hoặc lead của con đang liên kết khi con dưới 18 tuổi (SC-44 / UC-44)
-            if (lead.SubmittedByUserId == user.Id)
-            {
-                canView = true;
-            }
-            else if ((await parentLinks.GetActiveByParentAsync(user.Id, ct)).Any(l => l.StudentUserId == lead.UserId))
-            {
-                var student = await users.GetUserById(lead.UserId, ct);
-                var today = AgePolicy.TodayInVietnam(DateTime.UtcNow);
-                var isUnder18 = student?.DateOfBirth is not { } dob || AgePolicy.GetAge(dob, today) < AgeGroups.AdultAge;
-                canView = isUnder18;
-            }
+            // [UC-44] Phụ huynh: lead mình bấm gửi (kể cả khi liên kết đã hủy), hoặc lead của con dưới 18 tuổi đang liên kết
+            canView = lead.SubmittedByUserId == user.Id
+                      || (await GetLinkedMinorChildIdsAsync(user.Id, ct)).Contains(lead.UserId);
         }
-
         if (!canView)
             throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
 
@@ -817,9 +824,14 @@ public class LeadService(
     }
 
     public const int MaxRemoveReasonLength = 500;
+    /// <summary>[UC-143] Độ dài lý do báo cáo tin nhắn (thống nhất với báo cáo tin diễn đàn UC-49): 3 đến 64 ký tự.</summary>
+    public const int MinReportReasonLength = 3;
+    public const int MaxReportReasonLength = 64;
+    /// <summary>[UC-143] Độ dài chi tiết thêm (không bắt buộc): tối đa 1.000 ký tự.</summary>
+    public const int MaxReportDetailLength = 1000;
 
     /// <summary>
-    /// [UC-58] Học sinh / phụ huynh báo cáo một tin của trung tâm trong yêu cầu của mình.
+    /// [UC-143] Học sinh / phụ huynh báo cáo một tin của trung tâm trong yêu cầu của mình (trong 90 ngày kể từ ngày gửi yêu cầu).
     /// Admin nhận thông báo. Báo lại tin đã báo không đổi gì; tin đã gỡ hoặc tin của chính mình thì không báo được.
     /// </summary>
     public async Task<LeadMessageDto> ReportSentLeadMessageAsync(
@@ -827,16 +839,17 @@ public class LeadService(
         Guid leadId,
         Guid messageId,
         string? reason,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? detail = null)
     {
-        var trimmedReason = ValidateReportInput(messageId, reason);
+        var (trimmedReason, trimmedDetail) = ValidateReportInput(messageId, reason, detail);
 
         var (user, lead, centerName) = await GetAuthorizedSentLeadAsync(userId, leadId, ct);
-        return await ReportMessageAsync(user.Id, user.Role, lead, centerName, messageId, trimmedReason,
+        return await ReportMessageAsync(user.Id, user.Role, lead, centerName, messageId, trimmedReason, trimmedDetail,
             reporterIsCenterSide: false, sharedProfile: true, ct);
     }
 
-    /// <summary>[UC-58] Trung tâm báo cáo một tin của học sinh / phụ huynh (thô tục, quấy rối...). Admin nhận thông báo.</summary>
+    /// <summary>[UC-143] Trung tâm báo cáo một tin của học sinh / phụ huynh (trong 90 ngày kể từ ngày gửi yêu cầu). Admin nhận thông báo.</summary>
     public async Task<LeadMessageDto> ReportReceivedLeadMessageAsync(
         Guid userId,
         string? userEmail,
@@ -844,24 +857,30 @@ public class LeadService(
         Guid leadId,
         Guid messageId,
         string? reason,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? detail = null)
     {
-        var trimmedReason = ValidateReportInput(messageId, reason);
+        var (trimmedReason, trimmedDetail) = ValidateReportInput(messageId, reason, detail);
 
         var (lead, centerName) = await GetAuthorizedLeadForCenterAsync(userId, userEmail, userRole, leadId, ct);
-        return await ReportMessageAsync(userId, userRole, lead, centerName, messageId, trimmedReason,
+        return await ReportMessageAsync(userId, userRole, lead, centerName, messageId, trimmedReason, trimmedDetail,
             reporterIsCenterSide: true, sharedProfile: lead.SharedFields.Contains(LeadSharedFields.Contact), ct);
     }
 
-    private static string? ValidateReportInput(Guid messageId, string? reason)
+    private static (string Reason, string? Detail) ValidateReportInput(Guid messageId, string? reason, string? detail)
     {
         if (messageId == Guid.Empty)
             throw new ArgumentException("Mã tin nhắn không hợp lệ.");
 
-        var trimmedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
-        if (trimmedReason is { Length: > MaxRemoveReasonLength })
-            throw new ArgumentException($"Lý do báo cáo tối đa {MaxRemoveReasonLength} ký tự.");
-        return trimmedReason;
+        var trimmedReason = reason?.Trim() ?? string.Empty;
+        if (trimmedReason.Length < MinReportReasonLength || trimmedReason.Length > MaxReportReasonLength)
+            throw new ArgumentException($"Lý do báo cáo phải từ {MinReportReasonLength} đến {MaxReportReasonLength} ký tự.");
+
+        var trimmedDetail = string.IsNullOrWhiteSpace(detail) ? null : detail.Trim();
+        if (trimmedDetail is { Length: > MaxReportDetailLength })
+            throw new ArgumentException($"Chi tiết thêm tối đa {MaxReportDetailLength} ký tự.");
+
+        return (trimmedReason, trimmedDetail);
     }
 
     private async Task<LeadMessageDto> ReportMessageAsync(
@@ -870,11 +889,16 @@ public class LeadService(
         Lead lead,
         string centerName,
         Guid messageId,
-        string? reason,
+        string reason,
+        string? detail,
         bool reporterIsCenterSide,
         bool sharedProfile,
         CancellationToken ct)
     {
+        // [UC-143 E3] Chỉ cho báo cáo trong 90 ngày kể từ ngày gửi yêu cầu (kể cả khi lead Đã hoàn tất, Hết hạn hoặc Đã thu hồi)
+        if (lead.CreatedAt < DateTime.UtcNow.AddDays(-CenterLeadMapper.DataVisibleDays))
+            throw new LeadRuleException("report_expired", 400, "Đã quá 90 ngày kể từ ngày gửi yêu cầu, không thể báo cáo tin nhắn này.");
+
         var message = await leads.GetLeadMessageForUpdateAsync(lead.Id, messageId, ct)
             ?? throw new KeyNotFoundException("Không tìm thấy tin nhắn trong yêu cầu liên hệ này.");
 
@@ -892,6 +916,7 @@ public class LeadService(
             message.ReportedByUserId = reporterId;
             message.ReportedAt = DateTime.UtcNow;
             message.ReportReason = reason;
+            message.ReportDetail = detail;
             await leads.SaveLeadMessageAsync(message, ct);
 
             if (auditLogs is not null)
@@ -909,6 +934,7 @@ public class LeadService(
                         reporterRole,
                         senderUserId = message.SenderUserId,
                         reason,
+                        detail,
                     }),
                 }, ct);
             }
@@ -947,6 +973,7 @@ public class LeadService(
     public const string ReportResolutionRemoved = "removed";
     public const string ReportResolutionWarned = "warned";
     public const string ReportResolutionLocked = "locked";
+    public const string ReportResolutionDismissed = "dismissed";
 
     /// <summary>Đọc số tin ngữ cảnh từ JSON cấu hình; trả null nếu trống hoặc sai định dạng (khi đó dùng mặc định).</summary>
     public static int? ParseReportContextSize(string? json)
@@ -1148,12 +1175,13 @@ public class LeadService(
             ?? throw new KeyNotFoundException("Không tìm thấy tin nhắn trong yêu cầu liên hệ này.");
 
         if (!message.ReportedAt.HasValue) return;
+        if (message.ReportResolution is not null) return;
 
         var reportedBy = message.ReportedByUserId;
         var reportReason = message.ReportReason;
-        message.ReportedByUserId = null;
-        message.ReportedAt = null;
-        message.ReportReason = null;
+        // [UC-54] Giữ nguyên lịch sử báo cáo để đối chiếu audit, chỉ đánh dấu đã bác bỏ (dismissed)
+        message.ReportResolution = ReportResolutionDismissed;
+        message.ReportResolvedAt = DateTime.UtcNow;
         await leads.SaveLeadMessageAsync(message, ct);
 
         if (auditLogs is not null)

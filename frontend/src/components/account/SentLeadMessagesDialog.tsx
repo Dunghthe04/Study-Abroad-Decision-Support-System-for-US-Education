@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangleIcon, RefreshCwIcon, SendIcon } from "lucide-react";
+import { AlertTriangleIcon, HelpCircleIcon, RefreshCwIcon, SendIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { ApiError } from "@/lib/api";
+import { ApiError, studyCentersApi } from "@/lib/api";
 import { getLeadRuleError, leadApi } from "@/lib/lead-api";
 import { MAX_LEAD_MESSAGE_LENGTH, formatLeadMessageRoleLabel } from "@/lib/lead-message";
 import {
@@ -16,7 +16,7 @@ import {
 } from "@/components/lead/LeadMessageParts";
 import { useLeadChat } from "@/hooks/use-lead-chat";
 import { cn } from "@/lib/utils";
-import type { LeadMessageDto, LeadMessagesThreadDto } from "@/types/api";
+import type { CenterGuidanceCardsDto, LeadMessageDto, LeadMessagesThreadDto } from "@/types/api";
 import { LEAD_MESSAGING_BLOCK_CODES, getLeadMessagingBlockReason, type SentLeadDto } from "@/types/lead";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -92,10 +92,25 @@ function ThreadBody({
 
   // [UC-58] Tin của trung tâm đã báo cáo trong lần mở khung này (backend không trả cờ báo cáo)
   const [reportedIds, setReportedIds] = useState<Set<string>>(() => new Set());
+  // [UC-44] Thẻ hướng dẫn từ Kho tri thức (CENTER_ASK / CENTER_WARNING)
+  const [guidanceCards, setGuidanceCards] = useState<CenterGuidanceCardsDto | null>(null);
 
-  const reportMessage = async (messageId: string, reason: string) => {
+  useEffect(() => {
+    let ignore = false;
+    studyCentersApi
+      .getGuidanceCards()
+      .then((res) => {
+        if (!ignore) setGuidanceCards(res);
+      })
+      .catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const reportMessage = async (messageId: string, reason: string, detail?: string) => {
     try {
-      await leadApi.reportSentMessage(leadId, messageId, reason);
+      await leadApi.reportSentMessage(leadId, messageId, reason, detail);
       setReportedIds((prev) => new Set(prev).add(messageId));
       toast.add({
         type: "success",
@@ -249,6 +264,30 @@ function ThreadBody({
         </Button>
       </div>
 
+      {/* [UC-44] Thẻ hướng dẫn từ Kho tri thức (CENTER_ASK / CENTER_WARNING) */}
+      {(guidanceCards?.askCard || guidanceCards?.warningCard) && (
+        <div className="space-y-1.5">
+          {guidanceCards.askCard && (
+            <details className="rounded-md border border-brand/25 bg-brand-wash/20 px-3 py-2 text-xs">
+              <summary className="cursor-pointer font-semibold text-brand-ink flex items-center gap-1.5">
+                <HelpCircleIcon className="size-3.5 text-brand shrink-0" />
+                Nên hỏi trung tâm
+              </summary>
+              <p className="mt-1.5 whitespace-pre-line text-ink-2 leading-relaxed">{guidanceCards.askCard.content}</p>
+            </details>
+          )}
+          {guidanceCards.warningCard && (
+            <details className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
+              <summary className="cursor-pointer font-semibold text-amber-800 dark:text-amber-200 flex items-center gap-1.5">
+                <AlertTriangleIcon className="size-3.5 text-amber-600 shrink-0" />
+                Dấu hiệu cảnh giác
+              </summary>
+              <p className="mt-1.5 whitespace-pre-line text-ink-2 leading-relaxed">{guidanceCards.warningCard.content}</p>
+            </details>
+          )}
+        </div>
+      )}
+
       {/* Security Warning Banner */}
       <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
         <AlertTriangleIcon className="size-4 text-amber-600 shrink-0 mt-0.5" />
@@ -352,7 +391,7 @@ function MessageBubble({
   msg: LeadMessageDto;
   isMine: boolean;
   isReported: boolean;
-  onReport: (messageId: string, reason: string) => Promise<void>;
+  onReport: (messageId: string, reason: string, detail?: string) => Promise<void>;
   /** Tin cuối cùng của mình: hiện "Đã gửi / Đã xem". */
   showReceipt: boolean;
 }) {
@@ -390,12 +429,18 @@ function MessageBubble({
       </div>
       {msg.content && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{msg.content}</p>}
       <LeadMessageAttachment url={msg.attachmentUrl} />
+      {msg.isFromCenter && msg.showPaymentReminder && (
+        <div className="mt-1.5 flex items-start gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-800 dark:text-amber-200">
+          <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+          <span>Chỉ thanh toán theo hợp đồng đã ký với trung tâm</span>
+        </div>
+      )}
       {showReceipt && <MessageReceipt readAt={msg.readAt} />}
 
-      {/* [UC-58] Học sinh / phụ huynh báo cáo tin của trung tâm (lời lẽ thô tục, quấy rối...) */}
+      {/* [UC-143] Học sinh / phụ huynh báo cáo tin của trung tâm */}
       {msg.isFromCenter && !isMine && (
         <div className="mt-1.5">
-          <ReportMessageControl isReported={isReported} onReport={(reason) => onReport(msg.id, reason)} />
+          <ReportMessageControl isReported={isReported} onReport={(reason, detail) => onReport(msg.id, reason, detail)} />
         </div>
       )}
     </div>

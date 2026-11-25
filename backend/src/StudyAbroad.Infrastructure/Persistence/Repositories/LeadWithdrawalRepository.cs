@@ -11,7 +11,7 @@ public class LeadWithdrawalRepository(AppDbContext db) : ILeadWithdrawalReposito
     {
         var withdrawn = await db.Leads
             .Where(l => l.UserId == userId
-                && (l.Status == LeadStatuses.New || l.Status == LeadStatuses.Contacted))
+                && (l.Status == LeadStatuses.New || l.Status == LeadStatuses.Accepted || l.Status == LeadStatuses.Contacted))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(l => l.Status, LeadStatuses.Withdrawn)
                 .SetProperty(l => l.UpdatedAt, now), ct);

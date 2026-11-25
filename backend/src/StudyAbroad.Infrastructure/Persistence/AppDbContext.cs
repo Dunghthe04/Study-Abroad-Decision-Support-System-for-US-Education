@@ -65,6 +65,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<LeadMessage> LeadMessages => Set<LeadMessage>();
     public DbSet<CenterSuspensionProposal> CenterSuspensionProposals => Set<CenterSuspensionProposal>();
     public DbSet<CenterReview> CenterReviews => Set<CenterReview>();
+    public DbSet<CenterReviewReport> CenterReviewReports => Set<CenterReviewReport>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
     public DbSet<UserSubscription> UserSubscriptions => Set<UserSubscription>();
     public DbSet<UserDailyUsage> UserDailyUsages => Set<UserDailyUsage>();

@@ -63,6 +63,25 @@ export interface StudyCenter {
   /** [UC-92] Khu vực phục vụ và chi nhánh do trung tâm công bố. */
   serviceAreas?: string[] | null;
   branches?: string[] | null;
+  /** [UC-40] Chỉ số phản hồi 90 ngày gần nhất (null nếu mẫu < 5 lead). */
+  medianResponseHours?: number | null;
+  responseRatePercent?: number | null;
+  responseSampleCount?: number;
+}
+
+/** [UC-40 / UC-44] Thẻ hướng dẫn từ Kho tri thức (CENTER_ASK / CENTER_WARNING). */
+export interface CenterGuidanceCardDto {
+  topicCode: string;
+  docType: string;
+  title: string;
+  content: string;
+  source?: string | null;
+  sourceUrl?: string | null;
+}
+
+export interface CenterGuidanceCardsDto {
+  askCard: CenterGuidanceCardDto | null;
+  warningCard: CenterGuidanceCardDto | null;
 }
 
 export interface RegisterCenterRequest {
@@ -136,6 +155,7 @@ export interface CenterVerificationDto {
   centerEmail?: string | null;
   centerPhone?: string | null;
   emailVerifiedAt?: string | null;
+  isServiceContractValid?: boolean;
 }
 
 export interface CenterVerificationStatusDto {
@@ -151,6 +171,7 @@ export interface ReviewCenterVerificationRequest {
   isNationalRegistryMatched?: boolean;
   isBusinessOperating?: boolean;
   isRepresentativeValid?: boolean;
+  isServiceContractValid?: boolean;
   reviewNotes?: string | null;
   rejectionReason?: string | null;
 }
@@ -609,6 +630,7 @@ export interface TargetSchoolSummaryDto {
   safetyCount: number;
   undecidedCategoryCount: number;
   nextDeadline?: string | null;
+  isScholarshipMandatory?: boolean;
 }
 
 export interface UpdateApplicationRoundRequest {
@@ -673,6 +695,7 @@ export interface AddTargetSchoolRequest {
   applicationRound?: string | null;
   deadline?: string | null;
   notes?: string | null;
+  isUserCategory?: boolean | null;
 }
 
 export interface TargetSchoolDto {
@@ -694,22 +717,17 @@ export interface TargetSchoolDto {
   deadline?: string | null;
   createdAt: string;
   updatedAt?: string | null;
+  estimatedAnnualCostUsd?: number | null;
+  isCategoryUserSelected?: boolean;
+  availableRounds?: string[];
 }
 
-export interface TargetSchoolSummaryDto {
-  items: TargetSchoolDto[];
-  totalCount: number;
-  reachCount: number;
-  matchCount: number;
-  safetyCount: number;
-  undecidedCategoryCount: number;
-  nextDeadline?: string | null;
-}
-
-export interface UpdateApplicationRoundRequest {
-  applicationRound: string;
-  deadline?: string | null;
-  autoResolveDeadline?: boolean;
+export interface TargetSchoolDefaultsDto {
+  recommendedCategory?: "reach" | "match" | "safety" | string | null;
+  availableRounds: string[];
+  isScholarshipMandatory?: boolean;
+  existingEdSchoolName?: string | null;
+  existingEd2SchoolName?: string | null;
 }
 // [UC-73] Quản lý yêu cầu liên hệ nhận được phía Trung tâm tư vấn (Leads)
 export interface SharedProfileSummaryDto {
@@ -742,6 +760,9 @@ export interface CenterReceivedLeadDto {
   profileSummary?: SharedProfileSummaryDto | null;
   /** [UC-73] Đã thu hồi hoặc quá 90 ngày: trung tâm không còn xem được dữ liệu đã chia sẻ. */
   dataHidden?: boolean;
+  /** [UC-68] Thời hạn 7 ngày để trung tâm phản hồi lead ở trạng thái Mới. */
+  expiresAt?: string | null;
+  daysUntilExpiry?: number | null;
 }
 
 export interface CenterLeadsSummaryDto {
@@ -776,6 +797,8 @@ export interface LeadMessageDto {
   createdAt: string;
   /** [Chat realtime] Lúc phía đối diện đã xem tin này, null nếu chưa xem. */
   readAt?: string | null;
+  /** [UC-44] True khi tin nhắn trung tâm chứa STK/chuyển khoản/đặt cọc để hiện nhắc nhở thanh toán theo hợp đồng. */
+  showPaymentReminder?: boolean;
 }
 
 export interface LeadMessagesThreadDto {
@@ -814,10 +837,14 @@ export interface AdminLeadMessageReportDto {
   reportedByUserId?: string | null;
   reportedAt?: string | null;
   reportReason?: string | null;
+  /** [UC-143] Chi tiết bổ sung do người báo cáo nhập (tùy chọn, tối đa 1000 ký tự). */
+  reportDetail?: string | null;
   createdAt: string;
-  /** Kết quả Admin xử lý: removed (gỡ tin), warned (cảnh cáo), locked (khóa tài khoản). Trống là chưa xử lý. */
-  reportResolution?: "removed" | "warned" | "locked" | string | null;
+  /** Kết quả Admin xử lý: removed (gỡ tin), warned (cảnh cáo), locked (khóa tài khoản), dismissed (bác bỏ). Trống là chưa xử lý. */
+  reportResolution?: "removed" | "warned" | "locked" | "dismissed" | string | null;
   reportResolvedAt?: string | null;
+  isFlagged?: boolean;
+  flagReason?: string | null;
 }
 
 /** [UC-58] Một tin trong phần ngữ cảnh quanh tin bị báo cáo. */
@@ -832,6 +859,8 @@ export interface AdminReportContextMessageDto {
   createdAt: string;
   /** Chính là tin bị báo cáo. */
   isReported: boolean;
+  isFlagged?: boolean;
+  flagReason?: string | null;
 }
 
 /** [UC-58] Tin bị báo cáo kèm tối đa contextSize tin liền trước và liền sau. Admin không đọc cả cuộc trò chuyện. */
@@ -840,6 +869,13 @@ export interface AdminLeadMessageReportContextDto {
   messageId: string;
   contextSize: number;
   messages: AdminReportContextMessageDto[];
+}
+
+/** [UC-152] Phản hồi công khai của trung tâm dưới một đánh giá. */
+export interface CenterReviewReplyDto {
+  content: string;
+  createdAt: string;
+  editedAt?: string | null;
 }
 
 /** Đánh giá công khai của trung tâm (tên người đánh giá đã được rút gọn ở backend). */
@@ -851,6 +887,42 @@ export interface CenterReviewDto {
   createdAt: string;
   rating: number;
   comment?: string | null;
+  /** [UC-152] Phản hồi công khai của trung tâm (nếu có và đang hiển thị). */
+  centerReply?: CenterReviewReplyDto | null;
+}
+
+/** [UC-151] Lý do báo cáo đánh giá trung tâm. */
+export type CenterReviewReportReason =
+  | "offensive_language"
+  | "personal_info"
+  | "not_real_experience"
+  | "spam_ad"
+  | "other";
+
+export type CenterReviewReportFilter = "open" | "resolved" | "all";
+
+/** [UC-151] Báo cáo đánh giá trung tâm hiển thị cho Moderator (UC-53). */
+export interface CenterReviewReportDto {
+  id: string;
+  centerReviewId: string;
+  studyCenterId: string;
+  studyCenterName: string;
+  reviewRating: number;
+  reviewComment?: string | null;
+  reviewStatus: string;
+  reviewerName: string;
+  reporterUserId: string;
+  reporterName: string;
+  reporterRole: string;
+  /** Trung tâm tự báo cáo đánh giá về chính trung tâm mình (Moderator cần lưu ý xung đột lợi ích). */
+  isCenterSelfReport: boolean;
+  reason: CenterReviewReportReason | string;
+  detail?: string | null;
+  status: "open" | "resolved_removed" | "dismissed" | string;
+  createdAt: string;
+  resolvedByUserId?: string | null;
+  resolvedAt?: string | null;
+  resolutionNote?: string | null;
 }
 
 /** [USAS-2070 / UC-45] Gửi đánh giá trung tâm: số sao 1 đến 5, nhận xét tùy chọn (tối đa 2000 ký tự). */

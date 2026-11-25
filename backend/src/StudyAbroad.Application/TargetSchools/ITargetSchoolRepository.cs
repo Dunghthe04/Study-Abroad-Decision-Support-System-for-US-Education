@@ -20,4 +20,12 @@ public interface ITargetSchoolRepository
     Task<University?> GetUniversityAsync(Guid universityId, CancellationToken ct = default);
     Task<University?> GetUniversityByCodeAsync(string code, CancellationToken ct = default);
     Task<string?> GetUniversityDeadlinesJsonAsync(Guid universityId, CancellationToken ct = default);
+    Task<Dictionary<Guid, string>> GetLatestRecommendedCategoriesAsync(Guid userId, CancellationToken ct = default) =>
+        Task.FromResult(new Dictionary<Guid, string>());
+    Task<string?> GetLatestRecommendedCategoryAsync(Guid userId, Guid universityId, CancellationToken ct = default) =>
+        Task.FromResult<string?>(null);
+    Task<string?> GetUserScholarshipNeedAsync(Guid userId, CancellationToken ct = default) =>
+        Task.FromResult<string?>(null);
+    Task<string?> FindSchoolWithRoundAsync(Guid userId, string canonicalRound, Guid? excludeTargetId = null, CancellationToken ct = default) =>
+        Task.FromResult<string?>(null);
 }

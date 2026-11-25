@@ -36,10 +36,11 @@ export function ReviewVerificationModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 3 Moderator Checklist items (BR-C3)
+  // 4 Moderator Checklist items (UC-55 / BR-C3)
   const [isNationalRegistryMatched, setIsNationalRegistryMatched] = useState(false);
   const [isBusinessOperating, setIsBusinessOperating] = useState(false);
   const [isRepresentativeValid, setIsRepresentativeValid] = useState(false);
+  const [isServiceContractValid, setIsServiceContractValid] = useState(false);
 
   const [reviewNotes, setReviewNotes] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
@@ -63,6 +64,7 @@ export function ReviewVerificationModal({
             setIsNationalRegistryMatched(item.isNationalRegistryMatched || false);
             setIsBusinessOperating(item.isBusinessOperating || false);
             setIsRepresentativeValid(item.isRepresentativeValid || false);
+            setIsServiceContractValid(item.isServiceContractValid || false);
             setReviewNotes(item.reviewNotes || "");
             setRejectionReason(item.rejectionReason || "");
           }
@@ -88,13 +90,13 @@ export function ReviewVerificationModal({
     setError(null);
 
     if (action === "approve") {
-      if (!isNationalRegistryMatched || !isBusinessOperating || !isRepresentativeValid) {
-        setError("Để cấp dấu xác minh (BR-C3), bạn phải tích xác nhận cả 3 tiêu chí đối chiếu trên Cổng ĐKDN.");
+      if (!isNationalRegistryMatched || !isBusinessOperating || !isRepresentativeValid || !isServiceContractValid) {
+        setError("Để cấp dấu xác minh (BR-C3), bạn phải tích xác nhận đầy đủ cả 4 tiêu chí kiểm duyệt (bao gồm hợp đồng dịch vụ mẫu).");
         return;
       }
     } else {
       if (!rejectionReason.trim()) {
-        setError("Vui lòng nhập lý do từ chối duyệt hồ sơ.");
+        setError("Vui lòng nhập lý do từ chối / yêu cầu bổ sung / thu hồi dấu xác minh.");
         return;
       }
     }
@@ -106,6 +108,7 @@ export function ReviewVerificationModal({
         isNationalRegistryMatched,
         isBusinessOperating,
         isRepresentativeValid,
+        isServiceContractValid,
         reviewNotes: reviewNotes.trim() || null,
         rejectionReason: rejectionReason.trim() || null,
       });
@@ -128,7 +131,8 @@ export function ReviewVerificationModal({
     isEmailVerified &&
     isNationalRegistryMatched &&
     isBusinessOperating &&
-    isRepresentativeValid;
+    isRepresentativeValid &&
+    isServiceContractValid;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -333,6 +337,19 @@ export function ReviewVerificationModal({
                       4. Người đăng ký là người đại diện pháp luật hoặc có Giấy ủy quyền hợp lệ
                     </span>
                   </label>
+
+                  {/* Moderator Condition 5 (UC-55) */}
+                  <label className="flex items-center gap-2.5 p-2 rounded bg-surface-2 cursor-pointer hover:bg-surface-3 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={isServiceContractValid}
+                      onChange={(e) => setIsServiceContractValid(e.target.checked)}
+                      className="h-4 w-4 rounded border-line text-brand focus:ring-brand"
+                    />
+                    <span className="text-ink font-medium">
+                      5. Hợp đồng dịch vụ mẫu nêu rõ phạm vi dịch vụ, biểu phí và chính sách hoàn phí
+                    </span>
+                  </label>
                 </div>
               </div>
 
@@ -372,28 +389,44 @@ export function ReviewVerificationModal({
             Đóng
           </Button>
 
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={submitting}
-              onClick={() => handleAction("reject")}
-              className="text-rose-600 border-rose-500/30 hover:bg-rose-500/10"
-            >
-              Từ chối hồ sơ
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {data?.status === "verified" ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={submitting}
+                loading={submitting}
+                onClick={() => handleAction("revoke")}
+                className="text-rose-600 border-rose-500/30 hover:bg-rose-500/10"
+              >
+                Thu hồi dấu xác minh
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={submitting}
+                  onClick={() => handleAction("reject")}
+                  className="text-rose-600 border-rose-500/30 hover:bg-rose-500/10"
+                >
+                  Từ chối hồ sơ
+                </Button>
 
-            <Button
-              type="button"
-              size="sm"
-              disabled={!allConditionsMet}
-              loading={submitting}
-              onClick={() => handleAction("approve")}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              Duyệt & Cấp tick xanh
-            </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!allConditionsMet}
+                  loading={submitting}
+                  onClick={() => handleAction("approve")}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  Duyệt & Cấp tick xanh
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>

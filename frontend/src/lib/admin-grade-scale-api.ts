@@ -26,6 +26,7 @@ export interface GradeScaleHistoryItem {
   actorName: string | null;
   old: GradeScaleConfig | null;
   new: GradeScaleConfig | null;
+  recomputedProfiles?: number | null;
 }
 
 export type SaveGradeScaleResult =

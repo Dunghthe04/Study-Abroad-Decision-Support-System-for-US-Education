@@ -65,6 +65,7 @@ namespace StudyAbroad.Application.Auth
         StudyAbroad.Application.Billing.IBillingAccountHooks? billingHooks = null,
         // [UC-104] Đồng ý Điều khoản và Chính sách bảo mật lúc đăng ký; null trong test cũ thì bỏ qua
         StudyAbroad.Application.Policies.IRegistrationConsent? registrationConsent = null,
+        StudyAbroad.Application.Leads.ILeadRepository? leadRepo = null,
         // [SC-10 / UC-113] Gửi thông báo khi Admin cập nhật ngày sinh
         StudyAbroad.Application.Notifications.INotificationService? notifications = null) : IAuthService
     {
@@ -1008,6 +1009,22 @@ namespace StudyAbroad.Application.Auth
             user.FailedLoginAttempts = 0;
             await users.UpdateUserAsync(user, ct);
             await users.RevokeAllSessionsAsync(user.Id, ct);
+
+            // [UC-57] Khi khóa tài khoản Trung tâm: ẩn trung tâm khỏi danh bạ và chuyển các lead đang mở sang center_inactive
+            if (user.Role == UserRoles.Center && studyCenters is not null)
+            {
+                var center = await studyCenters.GetByOwnerOrEmailAsync(user.Id, user.Email, ct);
+                if (center is not null)
+                {
+                    if (center.IsActive)
+                    {
+                        center.IsActive = false;
+                        await studyCenters.UpdateAsync(center, ct);
+                    }
+                    if (leadRepo is not null)
+                        await leadRepo.MarkOpenLeadsCenterInactiveAsync(center.Id, DateTime.UtcNow, ct);
+                }
+            }
 
             var detailJson = JsonSerializer.Serialize(new
             {

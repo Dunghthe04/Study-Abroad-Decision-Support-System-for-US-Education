@@ -210,9 +210,12 @@ export function AcademicSummaryCard({ profile, isLoading, readOnly = false, titl
                 {/* overallGpa luôn là GPA thang 4 server đã quy đổi; gradeScale là thang học sinh nhập */}
                 <span className="text-xs font-normal text-ink-2">(Thang 4.0)</span>
               </span>
+              {profile?.overallGpa != null && profile.gradeScale === "4" && (
+                <span className="block text-xs text-ink-2">GPA thang 10: Chưa có dữ liệu</span>
+              )}
               {profile?.overallGpa != null && profile.gradeScale !== "4" && (
-                <span className="text-xs text-ink-2">
-                  Quy đổi từ {profile.gradeScale === "letter" ? "thang chữ" : `thang ${profile.gradeScale}`}
+                <span className="block text-xs text-ink-2">
+                  Quy đổi tham khảo từ {profile.gradeScale === "letter" ? "thang chữ" : `thang ${profile.gradeScale}`} (không thay cho đánh giá chính thức của trường)
                 </span>
               )}
             </div>

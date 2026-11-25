@@ -41,6 +41,7 @@ export function NotificationsView() {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<PagedResult<NotificationDto> | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -64,12 +65,15 @@ export function NotificationsView() {
 
   useEffect(() => {
     let cancelled = false;
-    notificationsApi
-      .list({ page, pageSize: PAGE_SIZE, unreadOnly })
-      .then((result) => {
+    Promise.all([
+      notificationsApi.list({ page, pageSize: PAGE_SIZE, unreadOnly }),
+      notificationsApi.unreadCount().catch(() => null),
+    ])
+      .then(([result, countRes]) => {
         if (cancelled) return;
         setError(null);
         setData(result);
+        if (countRes) setUnreadCount(countRes.count);
       })
       .catch((e: unknown) => {
         if (!cancelled)
@@ -149,7 +153,7 @@ export function NotificationsView() {
             variant="outline"
             size="sm"
             onClick={markAllRead}
-            disabled={busy || items.every((n) => n.isRead)}
+            disabled={busy || unreadCount === 0}
           >
             <CheckCheckIcon />
             Đánh dấu tất cả đã đọc

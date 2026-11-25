@@ -144,6 +144,17 @@ export const ADMIN_NAV: AdminNavItem[] = [
     useCases: ["UC-114"],
   },
   {
+    href: "/admin/center-review-reports",
+    label: "Báo cáo đánh giá",
+    description: "Xem xét báo cáo đánh giá trung tâm vi phạm (kể cả trung tâm tự báo cáo), gỡ đánh giá hoặc bác bỏ",
+    icon: ShieldAlertIcon,
+    filledIcon: ShieldAlertFilledIcon,
+    section: "moderation",
+    // [UC-151 / UC-53] Chỉ Moderator xử lý báo cáo đánh giá trung tâm
+    roles: ["moderator"],
+    useCases: ["UC-53", "UC-151"],
+  },
+  {
     href: "/admin/forum",
     label: "Kiểm duyệt diễn đàn",
     description: "Nội dung bị báo cáo, gỡ bài, hạn chế người dùng và gỡ đánh giá",

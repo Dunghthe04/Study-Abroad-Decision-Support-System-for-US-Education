@@ -52,7 +52,7 @@ export interface LeadDto {
 
 /** Trạng thái lead (backend: LeadStatuses). */
 export type LeadStatus =
-  | "new" | "accepted" | "rejected" | "contacted" | "closed" | "withdrawn" | "pending_parent" | "cancelled" | "expired";
+  | "new" | "accepted" | "rejected" | "contacted" | "closed" | "withdrawn" | "pending_parent" | "cancelled" | "expired" | "center_inactive";
 
 /** [UC-73] Trung tâm đã chấp nhận (gồm contacted cũ): điều kiện để nhắn tin (UC-74). */
 export const isLeadAccepted = (status: string) => status === "accepted" || status === "contacted";
@@ -69,6 +69,7 @@ export const LEAD_MESSAGING_BLOCK_CODES = [
   "lead_withdrawn",
   "lead_cancelled",
   "lead_expired",
+  "center_inactive",
 ] as const;
 
 /**
@@ -88,6 +89,8 @@ export function getLeadMessagingBlockReason(status: string, createdAt?: string |
       return "Yêu cầu đã bị hủy, không nhắn tin được.";
     case "expired":
       return "Yêu cầu đã hết hạn, không nhắn tin được.";
+    case "center_inactive":
+      return "Trung tâm hiện tạm ngừng hoạt động, không thể tiếp tục nhắn tin.";
     case "pending_parent":
       return "Yêu cầu đang chờ phụ huynh xác nhận nên chưa nhắn tin được.";
   }
@@ -122,6 +125,7 @@ export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
   pending_parent: "Chờ phụ huynh xác nhận",
   cancelled: "Phụ huynh từ chối",
   expired: "Hết hạn",
+  center_inactive: "Trung tâm ngừng hoạt động",
 };
 
 /** Nhãn trạng thái; giá trị backend chưa biết thì hiện nguyên giá trị đó. */
@@ -165,6 +169,7 @@ export type LeadRuleCode =
   | "lead_closed"
   | "lead_withdrawn" // [UC-80] người gửi đã xóa tài khoản
   | "lead_not_open" // [UC-116] trung tâm chưa nhận (chờ phụ huynh / từ chối / hết hạn)
+  | "center_inactive" // [UC-57] trung tâm bị khóa / tạm ngừng hoạt động
   | "not_found"
   | "invalid_content";
 

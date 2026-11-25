@@ -18,6 +18,8 @@ public class LeadMessage : BaseEntity
     public Guid? ReportedByUserId { get; set; }
     public DateTime? ReportedAt { get; set; }
     public string? ReportReason { get; set; }
+    /// <summary>[UC-143] Chi tiết thêm khi báo cáo tin nhắn vi phạm (không bắt buộc, tối đa 1.000 ký tự).</summary>
+    public string? ReportDetail { get; set; }
 
     /// <summary>
     /// [UC-58] Kết quả Admin xử lý báo cáo: removed (gỡ tin) | warned (cảnh cáo người gửi) | locked (khóa tài khoản người gửi).

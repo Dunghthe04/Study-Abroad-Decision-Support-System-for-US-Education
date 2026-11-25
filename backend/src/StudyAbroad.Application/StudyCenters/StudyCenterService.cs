@@ -47,6 +47,8 @@ public interface IStudyCenterService
     Task<CenterDeletionRequestDto?> GetDeletionRequestAsync(Guid userId, CancellationToken ct = default);
     /// <summary>[UC-92] Trung tâm gửi yêu cầu xóa tài khoản và dữ liệu (UC-93 xử lý).</summary>
     Task<CenterDeletionRequestResult> RequestDeletionAsync(Guid userId, string? reason, CancellationToken ct = default);
+    /// <summary>[UC-40 / UC-44] Thẻ hướng dẫn từ Kho tri thức (CENTER_ASK / CENTER_WARNING), 0 token AI.</summary>
+    Task<CenterGuidanceCardsDto> GetGuidanceCardsAsync(CancellationToken ct = default);
 }
 
 public class StudyCenterService(
@@ -58,7 +60,8 @@ public class StudyCenterService(
     ICenterProfileChangeRepository? profileChanges = null,
     ICenterDeletionRequestRepository? deletionRequests = null,
     StudyAbroad.Application.Auth.IUserRepository? users = null,
-    ICenterMediaCleaner? mediaCleaner = null) : IStudyCenterService
+    ICenterMediaCleaner? mediaCleaner = null,
+    StudyAbroad.Application.Leads.ILeadRepository? leadRepo = null) : IStudyCenterService
 {
     private const int MaxPageSize = 100;
     public const int MaxNameLength = 200;
@@ -185,15 +188,22 @@ public class StudyCenterService(
         };
 
         var result = await repository.SearchAsync(normalized, ct);
+        var metrics = await repository.GetResponseMetrics90dAsync(result.Items.Select(c => c.Id).ToList(), ct);
         return new PagedResult<StudyCenterDto>(
-            result.Items.Select(ToDto).ToList(), result.Page, result.PageSize, result.TotalCount);
+            result.Items.Select(c => ToDto(c, metrics.GetValueOrDefault(c.Id))).ToList(),
+            result.Page, result.PageSize, result.TotalCount);
     }
 
     public async Task<StudyCenterDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         var center = await repository.GetByIdAsync(id, ct);
-        return center is null ? null : ToDto(center);
+        if (center is null) return null;
+        var metrics = await repository.GetResponseMetrics90dAsync([center.Id], ct);
+        return ToDto(center, metrics.GetValueOrDefault(center.Id));
     }
+
+    public Task<CenterGuidanceCardsDto> GetGuidanceCardsAsync(CancellationToken ct = default) =>
+        repository.GetGuidanceCardsAsync(ct);
 
     // Các trung tâm cho chat gợi ý (B6), tối đa 20; luật chọn nằm ở CenterReferral
     public async Task<IReadOnlyList<StudyCenterDto>> ReferAsync(CenterReferralQuery query, CancellationToken ct = default)
@@ -201,7 +211,9 @@ public class StudyCenterService(
         if (string.IsNullOrWhiteSpace(query.Service))
             throw new ArgumentException("Service is required.", nameof(query));
         var centers = await repository.ListReferableAsync(ct);
-        return CenterReferral.Pick(centers, query.Service, query.StudyLevel, query.City).Select(ToDto).ToList();
+        var picked = CenterReferral.Pick(centers, query.Service, query.StudyLevel, query.City).ToList();
+        var metrics = await repository.GetResponseMetrics90dAsync(picked.Select(c => c.Id).ToList(), ct);
+        return picked.Select(c => ToDto(c, metrics.GetValueOrDefault(c.Id))).ToList();
     }
 
     public async Task<VerifyStudyCenterResult> VerifyCenterAsync(Guid id, bool isVerified, Guid actorUserId, string? verificationNote = null, CancellationToken ct = default)
@@ -348,6 +360,17 @@ public class StudyCenterService(
 
         await repository.UpdateAsync(center, ct);
 
+        // [UC-67] Ẩn trung tâm: tự động từ chối các lead đang ở trạng thái Mới và thông báo cho người gửi
+        if (!isActive && leadRepo is not null)
+        {
+            await leadRepo.RejectNewLeadsByCenterAsync(
+                center.Id,
+                center.Name,
+                "Trung tâm tạm ngừng hoạt động trên hệ thống",
+                DateTime.UtcNow,
+                ct);
+        }
+
         var action = isActive ? "study_center.show" : "study_center.hide";
         var detailJson = JsonSerializer.Serialize(new
         {
@@ -381,7 +404,9 @@ public class StudyCenterService(
         return CenterReferral.CityCounts(await repository.ListReferableAsync(ct), query.Service, query.StudyLevel);
     }
 
-    internal static StudyCenterDto ToDto(StudyCenter c) =>
+    internal static StudyCenterDto ToDto(StudyCenter c) => ToDto(c, null);
+
+    internal static StudyCenterDto ToDto(StudyCenter c, CenterResponseMetrics? metrics) =>
         new(c.Id, c.Code, c.Name, c.Website, c.Address, c.City, c.StudyLevels, c.Services, c.SurveyedAt,
             c.Phone, c.Email, c.Description, c.VerificationStatus, c.IsActive,
             c.CenterType, c.LogoUrl, c.CoverImageUrl, c.GalleryImages, c.District,
@@ -392,7 +417,8 @@ public class StudyCenterService(
             c.LegalComplianceMode, c.TrainingLicenseNumber, c.CertifiedCounselorCount,
             c.LegalDocumentUrls, c.VerificationNote,
             c.EmailVerifiedAt, c.FeeMin, c.FeeMax, c.FeeDescription,
-            c.RegistrantName, c.RegistrantPosition, c.Fanpage, c.ServiceAreas, c.Branches);
+            c.RegistrantName, c.RegistrantPosition, c.Fanpage, c.ServiceAreas, c.Branches,
+            metrics?.MedianResponseHours, metrics?.ResponseRatePercent, metrics?.SampleCount ?? 0);
 
     /// <summary>True nếu yêu cầu thay đổi một trường pháp lý so với giá trị hiện tại.</summary>
     private static bool TouchesLegalFields(StudyCenter c, UpdateCenterProfileRequest r)
@@ -629,7 +655,7 @@ public class StudyCenterService(
             return CreateStudyCenterResult.Fail("Tên pháp lý theo ĐKKD không được để trống và tối đa 256 ký tự.");
 
         var taxCode = request.TaxCode?.Trim().Replace(" ", "").ToUpperInvariant() ?? string.Empty;
-        if (string.IsNullOrEmpty(taxCode) || !Regex.IsMatch(taxCode, @"^\d{10}(-\d{3})?$"))
+        if (string.IsNullOrEmpty(taxCode) || !Regex.IsMatch(taxCode, @"^\d{10}(-?\d{3})?$"))
             return CreateStudyCenterResult.Fail("Mã số doanh nghiệp / Mã số thuế không đúng định dạng (10 hoặc 13 chữ số).");
 
         var address = request.Address?.Trim() ?? string.Empty;
@@ -649,6 +675,11 @@ public class StudyCenterService(
         var hasBizReg = docs.Any(d => d.DocumentType == CenterDocumentTypes.BusinessRegistration && !string.IsNullOrWhiteSpace(d.FileUrl));
         if (!hasBizReg)
             return CreateStudyCenterResult.Fail("Bản scan hoặc ảnh Giấy chứng nhận đăng ký doanh nghiệp là tài liệu bắt buộc.");
+
+        // [UC-66] Hợp đồng dịch vụ mẫu nêu rõ phạm vi dịch vụ, phí và chính sách hoàn phí là tài liệu bắt buộc
+        var hasSampleContract = docs.Any(d => d.DocumentType == CenterDocumentTypes.SampleServiceContract && !string.IsNullOrWhiteSpace(d.FileUrl));
+        if (!hasSampleContract)
+            return CreateStudyCenterResult.Fail("Bản Hợp đồng dịch vụ mẫu (nêu rõ phạm vi dịch vụ, phí và chính sách hoàn phí) là tài liệu bắt buộc.");
 
         // [UC-71] Đặc tả 5.1: người đăng ký không phải người đại diện theo pháp luật thì phải nộp giấy ủy quyền
         if (RegistrantNeedsPowerOfAttorney(center.RegistrantName, legalRep)
@@ -766,7 +797,7 @@ public class StudyCenterService(
         }
     }
 
-    /// <summary>Những điều kiện xác minh chưa đạt (đặc tả 5.1: điều kiện 1 email do hệ thống kiểm, 3 đến 5 do Moderator kiểm).</summary>
+    /// <summary>Những điều kiện xác minh chưa đạt (đặc tả UC-55: điều kiện 1 email do hệ thống kiểm, 4 mục do Moderator kiểm).</summary>
     private static List<string> UnmetConditions(StudyCenter center, ReviewCenterVerificationRequest request)
     {
         var unmet = new List<string>();
@@ -774,6 +805,7 @@ public class StudyCenterService(
         if (!request.IsNationalRegistryMatched) unmet.Add("Tên pháp lý và mã số thuế chưa khớp Cổng đăng ký doanh nghiệp quốc gia");
         if (!request.IsBusinessOperating) unmet.Add("Doanh nghiệp chưa được xác nhận là đang hoạt động");
         if (!request.IsRepresentativeValid) unmet.Add("Người đăng ký chưa được xác nhận là người đại diện theo pháp luật hoặc có giấy ủy quyền hợp lệ");
+        if (!request.IsServiceContractValid) unmet.Add("Hợp đồng dịch vụ mẫu chưa được xác nhận nêu rõ phạm vi dịch vụ, phí và chính sách hoàn phí");
         return unmet;
     }
 
@@ -806,12 +838,16 @@ public class StudyCenterService(
             if (!request.IsRepresentativeValid)
                 return VerifyStudyCenterResult.Fail("Điều kiện (4) chưa thỏa: Moderator chưa xác nhận tính hợp lệ của người đại diện hoặc giấy ủy quyền.");
 
+            if (!request.IsServiceContractValid)
+                return VerifyStudyCenterResult.Fail("Điều kiện (5) chưa thỏa: Moderator chưa xác nhận hợp đồng dịch vụ mẫu nêu rõ phạm vi dịch vụ, phí và chính sách hoàn phí.");
+
             req.Status = CenterVerificationStatuses.Verified;
             req.ReviewedByUserId = reviewerUserId;
             req.ReviewedAt = DateTime.UtcNow;
             req.IsNationalRegistryMatched = true;
             req.IsBusinessOperating = true;
             req.IsRepresentativeValid = true;
+            req.IsServiceContractValid = true;
             req.ReviewNotes = request.ReviewNotes?.Trim();
             req.RejectionReason = null;
 
@@ -850,6 +886,7 @@ public class StudyCenterService(
             req.IsNationalRegistryMatched = request.IsNationalRegistryMatched;
             req.IsBusinessOperating = request.IsBusinessOperating;
             req.IsRepresentativeValid = request.IsRepresentativeValid;
+            req.IsServiceContractValid = request.IsServiceContractValid;
 
             center.VerificationStatus = CenterVerificationStatuses.Rejected;
             center.VerificationNote = reason;
@@ -885,6 +922,17 @@ public class StudyCenterService(
 
             await verificationRepository.UpdateRequestAsync(req, ct);
             await repository.UpdateAsync(center, ct);
+
+            // [UC-55 4c] Thu hồi dấu xác minh: tự động từ chối các lead đang ở trạng thái Mới và thông báo cho người gửi
+            if (leadRepo is not null)
+            {
+                await leadRepo.RejectNewLeadsByCenterAsync(
+                    center.Id,
+                    center.Name,
+                    "Trung tâm tạm ngừng hoạt động trên hệ thống",
+                    DateTime.UtcNow,
+                    ct);
+            }
 
             await auditLogs.AddAsync(new AuditLog
             {
@@ -1073,7 +1121,7 @@ public class StudyCenterService(
         if (!pendingReview && (!verified || touchesLegal))
         {
             var taxCodeInput = request.TaxCode is null ? null : request.TaxCode.Trim().Replace(" ", "").ToUpperInvariant();
-            if (!string.IsNullOrEmpty(taxCodeInput) && !Regex.IsMatch(taxCodeInput, @"^\d{10}(-\d{3})?$"))
+            if (!string.IsNullOrEmpty(taxCodeInput) && !Regex.IsMatch(taxCodeInput, @"^\d{10}(-?\d{3})?$"))
                 return UpdateStudyCenterResult.Fail("Mã số doanh nghiệp / Mã số thuế không đúng định dạng (10 hoặc 13 chữ số).");
 
             var (legal, legalError) = ValidateLegalFields(
@@ -1101,9 +1149,16 @@ public class StudyCenterService(
                 center.CenterType = request.CenterType.Trim();
         }
 
+        var incomingWebsite = request.Website is not null ? TrimOrNull(request.Website) : center.Website;
+        var incomingFanpage = request.Fanpage is not null ? TrimOrNull(request.Fanpage) : center.Fanpage;
+
         if (request.Description != null) center.Description = TrimOrNull(request.Description);
-        if (request.Website != null) center.Website = TrimOrNull(request.Website);
-        if (request.Fanpage != null) center.Fanpage = TrimOrNull(request.Fanpage);
+        // [UC-86 / UC-108] Trung tâm ĐÃ XÁC MINH đổi website / fanpage: giữ nguyên giá trị cũ đã duyệt cho tới khi Moderator bấm Đạt.
+        if (!verified)
+        {
+            if (request.Website != null) center.Website = incomingWebsite;
+            if (request.Fanpage != null) center.Fanpage = incomingFanpage;
+        }
         if (request.Address != null) center.Address = TrimOrNull(request.Address);
         if (request.City != null) center.City = TrimOrNull(request.City);
         if (request.District != null) center.District = TrimOrNull(request.District);
@@ -1126,6 +1181,12 @@ public class StudyCenterService(
             return UpdateStudyCenterResult.Fail("Mức phí tối thiểu không được lớn hơn mức phí tối đa.");
 
         var after = SnapshotProfile(center);
+        // Với trung tâm đã xác minh, so sánh website / fanpage với giá trị gửi lên để đưa vào hàng đợi Moderator kiểm tra
+        if (verified)
+        {
+            after[CenterProfileChangeFields.Website] = incomingWebsite;
+            after[CenterProfileChangeFields.Fanpage] = incomingFanpage;
+        }
         var changed = after.Keys.Where(k => !string.Equals(before[k], after[k], StringComparison.Ordinal)).ToList();
         var legalChanged = changed.Where(LegalProfileFields.Contains).ToList();
         var reviewChanged = changed.Where(ReviewProfileFields.Contains).ToList();
@@ -1144,6 +1205,15 @@ public class StudyCenterService(
 
         foreach (var field in reviewChanged)
             await FlagProfileChangeAsync(center.Id, field, before[field], after[field], ct);
+
+        // [UC-86] Trung tâm đã xác minh gửi lại đúng giá trị cũ khi đang có đề xuất pending -> rút đề xuất pending đó
+        if (verified && profileChanges is not null)
+        {
+            if (request.Website is not null && !reviewChanged.Contains(CenterProfileChangeFields.Website))
+                await WithdrawPendingProfileChangeIfMatchesAsync(center.Id, CenterProfileChangeFields.Website, incomingWebsite, ct);
+            if (request.Fanpage is not null && !reviewChanged.Contains(CenterProfileChangeFields.Fanpage))
+                await WithdrawPendingProfileChangeIfMatchesAsync(center.Id, CenterProfileChangeFields.Fanpage, incomingFanpage, ct);
+        }
 
         if (changed.Count > 0)
         {
@@ -1167,7 +1237,9 @@ public class StudyCenterService(
         var message = verificationReset
             ? "Đã lưu. Thông tin pháp lý thay đổi nên hồ sơ chuyển về Chờ duyệt và tạm ẩn dấu xác minh tới khi Moderator duyệt lại."
             : reviewChanged.Count > 0
-                ? "Đã lưu. Website / fanpage mới hiển thị ngay và sẽ được Moderator kiểm tra."
+                ? verified
+                    ? "Đã lưu. Website / fanpage mới đang chờ Moderator kiểm tra và sẽ hiển thị công khai sau khi đạt duyệt."
+                    : "Đã lưu. Website / fanpage mới sẽ được Moderator kiểm tra."
                 : changed.Count > 0 ? "Đã lưu thay đổi hồ sơ." : "Không có thay đổi nào.";
 
         return UpdateStudyCenterResult.Ok(ToDto(center)) with
@@ -1208,6 +1280,19 @@ public class StudyCenterService(
             NewValue = newValue,
             Status = CenterProfileChangeStatuses.Pending,
         }, ct);
+    }
+
+    private async Task WithdrawPendingProfileChangeIfMatchesAsync(Guid centerId, string field, string? incomingValue, CancellationToken ct)
+    {
+        if (profileChanges is null) return;
+        var pending = await profileChanges.GetPendingAsync(centerId, field, ct);
+        if (pending is null || !string.Equals(pending.OldValue, incomingValue, StringComparison.Ordinal))
+            return;
+
+        pending.Status = CenterProfileChangeStatuses.Withdrawn;
+        pending.ReviewReason = "Trung tâm đã đổi lại giá trị cũ.";
+        pending.ReviewedAt = DateTime.UtcNow;
+        await profileChanges.UpdateAsync(pending, ct);
     }
 
     /// <summary>
@@ -1365,5 +1450,6 @@ public class StudyCenterService(
             center?.Code,
             center?.Email,
             center?.Phone,
-            center?.EmailVerifiedAt);
+            center?.EmailVerifiedAt,
+            req.IsServiceContractValid);
 }

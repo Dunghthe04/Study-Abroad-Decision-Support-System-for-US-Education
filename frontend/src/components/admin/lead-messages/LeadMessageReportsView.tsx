@@ -210,6 +210,7 @@ export function LeadMessageReportsView() {
             {list?.items.map((item) => {
               const senderLocked = item.senderStatus === "locked";
               const warned = item.reportResolution === "warned";
+              const dismissed = item.reportResolution === "dismissed";
               const resolved = item.status === "removed" || senderLocked || !!item.reportResolution;
               return (
                 <TableRow key={item.id}>
@@ -225,11 +226,29 @@ export function LeadMessageReportsView() {
                   <TableCell className="max-w-md whitespace-pre-wrap break-words">
                     {item.content}
                     <LeadMessageAttachment url={item.attachmentUrl} />
+                    {item.isFlagged ? (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                        <Badge variant="warn" className="text-[11px]">
+                          Gắn cờ tự động{item.flagReason ? `: ${item.flagReason}` : ""}
+                        </Badge>
+                      </div>
+                    ) : null}
                   </TableCell>
-                  <TableCell className="text-xs text-ink-2">{item.reportReason || "Không nêu lý do"}</TableCell>
+                  <TableCell className="max-w-xs text-xs text-ink-2">
+                    <span className="block font-medium text-ink">{item.reportReason || "Không nêu lý do"}</span>
+                    {item.reportDetail ? (
+                      <p className="mt-0.5 whitespace-pre-wrap break-words text-ink-2">{item.reportDetail}</p>
+                    ) : null}
+                  </TableCell>
                   <TableCell>
                     <div className="flex flex-col items-start gap-1">
-                      {item.status === "removed" ? <Badge variant="neutral">Đã gỡ</Badge> : <Badge variant="risk">Bị báo cáo</Badge>}
+                      {item.status === "removed" ? (
+                        <Badge variant="neutral">Đã gỡ</Badge>
+                      ) : dismissed ? (
+                        <Badge variant="neutral">Đã bác bỏ</Badge>
+                      ) : (
+                        <Badge variant="risk">Bị báo cáo</Badge>
+                      )}
                       {warned ? <Badge variant="warn">Đã cảnh cáo</Badge> : null}
                       {senderLocked ? <Badge variant="warn">Người gửi đã bị khóa</Badge> : null}
                     </div>
@@ -356,6 +375,7 @@ export function LeadMessageReportsView() {
                     <span>{m.isFromCenter ? "Trung tâm" : "Học sinh / phụ huynh"}</span>
                     <span className="tabular">{formatDateTime(m.createdAt)}</span>
                     {m.isReported ? <Badge variant="risk">Bị báo cáo</Badge> : null}
+                    {m.isFlagged ? <Badge variant="warn">Gắn cờ tự động{m.flagReason ? `: ${m.flagReason}` : ""}</Badge> : null}
                     {m.status === "removed" ? <Badge variant="neutral">Đã gỡ</Badge> : null}
                   </div>
                   <p className="mt-1 whitespace-pre-wrap break-words">{m.content || "(tin nhắn chỉ có ảnh)"}</p>

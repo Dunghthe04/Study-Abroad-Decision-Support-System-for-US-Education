@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ArrowRightIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,7 +34,9 @@ interface Step5ExtracurricularProps {
   onNext: () => void;
 }
 
-const MAX_ITEMS = 10;
+const MAX_ACTIVITIES = 10;
+const MAX_AWARDS = 5;
+const MAX_NAME_LENGTH = 256;
 
 /** Thiếu gì so với điều kiện commit phía BE (ProfileFlowService.ValidateForCommit). */
 export function getItemProblem(item: ActivityDraft): string | null {
@@ -51,10 +54,11 @@ type ItemErrors = Partial<Record<"name" | "impact" | "year" | "role" | "start" |
 const monthIndex = (m: { year: number; month: number }) => m.year * 12 + m.month;
 
 /** Kiểm tra từng ô của một mục; chạy khi bấm "Tiếp tục" */
-function validateItem(item: ActivityDraft, now: Date): ItemErrors {
+function validateItem(item: ActivityDraft, now: Date, minAwardYear: number): ItemErrors {
   const errors: ItemErrors = {};
   const currentYear = now.getFullYear();
   if (!item.name.trim()) errors.name = "Vui lòng nhập tên.";
+  else if (item.name.trim().length > MAX_NAME_LENGTH) errors.name = `Tên tối đa ${MAX_NAME_LENGTH} ký tự.`;
   if (!item.impactLevel) errors.impact = "Vui lòng chọn phạm vi ảnh hưởng.";
   if ((item.description ?? "").trim().length > 500) errors.desc = "Mô tả tối đa 500 ký tự.";
 
@@ -63,7 +67,7 @@ function validateItem(item: ActivityDraft, now: Date): ItemErrors {
     if (year == null) errors.year = "Vui lòng nhập năm đạt giải.";
     else if (!Number.isInteger(year) || year > currentYear)
       errors.year = `Năm đạt giải không được lớn hơn năm hiện tại (${currentYear}).`;
-    else if (year < 2000) errors.year = "Năm đạt giải không hợp lệ (từ năm 2000 trở lại đây).";
+    else if (year < minAwardYear) errors.year = `Năm đạt giải phải từ ${minAwardYear} đến ${currentYear}.`;
     return errors;
   }
 
@@ -91,38 +95,47 @@ const newItemId = () =>
 
 
 export function Step5Extracurricular({ activities, onUpdate, onPrev, onNext }: Step5ExtracurricularProps) {
+  const { user } = useAuth();
   // Chỉ báo lỗi sau khi bấm Tiếp tục; sửa xong ô nào thì ô đó tự hết đỏ
   const [triedNext, setTriedNext] = useState(false);
 
   const now = new Date();
   const currentYear = now.getFullYear();
   const thisMonth = { year: currentYear, month: now.getMonth() + 1 };
+  // [UC-16] Năm đạt giải từ năm học lớp 9 (năm sinh + 14) đến năm hiện tại
+  const birthYear = user?.dateOfBirth ? Number(String(user.dateOfBirth).slice(0, 4)) : NaN;
+  const minAwardYear = Number.isInteger(birthYear) && birthYear > 1900 ? birthYear + 14 : 2000;
+  const activityCount = activities.filter((a) => a.category === "activity").length;
+  const awardCount = activities.filter((a) => a.category === "achievement").length;
 
   const patch = (index: number, val: Partial<ActivityDraft>) =>
     onUpdate(activities.map((a, i) => (i === index ? { ...a, ...val } : a)));
 
-  const addItem = () =>
+  const addItem = () => {
+    const defaultCategory: "activity" | "achievement" =
+      activityCount >= MAX_ACTIVITIES && awardCount < MAX_AWARDS ? "achievement" : "activity";
     onUpdate([
       ...activities,
       {
         id: newItemId(),
         name: "",
-        category: "activity",
+        category: defaultCategory,
         impactLevel: null,
         role: null,
         startDate: null,
         endDate: null,
         isOngoing: false,
         durationMonths: null,
-        year: null,
+        year: defaultCategory === "achievement" ? currentYear : null,
         description: null,
       },
     ]);
+  };
 
   const removeItem = (index: number) => onUpdate(activities.filter((_, i) => i !== index));
 
   const handleNextClick = () => {
-    if (activities.some((a) => Object.keys(validateItem(a, now)).length > 0)) {
+    if (activities.some((a) => Object.keys(validateItem(a, now, minAwardYear)).length > 0)) {
       setTriedNext(true);
       // Chờ lỗi hiện ra rồi cuộn tới lỗi đầu tiên
       requestAnimationFrame(() =>
@@ -134,7 +147,7 @@ export function Step5Extracurricular({ activities, onUpdate, onPrev, onNext }: S
   };
 
   const renderItem = (item: ActivityDraft, idx: number) => {
-    const errors = triedNext ? validateItem(item, now) : {};
+    const errors = triedNext ? validateItem(item, now, minAwardYear) : {};
     const isActivity = item.category === "activity";
     const label = `${isActivity ? "Hoạt động" : "Giải thưởng"} ${idx + 1}`;
     const key = item.id ?? String(idx);
@@ -152,6 +165,8 @@ export function Step5Extracurricular({ activities, onUpdate, onPrev, onNext }: S
 
     const changeCategory = (category: "activity" | "achievement") => {
       if (category === item.category) return;
+      if (category === "activity" && activityCount >= MAX_ACTIVITIES) return;
+      if (category === "achievement" && awardCount >= MAX_AWARDS) return;
       patch(
         idx,
         category === "achievement"
@@ -193,7 +208,7 @@ export function Step5Extracurricular({ activities, onUpdate, onPrev, onNext }: S
               id={`${key}-name`}
               placeholder={isActivity ? "VD: CLB Robotics, Mùa Hè Xanh, Model UN" : "VD: Giải Nhì HSG Tin học cấp Tỉnh"}
               value={item.name}
-              maxLength={200}
+              maxLength={MAX_NAME_LENGTH}
               aria-invalid={Boolean(errors.name) || undefined}
               onChange={(e) => patch(idx, { name: e.target.value })}
               onBlur={(e) => e.target.value !== e.target.value.trim() && patch(idx, { name: e.target.value.trim() })}
@@ -253,7 +268,7 @@ export function Step5Extracurricular({ activities, onUpdate, onPrev, onNext }: S
               <Input
                 id={`${key}-year`}
                 type="number"
-                min={2000}
+                min={minAwardYear}
                 max={currentYear}
                 value={item.year ?? ""}
                 aria-invalid={Boolean(errors.year) || undefined}
@@ -326,12 +341,14 @@ export function Step5Extracurricular({ activities, onUpdate, onPrev, onNext }: S
             {activities.length === 0 && <p className="mb-3 text-sm text-ink-2">Bạn chưa thêm mục nào. Bước này có thể bỏ qua.</p>}
             <ActionList>
               {activities.map(renderItem)}
-              {activities.length < MAX_ITEMS ? (
+              {activityCount < MAX_ACTIVITIES || awardCount < MAX_AWARDS ? (
                 <ActionRow icon={<PlusIcon />} onClick={addItem}>
-                  Thêm hoạt động
+                  Thêm hoạt động hoặc giải thưởng ({activityCount}/{MAX_ACTIVITIES} hoạt động · {awardCount}/{MAX_AWARDS} giải thưởng)
                 </ActionRow>
               ) : (
-                <p className="px-4 py-3.5 text-sm text-ink-2">Đã đạt tối đa {MAX_ITEMS} mục.</p>
+                <p className="px-4 py-3.5 text-sm text-ink-2">
+                  Đã đạt tối đa {MAX_ACTIVITIES} hoạt động và {MAX_AWARDS} giải thưởng.
+                </p>
               )}
             </ActionList>
           </div>

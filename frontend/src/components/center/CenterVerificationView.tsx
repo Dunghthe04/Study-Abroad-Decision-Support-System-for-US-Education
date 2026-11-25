@@ -23,7 +23,6 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
-import { CenterContactCard } from "@/components/center/CenterContactCard";
 
 export function CenterVerificationView() {
   const [center, setCenter] = useState<StudyCenter | null>(null);
@@ -44,7 +43,14 @@ export function CenterVerificationView() {
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [dismissedVerified, setDismissedVerified] = useState(false);
+  const [dismissedVerified, setDismissedVerified] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return sessionStorage.getItem("center_verified_banner_dismissed") === "true";
+    } catch {
+      return false;
+    }
+  });
 
   // Tự động xóa thông báo nộp hồ sơ thành công sau 5 giây
   useEffect(() => {
@@ -52,17 +58,6 @@ export function CenterVerificationView() {
     const t = setTimeout(() => setFormSuccess(null), 5000);
     return () => clearTimeout(t);
   }, [formSuccess]);
-
-  useEffect(() => {
-    // Đọc sau một tick (không setState đồng bộ trong effect); sessionStorage có thể không khả dụng
-    void Promise.resolve().then(() => {
-      try {
-        if (sessionStorage.getItem("center_verified_banner_dismissed") === "true") {
-          setDismissedVerified(true);
-        }
-      } catch {}
-    });
-  }, []);
 
   const fetchStatus = async () => {
     try {
@@ -113,7 +108,7 @@ export function CenterVerificationView() {
         setDismissedVerified(true);
         try {
           sessionStorage.setItem("center_verified_banner_dismissed", "true");
-        } catch {}
+        } catch { }
       }, 8000);
       return () => clearTimeout(timer);
     }
@@ -158,7 +153,6 @@ export function CenterVerificationView() {
     setFormError(null);
     setFormSuccess(null);
 
-    // [UC-91] Phải xác thực email bằng mã OTP trước khi nộp hồ sơ
     if (!status?.isEmailVerified) {
       setFormError("Bạn phải xác thực email bằng mã OTP trước khi nộp hồ sơ.");
       return;
@@ -167,6 +161,13 @@ export function CenterVerificationView() {
     const hasBizReg = uploadedDocs.some((d) => d.documentType === "business_registration");
     if (!hasBizReg) {
       setFormError("Bản scan hoặc ảnh Giấy chứng nhận đăng ký doanh nghiệp là tài liệu bắt buộc.");
+      return;
+    }
+
+    // [UC-66] Hợp đồng dịch vụ mẫu nêu rõ phạm vi dịch vụ, phí và chính sách hoàn phí là bắt buộc
+    const hasSampleContract = uploadedDocs.some((d) => d.documentType === "sample_service_contract");
+    if (!hasSampleContract) {
+      setFormError("Bản Hợp đồng dịch vụ mẫu (nêu rõ phạm vi dịch vụ, phí và chính sách hoàn phí) là tài liệu bắt buộc.");
       return;
     }
 
@@ -237,7 +238,7 @@ export function CenterVerificationView() {
               setDismissedVerified(true);
               try {
                 sessionStorage.setItem("center_verified_banner_dismissed", "true");
-              } catch {}
+              } catch { }
             }}
             className="absolute top-3 right-3 p-1 rounded hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 transition-colors"
             title="Đóng thông báo"
@@ -309,26 +310,6 @@ export function CenterVerificationView() {
             <AlertCircleIcon className="h-5 w-5" />
             <AlertDescription className="ml-2">{formError}</AlertDescription>
           </Alert>
-        )}
-
-        {/* [UC-91] Chưa xác thực email thì xác thực ngay tại đây trước khi nộp */}
-        {status && !status.isEmailVerified && (
-          <div className="space-y-3">
-            <Alert>
-              <InfoIcon className="h-5 w-5" />
-              <AlertDescription className="ml-2">
-                Cần xác thực email bằng mã OTP trước khi nộp hồ sơ. Việc xác thực không tự cấp dấu xác minh.
-              </AlertDescription>
-            </Alert>
-            <CenterContactCard
-              phone={center?.phone}
-              email={center?.email}
-              emailVerified={status.isEmailVerified}
-              onChanged={() => {
-                void fetchStatus();
-              }}
-            />
-          </div>
         )}
 
         <form onSubmit={handleSubmitVerification} className="space-y-6">
@@ -458,6 +439,55 @@ export function CenterVerificationView() {
                         accept=".pdf,.jpg,.jpeg,.png"
                         disabled={isPending || isVerified}
                         onChange={(e) => handleFileUpload(e, "business_registration")}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {/* Upload Item: Sample Service Contract (UC-66) */}
+              <div className="rounded-lg border border-line bg-surface-2 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <FileTextIcon className="h-4 w-4 text-brand" />
+                    <span className="text-sm font-medium text-ink">
+                      Hợp đồng dịch vụ mẫu (*)
+                    </span>
+                    <Badge variant="outline" className="text-[10px] text-brand border-brand/30">
+                      Bắt buộc
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-ink-3">
+                    Mẫu hợp đồng tư vấn du học nêu rõ phạm vi dịch vụ, biểu phí và chính sách hoàn phí.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {uploadedDocs.find((d) => d.documentType === "sample_service_contract") ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-emerald-600 truncate max-w-[150px]">
+                        ✓ {uploadedDocs.find((d) => d.documentType === "sample_service_contract")?.fileName}
+                      </span>
+                      {!isPending && !isVerified && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDoc("sample_service_contract")}
+                          className="p-1 text-ink-3 hover:text-rose-600"
+                        >
+                          <XIcon className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <label className={`cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-surface text-xs font-medium text-ink hover:bg-surface-3 transition-colors ${uploadingType === "sample_service_contract" ? "opacity-50 pointer-events-none" : ""}`}>
+                      <UploadCloudIcon className="h-4 w-4 text-ink-2" />
+                      {uploadingType === "sample_service_contract" ? "Đang tải..." : "Tải tệp lên"}
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        disabled={isPending || isVerified}
+                        onChange={(e) => handleFileUpload(e, "sample_service_contract")}
                         className="hidden"
                       />
                     </label>
