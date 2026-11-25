@@ -70,6 +70,8 @@ const ACCOUNT_STATUS_OPTIONS = [
 function canAdminLock(target: UserDto, currentUserRole?: string, currentUserId?: string): boolean {
   if (currentUserId && target.id === currentUserId) return false;
   if (target.status === "locked") return false;
+  // [UC-80] Tài khoản chờ xóa không khóa được (server cũng chặn)
+  if (target.status === "deleted") return false;
   if (target.role === "admin") return false;
 
   return currentUserRole === "admin";

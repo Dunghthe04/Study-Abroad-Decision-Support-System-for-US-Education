@@ -154,6 +154,7 @@ namespace StudyAbroad.Application.Auth
         public const string OtpFailedMessage = "Mã OTP không đúng hoặc đã hết hạn. Vui lòng kiểm tra lại hoặc yêu cầu gửi mã mới.";
 
         public const string InvalidCredentialsMessage = "Sai tài khoản hoặc mật khẩu.";
+        public const string LockPendingDeletionMessage = "Tài khoản đang chờ xóa, không khóa được.";
         public const string PhoneInUseMessage = "Số điện thoại đã thuộc một tài khoản khác.";
 
         // Hash giả để so mật khẩu khi email không tồn tại: thời gian phản hồi như khi email có thật
@@ -1067,6 +1068,10 @@ namespace StudyAbroad.Application.Auth
             // [1.5c] Con managed không phải tài khoản thật: admin thao tác theo id cũng coi như không tồn tại
             if (user is null || user.Status == UserStatuses.Managed)
                 return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản.");
+
+            // [UC-80] Tài khoản chờ xóa đã không đăng nhập được; khóa sẽ đổi trạng thái và tác vụ xóa hẳn bỏ sót tài khoản
+            if (user.Status == UserStatuses.Deleted)
+                return AuthResult.Fail(AuthError.Validation, LockPendingDeletionMessage);
 
             if (user.Id == actorAdminId)
                 return AuthResult.Fail(AuthError.Validation, "Không thể khóa chính tài khoản đang đăng nhập.");

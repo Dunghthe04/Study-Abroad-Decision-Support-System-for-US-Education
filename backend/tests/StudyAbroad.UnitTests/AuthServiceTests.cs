@@ -453,6 +453,26 @@ public class AuthServiceTests
         Assert.Equal(AuthError.Validation, result.Error);
     }
 
+    // [UC-80] Tài khoản chờ xóa không khóa được: giữ trạng thái chờ xóa để tác vụ xóa hẳn vẫn xử lý
+    [Fact]
+    public async Task LockUserAccount_PendingDeletion_ReturnsValidation_StaysDeleted()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Deleted;
+        var deletedAt = DateTime.UtcNow.AddDays(-2);
+        user.DeletedAt = deletedAt;
+
+        var result = await service.LockUserAccountAsync(user.Id, new LockUserAccountRequest("lý do"), Guid.NewGuid());
+
+        Assert.Equal(AuthError.Validation, result.Error);
+        Assert.Equal(AuthService.LockPendingDeletionMessage, result.Message);
+        Assert.Equal(UserStatuses.Deleted, user.Status);
+        Assert.Equal(deletedAt, user.DeletedAt);
+        Assert.Empty(_auditLogs.Entries);
+    }
+
     [Fact]
     public async Task UnlockUserAccount_UnlocksLockedUser_WritesAuditAndResetsLockout()
     {
