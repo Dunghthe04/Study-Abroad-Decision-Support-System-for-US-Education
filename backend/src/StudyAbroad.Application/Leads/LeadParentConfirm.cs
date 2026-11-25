@@ -40,10 +40,15 @@ public static class LeadParentConfirm
     /// (có hạn link nhưng chưa ai bấm đồng ý) [UC-75 bước 4, UC-111 bước 5].
     /// </summary>
     public static bool IsHiddenFromCenter(Lead lead) =>
-        LeadStatuses.IsHiddenFromCenter(lead.Status) || WithdrawnBeforeCenter(lead.Status, lead.ParentTokenExpiresAt, lead.ParentDecidedAt);
+        LeadStatuses.IsHiddenFromCenter(lead.Status) || WithdrawnBeforeCenter(lead.Status, lead.ParentTokenExpiresAt, lead.ParentDecidedAt, lead.HeldFromStatus);
 
-    public static bool WithdrawnBeforeCenter(string? status, DateTime? parentTokenExpiresAt, DateTime? parentDecidedAt) =>
-        status == LeadStatuses.Withdrawn && parentTokenExpiresAt != null && parentDecidedAt == null;
+    /// <remarks>[UC-110] Yêu cầu đang giữ (có <c>HeldFromStatus</c>) bị thu hồi thì trung tâm đã từng nhận: hiện Đã thu hồi.</remarks>
+    public static bool WithdrawnBeforeCenter(string? status, DateTime? parentTokenExpiresAt, DateTime? parentDecidedAt, string? heldFromStatus) =>
+        status == LeadStatuses.Withdrawn && parentTokenExpiresAt != null && parentDecidedAt == null && heldFromStatus == null;
+
+    /// <summary>[UC-110] Yêu cầu đang giữ đã bị thu hồi khi chưa có phụ huynh trả lời (quá hạn hoặc phụ huynh từ chối tài khoản): link trả 410.</summary>
+    public static bool IsHeldWithdrawnUnanswered(Lead lead) =>
+        lead.Status == LeadStatuses.Withdrawn && lead.HeldFromStatus != null && lead.ParentDecidedAt == null;
 
     /// <summary>Tên nhóm dữ liệu chia sẻ để ghi trong mail cho phụ huynh.</summary>
     public static string FieldLabel(string key) => key switch

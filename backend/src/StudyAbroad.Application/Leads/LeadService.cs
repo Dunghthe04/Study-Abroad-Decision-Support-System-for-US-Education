@@ -906,7 +906,7 @@ public class LeadService(
         CancellationToken ct)
     {
         // [UC-143 E3] Chỉ cho báo cáo trong 90 ngày kể từ ngày gửi yêu cầu (kể cả khi lead Đã hoàn tất, Hết hạn hoặc Đã thu hồi)
-        if (lead.CreatedAt < DateTime.UtcNow.AddDays(-CenterLeadMapper.DataVisibleDays))
+        if (lead.ActiveSince < DateTime.UtcNow.AddDays(-CenterLeadMapper.DataVisibleDays))
             throw new LeadRuleException("report_expired", 400, "Đã quá 90 ngày kể từ ngày gửi yêu cầu, không thể báo cáo tin nhắn này.");
 
         var message = await leads.GetLeadMessageForUpdateAsync(lead.Id, messageId, ct)

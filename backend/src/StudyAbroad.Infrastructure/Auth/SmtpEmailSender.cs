@@ -477,6 +477,8 @@ namespace StudyAbroad.Infrastructure.Auth
             {
                 "new" => ("Phụ huynh đã đồng ý", $"Phụ huynh đã đồng ý. Yêu cầu liên hệ của bạn đã được gửi tới <strong>{center}</strong>; trung tâm sẽ liên hệ lại với bạn."),
                 "cancelled" => ("Phụ huynh đã từ chối", $"Phụ huynh đã từ chối gửi yêu cầu liên hệ tới <strong>{center}</strong>. Trung tâm không nhận được thông tin của bạn. Bạn có thể trao đổi lại với phụ huynh rồi gửi yêu cầu mới."),
+                // [UC-110] Yêu cầu đang giữ sau khi ngày sinh được sửa về dưới 16, không có phụ huynh xác nhận
+                "withdrawn" => ("Yêu cầu liên hệ đã bị thu hồi", $"Ngày sinh của bạn đã được cập nhật nên yêu cầu liên hệ tới <strong>{center}</strong> cần phụ huynh xác nhận. Yêu cầu chưa được phụ huynh xác nhận nên đã bị thu hồi; dữ liệu của bạn không còn hiển thị với trung tâm."),
                 _ => ("Yêu cầu đã hết hạn", $"Phụ huynh chưa trả lời trong 7 ngày nên yêu cầu liên hệ tới <strong>{center}</strong> đã hết hạn. Bạn có thể gửi lại yêu cầu mới."),
             };
             var subject = $"[USAS] {title}";

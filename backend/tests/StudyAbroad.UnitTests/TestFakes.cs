@@ -579,3 +579,29 @@ internal sealed class FakeUnitOfWork : IUnitOfWork
         return work(ct);
     }
 }
+
+/// <summary>[UC-110] Ghi lại các lần giữ, gửi mail xác nhận, thu hồi yêu cầu liên hệ đang giữ.</summary>
+internal sealed class RecordingLeadHolds : StudyAbroad.Application.Leads.ILeadParentHoldService
+{
+    public List<(Guid StudentId, DateTime Now)> Held { get; } = [];
+    public List<Guid> Confirmations { get; } = [];
+    public List<Guid> Withdrawals { get; } = [];
+
+    public Task<int> HoldOpenLeadsAsync(Guid studentId, DateTime now, CancellationToken ct = default)
+    {
+        Held.Add((studentId, now));
+        return Task.FromResult(1);
+    }
+
+    public Task SendHeldLeadConfirmationsAsync(User student, CancellationToken ct = default)
+    {
+        Confirmations.Add(student.Id);
+        return Task.CompletedTask;
+    }
+
+    public Task WithdrawHeldLeadsAsync(User student, CancellationToken ct = default)
+    {
+        Withdrawals.Add(student.Id);
+        return Task.CompletedTask;
+    }
+}

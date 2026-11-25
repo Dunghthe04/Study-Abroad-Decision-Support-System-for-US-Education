@@ -59,7 +59,11 @@ public class AdminBirthDateChangeService(
     IAuditLogRepository auditLogs,
     IUnitOfWork unitOfWork,
     INotificationService? notifications = null,
-    TimeProvider? clock = null) : IAdminBirthDateChangeService
+    TimeProvider? clock = null,
+    // [UC-110 / UC-109] Học sinh về dưới 16: giữ yêu cầu liên hệ, mời người đại diện đồng ý; null trong test cũ
+    StudyAbroad.Application.Leads.ILeadParentHoldService? leadHolds = null,
+    StudyAbroad.Application.ParentLinks.IParentLinkService? parentLinkService = null,
+    StudyAbroad.Application.ParentLinks.IParentLinkRepository? parentLinks = null) : IAdminBirthDateChangeService
 {
     public const int MaxRejectReasonLength = 500;
     public const int MaxPageSize = 100;
@@ -158,6 +162,11 @@ public class AdminBirthDateChangeService(
         int? oldAge = oldDob is { } o ? AgePolicy.GetAge(o, today) : null;
         var now = _clock.GetUtcNow().UtcDateTime;
         var closed = false;
+        // [UC-150 bước 4] Học sinh từ 16 trở lên (hoặc chưa có ngày sinh) về dưới 16
+        var droppedUnder16 = user.Role == UserRoles.Student && newAge < AgeGroups.ChildMaxAgeExclusive
+            && (oldAge is null || oldAge >= AgeGroups.ChildMaxAgeExclusive);
+        var hasConsent = false;
+        Func<CancellationToken, Task>? sendInvite = null;
 
         await unitOfWork.ExecuteInTransactionAsync(async tct =>
         {
@@ -169,8 +178,16 @@ public class AdminBirthDateChangeService(
             user.DateOfBirth = entity.RequestedBirthDate;
             await users.UpdateUserAsync(user, tct);
 
-            // TODO bước 4–5 (UC-110): học sinh xuống dưới 16 thì giữ yêu cầu liên hệ và tạo lời mời đồng ý UC-109;
-            // học sinh lên từ 16 thì trả các yêu cầu đang chờ phụ huynh về Mới gửi.
+            if (droppedUnder16)
+            {
+                // [UC-110] Yêu cầu liên hệ chưa kết thúc chờ phụ huynh xác nhận, hạn 7 ngày tính từ lúc giữ
+                if (leadHolds is not null)
+                    await leadHolds.HoldOpenLeadsAsync(user.Id, now, tct);
+                // [UC-109] Chưa có đồng ý thì mời người đại diện; mail UC-110 chỉ gửi sau khi phụ huynh đồng ý tài khoản
+                hasConsent = parentLinks is not null && await parentLinks.HasGrantedConsentAsync(user.Id, tct);
+                if (!hasConsent && parentLinkService is not null && !string.IsNullOrWhiteSpace(entity.RepresentativeEmail))
+                    sendInvite = await parentLinkService.InviteRepresentativeAfterBirthDateChangeAsync(user, entity.RepresentativeEmail, tct);
+            }
 
             await auditLogs.AddAsync(new AuditLog
             {
@@ -196,6 +213,12 @@ public class AdminBirthDateChangeService(
 
         if (!closed)
             return await ReloadNotPendingAsync(entity.Id, ct);
+
+        // Gửi mail sau commit: lời mời đồng ý (UC-109), hoặc đã có đồng ý thì mail xác nhận yêu cầu liên hệ đang giữ (UC-110)
+        if (sendInvite is not null)
+            await sendInvite(ct);
+        else if (droppedUnder16 && hasConsent && leadHolds is not null)
+            await leadHolds.SendHeldLeadConfirmationsAsync(user, ct);
 
         evidenceStorage.Delete(entity.EvidencePath);
         entity.Status = BirthDateChangeStatuses.Approved;

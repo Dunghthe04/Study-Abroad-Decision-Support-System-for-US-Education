@@ -61,6 +61,7 @@ public static class DependencyInjection
         services.AddSingleton<StudyAbroad.Application.BirthDateChanges.IBirthDateEvidenceStorage, StudyAbroad.Infrastructure.Services.BirthDateEvidenceStorage>();
         services.AddScoped<StudyAbroad.Application.Community.ICommunityRepository, CommunityRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadWithdrawalRepository, LeadWithdrawalRepository>();   // [UC-80] thu hồi lead khi xóa tài khoản
+        services.AddScoped<StudyAbroad.Application.Leads.ILeadHoldRepository, LeadHoldRepository>();   // [UC-110 / UC-150] giữ yêu cầu liên hệ khi học sinh về dưới 16
         services.AddScoped<StudyAbroad.Application.Auth.IAccountPurgeRepository, AccountPurgeRepository>();
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterDeletionWorkRepository, CenterDeletionWorkRepository>();   // [UC-93]   // [UC-80] xóa hẳn tài khoản quá hạn
         services.AddSingleton<StudyAbroad.Application.Admin.SlmSamples.ISlmWorkbookReader, StudyAbroad.Infrastructure.Import.SlmWorkbookReader>();

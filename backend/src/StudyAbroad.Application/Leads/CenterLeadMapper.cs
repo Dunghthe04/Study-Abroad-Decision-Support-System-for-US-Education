@@ -66,7 +66,7 @@ public static class CenterLeadMapper
         int? daysUntilExpiry = null;
         if (string.Equals(lead.Status, LeadStatuses.New, StringComparison.OrdinalIgnoreCase))
         {
-            expiresAt = lead.CreatedAt.AddDays(NewLeadExpiryDays);
+            expiresAt = lead.ActiveSince.AddDays(NewLeadExpiryDays);
             var remaining = (expiresAt.Value - DateTime.UtcNow).TotalDays;
             daysUntilExpiry = remaining <= 0 ? 0 : (int)Math.Ceiling(remaining);
         }
@@ -136,5 +136,5 @@ public static class CenterLeadMapper
         consentRevoked
         || lead.UserId is null
         || string.Equals(lead.Status, LeadStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase)
-        || lead.CreatedAt < DateTime.UtcNow.AddDays(-DataVisibleDays);
+        || lead.ActiveSince < DateTime.UtcNow.AddDays(-DataVisibleDays);
 }

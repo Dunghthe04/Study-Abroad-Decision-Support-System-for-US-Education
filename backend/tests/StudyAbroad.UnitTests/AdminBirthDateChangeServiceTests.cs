@@ -49,8 +49,13 @@ public class AdminBirthDateChangeServiceTests
 
     private readonly FakeUnitOfWork _uow = new();
 
+    private readonly RecordingLeadHolds _holds = new();
+    private readonly FakeParentLinkRepository _links = new();
+    private readonly FakeEmailSender _emails = new();
+
     private AdminBirthDateChangeService Service() =>
-        new(_repo, _users, _storage, _audit, _uow, _notifications, new BirthDateChangeServiceTests.FixedClock(Now));
+        new(_repo, _users, _storage, _audit, _uow, _notifications, new BirthDateChangeServiceTests.FixedClock(Now),
+            _holds, new StudyAbroad.Application.ParentLinks.ParentLinkService(_links, _users, _emails, new FakeAuditLogRepository()), _links);
 
     private User AddUser(string role, DateOnly? dob)
     {
@@ -292,5 +297,94 @@ public class AdminBirthDateChangeServiceTests
     public void CrossedThresholds_BothDirections(int? oldAge, int newAge, int[] expected)
     {
         Assert.Equal(expected, AdminBirthDateChangeService.CrossedThresholds(oldAge, newAge));
+    }
+
+    // ===== [UC-150 bước 4 / UC-110] Học sinh về dưới 16 =====
+
+    private static DateOnly BornAgo(int age) => DateOnly.FromDateTime(Now.UtcDateTime).AddYears(-age).AddDays(-30);
+
+    [Fact]
+    public async Task Approve_StudentDropsUnder16_NoConsent_HoldsLeads_InvitesRepresentative_NoLeadMailYet()
+    {
+        var student = AddUser(UserRoles.Student, BornAgo(17));
+        var request = AddRequest(student, BornAgo(15));
+        request.RepresentativeEmail = "Me@Test.com";
+        // Lời mời cũ tới email khác bị hủy
+        var old = new ParentStudentLink { StudentUserId = student.Id, ParentEmail = "old@test.com", Status = ParentLinkStatuses.Expired };
+        _links.Links.Add(old);
+
+        var result = await Service().ApproveAsync(request.Id, AdminId, Info);
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(student.Id, Assert.Single(_holds.Held).StudentId);
+        Assert.Empty(_holds.Confirmations);
+        // Fake trả bản sao nên đọc lại theo Id
+        Assert.Equal(ParentLinkStatuses.Revoked, _links.Links.Single(l => l.Id == old.Id).Status);
+        var link = Assert.Single(_links.Links, l => l.ParentEmail == "me@test.com");
+        Assert.Equal(ParentLinkStatuses.Pending, link.Status);
+        Assert.Single(_emails.SentEmails, e => e.Purpose == "parent_invite" && e.To == "me@test.com");
+    }
+
+    [Fact]
+    public async Task Approve_StudentDropsUnder16_SameEmailLinked_ReinvitesOnThatLink()
+    {
+        var student = AddUser(UserRoles.Student, BornAgo(17));
+        var request = AddRequest(student, BornAgo(15));
+        request.RepresentativeEmail = "me@test.com";
+        // Phụ huynh đã liên kết khi học sinh 17 tuổi, chưa có đồng ý
+        var active = new ParentStudentLink { StudentUserId = student.Id, ParentEmail = "me@test.com", Status = ParentLinkStatuses.Active };
+        _links.Links.Add(active);
+
+        await Service().ApproveAsync(request.Id, AdminId, Info);
+
+        var stored = Assert.Single(_links.Links);
+        Assert.Equal(active.Id, stored.Id);
+        Assert.Equal(ParentLinkStatuses.Pending, stored.Status);
+        Assert.NotNull(stored.TokenHash);
+        Assert.Single(_emails.SentEmails, e => e.Purpose == "parent_invite");
+    }
+
+    [Fact]
+    public async Task Approve_StudentDropsUnder16_AlreadyConsented_SendsLeadMailsAfterCommit_NoInvite()
+    {
+        var student = AddUser(UserRoles.Student, BornAgo(17));
+        var request = AddRequest(student, BornAgo(15));
+        request.RepresentativeEmail = "me@test.com";
+        var consent = new Consent { UserId = student.Id, Purpose = "process_student_data", Granted = true, PolicyVersion = "v1" };
+        _links.Consents.Add(consent);
+        _links.Links.Add(new ParentStudentLink { StudentUserId = student.Id, ParentEmail = "mom@test.com", Status = ParentLinkStatuses.Active, ConsentId = consent.Id });
+
+        await Service().ApproveAsync(request.Id, AdminId, Info);
+
+        Assert.Single(_holds.Held);
+        Assert.Equal(student.Id, Assert.Single(_holds.Confirmations));
+        Assert.DoesNotContain(_emails.SentEmails, e => e.Purpose == "parent_invite");
+    }
+
+    [Theory]
+    [InlineData(18, 17)]
+    [InlineData(15, 14)]
+    [InlineData(15, 17)]
+    public async Task Approve_NotCrossingDownBelow16_NoHold(int oldAge, int newAge)
+    {
+        var student = AddUser(UserRoles.Student, BornAgo(oldAge));
+        var request = AddRequest(student, BornAgo(newAge));
+        request.RepresentativeEmail = "me@test.com";
+
+        await Service().ApproveAsync(request.Id, AdminId, Info);
+
+        Assert.Empty(_holds.Held);
+        Assert.Empty(_emails.SentEmails);
+    }
+
+    [Fact]
+    public async Task Approve_ParentDropsUnder16_NoHold()
+    {
+        var parent = AddUser(UserRoles.Parent, BornAgo(40));
+        var request = AddRequest(parent, BornAgo(15));
+
+        await Service().ApproveAsync(request.Id, AdminId, Info);
+
+        Assert.Empty(_holds.Held);
     }
 }

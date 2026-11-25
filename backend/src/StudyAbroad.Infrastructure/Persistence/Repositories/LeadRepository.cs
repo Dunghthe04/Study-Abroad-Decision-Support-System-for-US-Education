@@ -67,6 +67,9 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
 
         // UPDATE có điều kiện status = pending_parent: hai phụ huynh bấm cùng lúc thì chỉ một người ghi được
         Guid? consentId = consent?.Id;
+        // [UC-110] Thời gian chờ phụ huynh cộng vào lead; yêu cầu đang giữ trở lại trạng thái cũ thì xóa dấu giữ
+        long? pausedSeconds = decision.PausedSeconds;
+        var clearHold = decision.ClearHold;
         var rows = await db.Leads
             .Where(l => l.Id == leadId && l.Status == LeadStatuses.PendingParent)
             .ExecuteUpdateAsync(s => s
@@ -75,6 +78,9 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
                 .SetProperty(l => l.ParentDecidedAt, decision.DecidedAt)
                 .SetProperty(l => l.ParentDecisionIp, decision.DecisionIp)
                 .SetProperty(l => l.ConsentId, l => consentId ?? l.ConsentId)
+                .SetProperty(l => l.PausedSeconds, l => pausedSeconds ?? l.PausedSeconds)
+                .SetProperty(l => l.HeldFromStatus, l => clearHold ? null : l.HeldFromStatus)
+                .SetProperty(l => l.HeldAt, l => clearHold ? null : l.HeldAt)
                 .SetProperty(l => l.UpdatedAt, decision.UpdatedAt), ct);
 
         if (rows == 0)
@@ -135,11 +141,14 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
                     l.Id,
                     l.StudyCenterId,
                     c.Name,
-                    // [UC-116 / UC-68] Quá hạn phụ huynh hoặc quá 7 ngày trung tâm không phản hồi đều hiện "Hết hạn"
-                    (l.Status == LeadStatuses.PendingParent && l.ParentTokenExpiresAt <= now)
-                    || (l.Status == LeadStatuses.New && l.CreatedAt <= now.AddDays(-CenterLeadMapper.NewLeadExpiryDays))
-                        ? LeadStatuses.Expired
-                        : l.Status,
+                    // [UC-116 / UC-68] Quá hạn phụ huynh hoặc quá 7 ngày trung tâm không phản hồi (tính từ lúc trung tâm nhận) đều hiện "Hết hạn".
+                    // [UC-110] Yêu cầu đang giữ quá hạn phụ huynh thì hiện "Đã thu hồi"
+                    l.Status == LeadStatuses.PendingParent && l.ParentTokenExpiresAt <= now && l.HeldFromStatus != null
+                        ? LeadStatuses.Withdrawn
+                        : (l.Status == LeadStatuses.PendingParent && l.ParentTokenExpiresAt <= now)
+                          || (l.Status == LeadStatuses.New && l.CreatedAt.AddSeconds(l.PausedSeconds) <= now.AddDays(-CenterLeadMapper.NewLeadExpiryDays))
+                            ? LeadStatuses.Expired
+                            : l.Status,
                     l.CreatedAt,
                     l.SharedFields,
                     l.StudyLevel,
@@ -169,7 +178,8 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
     {
         // [UC-68] Tự động chuyển lead ở trạng thái Mới quá 7 ngày trung tâm không phản hồi sang Hết hạn
         var expireCutoff = DateTime.UtcNow.AddDays(-CenterLeadMapper.NewLeadExpiryDays);
-        var staleNewQuery = db.Leads.Where(l => l.Status == LeadStatuses.New && l.CreatedAt <= expireCutoff);
+        // Tính từ lúc trung tâm nhận (ActiveSince = CreatedAt + thời gian chờ phụ huynh)
+        var staleNewQuery = db.Leads.Where(l => l.Status == LeadStatuses.New && l.CreatedAt.AddSeconds(l.PausedSeconds) <= expireCutoff);
         if (centerId.HasValue && centerId.Value != Guid.Empty)
             staleNewQuery = staleNewQuery.Where(l => l.StudyCenterId == centerId.Value);
         var staleNew = await staleNewQuery.ToListAsync(ct);
@@ -187,8 +197,8 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         // [UC-116] Lead chờ phụ huynh / bị từ chối / hết hạn: trung tâm chưa nhận nên không hiện, không đếm
         var baseLeads = db.Leads.AsNoTracking()
             .Where(l => l.Status != LeadStatuses.PendingParent && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired)
-            // Thu hồi khi còn chờ phụ huynh: trung tâm chưa từng nhận
-            .Where(l => !(l.Status == LeadStatuses.Withdrawn && l.ParentTokenExpiresAt != null && l.ParentDecidedAt == null));
+            // Thu hồi khi còn chờ phụ huynh: trung tâm chưa từng nhận (yêu cầu đang giữ thì trung tâm đã nhận, vẫn hiện) [UC-110]
+            .Where(l => !(l.Status == LeadStatuses.Withdrawn && l.ParentTokenExpiresAt != null && l.ParentDecidedAt == null && l.HeldFromStatus == null));
         if (centerId.HasValue && centerId.Value != Guid.Empty)
         {
             baseLeads = baseLeads.Where(l => l.StudyCenterId == centerId.Value);
@@ -225,7 +235,7 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
             query = query.Where(x => x.Lead.Status != LeadStatuses.Withdrawn);
             // [UC-73] Lead quá 90 ngày cũng không khớp tìm kiếm theo dữ liệu đã chia sẻ
             var visibleSince = DateTime.UtcNow.AddDays(-CenterLeadMapper.DataVisibleDays);
-            query = query.Where(x => x.Lead.CreatedAt >= visibleSince);
+            query = query.Where(x => x.Lead.CreatedAt.AddSeconds(x.Lead.PausedSeconds) >= visibleSince);
             // [UC-111 bước 5] Học sinh dưới 16 đã bị phụ huynh rút đồng ý cũng không khớp tìm kiếm
             var childBornAfter = AgePolicy.TodayInVietnam(DateTime.UtcNow).AddYears(-AgeGroups.ChildMaxAgeExclusive);
             query = query.Where(x => x.User == null || x.User.DateOfBirth == null || x.User.DateOfBirth <= childBornAfter
@@ -290,7 +300,7 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
                     where l.Id == leadId
                         && (!hidePendingParent
                             || (l.Status != LeadStatuses.PendingParent && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired
-                                && !(l.Status == LeadStatuses.Withdrawn && l.ParentTokenExpiresAt != null && l.ParentDecidedAt == null)))
+                                && !(l.Status == LeadStatuses.Withdrawn && l.ParentTokenExpiresAt != null && l.ParentDecidedAt == null && l.HeldFromStatus == null)))
                     join c in db.StudyCenters.AsNoTracking() on l.StudyCenterId equals c.Id
                     // [UC-75 lớp 1b] Nối trái: lead của người gửi đã bị xóa hẳn (UserId null) vẫn hiện để trung tâm xem tin nhắn còn giữ
                     join u in db.Users.AsNoTracking() on l.UserId equals (Guid?)u.Id into senders
