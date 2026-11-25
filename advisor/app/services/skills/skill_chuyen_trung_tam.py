@@ -1,7 +1,7 @@
 """skill_chuyen_trung_tam (B6): học sinh cần một dịch vụ hệ thống không làm thay được thì gợi ý trung tâm.
 
 Luồng: SLM tách ý đã đọc nhu cầu (service, city trong entities của ý center_referral) -> code đổi mã dịch vụ sang mã DB,
-chuẩn hóa thành phố -> backend chọn tối đa 3 trung tâm -> Claude (skill giải thích trung tâm) viết đoạn mở đầu và mỗi
+chuẩn hóa thành phố -> backend lọc tối đa 20 trung tâm, chat hiện 3 trung tâm đầu -> Claude (skill giải thích trung tâm) viết đoạn mở đầu và mỗi
 trung tâm một câu "vì sao hợp" (AI không thấy tên trung tâm) -> code kiểm lời cấm, ghép tên và website.
 AI không chọn trung tâm, không xin liên hệ, không nêu giá, không khen chê. Đặt lịch và so sánh trung tâm chưa có backend.
 """
