@@ -20,7 +20,6 @@ import {
 } from "@/lib/admin-university-display";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import type { UsStateOption } from "@/types/profile-flow";
-import { AidAnomalyNotice } from "./AidAnomalyNotice";
 import { CreateUniversityPanel } from "./CreateUniversityPanel";
 import { universityColumns } from "./university-columns";
 import { OfferingsPanel } from "./OfferingsPanel";
@@ -321,7 +320,6 @@ export function UniversityListView() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-        <AidAnomalyNotice />
         <DataTable
           columns={columns}
           items={data?.items ?? []}

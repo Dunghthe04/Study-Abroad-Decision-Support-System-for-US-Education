@@ -16,9 +16,6 @@ public interface IAdminUniversityService
     /// <summary>null nếu trường không tồn tại.</summary>
     Task<IReadOnlyList<AdminUniversityOfferingDto>?> GetOfferingsAsync(Guid universityId, CancellationToken ct = default);
     Task<IReadOnlyList<AdminMajorOptionDto>> ListMajorsAsync(CancellationToken ct = default);
-
-    /// <summary>[UC-22, UC-62] Dữ liệu hỗ trợ tài chính bất thường (trung bình lớn hơn học phí) để Moderator kiểm tra.</summary>
-    Task<IReadOnlyList<AdminAidAnomalyDto>> ListAidAnomaliesAsync(CancellationToken ct = default);
     Task<AdminUpdateResult<AdminUniversityDetailDto>> CreateUniversityAsync(
         CreateUniversityRequest request, Guid actorUserId, CancellationToken ct = default);
     /// <summary>[UC-66] Sửa thông tin trường (kèm ghi audit).</summary>
@@ -96,9 +93,6 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         }
         return result;
     }
-
-    public Task<IReadOnlyList<AdminAidAnomalyDto>> ListAidAnomaliesAsync(CancellationToken ct = default) =>
-        repository.ListAidAnomaliesAsync(ct);
 
     public async Task<IReadOnlyList<AdminMajorOptionDto>> ListMajorsAsync(CancellationToken ct = default)
     {

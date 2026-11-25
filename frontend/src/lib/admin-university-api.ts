@@ -1,7 +1,6 @@
 import { apiFetch, ApiError } from "@/lib/api";
 import type { PagedResult } from "@/types/api";
 import type {
-  AdminAidAnomaly,
   AdminFieldErrors,
   AdminMajorOption,
   AdminUniversityDetail,
@@ -64,15 +63,6 @@ export async function getAdminUniversity(universityId: string): Promise<AdminUni
       throw new Error("Không tìm thấy trường này.");
     }
     throw new Error("Không thể tải thông tin trường. Vui lòng thử lại sau.");
-  }
-}
-
-/** [UC-22, UC-62] Dữ liệu hỗ trợ tài chính bất thường (trung bình lớn hơn học phí). Lỗi tải thì trả rỗng: đây chỉ là gợi ý kiểm tra, không chặn việc sửa trường. */
-export async function getAdminAidAnomalies(): Promise<AdminAidAnomaly[]> {
-  try {
-    return await apiFetch<AdminAidAnomaly[]>("/api/v1/admin/universities/aid-anomalies");
-  } catch {
-    return [];
   }
 }
 

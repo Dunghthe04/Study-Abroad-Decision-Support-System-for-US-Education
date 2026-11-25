@@ -31,9 +31,6 @@ public interface IAdminUniversityRepository
 
     Task<IReadOnlyList<Major>> ListMajorsAsync(CancellationToken ct = default);
 
-    /// <summary>[UC-22] Bậc học có hỗ trợ tài chính trung bình cho du học sinh lớn hơn học phí (cả trường đang ẩn), xếp theo tên trường.</summary>
-    Task<IReadOnlyList<AdminAidAnomalyDto>> ListAidAnomaliesAsync(CancellationToken ct = default);
-
     /// <summary>Tên hiển thị của người sửa; null nếu không có id hoặc tài khoản đã bị xóa.</summary>
     Task<string?> GetUserDisplayNameAsync(Guid? userId, CancellationToken ct = default);
 

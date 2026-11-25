@@ -25,11 +25,6 @@ public class AdminUniversitiesController(IAdminUniversityService service) : Cont
     public Task<IReadOnlyList<AdminMajorOptionDto>> ListMajors(CancellationToken ct) =>
         service.ListMajorsAsync(ct);
 
-    /// <summary>[UC-22, UC-62] Trường có hỗ trợ tài chính trung bình lớn hơn học phí: dữ liệu bất thường để Moderator kiểm tra lại nguồn.</summary>
-    [HttpGet("aid-anomalies")]
-    public Task<IReadOnlyList<AdminAidAnomalyDto>> ListAidAnomalies(CancellationToken ct) =>
-        service.ListAidAnomaliesAsync(ct);
-
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<AdminUniversityDetailDto>> GetById(Guid id, CancellationToken ct)
     {
