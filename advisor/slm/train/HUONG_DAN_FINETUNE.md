@@ -68,9 +68,18 @@ Excel gán nhãn → JSONL → hội thoại train/val → [Colab: fine-tune] �
 | `python -m slm.prepare.build_slm_jsonl` | Đổi Excel thành `du_lieu_slm.jsonl`, kiểm từng dòng, sai thì báo tên sheet và số dòng | `slm/data/du_lieu_slm.jsonl` |
 | `python -m slm.prepare.check_slm_data` | Kiểm dữ liệu (chỉ đọc): span nguyên văn; một ý `collect_profile`; dòng test không trùng đầu vào với train hoặc val; một hồ sơ chỉ ở một tập; đủ dòng test cho mỗi nhãn, mỗi mục `fields`, câu từ 3 ý và mỗi khóa hồ sơ | Phải báo `Tổng số lỗi: 0` |
 | `python -m slm.prepare.resplit_slm` | Chia lại train, val, test **theo nhóm** (cùng hồ sơ hoặc cùng khuôn câu vào một tập) theo tỉ lệ 70/15/15. Mặc định chỉ in thử; thêm `--apply` mới ghi Excel | Chỉ chạy khi cần chia lại. Test đổi thì không so được với số đo cũ |
-| `python -m slm.prepare.export_slm_chat` | Đổi JSONL thành hội thoại `[system = prompt, user = JSON đầu vào, assistant = JSON đáp án]`. Chỉ xuất train và val, bỏ câu trùng chữ với test | `slm/data/finetune/train.jsonl` (7.507), `val.jsonl` (1.321) |
+| `python -m slm.prepare.export_slm_chat` | Đổi JSONL thành hội thoại `[system = prompt, user = JSON đầu vào, assistant = JSON đáp án]`. Chỉ xuất train và val, bỏ câu trùng chữ với test | `slm/data/finetune/train.jsonl`, `val.jsonl` (không nằm trong git, xem bên dưới) |
 
 Mỗi dòng của `train.jsonl` có dạng `{"messages": [system, user, assistant]}`. Tập **test không bao giờ đưa vào** hai file này: model thấy trước thì điểm đo vô nghĩa.
+
+**`train.jsonl` và `val.jsonl` không nằm trong git** (quá 100 MB, GitHub không nhận; đã khai trong `.gitignore`). Chúng chỉ là bản "ghép sẵn" sinh ra từ `du_lieu_slm.jsonl` (có trong git). Người mới kéo code về hoặc đổi máy thì sinh lại, trong thư mục `advisor`:
+
+```
+python -m slm.prepare.check_slm_data      # phải 0 lỗi
+python -m slm.prepare.export_slm_chat     # ra slm/data/finetune/train.jsonl và val.jsonl
+```
+
+Chỉ khi sửa `du_lieu_slm.xlsx` mới cần chạy thêm `python -m slm.prepare.build_slm_jsonl` trước `export_slm_chat`. Muốn chạy tiếp một lần train dở ở máy khác thì phải tải lên **đúng** hai file lúc bắt đầu (chép chúng sang máy kia), đừng sinh lại.
 
 Nếu đã kích hoạt môi trường ảo (dòng nhắc có `(.venv)`) thì gõ `python`; nếu chưa, gọi `.venv\Scripts\python.exe` (PowerShell) hoặc `.venv/Scripts/python.exe` (Git Bash).
 
