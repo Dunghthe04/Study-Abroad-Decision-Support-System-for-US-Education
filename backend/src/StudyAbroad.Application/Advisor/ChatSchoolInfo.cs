@@ -985,8 +985,12 @@ public static class ChatSchoolInfo
         return parts.Count == 0 ? "" : $"Số liệu: {string.Join(", ", parts)}.";
     }
 
-    private static string Pointer(SchoolInfoDto s) =>
-        string.IsNullOrWhiteSpace(s.Website) ? "" : $" Bạn có thể xem thêm ở {s.Website}.";
+    // UC-156: mục chat chưa lưu thì chỉ tới trang chi tiết trường trong hệ thống (UC-21) và website của trường
+    private static string Pointer(SchoolInfoDto s)
+    {
+        var detail = $" Bạn xem thêm ở trang chi tiết trường: /university/{Uri.EscapeDataString(s.Code)}";
+        return string.IsNullOrWhiteSpace(s.Website) ? $"{detail}." : $"{detail}, hoặc website {s.Website}.";
+    }
 
     /// <summary>
     /// Câu trả lời cho một trường. fields là các mục câu hỏi nhắc tới (FieldsOf); unstoredAsked là câu có nhắc điều hệ thống không lưu.
