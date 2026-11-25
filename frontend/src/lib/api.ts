@@ -485,6 +485,13 @@ export const adminUsersApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  /** [UC-58 2a, UC-03 3d] Administrator đặt lại xác thực hai lớp cho Moderator (lý do bắt buộc, tối đa 500 ký tự). */
+  resetTwoFactor: (id: string, data: { reason: string }) =>
+    apiFetch<void>(`/api/v1/admin/users/${encodeURIComponent(id)}/reset-2fa`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 // [UC-71] API Quản trị danh bạ trung tâm tư vấn (Moderator / Admin)

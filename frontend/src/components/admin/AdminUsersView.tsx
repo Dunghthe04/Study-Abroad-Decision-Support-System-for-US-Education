@@ -8,6 +8,7 @@ import {
   FilterIcon,
   KeyRoundIcon,
   RotateCcwIcon,
+  ShieldOffIcon,
   SearchIcon,
   ShieldCheckIcon,
   UserPlusIcon,
@@ -88,6 +89,11 @@ function canAdminUnlock(target: UserDto, currentUserRole?: string): boolean {
   }
 
   return false;
+}
+
+/** [UC-58 2a] Đặt lại xác thực hai lớp: chỉ Administrator đặt cho Moderator (Administrator dùng scripts/reset-admin-2fa.ps1). */
+function canResetTwoFactor(target: UserDto, currentUserRole?: string): boolean {
+  return currentUserRole === "admin" && target.role === "moderator" && target.status !== "deleted";
 }
 
 const LOCK_REASONS_STORAGE_KEY = "usas_user_lock_reasons";
@@ -194,6 +200,12 @@ export function AdminUsersView() {
   const [unlockReason, setUnlockReason] = useState("");
   const [unlockSubmitting, setUnlockSubmitting] = useState(false);
   const [unlockDialogError, setUnlockDialogError] = useState<string | null>(null);
+
+  // [UC-58 2a] Dialog đặt lại xác thực hai lớp cho Moderator
+  const [resetTfaTarget, setResetTfaTarget] = useState<UserDto | null>(null);
+  const [resetTfaReason, setResetTfaReason] = useState("");
+  const [resetTfaSubmitting, setResetTfaSubmitting] = useState(false);
+  const [resetTfaError, setResetTfaError] = useState<string | null>(null);
 
   const fetchUserPage = useCallback(async (activePage: number, signal?: { cancelled: boolean }) => {
     setListError(null);
@@ -361,6 +373,47 @@ export function AdminUsersView() {
       setUnlockDialogError(err instanceof ApiError ? err.message : "Không mở khóa được tài khoản.");
     } finally {
       setUnlockSubmitting(false);
+    }
+  };
+
+  const openResetTfaDialog = (user: UserDto) => {
+    if (!canResetTwoFactor(user, currentUser?.role)) return;
+    setResetTfaTarget(user);
+    setResetTfaReason("");
+    setResetTfaError(null);
+  };
+
+  const closeResetTfaDialog = () => {
+    if (resetTfaSubmitting) return;
+    setResetTfaTarget(null);
+    setResetTfaReason("");
+    setResetTfaError(null);
+  };
+
+  const handleConfirmResetTfa = async () => {
+    if (!resetTfaTarget || !canResetTwoFactor(resetTfaTarget, currentUser?.role)) return;
+    const reason = resetTfaReason.trim();
+    if (!reason) {
+      setResetTfaError("Vui lòng nhập lý do đặt lại.");
+      return;
+    }
+    setResetTfaError(null);
+    setResetTfaSubmitting(true);
+    try {
+      await adminUsersApi.resetTwoFactor(resetTfaTarget.id, { reason });
+      toast.add({
+        type: "success",
+        priority: "high",
+        timeout: 6000,
+        title: "Đã đặt lại xác thực hai lớp",
+        description: `${resetTfaTarget.email} sẽ thiết lập lại ở lần đăng nhập tới.`,
+      });
+      setResetTfaTarget(null);
+      setResetTfaReason("");
+    } catch (err) {
+      setResetTfaError(err instanceof ApiError ? err.message : "Không đặt lại được xác thực hai lớp.");
+    } finally {
+      setResetTfaSubmitting(false);
     }
   };
 
@@ -878,7 +931,8 @@ export function AdminUsersView() {
               )}
 
               {(canAdminLock(detailTarget, currentUser?.role, currentUser?.id) ||
-                canAdminUnlock(detailTarget, currentUser?.role)) && (
+                canAdminUnlock(detailTarget, currentUser?.role) ||
+                canResetTwoFactor(detailTarget, currentUser?.role)) && (
                 <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line">
                   {canAdminLock(detailTarget, currentUser?.role, currentUser?.id) && (
                     <Button
@@ -902,6 +956,18 @@ export function AdminUsersView() {
                     >
                       <KeyRoundIcon className="size-3.5" />
                       Mở khóa tài khoản
+                    </Button>
+                  )}
+                  {canResetTwoFactor(detailTarget, currentUser?.role) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openResetTfaDialog(detailTarget)}
+                      className="gap-1.5"
+                    >
+                      <ShieldOffIcon className="size-3.5" />
+                      Đặt lại xác thực hai lớp
                     </Button>
                   )}
                 </div>
@@ -1112,6 +1178,57 @@ export function AdminUsersView() {
             >
               <KeyRoundIcon className="size-4" />
               Xác nhận mở khóa
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* [UC-58 2a] Xác nhận đặt lại xác thực hai lớp cho Moderator */}
+      <Dialog open={resetTfaTarget !== null} onOpenChange={(open) => !open && closeResetTfaDialog()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldOffIcon className="size-5" />
+              Đặt lại xác thực hai lớp
+            </DialogTitle>
+            <DialogDescription>
+              {resetTfaTarget
+                ? `Đặt lại cho ${resetTfaTarget.fullName} (${resetTfaTarget.email}). Khóa xác thực và các mã khôi phục cũ hết hiệu lực, mọi phiên đăng nhập bị thu hồi. Lần đăng nhập tới người dùng quét QR mới. Chỉ làm sau khi đã xác minh đúng người.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <Field>
+            <FieldLabel htmlFor="reset-2fa-reason">Lý do đặt lại <span className="text-destructive">*</span></FieldLabel>
+            <Input
+              id="reset-2fa-reason"
+              value={resetTfaReason}
+              onChange={(e) => setResetTfaReason(e.target.value)}
+              placeholder="Ví dụ: Mất điện thoại và mã khôi phục, đã xác minh qua cuộc gọi..."
+              maxLength={500}
+              disabled={resetTfaSubmitting}
+            />
+          </Field>
+
+          {resetTfaError && (
+            <Alert variant="destructive">
+              <AlertDescription>{resetTfaError}</AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeResetTfaDialog} disabled={resetTfaSubmitting}>
+              Hủy
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleConfirmResetTfa()}
+              loading={resetTfaSubmitting}
+              className="gap-1.5"
+            >
+              <ShieldOffIcon className="size-4" />
+              Xác nhận đặt lại
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -103,6 +103,9 @@ const ACTION_FRIENDLY_NAMES: Record<string, string> = {
   // Tài khoản & Người dùng
   "user.lock": "Khóa tài khoản người dùng",
   "user.unlock": "Mở khóa tài khoản người dùng",
+  "user.two_factor_enabled": "Bật xác thực hai lớp",
+  "user.two_factor_reset": "Đặt lại xác thực hai lớp",
+  "user.login_recovery_code": "Đăng nhập bằng mã khôi phục",
   "user.role_change": "Thay đổi phân quyền vai trò",
   "user.birth_date_edit": "Cập nhật ngày sinh và tuổi",
   "user.birth_date_approved": "Duyệt yêu cầu sửa ngày sinh (UC-150)",
