@@ -341,12 +341,17 @@ namespace StudyAbroad.Application.Auth
                 return AuthResult.Fail(AuthError.InvalidCredentials, InvalidCredentialsMessage);
             }
 
-            // 1. [UC-03 E2] Tạm khóa do sai 5 lần: kiểm TRƯỚC mật khẩu để tài khoản đang khóa không thành nơi dò mật khẩu.
-            //    Hết 15 phút thì tự mở (không cần chờ job nền); Quản trị viên vẫn mở sớm được.
+            // 1. [UC-03 E2] Tạm khóa do sai 5 lần: hết 15 phút thì tự mở (không cần chờ job nền); Quản trị viên vẫn mở sớm được.
+            //    [UC-03 quy tắc] Đang khóa thì chỉ báo khóa khi mật khẩu đúng, mật khẩu sai nhận lỗi chung. Dù đúng mật khẩu
+            //    vẫn không tạo phiên nên không dò được mật khẩu qua tài khoản đang khóa; lần thử lúc khóa không đếm thêm.
             if (user.Status == UserStatuses.TempLocked)
             {
                 if (!await TryReleaseExpiredTempLockAsync(user, ct))
-                    return AuthResult.Fail(AuthError.TempLocked, TempLockedMessage(MaxFailedLoginAttempts, "mật khẩu"));
+                {
+                    return hasher.VerifyPassword(user.PasswordHash, request.Password)
+                        ? AuthResult.Fail(AuthError.TempLocked, TempLockedMessage(MaxFailedLoginAttempts, "mật khẩu"))
+                        : AuthResult.Fail(AuthError.InvalidCredentials, InvalidCredentialsMessage);
+                }
             }
 
             // 2. Bị Admin khóa / chưa kích hoạt email: chỉ báo trạng thái khi mật khẩu đúng (chống dò tài khoản).
@@ -399,10 +404,9 @@ namespace StudyAbroad.Application.Auth
                     user.LockoutEnd = DateTime.UtcNow.AddMinutes(TempLockoutMinutes);
                     if (await TryUpdateUserAsync(user, ct))
                         await emailSender.SendAccountTempLockedNotificationAsync(user.Email, user.FullName, TempLockoutMinutes, ct);
-
-                    return AuthResult.Fail(AuthError.TempLocked, TempLockedMessage(MaxFailedLoginAttempts, "mật khẩu"));
                 }
 
+                // [UC-03 quy tắc] Mật khẩu sai luôn nhận lỗi chung, kể cả lần sai thứ 5 vừa khóa tài khoản
                 return AuthResult.Fail(AuthError.InvalidCredentials, InvalidCredentialsMessage);
             }
 

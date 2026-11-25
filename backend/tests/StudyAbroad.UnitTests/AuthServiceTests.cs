@@ -1168,9 +1168,9 @@ public class AuthServiceTests
             Assert.Equal(UserStatuses.Active, _repo.Users[0].Status);
         }
 
-        // Lần thứ 5 nhập sai -> Tạm khóa tài khoản
+        // Lần thứ 5 nhập sai -> Tạm khóa tài khoản nhưng vẫn báo lỗi chung (UC-03 quy tắc)
         var fifthResult = await service.LoginAsync(new LoginRequest("a@test.com", "wrong-password"));
-        Assert.Equal(AuthError.TempLocked, fifthResult.Error);
+        Assert.Equal(AuthError.InvalidCredentials, fifthResult.Error);
         Assert.Equal(5, _repo.Users[0].FailedLoginAttempts);
         Assert.Equal(UserStatuses.TempLocked, _repo.Users[0].Status);
 
@@ -1189,6 +1189,24 @@ public class AuthServiceTests
         var result = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
 
         Assert.Equal(AuthError.TempLocked, result.Error);
+    }
+
+    [Fact]
+    public async Task Login_WhileTempLocked_WrongPassword_GetsGenericError_NotCounted()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.TempLocked;
+        user.FailedLoginAttempts = 5;
+        user.LockoutEnd = DateTime.UtcNow.AddMinutes(10);
+
+        var result = await service.LoginAsync(new LoginRequest("a@test.com", "wrong-password"));
+
+        // [UC-03 quy tắc] Mật khẩu sai không lộ trạng thái khóa
+        Assert.Equal(AuthError.InvalidCredentials, result.Error);
+        Assert.Equal(5, user.FailedLoginAttempts);
+        Assert.Equal(UserStatuses.TempLocked, user.Status);
     }
 
     [Fact]
@@ -1591,34 +1609,6 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task Login_WrongPassword5Times_TempLocks15Minutes()
-    {
-        var service = CreateService();
-        await service.RegisterAsync(Request());
-        var user = _repo.Users[0];
-        user.Status = UserStatuses.Active;
-
-        // Nhập sai 4 lần
-        for (int i = 1; i <= 4; i++)
-        {
-            var res = await service.LoginAsync(new LoginRequest("a@test.com", "wrongpass"));
-            Assert.Equal(AuthError.InvalidCredentials, res.Error);
-            Assert.Equal(i, user.FailedLoginAttempts);
-            Assert.Equal(UserStatuses.Active, user.Status);
-        }
-
-        // Nhập sai lần thứ 5 -> Khóa tài khoản
-        var lockRes = await service.LoginAsync(new LoginRequest("a@test.com", "wrongpass"));
-        Assert.Equal(AuthError.TempLocked, lockRes.Error);
-        Assert.Equal(UserStatuses.TempLocked, user.Status);
-        Assert.NotNull(user.LockoutEnd);
-        Assert.InRange(user.LockoutEnd!.Value, DateTime.UtcNow.AddMinutes(14), DateTime.UtcNow.AddMinutes(15));
-
-        // Kiểm tra email thông báo đã được gửi (không chứa mã OTP mở khóa)
-        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "temp_locked_notice");
-    }
-
-    [Fact]
     public async Task ResendOtp_FifthResendInHour_StillSends_RegistrationCodeNotCounted()
     {
         var service = CreateService();
@@ -1644,6 +1634,34 @@ public class AuthServiceTests
         Assert.Equal(AuthError.None, result.Error);
         Assert.Equal(6, _repo.Otps.Count);
         Assert.Equal(2, _emailSender.SentEmails.Count);
+    }
+
+    [Fact]
+    public async Task Login_WrongPassword5Times_TempLocks15Minutes()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Active;
+
+        // Nhập sai 4 lần
+        for (int i = 1; i <= 4; i++)
+        {
+            var res = await service.LoginAsync(new LoginRequest("a@test.com", "wrongpass"));
+            Assert.Equal(AuthError.InvalidCredentials, res.Error);
+            Assert.Equal(i, user.FailedLoginAttempts);
+            Assert.Equal(UserStatuses.Active, user.Status);
+        }
+
+        // Nhập sai lần thứ 5 -> Khóa tài khoản
+        var lockRes = await service.LoginAsync(new LoginRequest("a@test.com", "wrongpass"));
+        Assert.Equal(AuthError.InvalidCredentials, lockRes.Error);
+        Assert.Equal(UserStatuses.TempLocked, user.Status);
+        Assert.NotNull(user.LockoutEnd);
+        Assert.InRange(user.LockoutEnd!.Value, DateTime.UtcNow.AddMinutes(14), DateTime.UtcNow.AddMinutes(15));
+
+        // Kiểm tra email thông báo đã được gửi (không chứa mã OTP mở khóa)
+        Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "temp_locked_notice");
     }
 
     [Fact]
