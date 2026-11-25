@@ -52,18 +52,34 @@ public class CenterReviewSubmissionRepository(AppDbContext db) : ICenterReviewSu
         var row = await (
             from r in db.CenterReviews.AsNoTracking()
             where r.Id == reviewId
-            join u in db.Users.AsNoTracking() on r.UserId equals u.Id
-            select new { r.Id, u.FullName, u.Role, r.IsVerified, r.CreatedAt, r.Rating, r.Comment })
+            join u in db.Users.AsNoTracking() on r.UserId equals u.Id into usersJoin
+            from u in usersJoin.DefaultIfEmpty()
+            select new
+            {
+                r.Id,
+                FullName = u != null ? u.FullName : null,
+                Role = u != null ? u.Role : null,
+                UserStatus = u != null ? u.Status : null,
+                r.IsVerified,
+                r.CreatedAt,
+                r.Rating,
+                r.Comment,
+                r.CenterReplyContent,
+                r.CenterReplyCreatedAt,
+                r.CenterReplyEditedAt,
+                r.CenterReplyStatus,
+            })
             .FirstOrDefaultAsync(ct);
         if (row is null) return null;
 
         return new CenterReviewDto(
             row.Id,
-            CenterReviewRepository.MaskName(row.FullName),
+            CenterReviewRepository.FormatReviewerName(row.FullName, row.UserStatus),
             row.Role == UserRoles.Parent ? UserRoles.Parent : UserRoles.Student,
             row.IsVerified,
             row.CreatedAt,
             row.Rating,
-            row.Comment);
+            row.Comment,
+            CenterReviewRepository.BuildPublicReply(row.CenterReplyStatus, row.CenterReplyContent, row.CenterReplyCreatedAt, row.CenterReplyEditedAt));
     }
 }
