@@ -89,6 +89,18 @@ export interface AdminOfferingMajor {
   isVerified: boolean;
 }
 
+/** [UC-22, UC-62] Bậc học có hỗ trợ tài chính trung bình cho du học sinh lớn hơn học phí: dữ liệu bất thường để kiểm tra lại nguồn. */
+export interface AdminAidAnomaly {
+  universityId: string;
+  code: string;
+  name: string;
+  studyLevel: string;
+  tuitionUsd: number;
+  intlAidAvgUsd: number;
+  retrievedAt: string | null;
+  sourceUrl: string | null;
+}
+
 export interface AdminMajorOption {
   id: string;
   name: string;

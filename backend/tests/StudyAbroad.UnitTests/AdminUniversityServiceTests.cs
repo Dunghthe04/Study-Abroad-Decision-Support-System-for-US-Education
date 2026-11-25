@@ -467,8 +467,29 @@ public class AdminUniversityServiceTests
             [new UpdateOfferingMajor(repo.ComputerScience.Id, true), new UpdateOfferingMajor(repo.Engineering.Id, true)]);
     }
 
+    // UC-22, UC-62: hỗ trợ tài chính trung bình lớn hơn học phí là dữ liệu bất thường, liệt kê để Moderator kiểm tra lại nguồn
+    [Fact]
+    public async Task ListAidAnomalies_ReturnsWhatTheRepositoryFound_ForTheModeratorToCheck()
+    {
+        var repo = new FakeRepository();
+        repo.AidAnomalies.Add(new AdminAidAnomalyDto(Guid.NewGuid(), "166683", "Old Name", "undergraduate", 50_000m, 60_000m, new DateOnly(2026, 10, 1), "https://x.edu"));
+        var service = new AdminUniversityService(repo);
+
+        var list = await service.ListAidAnomaliesAsync();
+
+        var row = Assert.Single(list);
+        Assert.Equal(("166683", 50_000m, 60_000m), (row.Code, row.TuitionUsd, row.IntlAidAvgUsd));
+        Assert.True(row.IntlAidAvgUsd > row.TuitionUsd);
+    }
+
     private sealed class FakeRepository : IAdminUniversityRepository
     {
+        // UC-22: hàng bất thường mà dịch vụ chỉ chuyển tiếp nguyên vẹn
+        public List<AdminAidAnomalyDto> AidAnomalies { get; } = [];
+
+        public Task<IReadOnlyList<AdminAidAnomalyDto>> ListAidAnomaliesAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<AdminAidAnomalyDto>>(AidAnomalies);
+
         public University University { get; private set; } = new()
         {
             Code = "166683", Name = "Old Name", City = "Cambridge", State = "MA", Control = "private", AcceptanceRate = 0.05m,

@@ -94,6 +94,15 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
     public async Task<IReadOnlyList<Major>> ListMajorsAsync(CancellationToken ct = default) =>
         await db.Majors.AsNoTracking().OrderBy(m => m.Name).ToListAsync(ct);
 
+    public async Task<IReadOnlyList<AdminAidAnomalyDto>> ListAidAnomaliesAsync(CancellationToken ct = default) =>
+        await db.UniversityOfferings.AsNoTracking()
+            .Where(o => o.IntlAidAvgUsd != null && o.TuitionUsd != null && o.IntlAidAvgUsd > o.TuitionUsd)
+            .Join(db.Universities.AsNoTracking(), o => o.UniversityId, u => u.Id, (o, u) => new { o, u })
+            .OrderBy(x => x.u.Name).ThenBy(x => x.o.StudyLevel)
+            .Select(x => new AdminAidAnomalyDto(
+                x.u.Id, x.u.Code, x.u.Name, x.o.StudyLevel, x.o.TuitionUsd!.Value, x.o.IntlAidAvgUsd!.Value, x.o.RetrievedAt, x.o.SourceUrl))
+            .ToListAsync(ct);
+
     public async Task<string?> GetUserDisplayNameAsync(Guid? userId, CancellationToken ct = default)
     {
         if (userId is null) return null;

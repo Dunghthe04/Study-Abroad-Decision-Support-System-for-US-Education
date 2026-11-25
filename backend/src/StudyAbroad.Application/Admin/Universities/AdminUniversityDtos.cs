@@ -22,6 +22,20 @@ public record AdminUniversityListItemDto(
     string? LogoUrl = null,
     int ScholarshipCount = 0);
 
+/// <summary>
+/// [UC-22, UC-62] Một bậc học có hỗ trợ tài chính trung bình cho du học sinh LỚN HƠN học phí: dữ liệu bất thường, gợi ý không dùng số này để trừ
+/// chi phí (xử lý như không có dữ liệu hỗ trợ). Moderator kiểm tra lại nguồn; dữ liệu hỗ trợ cập nhật bằng đợt nạp, sửa tại đợt nạp.
+/// </summary>
+public record AdminAidAnomalyDto(
+    Guid UniversityId,
+    string Code,
+    string Name,
+    string StudyLevel,
+    decimal TuitionUsd,
+    decimal IntlAidAvgUsd,
+    DateOnly? RetrievedAt,
+    string? SourceUrl);
+
 public record AdminUniversityDetailDto(
     Guid Id,
     string Code,
