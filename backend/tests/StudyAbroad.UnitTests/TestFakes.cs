@@ -149,7 +149,11 @@ internal sealed class FakeUserRepository : IUserRepository
     public Task<int> CountOtpRequestsInLastHourAsync(Guid userId, string purpose, CancellationToken cancellationToken = default)
     {
         var oneHourAgo = DateTime.UtcNow.AddHours(-1);
-        return Task.FromResult(Otps.Count(o => o.UserId == userId && o.Purpose == purpose && o.CreatedAt >= oneHourAgo));
+        // Giống UserRepository: mã xác thực email đầu tiên (gửi lúc đăng ký) không tính vào giới hạn gửi lại
+        var registrationOtp = purpose == OtpPurposes.VerifyEmail
+            ? Otps.Where(o => o.UserId == userId && o.Purpose == purpose).OrderBy(o => o.CreatedAt).FirstOrDefault()
+            : null;
+        return Task.FromResult(Otps.Count(o => o.UserId == userId && o.Purpose == purpose && o.CreatedAt >= oneHourAgo && o != registrationOtp));
     }
 
     public Task<int> UnlockExpiredAccountsAsync(CancellationToken cancellationToken = default)

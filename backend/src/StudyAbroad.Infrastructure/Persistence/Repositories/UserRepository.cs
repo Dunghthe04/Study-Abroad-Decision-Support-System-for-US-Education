@@ -143,11 +143,19 @@ public class UserRepository(AppDbContext db) : IUserRepository
             .Where(o => o.CodeHash == codeHash && purposes.Contains(o.Purpose) && o.UsedAt == null)
             .FirstOrDefaultAsync(cancellationToken);
 
-    public Task<int> CountOtpRequestsInLastHourAsync(Guid userId, string purpose, CancellationToken cancellationToken = default)
+    public async Task<int> CountOtpRequestsInLastHourAsync(Guid userId, string purpose, CancellationToken cancellationToken = default)
     {
         var oneHourAgo = DateTime.UtcNow.AddHours(-1);
-        return db.OtpTokens
-            .Where(o => o.UserId == userId && o.Purpose == purpose && o.CreatedAt >= oneHourAgo)
+        // [UC-02 quy tắc] Giới hạn là 5 lần GỬI LẠI mỗi giờ: mã xác thực email đầu tiên (gửi lúc đăng ký) không tính
+        var registrationOtpId = purpose == OtpPurposes.VerifyEmail
+            ? await db.OtpTokens
+                .Where(o => o.UserId == userId && o.Purpose == purpose)
+                .OrderBy(o => o.CreatedAt)
+                .Select(o => (Guid?)o.Id)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+        return await db.OtpTokens
+            .Where(o => o.UserId == userId && o.Purpose == purpose && o.CreatedAt >= oneHourAgo && o.Id != registrationOtpId)
             .CountAsync(cancellationToken);
     }
 

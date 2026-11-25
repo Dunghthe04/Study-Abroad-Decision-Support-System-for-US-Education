@@ -1568,8 +1568,8 @@ public class AuthServiceTests
         await service.RegisterAsync(Request());
         var user = _repo.Users[0];
 
-        // Giả lập đã có 5 OTP tokens được tạo trong 1 giờ qua
-        for (int i = 0; i < 4; i++)
+        // [UC-02] Mã lúc đăng ký + 5 lần gửi lại trong 1 giờ qua: lần gửi lại thứ 6 không gửi
+        for (int i = 0; i < 5; i++)
         {
             _repo.Otps.Add(new OtpToken
             {
@@ -1586,7 +1586,7 @@ public class AuthServiceTests
         var result = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.VerifyEmail));
 
         Assert.Equal(AuthError.None, result.Error);
-        Assert.Equal(5, _repo.Otps.Count); // không sinh thêm mã
+        Assert.Equal(6, _repo.Otps.Count); // không sinh thêm mã
         Assert.Single(_emailSender.SentEmails);
     }
 
@@ -1616,6 +1616,34 @@ public class AuthServiceTests
 
         // Kiểm tra email thông báo đã được gửi (không chứa mã OTP mở khóa)
         Assert.Contains(_emailSender.SentEmails, e => e.Purpose == "temp_locked_notice");
+    }
+
+    [Fact]
+    public async Task ResendOtp_FifthResendInHour_StillSends_RegistrationCodeNotCounted()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        _repo.Otps[0].CreatedAt = DateTime.UtcNow.AddMinutes(-30);
+
+        // [UC-02] Đã gửi lại 4 lần (mã lúc đăng ký không tính): lần gửi lại thứ 5 vẫn được gửi
+        for (int i = 0; i < 4; i++)
+        {
+            _repo.Otps.Add(new OtpToken
+            {
+                UserId = user.Id,
+                Purpose = OtpPurposes.VerifyEmail,
+                CodeHash = "hash",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-20 + i),
+                ExpiresAt = DateTime.UtcNow.AddMinutes(5)
+            });
+        }
+
+        var result = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.VerifyEmail));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(6, _repo.Otps.Count);
+        Assert.Equal(2, _emailSender.SentEmails.Count);
     }
 
     [Fact]
