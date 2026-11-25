@@ -203,6 +203,16 @@ export interface ReviewReport {
   correctIntents: CorrectIntentCount[];
 }
 
+/**
+ * Đồng thuận giữa người chấm (UC-149): trong các câu được từ hai người chấm trở lên, tỷ lệ câu mà mọi người chấm cùng kết luận.
+ * rate nằm trong [0, 1]. Chỉ là số đếm, không nêu ai chấm thế nào.
+ */
+export interface ReviewerAgreement {
+  itemsWithMultipleReviewers: number;
+  itemsAgreed: number;
+  rate: number;
+}
+
 export interface ReviewBatchReport {
   batchId: string;
   batchName: string;
@@ -212,4 +222,6 @@ export interface ReviewBatchReport {
   itemsGraded: number;
   reviewerCount: number;
   report: ReviewReport;
+  /** Null khi chưa câu nào có từ hai người chấm. */
+  agreement?: ReviewerAgreement | null;
 }

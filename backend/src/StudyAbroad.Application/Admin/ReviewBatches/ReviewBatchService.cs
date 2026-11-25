@@ -241,7 +241,9 @@ public class ReviewBatchService(IReviewBatchRepository repository, IAuditLogRepo
             .ToList();
 
         var report = ReviewReportCalculator.Compute(ReviewSampler.ReadStrata(rows.StrataJson), graded);
-        return new ReviewReportDto(rows.BatchId, rows.BatchName, rows.Seed, rows.TotalItems, graded.Count, rows.ReviewerCount, report);
+        // Đồng thuận tính trên MỌI kết luận của các câu có từ hai người chấm (khác tỷ lệ sai ở trên: mỗi câu chỉ lấy kết luận sớm nhất)
+        var agreement = ReviewReportCalculator.Agreement(rows.Verdicts);
+        return new ReviewReportDto(rows.BatchId, rows.BatchName, rows.Seed, rows.TotalItems, graded.Count, rows.ReviewerCount, report, agreement);
     }
 
     private static ReviewVerdictDto ToDto(ReviewVerdict v) =>

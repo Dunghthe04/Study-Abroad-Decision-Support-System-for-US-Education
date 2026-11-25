@@ -144,6 +144,8 @@ public record ReviewReportRows(
 /// <summary>
 /// Báo cáo một đợt. ItemsGraded là số câu đã có ít nhất một kết luận (TotalItems là số câu của đợt). Mỗi câu chỉ tính một kết luận:
 /// kết luận chấm sớm nhất, để câu nhiều người chấm không bị đếm hai lần.
+/// Agreement là tỷ lệ đồng thuận giữa người chấm trên các câu có từ hai người chấm trở lên (UC-149); null khi chưa câu nào có hai người chấm.
 /// </summary>
 public record ReviewReportDto(
-    Guid BatchId, string BatchName, string Seed, int TotalItems, int ItemsGraded, int ReviewerCount, ReviewReport Report);
+    Guid BatchId, string BatchName, string Seed, int TotalItems, int ItemsGraded, int ReviewerCount, ReviewReport Report,
+    ReviewerAgreement? Agreement = null);
