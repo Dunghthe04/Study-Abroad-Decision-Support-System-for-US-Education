@@ -343,7 +343,7 @@ public static class SchoolRanker
 {
     public const int DefaultMaxPerGroup = 4;
 
-    // Fit = 0,30·A + 0,25·C + 0,15·H + 0,20·Q + 0,10·E, mỗi thành phần trong 0..1.
+    // Fit = 0,30·A + 0,25·C + 0,20·Q + 0,15·H + 0,10·E (vừa tầm, ngân sách, chất lượng, học bổng, tiếng Anh: thứ tự của UC-24), mỗi thành phần trong 0..1.
     // Thành phần nào thiếu dữ liệu thì bỏ khỏi tổng và chia lại trọng số cho các thành phần còn lại.
     public static FitScore Score(double pAdjusted, FitStudent student, FitSchool school, FitWeights? weights = null)
     {

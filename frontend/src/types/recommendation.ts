@@ -351,6 +351,24 @@ export interface ExplainCardData {
   ps: number | null;
   cost: number | null;
   gap: number | null;
+  /** Điểm phù hợp và năm thành phần (UC-24). Thẻ của lần gợi ý cũ không có thì không hiện phần này. */
+  fit?: FitBreakdown | null;
+}
+
+// UC-24: năm thành phần của điểm phù hợp theo thứ tự đặc tả. score 0..1, null là thiếu dữ liệu nên bị bỏ khỏi tổng; weight là trọng số đã dùng cho lần gợi ý đó.
+export type FitPartKey = "position" | "budget" | "quality" | "aid" | "english";
+
+export interface FitPart {
+  key: FitPartKey;
+  score: number | null;
+  weight: number;
+}
+
+export interface FitBreakdown {
+  total: number | null;
+  /** Trọng số đã đổi theo nút ưu tiên (UC-25), khác trọng số mặc định. */
+  priorityAdjusted: boolean;
+  parts: FitPart[];
 }
 
 // Gốc của lời giải thích: hồ sơ thật, hoặc giả định học sinh đang xem (label: "GPA 3.6, SAT 1500")

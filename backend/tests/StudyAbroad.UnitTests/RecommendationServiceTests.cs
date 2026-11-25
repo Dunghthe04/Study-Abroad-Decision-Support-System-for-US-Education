@@ -1032,6 +1032,83 @@ public class RecommendationServiceTests
         Assert.Equal("NY", advisor.LastExplain!.School.State);
     }
 
+    // ---- UC-24: điểm năm thành phần và trọng số đã dùng cho lần gợi ý đó
+
+    private static async Task<(RecommendationService Service, StudentProfile Profile)> SavedRunWithPriorities(IReadOnlyList<int> pref)
+    {
+        var (service, _, _, profile) = SimSetup();
+        await service.RecommendAsync(
+            profile, [School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m)], pref: pref);
+        return (service, profile);
+    }
+
+    [Fact]
+    public async Task ExplainCard_ShowsTheFiveFitComponentsInTheSpecOrder_WithTheDefaultWeights()
+    {
+        var (service, _, profile) = await SavedRunSetup();
+
+        var fit = (await service.ExplainCardAsync(profile.UserId, "S", default)).Fit!;
+
+        Assert.Equal(["position", "budget", "quality", "aid", "english"], fit.Parts.Select(p => p.Key));
+        Assert.Equal([0.30, 0.25, 0.20, 0.15, 0.10], fit.Parts.Select(p => p.Weight));
+        Assert.False(fit.PriorityAdjusted);
+        Assert.InRange(fit.Total!.Value, 0, 1);
+    }
+
+    [Fact]
+    public async Task ExplainCard_FitTotalIsTheWeightedAverageOfTheComponentsThatHaveData()
+    {
+        var (service, _, profile) = await SavedRunSetup();
+
+        var fit = (await service.ExplainCardAsync(profile.UserId, "S", default)).Fit!;
+
+        // Thành phần thiếu dữ liệu (Score null) bị bỏ khỏi tổng và trọng số chia lại, như SchoolRanker.Score
+        var present = fit.Parts.Where(p => p.Score is not null).ToList();
+        var expected = present.Sum(p => p.Score!.Value * p.Weight) / present.Sum(p => p.Weight);
+        Assert.Equal(expected, fit.Total!.Value, 2);
+    }
+
+    [Fact]
+    public async Task ExplainCard_ShowsTheWeightsAdjustedByThePriorityBars()
+    {
+        // Ba thanh [chi phí, học bổng, danh tiếng] = [4, 0, 2]: chi phí gấp đôi, học bổng bỏ hẳn, danh tiếng giữ nguyên
+        var (service, profile) = await SavedRunWithPriorities([4, 0, 2]);
+
+        var fit = (await service.ExplainCardAsync(profile.UserId, "S", default)).Fit!;
+
+        Assert.True(fit.PriorityAdjusted);
+        var weights = fit.Parts.ToDictionary(p => p.Key, p => p.Weight);
+        Assert.Equal(0.30, weights["position"], 6);
+        Assert.Equal(0.50, weights["budget"], 6);
+        Assert.Equal(0.20, weights["quality"], 6);
+        Assert.Equal(0.00, weights["aid"], 6);
+        Assert.Equal(0.10, weights["english"], 6);
+    }
+
+    [Fact]
+    public async Task ExplainCard_WithSimulatedValues_UsesTheDefaultWeightsOfTheSimulatedRun()
+    {
+        var (service, profile) = await SavedRunWithPriorities([4, 0, 2]);
+
+        var fit = (await service.ExplainCardAsync(profile.UserId, "S", default, NoChange with { Gpa = 2.5m, Sat = 1000m })).Fit!;
+
+        // Khung giải thích mô phỏng chạy không kèm nút ưu tiên nên dùng trọng số mặc định (khớp với danh sách giả định đang xem)
+        Assert.False(fit.PriorityAdjusted);
+        Assert.Equal([0.30, 0.25, 0.20, 0.15, 0.10], fit.Parts.Select(p => p.Weight));
+    }
+
+    [Fact]
+    public async Task Explain_StillSendsTheAdvisorTheSameSchoolFields_NowThatTheCardCarriesTheFitBreakdown()
+    {
+        var (service, advisor, profile) = await SavedRunSetup();
+
+        await service.ExplainAsync(profile.UserId, "S", default);
+
+        // Advisor bỏ qua trường Fit (chỉ thẻ trong chat dùng); các trường cũ vẫn như trước
+        Assert.Equal("M", advisor.LastExplain!.School.G2);
+        Assert.NotNull(advisor.LastExplain.School.Why);
+    }
+
     [Fact]
     public async Task Explain_WithEmptyOverrides_IsTheRealProfile()
     {

@@ -97,8 +97,9 @@ public static class AlgorithmParameters
 
         // B10, B11: điểm phù hợp và chọn trường
         Add("fit_weights", "B10", "Trọng số điểm phù hợp",
-            Join($"Vừa tầm {N(fit.Position)}", $"Ngân sách {N(fit.Budget)}", $"Học bổng {N(fit.Aid)}",
-                 $"Chất lượng {N(fit.Quality)}", $"Tiếng Anh {N(fit.English)}"),
+            // Thứ tự theo đặc tả UC-24: vừa tầm, ngân sách, chất lượng, học bổng, tiếng Anh
+            Join($"Vừa tầm {N(fit.Position)}", $"Ngân sách {N(fit.Budget)}", $"Chất lượng {N(fit.Quality)}",
+                 $"Học bổng {N(fit.Aid)}", $"Tiếng Anh {N(fit.English)}"),
             "Dùng để sắp thứ tự các trường trong cùng một nhóm; thiếu thành phần nào thì chia lại trọng số.");
         Add("max_per_block", "B11", "Số trường mỗi nhóm", RecommendationService.MaxPerBlock.ToString(),
             "Mỗi nhóm giữ tối đa chừng này trường.");

@@ -56,6 +56,17 @@ public class AlgorithmParametersTests
     }
 
     [Fact]
+    public void Catalog_FitWeightsAreListedInTheOrderOfTheSpec()
+    {
+        // UC-24: vừa tầm, ngân sách, chất lượng, học bổng, tiếng Anh (0,30; 0,25; 0,20; 0,15; 0,10)
+        var value = AlgorithmParameters.All.Single(p => p.Key == "fit_weights").Value;
+
+        Assert.Equal(
+            "Vừa tầm 0.3 · Ngân sách 0.25 · Chất lượng 0.2 · Học bổng 0.15 · Tiếng Anh 0.1",
+            value);
+    }
+
+    [Fact]
     public void Controller_ReturnsVersionAndParameters()
     {
         var controller = new MethodologyController { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };

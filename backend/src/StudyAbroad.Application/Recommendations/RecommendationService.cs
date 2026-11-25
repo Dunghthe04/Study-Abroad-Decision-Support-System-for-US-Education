@@ -429,6 +429,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         StudentProfile who = profile;          // hồ sơ dùng để lấy GPA, SAT, ngân sách của học sinh
         JsonObject items;
         int? tier;
+        IReadOnlyList<int>? pref;   // nút ưu tiên đã dùng cho lần gợi ý này (null: trọng số mặc định)
         string studyLevel;
         var simulated = HasValues(overrides);
         if (simulated)
@@ -439,6 +440,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             EnsureRunnable(who);
             var baseTier = EcTierOf(profile);
             tier = overrides!.EcTier ?? baseTier;
+            pref = null;   // mô phỏng trên khung giải thích chạy với trọng số mặc định (Evaluate bên dưới không nhận nút ưu tiên)
             studyLevel = profile.TargetLevel;
             var run = Evaluate(who, null, await recommendations.ListSchoolsAsync(studyLevel, ct), tier.Value);
             items = JsonNode.Parse(JsonSerializer.Serialize(BuildItems(who.BudgetMaxUsd, run), StoredJson))!.AsObject();
@@ -448,7 +450,9 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             var last = await recommendations.GetLatestAsync(userId, ct)
                 ?? throw new InvalidOperationException("Chưa có lần gợi ý nào.");
             items = JsonNode.Parse(last.ItemsJson)!.AsObject();
-            tier = JsonNode.Parse(last.CriteriaJson)!.AsObject()["tier"]?.GetValue<int>();
+            var criteria = JsonNode.Parse(last.CriteriaJson)!.AsObject();
+            tier = criteria["tier"]?.GetValue<int>();
+            pref = ReadPref(criteria["pref"]);
             studyLevel = last.StudyLevel;
         }
 
@@ -480,9 +484,34 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             Num(scored, "pg"),
             Num(scored, "ps"),
             ToDouble(TotalCost(offering)),
-            Num(scored, "gap"));
+            Num(scored, "gap"),
+            FitBreakdownOf(scored, pref));
 
         return (student, target, university.Code, university.Name);
+    }
+
+    // Mức ưu tiên đã lưu trong tiêu chí của lần gợi ý (3 số 0 đến 4); thiếu hoặc sai khuôn thì null
+    private static IReadOnlyList<int>? ReadPref(JsonNode? node) =>
+        node is JsonArray array && array.Count == 3 && array.All(n => n is JsonValue v && v.TryGetValue<int>(out _))
+            ? array.Select(n => n!.GetValue<int>()).ToList()
+            : null;
+
+    // UC-24: điểm của năm thành phần (đã lưu cùng kết quả của trường) và trọng số đã dùng cho lần gợi ý đó = bộ tham số đang chạy
+    // nhân với nút ưu tiên. Thứ tự theo đặc tả: vừa tầm học thuật, ngân sách, chất lượng, học bổng, tiếng Anh.
+    private static FitBreakdownDto FitBreakdownOf(JsonNode scored, IReadOnlyList<int>? pref)
+    {
+        var baseline = RecommendationTuning.Current.Fit;
+        var weights = SchoolRanker.WeightsFromPriorities(NormalizePref(pref), baseline);
+        return new FitBreakdownDto(
+            Num(scored, "fit"),
+            weights != baseline,
+            [
+                new FitPartDto("position", Num(scored, "a"), weights.Position),
+                new FitPartDto("budget", Num(scored, "f"), weights.Budget),
+                new FitPartDto("quality", Num(scored, "q"), weights.Quality),
+                new FitPartDto("aid", Num(scored, "h"), weights.Aid),
+                new FitPartDto("english", Num(scored, "e"), weights.English),
+            ]);
     }
 
     // Thẻ hiển thị cho học sinh: bang ghi tên đầy đủ (join bảng us_states), không phải mã "FL".
