@@ -9,6 +9,7 @@ import {
   MailIcon,
   SendIcon,
   UnlinkIcon,
+  Trash2Icon,
   UserPlusIcon,
   XIcon,
 } from "lucide-react";
@@ -38,6 +39,8 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -61,6 +64,8 @@ export function ParentLinksCard() {
   const [newParentEmail, setNewParentEmail] = useState("");
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<ParentLinkDto | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ParentLinkDto | null>(null);
+  const [deleteUnderstood, setDeleteUnderstood] = useState(false);
 
   // UC-76: nút So sánh ưu tiên chỉ cho con có tài khoản thật (getMine có thể trả cả con managed)
   const { data: children } = useFetched(isStudent ? "no-children" : "parent-children", () =>
@@ -127,6 +132,15 @@ export function ParentLinksCard() {
     const target = revokeTarget;
     setRevokeTarget(null);
     await run(`revoke-${target.id}`, () => parentLinksApi.revoke(target.id), "Không thể hủy liên kết.");
+  };
+
+  // [UC-75 1a] Rút đồng ý kèm xóa tài khoản con dưới 16 (chưa biết tuổi coi như dưới 16, máy chủ kiểm lại)
+  const handleRevokeAndDelete = async () => {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    setDeleteUnderstood(false);
+    await run(`delete-${target.id}`, () => parentLinksApi.revokeAndDelete(target.id), "Không thể xóa tài khoản của con.");
   };
 
   if (!user || (user.role !== "student" && user.role !== "parent")) return null;
@@ -314,6 +328,24 @@ export function ParentLinksCard() {
                           {link.status !== "active" ? "Hủy lời mời" : isStudent ? "Hủy liên kết" : "Rút đồng ý"}
                         </Button>
                       )}
+
+                      {!isStudent && link.status === "active" && (link.studentAge == null || link.studentAge < 16) && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-risk hover:bg-risk-wash hover:text-risk"
+                          disabled={busy !== null}
+                          onClick={() => {
+                            setDeleteUnderstood(false);
+                            setDeleteTarget(link);
+                          }}
+                          loading={busy === `delete-${link.id}`}
+                        >
+                          <Trash2Icon data-icon="inline-start" aria-hidden />
+                          Rút đồng ý và xóa tài khoản
+                        </Button>
+                      )}
                     </div>
                   </div>
 
@@ -416,6 +448,47 @@ export function ParentLinksCard() {
             </Button>
             <Button type="button" variant="destructive" onClick={handleRevoke}>
               Xác nhận
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* [UC-75 1a] Hộp thoại xác nhận rút đồng ý kèm xóa tài khoản con dưới 16 */}
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null);
+            setDeleteUnderstood(false);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rút đồng ý và xóa tài khoản của {deleteTarget?.studentName}?</DialogTitle>
+          </DialogHeader>
+          <DialogDescription>Việc này khác với chỉ rút đồng ý:</DialogDescription>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-ink-2">
+            <li>Hệ thống ngừng xử lý dữ liệu và rút mọi đồng ý của phụ huynh cho con.</li>
+            <li>Tài khoản của con bị khóa ngay và xóa vĩnh viễn sau 30 ngày. Con không tự khôi phục được khi chưa đủ 16 tuổi.</li>
+            <li>Bạn nhận email có nút &quot;Hủy xóa và đồng ý lại cho con&quot; và &quot;Chỉ hủy xóa&quot;, dùng được tới ngày xóa vĩnh viễn.</li>
+          </ul>
+          <div className="flex items-start gap-2">
+            <Checkbox
+              id="parent-delete-child-understood"
+              checked={deleteUnderstood}
+              onCheckedChange={(checked) => setDeleteUnderstood(Boolean(checked))}
+            />
+            <Label htmlFor="parent-delete-child-understood" className="leading-snug text-ink">
+              Tôi hiểu tài khoản và dữ liệu của con sẽ bị xóa vĩnh viễn nếu không hủy trong 30 ngày.
+            </Label>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>
+              Không
+            </Button>
+            <Button type="button" variant="destructive" disabled={!deleteUnderstood} onClick={handleRevokeAndDelete}>
+              Rút đồng ý và xóa
             </Button>
           </DialogFooter>
         </DialogContent>

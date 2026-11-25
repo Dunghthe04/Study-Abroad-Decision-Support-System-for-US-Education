@@ -31,6 +31,7 @@ import type {
   AcademicProfileResponse,
   ParentInviteInfo,
   ParentRevokeInfo,
+  ParentRestoreInfo,
   ParentLinkDto,
   ParentLinkResponse,
   ParentProfileOverviewDto,
@@ -317,6 +318,32 @@ export const parentLinksApi = {
     apiFetch<ParentLinkResponse<ParentRevokeInfo>>("/api/v1/parent-links/revoke", {
       method: "POST",
       body: JSON.stringify({ token }),
+    }),
+
+  // [UC-111 3a] Lựa chọn thứ hai của link rút đồng ý: rút kèm xóa tài khoản con dưới 16
+  revokeAndDeleteByToken: (token: string) =>
+    apiFetch<ParentLinkResponse<ParentRevokeInfo>>("/api/v1/parent-links/revoke-and-delete", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+
+  // [UC-75 1a] Phụ huynh đã đăng nhập rút đồng ý kèm xóa tài khoản con dưới 16
+  revokeAndDelete: (id: string) =>
+    apiFetch<ParentLinkResponse<ParentRevokeInfo>>(`/api/v1/parent-links/${encodeURIComponent(id)}/revoke-and-delete`, {
+      method: "POST",
+    }),
+
+  // [UC-75 4b] Hai nút trong mail xác nhận yêu cầu xóa, không cần đăng nhập
+  lookupRestore: (token: string) =>
+    apiFetch<ParentLinkResponse<ParentRestoreInfo>>("/api/v1/parent-links/restore/lookup", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+
+  restore: (token: string, isGuardian: boolean, policyVersion?: string) =>
+    apiFetch<ParentLinkResponse<ParentRestoreInfo>>("/api/v1/parent-links/restore", {
+      method: "POST",
+      body: JSON.stringify({ token, isGuardian, policyVersion }),
     }),
 };
 

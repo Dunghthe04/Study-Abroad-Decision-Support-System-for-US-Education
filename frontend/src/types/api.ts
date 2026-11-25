@@ -647,6 +647,18 @@ export interface ParentRevokeInfo {
   acceptedAt: string | null;
 }
 
+/** [UC-75 4b] Hai nút trong mail xác nhận người đại diện yêu cầu xóa tài khoản của con */
+export type ParentRestoreMode = "reconsent" | "restore_only";
+
+/** [UC-75 4b] Trang khôi phục mở từ nút trong mail. canReconsent = false khi con đã đủ 16 tuổi. */
+export interface ParentRestoreInfo {
+  studentName: string;
+  deletionDate: string;
+  mode: ParentRestoreMode;
+  canReconsent: boolean;
+  policyVersion: string;
+}
+
 export interface ParentLinkDto {
   id: string;
   status: ParentLinkStatus;

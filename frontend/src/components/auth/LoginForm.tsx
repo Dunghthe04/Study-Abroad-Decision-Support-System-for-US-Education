@@ -71,7 +71,10 @@ export function LoginForm() {
     } catch (err) {
       if (err instanceof ApiError) {
         const pending = getPendingDeletion(err);
-        if (pending) {
+        if (isPendingDeletionByParent(err)) {
+          // [UC-75 4b] Người đại diện yêu cầu xóa, học sinh dưới 16: không tự khôi phục được, chỉ hiện câu của máy chủ
+          setError(err.message || "Người đại diện của bạn đã yêu cầu xóa tài khoản này.");
+        } else if (pending) {
           setLockType("pending_deletion");
           setRestoreToken(pending.restoreToken);
           setError(`Tài khoản đang chờ xóa và sẽ bị xóa hẳn vào ngày ${formatDate(pending.deletionDate)}. Bạn có thể khôi phục để dùng tiếp.`);
@@ -241,6 +244,12 @@ function getPendingDeletion(err: ApiError): PendingDeletionProblem | null {
   const body = err.body as Partial<PendingDeletionProblem> | null;
   if (err.status !== 403 || body?.code !== "account_pending_deletion" || !body.restoreToken) return null;
   return { code: body.code, deletionDate: body.deletionDate ?? "", restoreToken: body.restoreToken };
+}
+
+/** [UC-75 4b] Tài khoản bị xóa theo yêu cầu người đại diện khi học sinh dưới 16: không có nút khôi phục */
+function isPendingDeletionByParent(err: ApiError): boolean {
+  const body = err.body as { code?: string } | null;
+  return err.status === 403 && body?.code === "account_pending_deletion_by_parent";
 }
 
 function formatDate(iso: string): string {
