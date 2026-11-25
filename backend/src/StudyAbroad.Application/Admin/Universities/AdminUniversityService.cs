@@ -36,6 +36,9 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
     private const int MaxPageSize = 100;
     private static readonly string[] Controls = ["public", "private"];
     private static readonly string[] SatPolicies = ["required", "optional", "not_accepted"];
+    private static readonly string[] Importances = ["very_important", "important", "considered", "not_considered"];
+    private static readonly string[] GpaScaleTypes = ["weighted", "unweighted", "both"];
+    private static readonly string[] AidPolicies = ["need_and_merit", "merit_only", "need_only", "none"];
     private const string DuplicateLevelMessage = "Trường đã có bậc học này.";
     private static readonly Regex StateCode = new("^[A-Z]{2}$");
 
@@ -237,8 +240,17 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         var sourceReliability = Clean(request.SourceReliability)?.ToLowerInvariant();
         var notes = Clean(request.Notes);
         var requestedMajors = request.Majors;
+        var gpaScaleType = Clean(request.GpaScaleType);
+        var c7GpaImportance = Clean(request.C7GpaImportance);
+        var c7TestImportance = Clean(request.C7TestImportance);
+        var c7EcImportance = Clean(request.C7EcImportance);
+        var intlAidPolicy = Clean(request.IntlAidPolicy);
+        var campusSetting = Clean(request.CampusSetting);
+        var housingTypes = Clean(request.HousingTypes);
+        var activities = Clean(request.Activities);
 
-        var errors = ValidateOffering(request, academicYear, satPolicy, actPolicy, notes);
+        var errors = ValidateOffering(request, academicYear, satPolicy, actPolicy, notes,
+            c7GpaImportance, c7TestImportance, c7EcImportance, gpaScaleType, intlAidPolicy, campusSetting);
         ValidateSource(sourceUrl, request.RetrievedAt, sourceReliability, errors);
         var knownMajors = await repository.ListMajorsAsync(ct);
         var knownMajorIds = knownMajors.Select(m => m.Id).ToHashSet();
@@ -277,6 +289,39 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         AddChange(changes, "retrievedAt", offering.RetrievedAt, request.RetrievedAt);
         AddChange(changes, "sourceReliability", offering.SourceReliability, sourceReliability);
         AddChange(changes, "notes", offering.Notes, notes);
+        AddChange(changes, "applicantsTotal", offering.ApplicantsTotal, request.ApplicantsTotal);
+        AddChange(changes, "admittedTotal", offering.AdmittedTotal, request.AdmittedTotal);
+        AddChange(changes, "intlApplicants", offering.IntlApplicants, request.IntlApplicants);
+        AddChange(changes, "intlAdmitted", offering.IntlAdmitted, request.IntlAdmitted);
+        AddChange(changes, "intlAcceptanceRate", offering.IntlAcceptanceRate, request.IntlAcceptanceRate);
+        AddChange(changes, "satSubmitPct", offering.SatSubmitPct, request.SatSubmitPct);
+        AddChange(changes, "gpaSubmitPct", offering.GpaSubmitPct, request.GpaSubmitPct);
+        AddChange(changes, "gpaPct40", offering.GpaPct40, request.GpaPct40);
+        AddChange(changes, "gpaPct375To399", offering.GpaPct375To399, request.GpaPct375To399);
+        AddChange(changes, "gpaPct350To374", offering.GpaPct350To374, request.GpaPct350To374);
+        AddChange(changes, "gpaPct325To349", offering.GpaPct325To349, request.GpaPct325To349);
+        AddChange(changes, "gpaPct300To324", offering.GpaPct300To324, request.GpaPct300To324);
+        AddChange(changes, "gpaPct250To299", offering.GpaPct250To299, request.GpaPct250To299);
+        AddChange(changes, "gpaPctBelow250", offering.GpaPctBelow250, request.GpaPctBelow250);
+        AddChange(changes, "avgGpaWeighted", offering.AvgGpaWeighted, request.AvgGpaWeighted);
+        AddChange(changes, "gpaScaleType", offering.GpaScaleType, gpaScaleType);
+        AddChange(changes, "c7GpaImportance", offering.C7GpaImportance, c7GpaImportance);
+        AddChange(changes, "c7TestImportance", offering.C7TestImportance, c7TestImportance);
+        AddChange(changes, "c7EcImportance", offering.C7EcImportance, c7EcImportance);
+        AddChange(changes, "retentionRate1Yr", offering.RetentionRate1Yr, request.RetentionRate1Yr);
+        AddChange(changes, "gradRate6Yr", offering.GradRate6Yr, request.GradRate6Yr);
+        AddChange(changes, "studentFacultyRatio", offering.StudentFacultyRatio, request.StudentFacultyRatio);
+        AddChange(changes, "intlAidPolicy", offering.IntlAidPolicy, intlAidPolicy);
+        AddChange(changes, "intlAidAvgUsd", offering.IntlAidAvgUsd, request.IntlAidAvgUsd);
+        AddChange(changes, "intlAidRecipients", offering.IntlAidRecipients, request.IntlAidRecipients);
+        AddChange(changes, "campusSetting", offering.CampusSetting, campusSetting);
+        AddChange(changes, "fyOnCampusPct", offering.FyOnCampusPct, request.FyOnCampusPct);
+        AddChange(changes, "ugOnCampusPct", offering.UgOnCampusPct, request.UgOnCampusPct);
+        AddChange(changes, "housingTypes", offering.HousingTypes, housingTypes);
+        AddChange(changes, "intlHousing", offering.IntlHousing, request.IntlHousing);
+        AddChange(changes, "housingOnlyUsd", offering.HousingOnlyUsd, request.HousingOnlyUsd);
+        AddChange(changes, "housingDepositUsd", offering.HousingDepositUsd, request.HousingDepositUsd);
+        AddChange(changes, "activities", offering.Activities, activities);
 
         offering.AcademicYear = academicYear;
         offering.TuitionUsd = request.TuitionUsd;
@@ -302,6 +347,39 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         offering.RetrievedAt = request.RetrievedAt;
         offering.SourceReliability = sourceReliability;
         offering.Notes = notes;
+        offering.ApplicantsTotal = request.ApplicantsTotal;
+        offering.AdmittedTotal = request.AdmittedTotal;
+        offering.IntlApplicants = request.IntlApplicants;
+        offering.IntlAdmitted = request.IntlAdmitted;
+        offering.IntlAcceptanceRate = request.IntlAcceptanceRate;
+        offering.SatSubmitPct = request.SatSubmitPct;
+        offering.GpaSubmitPct = request.GpaSubmitPct;
+        offering.GpaPct40 = request.GpaPct40;
+        offering.GpaPct375To399 = request.GpaPct375To399;
+        offering.GpaPct350To374 = request.GpaPct350To374;
+        offering.GpaPct325To349 = request.GpaPct325To349;
+        offering.GpaPct300To324 = request.GpaPct300To324;
+        offering.GpaPct250To299 = request.GpaPct250To299;
+        offering.GpaPctBelow250 = request.GpaPctBelow250;
+        offering.AvgGpaWeighted = request.AvgGpaWeighted;
+        offering.GpaScaleType = gpaScaleType;
+        offering.C7GpaImportance = c7GpaImportance;
+        offering.C7TestImportance = c7TestImportance;
+        offering.C7EcImportance = c7EcImportance;
+        offering.RetentionRate1Yr = request.RetentionRate1Yr;
+        offering.GradRate6Yr = request.GradRate6Yr;
+        offering.StudentFacultyRatio = request.StudentFacultyRatio;
+        offering.IntlAidPolicy = intlAidPolicy;
+        offering.IntlAidAvgUsd = request.IntlAidAvgUsd;
+        offering.IntlAidRecipients = request.IntlAidRecipients;
+        offering.CampusSetting = campusSetting;
+        offering.FyOnCampusPct = request.FyOnCampusPct;
+        offering.UgOnCampusPct = request.UgOnCampusPct;
+        offering.HousingTypes = housingTypes;
+        offering.IntlHousing = request.IntlHousing;
+        offering.HousingOnlyUsd = request.HousingOnlyUsd;
+        offering.HousingDepositUsd = request.HousingDepositUsd;
+        offering.Activities = activities;
 
         if (requestedMajors is not null)
         {
@@ -375,7 +453,9 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
     }
 
     private static Dictionary<string, string> ValidateOffering(
-        UpdateOfferingRequest request, string? academicYear, string? satPolicy, string? actPolicy, string? notes)
+        UpdateOfferingRequest request, string? academicYear, string? satPolicy, string? actPolicy, string? notes,
+        string? c7GpaImportance, string? c7TestImportance, string? c7EcImportance, string? gpaScaleType,
+        string? intlAidPolicy, string? campusSetting)
     {
         var errors = new Dictionary<string, string>();
 
@@ -415,6 +495,61 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
             errors["actPolicy"] = "Chính sách ACT chỉ nhận required, optional hoặc not_accepted.";
         if (notes is not null && notes.Length > 2000)
             errors["notes"] = "Ghi chú tối đa 2000 ký tự.";
+
+        // Tỉ lệ lưu dạng 0–1 (vd 0.651 = 65,1%)
+        void Fraction(string key, string label, decimal? v)
+        {
+            if (v is < 0 or > 1) errors[key] = $"{label} phải trong khoảng 0–1.";
+        }
+        void NonNegative(string key, string label, decimal? v)
+        {
+            if (v is < 0) errors[key] = $"{label} không được âm.";
+        }
+        Fraction("intlAcceptanceRate", "Tỉ lệ nhận du học sinh", request.IntlAcceptanceRate);
+        Fraction("satSubmitPct", "Tỉ lệ nộp SAT", request.SatSubmitPct);
+        Fraction("gpaSubmitPct", "Tỉ lệ nộp GPA", request.GpaSubmitPct);
+        Fraction("gpaPct40", "Tỉ lệ GPA 4.0", request.GpaPct40);
+        Fraction("gpaPct375To399", "Tỉ lệ GPA 3.75–3.99", request.GpaPct375To399);
+        Fraction("gpaPct350To374", "Tỉ lệ GPA 3.50–3.74", request.GpaPct350To374);
+        Fraction("gpaPct325To349", "Tỉ lệ GPA 3.25–3.49", request.GpaPct325To349);
+        Fraction("gpaPct300To324", "Tỉ lệ GPA 3.00–3.24", request.GpaPct300To324);
+        Fraction("gpaPct250To299", "Tỉ lệ GPA 2.50–2.99", request.GpaPct250To299);
+        Fraction("gpaPctBelow250", "Tỉ lệ GPA dưới 2.50", request.GpaPctBelow250);
+        Fraction("retentionRate1Yr", "Tỉ lệ giữ chân năm 1", request.RetentionRate1Yr);
+        Fraction("gradRate6Yr", "Tỉ lệ tốt nghiệp 6 năm", request.GradRate6Yr);
+        Fraction("fyOnCampusPct", "Tỉ lệ năm nhất ở KTX", request.FyOnCampusPct);
+        Fraction("ugOnCampusPct", "Tỉ lệ sinh viên đại học ở KTX", request.UgOnCampusPct);
+        if (request.AvgGpaWeighted is < 0 or > 5) errors["avgGpaWeighted"] = "GPA có trọng số phải trong khoảng 0–5.";
+        NonNegative("applicantsTotal", "Số hồ sơ nộp", request.ApplicantsTotal);
+        NonNegative("admittedTotal", "Số hồ sơ đỗ", request.AdmittedTotal);
+        NonNegative("intlApplicants", "Số hồ sơ du học sinh", request.IntlApplicants);
+        NonNegative("intlAdmitted", "Số du học sinh đỗ", request.IntlAdmitted);
+        NonNegative("intlAidAvgUsd", "Mức hỗ trợ trung bình", request.IntlAidAvgUsd);
+        NonNegative("intlAidRecipients", "Số du học sinh được hỗ trợ", request.IntlAidRecipients);
+        NonNegative("housingOnlyUsd", "Tiền phòng KTX", request.HousingOnlyUsd);
+        NonNegative("housingDepositUsd", "Tiền cọc KTX", request.HousingDepositUsd);
+        if (request.StudentFacultyRatio is < 1) errors["studentFacultyRatio"] = "Tỉ lệ SV/GV phải từ 1 trở lên.";
+        if (request.AdmittedTotal > request.ApplicantsTotal) errors["admittedTotal"] = "Số hồ sơ đỗ không được lớn hơn số hồ sơ nộp.";
+        if (request.IntlAdmitted > request.IntlApplicants) errors["intlAdmitted"] = "Số du học sinh đỗ không được lớn hơn số hồ sơ du học sinh.";
+
+        foreach (var (key, label, value) in new[]
+        {
+            ("c7GpaImportance", "Mức coi trọng GPA", c7GpaImportance),
+            ("c7TestImportance", "Mức coi trọng điểm thi", c7TestImportance),
+            ("c7EcImportance", "Mức coi trọng ngoại khóa", c7EcImportance),
+        })
+        {
+            if (value is not null && !Importances.Contains(value))
+                errors[key] = $"{label} chỉ nhận very_important, important, considered hoặc not_considered.";
+        }
+        if (gpaScaleType is not null && !GpaScaleTypes.Contains(gpaScaleType))
+            errors["gpaScaleType"] = "Loại thang GPA chỉ nhận weighted, unweighted hoặc both.";
+        if (intlAidPolicy is not null && !AidPolicies.Contains(intlAidPolicy))
+            errors["intlAidPolicy"] = "Chính sách hỗ trợ chỉ nhận need_and_merit, merit_only, need_only hoặc none.";
+        if (campusSetting is not null && campusSetting.Length > 64)
+            errors["campusSetting"] = "Bối cảnh khuôn viên tối đa 64 ký tự.";
+        if (request.HousingTypes is { Length: > 2000 }) errors["housingTypes"] = "Loại nhà ở tối đa 2000 ký tự.";
+        if (request.Activities is { Length: > 4000 }) errors["activities"] = "Hoạt động tối đa 4000 ký tự.";
 
         return errors;
     }
@@ -490,6 +625,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
             o.MinGpa4, o.MinIelts, o.MinToefl, o.MinDuolingo, o.AvgGpa4, o.Sat25, o.Sat75, o.Act25, o.Act75,
             o.SatPolicy, majors, stemMajors, items, o.DeadlinesJson, o.Notes, o.SourceUrl, o.RetrievedAt,
             o.SourceReliability, o.UpdatedAt, lastEditedBy, o.HealthInsuranceUsd,
-            o.ApplicationFeeUsd, o.TuitionInStateUsd, o.ActPolicy, o.ActSubmitPct);
+            o.ApplicationFeeUsd, o.TuitionInStateUsd, o.ActPolicy, o.ActSubmitPct,
+            o.ApplicantsTotal, o.AdmittedTotal, o.IntlApplicants, o.IntlAdmitted, o.IntlAcceptanceRate, o.SatSubmitPct, o.GpaSubmitPct, o.GpaPct40, o.GpaPct375To399, o.GpaPct350To374, o.GpaPct325To349, o.GpaPct300To324, o.GpaPct250To299, o.GpaPctBelow250, o.AvgGpaWeighted, o.GpaScaleType, o.C7GpaImportance, o.C7TestImportance, o.C7EcImportance, o.RetentionRate1Yr, o.GradRate6Yr, o.StudentFacultyRatio, o.IntlAidPolicy, o.IntlAidAvgUsd, o.IntlAidRecipients, o.CampusSetting, o.FyOnCampusPct, o.UgOnCampusPct, o.HousingTypes, o.IntlHousing, o.HousingOnlyUsd, o.HousingDepositUsd, o.Activities);
     }
 }

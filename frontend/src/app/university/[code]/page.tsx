@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { ApiError } from "@/lib/api";
+import { searchScholarships } from "@/lib/scholarship-api";
 import { getUniversityDetail } from "@/lib/university-api";
 import { UniversityDetailView } from "@/components/universities/UniversityDetailView";
+import type { ScholarshipItem } from "@/types/scholarship";
 import type { UniversityDetail } from "@/types/university";
 
 interface UniversityPageProps {
@@ -34,5 +36,15 @@ export default async function UniversityDetailPage({ params }: UniversityPagePro
     if (error instanceof ApiError && error.status === 404) notFound();
     throw error;
   }
-  return <UniversityDetailView key={university.code} university={university} />;
+  // Ngày hôm nay theo giờ Việt Nam (yyyy-MM-dd): chỉ lấy học bổng còn hạn, tính ở server để nhãn "Còn N ngày" không lệch khi hydrate
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
+  // API chưa lọc theo mã trường: tìm theo tên rồi giữ đúng học bổng của trường này. Lỗi thì ẩn mục học bổng, không làm hỏng trang
+  let scholarships: ScholarshipItem[] = [];
+  try {
+    const found = await searchScholarships({ search: university.name, deadlineFrom: today, vnEligible: true, pageSize: 50 });
+    scholarships = found.items.filter((s) => s.universityCode === university.code);
+  } catch {
+    scholarships = [];
+  }
+  return <UniversityDetailView key={university.code} university={university} scholarships={scholarships} today={today} />;
 }

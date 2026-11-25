@@ -13,8 +13,19 @@ import { findNotNumbers, numberOrNull, textOrNull, toInputValue, todayIso } from
 import { AdminFormError, getAdminMajors, updateAdminOffering } from "@/lib/admin-university-api";
 import {
   ACT_POLICY_OPTIONS,
+  AID_POLICY_OPTIONS,
+  CAMPUS_SETTING_OPTIONS,
+  GPA_SCALE_OPTIONS,
+  IMPORTANCE_OPTIONS,
+  INTL_HOUSING_OPTIONS,
   SAT_POLICY_OPTIONS,
   SOURCE_RELIABILITY_OPTIONS,
+  aidPolicyLabel,
+  campusSettingLabel,
+  formatFraction,
+  gpaScaleLabel,
+  importanceLabel,
+  intlHousingLabel,
   formatLastEdited,
   formatNumber,
   formatRetrievedAt,
@@ -34,7 +45,7 @@ import type {
 import { BlockBody, EditableTable, TableFrame, type TableEditState, type TableRow } from "./EditableTable";
 import { OptionSelect } from "./OptionSelect";
 
-export type OfferingTable = "cost" | "requirements" | "majors" | "source";
+export type OfferingTable = "cost" | "requirements" | "stats" | "aid" | "campus" | "majors" | "source";
 
 interface OfferingSectionProps {
   universityId: string;
@@ -67,6 +78,30 @@ const NUMBER_FIELDS = [
   "sat75",
   "act25",
   "act75",
+  "applicantsTotal",
+  "admittedTotal",
+  "intlApplicants",
+  "intlAdmitted",
+  "intlAcceptanceRate",
+  "satSubmitPct",
+  "gpaSubmitPct",
+  "gpaPct40",
+  "gpaPct375To399",
+  "gpaPct350To374",
+  "gpaPct325To349",
+  "gpaPct300To324",
+  "gpaPct250To299",
+  "gpaPctBelow250",
+  "avgGpaWeighted",
+  "retentionRate1Yr",
+  "gradRate6Yr",
+  "studentFacultyRatio",
+  "intlAidAvgUsd",
+  "intlAidRecipients",
+  "fyOnCampusPct",
+  "ugOnCampusPct",
+  "housingOnlyUsd",
+  "housingDepositUsd",
 ] as const;
 
 type NumberField = (typeof NUMBER_FIELDS)[number];
@@ -89,6 +124,30 @@ const NUMBER_LABELS: Record<NumberField, string> = {
   sat75: "SAT mốc 75%",
   act25: "ACT mốc 25%",
   act75: "ACT mốc 75%",
+  applicantsTotal: "Số hồ sơ nộp",
+  admittedTotal: "Số hồ sơ đỗ",
+  intlApplicants: "Số hồ sơ nộp – du học sinh",
+  intlAdmitted: "Số hồ sơ đỗ – du học sinh",
+  intlAcceptanceRate: "Tỉ lệ nhận du học sinh (0–1)",
+  satSubmitPct: "Tỉ lệ nộp SAT (0–1)",
+  gpaSubmitPct: "Tỉ lệ nộp GPA (0–1)",
+  gpaPct40: "Tỉ lệ GPA 4.0 (0–1)",
+  gpaPct375To399: "Tỉ lệ GPA 3.75–3.99 (0–1)",
+  gpaPct350To374: "Tỉ lệ GPA 3.50–3.74 (0–1)",
+  gpaPct325To349: "Tỉ lệ GPA 3.25–3.49 (0–1)",
+  gpaPct300To324: "Tỉ lệ GPA 3.00–3.24 (0–1)",
+  gpaPct250To299: "Tỉ lệ GPA 2.50–2.99 (0–1)",
+  gpaPctBelow250: "Tỉ lệ GPA dưới 2.50 (0–1)",
+  avgGpaWeighted: "GPA TB có trọng số (thang 5)",
+  retentionRate1Yr: "Tỉ lệ giữ chân năm 1 (0–1)",
+  gradRate6Yr: "Tỉ lệ tốt nghiệp 6 năm (0–1)",
+  studentFacultyRatio: "Tỉ lệ SV/giảng viên (x:1)",
+  intlAidAvgUsd: "Hỗ trợ TB mỗi du học sinh (USD)",
+  intlAidRecipients: "Số du học sinh được hỗ trợ",
+  fyOnCampusPct: "Tỉ lệ năm nhất ở KTX (0–1)",
+  ugOnCampusPct: "Tỉ lệ SV đại học ở KTX (0–1)",
+  housingOnlyUsd: "Tiền phòng KTX (USD/năm, chưa gồm ăn)",
+  housingDepositUsd: "Tiền cọc KTX (USD)",
 };
 
 const COST_FIELDS: NumberField[] = [
@@ -102,9 +161,47 @@ const COST_FIELDS: NumberField[] = [
 ];
 const REQUIREMENT_FIELDS: NumberField[] = ["minGpa4", "avgGpa4", "minIelts", "minToefl", "minDuolingo"];
 const TEST_FIELDS: NumberField[] = ["sat25", "sat75", "act25", "act75", "actSubmitPct"];
+const STATS_FIELDS: NumberField[] = [
+  "applicantsTotal",
+  "admittedTotal",
+  "intlApplicants",
+  "intlAdmitted",
+  "intlAcceptanceRate",
+  "satSubmitPct",
+  "gpaSubmitPct",
+  "avgGpaWeighted",
+  "gpaPct40",
+  "gpaPct375To399",
+  "gpaPct350To374",
+  "gpaPct325To349",
+  "gpaPct300To324",
+  "gpaPct250To299",
+  "gpaPctBelow250",
+  "retentionRate1Yr",
+  "gradRate6Yr",
+  "studentFacultyRatio",
+];
+const AID_FIELDS: NumberField[] = ["intlAidAvgUsd", "intlAidRecipients"];
+const CAMPUS_FIELDS: NumberField[] = ["fyOnCampusPct", "ugOnCampusPct", "housingOnlyUsd", "housingDepositUsd"];
+
+/** Các ô chữ/chọn mới, khóa trùng tên trường dữ liệu gửi lên API. */
+const TEXT_FIELDS = [
+  "gpaScaleType",
+  "c7GpaImportance",
+  "c7TestImportance",
+  "c7EcImportance",
+  "intlAidPolicy",
+  "campusSetting",
+  "housingTypes",
+  "activities",
+] as const;
+type TextField = (typeof TEXT_FIELDS)[number];
 
 interface FormState {
   numbers: Record<NumberField, string>;
+  texts: Record<TextField, string>;
+  /** "true" | "false" | "" (chưa rõ) */
+  intlHousing: string;
   academicYear: string;
   satPolicy: string;
   actPolicy: string;
@@ -121,12 +218,18 @@ function toFormState(offering: AdminUniversityOffering): FormState {
   for (const field of NUMBER_FIELDS) {
     numbers[field] = toInputValue(offering[field]);
   }
+  const texts = {} as Record<TextField, string>;
+  for (const field of TEXT_FIELDS) {
+    texts[field] = toInputValue(offering[field]);
+  }
   const majors: Record<string, boolean> = {};
   for (const item of offering.majorItems) {
     majors[item.majorId] = item.isStem;
   }
   return {
     numbers,
+    texts,
+    intlHousing: offering.intlHousing === null ? "" : String(offering.intlHousing),
     academicYear: toInputValue(offering.academicYear),
     satPolicy: toInputValue(offering.satPolicy),
     actPolicy: toInputValue(offering.actPolicy),
@@ -191,6 +294,10 @@ export function OfferingSection({
     setForm({ ...form, numbers: { ...form.numbers, [field]: value } });
   };
 
+  const setText = (field: TextField, value: string) => {
+    setForm({ ...form, texts: { ...form.texts, [field]: value } });
+  };
+
   const toggleMajor = (majorId: string, included: boolean) => {
     const majors = { ...form.majors };
     if (included) {
@@ -229,6 +336,10 @@ export function OfferingSection({
     }
 
     const majors = Object.entries(form.majors).map(([majorId, isStem]) => ({ majorId, isStem }));
+    const texts = {} as Record<TextField, string | null>;
+    for (const field of TEXT_FIELDS) {
+      texts[field] = textOrNull(form.texts[field]);
+    }
 
     setIsSaving(true);
     setError(null);
@@ -243,6 +354,8 @@ export function OfferingSection({
         retrievedAt: textOrNull(form.retrievedAt),
         sourceReliability: textOrNull(form.sourceReliability),
         notes: textOrNull(form.notes),
+        ...texts,
+        intlHousing: form.intlHousing === "" ? null : form.intlHousing === "true",
         majors,
       });
       toast.add({ type: "success", title: "Đã lưu bậc học", description: studyLevelLabel(saved.studyLevel) });
@@ -396,6 +509,133 @@ export function OfferingSection({
     return rows;
   };
 
+  const selectRow = (
+    field: TextField,
+    label: string,
+    options: { value: string; label: string }[],
+    shown: string,
+  ): TableRow => {
+    const id = `offering-${offering.id}-${field}`;
+    if (!editingTable) return { label, value: shown };
+    return {
+      label,
+      inputId: id,
+      error: fieldErrors[field],
+      value: (
+        <OptionSelect
+          id={id}
+          value={form.texts[field]}
+          options={options}
+          onChange={(value) => setText(field, value)}
+          invalid={Boolean(fieldErrors[field])}
+          disabled={isSaving}
+        />
+      ),
+    };
+  };
+
+  const textAreaRow = (field: TextField, label: string, max: number): TableRow => ({
+    label,
+    inputId: `offering-${offering.id}-${field}`,
+    error: fieldErrors[field],
+    value: (
+      <Textarea
+        id={`offering-${offering.id}-${field}`}
+        value={form.texts[field]}
+        onChange={(e) => setText(field, e.target.value)}
+        aria-invalid={Boolean(fieldErrors[field]) || undefined}
+        maxLength={max}
+        disabled={isSaving}
+      />
+    ),
+  });
+
+  const statsRows = (): TableRow[] => {
+    if (editingTable !== "stats") {
+      const gpaBands: [string, number | null][] = [
+        ["GPA 4.0", offering.gpaPct40],
+        ["GPA 3.75–3.99", offering.gpaPct375To399],
+        ["GPA 3.50–3.74", offering.gpaPct350To374],
+        ["GPA 3.25–3.49", offering.gpaPct325To349],
+        ["GPA 3.00–3.24", offering.gpaPct300To324],
+        ["GPA 2.50–2.99", offering.gpaPct250To299],
+        ["GPA dưới 2.50", offering.gpaPctBelow250],
+      ];
+      return [
+        { label: "Hồ sơ nộp / đỗ", value: `${formatNumber(offering.applicantsTotal)} / ${formatNumber(offering.admittedTotal)}` },
+        { label: "Hồ sơ nộp / đỗ – du học sinh", value: `${formatNumber(offering.intlApplicants)} / ${formatNumber(offering.intlAdmitted)}` },
+        { label: "Tỉ lệ nhận du học sinh", value: formatFraction(offering.intlAcceptanceRate) },
+        { label: "Tỉ lệ nộp SAT / GPA", value: `${formatFraction(offering.satSubmitPct)} / ${formatFraction(offering.gpaSubmitPct)}` },
+        { label: "GPA TB có trọng số", value: formatNumber(offering.avgGpaWeighted) },
+        { label: "Thang GPA trường báo cáo", value: gpaScaleLabel(offering.gpaScaleType) },
+        ...gpaBands.map(([label, value]) => ({ label, value: formatFraction(value) })),
+        { label: "Coi trọng GPA", value: importanceLabel(offering.c7GpaImportance) },
+        { label: "Coi trọng điểm thi", value: importanceLabel(offering.c7TestImportance) },
+        { label: "Coi trọng ngoại khóa", value: importanceLabel(offering.c7EcImportance) },
+        { label: "Giữ chân năm 1", value: formatFraction(offering.retentionRate1Yr) },
+        { label: "Tốt nghiệp 6 năm", value: formatFraction(offering.gradRate6Yr) },
+        { label: "SV / giảng viên", value: offering.studentFacultyRatio === null ? "—" : `${offering.studentFacultyRatio}:1` },
+      ];
+    }
+    const rows: TableRow[] = [];
+    STATS_FIELDS.forEach((field, index) => rows.push(numberRow(field, index === 0)));
+    rows.push(selectRow("gpaScaleType", "Thang GPA trường báo cáo", GPA_SCALE_OPTIONS, ""));
+    rows.push(selectRow("c7GpaImportance", "Coi trọng GPA", IMPORTANCE_OPTIONS, ""));
+    rows.push(selectRow("c7TestImportance", "Coi trọng điểm thi", IMPORTANCE_OPTIONS, ""));
+    rows.push(selectRow("c7EcImportance", "Coi trọng ngoại khóa", IMPORTANCE_OPTIONS, ""));
+    return rows;
+  };
+
+  const aidRows = (): TableRow[] => {
+    if (editingTable !== "aid") {
+      return [
+        { label: "Chính sách hỗ trợ", value: aidPolicyLabel(offering.intlAidPolicy) },
+        { label: "Hỗ trợ TB mỗi du học sinh", value: formatUsd(offering.intlAidAvgUsd) },
+        { label: "Số du học sinh được hỗ trợ", value: formatNumber(offering.intlAidRecipients) },
+      ];
+    }
+    return [
+      selectRow("intlAidPolicy", "Chính sách hỗ trợ", AID_POLICY_OPTIONS, ""),
+      ...AID_FIELDS.map((field) => numberRow(field)),
+    ];
+  };
+
+  const campusRows = (): TableRow[] => {
+    if (editingTable !== "campus") {
+      return [
+        { label: "Bối cảnh khuôn viên", value: campusSettingLabel(offering.campusSetting) },
+        { label: "Năm nhất ở KTX", value: formatFraction(offering.fyOnCampusPct) },
+        { label: "SV đại học ở KTX", value: formatFraction(offering.ugOnCampusPct) },
+        { label: "Nhà ở cho du học sinh", value: intlHousingLabel(offering.intlHousing) },
+        { label: "Tiền phòng KTX", value: formatUsd(offering.housingOnlyUsd) },
+        { label: "Tiền cọc KTX", value: formatUsd(offering.housingDepositUsd) },
+        { label: "Loại nhà ở", value: offering.housingTypes ?? "—" },
+        { label: "Hoạt động sinh viên", value: offering.activities ?? "—" },
+      ];
+    }
+    const housingId = `offering-${offering.id}-intlHousing`;
+    return [
+      selectRow("campusSetting", "Bối cảnh khuôn viên", CAMPUS_SETTING_OPTIONS, ""),
+      ...CAMPUS_FIELDS.map((field) => numberRow(field)),
+      {
+        label: "Nhà ở cho du học sinh",
+        inputId: housingId,
+        error: fieldErrors.intlHousing,
+        value: (
+          <OptionSelect
+            id={housingId}
+            value={form.intlHousing}
+            options={INTL_HOUSING_OPTIONS}
+            onChange={(value) => setForm({ ...form, intlHousing: value })}
+            disabled={isSaving}
+          />
+        ),
+      },
+      textAreaRow("housingTypes", "Loại nhà ở (cách nhau bằng |)", 2000),
+      textAreaRow("activities", "Hoạt động sinh viên (cách nhau bằng |)", 4000),
+    ];
+  };
+
   const sourceRows = (): TableRow[] => {
     const lastEditedRow: TableRow = {
       label: "Sửa lần cuối",
@@ -510,6 +750,9 @@ export function OfferingSection({
       <EditableTable title="Chi phí mỗi năm" rows={costRows()} edit={editStateFor("cost")} />
       <EditableTable title="Điều kiện" rows={requirementRows()} edit={editStateFor("requirements")} />
       <EditableTable title="Hạn nộp hồ sơ" rows={deadlineRows} />
+      <EditableTable title="Tuyển sinh & thống kê" rows={statsRows()} edit={editStateFor("stats")} />
+      <EditableTable title="Hỗ trợ tài chính cho du học sinh" rows={aidRows()} edit={editStateFor("aid")} />
+      <EditableTable title="Khuôn viên & nhà ở" rows={campusRows()} edit={editStateFor("campus")} />
 
       <TableFrame title={`Ngành (${majorCount})`} edit={editStateFor("majors")}>
         <BlockBody>

@@ -21,7 +21,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const visible = useAssistantVisible();
   const adminRoute = isAdminRoute(pathname);
   const authRoute = isAuthRoute(pathname);
-  const lockedViewport = pathname === "/universities";
+  const lockedViewport = pathname === "/universities" || pathname === "/scholarships";
   const showAssistant = !adminRoute && !authRoute;
   const docked = panelMode === "compact" || panelMode === "half";
   const pushed = showAssistant && open && visible && docked;

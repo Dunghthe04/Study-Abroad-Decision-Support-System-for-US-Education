@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "cn";
 import { studyLevelLabel } from "@/lib/study-levels";
 import { campusSettingLabel, schoolControlLabel, universityNumber, universityUrl } from "@/lib/university-display";
+import { ScholarshipCard } from "@/components/scholarships/ScholarshipCard";
+import type { ScholarshipItem } from "@/types/scholarship";
 import type { UniversityDetail } from "@/types/university";
 import { acceptanceRateTone, DetailSection, Gauge, SchoolImage } from "./UniversityDetailParts";
 import { UniversityAdmissions, UniversityCampusLife, UniversityCosts, UniversityMajors, UniversityStatistics } from "./UniversityOfferingSections";
@@ -47,7 +49,15 @@ function campusSettingIcon(value: string): LucideIcon {
   return MapPinIcon;
 }
 
-export function UniversityDetailView({ university }: { university: UniversityDetail }) {
+export function UniversityDetailView({
+  university,
+  scholarships = [],
+  today = "",
+}: {
+  university: UniversityDetail;
+  scholarships?: ScholarshipItem[];
+  today?: string;
+}) {
   const [selectedLevel, setSelectedLevel] = useState(university.offerings[0]?.studyLevel ?? "");
   const [activeSection, setActiveSection] = useState("overview");
   const offering = university.offerings.find((item) => item.studyLevel === selectedLevel) ?? university.offerings[0];
@@ -69,15 +79,17 @@ export function UniversityDetailView({ university }: { university: UniversityDet
       { id: "overview", label: "Tổng quan" },
       ...(offering
         ? [
-            { id: "costs", label: "Chi phí & hỗ trợ" },
             { id: "admissions", label: "Tuyển sinh" },
+            { id: "majors", label: "Ngành học" },
+            { id: "costs", label: "Chi phí & học bổng" },
             ...(hasCampusData ? [{ id: "campus", label: "Khuôn viên & nhà ở" }] : []),
             { id: "statistics", label: "Thống kê" },
-            { id: "majors", label: "Ngành học" },
           ]
-        : []),
+        : scholarships.length > 0
+          ? [{ id: "scholarships", label: "Học bổng" }]
+          : []),
     ],
-    [offering, hasCampusData],
+    [offering, hasCampusData, scholarships.length],
   );
 
   useEffect(() => {
@@ -101,6 +113,28 @@ export function UniversityDetailView({ university }: { university: UniversityDet
     offering?.campusSetting ? { label: "Bối cảnh khuôn viên", value: campusSettingLabel(offering.campusSetting), icon: campusSettingIcon(offering.campusSetting) } : null,
     university.internationalStudentCount != null ? { label: "Sinh viên quốc tế", value: <SourceTooltip source={findFieldSource(university.sources, "international_student_count")}>{universityNumber(university.internationalStudentCount)}</SourceTooltip> } : null,
   ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  // Học bổng nằm trong mục Chi phí & hỗ trợ: cùng chỗ với chi phí và hỗ trợ thực nhận để so ngay
+  const scholarshipList =
+    scholarships.length > 0 ? (
+      <div id="scholarships" className="scroll-mt-[calc(var(--header-h)+3.5rem)] space-y-3">
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold text-ink">Học bổng còn hạn nộp ({scholarships.length})</h3>
+          <p className="text-xs leading-relaxed text-ink-2">
+            Mức trường công bố cho từng gói, kèm điều kiện và hạn nộp; số tiền thực nhận tùy hồ sơ.
+          </p>
+        </div>
+        <ul className="space-y-4">
+          {scholarships.map((s) => (
+            <li key={s.id}>
+              <ScholarshipCard scholarship={s} today={today} showSchool={false} />
+            </li>
+          ))}
+        </ul>
+      </div>
+    ) : null;
+
+  const imageCredits = (university.imageCredits ?? []).filter((c) => c.author || c.license);
 
   const acceptanceTone = university.acceptanceRate != null ? acceptanceRateTone(university.acceptanceRate) : "brand";
   const acceptanceToneClass = {
@@ -250,21 +284,29 @@ export function UniversityDetailView({ university }: { university: UniversityDet
           </DetailSection>
 
           {offering ? (
+            // Thứ tự theo câu hỏi của người xem: có vào được không → học gì → chi trả thế nào → sống ra sao → kết quả
             <div key={offering.studyLevel} className="space-y-12">
-              <UniversityCosts offering={offering} sources={university.sources} />
               <UniversityAdmissions offering={offering} sources={university.sources} />
+              <UniversityMajors offering={offering} sources={university.sources} />
+              <UniversityCosts offering={offering} sources={university.sources} scholarships={scholarshipList} />
               <UniversityCampusLife offering={offering} sources={university.sources} />
               <UniversityStatistics offering={offering} internationalStudentCount={university.internationalStudentCount} sources={university.sources} />
-              <UniversityMajors offering={offering} sources={university.sources} />
             </div>
           ) : (
-            <DetailSection title="Thông tin tuyển sinh & chi phí">
-              <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
-                <p className="text-sm leading-relaxed text-ink-2">
-                  Trường chưa có dữ liệu bậc học trong hệ thống. Bạn có thể tham khảo website chính thức của trường.
-                </p>
-              </div>
-            </DetailSection>
+            <>
+              <DetailSection title="Thông tin tuyển sinh & chi phí">
+                <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+                  <p className="text-sm leading-relaxed text-ink-2">
+                    Trường chưa có dữ liệu bậc học trong hệ thống. Bạn có thể tham khảo website chính thức của trường.
+                  </p>
+                </div>
+              </DetailSection>
+              {scholarshipList && (
+                <DetailSection id="scholarships" title="Học bổng">
+                  {scholarshipList}
+                </DetailSection>
+              )}
+            </>
           )}
 
           {university.galleryUrls.length > 0 && (
@@ -279,6 +321,28 @@ export function UniversityDetailView({ university }: { university: UniversityDet
                     </a>
                   ))}
                 </div>
+                {imageCredits.length > 0 && (
+                  // Ảnh lấy từ Wikimedia Commons: giấy phép CC BY/BY-SA bắt buộc ghi tác giả và giấy phép
+                  <p className="mt-4 text-xs leading-relaxed text-ink-3">
+                    Ảnh:{" "}
+                    {imageCredits.map((credit, index) => {
+                      const page = universityUrl(credit.sourcePageUrl);
+                      const text = [credit.author, credit.license].filter(Boolean).join(", ");
+                      return (
+                        <span key={credit.url}>
+                          {index > 0 && " · "}
+                          {page ? (
+                            <a href={page} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-ink-2 hover:underline">
+                              {text}
+                            </a>
+                          ) : (
+                            text
+                          )}
+                        </span>
+                      );
+                    })}
+                  </p>
+                )}
               </div>
             </DetailSection>
           )}
