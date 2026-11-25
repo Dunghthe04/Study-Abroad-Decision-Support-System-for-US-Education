@@ -410,9 +410,9 @@ public class LeadServiceTests
         s.LeadRepo.Messages.Add(own);
         s.LeadRepo.Messages.Add(removed);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => service.ReportSentLeadMessageAsync(student.Id, lead.Id, own.Id, null));
-        await Assert.ThrowsAsync<ArgumentException>(() => service.ReportSentLeadMessageAsync(student.Id, lead.Id, removed.Id, null));
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.ReportSentLeadMessageAsync(student.Id, lead.Id, Guid.NewGuid(), null));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ReportSentLeadMessageAsync(student.Id, lead.Id, own.Id, "Quấy rối"));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ReportSentLeadMessageAsync(student.Id, lead.Id, removed.Id, "Quấy rối"));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.ReportSentLeadMessageAsync(student.Id, lead.Id, Guid.NewGuid(), "Quấy rối"));
         Assert.Null(own.ReportedAt);
     }
 
@@ -427,8 +427,44 @@ public class LeadServiceTests
         var message = new LeadMessage { LeadId = lead.Id, SenderUserId = centerUser.Id, Content = "x", Status = "visible" };
         s.LeadRepo.Messages.Add(message);
 
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.ReportSentLeadMessageAsync(student.Id, lead.Id, message.Id, null));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => service.ReportSentLeadMessageAsync(student.Id, lead.Id, message.Id, "Quấy rối"));
         Assert.Null(message.ReportedAt);
+    }
+
+    [Fact]
+    public async Task ReportSentLeadMessage_InvalidReasonOrDetailOrExpiredLead_IsRejected_AndClosedWithin90DaysAllowed()
+    {
+        var (s, _, service) = MessageSetup();
+        var student = s.AddStudent(18);
+        var centerUser = AddCenterUser(s);
+
+        // E4: lý do bắt buộc 3..64 ký tự, chi tiết thêm tối đa 1000 ký tự
+        var closedLead = AddLead(s, student.Id, student.Id);
+        closedLead.Status = "closed";
+        var msg = new LeadMessage { LeadId = closedLead.Id, SenderUserId = centerUser.Id, Content = "Nội dung", Status = "visible" };
+        s.LeadRepo.Messages.Add(msg);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ReportSentLeadMessageAsync(student.Id, closedLead.Id, msg.Id, null));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ReportSentLeadMessageAsync(student.Id, closedLead.Id, msg.Id, "ab"));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ReportSentLeadMessageAsync(student.Id, closedLead.Id, msg.Id, new string('x', 65)));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ReportSentLeadMessageAsync(student.Id, closedLead.Id, msg.Id, "Quấy rối", default, new string('d', 1001)));
+
+        // Trong 90 ngày kể từ ngày gửi yêu cầu (dù trạng thái Đã hoàn tất): báo cáo thành công kèm chi tiết
+        await service.ReportSentLeadMessageAsync(student.Id, closedLead.Id, msg.Id, "Quấy rối", default, "  Gửi liên tục  ");
+        Assert.Equal("Quấy rối", msg.ReportReason);
+        Assert.Equal("Gửi liên tục", msg.ReportDetail);
+
+        // E3: quá 90 ngày kể từ ngày gửi yêu cầu -> report_expired
+        var expiredLead = AddLead(s, student.Id, student.Id);
+        expiredLead.Status = "expired";
+        expiredLead.CreatedAt = DateTime.UtcNow.AddDays(-91);
+        var oldMsg = new LeadMessage { LeadId = expiredLead.Id, SenderUserId = centerUser.Id, Content = "Cũ", Status = "visible" };
+        s.LeadRepo.Messages.Add(oldMsg);
+
+        var ex = await Assert.ThrowsAsync<LeadRuleException>(() =>
+            service.ReportSentLeadMessageAsync(student.Id, expiredLead.Id, oldMsg.Id, "Quấy rối"));
+        Assert.Equal("report_expired", ex.Code);
+        Assert.Null(oldMsg.ReportedAt);
     }
 
     [Fact]
@@ -481,7 +517,7 @@ public class LeadServiceTests
 
         // trung tâm không báo cáo được tin của chính trung tâm
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            service.ReportReceivedLeadMessageAsync(centerUser.Id, null, UserRoles.Center, lead.Id, own.Id, null));
+            service.ReportReceivedLeadMessageAsync(centerUser.Id, null, UserRoles.Center, lead.Id, own.Id, "Quấy rối"));
     }
 
     [Fact]
@@ -519,8 +555,11 @@ public class LeadServiceTests
         await service.DismissReportAsync(adminId, leadId, message.Id);
         await service.DismissReportAsync(adminId, leadId, untouched.Id); // chưa bị báo cáo: không đổi gì, không log
 
-        Assert.Null(message.ReportedAt);
-        Assert.Null(message.ReportReason);
+        // [UC-54] Bác bỏ báo cáo: giữ lịch sử báo cáo để đối chiếu, chỉ đánh dấu ReportResolution = "dismissed"
+        Assert.NotNull(message.ReportedAt);
+        Assert.Equal("nhầm", message.ReportReason);
+        Assert.Equal(LeadService.ReportResolutionDismissed, message.ReportResolution);
+        Assert.NotNull(message.ReportResolvedAt);
         Assert.Equal("visible", message.Status);
         var log = Assert.Single(audit.Logs);
         Assert.Equal("lead_message.report_dismiss", log.Action);
@@ -1093,7 +1132,7 @@ public class LeadServiceTests
         Assert.Equal(3, thread.Messages.Count);
         Assert.Equal("Học sinh / Phụ huynh (Ẩn danh)", thread.Messages[0].SenderName);
         Assert.False(thread.Messages[0].IsFromCenter);
-        Assert.Equal("Tin nhắn đã bị gỡ do vi phạm quy tắc.", thread.Messages[1].Content);
+        Assert.Equal(LeadMessageMapper.RemovedContentPlaceholder, thread.Messages[1].Content);
         Assert.Equal("Trung Tâm Bảo Mật", thread.Messages[2].SenderName);
         Assert.True(thread.Messages[2].IsFromCenter);
     }
@@ -1804,7 +1843,8 @@ public class LeadServiceTests
         var notification = Assert.Single(s.LeadRepo.Notifications);
         Assert.Equal(reporterId, notification.UserId);
         Assert.Equal("lead_message_report_result", notification.Type);
-        Assert.Null(reported.ReportedAt);
+        Assert.NotNull(reported.ReportedAt);
+        Assert.Equal(LeadService.ReportResolutionDismissed, reported.ReportResolution);
     }
 
     [Fact]
