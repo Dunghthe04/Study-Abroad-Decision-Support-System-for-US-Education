@@ -286,8 +286,14 @@ public class ReviewBatchTests
             return Task.FromResult<IReadOnlyList<ReviewCandidate>>(Candidates);
         }
 
-        public Task<IReadOnlyList<Guid>> FindActiveAdminIdsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
+        // Admins: các tài khoản đang hoạt động được phép làm người duyệt (Admin hoặc Moderator)
+        public Task<IReadOnlyList<Guid>> FindActiveReviewerIdsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<Guid>>(userIds.Where(Admins.Contains).ToList());
+
+        public IReadOnlyList<ReviewerOptionDto> Options { get; init; } = [];
+
+        public Task<IReadOnlyList<ReviewerOptionDto>> ListAssignableReviewersAsync(CancellationToken ct = default) =>
+            Task.FromResult(Options);
 
         // Các thao tác đọc và chấm không thuộc nhóm test tạo đợt; test của chúng có bản giả riêng ở ReviewBatchReviewTests
         public Task<IReadOnlyList<ReviewBatchListRow>> ListForUserAsync(Guid userId, CancellationToken ct = default) =>
@@ -541,13 +547,38 @@ public class ReviewBatchTests
     }
 
     [Fact]
-    public async Task Create_WithAReviewerWhoIsNotAnActiveAdmin_Throws_AndSavesNothing()
+    public async Task Create_WithAReviewerWhoIsNotAnActiveAdminOrModerator_Throws_AndSavesNothing()
     {
         var repo = Repo();
 
-        await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo).CreateAsync(Request(reviewers: [Admin1, Id(999)]), Admin1, null, null));
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo).CreateAsync(Request(reviewers: [Admin1, Id(999)]), Admin1, null, null));
 
+        Assert.Contains("Moderator", error.Message);
         Assert.Equal(0, repo.Saves);
+    }
+
+    [Fact]
+    public async Task Create_CanAssignAModeratorToReview_AlongsideTheAdmin()
+    {
+        var moderator = Id(820);
+        var repo = Repo();
+        repo.Admins.Add(moderator);   // Moderator đang hoạt động là người duyệt hợp lệ (UC-148, UC-149)
+
+        var dto = await Svc(repo).CreateAsync(Request(reviewers: [Admin1, moderator]), Admin1, null, null);
+
+        Assert.Equal([Admin1, moderator], dto.ReviewerIds);
+        Assert.Equal([Admin1, moderator], repo.Reviewers.Select(r => r.UserId));
+    }
+
+    [Fact]
+    public async Task ReviewerOptions_AreTheAssignableAccountsFromTheRepository()
+    {
+        var options = new[] { new ReviewerOptionDto(Admin1, "An", "an@x.vn", "admin"), new ReviewerOptionDto(Id(820), "Bình", "b@x.vn", "moderator") };
+        var repo = new FakeRepo { Options = options };
+
+        var result = await Svc(repo).ListReviewerOptionsAsync();
+
+        Assert.Equal(options, result);
     }
 
     [Fact]

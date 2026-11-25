@@ -27,7 +27,8 @@ public class ReviewReportTests
         }
 
         public Task<IReadOnlyList<ReviewCandidate>> ListCandidatesAsync(DateTime? fromUtc, DateTime? toUtcExclusive, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Guid>> FindActiveAdminIdsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Guid>> FindActiveReviewerIdsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<ReviewerOptionDto>> ListAssignableReviewersAsync(CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddAsync(ReviewBatch batch, IReadOnlyList<ReviewBatchItem> items, IReadOnlyList<ReviewBatchReviewer> reviewers, AuditLog audit, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<ReviewBatchListRow>> ListForUserAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<ReviewItemsRows?> ListItemsAsync(Guid batchId, Guid reviewerUserId, CancellationToken ct = default) => throw new NotSupportedException();

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CreateBatchSheet } from "@/components/admin/review-batches/CreateBatchSheet";
+import { useAuth } from "@/contexts/AuthContext";
 import { ProgressBar } from "@/components/admin/review-batches/ProgressBar";
 import { formatDateTime, formatInt } from "@/lib/ai-usage-format";
 import { adminReviewBatchApi } from "@/lib/review-batch-api";
@@ -18,9 +19,12 @@ import type { ReviewBatchListItem } from "@/types/review-batch";
 
 /**
  * Trang admin: các đợt duyệt mẫu. Mỗi đợt là một mẫu ngẫu nhiên các câu hệ thống đã trả lời được, để người duyệt đọc và chấm đúng sai.
- * Danh sách chỉ có số đo, không có nội dung chat; nội dung chỉ hiện ở màn chấm, cho người được giao duyệt đợt đó. Chỉ Admin.
+ * Danh sách chỉ có số đo, không có nội dung chat; nội dung chỉ hiện ở màn chấm, cho người được giao duyệt đợt đó.
+ * Chỉ Admin tạo đợt; Moderator chỉ thấy các đợt được giao cho mình.
  */
 export function ReviewBatchesView() {
+  const { user } = useAuth();
+  const canCreate = user?.role === "admin";
   const [version, setVersion] = useState(0);   // tăng sau khi tạo đợt để tải lại danh sách
   const [creating, setCreating] = useState(false);
   const batches = useFetched(`batches|${version}`, () => adminReviewBatchApi.list());
@@ -28,11 +32,13 @@ export function ReviewBatchesView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <Button type="button" onClick={() => setCreating(true)}>
-          <PlusIcon /> Tạo đợt
-        </Button>
-      </div>
+      {canCreate ? (
+        <div className="flex justify-end">
+          <Button type="button" onClick={() => setCreating(true)}>
+            <PlusIcon /> Tạo đợt
+          </Button>
+        </div>
+      ) : null}
 
       {batches.error ? <Alert variant="destructive"><AlertDescription>{batches.error}</AlertDescription></Alert> : null}
 
@@ -41,9 +47,11 @@ export function ReviewBatchesView() {
         {list && list.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-start gap-2 py-6">
-              <p className="text-ink">Chưa có đợt nào.</p>
+              <p className="text-ink">{canCreate ? "Chưa có đợt nào." : "Chưa có đợt nào được giao cho bạn."}</p>
               <p className="text-sm text-ink-2">
-                Bấm &ldquo;Tạo đợt&rdquo; để bốc mẫu. Cần có câu hệ thống đã trả lời được (kèm câu hỏi) trong khoảng ngày bạn chọn.
+                {canCreate
+                  ? "Bấm “Tạo đợt” để bốc mẫu. Cần có câu hệ thống đã trả lời được (kèm câu hỏi) trong khoảng ngày bạn chọn."
+                  : "Khi Admin giao một đợt duyệt cho bạn, đợt đó sẽ hiện ở đây để bạn đọc và chấm."}
               </p>
             </CardContent>
           </Card>
@@ -51,7 +59,9 @@ export function ReviewBatchesView() {
         {!list && !batches.error ? <p className="text-sm text-ink-2">Đang tải...</p> : null}
       </div>
 
-      <CreateBatchSheet open={creating} onClose={() => setCreating(false)} onCreated={() => setVersion((current) => current + 1)} />
+      {canCreate ? (
+        <CreateBatchSheet open={creating} onClose={() => setCreating(false)} onCreated={() => setVersion((current) => current + 1)} />
+      ) : null}
     </div>
   );
 }

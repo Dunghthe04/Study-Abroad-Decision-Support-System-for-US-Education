@@ -90,14 +90,9 @@ public class AiQualitySampleRepository(AppDbContext db) : IAiQualitySampleReposi
         if (rows.Count == 0)
             return [];
 
-        // Sự đồng ý của phụ huynh: consents.user_id là CON (người được xử lý dữ liệu), granted_by_user_id là phụ huynh.
-        // Phụ huynh rút đồng ý thì dòng đó đổi thành granted = false nên chỉ lấy dòng còn hiệu lực
+        // Sự đồng ý của phụ huynh với việc xử lý dữ liệu của con (chỉ dòng còn hiệu lực)
         var ownerIds = rows.Select(r => r.OwnerId).Distinct().ToList();
-        var consents = (await db.Consents.AsNoTracking()
-                .Where(c => ownerIds.Contains(c.UserId) && c.Purpose == ConsentPurposes.ChildDataProcessing && c.Granted)
-                .Select(c => new { c.UserId, c.PolicyVersion })
-                .ToListAsync(ct))
-            .ToLookup(c => c.UserId, c => c.PolicyVersion);
+        var consents = await ChildConsentVersions.LoadAsync(db, ownerIds, ct);
 
         return rows
             .Select(r => new AiQualityCandidate(r.Id, r.CreatedAt, r.Birth, consents[r.OwnerId].ToList(), r.Managed, r.SessionDeleted))

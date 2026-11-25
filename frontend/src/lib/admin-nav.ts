@@ -196,12 +196,12 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/review-batches",
     label: "Duyệt mẫu",
-    description: "Bốc ngẫu nhiên các câu hệ thống đã trả lời để đọc và chấm đúng sai, đo tỷ lệ lỗi",
+    description: "Bốc ngẫu nhiên các câu hệ thống đã trả lời để đọc và chấm đúng sai, đo tỷ lệ lỗi (Admin tạo đợt, Admin và Moderator được giao thì chấm)",
     icon: ClipboardCheckIcon,
     filledIcon: ClipboardCheckFilledIcon,
     section: "ai",
-    roles: ["admin"],
-    useCases: ["UC-155", "UC-156", "UC-157"],
+    roles: ["admin", "moderator"],
+    useCases: ["UC-147", "UC-148", "UC-149"],
   },
   {
     href: "/admin/users",

@@ -22,6 +22,14 @@ export type SlmIntentType =
   | "center_referral"
   | "out_of_scope";
 
+/** Một tài khoản có thể được giao duyệt (Admin hoặc Moderator đang hoạt động). Chỉ Admin tải được danh sách này. */
+export interface ReviewerOption {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+}
+
 /** Một nhóm lúc bốc mẫu: có bao nhiêu câu và chọn được bao nhiêu. Cần để tính tỷ lệ chung theo trọng số. */
 export interface StratumCount {
   stratum: string;
@@ -121,6 +129,8 @@ export interface ReviewItemDetail {
   myVerdict: ReviewVerdict | null;
   /** Học sinh đã xóa cuộc trò chuyện này sau khi câu được bốc: không có nội dung, không chấm được nữa. */
   deletedByUser?: boolean;
+  /** Chủ cuộc trò chuyện dưới 16 tuổi và phụ huynh đã rút đồng ý sau khi câu được bốc: không có nội dung, không chấm được nữa (kết luận cũ vẫn giữ). */
+  minorWithoutConsent?: boolean;
 }
 
 export interface SaveReviewVerdictRequest {
