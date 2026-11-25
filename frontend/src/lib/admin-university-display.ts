@@ -145,3 +145,57 @@ export const CONTROL_FILTER_OPTIONS = buildOptions("Mọi loại trường", CON
 export const SAT_POLICY_OPTIONS = buildOptions("Chưa rõ", SAT_POLICY_LABELS);
 export const ACT_POLICY_OPTIONS = buildOptions("Chưa rõ", ACT_POLICY_LABELS);
 export const SOURCE_RELIABILITY_OPTIONS = buildOptions("Chưa rõ", SOURCE_RELIABILITY_LABELS);
+
+// Các trường lấy từ CDS: mức coi trọng (C7), thang GPA, chính sách hỗ trợ, bối cảnh khuôn viên
+const IMPORTANCE_LABELS: Record<string, string> = {
+  very_important: "Rất quan trọng",
+  important: "Quan trọng",
+  considered: "Có xem xét",
+  not_considered: "Không xem xét",
+};
+const GPA_SCALE_LABELS: Record<string, string> = {
+  weighted: "Có trọng số (weighted)",
+  unweighted: "Không trọng số (unweighted)",
+  both: "Cả hai thang",
+};
+const AID_POLICY_LABELS: Record<string, string> = {
+  need_and_merit: "Theo nhu cầu & thành tích",
+  merit_only: "Chỉ theo thành tích",
+  need_only: "Chỉ theo nhu cầu",
+  none: "Không hỗ trợ",
+};
+const CAMPUS_SETTING_LABELS: Record<string, string> = {
+  "City: Large": "Đô thị lớn",
+  "City: Midsize": "Đô thị vừa",
+  "City: Small": "Đô thị nhỏ",
+  "Suburb: Large": "Ngoại ô lớn",
+  "Suburb: Midsize": "Ngoại ô vừa",
+  "Suburb: Small": "Ngoại ô nhỏ",
+  "Town: Fringe": "Thị trấn gần đô thị",
+  "Town: Distant": "Thị trấn xa đô thị",
+  "Town: Remote": "Thị trấn biệt lập",
+  "Rural: Fringe": "Nông thôn gần đô thị",
+  "Rural: Distant": "Nông thôn xa đô thị",
+  "Rural: Remote": "Nông thôn biệt lập",
+};
+const INTL_HOUSING_LABELS: Record<string, string> = { true: "Có", false: "Không" };
+
+function labelOf(labels: Record<string, string>, value: string | null): string {
+  return value ? (labels[value] ?? value) : "—";
+}
+export const importanceLabel = (v: string | null) => labelOf(IMPORTANCE_LABELS, v);
+export const gpaScaleLabel = (v: string | null) => labelOf(GPA_SCALE_LABELS, v);
+export const aidPolicyLabel = (v: string | null) => labelOf(AID_POLICY_LABELS, v);
+export const campusSettingLabel = (v: string | null) => labelOf(CAMPUS_SETTING_LABELS, v);
+export const intlHousingLabel = (v: boolean | null) => (v === null ? "—" : v ? "Có" : "Không");
+
+export const IMPORTANCE_OPTIONS = buildOptions("Chưa rõ", IMPORTANCE_LABELS);
+export const GPA_SCALE_OPTIONS = buildOptions("Chưa rõ", GPA_SCALE_LABELS);
+export const AID_POLICY_OPTIONS = buildOptions("Chưa rõ", AID_POLICY_LABELS);
+export const CAMPUS_SETTING_OPTIONS = buildOptions("Chưa rõ", CAMPUS_SETTING_LABELS);
+export const INTL_HOUSING_OPTIONS = buildOptions("Chưa rõ", INTL_HOUSING_LABELS);
+
+/** Tỉ lệ 0–1 hiển thị dạng phần trăm; không có thì "—". */
+export function formatFraction(value: number | null): string {
+  return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
+}

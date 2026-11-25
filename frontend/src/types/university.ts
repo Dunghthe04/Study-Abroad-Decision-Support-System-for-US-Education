@@ -60,6 +60,8 @@ export interface UniversityOffering {
   actSubmitPct: number | null;
   applicationFeeUsd: number | null;
   tuitionInStateUsd: number | null;
+  /** Bảo hiểm y tế bắt buộc / năm; có trường dữ liệu cũ chưa trả về */
+  healthInsuranceUsd?: number | null;
   majors: UniversityMajor[];
   sourceUrl: string | null;
   retrievedAt: string | null;
@@ -103,6 +105,8 @@ export interface UniversityDetail {
   logoUrl: string | null;
   coverUrl: string | null;
   galleryUrls: string[];
+  /** Ghi công ảnh bìa / ảnh trường theo giấy phép; API cũ chưa trả về */
+  imageCredits?: UniversityImageCredit[];
   offerings: UniversityOffering[];
   rankings: UniversityRanking[];
   sources: UniversitySource[];
@@ -227,3 +231,10 @@ export interface UniversitySearchParams {
   pageSize?: number;
 }
 
+
+export interface UniversityImageCredit {
+  url: string;
+  license: string | null;
+  author: string | null;
+  sourcePageUrl: string | null;
+}
