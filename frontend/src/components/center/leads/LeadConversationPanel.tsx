@@ -189,9 +189,9 @@ export function LeadConversationPanel({
     }
   };
 
-  const reportMessage = async (messageId: string, reason: string) => {
+  const reportMessage = async (messageId: string, reason: string, detail?: string) => {
     try {
-      await centerLeadsApi.reportMessage(leadId, messageId, reason);
+      await centerLeadsApi.reportMessage(leadId, messageId, reason, detail);
       setReportedIds((prev) => new Set(prev).add(messageId));
       toast.add({
         type: "success",
@@ -332,12 +332,12 @@ export function LeadConversationPanel({
 
                 {!isRemoved && msg.isFromCenter && msg.id === lastOwnId && <MessageReceipt readAt={msg.readAt} />}
 
-                {/* [UC-58] Trung tâm báo cáo tin của học sinh / phụ huynh */}
+                {/* [UC-143] Trung tâm báo cáo tin của học sinh / phụ huynh */}
                 {!isRemoved && !msg.isFromCenter && (
                   <div className="mt-1.5">
                     <ReportMessageControl
                       isReported={reportedIds.has(msg.id)}
-                      onReport={(reason) => reportMessage(msg.id, reason)}
+                      onReport={(reason, detail) => reportMessage(msg.id, reason, detail)}
                     />
                   </div>
                 )}
