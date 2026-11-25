@@ -7,7 +7,7 @@ import { Building2Icon, CheckIcon, GraduationCapIcon, InfoIcon, UsersIcon, XIcon
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { setPendingEmail } from "@/lib/pending-email";
-import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/password-rules";
+import { NETWORK_ERROR, PASSWORD_RULE_HINT, checkPhone, confirmPasswordError, emailError, fullNameError, passwordRuleError } from "@/lib/auth-validation";
 import { useAccountPolicies } from "@/lib/use-account-policies";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -167,23 +167,6 @@ export function RegisterForm() {
   const isMinorStudent = role === "student" && age !== null && age >= 0 && age < ADULT_AGE;
   const parentEmailRequired = isMinorStudent && age !== null && age < CHILD_MAX_AGE_EXCLUSIVE;
 
-  // Hàm kiểm tra và chuẩn hóa số điện thoại Việt Nam
-  const validateVietnamesePhone = (raw: string): { valid: boolean; normalized?: string } => {
-    const cleaned = raw.trim().replace(/[\s.\-()]/g, "");
-    let normalized = cleaned;
-    if (normalized.startsWith("+84")) {
-      normalized = "0" + normalized.slice(3);
-    } else if (normalized.startsWith("84") && normalized.length === 11) {
-      normalized = "0" + normalized.slice(2);
-    }
-    // Định dạng di động 10 số Việt Nam: 03x, 05x, 07x, 08x, 09x
-    const regex = /^0(3|5|7|8|9)\d{8}$/;
-    if (regex.test(normalized)) {
-      return { valid: true, normalized };
-    }
-    return { valid: false };
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -191,11 +174,8 @@ export function RegisterForm() {
     const errors: FieldErrors = {};
 
     // 1. Kiểm tra tính hợp lệ cơ bản ở phía client dưới từng ô
-    if (!fullName.trim()) {
-      errors.fullName = "Vui lòng nhập họ và tên.";
-    } else if (fullName.trim().length > 100) {
-      errors.fullName = "Họ và tên không được vượt quá 100 ký tự.";
-    }
+    const nameError = fullNameError(fullName);
+    if (nameError) errors.fullName = nameError;
 
     if (!dateOfBirth && dobInputRef.current?.validity.badInput) {
       errors.dateOfBirth = "Ngày sinh không tồn tại.";
@@ -211,27 +191,12 @@ export function RegisterForm() {
       errors.dateOfBirth = `Học sinh phải từ đủ ${STUDENT_MIN_AGE} tuổi để tự đăng ký. Với học sinh nhỏ hơn, vui lòng nhờ Phụ huynh đăng ký và quản lý hồ sơ.`;
     }
 
-    if (!email.trim()) {
-      errors.email = "Vui lòng nhập email.";
-    } else if (email.trim().length > 100) {
-      errors.email = "Email không được vượt quá 100 ký tự.";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      errors.email = "Email không đúng định dạng.";
-    }
+    const emailProblem = emailError(email);
+    if (emailProblem) errors.email = emailProblem;
 
-    let normalizedPhone: string | null = null;
-    if (phone.trim()) {
-      if (phone.trim().length > 20) {
-        errors.phone = "Số điện thoại không được vượt quá 20 ký tự.";
-      } else {
-        const phoneValidation = validateVietnamesePhone(phone);
-        if (!phoneValidation.valid) {
-          errors.phone = "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912 345 678 hoặc +84912345678).";
-        } else {
-          normalizedPhone = phoneValidation.normalized!;
-        }
-      }
-    }
+    const phoneCheck = checkPhone(phone);
+    if (phoneCheck.error) errors.phone = phoneCheck.error;
+    const normalizedPhone = phoneCheck.normalized;
 
     // [UC-01] 8–100 ký tự, không toàn khoảng trắng, đủ chữ hoa, chữ thường, chữ số, ký tự đặc biệt (khớp backend)
     const passwordError = passwordRuleError(password);
@@ -239,19 +204,15 @@ export function RegisterForm() {
       errors.password = passwordError;
     }
 
-    if (!confirmPassword) {
-      errors.confirmPassword = "Vui lòng xác nhận mật khẩu.";
-    } else if (password && confirmPassword !== password) {
-      errors.confirmPassword = "Mật khẩu xác nhận không khớp.";
-    }
+    const confirmError = confirmPasswordError(password, confirmPassword);
+    if (confirmError) errors.confirmPassword = confirmError;
 
     if (parentEmailRequired && !parentEmail.trim()) {
       errors.parentEmail = `Học sinh dưới ${CHILD_MAX_AGE_EXCLUSIVE} tuổi cần nhập email phụ huynh để phụ huynh đồng ý.`;
     } else if (parentEmail.trim()) {
-      if (parentEmail.trim().length > 100) {
-        errors.parentEmail = "Email phụ huynh không được vượt quá 100 ký tự.";
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail.trim())) {
-        errors.parentEmail = "Email phụ huynh không đúng định dạng.";
+      const parentEmailProblem = emailError(parentEmail, "Email phụ huynh", false);
+      if (parentEmailProblem) {
+        errors.parentEmail = parentEmailProblem;
       } else if (isMinorStudent && parentEmail.trim().toLowerCase() === email.trim().toLowerCase()) {
         errors.parentEmail = "Email phụ huynh phải khác email của học sinh.";
       }
@@ -304,7 +265,7 @@ export function RegisterForm() {
           setError(msg);
         }
       } else {
-        setError("Có lỗi kết nối máy chủ. Vui lòng thử lại sau.");
+        setError(NETWORK_ERROR);
       }
     } finally {
       setIsSubmitting(false);

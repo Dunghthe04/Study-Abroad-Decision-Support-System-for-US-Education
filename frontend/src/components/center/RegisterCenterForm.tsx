@@ -12,7 +12,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
-import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/password-rules";
+import { AUTH_LIMITS, NETWORK_ERROR, PASSWORD_RULE_HINT, checkPhone, confirmPasswordError, emailError, fullNameError, passwordRuleError, requiredTextError } from "@/lib/auth-validation";
 
 export function RegisterCenterForm() {
   const router = useRouter();
@@ -41,15 +41,16 @@ export function RegisterCenterForm() {
       return;
     }
 
-    // [UC-01] Cùng luật mật khẩu với đăng ký (khớp backend)
-    const passwordError = passwordRuleError(password);
-    if (passwordError) {
-      setError(passwordError);
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError("Mật khẩu xác nhận không khớp.");
+    // [UC-01] Cùng luật kiểm lỗi với đăng ký (khớp backend), báo lỗi đầu tiên gặp
+    const inputError =
+      requiredTextError(centerName, "Tên trung tâm", AUTH_LIMITS.centerNameMax) ??
+      fullNameError(registrantName, "Họ tên người đăng ký") ??
+      emailError(email) ??
+      checkPhone(phone, true).error ??
+      passwordRuleError(password) ??
+      confirmPasswordError(password, confirmPassword);
+    if (inputError) {
+      setError(inputError);
       return;
     }
 
@@ -76,7 +77,7 @@ export function RegisterCenterForm() {
         if (err.status === 400) accountPolicies.reload();
         setError(err.message);
       } else {
-        setError("Đăng ký không thành công. Vui lòng kiểm tra lại thông tin và thử lại.");
+        setError(NETWORK_ERROR);
       }
     } finally {
       setIsSubmitting(false);

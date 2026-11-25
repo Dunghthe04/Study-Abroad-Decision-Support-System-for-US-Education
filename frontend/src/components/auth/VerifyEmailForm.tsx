@@ -12,6 +12,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { clearPendingEmail, usePendingEmail } from "@/lib/pending-email";
 import { AUTH_RETURN_TO_KEY } from "@/components/billing/FamilyInviteForm";
+import { NETWORK_ERROR, emailError, otpError } from "@/lib/auth-validation";
 
 export function VerifyEmailForm() {
   const router = useRouter();
@@ -45,12 +46,9 @@ export function VerifyEmailForm() {
     setSuccessMessage(null);
 
     const cleanOtp = otpCode.trim();
-    if (!email.trim()) {
-      setError("Vui lòng nhập địa chỉ email.");
-      return;
-    }
-    if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
-      setError("Mã OTP phải gồm đúng 6 chữ số.");
+    const inputError = emailError(email) ?? otpError(cleanOtp);
+    if (inputError) {
+      setError(inputError);
       return;
     }
 
@@ -80,7 +78,7 @@ export function VerifyEmailForm() {
       if (err instanceof ApiError) {
         setError(err.message || "Mã xác thực không hợp lệ hoặc đã hết hạn.");
       } else {
-        setError("Có lỗi kết nối máy chủ. Vui lòng thử lại sau.");
+        setError(NETWORK_ERROR);
       }
     } finally {
       setIsSubmitting(false);
@@ -92,8 +90,9 @@ export function VerifyEmailForm() {
     setError(null);
     setSuccessMessage(null);
 
-    if (!email.trim()) {
-      setError("Vui lòng nhập địa chỉ email để gửi lại mã.");
+    const emailProblem = emailError(email);
+    if (emailProblem) {
+      setError(emailProblem);
       return;
     }
 

@@ -34,7 +34,7 @@ import { DetailPanel } from "@/components/admin/shared/DetailPanel";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
 import { cn } from "@/lib/utils";
-import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/password-rules";
+import { PASSWORD_RULE_HINT, checkPhone, emailError, fullNameError, passwordRuleError } from "@/lib/auth-validation";
 import {
   Dialog,
   DialogContent,
@@ -43,16 +43,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-/** Chuẩn hóa SĐT VN (khớp quy tắc backend). */
-function normalizeVietnamesePhone(raw: string): { ok: true; value: string } | { ok: false } {
-  const cleaned = raw.trim().replace(/[\s.\-()]/g, "");
-  let normalized = cleaned;
-  if (normalized.startsWith("+84")) normalized = "0" + normalized.slice(3);
-  else if (normalized.startsWith("84") && normalized.length === 11) normalized = "0" + normalized.slice(2);
-  const regex = /^0(3|5|7|8|9)\d{8}$/;
-  return regex.test(normalized) ? { ok: true, value: normalized } : { ok: false };
-}
 
 const ACCOUNT_LIST_PAGE_SIZE = 20;
 
@@ -488,34 +478,15 @@ export function AdminUsersView() {
     const trimmedEmail = email.trim();
     const trimmedName = fullName.trim();
 
-    if (!trimmedName) {
-      setFormError("Họ và tên không được để trống.");
+    // [UC-01] Cùng luật kiểm lỗi với đăng ký (khớp backend): họ tên tối đa 100 ký tự
+    const phoneCheck = checkPhone(phone);
+    const inputError =
+      fullNameError(trimmedName) ?? emailError(trimmedEmail) ?? passwordRuleError(password) ?? phoneCheck.error;
+    if (inputError) {
+      setFormError(inputError);
       return;
     }
-    if (trimmedName.length > 128) {
-      setFormError("Họ tên tối đa 128 ký tự.");
-      return;
-    }
-    if (!trimmedEmail) {
-      setFormError("Vui lòng nhập email.");
-      return;
-    }
-    // [UC-01] Cùng luật mật khẩu với đăng ký (khớp backend)
-    const passwordError = passwordRuleError(password);
-    if (passwordError) {
-      setFormError(passwordError);
-      return;
-    }
-
-    let phonePayload: string | null = null;
-    if (phone.trim()) {
-      const parsed = normalizeVietnamesePhone(phone);
-      if (!parsed.ok) {
-        setFormError("Số điện thoại không đúng định dạng Việt Nam (vd: 0912345678).");
-        return;
-      }
-      phonePayload = parsed.value;
-    }
+    const phonePayload = phoneCheck.normalized;
 
     setIsSubmitting(true);
     try {

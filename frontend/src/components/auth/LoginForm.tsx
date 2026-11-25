@@ -14,6 +14,7 @@ import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { Spinner } from "@/components/ui/spinner";
+import { NETWORK_ERROR, emailError } from "@/lib/auth-validation";
 
 export function LoginForm() {
   const router = useRouter();
@@ -57,11 +58,8 @@ export function LoginForm() {
     setRestoreToken(null);
 
     const errors: { email?: string; password?: string } = {};
-    if (!email.trim()) {
-      errors.email = "Vui lòng nhập email.";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      errors.email = "Email không đúng định dạng.";
-    }
+    const emailProblem = emailError(email);
+    if (emailProblem) errors.email = emailProblem;
     if (!password) {
       errors.password = "Vui lòng nhập mật khẩu.";
     }
@@ -104,7 +102,7 @@ export function LoginForm() {
           setError(err.message || "Sai tài khoản hoặc mật khẩu.");
         }
       } else {
-        setError("Có lỗi kết nối máy chủ. Vui lòng thử lại sau.");
+        setError(NETWORK_ERROR);
       }
     } finally {
       setIsSubmitting(false);
@@ -122,7 +120,7 @@ export function LoginForm() {
       setRestoreToken(null);
       await refreshUser();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Có lỗi kết nối máy chủ. Vui lòng thử lại sau.");
+      setError(err instanceof ApiError ? err.message : NETWORK_ERROR);
       setLockType(null);
       setRestoreToken(null);
     } finally {
