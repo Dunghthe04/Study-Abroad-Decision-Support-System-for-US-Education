@@ -188,6 +188,10 @@ namespace StudyAbroad.Application.Advisor
             if (response.Action == ChatSchoolInfo.CompareAction && recommender is not null)
                 response = await AnswerSchoolCompareAsync(userId, response, ct);
 
+            // Học sinh hỏi trường nào trong 2 đến 4 trường hợp với hồ sơ hơn (UC-154): nhóm và điểm phù hợp của từng trường bằng công thức gợi ý
+            if (response.Action == ChatFitCompare.Action && recommender is not null)
+                response = await AnswerSchoolCompareAsync(userId, response, ct, fit: true);
+
             // Học sinh hỏi thông tin một trường ("học phí Harvard bao nhiêu"): lấy số thật từ cơ sở dữ liệu, không có mới giữ câu của kho kiến thức
             if (response.Action == ChatSchoolInfo.Action && recommender is not null)
                 response = await AnswerSchoolInfoAsync(userId, response, ct);
@@ -726,7 +730,9 @@ namespace StudyAbroad.Application.Advisor
 
         // So sánh từ hai trường: mỗi tên khớp bằng bộ khớp tên chặt, trường nào chưa chắc thì nói rõ để học sinh gõ lại (không đoán).
         // Mục lấy từ điều model trả; model không trả mục thì dùng bộ mục mặc định. Lỗi dữ liệu thì báo chưa tra được, không để câu tạm.
-        private async Task<AdvisorChatResponse> AnswerSchoolCompareAsync(Guid userId, AdvisorChatResponse response, CancellationToken ct)
+        // fit = true: so sánh theo độ phù hợp với hồ sơ (UC-154); mặc định là so sánh số liệu của trường (UC-156)
+        private async Task<AdvisorChatResponse> AnswerSchoolCompareAsync(
+            Guid userId, AdvisorChatResponse response, CancellationToken ct, bool fit = false)
         {
             var query = ChatSchoolInfo.ParseCompare(response.ActionData);
             if (query is null)
@@ -753,7 +759,7 @@ namespace StudyAbroad.Application.Advisor
                         var picked = entries.ToList();
                         picked[ambiguousAt] = c.Code;
                         return new QuickReply(c.Name, c.Name, new ChatAction(
-                            ChatSchoolInfo.CompareAction, SchoolCodes: picked, Question: query.Question, Fields: query.Fields));
+                            fit ? ChatFitCompare.Action : ChatSchoolInfo.CompareAction, SchoolCodes: picked, Question: query.Question, Fields: query.Fields));
                     }).ToList();
                     var clarify = ChatGoalSeek.Clarify(typedNames[ambiguousAt], matches[ambiguousAt].Schools.Count);
                     return MergeSchoolInfo(response, asQuery, clarify, clearKb: true) with { QuickReplies = choices };
@@ -762,6 +768,9 @@ namespace StudyAbroad.Application.Advisor
                 codes = codes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 if (codes.Count < 2)
                     return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.CompareNeedsTwo, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
+
+                if (fit)
+                    return await AnswerFitCompareAsync(userId, response, asQuery, codes, ct);
 
                 var infos = new List<SchoolInfoDto>();
                 foreach (var code in codes)
@@ -782,6 +791,27 @@ namespace StudyAbroad.Application.Advisor
             {
                 return MergeSchoolInfo(response, asQuery, AdvisorMessages.SchoolInfoUnavailable, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
             }
+        }
+
+        // UC-154: nhóm và điểm phù hợp của các trường đã khớp tên. Hồ sơ chưa đủ dữ liệu (UC-22 E1) thì nói thiếu gì và mời sửa hồ sơ, không so sánh
+        private async Task<AdvisorChatResponse> AnswerFitCompareAsync(
+            Guid userId, AdvisorChatResponse response, ChatSchoolInfo.Query asQuery, IReadOnlyList<string> codes, CancellationToken ct)
+        {
+            FitCompareResult compared;
+            try
+            {
+                compared = await recommender!.CompareFitAsync(userId, codes, ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return MergeSchoolInfo(response, asQuery, ex.Message, clearKb: true) with { QuickReplies = [ChatNextSteps.EditProfile] };
+            }
+            var names = (await recommender!.ListSchoolOptionsAsync(userId, ct)).Select(o => o.Name).ToList();
+            var note = await WriteCompareNoteAsync(
+                new CompareNoteRequestDto(compared.Schools.Select(s => s.Name).ToList(), ChatFitCompare.Facts(compared), names), ct);
+            var text = ChatFitCompare.Text(compared, note);
+            return MergeSchoolInfo(response, asQuery, text, clearKb: true)
+                with { Widget = ChatFitCompare.WidgetOf(compared, note, text), QuickReplies = ChatFitCompare.NextSteps(compared) };
         }
 
         // Thay câu trả lời của kho kiến thức bằng câu từ cơ sở dữ liệu. Trả lời nhiều ý gộp một văn bản: thay đúng đoạn của kho, giữ các đoạn khác.

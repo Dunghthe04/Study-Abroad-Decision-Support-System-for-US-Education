@@ -857,19 +857,33 @@ async def test_a_school_list_with_template_tasks_asks_the_major_first():
     assert writer.skills == []
 
 
+# UC-154: câu so sánh theo hồ sơ ("hợp với em hơn") đi sang .NET tính nhóm và điểm phù hợp từng trường (công thức gợi ý)
 @pytest.mark.parametrize("tasks", [["compare"], ["compare", "explain_school"]])
-async def test_only_comparing_runs_the_school_data_comparison(tasks):
+async def test_comparing_for_the_profile_runs_the_fit_comparison_on_a_complete_profile(tasks):
     writer = FakeWriter()
     question = "Iowa và Purdue trường nào hợp với em hơn"
     entities = {"tasks": tasks, "schools": ["Iowa", "Purdue"]}
 
     out = await new_advice([], writer=writer).run(
-        ChatState(), question, tin(("profile_review", entities, question))
+        ChatState(profile=filled(REQUIRED_B4)), question, tin(("profile_review", entities, question))
     )
 
-    assert out.action == "school_compare"
+    assert out.action == "school_fit_compare"
     assert out.action_data["schools"] == ["Iowa", "Purdue"] and out.action_data["question"] == question
-    assert writer.skills == []  # không cần hồ sơ, không gọi Claude
+    assert writer.skills == []  # nhóm và điểm do .NET tính, nhánh này không gọi Claude
+
+
+async def test_comparing_for_the_profile_asks_for_the_missing_profile_first_and_remembers_the_question():
+    state = ChatState()  # chưa có hồ sơ
+    question = "Iowa và Purdue trường nào hợp với em hơn"
+    entities = {"tasks": ["compare"], "schools": ["Iowa", "Purdue"]}
+
+    out = await new_advice([], writer=FakeWriter()).run(
+        state, question, tin(("profile_review", entities, question))
+    )
+
+    assert out.action is None  # chưa so sánh được: thiếu hồ sơ (UC-22 E1)
+    assert state.pending_advice is not None and state.pending_advice.entities["schools"] == ["Iowa", "Purdue"]
 
 
 async def test_explaining_a_school_without_its_name_asks_which_school():

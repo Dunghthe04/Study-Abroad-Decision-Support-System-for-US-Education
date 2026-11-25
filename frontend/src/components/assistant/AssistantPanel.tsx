@@ -35,6 +35,7 @@ import { BudgetWidget } from "./BudgetWidget";
 import { ChatHistoryPopover, ChatHistorySidebar } from "./ChatHistoryPopover";
 import { CenterCardsWidget } from "./CenterCardsWidget";
 import { ChatText } from "./ChatText";
+import { FitCompareCard } from "./FitCompareCard";
 import { MajorWidget } from "./MajorWidget";
 import { CurrentValues, ReviewWidget } from "./ReviewWidget";
 import { ScholarshipWidget } from "./ScholarshipWidget";
@@ -46,7 +47,7 @@ import { PremiumLockedCard } from "@/components/billing/PremiumLockedCard";
 import { formatVnDate } from "@/lib/billing-api";
 import type { QuickReply } from "@/types/api";
 import type { SubscriptionSummaryDto } from "@/types/billing";
-import type { SchoolGoalResult, SchoolSearchData } from "@/types/recommendation";
+import type { FitCompareData, SchoolGoalResult, SchoolSearchData } from "@/types/recommendation";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
 export function useAssistantVisible() {
@@ -748,8 +749,13 @@ function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (va
       ? (turn.widget.data as unknown as SchoolSearchData)
       : null;
   // Thẻ trường đã nói đủ đoạn chữ này (tổng số, cách xếp, danh sách): bỏ đoạn đó, các đoạn khác của lượt vẫn hiện
-  const content =
-    searchData?.coveredText && turn.content ? turn.content.replace(searchData.coveredText, "").trim() : turn.content;
+  // UC-154: bảng so sánh theo độ phù hợp nói đủ cả số liệu lẫn nhận xét, nên cũng bỏ đoạn chữ trùng
+  const fitData =
+    turn.widget?.type === "fit_compare" && Array.isArray(turn.widget.data?.schools)
+      ? (turn.widget.data as unknown as FitCompareData)
+      : null;
+  const coveredText = searchData?.coveredText ?? fitData?.coveredText;
+  const content = coveredText && turn.content ? turn.content.replace(coveredText, "").trim() : turn.content;
   const goalData = turn.widget?.type === "goal_seek" ? turn.widget.data : null;
   const goalResult = (goalData?.result as SchoolGoalResult | undefined) ?? null;
   const goalBasisLabel = typeof goalData?.basisLabel === "string" ? goalData.basisLabel : null;
@@ -777,6 +783,7 @@ function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (va
       )}
       {turn.widget?.type === "centers" && <CenterCardsWidget data={turn.widget.data} onPick={onReply} />}
       {searchData && <SchoolSearchCard data={searchData} />}
+      {fitData && <FitCompareCard data={fitData} />}
       <ChatImages media={turn.media} />
       {turn.citations && turn.citations.length > 0 && (
         <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">

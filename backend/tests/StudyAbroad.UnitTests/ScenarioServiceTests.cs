@@ -216,6 +216,9 @@ public class ScenarioServiceTests
 
         public Guid? CalledFor { get; private set; }
 
+        public Task<FitCompareResult> CompareFitAsync(Guid userId, IReadOnlyList<string> codes, CancellationToken ct) =>
+            throw new NotSupportedException();
+
         public Task<SimulationResult> SimulateAsync(Guid userId, SimulationOverrides overrides, IReadOnlyList<int>? pref, CancellationToken ct)
         {
             CalledFor = userId;

@@ -2804,8 +2804,9 @@ public class ChatServiceTests
         Assert.DoesNotContain("AI nhận xét", res.Answer);
     }
 
-    private static FakeRunner CompareRunner() => new()
+    private static FakeRunner CompareRunner(FitCompareResult? fit = null, Exception? fitError = null) => new()
     {
+        FitCompare = fit, FitCompareError = fitError,
         MatchByName = new()
         {
             ["BU"] = Found("bu", "Boston University"),
@@ -2819,6 +2820,110 @@ public class ChatServiceTests
             ["nyu"] = InfoOf("New York University") with { Code = "nyu", Cost = new SchoolCostInfo(50_000m, 20_000m, 3_000m, 2_000m, 75_000m) },
         },
     };
+
+    // ---- UC-154: so sánh theo độ phù hợp với hồ sơ: backend khớp tên, tính nhóm và điểm từng trường, AI chỉ diễn giải
+
+    private static FitCompareResult FitResult() => new(
+        [
+            new FitCompareSchoolDto("bu", "Boston University", "MA", FitCompareStatus.InList, "M", null, 0.61,
+                [new FitPartDto("position", 0.4, 0.3), new FitPartDto("budget", 0.9, 0.25), new FitPartDto("quality", 0.7, 0.2),
+                 new FitPartDto("aid", 0.4, 0.15), new FitPartDto("english", 1.0, 0.1)], []),
+            new FitCompareSchoolDto("nyu", "New York University", "NY", FitCompareStatus.Excluded, null, "BUDGET", null, [], []),
+        ],
+        false);
+
+    private static async Task<(AdvisorChatResponse Res, FakeAdvisor Advisor, FakeRunner Runner)> FitCompareChatWith(
+        JsonElement data, FakeRunner runner, CompareNoteResponseDto? note = null, Exception? noteError = null)
+    {
+        var advisor = new FakeAdvisor("B4")
+        {
+            Action = "school_fit_compare", ActionData = data, Answer = "Mình đang tra số liệu của trường này nhé.",
+            CompareNote = note ?? new("1.0", "gemini", "FAILED", ""), CompareNoteError = noteError,
+        };
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+        return (res, advisor, runner);
+    }
+
+    [Fact]
+    public async Task FitCompare_NamesAreMatchedThenEachSchoolGetsAGroupAndFiveParts_AndTheAiOnlyNarrates()
+    {
+        var runner = CompareRunner(FitResult());
+        var note = new CompareNoteResponseDto("1.0", "gemini", "OK", "Hai trường khác nhau ở nhóm.");
+
+        var (res, advisor, _) = await FitCompareChatWith(CompareAction(["BU", "NYU"], []), runner, note);
+
+        Assert.Equal(["bu", "nyu"], Assert.Single(runner.FitCompared));
+        Assert.Equal("fit_compare", res.Widget!.Type);
+        Assert.StartsWith("Hai trường khác nhau ở nhóm.", res.Answer);
+        Assert.Contains("Boston University: nhóm Vừa sức, điểm phù hợp 61/100", res.Answer);
+        Assert.Contains("New York University: không nằm trong gợi ý vì chi phí vượt ngân sách", res.Answer);
+        Assert.Equal(res.Answer, res.Widget.Data!.Value.GetProperty("coveredText").GetString());
+        Assert.Equal("/recommendations", res.QuickReplies!.First().Href);
+        // AI chỉ nhận số code đã tính (nhóm, điểm, thành phần thấp nhất) và tên trường khác để chặn nhắc nhầm
+        var sent = advisor.LastCompareNote!;
+        Assert.Contains(sent.Facts, f => f.StartsWith("Nhóm: Boston University Vừa sức"));
+        Assert.Contains(sent.Facts, f => f.StartsWith("Điểm phù hợp: Boston University 61/100"));
+        Assert.NotEmpty(sent.Others);
+    }
+
+    [Fact]
+    public async Task FitCompare_WhenTheAiFails_TheCodeBuiltLinesStillAnswer()
+    {
+        var runner = CompareRunner(FitResult());
+
+        var (res, _, _) = await FitCompareChatWith(CompareAction(["BU", "NYU"], []), runner, noteError: new HttpRequestException("advisor tắt"));
+
+        Assert.StartsWith("- Boston University: nhóm Vừa sức", res.Answer);
+        Assert.False(res.Widget!.Data!.Value.TryGetProperty("aiNote", out _));
+    }
+
+    [Fact]
+    public async Task FitCompare_AnIncompleteProfile_SaysWhatIsMissingAndOffersToEditIt_InsteadOfComparing()
+    {
+        var runner = CompareRunner(null, new InvalidOperationException("Hồ sơ chưa có GPA, ngân sách."));
+
+        var (res, _, _) = await FitCompareChatWith(CompareAction(["BU", "NYU"], []), runner);
+
+        Assert.Contains("Hồ sơ chưa có GPA, ngân sách.", res.Answer);
+        Assert.Null(res.Widget);
+        Assert.Contains(res.QuickReplies!, q => q.Label == ChatNextSteps.EditProfile.Label);
+    }
+
+    [Fact]
+    public async Task FitCompare_ASchoolNotInTheSystem_IsNamedAndNothingIsComputed()
+    {
+        var runner = CompareRunner(FitResult());
+
+        var (res, _, _) = await FitCompareChatWith(CompareAction(["BU", "Hogwarts"], []), runner);
+
+        Assert.Contains("Hogwarts", res.Answer);
+        Assert.Empty(runner.FitCompared);
+    }
+
+    [Fact]
+    public async Task FitCompare_AnAmbiguousName_AsksWhichOne_AndTheButtonsStayInTheFitCompare()
+    {
+        var runner = CompareRunner(FitResult());
+
+        var (res, _, _) = await FitCompareChatWith(CompareAction(["Boston", "NYU"], []), runner);
+
+        Assert.All(res.QuickReplies!, q => Assert.Equal("school_fit_compare", q.Action!.Type));   // chọn xong vẫn so sánh theo hồ sơ
+        Assert.Empty(runner.FitCompared);
+    }
+
+    [Fact]
+    public async Task FitCompare_AButtonWithTheTwoCodes_RunsTheFitCompareWithoutTheModel()
+    {
+        var runner = CompareRunner(FitResult());
+        runner.MatchByName!["bu"] = Found("bu", "Boston University");
+        runner.MatchByName["nyu"] = Found("nyu", "New York University");
+
+        var (res, _) = await ActionChat(new ChatAction("school_fit_compare", SchoolCodes: ["bu", "nyu"], Question: "So sánh"), runner);
+
+        Assert.Equal("fit_compare", res.Widget!.Type);
+        Assert.Equal(["bu", "nyu"], Assert.Single(runner.FitCompared));
+    }
 
     [Fact]
     public async Task SchoolCompare_TwoResolvedSchools_GiveATableOfTheirNumbersAndTheCostGap()
@@ -3588,6 +3693,18 @@ public class ChatServiceTests
             if (InfoByCode is not null && InfoByCode.TryGetValue(code, out var byCode))
                 return Task.FromResult(byCode);
             return Task.FromResult(Info ?? throw new InvalidOperationException($"Chưa có trường {code} trong dữ liệu."));
+        }
+
+        public FitCompareResult? FitCompare { get; init; }
+        public Exception? FitCompareError { get; init; }
+        public List<IReadOnlyList<string>> FitCompared { get; } = [];
+
+        public Task<FitCompareResult> CompareFitAsync(Guid userId, IReadOnlyList<string> codes, CancellationToken ct)
+        {
+            FitCompared.Add(codes);
+            if (FitCompareError is not null)
+                throw FitCompareError;
+            return Task.FromResult(FitCompare ?? throw new InvalidOperationException("Chưa có kết quả so sánh."));
         }
 
         public SimulationResult? Simulation { get; init; }

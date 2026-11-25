@@ -257,6 +257,7 @@ class ChatResponse(CamelModel):
     # "school_info" = câu kiến thức có thể hỏi số liệu một trường: .NET thử lấy số từ cơ sở dữ liệu, không có thì giữ câu trả lời của kho kiến thức
     #   (action_data["question"]: câu hỏi, ["school"]: tên trường SLM trích hoặc None, ["kb_answer"]: câu trả lời của kho, ["kb_found"]: kho có nguồn thật),
     # "school_compare" = so sánh sự thật của từ hai trường (action_data["schools"]: tên như học sinh gõ, ["fields"]: mã mục, ["question"]),
+    # "school_fit_compare" = so sánh 2 đến 4 trường theo độ phù hợp với hồ sơ (UC-154): nhóm và điểm năm thành phần; action_data như school_compare,
     # "school_search" = tìm trường theo điều kiện (action_data["filters"]: bộ lọc đã chuẩn hóa camelCase, ["sort"]: cách xếp, ["unresolved"]: điều chưa đọc được),
     # "premium_required" = mọi ý của tin đều cần gói Premium (allowed_intents), không chạy nhánh nào,
     # None = không có
@@ -268,6 +269,7 @@ class ChatResponse(CamelModel):
             "goal_seek",
             "school_info",
             "school_compare",
+            "school_fit_compare",
             "school_search",
             "premium_required",
         ]

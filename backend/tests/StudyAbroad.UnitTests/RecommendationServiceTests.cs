@@ -106,6 +106,112 @@ public class RecommendationServiceTests
         Assert.Contains("NO_COST_DATA", scored["N"].GetProperty("reasons").EnumerateArray().Select(w => w.GetString()));
     }
 
+    // ---- UC-154: so sánh trường theo độ phù hợp: cùng công thức và tham số với gợi ý, trên hồ sơ thật
+
+    [Fact]
+    public async Task CompareFit_EachSchoolGetsItsGroupAndTheFiveWeightedParts_FromTheSameFormulaAsTheRecommendation()
+    {
+        var profile = Profile();
+        var b = School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, _, _) = Setup(profile, [b]);
+
+        var result = await service.CompareFitAsync(profile.UserId, ["B"], default);
+
+        var school = Assert.Single(result.Schools);
+        Assert.Equal((FitCompareStatus.InList, "M"), (school.Status, school.Group));
+        Assert.Equal(["position", "budget", "quality", "aid", "english"], school.Parts.Select(p => p.Key));
+        var w = new FitWeights();
+        Assert.Equal([w.Position, w.Budget, w.Quality, w.Aid, w.English], school.Parts.Select(p => p.Weight));
+        Assert.False(result.PriorityAdjusted);
+        // Cùng con số với lần gợi ý thật của đúng trường này
+        var run = await service.RecommendAsync(profile, [b]);
+        Assert.Equal(run.Scored.Single().Fit!.Value, school.Total!.Value, 9);
+    }
+
+    [Fact]
+    public async Task CompareFit_ASchoolThatTheRecommendationWouldExclude_SaysWhyInsteadOfGivingAGroup()
+    {
+        var profile = Profile();
+        var wrongMajor = School("D", 20_000m, "none", "History", sat: (1200, 1380), accept: 0.60m);
+        var tooExpensive = School("E", 95_610m, "none", Major, sat: (1200, 1380), accept: 0.60m);
+        var (service, _, _) = Setup(profile, [wrongMajor, tooExpensive]);
+
+        var result = await service.CompareFitAsync(profile.UserId, ["D", "E"], default);
+
+        Assert.Equal([("D", "MAJOR"), ("E", "BUDGET")], result.Schools.Select(s => (s.Code, s.ExcludeReason!)));
+        Assert.All(result.Schools, s =>
+        {
+            Assert.Equal(FitCompareStatus.Excluded, s.Status);
+            Assert.Null(s.Group);
+            Assert.Null(s.Total);
+            Assert.Empty(s.Parts);
+        });
+    }
+
+    [Fact]
+    public async Task CompareFit_ASchoolOverTheBudgetButWithUsableAid_IsInTheAidBlock()
+    {
+        var profile = Profile();
+        var colgate = School("Colgate", 95_610m, "need_and_merit", Major, sat: (1450, 1550), accept: 0.08m, aidAvg: 60_000m);
+        var (service, _, _) = Setup(profile, [colgate]);
+
+        var school = Assert.Single((await service.CompareFitAsync(profile.UserId, ["Colgate"], default)).Schools);
+
+        Assert.Equal(FitCompareStatus.Aid, school.Status);
+        Assert.Equal("R", school.Group);   // tỉ lệ nhận 8% nên luôn Khó vào
+        Assert.Contains("NEED_AID", school.Why);
+    }
+
+    [Fact]
+    public async Task CompareFit_ASchoolWithoutTuition_HasNoDataStatus_AndNoScore()
+    {
+        var profile = Profile();
+        var noTuition = School("N", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        noTuition.Offering.TuitionUsd = null;
+        var (service, _, _) = Setup(profile, [noTuition]);
+
+        var school = Assert.Single((await service.CompareFitAsync(profile.UserId, ["N"], default)).Schools);
+
+        Assert.Equal((FitCompareStatus.NoData, "NA"), (school.Status, school.Group));
+        Assert.Null(school.Total);
+    }
+
+    [Fact]
+    public async Task CompareFit_UsesTheWeightsOfTheLatestRecommendationsPriorityButtons()
+    {
+        var profile = Profile();
+        var b = School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, _, _) = Setup(profile, [b]);
+        await service.RecommendAsync(profile, [b], [4, 0, 0]);   // học sinh đã bấm nút ưu tiên chi phí
+
+        var result = await service.CompareFitAsync(profile.UserId, ["B"], default);
+
+        Assert.True(result.PriorityAdjusted);
+        Assert.NotEqual(new FitWeights().Budget, result.Schools.Single().Parts.Single(p => p.Key == "budget").Weight);
+    }
+
+    [Fact]
+    public async Task CompareFit_ACodeNotInTheData_ThrowsSoTheChatCanNameIt()
+    {
+        var profile = Profile();
+        var (service, _, _) = Setup(profile, [School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m)]);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CompareFitAsync(profile.UserId, ["B", "ZZZ"], default));
+
+        Assert.Contains("ZZZ", ex.Message);
+    }
+
+    [Fact]
+    public async Task CompareFit_AProfileMissingWhatTheRecommendationNeeds_IsRefusedLikeTheRecommendation()
+    {
+        var profile = Profile(need: null);
+        var (service, _, _) = Setup(profile, [School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m)]);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CompareFitAsync(profile.UserId, ["B"], default));
+
+        Assert.StartsWith("Hồ sơ", ex.Message);
+    }
+
     [Fact]
     public async Task Recommend_SavedJsonKeepsTheShapeTheFrontendReads()
     {

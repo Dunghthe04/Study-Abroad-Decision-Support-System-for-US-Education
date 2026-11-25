@@ -424,15 +424,12 @@ def others_only_output(
 ) -> SkillOutput | None:
     schools = [t.strip() for t in y.entities.get("schools") or []]
     if "compare" in tasks and len(schools) >= 2:
+        # UC-154: câu so sánh theo hồ sơ ("BU hay NYU hợp với em hơn"): .NET tính nhóm và điểm phù hợp từng trường bằng công thức gợi ý.
+        # Câu so sánh số liệu (học phí, hạn nộp) không hỏi độ phù hợp đã được đổi sang câu kiến thức ở with_comparison_intent (UC-156)
         return SkillOutput(
             LOOKING_UP,
-            action="school_compare",
-            action_data={
-                "question": y.span,
-                "schools": schools,
-                "fields": info_fields(y.entities),
-                "kb_answer": LOOKING_UP,
-            },
+            action="school_fit_compare",
+            action_data={"question": y.span, "schools": schools, "kb_answer": LOOKING_UP},
         )
     # UC-153 1a: hỏi cách tính điểm phù hợp, không nêu trường: giải thích cách tính, dẫn tới trang tham số, không dùng số của trường nào
     if (
@@ -489,6 +486,14 @@ class GeneratedAdviceBranch:
             asks_for_school_list(question) or others_only or "school_list" in (tasks or [])
         )
         if others_only and "school_list" not in tasks:
+            # UC-154: so sánh theo hồ sơ cần hồ sơ đủ như gợi ý trường (UC-22 E1): thiếu thì hỏi tiếp, hồ sơ xong thì trả lời lại đúng câu này
+            if (
+                "compare" in tasks
+                and len([s for s in y.entities.get("schools") or [] if str(s).strip()]) >= 2
+            ):
+                asked = ask_missing_profile(state, y, REQUIRED_B4)
+                if asked is not None:
+                    return asked
             out = others_only_output(y, tasks, asks_for_school_list(question), state)
             if out is not None:
                 return out

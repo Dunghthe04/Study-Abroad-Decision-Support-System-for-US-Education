@@ -90,7 +90,7 @@ export function ExplainCard({ code, card, basis }: { code: string; card: Explain
 }
 
 // UC-24: tên và lời diễn giải từng thành phần của điểm phù hợp, theo thứ tự đặc tả (khớp cách SchoolRanker tính)
-const FIT_PART_INFO: Record<FitPartKey, { label: string; text: string }> = {
+export const FIT_PART_INFO: Record<FitPartKey, { label: string; text: string }> = {
   position: {
     label: "Vừa tầm học thuật",
     text: "Cao nhất khi hồ sơ của bạn ở giữa nhóm sinh viên của trường; quá khó hay quá dễ đều thấp.",
