@@ -64,7 +64,7 @@ export const formatVnDateTime = (iso: string | null | undefined) =>
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   pending: "Chờ thanh toán",
   paid: "Đã thanh toán",
-  mismatch: "Sai số tiền",
+  mismatch: "Lệch số tiền",
   expired: "Hết hạn",
   cancelled: "Đã hủy",
 };

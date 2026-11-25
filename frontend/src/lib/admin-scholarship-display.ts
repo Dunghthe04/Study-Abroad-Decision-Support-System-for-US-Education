@@ -53,7 +53,10 @@ function toOptions(labels: Record<string, string>): LabeledOption[] {
   return [{ value: "", label: "Chưa rõ" }, ...Object.entries(labels).map(([value, label]) => ({ value, label }))];
 }
 
-export const KIND_OPTIONS = toOptions(KIND_LABELS);
+// UC-29 & UC-103: chỉ học bổng do trường cấp, không cho chọn loại external
+export const KIND_OPTIONS = toOptions(
+  Object.fromEntries(Object.entries(KIND_LABELS).filter(([k]) => k !== "external")),
+);
 export const AMOUNT_TYPE_OPTIONS = toOptions(AMOUNT_TYPE_LABELS);
 export const APPLICATION_METHOD_OPTIONS = toOptions(APPLICATION_METHOD_LABELS);
 

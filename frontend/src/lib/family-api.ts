@@ -44,7 +44,7 @@ const FAMILY_ERROR_MESSAGES: Record<string, string> = {
   not_owner: "Chỉ chủ gói mới làm được thao tác này.",
   invalid_email: "Email không hợp lệ hoặc là email của chính bạn.",
   seat_full: "Loại chỗ này đã đủ người (tính cả lời mời đang chờ).",
-  invite_exists: "Email này đã có lời mời đang chờ. Hãy dùng nút Gửi lại.",
+  invite_exists: "Email này đã có lời mời đang chờ hoặc đã là thành viên. Hãy dùng nút Gửi lại.",
   resend_too_soon: "Bạn vừa gửi lại lời mời. Đợi một lúc rồi thử lại nhé.",
   not_pending: "Lời mời này không còn ở trạng thái chờ.",
   invite_invalid: "Link lời mời không hợp lệ hoặc đã bị hủy.",

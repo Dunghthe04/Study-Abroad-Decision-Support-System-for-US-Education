@@ -5,12 +5,13 @@ export interface CostLine {
 }
 
 export interface BudgetCompare {
-  source: "profile" | "input";
+  source: "student" | "parent" | "profile" | "input";
   annualBudgetUsd: number | null;
   unlimited: boolean;
   /** Âm = còn dư, dương = còn thiếu */
   annualGapUsd: number | null;
   totalGapUsd: number | null;
+  withinTolerance?: boolean;
 }
 
 export interface SchoolCost {
@@ -46,6 +47,9 @@ export interface CostEstimate {
   schools: SchoolCost[];
   missingCodes: string[];
   academicYearsDiffer: boolean;
+  annualEscalationRate?: number;
+  bankSellRateSpread?: number;
+  undergraduateYears?: number;
 }
 
 export interface StateLivingCost {

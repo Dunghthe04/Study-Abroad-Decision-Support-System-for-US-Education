@@ -1,5 +1,5 @@
 import type { LabeledOption } from "@/lib/admin-university-display";
-import type { SaveSlmSampleRequest, SlmReviewStatus, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
+import type { SaveSlmSampleRequest, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
 
 export const SAMPLE_TYPES: { id: SlmSampleType; label: string }[] = [
   { id: "collect_profile", label: "Thu thập hồ sơ" },
@@ -16,33 +16,23 @@ export const SPLITS: { id: SlmSplit; label: string }[] = [
   { id: "test", label: "Test" },
 ];
 
-export const REVIEW_STATUSES: { id: SlmReviewStatus; label: string }[] = [
-  { id: "draft", label: "Nháp" },
-  { id: "pending", label: "Chờ duyệt" },
-  { id: "approved", label: "Đã duyệt" },
-  { id: "rejected", label: "Từ chối" },
-  { id: "needs_fix", label: "Cần sửa" },
-];
-
 export const SAMPLE_TYPE_OPTIONS: LabeledOption[] = SAMPLE_TYPES.map((item) => ({ value: item.id, label: item.label }));
 export const SPLIT_OPTIONS: LabeledOption[] = SPLITS.map((item) => ({ value: item.id, label: item.label }));
-
-export const REVIEW_STATUS_OPTIONS: LabeledOption[] = REVIEW_STATUSES.map((item) => ({ value: item.id, label: item.label }));
 
 export function sampleTypeLabel(type: SlmSampleType): string {
   return SAMPLE_TYPES.find((item) => item.id === type)?.label ?? type;
 }
 
-export function statusLabel(status: SlmReviewStatus): string {
-  return REVIEW_STATUSES.find((item) => item.id === status)?.label ?? status;
-}
+export const VERSION_ACTION_LABELS: Record<string, string> = {
+  create: "Tạo mới",
+  edit: "Chỉnh sửa",
+  restore: "Khôi phục phiên bản",
+  import: "Nhập từ Excel",
+};
 
-export function statusBadgeVariant(status: SlmReviewStatus): "neutral" | "ok" | "risk" | "warn" | "brand" {
-  if (status === "approved") return "ok";
-  if (status === "rejected") return "risk";
-  if (status === "needs_fix") return "warn";
-  if (status === "pending") return "brand";
-  return "neutral";
+export function versionActionLabel(action: string, restoredFromVersion?: number | null): string {
+  if (action === "restore" && restoredFromVersion) return `Khôi phục từ v${restoredFromVersion}`;
+  return VERSION_ACTION_LABELS[action] ?? action;
 }
 
 export function jsonProblem(text: string): string | null {
@@ -92,8 +82,6 @@ export function sampleToRequest(sample: SlmSample): SaveSlmSampleRequest {
     source: sample.source,
   };
 }
-
-export const canSubmit = (status: SlmReviewStatus) => status === "draft" || status === "rejected" || status === "needs_fix";
 
 /** Giống quy tắc backend: intents là mảng không rỗng. */
 export function isReady(intents: string | null | undefined): boolean {
