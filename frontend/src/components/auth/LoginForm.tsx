@@ -13,6 +13,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
+import { Spinner } from "@/components/ui/spinner";
 
 export function LoginForm() {
   const router = useRouter();
@@ -119,6 +120,16 @@ export function LoginForm() {
       setIsRestoring(false);
     }
   };
+
+  // [AUTH-099] Chưa biết đã đăng nhập hay chưa, hoặc đã đăng nhập và đang chuyển đi: không hiện form
+  if (isLoading || user) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-ink-2" role="status">
+        <Spinner />
+        Đang tải...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

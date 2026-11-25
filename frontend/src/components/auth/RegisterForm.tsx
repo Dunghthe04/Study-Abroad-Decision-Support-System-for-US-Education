@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { REGISTER_PARENT_EMAIL_KEY } from "@/components/auth/ParentConsentForm";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 // Đánh giá độ mạnh mật khẩu (1..4)
@@ -306,6 +307,16 @@ export function RegisterForm() {
       setIsSubmitting(false);
     }
   };
+
+  // [AUTH-059] Chưa biết đã đăng nhập hay chưa, hoặc đã đăng nhập và đang chuyển đi: không hiện form
+  if (isLoading || user) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-ink-2" role="status">
+        <Spinner />
+        Đang tải...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
