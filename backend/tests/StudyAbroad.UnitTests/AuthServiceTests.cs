@@ -688,6 +688,36 @@ public class AuthServiceTests
         Assert.Contains("\"withdrawnLeads\":2", log.DetailJson);
     }
 
+    // [UC-75 quy tắc, UC-130] Phụ huynh xóa tài khoản: hồ sơ con chưa có tài khoản bị xóa mềm cùng lúc, không gửi mail tới con;
+    // con thật đã liên kết vẫn còn tài khoản và được báo
+    [Fact]
+    public async Task AnonymizeUserAccount_Parent_SoftDeletesManagedChildren_KeepsRealChild()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var parent = _repo.Users[0];
+        parent.Status = UserStatuses.Active;
+        var minh = new User { Email = "minh@noreply.usas.local", FullName = "Minh", Role = UserRoles.Student, Status = UserStatuses.Managed, PasswordHash = "" };
+        var realKid = new User { Email = "kid@test.com", FullName = "Kid", Role = UserRoles.Student, Status = UserStatuses.Active, PasswordHash = "x" };
+        _repo.Users.AddRange([minh, realKid]);
+        _links.Links.Add(new ParentStudentLink { StudentUserId = minh.Id, ParentUserId = parent.Id, ParentEmail = parent.Email, Status = ParentLinkStatuses.Active });
+        _links.Links.Add(new ParentStudentLink { StudentUserId = realKid.Id, ParentUserId = parent.Id, ParentEmail = parent.Email, Status = ParentLinkStatuses.Active });
+        await _repo.CreateSessionAsync(new UserSession { UserId = minh.Id, TokenHash = "acting", ExpiresAt = DateTime.UtcNow.AddHours(1) });
+        var mailsBefore = _emailSender.SentEmails.Count;
+
+        var result = await service.AnonymizeUserAccountAsync(parent.Id);
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(UserStatuses.Deleted, minh.Status);
+        Assert.NotNull(minh.DeletedAt);
+        Assert.InRange(minh.DeletedAt!.Value - parent.DeletedAt!.Value, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+        Assert.True(_repo.Sessions.Single(s => s.UserId == minh.Id).IsRevoked);
+        Assert.Equal(UserStatuses.Active, realKid.Status);
+        var mails = _emailSender.SentEmails.Skip(mailsBefore).ToList();
+        Assert.DoesNotContain(mails, e => e.To == minh.Email);
+        Assert.Contains(mails, e => e.To == realKid.Email);
+    }
+
     [Fact]
     public async Task AnonymizeUserAccount_AlreadyDeleted_ReturnsValidationError()
     {

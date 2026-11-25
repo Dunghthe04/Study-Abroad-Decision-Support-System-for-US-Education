@@ -490,7 +490,17 @@ public class ParentLinkService(
             else
             {
                 var student = await users.GetUserById(link.StudentUserId, ct);
-                if (student != null)
+                if (student?.Status == UserStatuses.Managed)
+                {
+                    // [UC-75 quy tắc, UC-130] Hồ sơ con chưa có tài khoản do phụ huynh tạo: xóa mềm cùng lúc với phụ huynh,
+                    // tác vụ xóa hẳn (UC-80) xóa cùng lượt với phụ huynh. Con không có hộp thư thật nên không gửi mail.
+                    student.Status = UserStatuses.Deleted;
+                    student.DeletedAt = now;
+                    student.UpdatedAt = now;
+                    await users.UpdateUserAsync(student, ct);
+                    await users.RevokeAllSessionsAsync(student.Id, ct);
+                }
+                else if (student != null)
                     notices.Add(new ParentLinkRevokeNotice(student.Email, student.FullName, user.FullName));
             }
         }
