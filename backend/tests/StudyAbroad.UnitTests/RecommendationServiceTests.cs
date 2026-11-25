@@ -52,7 +52,7 @@ public class RecommendationServiceTests
         var profile = Profile();
         var schools = new List<RecommendSchoolInput>
         {
-            School("Colgate", 95_610m, "need_and_merit", Major, sat: (1450, 1550), accept: 0.08m),   // vượt ngân sách, rất chọn lọc
+            School("Colgate", 95_610m, "need_and_merit", Major, sat: (1450, 1550), accept: 0.08m, aidAvg: 60_000m),   // vượt ngân sách, sau trừ hỗ trợ còn 35.610; rất chọn lọc
             School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m),     // vừa sức
             School("D", 20_000m, "none", "History", sat: (1200, 1380), accept: 0.60m)                 // sai ngành
         };
@@ -83,6 +83,27 @@ public class RecommendationServiceTests
 
         Assert.Equal(3, criteria.RootElement.GetProperty("tier").GetInt32());   // hồ sơ chưa có bậc ngoại khóa: coi là trung bình
         Assert.Equal("OK", criteria.RootElement.GetProperty("status").GetString());
+    }
+
+    // UC-22 4b: thiếu học phí nên không tính được chi phí năm: trường không bị loại, vào "Chưa xếp được nhóm" với lý do thiếu dữ liệu chi phí
+    [Fact]
+    public async Task Recommend_ASchoolWithoutTuition_IsNotExcluded_ButGoesToTheNoGroupBlockWithACostReason()
+    {
+        var (service, _, store) = Setup();
+        var noTuition = School("N", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        noTuition.Offering.TuitionUsd = null;
+        var fine = School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+
+        await service.RecommendAsync(Profile(), [noTuition, fine]);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        var root = items.RootElement;
+        var scored = root.GetProperty("scored").EnumerateArray().ToDictionary(e => e.GetProperty("code").GetString()!);
+        Assert.Equal("NA", scored["N"].GetProperty("g2").GetString());
+        Assert.Equal("Keep", scored["N"].GetProperty("outcome").GetString());
+        Assert.Equal("M", scored["B"].GetProperty("g2").GetString());
+        Assert.Equal(["N"], root.GetProperty("other").EnumerateArray().Select(e => e.GetProperty("code").GetString()));
+        Assert.Contains("NO_COST_DATA", scored["N"].GetProperty("reasons").EnumerateArray().Select(w => w.GetString()));
     }
 
     [Fact]
@@ -1184,7 +1205,7 @@ public class RecommendationServiceTests
     [Fact]
     public async Task Simulate_LoweringTheBudget_WithAScholarshipNeed_MovesTheSchoolToTheAidBlock()
     {
-        var school = School("S", 38_000m, "need_and_merit", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var school = School("S", 38_000m, "need_and_merit", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m, aidAvg: 20_000m);
         var (service, _, _, profile) = SimSetup([school]);
 
         var result = await service.SimulateAsync(
@@ -1346,7 +1367,7 @@ public class RecommendationServiceTests
         string code, decimal tuition, string aidPolicy, string major,
         (int Low, int High)? sat = null, decimal? accept = null, decimal? avgGpa = null,
         decimal? minIelts = null, decimal? minToefl = null, decimal? minDuolingo = null, (int Rank, int Total)? rank = null, int? admitted = null, int? applicants = null,
-        string? ec = null)
+        string? ec = null, decimal? aidAvg = null)
     {
         var university = new University
         {
@@ -1358,6 +1379,7 @@ public class RecommendationServiceTests
             StudyLevel = "undergraduate",
             TuitionUsd = tuition,
             IntlAidPolicy = aidPolicy,
+            IntlAidAvgUsd = aidAvg,   // UC-22 4a: học bổng trung bình trừ vào chi phí khi vượt ngưỡng
             Sat25 = sat?.Low,
             Sat75 = sat?.High,
             AvgGpa4 = avgGpa,
@@ -1651,7 +1673,7 @@ public class RecommendationServiceTests
     [Fact]
     public async Task GoalSeek_ASchoolAboveTheBudgetButWithAid_NeedsAid_AndSaysTheMinimumBudget()
     {
-        var pricey = School("P", 62_000m, "preferred", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var pricey = School("P", 62_000m, "preferred", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m, aidAvg: 20_000m);
         var (service, profile) = GoalSetup(pricey);
 
         var budget = (await service.GoalSeekAsync(profile.UserId, "P", "match", default)).Budget;
@@ -1780,7 +1802,7 @@ public class RecommendationServiceTests
     [Fact]
     public async Task GoalSeek_ASchoolThatNeedsAid_IsInTheListFlaggedNeedAid()
     {
-        var pricey = School("P", 62_000m, "preferred", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var pricey = School("P", 62_000m, "preferred", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m, aidAvg: 20_000m);
         var (service, profile) = GoalSetup(pricey);
 
         var result = await service.GoalSeekAsync(profile.UserId, "P", null, default);

@@ -86,7 +86,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     private static readonly int[] BalancedPref = [2, 2, 2];
     // Mỗi khối giữ tối đa chừng này trường (thầy chốt)
     public const int MaxPerBlock = 4;
-    public const string AlgorithmVersion = "percentile-fit-1";
+    public const string AlgorithmVersion = "percentile-fit-2";   // 2: UC-22 4a trừ hỗ trợ trung bình, thiếu hỗ trợ thì loại; 4b thiếu học phí thì vào "Chưa xếp được nhóm"
     // Bắt đầu bằng "Hồ sơ" để controller trả 400 kèm câu này
     public const string MissingScholarshipMessage = "Hồ sơ chưa chọn mức cần học bổng, cần chọn trước khi gợi ý trường.";
     public const string MissingMajorMessage = "Hồ sơ chưa chọn ngành, cần chọn ngành trước khi gợi ý trường.";
@@ -192,6 +192,9 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         {
             var grade = SchoolGrouper.Grade(student, ToSchoolAcademics(school), t.Grouping);
             var filter = byCode[school.University.Code];
+            // UC-22 4b: thiếu học phí nên không tính được chi phí năm: không loại, đưa vào "Chưa xếp được nhóm" với lý do thiếu dữ liệu chi phí
+            if (filter.Flags.Contains(FilterFlags.CostUnknown))
+                grade = new SchoolGrade(SchoolGroup.NoData, grade.Pg, grade.Ps, null, null, [GroupReasons.NoCostData]);
             graded.Add((school, filter,
                 new GradedSchool(school.University.Code, grade, ToFitSchool(school, filter.EnglishShortfall))));
         }
@@ -735,7 +738,9 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             HasIntlAid(offering.IntlAidPolicy),
             offering.MinIelts,
             offering.MinToefl,
-            offering.MinDuolingo);
+            offering.MinDuolingo,
+            offering.TuitionUsd,
+            offering.IntlAidAvgUsd);
     }
 
     // Số liệu học thuật của trường cho công thức xếp nhóm. Tỉ lệ nhận thiếu thì tính từ số được nhận / số nộp.

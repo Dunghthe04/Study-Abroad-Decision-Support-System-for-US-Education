@@ -15,15 +15,16 @@ public class HardFilterTests
 
     private static FilterSchool School(
         string code, decimal? cost, bool? hasAid, string major = "Computer and information sciences",
-        decimal? minIelts = null, decimal? minToefl = null, decimal? minDuolingo = null) =>
-        new(code, [major], "NY", "private", cost, hasAid, minIelts, minToefl, minDuolingo);
+        decimal? minIelts = null, decimal? minToefl = null, decimal? minDuolingo = null,
+        decimal? tuition = null, decimal? aidAvg = null) =>
+        new(code, [major], "NY", "private", cost, hasAid, minIelts, minToefl, minDuolingo, tuition, aidAvg);
 
     [Fact]
     public void An_KeepsAffordableSchools_AndPutsColgateInAidBlock()
     {
         var results = HardFilter.Apply(An(),
         [
-            School("Colgate", 95_610m, true),                                  // vượt trần, có học bổng
+            School("Colgate", 95_610m, true, tuition: 60_000m, aidAvg: 60_000m),   // vượt trần, hỗ trợ trung bình 60.000 kéo xuống 35.610
             School("B", 38_000m, false, minIelts: 6.0m),
             School("C", 46_000m, false, minIelts: 6.5m),
             School("D", 20_000m, false, major: "History"),                     // sai ngành
@@ -41,9 +42,78 @@ public class HardFilterTests
     [Fact]
     public void An_WithoutAidNeed_DropsSchoolsOverTheCeiling()
     {
-        var result = HardFilter.Check(An(AidNeed.None), School("Colgate", 95_610m, true), Tolerance);
+        var result = HardFilter.Check(An(AidNeed.None), School("Colgate", 95_610m, true, tuition: 60_000m, aidAvg: 60_000m), Tolerance);
 
         Assert.Equal((FilterOutcome.Excluded, "BUDGET"), (result.Outcome, result.ExcludeReason));
+    }
+
+    // ---------------------------------------------------------------- UC-22 4a: trừ hỗ trợ tài chính trung bình
+
+    // Ngưỡng = 50.000 x 1,10 = 55.000
+    [Theory]
+    [InlineData(70_000, 15_000, FilterOutcome.AidBlock)]    // 70.000 - 15.000 = 55.000: đúng ngưỡng, không vượt
+    [InlineData(70_000, 14_999, FilterOutcome.Excluded)]    // còn 55.001: vẫn vượt
+    public void Aid_IsSubtractedFromTheCost_AndTheCeilingIsInclusive(double cost, double aid, FilterOutcome expected)
+    {
+        var result = HardFilter.Check(An(), School("S", (decimal)cost, true, tuition: 50_000m, aidAvg: (decimal)aid), Tolerance);
+
+        Assert.Equal(expected, result.Outcome);
+        if (expected == FilterOutcome.Excluded) Assert.Equal("BUDGET", result.ExcludeReason);
+    }
+
+    [Fact]
+    public void Aid_StillOverTheCeilingAfterTheSubtraction_IsExcludedForBudget()
+    {
+        var result = HardFilter.Check(An(), School("S", 95_610m, true, tuition: 60_000m, aidAvg: 20_000m), Tolerance);
+
+        Assert.Equal((FilterOutcome.Excluded, "BUDGET"), (result.Outcome, result.ExcludeReason));
+    }
+
+    [Theory]
+    [InlineData(false, 20_000.0)]    // trường không có học bổng cho du học sinh
+    [InlineData(null, 20_000.0)]     // chưa có dữ liệu hỗ trợ
+    [InlineData(true, null)]       // có chính sách nhưng không có số tiền
+    [InlineData(true, 0.0)]
+    public void Aid_WithoutUsableData_IsExcludedForBudget_NotKeptWithAFlag(bool? hasAid, double? aid)
+    {
+        var result = HardFilter.Check(An(), School("S", 70_000m, hasAid, tuition: 50_000m, aidAvg: (decimal?)aid), Tolerance);
+
+        Assert.Equal((FilterOutcome.Excluded, "BUDGET_NO_AID"), (result.Outcome, result.ExcludeReason));
+    }
+
+    [Fact]
+    public void Aid_BiggerThanTheTuition_IsAbnormalData_AndIsNotUsed()
+    {
+        // Hỗ trợ trung bình 60.000 > học phí 50.000: không trừ, xử lý như không có dữ liệu hỗ trợ
+        var result = HardFilter.Check(An(), School("S", 70_000m, true, tuition: 50_000m, aidAvg: 60_000m), Tolerance);
+
+        Assert.Equal((FilterOutcome.Excluded, "BUDGET_NO_AID"), (result.Outcome, result.ExcludeReason));
+    }
+
+    [Fact]
+    public void Aid_EqualToTheTuition_IsStillUsed()
+    {
+        var result = HardFilter.Check(An(), School("S", 70_000m, true, tuition: 50_000m, aidAvg: 50_000m), Tolerance);
+
+        Assert.Equal(FilterOutcome.AidBlock, result.Outcome);
+    }
+
+    [Fact]
+    public void Aid_IsNotLookedAtWhenTheSchoolIsWithinTheCeiling()
+    {
+        var result = HardFilter.Check(An(), School("S", 54_000m, null), Tolerance);
+
+        Assert.Equal(FilterOutcome.Keep, result.Outcome);
+    }
+
+    // UC-22 4b: thiếu học phí nên không có chi phí năm: không loại; RecommendationService đưa vào "Chưa xếp được nhóm"
+    [Fact]
+    public void MissingCost_IsKeptWithACostUnknownFlag()
+    {
+        var result = HardFilter.Check(An(), School("S", null, true), Tolerance);
+
+        Assert.Equal(FilterOutcome.Keep, result.Outcome);
+        Assert.Contains(FilterFlags.CostUnknown, result.Flags);
     }
 
     // ---------------------------------------------------------------- cổng tiếng Anh (B4)
