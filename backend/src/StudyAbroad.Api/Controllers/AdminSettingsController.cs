@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Admin.Settings;
 using StudyAbroad.Application.Common;
+using StudyAbroad.Application.Costs;
+using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Api.Controllers;
@@ -16,8 +18,21 @@ namespace StudyAbroad.Api.Controllers;
 [Route("api/v1/admin/settings")]
 public class AdminSettingsController(
     IGradeScaleSettingService gradeScale,
-    ICostParametersSettingService costParameters) : ControllerBase
+    ICostParametersSettingService costParameters,
+    IExchangeRateProvider exchangeRates) : ControllerBase
 {
+    /// <summary>
+    /// [UC-65] Tỉ giá USD sang VNĐ đang dùng: giá trị, thời điểm cập nhật gần nhất, nguồn, số ngày từ lần cập nhật, cảnh báo dữ liệu cũ hoặc đang dùng
+    /// tỉ giá dự phòng. Chỉ xem: tỉ giá tự cập nhật mỗi ngày từ nguồn công khai, Moderator không sửa.
+    /// </summary>
+    [HttpGet("exchange-rate")]
+    public async Task<ExchangeRateStatusDto> GetExchangeRate(CancellationToken ct)
+    {
+        var quote = await exchangeRates.GetQuoteAsync(ct);
+        var parameters = await costParameters.GetCurrentParametersAsync(ct);
+        return ExchangeRateStatus.From(quote, parameters.BankSellRateSpread, DateTimeOffset.UtcNow);
+    }
+
     [HttpGet("grade-scale")]
     public Task<GradeScaleSettingDto> GetGradeScale(CancellationToken ct) => gradeScale.GetAsync(ct);
 

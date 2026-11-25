@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import { AdminSection } from "@/components/admin/AdminSection";
 import { CostParametersSettings } from "@/components/admin/parameters/CostParametersSettings";
+import { ExchangeRatePanel } from "@/components/admin/parameters/ExchangeRatePanel";
 import { GradeScaleSettings } from "@/components/admin/parameters/GradeScaleSettings";
 import { ParameterList } from "@/components/methodology/ParameterList";
 import { getMethodologyParameters } from "@/lib/methodology-api";
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
 /**
  * Tham số hệ thống. Bảng quy đổi điểm [UC-68]: moderator sửa, admin xem.
  * Tham số thuật toán gợi ý [UC-89]: chỉ xem cho cả hai vai trò, không ai sửa trên giao diện (D6, BR-10).
- * Tỷ giá [UC-70] làm sau. Luật tư vấn [UC-88] không làm thành chức năng riêng.
+ * Tỉ giá [UC-65]: chỉ xem (giá trị, thời điểm, nguồn, cảnh báo dữ liệu cũ hoặc dự phòng). Luật tư vấn [UC-88] không làm thành chức năng riêng.
  */
 export default async function AdminParametersPage() {
   await connection();
@@ -23,6 +24,7 @@ export default async function AdminParametersPage() {
     <AdminSection href="/admin/parameters">
       <div className="flex flex-col gap-6">
         <GradeScaleSettings />
+        <ExchangeRatePanel />
         <CostParametersSettings />
         <section className="rounded-xl border border-line bg-surface p-5 sm:p-6">
           <h2 className="font-sans text-lg font-semibold text-foreground">Tham số gợi ý trường và ước tính chi phí</h2>
