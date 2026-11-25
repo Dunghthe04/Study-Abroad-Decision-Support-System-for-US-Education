@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Scholarships;
+using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 
@@ -8,10 +9,13 @@ public class ScholarshipSearchRepository(AppDbContext db) : IScholarshipSearchRe
 {
     public async Task<PagedResult<ScholarshipDto>> SearchAsync(ScholarshipSearchQuery query, CancellationToken ct = default)
     {
-        // chỉ học bổng đang bật; học bổng của trường đã ẩn thì không hiện
+        // UC-29: chỉ học bổng đại học do trường cấp (đang bật, trường đang hiện, không có học bổng ngoài trường)
         var q = db.Scholarships.AsNoTracking()
             .Where(s => s.IsActive
-                && (s.UniversityId == null || db.Universities.Any(u => u.Id == s.UniversityId && u.IsActive)));
+                && s.StudyLevel == StudyLevels.Undergraduate
+                && s.UniversityId != null
+                && s.Kind != "external"
+                && db.Universities.Any(u => u.Id == s.UniversityId && u.IsActive));
 
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
@@ -19,11 +23,6 @@ public class ScholarshipSearchRepository(AppDbContext db) : IScholarshipSearchRe
             q = q.Where(s => EF.Functions.ILike(s.Name, pattern)
                 || (s.Provider != null && EF.Functions.ILike(s.Provider, pattern))
                 || db.Universities.Any(u => u.Id == s.UniversityId && EF.Functions.ILike(u.Name, pattern)));
-        }
-        if (!string.IsNullOrWhiteSpace(query.StudyLevel))
-        {
-            var level = query.StudyLevel.Trim().ToLowerInvariant();
-            q = q.Where(s => s.StudyLevel == level);
         }
         if (!string.IsNullOrWhiteSpace(query.CoverageType))
         {
@@ -38,11 +37,12 @@ public class ScholarshipSearchRepository(AppDbContext db) : IScholarshipSearchRe
         if (query.VnEligible == true) q = q.Where(s => s.VnEligible == true);
         if (query.MinAmountUsd is not null || query.MaxAmountUsd is not null)
         {
-            // khớp khi số tiền cố định nằm trong khoảng lọc, hoặc khoảng [min, max] của học bổng giao với khoảng lọc
+            // UC-29: giữ học bổng toàn phần (full_tuition / full_ride); học bổng không rõ giá trị không hiện
             var lo = query.MinAmountUsd;
             var hi = query.MaxAmountUsd;
             q = q.Where(s =>
-                (s.AmountUsd != null && (lo == null || s.AmountUsd >= lo) && (hi == null || s.AmountUsd <= hi))
+                s.AmountType == "full_tuition" || s.AmountType == "full_ride"
+                || (s.AmountUsd != null && (lo == null || s.AmountUsd >= lo) && (hi == null || s.AmountUsd <= hi))
                 || ((s.AmountMinUsd != null || s.AmountMaxUsd != null)
                     && (lo == null || (s.AmountMaxUsd ?? s.AmountMinUsd) >= lo)
                     && (hi == null || (s.AmountMinUsd ?? s.AmountMaxUsd) <= hi)));
@@ -50,6 +50,8 @@ public class ScholarshipSearchRepository(AppDbContext db) : IScholarshipSearchRe
         // điều kiện null = không đòi hỏi, nên vẫn giữ
         if (query.MaxMinGpa4 is { } gpa) q = q.Where(s => s.MinGpa4 == null || s.MinGpa4 <= gpa);
         if (query.MaxMinIelts is { } ielts) q = q.Where(s => s.MinIelts == null || s.MinIelts <= ielts);
+        if (query.MaxMinToefl is { } toefl) q = q.Where(s => s.MinToefl == null || s.MinToefl <= toefl);
+        if (query.MaxMinDuolingo is { } duolingo) q = q.Where(s => s.MinDuolingo == null || s.MinDuolingo <= duolingo);
         if (query.DeadlineFrom is { } from) q = q.Where(s => s.Deadline == null || s.Deadline >= from);
 
         var total = await q.CountAsync(ct);
@@ -83,7 +85,14 @@ public class ScholarshipSearchRepository(AppDbContext db) : IScholarshipSearchRe
                 s.Renewable,
                 s.VnEligible,
                 s.ApplicationMethod,
-                s.ApplyUrl))
+                s.ApplyUrl,
+                s.MinSat,
+                s.MinAct,
+                s.MinToefl,
+                s.MinDuolingo,
+                s.MeritBased,
+                s.NeedBased,
+                s.MajorRestriction))
             .ToListAsync(ct);
 
         return new PagedResult<ScholarshipDto>(items, query.Page, query.PageSize, total);
@@ -95,6 +104,8 @@ public class ScholarshipSearchRepository(AppDbContext db) : IScholarshipSearchRe
         // Lấy học bổng IsActive của trường có Code khớp, sắp hạn nộp (null cuối), tối đa maxCount bản ghi
         var items = await db.Scholarships.AsNoTracking()
             .Where(s => s.IsActive
+                && s.StudyLevel == StudyLevels.Undergraduate
+                && s.Kind != "external"
                 && db.Universities.Any(u => u.Id == s.UniversityId && u.IsActive && u.Code == universityCode))
             .OrderBy(s => s.Deadline == null)
             .ThenBy(s => s.Deadline)
@@ -124,7 +135,14 @@ public class ScholarshipSearchRepository(AppDbContext db) : IScholarshipSearchRe
                 s.Renewable,
                 s.VnEligible,
                 s.ApplicationMethod,
-                s.ApplyUrl))
+                s.ApplyUrl,
+                s.MinSat,
+                s.MinAct,
+                s.MinToefl,
+                s.MinDuolingo,
+                s.MeritBased,
+                s.NeedBased,
+                s.MajorRestriction))
             .ToListAsync(ct);
 
         return items;
