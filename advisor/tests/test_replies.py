@@ -97,7 +97,11 @@ async def test_no_out_of_scope_answer_is_a_dead_end(kind):
     out = await BRANCH.run(ChatState(), "xin hỏi", tin(("out_of_scope", {"subtype": kind})))
 
     assert out.answer
-    assert [b.label for b in out.quick_replies] == MENU_LABELS
+    labels = [b.label for b in out.quick_replies]
+    # about_system có thêm nút mở trang Căn cứ tham số (UC-157); mọi câu vẫn đủ các nút menu
+    assert labels == MENU_LABELS or (
+        kind == "about_system" and labels == [replies.ABOUT_SYSTEM_PAGE_BUTTON.label, *MENU_LABELS]
+    )
 
 
 async def test_asking_what_the_system_is_gets_its_own_answer_not_the_unclear_one():

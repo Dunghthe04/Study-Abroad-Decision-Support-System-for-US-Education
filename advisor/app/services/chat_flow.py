@@ -42,6 +42,7 @@ from app.services.replies import (
     CHAT_BUTTON,
     CONTINUE_CHAT,
     FORM_BUTTON,
+    HANDOFF_FREE,
     INTAKE_FORM,
     INTAKE_MORE,
     MENU,
@@ -422,6 +423,10 @@ class ChatFlow:
             response.slm = slm_summary(slm, asked_slm, fell_back, model_intents)
             return response
 
+        # Gói không cho gợi ý trung tâm trong chat (Miễn phí): "cho em gặp người thật" dẫn tới trang danh bạ Trung tâm (UC-157)
+        if not allows(req, "center_referral"):
+            intents = [free_handoff(y) for y in intents]
+
         # 2. Chạy từng ý theo thứ tự, ghép câu trả lời
         names, output = await self._run_intents(state, message, slm, intents, emit)
 
@@ -552,6 +557,14 @@ class ChatFlow:
 # Gói của học sinh cho chạy loại ý này không (allowed_intents None = mọi loại)
 def allows(req: ChatRequest, kind: str) -> bool:
     return req.allowed_intents is None or kind in req.allowed_intents
+
+
+# Muốn gặp người thật mà gói không cho gợi ý trung tâm: đổi ý sang loại dẫn tới trang Trung tâm.
+# Chỉ đổi ý sẽ chạy; nhãn model gán vẫn giữ nguyên trong log và trong slm_summary
+def free_handoff(y: SlmY) -> SlmY:
+    if y.type == "out_of_scope" and y.entities.get("subtype") == "human_handoff":
+        return y.model_copy(update={"entities": {**y.entities, "subtype": HANDOFF_FREE}})
+    return y
 
 
 # Tin nhắn mới nhất của học sinh

@@ -34,18 +34,29 @@ def menu_buttons(*skip: str) -> list[QuickReply]:
 HANDOFF_AI = "Mình là trợ lý AI nên không thay được tư vấn viên."
 # Muốn gặp người thật: trong hệ thống "người thật" là tư vấn viên của trung tâm, nên đi vào luồng trung tâm kèm câu này
 HANDOFF_INTRO = f"{HANDOFF_AI} Mình gợi ý các trung tâm tư vấn đã xác minh."
+# Hỏi về hệ thống (nguồn dữ liệu, ngày cập nhật, độ tin cậy): câu cố định kèm nút mở trang Căn cứ tham số (UC-157, UC-83)
 ABOUT_SYSTEM = (
     "Mình là trợ lý AI tư vấn du học Mỹ. Mình đánh giá hồ sơ của bạn, gợi ý trường phù hợp, thử các thay đổi "
     "(như điểm SAT, GPA), giải đáp về visa, học phí, học bổng và giới thiệu trung tâm tư vấn đã xác minh. "
+    "Số liệu về trường lấy từ cơ sở dữ liệu của hệ thống, kèm nguồn và ngày thu thập; kết quả gợi ý chỉ mang tính tham khảo. "
+    "Căn cứ của các tham số tính gợi ý bạn xem ở trang Căn cứ tham số. "
     "Bạn muốn bắt đầu từ đâu?"
 )
+ABOUT_SYSTEM_PAGE_BUTTON = QuickReply(
+    label="Xem căn cứ tham số", value="Em muốn xem căn cứ tham số của hệ thống", href="/methodology"
+)
+# Muốn gặp người thật mà gói không cho gợi ý trung tâm trong chat (Miễn phí): dẫn tới trang danh bạ Trung tâm (UC-40, UC-42).
+# Không phải subtype của model: chat_flow đổi human_handoff thành loại này theo gói của học sinh
+HANDOFF_FREE = "human_handoff_free"
+HANDOFF_FREE_REPLY = f"{HANDOFF_AI} Bạn xem danh sách trung tâm tư vấn đã xác minh ở trang Trung tâm và gửi yêu cầu liên hệ nhé."
 GREETING_REPLY = (
     "Xin chào! Mình là trợ lý tư vấn du học Mỹ. Mình có thể gợi ý trường phù hợp với hồ sơ của bạn, "
     "thử các kịch bản (nếu điểm SAT, GPA thay đổi), giải đáp về visa, học phí, học bổng, hoặc giới thiệu trung tâm tư vấn. "
     "Bạn muốn bắt đầu từ đâu?"
 )
 OUT_OF_SCOPE = {
-    "exception": "Mình chỉ hỗ trợ tư vấn du học Mỹ. Bạn chọn một việc dưới đây nhé.",
+    # Ngoài chủ đề, kể cả muốn học thạc sĩ hoặc tiến sĩ: hệ thống chỉ hỗ trợ du học Mỹ bậc đại học (UC-157, UC-08)
+    "exception": "Mình chỉ hỗ trợ tư vấn du học Mỹ bậc đại học (chưa hỗ trợ thạc sĩ hay tiến sĩ). Bạn chọn một việc dưới đây nhé.",
     "sensitive": "Mình không hỗ trợ việc này. Hồ sơ du học cần trung thực, mình giúp bạn chuẩn bị đúng cách nhé.",
     # farewell gồm cảm ơn và tạm biệt nên dùng một câu hợp với cả hai
     "farewell": "Rất vui được hỗ trợ bạn! Khi cần bạn cứ quay lại hỏi mình nhé.",
@@ -53,6 +64,7 @@ OUT_OF_SCOPE = {
     "about_system": ABOUT_SYSTEM,
     # Chỉ dùng khi chưa có skill trung tâm; bình thường human_handoff đi vào luồng trung tâm (HANDOFF_INTRO)
     "human_handoff": f"{HANDOFF_AI} Bạn xem danh sách trung tâm tư vấn đã xác minh ở trang Trung tâm nhé.",
+    HANDOFF_FREE: HANDOFF_FREE_REPLY,
 }
 
 # ---------------------------------------------------------------------------------------------------------------------

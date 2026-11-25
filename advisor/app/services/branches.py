@@ -24,11 +24,13 @@ from app.services.goal_target import plain, target_code
 from app.services.priority import from_model as priority_from_model
 from app.services.priority import label as priority_label
 from app.services.replies import (
+    ABOUT_SYSTEM_PAGE_BUTTON,
     ASK_AGAIN_LABEL,
     ASK_SCHOOL,
     ASK_WHICH_SCHOOLS,
     CANNOT_ANSWER,
     CANNOT_TRY_OTHERS,
+    CENTER_PAGE_BUTTON,
     DEFAULT_QUESTION,
     EDIT_SECTION_LABEL,
     EDIT_SECTION_VALUE,
@@ -38,6 +40,7 @@ from app.services.replies import (
     GREETING_REPLY,
     GROUP_NEED_RESULTS,
     GROUP_TOO_SMALL,
+    HANDOFF_FREE,
     HANDOFF_INTRO,
     LOOKING_UP,
     MENU,
@@ -319,6 +322,18 @@ class OutOfScopeBranch:
             output = await self._center.run(state, message, {"follow_up": True})
             output.answer = f"{HANDOFF_INTRO}\n\n{output.answer}"
             return output
+        if kind == HANDOFF_FREE:
+            # Gói không cho gợi ý trung tâm trong chat (Miễn phí): dẫn tới trang danh bạ Trung tâm, bỏ nút Tìm trung tâm vì nút đó cũng bị khóa
+            return SkillOutput(
+                OUT_OF_SCOPE[HANDOFF_FREE],
+                quick_replies=[CENTER_PAGE_BUTTON.model_copy(), *menu_buttons("centers")],
+            )
+        if kind == "about_system":
+            # Câu cố định kèm nút mở trang Căn cứ tham số (UC-83)
+            return SkillOutput(
+                OUT_OF_SCOPE["about_system"],
+                quick_replies=[ABOUT_SYSTEM_PAGE_BUTTON.model_copy(), *menu_buttons()],
+            )
         # Luật small_talk là lưới an toàn cho model chưa học nhãn greeting (bản cũ hay trả ambiguous hoặc farewell cho lời chào)
         if kind == "greeting" or (
             kind in ("ambiguous", "farewell") and small_talk.classify(message) == "greeting"
