@@ -363,6 +363,30 @@ public class AuthServiceTests
         Assert.InRange(session.ExpiresAt, DateTime.UtcNow.AddDays(7).AddMinutes(-1), DateTime.UtcNow.AddDays(7).AddMinutes(1));
     }
 
+    // [UC-03] AUTH-215: phiên Moderator chỉ sống 8 giờ tính từ lúc đăng nhập, cookie theo cùng mốc
+    [Fact]
+    public async Task Login_Moderator_SessionLasts8Hours()
+    {
+        var service = CreateService();
+        await service.CreateModeratorAccountAsync(
+            new CreateModeratorAccountRequest("mod@test.com", "password123", "Mod User"));
+
+        var login = await service.LoginAsync(new LoginRequest("mod@test.com", "password123"));
+
+        var session = Assert.Single(_repo.Sessions);
+        Assert.Equal(session.ExpiresAt, login.Response!.SessionExpiresAt);
+        Assert.InRange(session.ExpiresAt, DateTime.UtcNow.AddHours(8).AddMinutes(-1), DateTime.UtcNow.AddHours(8).AddMinutes(1));
+    }
+
+    [Theory]
+    [InlineData(UserRoles.Student, 7 * 24)]
+    [InlineData(UserRoles.Parent, 7 * 24)]
+    [InlineData(UserRoles.Center, 7 * 24)]
+    [InlineData(UserRoles.Moderator, 8)]
+    [InlineData(UserRoles.Admin, 8)]
+    public void LifetimeFor_FollowsRole(string role, int hours) =>
+        Assert.Equal(TimeSpan.FromHours(hours), RefreshTokens.LifetimeFor(role));
+
     [Fact]
     public async Task LockUserAccount_LocksStudent_WritesAuditAndRevokesSessions()
     {

@@ -419,7 +419,7 @@ namespace StudyAbroad.Application.Auth
         public async Task<AuthResult> StartSessionAsync(User user, CancellationToken ct = default) =>
             AuthResult.Ok(await CreateSessionAsync(user, null, null, ct));
 
-        /// <summary>Sinh access token (JWT 15 phút) và refresh token, lưu phiên 7 ngày và trả về thông tin phiên.</summary>
+        /// <summary>Sinh access token (JWT 15 phút) và refresh token, lưu phiên (7 ngày, Moderator/Admin 8 giờ) và trả về thông tin phiên.</summary>
         private async Task<AuthResponse> CreateSessionAsync(User user, string? ipAddress, string? userAgent, CancellationToken ct)
         {
             var (token, expiresAt) = tokens.GenerateToken(user);
@@ -430,7 +430,7 @@ namespace StudyAbroad.Application.Auth
                 UserId = user.Id,
                 TokenHash = tokens.HashToken(token),
                 RefreshTokenHash = tokens.HashToken(refreshToken),
-                ExpiresAt = DateTime.UtcNow.Add(RefreshTokens.Lifetime),
+                ExpiresAt = DateTime.UtcNow.Add(RefreshTokens.LifetimeFor(user.Role)),
                 IsRevoked = false,
                 IpAddress = ipAddress,
                 UserAgent = userAgent
