@@ -60,13 +60,16 @@ export const leadApi = {
     }),
 
   /**
-   * [USAS-2080 / UC-58] Báo cáo một tin của trung tâm vi phạm quy tắc; tin vào hàng đợi của Moderator.
-   * Báo lại tin đã báo không đổi gì. Lỗi: 400 (tin không phải của trung tâm hoặc đã gỡ), 404 not_found.
+   * [UC-143] Báo cáo một tin của trung tâm vi phạm quy tắc (trong 90 ngày kể từ ngày gửi yêu cầu); tin vào hàng đợi của Admin.
+   * Lý do bắt buộc 3–64 ký tự; chi tiết thêm tùy chọn tối đa 1.000 ký tự.
    */
-  reportSentMessage: (leadId: string, messageId: string, reason?: string) =>
+  reportSentMessage: (leadId: string, messageId: string, reason: string, detail?: string) =>
     apiFetch<LeadMessageDto>(
       `/api/v1/leads/sent/${encodeURIComponent(leadId)}/messages/${encodeURIComponent(messageId)}/report`,
-      { method: "POST", body: JSON.stringify({ reason: reason?.trim() || null }) }
+      {
+        method: "POST",
+        body: JSON.stringify({ reason: reason.trim(), detail: detail?.trim() || null }),
+      }
     ),
 };
 
