@@ -2,6 +2,7 @@
 
 from datetime import date
 from typing import Any, Literal
+
 from pydantic import BaseModel, Field
 
 from app.core.study_levels import StudyLevel
