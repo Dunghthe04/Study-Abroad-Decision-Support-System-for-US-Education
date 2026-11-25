@@ -40,6 +40,8 @@ function describeChange(item: GradeScaleHistoryItem): string[] {
   }
   if (item.old && item.new && item.old.sourceName !== item.new.sourceName)
     lines.push(`Nguồn: "${item.old.sourceName}" → "${item.new.sourceName}".`);
+  if (item.recomputedProfiles != null)
+    lines.push(`Đã tính lại GPA thang 4 cho ${item.recomputedProfiles} hồ sơ.`);
   if (lines.length === 0) lines.push("Lưu lại, không đổi mốc nào.");
   return lines;
 }
