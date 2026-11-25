@@ -17,6 +17,10 @@ public interface IGradeScaleSettingRepository
     /// <summary>Lưu bảng (thêm nếu mới), GPA hồ sơ đã sửa và audit trong cùng một lần SaveChanges.</summary>
     Task SaveAsync(AppSetting setting, bool isNew, AuditLog audit, CancellationToken ct = default);
 
+    /// <summary>Xóa cache kết quả phân tích GPA cũ cho các hồ sơ vừa đổi GPA để lần xem sau tính theo bảng mới.</summary>
+    Task InvalidateGpaAnalysisCacheAsync(IReadOnlyCollection<Guid> profileIds, CancellationToken ct = default) =>
+        Task.CompletedTask;
+
     /// <summary>Một trang lịch sử sửa (mới trước, kèm tên người sửa) và tổng số lần sửa.</summary>
     Task<(IReadOnlyList<(AuditLog Log, string? ActorName)> Rows, int TotalCount)> GetHistoryAsync(
         int page, int pageSize, CancellationToken ct = default);
