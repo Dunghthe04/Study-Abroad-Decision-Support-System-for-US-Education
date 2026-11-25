@@ -41,7 +41,7 @@ export default async function UniversityDetailPage({ params }: UniversityPagePro
   // API chưa lọc theo mã trường: tìm theo tên rồi giữ đúng học bổng của trường này. Lỗi thì ẩn mục học bổng, không làm hỏng trang
   let scholarships: ScholarshipItem[] = [];
   try {
-    const found = await searchScholarships({ search: university.name, deadlineFrom: today, pageSize: 50 });
+    const found = await searchScholarships({ search: university.name, deadlineFrom: today, vnEligible: true, pageSize: 50 });
     scholarships = found.items.filter((s) => s.universityCode === university.code);
   } catch {
     scholarships = [];
