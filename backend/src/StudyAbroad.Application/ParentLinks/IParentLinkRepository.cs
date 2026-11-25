@@ -32,7 +32,7 @@ public interface IParentLinkRepository
 
     /// <summary>Phụ huynh chấp nhận: thêm consent và cập nhật link trong cùng một lần lưu (một transaction).
     /// Ném <see cref="Common.ConcurrencyConflictException"/> khi link vừa bị sửa.</summary>
-    Task SaveAcceptAsync(ParentStudentLink link, Consent consent, CancellationToken ct = default);
+    Task SaveAcceptAsync(ParentStudentLink link, Consent? consent, CancellationToken ct = default);
 
     /// <summary>Rút đồng ý / hủy liên kết: cập nhật link và consent (nếu có) trong cùng một lần lưu.</summary>
     Task SaveRevokeAsync(ParentStudentLink link, Consent? consent, CancellationToken ct = default);

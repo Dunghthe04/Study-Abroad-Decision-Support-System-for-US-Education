@@ -69,7 +69,8 @@ public class ParentLinkServiceTests
         var (link, token) = AddPendingLink(student);
         var result = await CreateService().AcceptAsync(token, isGuardian: true, "1.2.3.4");
         Assert.Equal(ParentLinkError.None, result.Error);
-        _revokeToken = _emails.SentEmails.Single(e => e.Purpose == ParentConsentConfirmedPurpose).Code;
+        // Học sinh từ 16 tuổi không có mail xác nhận đồng ý nên không có token thu hồi (UC-109)
+        _revokeToken = _emails.SentEmails.Where(e => e.Purpose == ParentConsentConfirmedPurpose).Select(e => e.Code).SingleOrDefault() ?? "";
         _emails.SentEmails.Clear();
         return (student, parent, Stored(link.Id));
     }
@@ -244,6 +245,55 @@ public class ParentLinkServiceTests
         Assert.Contains(_emails.SentEmails, e => e.To == student.Email && e.Purpose == "parent_linked");
         Assert.Contains(_emails.SentEmails, e => e.To == "me@test.com" && e.Purpose == ParentConsentConfirmedPurpose);
         Assert.False(result.Value.HasParentAccount);
+    }
+
+    // [UC-109, CON-051] Học sinh 16–17 đã tự đồng ý: phụ huynh chấp nhận chỉ là liên kết, không ghi đồng ý, không có link rút đồng ý
+    [Theory]
+    [InlineData(16)]
+    [InlineData(17)]
+    public async Task Accept_Student16Plus_LinksWithoutConsent_AndNoRevokeEmail(int age)
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, age);
+        var (link, token) = AddPendingLink(student);
+
+        var result = await CreateService().AcceptAsync(token, isGuardian: true, "1.2.3.4");
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal(ParentInviteStates.Accepted, result.Value!.State);
+        Assert.Empty(_links.Consents);
+        var stored = Stored(link.Id);
+        Assert.Equal(ParentLinkStatuses.Active, stored.Status);
+        Assert.Null(stored.ConsentId);
+        Assert.Contains(_emails.SentEmails, e => e.To == student.Email && e.Purpose == "parent_linked");
+        Assert.DoesNotContain(_emails.SentEmails, e => e.Purpose == ParentConsentConfirmedPurpose);
+    }
+
+    [Theory]
+    [InlineData(17, false)]
+    [InlineData(14, true)]
+    public async Task Resend_InviteIsConsentRequestOnlyUnder16(int age, bool expected)
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, age);
+        AddPendingLink(student);
+
+        var result = await CreateService().ResendAsync(student.Id);
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal(expected, _emails.LastInviteIsConsentRequest);
+    }
+
+    [Theory]
+    [InlineData(17, false)]
+    [InlineData(14, true)]
+    public async Task ChangeParentEmail_InviteIsConsentRequestOnlyUnder16(int age, bool expected)
+    {
+        var student = AddUser("kid@test.com", UserRoles.Student, age);
+        AddPendingLink(student);
+
+        var result = await CreateService().ChangeParentEmailAsync(student.Id, "dad@test.com");
+
+        Assert.Equal(ParentLinkError.None, result.Error);
+        Assert.Equal(expected, _emails.LastInviteIsConsentRequest);
     }
 
     [Fact]

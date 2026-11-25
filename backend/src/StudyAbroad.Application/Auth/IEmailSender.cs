@@ -29,8 +29,11 @@ namespace StudyAbroad.Application.Auth
         /// </summary>
         Task SendCenterVerificationOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? reason, IReadOnlyList<string>? unmetConditions, CancellationToken ct = default);
 
-        /// <summary>Mời phụ huynh liên kết và đồng ý cho hệ thống xử lý dữ liệu của học sinh; link chứa token dùng một lần.</summary>
-        Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, CancellationToken ct = default);
+        /// <summary>
+        /// Mời phụ huynh liên kết; link chứa token dùng một lần. <paramref name="isConsentRequest"/>: học sinh dưới 16 thì thư xin đồng ý
+        /// xử lý dữ liệu; học sinh 16–17 thì chỉ là lời mời liên kết để phụ huynh theo dõi (UC-109).
+        /// </summary>
+        Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, bool isConsentRequest, CancellationToken ct = default);
 
         /// <summary>Báo cho một bên khi liên kết phụ huynh–học sinh được xác nhận (<paramref name="linked"/> = true) hoặc bị hủy / rút đồng ý.</summary>
         Task SendParentLinkChangedEmailAsync(string toEmail, string studentName, string parentLabel, bool linked, CancellationToken ct = default);

@@ -53,8 +53,8 @@ namespace StudyAbroad.Infrastructure.Auth
         public Task SendCenterVerificationOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? reason, IReadOnlyList<string>? unmetConditions, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendCenterVerificationOutcomeEmailAsync(toEmail, centerName, outcome, reason, unmetConditions, t));
 
-        public Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, CancellationToken ct = default) =>
-            Enqueue(toEmail, (s, t) => s.SendParentInviteEmailAsync(toEmail, studentName, inviteToken, expiryDays, t));
+        public Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, bool isConsentRequest, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendParentInviteEmailAsync(toEmail, studentName, inviteToken, expiryDays, isConsentRequest, t));
 
         public Task SendParentLinkChangedEmailAsync(string toEmail, string studentName, string parentLabel, bool linked, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendParentLinkChangedEmailAsync(toEmail, studentName, parentLabel, linked, t));

@@ -55,10 +55,12 @@ public class ParentLinkRepository(AppDbContext db) : IParentLinkRepository
             .Join(db.Consents, l => l.ConsentId, c => (Guid?)c.Id, (l, c) => c)
             .AnyAsync(c => c.Granted, ct);
 
-    public async Task SaveAcceptAsync(ParentStudentLink link, Consent consent, CancellationToken ct = default)
+    public async Task SaveAcceptAsync(ParentStudentLink link, Consent? consent, CancellationToken ct = default)
     {
-        // Một SaveChanges = một transaction: consent và link cùng thành công hoặc cùng rollback
-        db.Consents.Add(consent);
+        // Một SaveChanges = một transaction: consent và link cùng thành công hoặc cùng rollback.
+        // Học sinh từ 16 tuổi không cần đồng ý của phụ huynh nên không có consent (UC-109)
+        if (consent != null)
+            db.Consents.Add(consent);
         db.ParentStudentLinks.Update(link);
         await SaveOrThrowConflictAsync(ct);
     }

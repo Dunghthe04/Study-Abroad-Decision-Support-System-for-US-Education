@@ -281,8 +281,12 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
-    public Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, CancellationToken ct = default)
+    /// <summary>Thư mời cuối cùng có phải thư xin đồng ý không (học sinh dưới 16).</summary>
+    public bool? LastInviteIsConsentRequest { get; private set; }
+
+    public Task SendParentInviteEmailAsync(string toEmail, string studentName, string inviteToken, int expiryDays, bool isConsentRequest, CancellationToken ct = default)
     {
+        LastInviteIsConsentRequest = isConsentRequest;
         SentEmails.Add((toEmail, "parent_invite", inviteToken));
         return Task.CompletedTask;
     }
@@ -453,10 +457,11 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
             PolicyVersion = c.PolicyVersion, GrantedByUserId = c.GrantedByUserId, GrantedByEmail = c.GrantedByEmail, GrantedIp = c.GrantedIp,
         }).FirstOrDefault());
 
-    public Task SaveAcceptAsync(ParentStudentLink link, Consent consent, CancellationToken ct = default)
+    public Task SaveAcceptAsync(ParentStudentLink link, Consent? consent, CancellationToken ct = default)
     {
         ThrowIfConflict();
-        Consents.Add(consent);
+        if (consent != null)
+            Consents.Add(consent);
         Replace(link);
         return Task.CompletedTask;
     }

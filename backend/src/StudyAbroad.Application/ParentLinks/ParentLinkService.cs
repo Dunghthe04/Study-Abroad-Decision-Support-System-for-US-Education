@@ -153,11 +153,14 @@ public class ParentLinkService(
         // Ghi ĐÚNG phiên bản đang hiệu lực. Phụ huynh đã đọc bản khác (admin vừa công bố bản mới) thì không ghi đồng ý,
         // để bằng chứng luôn khớp với văn bản người đó thực sự đã đọc. Từ chối thì không cần kiểm tra.
         var policyVersion = await CurrentConsentVersionAsync(ct);
-        if (accept && seenPolicyVersion is not null && !string.Equals(seenPolicyVersion, policyVersion, StringComparison.Ordinal))
+        // [UC-109] Học sinh 16–17 tự đồng ý được: phụ huynh chỉ chấp nhận liên kết, không có văn bản đồng ý,
+        // không ghi Consent và không có link rút đồng ý
+        var consentRequired = IsConsentRequired(student);
+        if (consentRequired && accept && seenPolicyVersion is not null && !string.Equals(seenPolicyVersion, policyVersion, StringComparison.Ordinal))
             return ParentLinkResult<ParentInviteInfo>.Fail(ParentLinkError.Validation, PolicyChangedMessage);
 
         var now = DateTime.UtcNow;
-        var consent = new Consent
+        var consent = !consentRequired ? null : new Consent
         {
             UserId = student.Id,
             Purpose = ConsentPurposes.ChildDataProcessing,
@@ -168,7 +171,7 @@ public class ParentLinkService(
             GrantedIp = Truncate(ipAddress, 45),
             CreatedAt = now,
         };
-        link.ConsentId = consent.Id;
+        link.ConsentId = consent?.Id;
         link.TokenExpiresAt = null;
 
         string? revokeToken = null;
@@ -178,8 +181,11 @@ public class ParentLinkService(
             link.ParentUserId = parentAccount?.Id;
             link.AcceptedAt = now;
             // [UC-117] Link rút đồng ý gửi phụ huynh: DB chỉ giữ hash
-            revokeToken = ParentInvite.GenerateToken();
-            link.RevokeTokenHash = ParentInvite.HashToken(revokeToken);
+            if (consentRequired)
+            {
+                revokeToken = ParentInvite.GenerateToken();
+                link.RevokeTokenHash = ParentInvite.HashToken(revokeToken);
+            }
         }
         else
         {
@@ -202,7 +208,8 @@ public class ParentLinkService(
             // [UC-110 / UC-75] Báo học sinh phụ huynh đã xác nhận liên kết
             await NotifyAsync(student.Id, StudyAbroad.Application.Notifications.NotificationTypes.ParentLinkLinked, "Phụ huynh đã xác nhận liên kết",
                 $"{parentLabel} đã liên kết với tài khoản của bạn.", ct);
-            await emailSender.SendParentConsentConfirmedEmailAsync(link.ParentEmail, student.FullName, revokeToken!, ct);
+            if (revokeToken != null)
+                await emailSender.SendParentConsentConfirmedEmailAsync(link.ParentEmail, student.FullName, revokeToken, ct);
             if (parentAccount != null && profileShare != null)
                 await profileShare.PrepareMatchAfterLinkAsync(parentAccount.Id, [link], ct);
         }
@@ -213,7 +220,7 @@ public class ParentLinkService(
 
         return ParentLinkResult<ParentInviteInfo>.Ok(
             ToInviteInfo(link, student, now, policyVersion),
-            accept ? "Đã ghi nhận bạn đồng ý." : "Đã ghi nhận bạn từ chối.");
+            accept ? (consentRequired ? "Đã ghi nhận bạn đồng ý." : "Đã liên kết tài khoản với con.") : "Đã ghi nhận bạn từ chối.");
     }
 
     /// <summary>Tài khoản vai trò Phụ huynh, chưa xóa, đúng email nhận link mời; không có thì null.</summary>
@@ -265,7 +272,7 @@ public class ParentLinkService(
             return Fail(ParentLinkError.Conflict, ConflictMessage);
         }
 
-        await emailSender.SendParentInviteEmailAsync(link.ParentEmail, student.FullName, token, ParentInvite.ExpiryDays, ct);
+        await emailSender.SendParentInviteEmailAsync(link.ParentEmail, student.FullName, token, ParentInvite.ExpiryDays, IsConsentRequired(student), ct);
         return ParentLinkResult<ParentLinkDto>.Ok(ToDto(link, null, student, canRevoke: true), "Đã gửi lại lời mời tới email phụ huynh.");
     }
 
@@ -310,7 +317,7 @@ public class ParentLinkService(
         var token = ParentInvite.Issue(link, now);
         await links.AddAsync(link, ct);
 
-        await emailSender.SendParentInviteEmailAsync(email, student.FullName, token, ParentInvite.ExpiryDays, ct);
+        await emailSender.SendParentInviteEmailAsync(email, student.FullName, token, ParentInvite.ExpiryDays, IsConsentRequired(student), ct);
         return ParentLinkResult<ParentLinkDto>.Ok(ToDto(link, null, student, canRevoke: true), "Đã gửi lời mời tới email phụ huynh mới.");
     }
 
@@ -714,6 +721,10 @@ public class ParentLinkService(
     /// <summary>Liên kết đã đồng ý rồi bị phụ huynh rút (qua link mail hoặc tài khoản), không phải học sinh tự hủy / đổi email.</summary>
     private static bool IsRevokedByParent(ParentStudentLink link, Guid studentUserId) =>
         link.Status == ParentLinkStatuses.Revoked && link.AcceptedAt is not null && link.RevokedByUserId != studentUserId;
+
+    /// <summary>[UC-109] Cần phụ huynh đồng ý xử lý dữ liệu: học sinh dưới 16 (tài khoản cũ chưa có ngày sinh giữ như trước: cần).</summary>
+    private static bool IsConsentRequired(User student) =>
+        AgeOf(student) is not { } age || age < AgeGroups.ChildMaxAgeExclusive;
 
     private static bool CanStudentRevoke(ParentStudentLink link, User student) =>
         link.Status != ParentLinkStatuses.Active ||

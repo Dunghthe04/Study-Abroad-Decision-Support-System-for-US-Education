@@ -746,6 +746,9 @@ namespace StudyAbroad.Application.Auth
         private async Task SendFirstParentInvitesAsync(User student, CancellationToken ct)
         {
             var links = await parentLinks.GetByStudentAsync(student.Id, ct);
+            // [UC-109] Học sinh 16–17 khai email phụ huynh: thư mời liên kết, không phải thư xin đồng ý
+            var isConsentRequest = student.DateOfBirth is not { } dob ||
+                AgePolicy.GetAge(dob, AgePolicy.TodayInVietnam(DateTime.UtcNow)) < AgeGroups.ChildMaxAgeExclusive;
             foreach (var link in links.Where(l => l.Status == ParentLinkStatuses.Pending && l.InviteSentCount == 0))
             {
                 var token = ParentInvite.Issue(link, DateTime.UtcNow);
@@ -757,7 +760,7 @@ namespace StudyAbroad.Application.Auth
                 {
                     continue;
                 }
-                await emailSender.SendParentInviteEmailAsync(link.ParentEmail, student.FullName, token, ParentInvite.ExpiryDays, ct);
+                await emailSender.SendParentInviteEmailAsync(link.ParentEmail, student.FullName, token, ParentInvite.ExpiryDays, isConsentRequest, ct);
             }
         }
 
