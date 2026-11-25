@@ -15,14 +15,24 @@ public class GradeScaleSettingRepository(AppDbContext db) : IGradeScaleSettingRe
     {
         var profiles = await db.StudentProfiles
             .Where(p => p.OverallGpa != null && p.GradeScale == GradeScales.Scale10)
-            .Where(p => db.TranscriptScores.Any(s => s.StudentProfileId == p.Id && s.Semester != null))
+            .Where(p => db.TranscriptScores.Any(s => s.StudentProfileId == p.Id))
             .ToListAsync(ct);
         var ids = profiles.Select(p => p.Id).ToList();
         var scores = await db.TranscriptScores.AsNoTracking()
-            .Where(s => ids.Contains(s.StudentProfileId) && s.Semester != null)
+            .Where(s => ids.Contains(s.StudentProfileId))
             .ToListAsync(ct);
         var byProfile = scores.ToLookup(s => s.StudentProfileId);
         return profiles.Select(p => (p, (IReadOnlyList<TranscriptScore>)byProfile[p.Id].ToList())).ToList();
+    }
+
+    public async Task InvalidateGpaAnalysisCacheAsync(IReadOnlyCollection<Guid> profileIds, CancellationToken ct = default)
+    {
+        if (profileIds.Count == 0) return;
+        var stale = await db.AnalysisResults
+            .Where(a => a.Kind == AcademicConstants.KindGpa && profileIds.Contains(a.StudentProfileId))
+            .ToListAsync(ct);
+        if (stale.Count > 0)
+            db.AnalysisResults.RemoveRange(stale);
     }
 
     public async Task SaveAsync(AppSetting setting, bool isNew, AuditLog audit, CancellationToken ct = default)
