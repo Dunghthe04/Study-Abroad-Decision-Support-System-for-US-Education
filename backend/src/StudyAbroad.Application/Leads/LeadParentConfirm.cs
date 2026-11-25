@@ -46,6 +46,19 @@ public static class LeadParentConfirm
         _ => key,
     };
 
+    /// <summary>
+    /// [UC-110 bước 3] Phiên bản văn bản đang hiệu lực ghi vào bằng chứng đồng ý chia sẻ. Đồng ý của người đại diện cho con dưới 16
+    /// theo văn bản đồng ý của phụ huynh (như <c>ParentLinkService</c>); người từ 16 tuổi tự đồng ý theo Chính sách bảo mật.
+    /// Chưa công bố bản nào thì dùng hằng số mặc định.
+    /// </summary>
+    public static async Task<string> ConsentPolicyVersionAsync(
+        StudyAbroad.Application.Admin.Policies.IPolicyVersionLookup? lookup, bool byGuardian, CancellationToken ct)
+    {
+        var kind = byGuardian ? PolicyKinds.ChildDataConsent : PolicyKinds.PrivacyPolicy;
+        var published = lookup is null ? null : await lookup.GetPublishedVersionAsync(kind, ct);
+        return published ?? (byGuardian ? ConsentPurposes.ChildDataPolicyVersion : "v1.0");
+    }
+
     private const string Missing = "Chưa cập nhật";
 
     /// <summary>

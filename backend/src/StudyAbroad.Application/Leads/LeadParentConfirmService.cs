@@ -1,4 +1,5 @@
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.Notifications;
 using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Domain.Constants;
@@ -24,7 +25,9 @@ public class LeadParentConfirmService(
     IParentLinkRepository parentLinks,
     IUserRepository users,
     IStudyCenterRepository studyCenters,
-    IEmailSender emailSender) : ILeadParentConfirmService
+    IEmailSender emailSender,
+    StudyAbroad.Application.Admin.Policies.IPolicyVersionLookup? policyVersions = null,
+    INotificationService? notifications = null) : ILeadParentConfirmService
 {
     public async Task<LeadParentConfirmInfo> LookupAsync(string? token, CancellationToken ct = default)
     {
@@ -63,7 +66,7 @@ public class LeadParentConfirmService(
                 UserId = lead.UserId ?? throw LinkInactive(),
                 Purpose = AgeFeatures.ShareWithCenter,
                 Granted = true,
-                PolicyVersion = "v1.0",
+                PolicyVersion = await LeadParentConfirm.ConsentPolicyVersionAsync(policyVersions, byGuardian: true, ct),
                 GrantedByUserId = link.ParentUserId,
                 GrantedByEmail = link.ParentEmail,
                 GrantedIp = safeIp,
@@ -114,7 +117,25 @@ public class LeadParentConfirmService(
             return;
 
         var center = await studyCenters.GetByIdAsync(lead.StudyCenterId, ct);
-        await emailSender.SendLeadParentDecisionEmailAsync(student.Email, student.FullName, center?.Name ?? "Trung tâm tư vấn", outcome, ct);
+        var centerName = center?.Name ?? "Trung tâm tư vấn";
+        await emailSender.SendLeadParentDecisionEmailAsync(student.Email, student.FullName, centerName, outcome, ct);
+        if (notifications is null)
+            return;
+
+        // [UC-110 bước 4] Học sinh nhận cả thông báo trong hệ thống, cho cả ba kết quả
+        var text = outcome switch
+        {
+            LeadStatuses.New => $"Phụ huynh đã đồng ý. Yêu cầu liên hệ của bạn đã được gửi tới {centerName}.",
+            LeadStatuses.Cancelled => $"Phụ huynh đã từ chối gửi yêu cầu liên hệ tới {centerName}. Trung tâm không nhận được thông tin của bạn.",
+            _ => $"Phụ huynh chưa trả lời trong {LeadParentConfirm.ExpiryDays} ngày nên yêu cầu liên hệ tới {centerName} đã hết hạn.",
+        };
+        await notifications.NotifyAsync(student.Id, NotificationTypes.LeadStatusChanged, "Kết quả phụ huynh xác nhận yêu cầu liên hệ",
+            text, "/account", ct);
+
+        // [UC-110 bước 3] Đồng ý: yêu cầu tới trung tâm như yêu cầu mới gửi (UC-42)
+        if (outcome == LeadStatuses.New && center?.OwnerUserId is { } ownerId)
+            await notifications.NotifyAsync(ownerId, NotificationTypes.LeadNew, "Có yêu cầu liên hệ mới",
+                "Một học sinh / phụ huynh vừa gửi yêu cầu liên hệ tới trung tâm.", "/center/leads", ct);
     }
 
     private async Task<LeadParentConfirmInfo> ToInfoAsync(Lead lead, ParentStudentLink link, DateTime now, CancellationToken ct)

@@ -1,6 +1,7 @@
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Leads;
+using StudyAbroad.Application.Notifications;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -2045,10 +2046,20 @@ public class LeadServiceTests
 
     // ===== [UC-116] Học sinh dưới 16 gửi yêu cầu liên hệ: phụ huynh xác nhận qua link mail =====
 
+    // [UC-110 bước 3] Phiên bản văn bản admin đã công bố theo từng loại
+    private sealed class PublishedPolicy : StudyAbroad.Application.Admin.Policies.IPolicyVersionLookup
+    {
+        public Dictionary<string, string> Versions { get; } = [];
+        public Task<string?> GetPublishedVersionAsync(string kind, CancellationToken ct = default) =>
+            Task.FromResult(Versions.TryGetValue(kind, out var v) ? v : null);
+    }
+
     private sealed class ParentConfirmSetup
     {
         public CreateLeadSetup S { get; } = new();
         public FakeEmailSender Emails { get; } = new();
+        public ParentPreferenceServiceTests.FakeNotifications Notifications { get; } = new();
+        public PublishedPolicy Policies { get; } = new();
         public LeadService Leads { get; }
         public LeadParentConfirmService Confirm { get; }
         public User Student { get; }
@@ -2058,7 +2069,7 @@ public class LeadServiceTests
         public ParentConfirmSetup()
         {
             Leads = new LeadService(S.LeadRepo, S.CenterRepo, S.UserRepo, S.LinkRepo, null, Emails);
-            Confirm = new LeadParentConfirmService(S.LeadRepo, S.LinkRepo, S.UserRepo, S.CenterRepo, Emails);
+            Confirm = new LeadParentConfirmService(S.LeadRepo, S.LinkRepo, S.UserRepo, S.CenterRepo, Emails, Policies, Notifications);
             Student = S.AddStudent(14);
             Student.Email = "kid@test.com";
             Student.FullName = "Con";
@@ -2158,6 +2169,50 @@ public class LeadServiceTests
         Assert.Equal("mom@test.com", consent.GrantedByEmail);
         Assert.Equal(p.Student.Id, consent.UserId);
         Assert.Contains(p.Emails.SentEmails, e => e.To == "kid@test.com" && e.Purpose == "lead_parent_decision" && e.Code == LeadStatuses.New);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_Accept_ConsentRecordsPublishedChildConsentVersion_AndNotifiesStudentAndCenter()
+    {
+        var p = new ParentConfirmSetup();
+        p.Policies.Versions[PolicyKinds.ChildDataConsent] = "2027-01";
+        p.Policies.Versions[PolicyKinds.PrivacyPolicy] = "v9.9";
+        var owner = Guid.NewGuid();
+        p.S.CenterRepo.Centers.Single().OwnerUserId = owner;
+        await p.Send();
+
+        await p.Confirm.AcceptAsync(p.TokenFor(p.Mom), null);
+
+        Assert.Equal("2027-01", Assert.Single(p.S.LeadRepo.Consents).PolicyVersion);
+        Assert.Single(p.Notifications.Sent, n => n.UserId == p.Student.Id && n.Type == NotificationTypes.LeadStatusChanged && n.LinkUrl == "/account");
+        Assert.Single(p.Notifications.Sent, n => n.UserId == owner && n.Type == NotificationTypes.LeadNew);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_Accept_NoPublishedVersion_FallsBackToChildConsentDefault()
+    {
+        var p = new ParentConfirmSetup();
+        await p.Send();
+
+        await p.Confirm.AcceptAsync(p.TokenFor(p.Mom), null);
+
+        Assert.Equal(ConsentPurposes.ChildDataPolicyVersion, Assert.Single(p.S.LeadRepo.Consents).PolicyVersion);
+    }
+
+    [Fact]
+    public async Task ParentConfirm_RejectAndExpire_StudentGetsInAppNotification_CenterNot()
+    {
+        var p = new ParentConfirmSetup();
+        await p.Send();
+        await p.Confirm.RejectAsync(p.TokenFor(p.Dad), null);
+        Assert.Single(p.Notifications.Sent);
+        Assert.Equal((p.Student.Id, NotificationTypes.LeadStatusChanged), (p.Notifications.Sent[0].UserId, p.Notifications.Sent[0].Type));
+
+        var q = new ParentConfirmSetup();
+        await q.Send();
+        q.Stored.ParentTokenExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+        await Assert.ThrowsAsync<LeadRuleException>(() => q.Confirm.LookupAsync(q.TokenFor(q.Mom)));
+        Assert.Single(q.Notifications.Sent, n => n.UserId == q.Student.Id && n.Type == NotificationTypes.LeadStatusChanged);
     }
 
     [Fact]

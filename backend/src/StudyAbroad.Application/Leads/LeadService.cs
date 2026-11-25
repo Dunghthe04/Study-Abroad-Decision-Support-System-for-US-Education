@@ -22,7 +22,8 @@ public class LeadService(
     IEmailSender? emailSender = null,
     INotificationService? notifications = null,
     ILeadChatNotifier? chat = null,
-    ILeadChatPresence? presence = null) : ILeadService
+    ILeadChatPresence? presence = null,
+    StudyAbroad.Application.Admin.Policies.IPolicyVersionLookup? policyVersions = null) : ILeadService
 {
     public const int MaxMessageLength = 2000;
     public const int MaxReplyMessageLength = 4000;
@@ -226,12 +227,15 @@ public class LeadService(
         var isParent = submitter.Role == UserRoles.Parent;
         // [UC-116] Học sinh dưới 16: chưa có đồng ý chia sẻ; bản ghi đồng ý tạo khi phụ huynh bấm Đồng ý trong mail
         var parentSecret = needsParentConfirm ? ParentInvite.GenerateToken() : null;
+        // [UC-42 4b / UC-110 bước 3] Ghi phiên bản văn bản đang hiệu lực: phụ huynh gửi thay con dưới 16 là đồng ý của người đại diện
+        var child = isParent ? await users.GetUserById(studentId, ct) : null;
+        var byGuardian = child?.DateOfBirth is { } childDob && AgePolicy.GetAge(childDob, today) < AgeGroups.ChildMaxAgeExclusive;
         var consent = needsParentConfirm ? null : new Consent
         {
             UserId = studentId,
             Purpose = AgeFeatures.ShareWithCenter,
             Granted = true,
-            PolicyVersion = "v1.0",
+            PolicyVersion = await LeadParentConfirm.ConsentPolicyVersionAsync(policyVersions, byGuardian, ct),
             GrantedByUserId = isParent ? submitter.Id : null,
             GrantedIp = clientIp,
         };
