@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FlagIcon, ImageIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { LEAD_IMAGE_ACCEPT, validateLeadImage } from "@/lib/lead-message";
 import { cn } from "@/lib/utils";
@@ -100,16 +101,17 @@ export function ImageAttachPicker({
   );
 }
 
-/** Nút "Báo cáo" mở ô nhập lý do tại chỗ. `onReport` ném lỗi nếu thất bại để giữ form. */
+/** [UC-143] Nút "Báo cáo" mở form lý do (bắt buộc 3–64 ký tự) và chi tiết thêm (tùy chọn, <= 1.000 ký tự). */
 export function ReportMessageControl({
   isReported,
   onReport,
 }: {
   isReported: boolean;
-  onReport: (reason: string) => Promise<void>;
+  onReport: (reason: string, detail?: string) => Promise<void>;
 }) {
   const [isReporting, setIsReporting] = useState(false);
   const [reason, setReason] = useState("");
+  const [detail, setDetail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (isReported) {
@@ -129,12 +131,17 @@ export function ReportMessageControl({
     );
   }
 
+  const trimmedReason = reason.trim();
+  const isReasonValid = trimmedReason.length >= 3 && trimmedReason.length <= 64;
+
   const submit = async () => {
+    if (!isReasonValid) return;
     setIsSubmitting(true);
     try {
-      await onReport(reason);
+      await onReport(trimmedReason, detail.trim() || undefined);
       setIsReporting(false);
       setReason("");
+      setDetail("");
     } catch {
       // lỗi đã hiện ở toast; giữ form để thử lại
     } finally {
@@ -144,23 +151,43 @@ export function ReportMessageControl({
 
   return (
     <div className="space-y-1.5">
-      <Textarea
+      <Input
         value={reason}
         onChange={(e) => setReason(e.target.value)}
-        maxLength={500}
+        maxLength={64}
+        disabled={isSubmitting}
+        placeholder="Lý do báo cáo (bắt buộc, 3–64 ký tự, vd: Quấy rối, Lừa đảo)"
+        aria-label="Lý do báo cáo tin nhắn"
+        className="h-7 text-xs"
+      />
+      <Textarea
+        value={detail}
+        onChange={(e) => setDetail(e.target.value)}
+        maxLength={1000}
         rows={2}
         disabled={isSubmitting}
-        placeholder="Vì sao tin này vi phạm? (lời lẽ thô tục, quấy rối...)"
-        aria-label="Lý do báo cáo tin nhắn"
+        placeholder="Chi tiết thêm (tùy chọn, tối đa 1.000 ký tự)..."
+        aria-label="Chi tiết báo cáo tin nhắn"
         className="text-xs"
       />
-      <div className="flex justify-end gap-1.5">
-        <Button type="button" variant="ghost" size="xs" disabled={isSubmitting} onClick={() => setIsReporting(false)}>
-          Hủy
-        </Button>
-        <Button type="button" size="xs" disabled={isSubmitting} onClick={() => void submit()} loading={isSubmitting}>
-          Gửi báo cáo
-        </Button>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] text-muted-foreground">
+          {trimmedReason.length < 3 ? "Cần tối thiểu 3 ký tự lý do" : `${trimmedReason.length}/64 ký tự`}
+        </span>
+        <div className="flex gap-1.5">
+          <Button type="button" variant="ghost" size="xs" disabled={isSubmitting} onClick={() => setIsReporting(false)}>
+            Hủy
+          </Button>
+          <Button
+            type="button"
+            size="xs"
+            disabled={isSubmitting || !isReasonValid}
+            onClick={() => void submit()}
+            loading={isSubmitting}
+          >
+            Gửi báo cáo
+          </Button>
+        </div>
       </div>
     </div>
   );
