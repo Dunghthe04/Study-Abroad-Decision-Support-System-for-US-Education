@@ -19,6 +19,7 @@ import type { ParentLinkDto } from "@/types/api";
 import { parentChildrenApi } from "@/lib/parent-children-api";
 import { useFetched } from "@/lib/use-fetched";
 import { AccountSectionHeader } from "@/components/account/AccountSectionHeader";
+import { RevokeAndDeleteChildDialog, RevokeConsentDialog } from "@/components/account/ParentConsentDialogs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -39,8 +40,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -67,7 +66,6 @@ export function ParentLinksCard() {
   const [deleteTarget, setDeleteTarget] = useState<ParentLinkDto | null>(null);
   // Giữ tên con cho tiêu đề khi hộp thoại đang đóng dần (deleteTarget đã về null)
   const [deleteName, setDeleteName] = useState("");
-  const [deleteUnderstood, setDeleteUnderstood] = useState(false);
 
   // UC-76: nút So sánh ưu tiên chỉ cho con có tài khoản thật (getMine có thể trả cả con managed)
   const { data: children } = useFetched(isStudent ? "no-children" : "parent-children", () =>
@@ -141,7 +139,6 @@ export function ParentLinksCard() {
     if (!deleteTarget) return;
     const target = deleteTarget;
     setDeleteTarget(null);
-    setDeleteUnderstood(false);
     await run(`delete-${target.id}`, () => parentLinksApi.revokeAndDelete(target.id), "Không thể xóa tài khoản của con.");
   };
 
@@ -344,7 +341,6 @@ export function ParentLinksCard() {
                           className="text-risk hover:bg-risk-wash hover:text-risk"
                           disabled={busy !== null}
                           onClick={() => {
-                            setDeleteUnderstood(false);
                             setDeleteName(link.studentName);
                             setDeleteTarget(link);
                           }}
@@ -431,24 +427,28 @@ export function ParentLinksCard() {
         </DialogContent>
       </Dialog>
 
-      {/* Hộp thoại xác nhận hủy liên kết / rút đồng ý */}
-      <Dialog open={revokeTarget !== null} onOpenChange={(open) => !open && setRevokeTarget(null)}>
+      {/* Phụ huynh rút đồng ý: hộp thoại dùng chung với Con của tôi */}
+      <RevokeConsentDialog
+        open={!isStudent && revokeTarget?.status === "active"}
+        onCancel={() => setRevokeTarget(null)}
+        onConfirm={handleRevoke}
+      />
+
+      {/* Hộp thoại xác nhận hủy liên kết (học sinh) / hủy lời mời */}
+      <Dialog
+        open={revokeTarget !== null && (isStudent || revokeTarget.status !== "active")}
+        onOpenChange={(open) => !open && setRevokeTarget(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {revokeTarget && revokeTarget.status !== "active"
-                ? "Hủy lời mời?"
-                : isStudent
-                  ? "Hủy liên kết phụ huynh?"
-                  : "Rút lại sự đồng ý?"}
+              {revokeTarget && revokeTarget.status !== "active" ? "Hủy lời mời?" : "Hủy liên kết phụ huynh?"}
             </DialogTitle>
           </DialogHeader>
           <DialogDescription>
             {revokeTarget && revokeTarget.status !== "active"
               ? "Link trong mail mời sẽ không dùng được nữa."
-              : isStudent
-                ? "Phụ huynh sẽ không còn liên kết với tài khoản của bạn và sẽ nhận email thông báo."
-                : "Hệ thống sẽ ngừng xử lý dữ liệu của con; con dưới 16 tuổi quay về chế độ hạn chế cho tới khi có đồng ý mới."}
+              : "Phụ huynh sẽ không còn liên kết với tài khoản của bạn và sẽ nhận email thông báo."}
           </DialogDescription>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setRevokeTarget(null)}>
@@ -462,45 +462,12 @@ export function ParentLinksCard() {
       </Dialog>
 
       {/* [UC-75 1a] Hộp thoại xác nhận rút đồng ý kèm xóa tài khoản con dưới 16 */}
-      <Dialog
+      <RevokeAndDeleteChildDialog
         open={deleteTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDeleteTarget(null);
-            setDeleteUnderstood(false);
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="pr-6">Rút đồng ý và xóa tài khoản của {deleteName}?</DialogTitle>
-          </DialogHeader>
-          <DialogDescription>Việc này khác với chỉ rút đồng ý:</DialogDescription>
-          <ul className="list-disc space-y-1 pl-5 text-sm text-ink-2">
-            <li>Hệ thống ngừng xử lý dữ liệu và rút mọi đồng ý của phụ huynh cho con.</li>
-            <li>Tài khoản của con bị khóa ngay và xóa vĩnh viễn sau 30 ngày. Con không tự khôi phục được khi chưa đủ 16 tuổi.</li>
-            <li>Bạn nhận email có nút &quot;Hủy xóa và đồng ý lại cho con&quot; và &quot;Chỉ hủy xóa&quot;, dùng được tới ngày xóa vĩnh viễn.</li>
-          </ul>
-          <div className="flex items-start gap-2">
-            <Checkbox
-              id="parent-delete-child-understood"
-              checked={deleteUnderstood}
-              onCheckedChange={(checked) => setDeleteUnderstood(Boolean(checked))}
-            />
-            <Label htmlFor="parent-delete-child-understood" className="leading-snug text-ink">
-              Tôi hiểu tài khoản và dữ liệu của con sẽ bị xóa vĩnh viễn nếu không hủy trong 30 ngày.
-            </Label>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>
-              Không
-            </Button>
-            <Button type="button" variant="destructive" disabled={!deleteUnderstood} onClick={handleRevokeAndDelete}>
-              Rút đồng ý và xóa
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        childName={deleteName}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={handleRevokeAndDelete}
+      />
     </div>
   );
 }

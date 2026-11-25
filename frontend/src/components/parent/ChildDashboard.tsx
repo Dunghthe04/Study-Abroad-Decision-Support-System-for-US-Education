@@ -5,6 +5,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Trash2Icon, UnlinkIcon } from "lucide-react";
+import { RevokeAndDeleteChildDialog, RevokeConsentDialog } from "@/components/account/ParentConsentDialogs";
 import { AcademicSummaryCard } from "@/components/account/AcademicSummaryCard";
 import { RecommendationHistory, RunGroups } from "@/components/recommendation/RecommendationHistory";
 import { scenarioOverrides, snapshotText, useSavedScenarios } from "@/components/recommendation/SavedScenarios";
@@ -18,7 +20,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
-import { ApiError } from "@/lib/api";
+import { ApiError, parentLinksApi } from "@/lib/api";
 import { parentChildrenApi } from "@/lib/parent-children-api";
 import { recommendationHistoryApi } from "@/lib/recommendation-history-api";
 import { describeSimulation } from "@/lib/simulation-link";
@@ -123,6 +125,7 @@ export function ChildDashboard({ studentId, initialTab = "overview" }: { student
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {child.isManaged && <ActAsChildButton childId={child.studentUserId} childName={child.studentName} />}
+          {!child.isManaged && <ChildConsentActions studentId={child.studentUserId} childName={child.studentName} />}
           <AddManagedChildButton />
           {list.length > 1 && (
             <NativeSelect
@@ -172,6 +175,69 @@ export function ChildDashboard({ studentId, initialTab = "overview" }: { student
         )}
       </Tabs>
     </Page>
+  );
+}
+
+// [UC-111 1a, UC-75 1a] Phụ huynh rút đồng ý ngay tại Con của tôi (giống Tài khoản > Liên kết) khi con dưới 16 và liên kết
+// đang hoạt động. Rút xong con không còn trong danh sách nên quay về Con của tôi.
+function ChildConsentActions({ studentId, childName }: { studentId: string; childName: string }) {
+  const router = useRouter();
+  const { data: links } = useFetched(`parent-links-${studentId}`, async () => (await parentLinksApi.getMine()).data);
+  const [dialog, setDialog] = useState<"revoke" | "delete" | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const link = links?.find((l) => l.studentUserId === studentId && l.status === "active");
+  if (!link || (link.studentAge != null && link.studentAge >= 16)) return null;
+
+  const run = async (action: () => Promise<{ message: string | null }>, fallback: string) => {
+    setDialog(null);
+    setBusy(true);
+    try {
+      const res = await action();
+      toast.add({ type: "success", title: res.message || "Đã cập nhật." });
+      router.push("/parent/children");
+    } catch (err) {
+      toast.add({ type: "error", title: fallback, description: err instanceof ApiError ? err.message : "Vui lòng thử lại." });
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      {link.canRevoke && (
+        <Button
+          type="button"
+          variant="ghost"
+          className="text-risk hover:bg-risk-wash hover:text-risk"
+          disabled={busy}
+          onClick={() => setDialog("revoke")}
+        >
+          <UnlinkIcon data-icon="inline-start" aria-hidden />
+          Rút đồng ý
+        </Button>
+      )}
+      <Button
+        type="button"
+        variant="ghost"
+        className="text-risk hover:bg-risk-wash hover:text-risk"
+        disabled={busy}
+        onClick={() => setDialog("delete")}
+      >
+        <Trash2Icon data-icon="inline-start" aria-hidden />
+        Rút đồng ý và xóa tài khoản
+      </Button>
+      <RevokeConsentDialog
+        open={dialog === "revoke"}
+        onCancel={() => setDialog(null)}
+        onConfirm={() => run(() => parentLinksApi.revoke(link.id), "Không thể rút đồng ý.")}
+      />
+      <RevokeAndDeleteChildDialog
+        open={dialog === "delete"}
+        childName={childName}
+        onCancel={() => setDialog(null)}
+        onConfirm={() => run(() => parentLinksApi.revokeAndDelete(link.id), "Không thể xóa tài khoản của con.")}
+      />
+    </>
   );
 }
 
