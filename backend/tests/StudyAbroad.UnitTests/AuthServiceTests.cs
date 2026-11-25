@@ -829,6 +829,57 @@ public class AuthServiceTests
         Assert.Empty(_repo.Sessions);
     }
 
+    // [UC-05] AUTH-223: tài khoản đang chờ xóa còn trong 30 ngày đặt lại được mật khẩu, tài khoản vẫn chờ xóa;
+    // đăng nhập bằng mật khẩu mới đi vào luồng khôi phục (UC-03, 3c)
+    [Fact]
+    public async Task ResetPassword_PendingDeletion_Succeeds_StaysDeleted_LoginOffersRestore()
+    {
+        var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
+
+        await service.ForgotPasswordAsync(new ForgotPasswordRequest("a@test.com"));
+        var code = _emailSender.SentEmails.Last(e => e.Purpose == OtpPurposes.ResetPassword).Code;
+        var reset = await service.ResetPasswordAsync(new ResetPasswordRequest("a@test.com", code, "newPassword123"));
+
+        Assert.Equal(AuthError.None, reset.Error);
+        Assert.Equal(UserStatuses.Deleted, user.Status);
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "newPassword123"));
+        Assert.Equal(AuthError.PendingDeletion, login.Error);
+        Assert.False(string.IsNullOrEmpty(login.PendingDeletion!.RestoreToken));
+        Assert.Empty(_repo.Sessions);
+    }
+
+    // Học sinh dưới 16 bị người đại diện yêu cầu xóa: vẫn đặt lại được mật khẩu nhưng đăng nhập không có mã khôi phục (UC-75 4b)
+    [Fact]
+    public async Task ResetPassword_PendingDeletionRequestedByParent_Succeeds_LoginStillBlocked()
+    {
+        var (service, user) = await PendingDeletionSetup(TimeSpan.FromDays(1));
+        user.DateOfBirth = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-14));
+        user.DeletionRequestedByEmail = "parent@test.com";
+
+        await service.ForgotPasswordAsync(new ForgotPasswordRequest("a@test.com"));
+        var code = _emailSender.SentEmails.Last(e => e.Purpose == OtpPurposes.ResetPassword).Code;
+        var reset = await service.ResetPasswordAsync(new ResetPasswordRequest("a@test.com", code, "newPassword123"));
+
+        Assert.Equal(AuthError.None, reset.Error);
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "newPassword123"));
+        Assert.True(login.PendingDeletion!.RequestedByParent);
+        Assert.Null(login.PendingDeletion.RestoreToken);
+    }
+
+    // Quá 30 ngày (job chưa kịp xóa hẳn) thì không nhận mã, vẫn thông báo chung
+    [Fact]
+    public async Task ForgotPassword_PendingDeletionPastRetention_NoResetCode()
+    {
+        var (service, _) = await PendingDeletionSetup(TimeSpan.FromDays(31));
+
+        var forgot = await service.ForgotPasswordAsync(new ForgotPasswordRequest("a@test.com"));
+        var resend = await service.ResendOtpAsync(new ResendOtpRequest("a@test.com", OtpPurposes.ResetPassword));
+
+        Assert.Equal(AuthError.None, forgot.Error);
+        Assert.Equal(AuthError.None, resend.Error);
+        Assert.DoesNotContain(_repo.Otps, o => o.Purpose == OtpPurposes.ResetPassword);
+    }
+
     [Fact]
     public async Task RestoreAccount_TokenUsedTwice_SecondFails()
     {

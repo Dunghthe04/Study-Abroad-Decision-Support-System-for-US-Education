@@ -557,12 +557,15 @@ namespace StudyAbroad.Application.Auth
 
         /// <summary>
         /// [UC-05] Chỉ tài khoản đã kích hoạt, không bị khóa mới được đặt lại mật khẩu. Tài khoản bị khóa,
-        /// chưa kích hoạt (AUTH-126), con do phụ huynh quản lý hay đã xóa thì không nhận mã, vẫn nhận thông báo chung.
+        /// chưa kích hoạt (AUTH-126), con do phụ huynh quản lý hay đã xóa hẳn thì không nhận mã, vẫn nhận thông báo chung.
+        /// Tài khoản đang chờ xóa còn trong 30 ngày vẫn đặt lại được (AUTH-223), kể cả học sinh dưới 16 do người đại diện
+        /// yêu cầu xóa; đặt lại không khôi phục tài khoản, lần đăng nhập sau đi qua luồng khôi phục (UC-03, 3c).
         /// </summary>
-        private static bool CanResetPassword(User user) =>
-            user.Status != UserStatuses.Locked && user.Status != UserStatuses.TempLocked &&
-            user.Status != UserStatuses.Managed && user.Status != UserStatuses.Unverified &&
-            user.Status != UserStatuses.Deleted;
+        private bool CanResetPassword(User user) =>
+            user.Status == UserStatuses.Deleted
+                ? IsWithinRetention(user, DateTime.UtcNow)
+                : user.Status != UserStatuses.Locked && user.Status != UserStatuses.TempLocked &&
+                  user.Status != UserStatuses.Managed && user.Status != UserStatuses.Unverified;
 
         public async Task<AuthResult> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default)
         {
