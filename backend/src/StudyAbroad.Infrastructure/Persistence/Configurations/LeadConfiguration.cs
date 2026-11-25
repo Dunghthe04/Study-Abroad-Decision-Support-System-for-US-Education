@@ -28,5 +28,8 @@ public class LeadConfiguration : IEntityTypeConfiguration<Lead>
         b.HasIndex(x => x.ParentTokenHash);
         b.Property(x => x.ParentEmail).HasMaxLength(256);
         b.Property(x => x.ParentDecisionIp).HasMaxLength(64);
+        // [UC-150 4a / UC-110 3a] Giữ chờ phụ huynh khi sửa ngày sinh; ActiveSince chỉ tính trong C#
+        b.Property(x => x.HeldFromStatus).HasMaxLength(16);
+        b.Ignore(x => x.ActiveSince);
     }
 }

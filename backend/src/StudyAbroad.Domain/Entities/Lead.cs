@@ -31,4 +31,18 @@ public class Lead : BaseEntity
     public string? ParentEmail { get; set; }
     public DateTime? ParentDecidedAt { get; set; }
     public string? ParentDecisionIp { get; set; }
+
+    // [UC-150 4a / UC-110 3a] Yêu cầu trung tâm đã nhận bị giữ chờ phụ huynh vì sửa ngày sinh làm học sinh xuống dưới 16.
+    /// <summary>Trạng thái trước khi bị giữ; null = không bị giữ do sửa ngày sinh. Phụ huynh đồng ý thì trở về trạng thái này.</summary>
+    public string? HeldFromStatus { get; set; }
+    /// <summary>Lúc bắt đầu giữ; hạn 7 ngày chờ phụ huynh tính từ đây.</summary>
+    public DateTime? HeldAt { get; set; }
+    /// <summary>
+    /// Số giây không tính vào hạn 7 ngày trung tâm phản hồi và mốc 90 ngày: thời gian bị giữ, hoặc thời gian chờ phụ huynh trước khi
+    /// thành Mới gửi. Mốc bắt đầu của hai hạn đó là <c>CreatedAt + PausedSeconds</c> (<see cref="ActiveSince"/>).
+    /// </summary>
+    public long PausedSeconds { get; set; }
+
+    /// <summary>Mốc tính hạn 7 ngày trung tâm phản hồi (UC-68) và 90 ngày xem dữ liệu (UC-73).</summary>
+    public DateTime ActiveSince => CreatedAt.AddSeconds(PausedSeconds);
 }
