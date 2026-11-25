@@ -12,8 +12,7 @@ import { useAssistant, useAssistantPageContext } from "@/components/assistant/As
 import { PremiumLockedCard } from "@/components/billing/PremiumLockedCard";
 import { isPremiumRequired } from "@/lib/billing-api";
 import { recommendationApi } from "@/lib/recommendation-api";
-import { whyText } from "@/lib/recommendation-labels";
-import { mainGroupOf, restOfGroup, type MainGroup } from "@/lib/recommendation-groups";
+import { blockOf, restOfGroup } from "@/lib/recommendation-groups";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   GOAL_SCHOOL_EVENT,
@@ -43,7 +42,7 @@ const BLOCKS: { key: PickBlockName; title: string; note: string }[] = [
   { key: "reach", title: "Khó vào", note: "4 trường phù hợp nhất" },
   { key: "match", title: "Vừa sức", note: "4 trường phù hợp nhất" },
   { key: "safety", title: "An toàn hơn", note: "4 trường phù hợp nhất" },
-  { key: "aid", title: "Chỉ đi được nếu có học bổng lớn", note: "Xếp theo điểm phù hợp" },
+  { key: "aid", title: "Chỉ đi được nếu có học bổng lớn", note: "4 trường phù hợp nhất" },
 ];
 
 const RESULT_SUGGESTIONS = [
@@ -150,6 +149,9 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
 
   // Chạy cả quy trình (lọc cứng, đọc ngoại khóa, chấm nhóm bằng code, lưu)
   const runNew = async () => {
+    // UC-25: mức ưu tiên đang kéo ở khung bên trái (chưa lưu) được lưu và áp dụng khi bấm Gợi ý lại.
+    // Không kéo thanh nào thì giữ mức ưu tiên của lần gợi ý trước. Phải đọc trước sim.resetAll() bên dưới.
+    const pref = sim.overrides.pref ?? rec?.criteria.pref;
     setProfileSaved(false);
     setFocusCode(null);
     setPhase("running");
@@ -157,7 +159,7 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
     setLocked(false);
     sim.resetAll();
     try {
-      setRec(await recommendationApi.create(rec?.criteria.pref));
+      setRec(await recommendationApi.create(pref));
     } catch (err) {
       if (isPremiumRequired(err)) setLocked(true);
       else setError(err instanceof Error ? err.message : "Chưa tạo được gợi ý.");
@@ -324,7 +326,7 @@ export function RecommendationView({ autoRun, initialOverrides }: Recommendation
   if (!rec || !view) return main;
   return (
     <div className="flex flex-col lg:flex-row lg:items-start">
-      <ProfileSimulator sim={sim} basePref={basePref} />
+      <ProfileSimulator sim={sim} basePref={basePref} onRerun={runNew} />
       {main}
     </div>
   );
@@ -397,15 +399,14 @@ function ResultBody({ rec, changes, simulated, focusCode, onExplain, onGoal }: R
       )}
 
       {BLOCKS.map((block) => {
-        const list = items[block.key];
-        const group = block.key === "aid" ? null : (block.key as MainGroup);
-        // Trường được ghim: đang nằm ở nhóm này nhưng không thuộc 4 trường đầu
+        const list = items[block.key].slice(0, 4);
+        // Trường được ghim: đang nằm ở khối này (gồm cả aid) nhưng không thuộc 4 trường đầu
         const pinned =
-          group && focusCode && mainGroupOf(byCode.get(focusCode)) === group && !list.some((p) => p.code === focusCode)
+          focusCode && blockOf(byCode.get(focusCode)) === block.key && !list.some((p) => p.code === focusCode)
             ? byCode.get(focusCode)
             : undefined;
         if (list.length === 0 && !pinned) return null;
-        const rest = group ? restOfGroup(items, group).filter((r) => r.picked.code !== pinned?.code) : [];
+        const rest = restOfGroup(items, block.key).filter((r) => r.picked.code !== pinned?.code);
         const card = (p: (typeof list)[number]) => (
           <SchoolCard
             picked={p}
@@ -439,28 +440,62 @@ function ResultBody({ rec, changes, simulated, focusCode, onExplain, onGoal }: R
                   {card(p)}
                 </div>
               ))}
-              {group && rest.length > 0 && <MoreSchools rest={rest} card={card} />}
+              {rest.length > 0 && <MoreSchools rest={rest} card={card} />}
             </div>
           </section>
         );
       })}
 
-      {items.other.length > 0 && (
-        <details className="rounded-2xl border border-line bg-surface p-4 text-xs text-muted-foreground">
-          <summary className="cursor-pointer font-semibold text-foreground">
-            {items.other.length} trường chưa xếp được nhóm Khó vào / Vừa sức / An toàn
-          </summary>
-          <p className="mt-2">Hệ thống không đoán khi thiếu số liệu. Các trường này vẫn phù hợp bộ lọc của bạn, chỉ là chưa đủ dữ liệu để so với hồ sơ.</p>
-          <ul className="mt-2 space-y-1.5">
-            {items.other.map((p) => (
-              <li key={p.code}>
-                <b className="text-foreground">{byCode.get(p.code)?.name ?? p.code}</b>
-                {p.why.length > 0 && <>: {p.why.map(whyText).join(" ")}</>}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
+      {items.other.length > 0 && (() => {
+        const otherTop = items.other.slice(0, 4);
+        const otherPinned =
+          focusCode && blockOf(byCode.get(focusCode)) === "other" && !otherTop.some((p) => p.code === focusCode)
+            ? byCode.get(focusCode)
+            : undefined;
+        const otherShown = new Set(otherTop.map((p) => p.code));
+        const otherRest = [
+          ...items.other.slice(4).map((p) => ({ picked: p, school: byCode.get(p.code)! })).filter((r) => r.school),
+          ...restOfGroup(items, "other").filter((r) => !items.other.some((p) => p.code === r.picked.code)),
+        ].filter((r) => !otherShown.has(r.picked.code) && r.picked.code !== otherPinned?.code);
+        const otherCard = (p: (typeof otherTop)[number]) => (
+          <SchoolCard
+            picked={p}
+            school={byCode.get(p.code)}
+            change={changeByCode.get(p.code)}
+            simulated={simulated}
+            onExplain={onExplain}
+            onGoal={onGoal}
+            student={{ sat: criteria.studentSat ?? null, gpa: criteria.studentGpa ?? null }}
+          />
+        );
+        return (
+          <section className="space-y-3">
+            <div className="flex items-baseline gap-2">
+              <h2 className="text-h3 text-foreground">Chưa xếp được nhóm</h2>
+              <span className="text-xs text-muted-foreground">
+                Phù hợp bộ lọc nhưng chưa đủ số liệu học thuật để xếp Khó vào / Vừa sức / An toàn
+              </span>
+            </div>
+            <div className="space-y-3">
+              {otherPinned && (
+                <div className="space-y-1.5 rounded-2xl border border-dashed border-brand/50 bg-brand-wash/40 p-2">
+                  <p className="flex items-center gap-1.5 px-2 text-xs font-semibold text-brand">
+                    <PinIcon className="size-3.5" />
+                    Trường đang xem
+                  </p>
+                  {otherCard({ code: otherPinned.code, x: otherPinned.fit ?? null, why: otherPinned.why ?? [] })}
+                </div>
+              )}
+              {otherTop.map((p) => (
+                <div key={p.code} className="space-y-2">
+                  {otherCard(p)}
+                </div>
+              ))}
+              {otherRest.length > 0 && <MoreSchools rest={otherRest} card={otherCard} />}
+            </div>
+          </section>
+        );
+      })()}
     </div>
   );
 }

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from app.schemas.chat import AiUsageMixin
 
 MAX_ACTIVITIES = 10
-MAX_AWARD = 10
+MAX_AWARD = 5
 ROLES = [1.0, 0.8, 0.6, 0.3]
 FORM_ROLES = {"founder": 1.0, "leader": 0.8, "vice_leader": 0.6, "member": 0.3}
 

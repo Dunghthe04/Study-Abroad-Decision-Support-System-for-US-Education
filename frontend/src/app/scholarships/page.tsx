@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { connection } from "next/server";
-import { ScholarshipFilters } from "@/components/scholarships/ScholarshipFilters";
-import { ScholarshipList } from "@/components/scholarships/ScholarshipList";
+import { ScholarshipListView } from "@/components/scholarships/ScholarshipListView";
 import { ErrorFallback } from "@/components/ui/error-fallback";
 import { searchScholarships } from "@/lib/scholarship-api";
 import type { PagedResult } from "@/types/api";
@@ -10,7 +8,7 @@ import type { ScholarshipItem, ScholarshipSearchParams } from "@/types/scholarsh
 
 export const metadata: Metadata = {
   title: "Tìm học bổng – USAS",
-  description: "Tìm và lọc học bổng du học Mỹ theo bậc học, giá trị, điều kiện và hạn nộp, mỗi học bổng đều có nguồn.",
+  description: "Tìm và lọc học bổng du học Mỹ bậc đại học theo giá trị, điều kiện và hạn nộp, mỗi học bổng đều có nguồn.",
 };
 
 interface PageProps {
@@ -26,24 +24,37 @@ export default async function ScholarshipsPage({ searchParams }: PageProps) {
     const n = s === undefined ? NaN : Number(s);
     return Number.isFinite(n) ? n : undefined;
   };
+  // Ngày hôm nay theo giờ Việt Nam, dạng yyyy-MM-dd
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
+  const includeExpired = str(raw.includeExpired) === "true" ? true : undefined;
+  const customDeadlineFrom = str(raw.deadlineFrom);
+  // UC-29: mặc định bật lọc mở cho người Việt; người dùng có thể tắt (?vnEligible=false)
+  const vnEligible = str(raw.vnEligible) === "false" ? false : true;
 
   const params: ScholarshipSearchParams = {
     search: str(raw.search),
-    studyLevel: str(raw.studyLevel),
     coverageType: str(raw.coverageType),
     minAmountUsd: num(raw.minAmountUsd),
     maxAmountUsd: num(raw.maxAmountUsd),
     maxMinGpa4: num(raw.maxMinGpa4),
     maxMinIelts: num(raw.maxMinIelts),
+    maxMinToefl: num(raw.maxMinToefl),
+    maxMinDuolingo: num(raw.maxMinDuolingo),
     kind: str(raw.kind),
-    vnEligible: str(raw.vnEligible) === "true" ? true : undefined,
+    vnEligible,
+    includeExpired,
+    deadlineFrom: customDeadlineFrom ?? (includeExpired ? undefined : today),
     page: num(raw.page) || 1,
     pageSize: 20,
   };
 
   let data: PagedResult<ScholarshipItem> | null = null;
   try {
-    data = await searchScholarships(params);
+    data = await searchScholarships({
+      ...params,
+      vnEligible: vnEligible ? true : undefined,
+      includeExpired: undefined,
+    });
   } catch {
     data = null;
   }
@@ -51,25 +62,9 @@ export default async function ScholarshipsPage({ searchParams }: PageProps) {
     return <ErrorFallback title="Không thể tải danh sách học bổng" description="Đã xảy ra lỗi khi kết nối với máy chủ API. Vui lòng thử lại sau." />;
   }
 
-  const pageHref = (page: number) => {
-    const q = new URLSearchParams();
-    for (const [k, v] of Object.entries({ ...params, page })) if (v !== undefined) q.set(k, String(v));
-    return `/scholarships?${q}`;
-  };
-
   return (
-    <section className="space-y-6 py-6 pb-16">
-      <h1 className="text-2xl font-bold">Tìm học bổng</h1>
-      <ScholarshipFilters params={params} />
-      <p className="text-sm text-muted-foreground">{data.totalCount} học bổng</p>
-      <ScholarshipList items={data.items} />
-      {data.totalPages > 1 && (
-        <nav className="flex items-center justify-center gap-4 text-sm">
-          {data.page > 1 && <Link href={pageHref(data.page - 1)} className="underline">Trang trước</Link>}
-          <span>Trang {data.page}/{data.totalPages}</span>
-          {data.page < data.totalPages && <Link href={pageHref(data.page + 1)} className="underline">Trang sau</Link>}
-        </nav>
-      )}
+    <section className="mx-auto w-full max-w-[1560px] px-4 pt-4 pb-8 sm:px-8 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden lg:px-12 lg:pb-0">
+      <ScholarshipListView data={data} params={params} today={today} hasCustomDeadline={Boolean(customDeadlineFrom)} />
     </section>
   );
 }

@@ -1,41 +1,159 @@
-import { Button } from "@/components/ui/button";
+"use client";
+
 import { Input } from "@/components/ui/input";
-import { NativeSelect } from "@/components/ui/native-select";
+import {
+  BooleanFilterRow,
+  CollapsibleFilter,
+  CheckboxChoiceFilter,
+  FilterCategory,
+  RangeFilter,
+  findLabel,
+  formatRangeSummary,
+} from "@/components/universities/UniversityFilters";
 import { COVERAGE_OPTIONS, KIND_OPTIONS } from "@/lib/admin-scholarship-display";
+import { cn } from "@/lib/utils";
 import type { ScholarshipSearchParams } from "@/types/scholarship";
 
-const LEVELS = [
-  { value: "", label: "Mọi bậc học" },
-  { value: "undergraduate", label: "Đại học" },
-  { value: "graduate", label: "Sau đại học" },
-];
+// Bỏ mục "Chưa rõ" (value rỗng) của form quản trị; KIND_OPTIONS đã loại "external"
+export const KIND_FILTER_OPTIONS = KIND_OPTIONS.filter((o) => o.value);
+export const COVERAGE_FILTER_OPTIONS = COVERAGE_OPTIONS.filter((o) => o.value);
 
-/** Form GET thuần: bấm Lọc thì trang tải lại theo query string, không cần state phía client. */
-export function ScholarshipFilters({ params }: { params: ScholarshipSearchParams }) {
+// Điểm của người dùng: lọc học bổng có yêu cầu tối thiểu không vượt quá điểm này
+export const MY_GPA_OPTIONS = ["2.5", "3", "3.3", "3.5", "3.7", "4"].map((v) => ({ value: v, label: `GPA ${Number(v).toFixed(1)}` }));
+export const MY_IELTS_OPTIONS = ["5.5", "6", "6.5", "7", "7.5", "8"].map((v) => ({ value: v, label: `IELTS ${Number(v).toFixed(1)}` }));
+export const MY_TOEFL_OPTIONS = ["60", "70", "80", "90", "100", "110"].map((v) => ({ value: v, label: `TOEFL ${v}` }));
+export const MY_DUOLINGO_OPTIONS = ["90", "100", "110", "120", "130", "140"].map((v) => ({ value: v, label: `Duolingo ${v}` }));
+
+const AMOUNT_MAX = 100_000;
+const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
+
+interface ScholarshipFiltersProps {
+  values: ScholarshipSearchParams;
+  hasCustomDeadline?: boolean;
+  onChange: (patch: Partial<ScholarshipSearchParams>) => void;
+  className?: string;
+}
+
+export function ScholarshipFilters({ values, hasCustomDeadline = false, onChange, className }: ScholarshipFiltersProps) {
+  const choice = (
+    title: string,
+    options: { value: string; label: string }[],
+    value: string | undefined,
+    onSelect: (next: string | undefined) => void,
+    defaultOpen = false,
+    summary?: string | null,
+  ) => (
+    <CollapsibleFilter
+      title={title}
+      activeSummary={summary !== undefined ? summary : findLabel(options, value)}
+      onClear={() => onSelect(undefined)}
+      defaultOpen={defaultOpen}
+    >
+      {(collapse) => (
+        <CheckboxChoiceFilter
+          label={title}
+          options={options}
+          value={value}
+          onValueChange={(next) => {
+            onSelect(next);
+            if (next !== undefined) collapse();
+          }}
+        />
+      )}
+    </CollapsibleFilter>
+  );
+
+  const gpa = values.maxMinGpa4 !== undefined ? String(values.maxMinGpa4) : undefined;
+  const ielts = values.maxMinIelts !== undefined ? String(values.maxMinIelts) : undefined;
+  const toefl = values.maxMinToefl !== undefined ? String(values.maxMinToefl) : undefined;
+  const duolingo = values.maxMinDuolingo !== undefined ? String(values.maxMinDuolingo) : undefined;
+
   return (
-    <form method="get" className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
-      <Input name="search" placeholder="Tên học bổng, đơn vị cấp, trường" defaultValue={params.search ?? ""} className="lg:col-span-2" />
-      <NativeSelect name="studyLevel" defaultValue={params.studyLevel ?? ""} className="w-full" aria-label="Bậc học">
-        {LEVELS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </NativeSelect>
-      <NativeSelect name="coverageType" defaultValue={params.coverageType ?? ""} className="w-full" aria-label="Loại hỗ trợ">
-        {COVERAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value ? o.label : "Mọi loại hỗ trợ"}</option>)}
-      </NativeSelect>
-      <NativeSelect name="kind" defaultValue={params.kind ?? ""} className="w-full" aria-label="Loại học bổng">
-        {KIND_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value ? o.label : "Mọi loại học bổng"}</option>)}
-      </NativeSelect>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" name="vnEligible" value="true" defaultChecked={params.vnEligible === true} />
-        Chỉ học bổng mở cho người Việt Nam
-      </label>
-      <Input name="minAmountUsd" type="number" min={0} placeholder="Giá trị từ (USD)" defaultValue={params.minAmountUsd ?? ""} />
-      <Input name="maxAmountUsd" type="number" min={0} placeholder="Giá trị đến (USD)" defaultValue={params.maxAmountUsd ?? ""} />
-      <Input name="maxMinGpa4" type="number" step="0.1" min={0} max={4} placeholder="GPA của bạn (thang 4)" defaultValue={params.maxMinGpa4 ?? ""} />
-      <Input name="maxMinIelts" type="number" step="0.5" min={0} max={9} placeholder="IELTS của bạn" defaultValue={params.maxMinIelts ?? ""} />
-      <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
-        <Button type="submit">Lọc</Button>
-        <Button type="button" variant="outline" render={<a href="/scholarships" />}>Xóa lọc</Button>
-      </div>
-    </form>
+    <div className={cn("min-w-0 space-y-4 overflow-x-hidden", className)}>
+      <FilterCategory>
+        <BooleanFilterRow
+          label="Chỉ học bổng mở cho người Việt"
+          checked={values.vnEligible !== false}
+          onCheckedChange={(checked) => onChange({ vnEligible: checked ? true : false })}
+        />
+        {choice("Loại học bổng", KIND_FILTER_OPTIONS, values.kind, (kind) => onChange({ kind }), true)}
+        {choice("Phần được hỗ trợ", COVERAGE_FILTER_OPTIONS, values.coverageType, (coverageType) => onChange({ coverageType }))}
+        <BooleanFilterRow
+          label="Hiện cả học bổng đã hết hạn"
+          checked={values.includeExpired === true}
+          onCheckedChange={(checked) => onChange({ includeExpired: checked ? true : undefined, deadlineFrom: undefined })}
+        />
+        <div className="space-y-1.5 pt-1">
+          <label htmlFor="scholarship-deadline-from" className="block text-sm font-medium text-foreground">
+            Hạn nộp từ ngày
+          </label>
+          <Input
+            id="scholarship-deadline-from"
+            type="date"
+            value={hasCustomDeadline ? (values.deadlineFrom ?? "") : ""}
+            onChange={(e) => {
+              const next = e.target.value || undefined;
+              onChange({ deadlineFrom: next, includeExpired: next ? undefined : values.includeExpired });
+            }}
+            className="bg-surface text-sm"
+          />
+        </div>
+      </FilterCategory>
+
+      <FilterCategory className="border-t border-line pt-4">
+        <CollapsibleFilter
+          title="Giá trị học bổng (USD)"
+          activeSummary={formatRangeSummary(values.minAmountUsd, values.maxAmountUsd, usd)}
+          onClear={() => onChange({ minAmountUsd: undefined, maxAmountUsd: undefined })}
+          defaultOpen
+        >
+          <RangeFilter
+            label="Giá trị học bổng (USD)"
+            minBound={0}
+            maxBound={AMOUNT_MAX}
+            step={1000}
+            minValue={values.minAmountUsd}
+            maxValue={values.maxAmountUsd}
+            formatInput={usd}
+            onCommit={(minAmountUsd, maxAmountUsd) => onChange({ minAmountUsd, maxAmountUsd })}
+          />
+        </CollapsibleFilter>
+      </FilterCategory>
+
+      <FilterCategory className="border-t border-line pt-4">
+        {choice(
+          "GPA của bạn (thang 4)",
+          MY_GPA_OPTIONS,
+          gpa,
+          (next) => onChange({ maxMinGpa4: next === undefined ? undefined : Number(next) }),
+          false,
+          gpa ? `Đủ GPA ${Number(gpa).toFixed(1)}` : null,
+        )}
+        {choice(
+          "IELTS của bạn",
+          MY_IELTS_OPTIONS,
+          ielts,
+          (next) => onChange({ maxMinIelts: next === undefined ? undefined : Number(next) }),
+          false,
+          ielts ? `Đủ IELTS ${Number(ielts).toFixed(1)}` : null,
+        )}
+        {choice(
+          "TOEFL iBT của bạn",
+          MY_TOEFL_OPTIONS,
+          toefl,
+          (next) => onChange({ maxMinToefl: next === undefined ? undefined : Number(next) }),
+          false,
+          toefl ? `Đủ TOEFL ${toefl}` : null,
+        )}
+        {choice(
+          "Duolingo của bạn",
+          MY_DUOLINGO_OPTIONS,
+          duolingo,
+          (next) => onChange({ maxMinDuolingo: next === undefined ? undefined : Number(next) }),
+          false,
+          duolingo ? `Đủ Duolingo ${duolingo}` : null,
+        )}
+      </FilterCategory>
+    </div>
   );
 }

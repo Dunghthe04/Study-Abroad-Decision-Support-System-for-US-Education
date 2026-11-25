@@ -104,7 +104,7 @@ async def test_collect_bac_hoc_question_saves_and_asks_next():
     ask(state, "B1.1")
     await make_handler(llm).collect(state, "Em lớp 12", MAC_DINH)
     assert state.profile["current_level"].value == "high_school"
-    assert state.question_id == "B1.2"
+    assert state.question_id == "B1.3"  # không hỏi bậc học
 
 
 async def test_collect_ho_so_question_saves_answer():
@@ -458,7 +458,7 @@ async def test_pick_sections_asks_each_question_then_review():
 async def test_pick_goal_and_finance_crosses_steps():
     state = at_review()
     await make_handler(FakeLLM()).collect(state, "Em muốn sửa Mục tiêu, Tài chính", MAC_DINH)
-    assert (state.question_id, state.edit_queue) == ("B1.1", ["B1.2", "B1.3", "B1.4", "F1", "F2", "F3"])
+    assert (state.question_id, state.edit_queue) == ("B1.1", ["B1.3", "B1.4", "F1", "F2", "F3"])
 
 
 # Sửa Tiếng Anh hỏi cả dự định thi E2, kể cả khi đã có chứng chỉ (dự định thi lại để nâng điểm) như form
@@ -514,13 +514,13 @@ async def test_edit_on_form_sends_the_waiting_tasks():
     assert output.widget.data == {"goals": ["goi_y_truong"]}
 
 
-# Điền lại từ đầu: hỏi lại mọi câu theo thứ tự form, bắt đầu từ B1.1; không hỏi visa (N4)
+# Điền lại từ đầu: hỏi lại mọi câu theo thứ tự form, bắt đầu từ B1.1; câu visa (N4) hỏi sau cùng (UC-35)
 async def test_restart_asks_every_question_from_start():
     state = at_review()
     output = await make_handler(FakeLLM()).collect(state, "Điền lại từ đầu", MAC_DINH)
     assert state.question_id == "B1.1"
     assert state.edit_queue == list(skill_ho_so.EDIT_ORDER[1:])
-    assert "N4" not in state.edit_queue
+    assert state.edit_queue[-1] == "N4"
     assert KEEP in labels(output)
 
 
@@ -555,7 +555,7 @@ async def test_edit_menu_text_without_pending_question_starts_edit():
     llm = FakeLLM()
     state = ChatState(current_step="B3", profile=full_profile(), intake_mode="chat", asked={"X1": 1})
     output = await make_handler(llm).collect(state, "Em muốn sửa Mục tiêu", MAC_DINH)
-    assert (state.question_id, state.edit_queue) == ("B1.1", ["B1.2", "B1.3", "B1.4"])
+    assert (state.question_id, state.edit_queue) == ("B1.1", ["B1.3", "B1.4"])
     assert KEEP in labels(output)
     assert llm.calls == []
 

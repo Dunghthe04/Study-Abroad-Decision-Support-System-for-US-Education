@@ -111,5 +111,13 @@ public interface ILeadRepository
 
     /// <summary>[UC-58] Số tin ngữ cảnh mỗi phía do Admin cấu hình trong app_settings, null nếu chưa cấu hình hoặc giá trị không đọc được.</summary>
     Task<int?> GetReportContextSizeSettingAsync(CancellationToken ct = default);
+
+    /// <summary>[UC-67 / UC-55 4c] Từ chối tự động các lead ở trạng thái Mới khi trung tâm bị ẩn hoặc thu hồi dấu xác minh, đồng thời gửi thông báo cho người gửi.</summary>
+    Task<int> RejectNewLeadsByCenterAsync(Guid studyCenterId, string centerName, string reason, DateTime now, CancellationToken ct = default) =>
+        Task.FromResult(0);
+
+    /// <summary>[UC-57] Chuyển các lead đang mở của trung tâm sang center_inactive khi tài khoản trung tâm bị khóa.</summary>
+    Task<int> MarkOpenLeadsCenterInactiveAsync(Guid studyCenterId, DateTime now, CancellationToken ct = default) =>
+        Task.FromResult(0);
 }
 

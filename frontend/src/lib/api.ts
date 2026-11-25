@@ -9,6 +9,9 @@ import type {
   UnreadCountDto,
   CenterReviewDto,
   CenterReviewEligibilityDto,
+  CenterReviewReportDto,
+  CenterReviewReportFilter,
+  CenterReviewReportReason,
   CreateCenterReviewRequest,
   AuthResponse,
   ChangePasswordRequest,
@@ -38,9 +41,11 @@ import type {
   MatchManagedChildResult,
   ParentProfileOfferDto,
   StudyCenter,
+  CenterGuidanceCardsDto,
   CreateStudyCenterRequest,
   AddTargetSchoolRequest,
   TargetSchoolDto,
+  TargetSchoolDefaultsDto,
   TargetSchoolSummaryDto,
   SetStudyCenterActiveRequest,
   CenterReceivedLeadDto,
@@ -445,16 +450,30 @@ export const studyCentersApi = {
     return apiFetch<PagedResult<StudyCenter>>(`/api/v1/study-centers${qs ? `?${qs}` : ""}`);
   },
   getById: (id: string) => apiFetch<StudyCenter>(`/api/v1/study-centers/${id}`),
+  /** [UC-40 / UC-44] Thẻ hướng dẫn từ Kho tri thức (CENTER_ASK / CENTER_WARNING), 0 token AI. */
+  getGuidanceCards: () => apiFetch<CenterGuidanceCardsDto>("/api/v1/study-centers/guidance-cards"),
   /** Đánh giá thật của trung tâm (UC-41): một trang danh sách + điểm trung bình + tổng số lượng. */
   getReviews: (id: string, page = 1, pageSize = 20) =>
     apiFetch<CenterReviewsDto>(
       `/api/v1/study-centers/${encodeURIComponent(id)}/reviews?page=${page}&pageSize=${pageSize}`,
     ),
-  /** [USAS-2079 / UC-57] Moderator gỡ một đánh giá vi phạm (lý do tùy chọn, tối đa 500 ký tự). Đánh giá biến khỏi danh sách và điểm trung bình. */
+  /** [USAS-2079 / UC-57] Moderator gỡ một đánh giá vi phạm (lý do bắt buộc, tối đa 500 ký tự). Đánh giá biến khỏi danh sách và điểm trung bình. */
   removeReview: (centerId: string, reviewId: string, reason: string) =>
     apiFetch<{ reviewId: string; studyCenterId: string; status: string }>(
       `/api/v1/study-centers/${encodeURIComponent(centerId)}/reviews/${encodeURIComponent(reviewId)}/remove`,
       { method: "POST", body: JSON.stringify({ reason: reason.trim() }) },
+    ),
+  /** [UC-53 2b / UC-152] Moderator gỡ phản hồi vi phạm của trung tâm (đánh giá gốc vẫn hiển thị). */
+  removeReviewReply: (centerId: string, reviewId: string, reason: string) =>
+    apiFetch<{ reviewId: string; studyCenterId: string; status: string }>(
+      `/api/v1/study-centers/${encodeURIComponent(centerId)}/reviews/${encodeURIComponent(reviewId)}/reply/remove`,
+      { method: "POST", body: JSON.stringify({ reason: reason.trim() }) },
+    ),
+  /** [UC-151] Học sinh, phụ huynh hoặc trung tâm (cho đánh giá về chính mình) báo cáo đánh giá vi phạm. */
+  reportReview: (centerId: string, reviewId: string, reason: CenterReviewReportReason, detail?: string) =>
+    apiFetch<CenterReviewReportDto>(
+      `/api/v1/study-centers/${encodeURIComponent(centerId)}/reviews/${encodeURIComponent(reviewId)}/report`,
+      { method: "POST", body: JSON.stringify({ reason, detail: detail?.trim() || null }) },
     ),
   /** [UC-45] Người dùng hiện tại (học sinh / phụ huynh) có được đánh giá trung tâm này không. */
   getReviewEligibility: (id: string) =>
@@ -654,11 +673,11 @@ export const centerLeadsApi = {
     });
   },
 
-  /** [UC-58] Trung tâm báo cáo một tin của học sinh / phụ huynh; Admin sẽ nhận thông báo và xem xét. */
-  reportMessage: (id: string, messageId: string, reason?: string) =>
+  /** [UC-143] Trung tâm báo cáo một tin của học sinh / phụ huynh (lý do 3–64 ký tự, chi tiết tùy chọn <= 1.000 ký tự). */
+  reportMessage: (id: string, messageId: string, reason: string, detail?: string) =>
     apiFetch<LeadMessageDto>(
       `/api/v1/leads/received/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/report`,
-      { method: "POST", body: JSON.stringify({ reason: reason?.trim() || null }) }
+      { method: "POST", body: JSON.stringify({ reason: reason.trim(), detail: detail?.trim() || null }) }
     ),
 
   /** Gửi tin kèm ảnh (jpg/png/webp, tối đa 5MB), `content` không bắt buộc. */
@@ -694,6 +713,21 @@ export const targetSchoolsApi = {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+  /** [UC-33] Đổi nhóm phân loại (reach / match / safety) và đánh dấu do người dùng chọn */
+  updateCategory: (id: string, data: { category: "reach" | "match" | "safety" | string }) =>
+    apiFetch<TargetSchoolDto>(`/api/v1/target-schools/${encodeURIComponent(id)}/category`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  /** Lấy nhóm mặc định theo gợi ý gần nhất và các vòng nộp trường hỗ trợ */
+  getDefaults: (params: { universityCode?: string; universityId?: string }) => {
+    const q = new URLSearchParams();
+    if (params.universityCode) q.set("universityCode", params.universityCode);
+    if (params.universityId) q.set("universityId", params.universityId);
+    return apiFetch<TargetSchoolDefaultsDto>(
+      `/api/v1/target-schools/defaults?${q.toString()}`
+    );
+  },
   /** [UC-31] Xóa một trường khỏi danh sách mục tiêu theo ID mục tiêu */
   remove: (id: string) =>
     apiFetch<void>(`/api/v1/target-schools/${encodeURIComponent(id)}`, {
@@ -785,6 +819,38 @@ export const centerPortalApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  /** [UC-152] Danh sách đánh giá đang hiển thị về trung tâm của mình. */
+  getReviews: (page = 1, pageSize = 20) =>
+    apiFetch<CenterReviewsDto>(`/api/v1/center/reviews?page=${page}&pageSize=${pageSize}`),
+  /** [UC-152] Đăng phản hồi công khai (tối đa 1 phản hồi / đánh giá, tối đa 1.000 ký tự, không SĐT/email/link). */
+  createReviewReply: (reviewId: string, content: string) =>
+    apiFetch<CenterReviewDto>(`/api/v1/center/reviews/${encodeURIComponent(reviewId)}/reply`, {
+      method: "POST",
+      body: JSON.stringify({ content: content.trim() }),
+    }),
+  /** [UC-152 Flow 2a] Sửa phản hồi công khai trong vòng 24 giờ kể từ lúc đăng. */
+  editReviewReply: (reviewId: string, content: string) =>
+    apiFetch<CenterReviewDto>(`/api/v1/center/reviews/${encodeURIComponent(reviewId)}/reply`, {
+      method: "PUT",
+      body: JSON.stringify({ content: content.trim() }),
+    }),
+};
+
+/** [UC-151 / UC-53] Moderator xem và xử lý báo cáo đánh giá trung tâm. */
+export const centerReviewReportsApi = {
+  list: (params?: { status?: CenterReviewReportFilter; page?: number; pageSize?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.set("status", params.status);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+    const qs = sp.toString();
+    return apiFetch<PagedResult<CenterReviewReportDto>>(`/api/v1/moderator/center-review-reports${qs ? `?${qs}` : ""}`);
+  },
+  dismiss: (reportId: string, note?: string) =>
+    apiFetch<{ message: string }>(`/api/v1/moderator/center-review-reports/${encodeURIComponent(reportId)}/dismiss`, {
+      method: "POST",
+      body: JSON.stringify({ note: note?.trim() || null }),
+    }),
 };
 
 // [UC-59] Moderator duyệt yêu cầu xác minh pháp lý của trung tâm
@@ -823,7 +889,7 @@ export const notificationsApi = {
   markAllRead: () => apiFetch<{ updated: number }>("/api/v1/notifications/read-all", { method: "POST" }),
 };
 
-// [UC-97] Admin xem và lọc nhật ký truy cập dữ liệu nhạy cảm
+// [UC-91] Admin xem và lọc nhật ký truy cập dữ liệu nhạy cảm
 export const accessLogsApi = {
   list: (params?: AccessLogFilterQuery) => {
     const sp = new URLSearchParams();

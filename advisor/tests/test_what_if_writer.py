@@ -9,12 +9,12 @@ from app.services.what_if_writer import SKILL_PATH, WhatIfWriter, build_user, ch
 from tests.fakes import FakeLLM
 
 CHANGES = [
-    {"factor": "major", "value": "Khoa học máy tính"},
+    {"factor": "school_type", "value": "công lập"},
     {"factor": "intake", "value": "Fall 2027"},
     {"factor": "activities", "value": "x"},
 ]
 GOOD = {
-    "answer": "Ngành là điều kiện lọc trường nên mình không thử tạm được, bạn sửa trong hồ sơ rồi nhờ mình "
+    "answer": "Loại trường là điều kiện lọc trường nên mình không thử tạm được, bạn sửa trong hồ sơ rồi nhờ mình "
     "gợi ý lại nhé. Kỳ nhập học Fall 2027 không làm thay đổi danh sách trường gợi ý."
 }
 
@@ -30,17 +30,17 @@ def test_skill_file_has_version():
 # Gửi Claude tên mục theo nhóm và giá trị muốn đổi, không gửi nguyên tin nhắn
 def test_build_user_groups_labels_and_values():
     assert user() == {
-        "filters": ["ngành"],
+        "filters": ["loại trường"],
         "noEffect": ["kỳ nhập học"],
         "others": ["hoạt động ngoại khóa"],
-        "values": {"ngành": "Khoa học máy tính", "kỳ nhập học": "Fall 2027"},
+        "values": {"loại trường": "công lập", "kỳ nhập học": "Fall 2027"},
         "canTry": SUPPORTED_TEXT,
     }
 
 
 def test_build_user_joins_list_values():
-    changes = [{"factor": "preferred_states", "value": ["CA", "NY"]}]
-    assert build_user(parse_what_if(changes), changes)["values"] == {"bang muốn học": "CA, NY"}
+    changes = [{"factor": "school_type", "value": ["public", "private"]}]
+    assert build_user(parse_what_if(changes), changes)["values"] == {"loại trường": "public, private"}
 
 
 def test_good_answer_passes():
@@ -50,9 +50,9 @@ def test_good_answer_passes():
 @pytest.mark.parametrize(
     "answer",
     [
-        "Ngành là điều kiện lọc trường nên mình không thử tạm được nhé bạn.",  # thiếu kỳ nhập học
-        "Mình đã thử đổi ngành và kỳ nhập học, danh sách vẫn vậy bạn nhé.",  # nói đã thử
-        "Ngành và kỳ nhập học không đổi được, có 12 trường vẫn giữ nguyên.",  # số lạ
+        "Loại trường là điều kiện lọc trường nên mình không thử tạm được nhé bạn.",  # thiếu kỳ nhập học
+        "Mình đã thử đổi loại trường và kỳ nhập học, danh sách vẫn vậy bạn nhé.",  # nói đã thử
+        "Loại trường và kỳ nhập học không đổi được, có 12 trường vẫn giữ nguyên.",  # số lạ
         "Ngắn",  # quá ngắn
     ],
 )

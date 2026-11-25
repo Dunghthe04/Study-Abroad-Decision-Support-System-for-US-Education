@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowUpRightIcon, Building2Icon, GlobeIcon, HomeIcon, MapPinIcon, TreesIcon, WarehouseIcon, type LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRightIcon, Building2Icon, CalculatorIcon, GlobeIcon, HomeIcon, MapPinIcon, TreesIcon, WarehouseIcon, type LucideIcon } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { MissingValue } from "@/components/shared/missing-value";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
@@ -10,7 +13,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "cn";
 import { studyLevelLabel } from "@/lib/study-levels";
-import { campusSettingLabel, schoolControlLabel, universityNumber, universityUrl } from "@/lib/university-display";
+import { campusSettingLabel, isValidRate, schoolControlLabel, universityDate, universityHost, universityNumber, universityUrl } from "@/lib/university-display";
+import { ScholarshipCard } from "@/components/scholarships/ScholarshipCard";
+import type { ScholarshipItem } from "@/types/scholarship";
 import type { UniversityDetail } from "@/types/university";
 import { acceptanceRateTone, DetailSection, Gauge, SchoolImage } from "./UniversityDetailParts";
 import { UniversityAdmissions, UniversityCampusLife, UniversityCosts, UniversityMajors, UniversityStatistics } from "./UniversityOfferingSections";
@@ -47,7 +52,16 @@ function campusSettingIcon(value: string): LucideIcon {
   return MapPinIcon;
 }
 
-export function UniversityDetailView({ university }: { university: UniversityDetail }) {
+export function UniversityDetailView({
+  university,
+  scholarships = [],
+  today = "",
+}: {
+  university: UniversityDetail;
+  scholarships?: ScholarshipItem[];
+  today?: string;
+}) {
+  const { user } = useAuth();
   const [selectedLevel, setSelectedLevel] = useState(university.offerings[0]?.studyLevel ?? "");
   const [activeSection, setActiveSection] = useState("overview");
   const offering = university.offerings.find((item) => item.studyLevel === selectedLevel) ?? university.offerings[0];
@@ -69,15 +83,17 @@ export function UniversityDetailView({ university }: { university: UniversityDet
       { id: "overview", label: "Tổng quan" },
       ...(offering
         ? [
-            { id: "costs", label: "Chi phí & hỗ trợ" },
             { id: "admissions", label: "Tuyển sinh" },
+            { id: "majors", label: "Ngành học" },
+            { id: "costs", label: "Chi phí & học bổng" },
             ...(hasCampusData ? [{ id: "campus", label: "Khuôn viên & nhà ở" }] : []),
             { id: "statistics", label: "Thống kê" },
-            { id: "majors", label: "Ngành học" },
           ]
-        : []),
+        : scholarships.length > 0
+          ? [{ id: "scholarships", label: "Học bổng" }]
+          : []),
     ],
-    [offering, hasCampusData],
+    [offering, hasCampusData, scholarships.length],
   );
 
   useEffect(() => {
@@ -98,18 +114,76 @@ export function UniversityDetailView({ university }: { university: UniversityDet
   }, [navigation]);
 
   const overviewRows: { label: string; value: ReactNode; icon?: LucideIcon }[] = [
-    offering?.campusSetting ? { label: "Bối cảnh khuôn viên", value: campusSettingLabel(offering.campusSetting), icon: campusSettingIcon(offering.campusSetting) } : null,
-    university.internationalStudentCount != null ? { label: "Sinh viên quốc tế", value: <SourceTooltip source={findFieldSource(university.sources, "international_student_count")}>{universityNumber(university.internationalStudentCount)}</SourceTooltip> } : null,
+    offering?.campusSetting
+      ? {
+          label: "Bối cảnh khuôn viên",
+          value: (
+            <SourceTooltip source={findFieldSource(university.sources, "campus_setting")}>
+              {campusSettingLabel(offering.campusSetting)}
+            </SourceTooltip>
+          ),
+          icon: campusSettingIcon(offering.campusSetting),
+        }
+      : null,
+    university.internationalStudentCount != null
+      ? {
+          label: "Sinh viên quốc tế",
+          value: (
+            <SourceTooltip source={findFieldSource(university.sources, "international_student_count")}>
+              {universityNumber(university.internationalStudentCount)}
+            </SourceTooltip>
+          ),
+        }
+      : null,
   ].filter((item): item is NonNullable<typeof item> => Boolean(item));
 
-  const acceptanceTone = university.acceptanceRate != null ? acceptanceRateTone(university.acceptanceRate) : "brand";
+  const overviewSource =
+    findFieldSource(university.sources, "acceptance_rate", "campus_setting", "international_student_count", "control", "name") ??
+    (offering?.sourceUrl
+      ? {
+          fieldName: "overview",
+          fieldValue: null,
+          sourceUrl: offering.sourceUrl,
+          sourceSection: null,
+          status: "unverified",
+          retrievedAt: offering.retrievedAt,
+          dataYear: offering.academicYear,
+          appliedToSnapshot: true,
+          normalization: null,
+        }
+      : undefined);
+
+  // Học bổng nằm trong mục Chi phí & hỗ trợ: cùng chỗ với chi phí và hỗ trợ thực nhận để so ngay
+  const scholarshipList =
+    scholarships.length > 0 ? (
+      <div id="scholarships" className="scroll-mt-[calc(var(--header-h)+3.5rem)] space-y-3">
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold text-ink">Học bổng còn hạn nộp ({scholarships.length})</h3>
+          <p className="text-xs leading-relaxed text-ink-2">
+            Mức trường công bố cho từng gói, kèm điều kiện và hạn nộp; số tiền thực nhận tùy hồ sơ.
+          </p>
+        </div>
+        <ul className="space-y-4">
+          {scholarships.map((s) => (
+            <li key={s.id}>
+              <ScholarshipCard scholarship={s} today={today} showSchool={false} />
+            </li>
+          ))}
+        </ul>
+      </div>
+    ) : null;
+
+  const imageCredits = (university.imageCredits ?? []).filter((c) => c.author || c.license);
+
+  const validAcceptanceRate = isValidRate(university.acceptanceRate) ? university.acceptanceRate : null;
+  const acceptanceTone = validAcceptanceRate != null ? acceptanceRateTone(validAcceptanceRate) : "brand";
   const acceptanceToneClass = {
     reach: "text-reach",
     warn: "text-warn",
     ok: "text-ok",
     brand: "text-brand",
   }[acceptanceTone];
-  const acceptancePct = university.acceptanceRate != null ? (university.acceptanceRate > 1 ? university.acceptanceRate : university.acceptanceRate * 100) : null;
+  const acceptancePct = validAcceptanceRate != null ? validAcceptanceRate * 100 : null;
   const acceptanceDisplayNumber = acceptancePct != null ? universityNumber(Number(acceptancePct.toFixed(1))) : null;
 
   return (
@@ -137,15 +211,26 @@ export function UniversityDetailView({ university }: { university: UniversityDet
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3 pt-4">
-              <AddTargetSchoolButton
-                universityCode={university.code}
-                universityName={university.name}
-                universityCity={university.city}
-                universityState={university.state}
-                deadlinesJson={university.offerings?.find((o) => o.deadlinesJson)?.deadlinesJson ?? null}
+              <Button
+                variant="outline"
                 size="lg"
-                className="!border-transparent !bg-brand-wash !text-brand-ink hover:!bg-brand-wash/70"
-              />
+                nativeButton={false}
+                role="link"
+                render={<Link href={`/costs?code=${encodeURIComponent(university.code)}`} />}
+              >
+                <CalculatorIcon />Ước tính chi phí
+              </Button>
+              {(user?.role === "student" || user?.role === "parent") && (
+                <AddTargetSchoolButton
+                  universityCode={university.code}
+                  universityName={university.name}
+                  universityCity={university.city}
+                  universityState={university.state}
+                  deadlinesJson={university.offerings?.find((o) => o.deadlinesJson)?.deadlinesJson ?? null}
+                  size="lg"
+                  className="!border-transparent !bg-brand-wash !text-brand-ink hover:!bg-brand-wash/70"
+                />
+              )}
               {website && (
                 <Button
                   size="lg"
@@ -208,33 +293,39 @@ export function UniversityDetailView({ university }: { university: UniversityDet
         <div className="min-w-0 space-y-12">
           <DetailSection id="overview" title="Tổng quan">
             <div className="overflow-hidden rounded-xl border border-line bg-surface">
-              {university.acceptanceRate != null && (
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 p-5 sm:p-6">
-                  <div className="space-y-1">
-                    <p className="text-base font-medium text-ink">Tỷ lệ nhận chung</p>
-                    <p className="text-sm text-ink-2">Tỷ lệ trúng tuyển toàn trường</p>
-                    <div className="pt-2 flex items-baseline gap-1">
-                      <span className={cn("text-5xl sm:text-6xl font-semibold tracking-tight tabular-nums", acceptanceToneClass)}>
-                        <SourceTooltip source={findFieldSource(university.sources, "acceptance_rate")}>
-                          {acceptanceDisplayNumber}
-                        </SourceTooltip>
-                      </span>
-                      <span className={cn("text-2xl font-semibold", acceptanceToneClass)}>%</span>
-                    </div>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 p-5 sm:p-6">
+                <div className="space-y-1">
+                  <p className="text-base font-medium text-ink">Tỷ lệ nhận chung</p>
+                  <p className="text-sm text-ink-2">Tỷ lệ trúng tuyển toàn trường</p>
+                  <div className="pt-2 flex items-baseline gap-1">
+                    {validAcceptanceRate != null ? (
+                      <>
+                        <span className={cn("text-5xl sm:text-6xl font-semibold tracking-tight tabular-nums", acceptanceToneClass)}>
+                          <SourceTooltip source={findFieldSource(university.sources, "acceptance_rate")}>
+                            {acceptanceDisplayNumber}
+                          </SourceTooltip>
+                        </span>
+                        <span className={cn("text-2xl font-semibold", acceptanceToneClass)}>%</span>
+                      </>
+                    ) : (
+                      <MissingValue className="text-4xl font-normal" />
+                    )}
                   </div>
+                </div>
+                {validAcceptanceRate != null && (
                   <div className="shrink-0 self-center sm:self-auto">
                     <Gauge
-                      value={university.acceptanceRate}
+                      value={validAcceptanceRate}
                       label="Tỷ lệ nhận chung"
                       tone={acceptanceTone}
                       className="w-48 sm:w-56 md:w-60"
                     />
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {overviewRows.length > 0 && (
-                <div className={cn("divide-y divide-line", university.acceptanceRate != null && "border-t border-line")}>
+                <div className="divide-y divide-line border-t border-line">
                   {overviewRows.map((row) => (
                     <div key={row.label} className="flex items-center justify-between px-5 py-3.5 sm:px-6">
                       <span className="text-sm text-ink-2">{row.label}</span>
@@ -247,24 +338,41 @@ export function UniversityDetailView({ university }: { university: UniversityDet
                 </div>
               )}
             </div>
+            {overviewSource?.sourceUrl && (
+              <p className="text-xs text-ink-3">
+                Nguồn:{" "}
+                <a href={universityUrl(overviewSource.sourceUrl) ?? undefined} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-ink-2">
+                  {universityHost(overviewSource.sourceUrl)}
+                </a>
+                {overviewSource.retrievedAt && ` · lấy ngày ${universityDate(overviewSource.retrievedAt)}`}
+              </p>
+            )}
           </DetailSection>
 
           {offering ? (
+            // Thứ tự theo câu hỏi của người xem: có vào được không → học gì → chi trả thế nào → sống ra sao → kết quả
             <div key={offering.studyLevel} className="space-y-12">
-              <UniversityCosts offering={offering} sources={university.sources} />
               <UniversityAdmissions offering={offering} sources={university.sources} />
+              <UniversityMajors offering={offering} sources={university.sources} />
+              <UniversityCosts offering={offering} sources={university.sources} scholarships={scholarshipList} />
               <UniversityCampusLife offering={offering} sources={university.sources} />
               <UniversityStatistics offering={offering} internationalStudentCount={university.internationalStudentCount} sources={university.sources} />
-              <UniversityMajors offering={offering} sources={university.sources} />
             </div>
           ) : (
-            <DetailSection title="Thông tin tuyển sinh & chi phí">
-              <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
-                <p className="text-sm leading-relaxed text-ink-2">
-                  Trường chưa có dữ liệu bậc học trong hệ thống. Bạn có thể tham khảo website chính thức của trường.
-                </p>
-              </div>
-            </DetailSection>
+            <>
+              <DetailSection title="Thông tin tuyển sinh & chi phí">
+                <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+                  <p className="text-sm leading-relaxed text-ink-2">
+                    Trường chưa có dữ liệu bậc học trong hệ thống. Bạn có thể tham khảo website chính thức của trường.
+                  </p>
+                </div>
+              </DetailSection>
+              {scholarshipList && (
+                <DetailSection id="scholarships" title="Học bổng">
+                  {scholarshipList}
+                </DetailSection>
+              )}
+            </>
           )}
 
           {university.galleryUrls.length > 0 && (
@@ -279,6 +387,28 @@ export function UniversityDetailView({ university }: { university: UniversityDet
                     </a>
                   ))}
                 </div>
+                {imageCredits.length > 0 && (
+                  // Ảnh lấy từ Wikimedia Commons: giấy phép CC BY/BY-SA bắt buộc ghi tác giả và giấy phép
+                  <p className="mt-4 text-xs leading-relaxed text-ink-3">
+                    Ảnh:{" "}
+                    {imageCredits.map((credit, index) => {
+                      const page = universityUrl(credit.sourcePageUrl);
+                      const text = [credit.author, credit.license].filter(Boolean).join(", ");
+                      return (
+                        <span key={credit.url}>
+                          {index > 0 && " · "}
+                          {page ? (
+                            <a href={page} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-ink-2 hover:underline">
+                              {text}
+                            </a>
+                          ) : (
+                            text
+                          )}
+                        </span>
+                      );
+                    })}
+                  </p>
+                )}
               </div>
             </DetailSection>
           )}
@@ -314,7 +444,15 @@ export function UniversityDetailView({ university }: { university: UniversityDet
                             <p className="line-clamp-2 text-sm font-medium leading-snug text-ink">{ranking.name}</p>
                           )}
                           <p className="text-xs text-ink-3">
-                            {ranking.publisher} · {ranking.edition ?? ranking.editionYear ?? "Chưa có năm"}
+                            {ranking.publisher} · {ranking.edition ?? ranking.editionYear ?? <MissingValue />}
+                            {safeSourceUrl && (
+                              <>
+                                {" · "}
+                                <a href={safeSourceUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-ink-2">
+                                  {universityHost(safeSourceUrl)}
+                                </a>
+                              </>
+                            )}
                           </p>
                         </div>
                       </li>

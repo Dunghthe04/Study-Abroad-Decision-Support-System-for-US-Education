@@ -227,12 +227,11 @@ public class PlanAdminServiceTests
     }
 
     [Fact]
-    public async Task A2_CreateLosesTheRaceOnTheSingleFreeIndex_ReturnsFreePlanExists()
+    public async Task A2_CreateFreePlan_IsRejected_UC74_2b()
     {
         var f = new Fixture();
-        f.Repo.ThrowOnAdd = new PlanConflictException(PlanConflict.FreePlanExists);
 
-        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(code: "free-2", kind: PlanKinds.Free, price: 0, days: null, quotaPeriodDays: null))), "free_plan_exists", 409);
+        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(code: "free-2", kind: PlanKinds.Free, price: 0, days: null, quotaPeriodDays: null))), "invalid_kind", 400);
 
         Assert.Empty(f.Audit.Entries);
     }
@@ -276,23 +275,12 @@ public class PlanAdminServiceTests
     }
 
     [Fact]
-    public async Task Create_SecondFreePlan_ReturnsFreePlanExists()
-    {
-        var f = new Fixture();
-
-        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(code: "free-2", kind: PlanKinds.Free, price: 0, days: null, quotaPeriodDays: null))), "free_plan_exists", 409);
-    }
-
-    [Fact]
-    public async Task Create_FreePlanWhenNoneExists_StoresNoDurationWhateverIsSent()
+    public async Task Create_FreePlanEvenWhenNoneExists_IsRejected_UC74_2b()
     {
         var f = new Fixture();
         f.Repo.Plans.Remove(f.Free);
 
-        var dto = await f.Service.CreateAsync(Admin, Create(code: "free", kind: PlanKinds.Free, price: 0, days: 30, quotaPeriodDays: null));
-
-        Assert.Null(dto.DurationDays);
-        Assert.Null(f.Repo.Plans.Single(p => p.Code == "free").DurationDays);
+        AssertRule(await Fails(f.Service.CreateAsync(Admin, Create(code: "free", kind: PlanKinds.Free, price: 0, days: null, quotaPeriodDays: null))), "invalid_kind", 400);
     }
 
     [Theory]
@@ -540,36 +528,17 @@ public class PlanAdminServiceTests
     // ---- gói Free
 
     [Fact]
-    public async Task A3_Free_FrontendBody_DurationNullPriceZeroActive_Succeeds()
+    public async Task A3_Free_OnlyTokenQuotaAndDescriptionEditable_Succeeds()
     {
         var f = new Fixture();
 
         var dto = await f.Service.UpdateAsync(Admin, f.Free.Id,
-            Create(code: null, kind: null, name: "Miễn phí", description: "Hạn mức hằng tháng", price: 0, days: null, quotaPeriodDays: null, quota: 150_000, active: true, order: 0));
+            Create(code: null, kind: null, name: f.Free.Name, description: "Hạn mức hằng tháng", price: 0, days: null, quotaPeriodDays: null, quota: 150_000, active: true, order: f.Free.DisplayOrder));
 
-        Assert.Equal(("Miễn phí", 0L, (int?)null, (int?)null, 150_000L, true), (dto.Name, dto.PriceVnd, dto.DurationDays, dto.QuotaPeriodDays, dto.TokenQuota, dto.IsActive));
+        Assert.Equal((f.Free.Name, "Hạn mức hằng tháng", 0L, (int?)null, (int?)null, 150_000L, true),
+            (dto.Name, dto.Description, dto.PriceVnd, dto.DurationDays, dto.QuotaPeriodDays, dto.TokenQuota, dto.IsActive));
         Assert.Null(dto.QuotaMultiplier);
         Assert.Equal(150_000, f.Free.TokenQuota);
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(366)]
-    public async Task A3_Free_QuotaPeriodOutOfRange_ReturnsInvalidQuotaPeriod(int quotaPeriodDays)
-    {
-        var f = new Fixture();
-
-        AssertRule(await Fails(f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, price: 0, days: null, quotaPeriodDays: quotaPeriodDays))), "invalid_quota_period", 400);
-    }
-
-    [Fact]
-    public async Task A3_Free_ValidQuotaPeriod_Accepted()
-    {
-        var f = new Fixture();
-
-        var dto = await f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, price: 0, days: null, quotaPeriodDays: 7));
-
-        Assert.Equal(7, dto.QuotaPeriodDays);
     }
 
     [Fact]
@@ -577,20 +546,22 @@ public class PlanAdminServiceTests
     {
         var f = new Fixture();
 
-        var dto = await f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: PlanKinds.Free, price: 0, days: null, quotaPeriodDays: null));
+        var dto = await f.Service.UpdateAsync(Admin, f.Free.Id,
+            Create(code: null, kind: PlanKinds.Free, name: f.Free.Name, description: "Mô tả mới", price: 0, days: null, quotaPeriodDays: null, quota: 50_000, active: true, order: f.Free.DisplayOrder));
 
-        Assert.Equal(PlanKinds.Free, dto.Kind);
+        Assert.Equal((PlanKinds.Free, "Mô tả mới", 50_000L), (dto.Kind, dto.Description, dto.TokenQuota));
     }
 
     [Fact]
-    public async Task A3_Free_DurationSentIsIgnoredAndStoredNull()
+    public async Task A3_Free_ChangingNameOrOrderOrQuotaPeriodOrDuration_ReturnsFreePlanLocked_UC74_2b()
     {
         var f = new Fixture();
 
-        var dto = await f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, price: 0, days: 30, quotaPeriodDays: null));
-
-        Assert.Null(dto.DurationDays);
-        Assert.Null(f.Free.DurationDays);
+        AssertRule(await Fails(f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, name: "Đổi tên", price: 0, days: null, quotaPeriodDays: null, order: f.Free.DisplayOrder))), "free_plan_locked", 409);
+        AssertRule(await Fails(f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, name: f.Free.Name, price: 0, days: null, quotaPeriodDays: 7, order: f.Free.DisplayOrder))), "free_plan_locked", 409);
+        AssertRule(await Fails(f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, name: f.Free.Name, price: 0, days: 30, quotaPeriodDays: null, order: f.Free.DisplayOrder))), "free_plan_locked", 409);
+        AssertRule(await Fails(f.Service.UpdateAsync(Admin, f.Free.Id, Create(code: null, kind: null, name: f.Free.Name, price: 0, days: null, quotaPeriodDays: null, order: 9))), "free_plan_locked", 409);
+        Assert.Empty(f.Audit.Entries);
     }
 
     [Fact]

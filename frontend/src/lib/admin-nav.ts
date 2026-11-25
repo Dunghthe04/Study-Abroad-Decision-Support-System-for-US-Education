@@ -104,12 +104,12 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/slm-samples",
     label: "Mẫu huấn luyện SLM",
-    description: "Duyệt, sửa và nhập mẫu huấn luyện SLM từ Excel",
+    description: "Tra cứu, thêm, sửa, xóa và nhập mẫu huấn luyện SLM từ Excel",
     icon: BookOpenIcon,
     filledIcon: BookOpenFilledIcon,
     section: "data",
     roles: ["admin", "moderator"],
-    useCases: ["UC-51", "UC-52"],
+    useCases: ["UC-89", "UC-90", "UC-92", "UC-93", "UC-94", "UC-95", "UC-96"],
   },
   {
     href: "/admin/knowledge-base",
@@ -119,7 +119,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: LibraryBigFilledIcon,
     section: "data",
     roles: ["admin", "moderator"],
-    useCases: ["UC-118", "UC-119", "UC-120", "UC-121", "UC-122", "UC-123"],
+    useCases: ["UC-112", "UC-113", "UC-114", "UC-115", "UC-116", "UC-117"],
   },
   {
     href: "/admin/centers",
@@ -142,6 +142,17 @@ export const ADMIN_NAV: AdminNavItem[] = [
     // [UC-114] Chỉ Moderator kiểm tra thay đổi trung tâm
     roles: ["moderator"],
     useCases: ["UC-114"],
+  },
+  {
+    href: "/admin/center-review-reports",
+    label: "Báo cáo đánh giá",
+    description: "Xem xét báo cáo đánh giá trung tâm vi phạm (kể cả trung tâm tự báo cáo), gỡ đánh giá hoặc bác bỏ",
+    icon: ShieldAlertIcon,
+    filledIcon: ShieldAlertFilledIcon,
+    section: "moderation",
+    // [UC-151 / UC-53] Chỉ Moderator xử lý báo cáo đánh giá trung tâm
+    roles: ["moderator"],
+    useCases: ["UC-53", "UC-151"],
   },
   {
     href: "/admin/forum",
@@ -196,12 +207,12 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/review-batches",
     label: "Duyệt mẫu",
-    description: "Bốc ngẫu nhiên các câu hệ thống đã trả lời để đọc và chấm đúng sai, đo tỷ lệ lỗi",
+    description: "Bốc ngẫu nhiên các câu hệ thống đã trả lời để đọc và chấm đúng sai, đo tỷ lệ lỗi (Admin tạo đợt, Admin và Moderator được giao thì chấm)",
     icon: ClipboardCheckIcon,
     filledIcon: ClipboardCheckFilledIcon,
     section: "ai",
-    roles: ["admin"],
-    useCases: ["UC-155", "UC-156", "UC-157"],
+    roles: ["admin", "moderator"],
+    useCases: ["UC-147", "UC-148", "UC-149"],
   },
   {
     href: "/admin/users",
@@ -267,12 +278,12 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/access-logs",
     label: "Nhật ký truy cập",
-    description: "Xem và lọc nhật ký ai đã xem hoặc xuất dữ liệu nhạy cảm (tài liệu xác minh, tin nhắn báo cáo, xuất mẫu)",
+    description: "Xem và lọc nhật ký ai đã xem hoặc xuất dữ liệu nhạy cảm và nhật ký thao tác hệ thống",
     icon: ShieldAlertIcon,
     filledIcon: ShieldAlertFilledIcon,
     section: "system",
     roles: ["admin"],
-    useCases: ["UC-97"],
+    useCases: ["UC-91"],
   },
 ];
 

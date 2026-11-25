@@ -24,13 +24,15 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Admin.Scholarships.IAdminScholarshipService, StudyAbroad.Application.Admin.Scholarships.AdminScholarshipService>();
         services.AddScoped<StudyAbroad.Application.Scholarships.IScholarshipSearchService, StudyAbroad.Application.Scholarships.ScholarshipSearchService>();
         services.AddScoped<StudyAbroad.Application.Costs.ICostService, StudyAbroad.Application.Costs.CostService>();
+        services.AddScoped<StudyAbroad.Application.Costs.ICostParameterCatalog, StudyAbroad.Application.Costs.CostParameterCatalog>();
         services.AddScoped<StudyAbroad.Application.Admin.Settings.IGradeScaleSettingService, StudyAbroad.Application.Admin.Settings.GradeScaleSettingService>();
+        services.AddScoped<StudyAbroad.Application.Admin.Settings.ICostParametersSettingService, StudyAbroad.Application.Admin.Settings.CostParametersSettingService>();
         services.AddScoped<StudyAbroad.Application.Admin.AiUsage.IAiUsageReportService, StudyAbroad.Application.Admin.AiUsage.AiUsageReportService>();   // token của các lần gọi AI cho admin
         services.AddScoped<StudyAbroad.Application.Admin.AiQuality.IAiQualityService, StudyAbroad.Application.Admin.AiQuality.AiQualityService>();   // báo cáo chất lượng AI cho admin (UC-90)
         services.AddScoped<StudyAbroad.Application.Admin.AiQuality.IAiQualitySampleService, StudyAbroad.Application.Admin.AiQuality.AiQualitySampleService>();   // mẫu hội thoại đã che cho admin (UC-90)
         services.AddScoped<StudyAbroad.Application.Advisor.History.IChatHistoryService, StudyAbroad.Application.Advisor.History.ChatHistoryService>();   // lịch sử chat của chính người dùng
         services.AddScoped<StudyAbroad.Application.Admin.SlmSamples.ISlmSampleService, StudyAbroad.Application.Admin.SlmSamples.SlmSampleService>();
-        services.AddScoped<StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeBaseService, StudyAbroad.Application.Admin.KnowledgeBase.KnowledgeBaseService>();   // kho tri thức (UC-118..125)
+        services.AddScoped<StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeBaseService, StudyAbroad.Application.Admin.KnowledgeBase.KnowledgeBaseService>();   // kho tri thức (UC-112..117)
         services.AddScoped<StudyAbroad.Application.Admin.ReviewBatches.IReviewBatchService, StudyAbroad.Application.Admin.ReviewBatches.ReviewBatchService>();   // đợt duyệt mẫu
         services.AddScoped<StudyAbroad.Application.Admin.Sensitivity.ISensitivityRunService, StudyAbroad.Application.Admin.Sensitivity.SensitivityRunService>();   // phân tích độ nhạy tham số (UC-85)
         services.AddScoped<StudyAbroad.Application.Admin.Policies.IPolicyService, StudyAbroad.Application.Admin.Policies.PolicyService>();   // quản lý chính sách và điều khoản (UC-103)
@@ -41,6 +43,8 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Leads.ILeadParentConfirmService, StudyAbroad.Application.Leads.LeadParentConfirmService>();   // [UC-116] phụ huynh xác nhận lead qua mail
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewService, StudyAbroad.Application.StudyCenters.CenterReviewService>();
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewModerationService, StudyAbroad.Application.StudyCenters.CenterReviewModerationService>();
+        services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewReportService, StudyAbroad.Application.StudyCenters.CenterReviewReportService>();   // [UC-151] báo cáo đánh giá trung tâm
+        services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewReplyService, StudyAbroad.Application.StudyCenters.CenterReviewReplyService>();   // [UC-152] trung tâm phản hồi đánh giá
         services.AddScoped<ICenterDeletionService, CenterDeletionService>();   // [UC-93] Admin xử lý yêu cầu xóa trung tâm
         services.AddScoped<IAuthService, AuthService>();
         // [UC-75 1a] Cùng một AuthService trong scope, để dịch vụ liên kết gọi xóa tài khoản của con
@@ -75,7 +79,7 @@ public static class DependencyInjection
         services.AddScoped<ActingSessionGuard>();      // 1.5b: kiểm tra phiên làm thay con managed ở mỗi request
         services.AddScoped<ActingService>();           // 1.5b: vào / thoát làm thay
         services.AddScoped<StudyAbroad.Application.Dashboard.IDashboardService, StudyAbroad.Application.Dashboard.DashboardService>(); // [UC-94] Dashboard KPI
-        services.AddScoped<StudyAbroad.Application.Audit.IAccessLogService, StudyAbroad.Application.Audit.AccessLogService>();   // [UC-97] nhật ký truy cập dữ liệu nhạy cảm
+        services.AddScoped<StudyAbroad.Application.Audit.IAccessLogService, StudyAbroad.Application.Audit.AccessLogService>();   // [UC-91] nhật ký truy cập dữ liệu nhạy cảm
         services.AddScoped<StudyAbroad.Application.Billing.IEntitlementService, StudyAbroad.Application.Billing.EntitlementService>();   // gói dịch vụ: tier, pool trả cho lượt chat
         services.AddScoped<StudyAbroad.Application.Billing.Admin.IPlanAdminService, StudyAbroad.Application.Billing.Admin.PlanAdminService>();   // UC-79: admin quản lý gói
         services.AddScoped<StudyAbroad.Application.Billing.Family.IFamilyService, StudyAbroad.Application.Billing.Family.FamilyService>();   // gói Gia đình: lời mời, thành viên, rời gói (UC-126..131)

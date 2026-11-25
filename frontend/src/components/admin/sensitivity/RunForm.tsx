@@ -20,7 +20,7 @@ interface RunFormProps {
 
 const KINDS: SensitivityKind[] = ["grouping", "fit_weight"];
 
-/** Chọn tham số, mức nhích và ngưỡng nhãn rồi bấm Chạy. Mặc định chọn hết 14 tham số và cả hai mức. */
+/** Chọn tham số, mức nhích và ngưỡng nhãn rồi bấm Chạy. Mặc định chọn hết 13 tham số và cả hai mức. */
 export function RunForm({ parameters, running, onRun }: RunFormProps) {
   // null: chưa đụng tới, coi như chọn hết
   const [picked, setPicked] = useState<Set<string> | null>(null);

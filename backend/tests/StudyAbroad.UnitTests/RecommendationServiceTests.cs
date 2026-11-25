@@ -52,7 +52,7 @@ public class RecommendationServiceTests
         var profile = Profile();
         var schools = new List<RecommendSchoolInput>
         {
-            School("Colgate", 95_610m, "need_and_merit", Major, sat: (1450, 1550), accept: 0.08m),   // vượt ngân sách, rất chọn lọc
+            School("Colgate", 95_610m, "need_and_merit", Major, sat: (1450, 1550), accept: 0.08m, aidAvg: 60_000m),   // vượt ngân sách, sau trừ hỗ trợ còn 35.610; rất chọn lọc
             School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m),     // vừa sức
             School("D", 20_000m, "none", "History", sat: (1200, 1380), accept: 0.60m)                 // sai ngành
         };
@@ -83,6 +83,133 @@ public class RecommendationServiceTests
 
         Assert.Equal(3, criteria.RootElement.GetProperty("tier").GetInt32());   // hồ sơ chưa có bậc ngoại khóa: coi là trung bình
         Assert.Equal("OK", criteria.RootElement.GetProperty("status").GetString());
+    }
+
+    // UC-22 4b: thiếu học phí nên không tính được chi phí năm: trường không bị loại, vào "Chưa xếp được nhóm" với lý do thiếu dữ liệu chi phí
+    [Fact]
+    public async Task Recommend_ASchoolWithoutTuition_IsNotExcluded_ButGoesToTheNoGroupBlockWithACostReason()
+    {
+        var (service, _, store) = Setup();
+        var noTuition = School("N", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        noTuition.Offering.TuitionUsd = null;
+        var fine = School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+
+        await service.RecommendAsync(Profile(), [noTuition, fine]);
+
+        using var items = JsonDocument.Parse(store.Rows.Single().ItemsJson);
+        var root = items.RootElement;
+        var scored = root.GetProperty("scored").EnumerateArray().ToDictionary(e => e.GetProperty("code").GetString()!);
+        Assert.Equal("NA", scored["N"].GetProperty("g2").GetString());
+        Assert.Equal("Keep", scored["N"].GetProperty("outcome").GetString());
+        Assert.Equal("M", scored["B"].GetProperty("g2").GetString());
+        Assert.Equal(["N"], root.GetProperty("other").EnumerateArray().Select(e => e.GetProperty("code").GetString()));
+        Assert.Contains("NO_COST_DATA", scored["N"].GetProperty("reasons").EnumerateArray().Select(w => w.GetString()));
+    }
+
+    // ---- UC-154: so sánh trường theo độ phù hợp: cùng công thức và tham số với gợi ý, trên hồ sơ thật
+
+    [Fact]
+    public async Task CompareFit_EachSchoolGetsItsGroupAndTheFiveWeightedParts_FromTheSameFormulaAsTheRecommendation()
+    {
+        var profile = Profile();
+        var b = School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, _, _) = Setup(profile, [b]);
+
+        var result = await service.CompareFitAsync(profile.UserId, ["B"], default);
+
+        var school = Assert.Single(result.Schools);
+        Assert.Equal((FitCompareStatus.InList, "M"), (school.Status, school.Group));
+        Assert.Equal(["position", "budget", "quality", "aid", "english"], school.Parts.Select(p => p.Key));
+        var w = new FitWeights();
+        Assert.Equal([w.Position, w.Budget, w.Quality, w.Aid, w.English], school.Parts.Select(p => p.Weight));
+        Assert.False(result.PriorityAdjusted);
+        // Cùng con số với lần gợi ý thật của đúng trường này
+        var run = await service.RecommendAsync(profile, [b]);
+        Assert.Equal(run.Scored.Single().Fit!.Value, school.Total!.Value, 9);
+    }
+
+    [Fact]
+    public async Task CompareFit_ASchoolThatTheRecommendationWouldExclude_SaysWhyInsteadOfGivingAGroup()
+    {
+        var profile = Profile();
+        var wrongMajor = School("D", 20_000m, "none", "History", sat: (1200, 1380), accept: 0.60m);
+        var tooExpensive = School("E", 95_610m, "none", Major, sat: (1200, 1380), accept: 0.60m);
+        var (service, _, _) = Setup(profile, [wrongMajor, tooExpensive]);
+
+        var result = await service.CompareFitAsync(profile.UserId, ["D", "E"], default);
+
+        Assert.Equal([("D", "MAJOR"), ("E", "BUDGET")], result.Schools.Select(s => (s.Code, s.ExcludeReason!)));
+        Assert.All(result.Schools, s =>
+        {
+            Assert.Equal(FitCompareStatus.Excluded, s.Status);
+            Assert.Null(s.Group);
+            Assert.Null(s.Total);
+            Assert.Empty(s.Parts);
+        });
+    }
+
+    [Fact]
+    public async Task CompareFit_ASchoolOverTheBudgetButWithUsableAid_IsInTheAidBlock()
+    {
+        var profile = Profile();
+        var colgate = School("Colgate", 95_610m, "need_and_merit", Major, sat: (1450, 1550), accept: 0.08m, aidAvg: 60_000m);
+        var (service, _, _) = Setup(profile, [colgate]);
+
+        var school = Assert.Single((await service.CompareFitAsync(profile.UserId, ["Colgate"], default)).Schools);
+
+        Assert.Equal(FitCompareStatus.Aid, school.Status);
+        Assert.Equal("R", school.Group);   // tỉ lệ nhận 8% nên luôn Khó vào
+        Assert.Contains("NEED_AID", school.Why);
+    }
+
+    [Fact]
+    public async Task CompareFit_ASchoolWithoutTuition_HasNoDataStatus_AndNoScore()
+    {
+        var profile = Profile();
+        var noTuition = School("N", 30_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        noTuition.Offering.TuitionUsd = null;
+        var (service, _, _) = Setup(profile, [noTuition]);
+
+        var school = Assert.Single((await service.CompareFitAsync(profile.UserId, ["N"], default)).Schools);
+
+        Assert.Equal((FitCompareStatus.NoData, "NA"), (school.Status, school.Group));
+        Assert.Null(school.Total);
+    }
+
+    [Fact]
+    public async Task CompareFit_UsesTheWeightsOfTheLatestRecommendationsPriorityButtons()
+    {
+        var profile = Profile();
+        var b = School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, _, _) = Setup(profile, [b]);
+        await service.RecommendAsync(profile, [b], [4, 0, 0]);   // học sinh đã bấm nút ưu tiên chi phí
+
+        var result = await service.CompareFitAsync(profile.UserId, ["B"], default);
+
+        Assert.True(result.PriorityAdjusted);
+        Assert.NotEqual(new FitWeights().Budget, result.Schools.Single().Parts.Single(p => p.Key == "budget").Weight);
+    }
+
+    [Fact]
+    public async Task CompareFit_ACodeNotInTheData_ThrowsSoTheChatCanNameIt()
+    {
+        var profile = Profile();
+        var (service, _, _) = Setup(profile, [School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m)]);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CompareFitAsync(profile.UserId, ["B", "ZZZ"], default));
+
+        Assert.Contains("ZZZ", ex.Message);
+    }
+
+    [Fact]
+    public async Task CompareFit_AProfileMissingWhatTheRecommendationNeeds_IsRefusedLikeTheRecommendation()
+    {
+        var profile = Profile(need: null);
+        var (service, _, _) = Setup(profile, [School("B", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m)]);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CompareFitAsync(profile.UserId, ["B"], default));
+
+        Assert.StartsWith("Hồ sơ", ex.Message);
     }
 
     [Fact]
@@ -507,6 +634,147 @@ public class RecommendationServiceTests
         var list = schools ?? [School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m)];
         var (service, advisor, store) = Setup(profile, list, activities);
         return (service, advisor, store, profile);
+    }
+
+    // ---- UC-77 / UC-155: bang, ngành, tỉ giá giả định (thay điều kiện lọc ở bước 3 của UC-22 và ngân sách USD trên bản sao hồ sơ)
+
+    private sealed class FixedRate(decimal vndPerUsd) : StudyAbroad.Application.Profile.Flow.IExchangeRateProvider
+    {
+        public Task<decimal> GetVndPerUsdAsync(CancellationToken ct = default) => Task.FromResult(vndPerUsd);
+    }
+
+    private static (RecommendationService Service, StudentProfile Profile) SimWithRate(
+        IReadOnlyList<RecommendSchoolInput> schools, decimal? vndPerUsd = 25_000m)
+    {
+        var profile = Profile();
+        profile.OverallGpa = 3.5m;
+        profile.Sat = 1290m;
+        var service = new RecommendationService(
+            new FakeAdvisor(), new FakeRecommendationRepository(schools), new FakeProfileFlow(profile), null,
+            vndPerUsd is { } rate ? new FixedRate(rate) : null);
+        return (service, profile);
+    }
+
+    [Fact]
+    public async Task Simulate_ANewMajor_ReplacesTheMajorFilter_SchoolsOfTheOldMajorLeaveAndThoseOfTheNewComeIn()
+    {
+        var cs = School("CS", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var history = School("HIS", 38_000m, "none", "History", sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, profile) = SimWithRate([cs, history]);
+
+        var result = await service.SimulateAsync(profile.UserId, NoChange with { Major = "History" }, null, default);
+
+        Assert.Contains(new SchoolChange("CS", "CS", "M", "OUT"), result.Changes);
+        Assert.Contains(new SchoolChange("HIS", "HIS", "OUT", "M"), result.Changes);
+    }
+
+    [Fact]
+    public async Task Simulate_NewStates_ReplaceThePreferredStates_AndSchoolsOutsideThemLeave()
+    {
+        var ny = School("NYS", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);   // helper đặt bang NY
+        var (service, profile) = SimWithRate([ny]);
+
+        var texas = await service.SimulateAsync(profile.UserId, NoChange with { States = ["tx"] }, null, default);   // chữ thường vẫn nhận
+        var sameState = await service.SimulateAsync(profile.UserId, NoChange with { States = ["NY"] }, null, default);
+
+        Assert.Equal(new SchoolChange("NYS", "NYS", "M", "OUT"), Assert.Single(texas.Changes));
+        Assert.Empty(sameState.Changes);
+    }
+
+    // Tỉ giá hiện nay 25.000: tăng 25% (hoặc lên 31.250) thì ngân sách 50.000 USD còn 40.000, trần 44.000 nên trường 48.000 USD bị loại
+    [Theory]
+    [InlineData(null, 25.0)]
+    [InlineData(31_250, null)]
+    public async Task Simulate_ARisingExchangeRate_ShrinksTheUsdBudget_SoAnExpensiveSchoolLeaves(int? vnd, double? percent)
+    {
+        var dear = School("DEAR", 48_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, profile) = SimWithRate([dear]);
+        var overrides = NoChange with { ExchangeRateVnd = vnd, ExchangeRatePercent = (decimal?)percent };
+
+        var result = await service.SimulateAsync(profile.UserId, overrides, null, default);
+
+        Assert.Equal(new SchoolChange("DEAR", "DEAR", "M", "OUT"), Assert.Single(result.Changes));
+        using var criteria = JsonDocument.Parse(result.CriteriaJson);
+        Assert.Equal(40_000m, criteria.RootElement.GetProperty("budget").GetDecimal());   // ngân sách trong kịch bản
+    }
+
+    [Fact]
+    public async Task Simulate_TheExchangeRateAppliesToTheSimulatedBudgetWhenBothAreGiven()
+    {
+        var dear = School("DEAR", 48_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, profile) = SimWithRate([dear]);
+
+        var result = await service.SimulateAsync(profile.UserId, NoChange with { BudgetUsd = 100_000m, ExchangeRatePercent = 25m }, null, default);
+
+        using var criteria = JsonDocument.Parse(result.CriteriaJson);
+        Assert.Equal(80_000m, criteria.RootElement.GetProperty("budget").GetDecimal());   // 100.000 x 25.000 / 31.250
+        Assert.Empty(result.Changes);
+    }
+
+    [Theory]
+    [InlineData(25_000, null)]    // bằng tỉ giá hiện nay: không phải mức tăng
+    [InlineData(20_000, null)]    // giảm: không nhận
+    [InlineData(null, 0.0)]
+    [InlineData(null, -5.0)]
+    [InlineData(null, 150.0)]
+    [InlineData(31_250, 25.0)]    // nhập cả hai cách
+    public async Task Simulate_AnExchangeRateThatIsNotARise_IsRefused(int? vnd, double? percent)
+    {
+        var (service, profile) = SimWithRate([School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m)]);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SimulateAsync(
+            profile.UserId, NoChange with { ExchangeRateVnd = vnd, ExchangeRatePercent = (decimal?)percent }, null, default));
+    }
+
+    [Fact]
+    public async Task Simulate_TheRefusalOfAFallingRate_SaysTheCurrentRate()
+    {
+        var (service, profile) = SimWithRate([School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m)]);
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => service.SimulateAsync(profile.UserId, NoChange with { ExchangeRateVnd = 20_000m }, null, default));
+
+        Assert.Contains("chỉ nhận mức tăng", ex.Message);
+        Assert.Contains("25", ex.Message);   // tỉ giá hiện nay
+    }
+
+    [Theory]
+    [InlineData("Texas")]   // phải là mã hai chữ
+    [InlineData("T1")]
+    [InlineData("")]
+    public async Task Simulate_AnInvalidState_IsRefused(string state)
+    {
+        var (service, profile) = SimWithRate([School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m)]);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SimulateAsync(profile.UserId, NoChange with { States = [state] }, null, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SimulateAsync(profile.UserId, NoChange with { States = [] }, null, default));
+    }
+
+    [Fact]
+    public async Task Simulate_ABlankMajor_IsRefused()
+    {
+        var (service, profile) = SimWithRate([School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m)]);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SimulateAsync(profile.UserId, NoChange with { Major = "  " }, null, default));
+    }
+
+    [Fact]
+    public async Task Simulate_WithoutAnExchangeRateProvider_TheRateScenarioCannotRun()
+    {
+        var (service, profile) = SimWithRate([School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m)], vndPerUsd: null);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SimulateAsync(profile.UserId, NoChange with { ExchangeRatePercent = 10m }, null, default));
+    }
+
+    [Fact]
+    public async Task GoalSeek_UsesTheSameSimulatedRate()
+    {
+        var dear = School("DEAR", 48_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, profile) = SimWithRate([dear]);
+
+        var result = await service.GoalSeekAsync(profile.UserId, "DEAR", "safety", default, NoChange with { ExchangeRatePercent = 25m });
+
+        Assert.Equal("simulated", result.Basis);
+        Assert.Equal(40_000m, result.Budget.BudgetUsd);   // goal-seek tính trên ngân sách đã đổi theo tỉ giá giả định
     }
 
     [Fact]
@@ -1032,6 +1300,83 @@ public class RecommendationServiceTests
         Assert.Equal("NY", advisor.LastExplain!.School.State);
     }
 
+    // ---- UC-24: điểm năm thành phần và trọng số đã dùng cho lần gợi ý đó
+
+    private static async Task<(RecommendationService Service, StudentProfile Profile)> SavedRunWithPriorities(IReadOnlyList<int> pref)
+    {
+        var (service, _, _, profile) = SimSetup();
+        await service.RecommendAsync(
+            profile, [School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m)], pref: pref);
+        return (service, profile);
+    }
+
+    [Fact]
+    public async Task ExplainCard_ShowsTheFiveFitComponentsInTheSpecOrder_WithTheDefaultWeights()
+    {
+        var (service, _, profile) = await SavedRunSetup();
+
+        var fit = (await service.ExplainCardAsync(profile.UserId, "S", default)).Fit!;
+
+        Assert.Equal(["position", "budget", "quality", "aid", "english"], fit.Parts.Select(p => p.Key));
+        Assert.Equal([0.30, 0.25, 0.20, 0.15, 0.10], fit.Parts.Select(p => p.Weight));
+        Assert.False(fit.PriorityAdjusted);
+        Assert.InRange(fit.Total!.Value, 0, 1);
+    }
+
+    [Fact]
+    public async Task ExplainCard_FitTotalIsTheWeightedAverageOfTheComponentsThatHaveData()
+    {
+        var (service, _, profile) = await SavedRunSetup();
+
+        var fit = (await service.ExplainCardAsync(profile.UserId, "S", default)).Fit!;
+
+        // Thành phần thiếu dữ liệu (Score null) bị bỏ khỏi tổng và trọng số chia lại, như SchoolRanker.Score
+        var present = fit.Parts.Where(p => p.Score is not null).ToList();
+        var expected = present.Sum(p => p.Score!.Value * p.Weight) / present.Sum(p => p.Weight);
+        Assert.Equal(expected, fit.Total!.Value, 2);
+    }
+
+    [Fact]
+    public async Task ExplainCard_ShowsTheWeightsAdjustedByThePriorityBars()
+    {
+        // Ba thanh [chi phí, học bổng, danh tiếng] = [4, 0, 2]: chi phí gấp đôi, học bổng bỏ hẳn, danh tiếng giữ nguyên
+        var (service, profile) = await SavedRunWithPriorities([4, 0, 2]);
+
+        var fit = (await service.ExplainCardAsync(profile.UserId, "S", default)).Fit!;
+
+        Assert.True(fit.PriorityAdjusted);
+        var weights = fit.Parts.ToDictionary(p => p.Key, p => p.Weight);
+        Assert.Equal(0.30, weights["position"], 6);
+        Assert.Equal(0.50, weights["budget"], 6);
+        Assert.Equal(0.20, weights["quality"], 6);
+        Assert.Equal(0.00, weights["aid"], 6);
+        Assert.Equal(0.10, weights["english"], 6);
+    }
+
+    [Fact]
+    public async Task ExplainCard_WithSimulatedValues_UsesTheDefaultWeightsOfTheSimulatedRun()
+    {
+        var (service, profile) = await SavedRunWithPriorities([4, 0, 2]);
+
+        var fit = (await service.ExplainCardAsync(profile.UserId, "S", default, NoChange with { Gpa = 2.5m, Sat = 1000m })).Fit!;
+
+        // Khung giải thích mô phỏng chạy không kèm nút ưu tiên nên dùng trọng số mặc định (khớp với danh sách giả định đang xem)
+        Assert.False(fit.PriorityAdjusted);
+        Assert.Equal([0.30, 0.25, 0.20, 0.15, 0.10], fit.Parts.Select(p => p.Weight));
+    }
+
+    [Fact]
+    public async Task Explain_StillSendsTheAdvisorTheSameSchoolFields_NowThatTheCardCarriesTheFitBreakdown()
+    {
+        var (service, advisor, profile) = await SavedRunSetup();
+
+        await service.ExplainAsync(profile.UserId, "S", default);
+
+        // Advisor bỏ qua trường Fit (chỉ thẻ trong chat dùng); các trường cũ vẫn như trước
+        Assert.Equal("M", advisor.LastExplain!.School.G2);
+        Assert.NotNull(advisor.LastExplain.School.Why);
+    }
+
     [Fact]
     public async Task Explain_WithEmptyOverrides_IsTheRealProfile()
     {
@@ -1107,7 +1452,7 @@ public class RecommendationServiceTests
     [Fact]
     public async Task Simulate_LoweringTheBudget_WithAScholarshipNeed_MovesTheSchoolToTheAidBlock()
     {
-        var school = School("S", 38_000m, "need_and_merit", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var school = School("S", 38_000m, "need_and_merit", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m, aidAvg: 20_000m);
         var (service, _, _, profile) = SimSetup([school]);
 
         var result = await service.SimulateAsync(
@@ -1269,7 +1614,7 @@ public class RecommendationServiceTests
         string code, decimal tuition, string aidPolicy, string major,
         (int Low, int High)? sat = null, decimal? accept = null, decimal? avgGpa = null,
         decimal? minIelts = null, decimal? minToefl = null, decimal? minDuolingo = null, (int Rank, int Total)? rank = null, int? admitted = null, int? applicants = null,
-        string? ec = null)
+        string? ec = null, decimal? aidAvg = null)
     {
         var university = new University
         {
@@ -1281,6 +1626,7 @@ public class RecommendationServiceTests
             StudyLevel = "undergraduate",
             TuitionUsd = tuition,
             IntlAidPolicy = aidPolicy,
+            IntlAidAvgUsd = aidAvg,   // UC-22 4a: học bổng trung bình trừ vào chi phí khi vượt ngưỡng
             Sat25 = sat?.Low,
             Sat75 = sat?.High,
             AvgGpa4 = avgGpa,
@@ -1574,7 +1920,7 @@ public class RecommendationServiceTests
     [Fact]
     public async Task GoalSeek_ASchoolAboveTheBudgetButWithAid_NeedsAid_AndSaysTheMinimumBudget()
     {
-        var pricey = School("P", 62_000m, "preferred", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var pricey = School("P", 62_000m, "preferred", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m, aidAvg: 20_000m);
         var (service, profile) = GoalSetup(pricey);
 
         var budget = (await service.GoalSeekAsync(profile.UserId, "P", "match", default)).Budget;
@@ -1703,7 +2049,7 @@ public class RecommendationServiceTests
     [Fact]
     public async Task GoalSeek_ASchoolThatNeedsAid_IsInTheListFlaggedNeedAid()
     {
-        var pricey = School("P", 62_000m, "preferred", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var pricey = School("P", 62_000m, "preferred", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m, aidAvg: 20_000m);
         var (service, profile) = GoalSetup(pricey);
 
         var result = await service.GoalSeekAsync(profile.UserId, "P", null, default);
@@ -1721,7 +2067,8 @@ public class RecommendationServiceTests
         var stats = (await service.GoalSeekAsync(profile.UserId, "S", null, default)).Stats!;
 
         Assert.Equal(0.60m, stats.AcceptRate);
-        Assert.Equal((0.15, 0.5, 0.5), (stats.AlwaysReachRate, stats.SafetyMinRate, stats.IntlRatioCut));
+        Assert.Equal((0.15, 0.5), (stats.AlwaysReachRate, stats.SafetyMinRate));
+        Assert.Equal((0.60m, "overall"), (stats.EffectiveRate, stats.RateSource));   // trường mẫu chưa có tỉ lệ du học sinh: luật dùng tỉ lệ chung
     }
 
     // Trường bị loại: vẫn có nhóm học thuật ("nếu đủ điều kiện") và các mức đích, kèm lý do bị loại

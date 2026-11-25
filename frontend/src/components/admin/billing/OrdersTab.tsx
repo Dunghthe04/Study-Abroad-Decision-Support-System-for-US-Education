@@ -15,7 +15,7 @@ import { TablePagination } from "../shared/TablePagination";
 import { OrderDetailPanel } from "./OrderDetailPanel";
 import { ORDER_STATUS_LABELS, OrderStatusBadge } from "./OrderStatusBadge";
 
-const EMPTY_FILTERS: AdminOrderFilters = { status: "", q: "", page: 1 };
+const EMPTY_FILTERS: AdminOrderFilters = { status: "", q: "", from: "", to: "", page: 1 };
 
 interface LoadResult {
   key: string;
@@ -49,17 +49,38 @@ export function OrdersTab() {
   }, [applied, requestKey]);
 
   const columns: DataTableColumn<AdminOrderDto>[] = [
-    { id: "orderCode", label: "Mã đơn", required: true, render: (o) => <span className="font-mono text-xs">{o.orderCode}</span> },
+    {
+      id: "orderCode",
+      label: "Mã đơn",
+      required: true,
+      render: (o) => (
+        <>
+          <div className="font-mono text-xs">{o.orderCode}</div>
+          {o.gatewayTransactionId && (
+            <div className="font-mono text-[11px] text-muted-foreground" title="Mã giao dịch payOS">
+              {o.gatewayTransactionId}
+            </div>
+          )}
+        </>
+      ),
+    },
     {
       id: "buyer",
       label: "Người mua",
-      render: (o) => (
-        <>
-          {/* [UC-75 lớp 2] Người mua đã xóa tài khoản: chỉ hiện mã, họ tên và email xem trong chi tiết đơn */}
-          <div className="font-medium">{o.buyerName ?? (o.buyerCode ? "Đã xóa tài khoản" : "—")}</div>
-          <div className="text-xs text-muted-foreground">{o.buyerEmail ?? (o.buyerCode ? `Mã ${o.buyerCode.slice(0, 8)}` : "")}</div>
-        </>
-      ),
+      render: (o) =>
+        o.buyerName ? (
+          <>
+            <div className="font-medium">{o.buyerName}</div>
+            <div className="text-xs text-muted-foreground">{o.buyerEmail ?? ""}</div>
+          </>
+        ) : o.deletedBuyerCode ? (
+          <>
+            <div className="font-mono text-xs font-medium">{o.deletedBuyerCode}</div>
+            <div className="text-xs text-muted-foreground">Tài khoản đã xóa</div>
+          </>
+        ) : (
+          <span title="Chưa có dữ liệu" aria-label="Chưa có dữ liệu" className="text-muted-foreground">—</span>
+        ),
     },
     { id: "plan", label: "Gói", render: (o) => o.planName },
     { id: "amount", label: "Số tiền", render: (o) => formatVnd(o.amountVnd) },
@@ -82,16 +103,44 @@ export function OrdersTab() {
           label="Danh sách đơn hàng"
           toolbar={{
             filters: (
-              <NativeSelect
-                aria-label="Lọc theo trạng thái"
-                value={applied.status}
-                onChange={(e) => setApplied({ ...applied, status: e.target.value as OrderStatus | "", page: 1 })}
-              >
-                <NativeSelectOption value="">Mọi trạng thái</NativeSelectOption>
-                {Object.entries(ORDER_STATUS_LABELS).map(([value, label]) => (
-                  <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>
-                ))}
-              </NativeSelect>
+              <div className="flex flex-wrap items-center gap-2">
+                <NativeSelect
+                  aria-label="Lọc theo trạng thái"
+                  value={applied.status}
+                  onChange={(e) => setApplied({ ...applied, status: e.target.value as OrderStatus | "", page: 1 })}
+                >
+                  <NativeSelectOption value="">Mọi trạng thái</NativeSelectOption>
+                  {Object.entries(ORDER_STATUS_LABELS).map(([value, label]) => (
+                    <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                <Input
+                  type="date"
+                  aria-label="Từ ngày"
+                  title="Từ ngày"
+                  value={applied.from}
+                  onChange={(e) => setApplied({ ...applied, from: e.target.value, page: 1 })}
+                  className="w-auto"
+                />
+                <Input
+                  type="date"
+                  aria-label="Đến ngày"
+                  title="Đến ngày"
+                  value={applied.to}
+                  onChange={(e) => setApplied({ ...applied, to: e.target.value, page: 1 })}
+                  className="w-auto"
+                />
+                {(applied.from || applied.to) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setApplied({ ...applied, from: "", to: "", page: 1 })}
+                  >
+                    Xóa ngày
+                  </Button>
+                )}
+              </div>
             ),
             search: (
               <form
@@ -105,7 +154,7 @@ export function OrdersTab() {
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Tìm theo mã đơn hoặc email người mua"
+                  placeholder="Tìm theo mã đơn, mã GD payOS, tên hoặc email"
                   aria-label="Tìm đơn hàng"
                   className="pr-10"
                 />

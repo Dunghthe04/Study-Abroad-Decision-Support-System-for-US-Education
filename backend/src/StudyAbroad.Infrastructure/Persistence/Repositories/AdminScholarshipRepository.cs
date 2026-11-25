@@ -56,7 +56,7 @@ public class AdminScholarshipRepository(AppDbContext db) : IAdminScholarshipRepo
                 db.Users.Where(u => u.Id == s.LastEditedByUserId).Select(u => u.FullName).FirstOrDefault(),
                 s.Kind, s.AmountType, s.AmountMinUsd, s.AmountMaxUsd, s.DurationYears, s.Renewable, s.RenewalCriteria,
                 s.IntlEligible, s.VnEligible, s.NeedBased, s.MeritBased, s.MinSat, s.MinAct, s.MinToefl,
-                s.MajorRestriction, s.ApplicationMethod, s.ApplyUrl))
+                s.MajorRestriction, s.ApplicationMethod, s.ApplyUrl, s.MinDuolingo))
             .ToListAsync(ct);
 
         return new PagedResult<AdminScholarshipDto>(items, query.Page, query.PageSize, total);

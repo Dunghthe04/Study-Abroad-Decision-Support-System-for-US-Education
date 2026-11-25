@@ -239,12 +239,14 @@ public class LeadsControllerTests
         }
 
         public (Guid UserId, Guid LeadId, Guid MessageId, string? Reason)? LastReport { get; private set; }
+        public string? LastReportDetail { get; private set; }
 
-        public Task<LeadMessageDto> ReportSentLeadMessageAsync(Guid userId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default)
+        public Task<LeadMessageDto> ReportSentLeadMessageAsync(Guid userId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default, string? detail = null)
         {
             if (MissingSentLeadId == leadId)
                 throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
             LastReport = (userId, leadId, messageId, reason);
+            LastReportDetail = detail;
             return Task.FromResult(new LeadMessageDto(
                 messageId, leadId, Guid.NewGuid(), "Trung tâm", UserRoles.Center, true, "Nội dung", null, "visible", DateTime.UtcNow));
         }
@@ -252,11 +254,12 @@ public class LeadsControllerTests
         public (Guid UserId, Guid LeadId, Guid MessageId, string? Reason)? LastReceivedReport { get; private set; }
 
         public Task<LeadMessageDto> ReportReceivedLeadMessageAsync(
-            Guid userId, string? userEmail, string userRole, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default)
+            Guid userId, string? userEmail, string userRole, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default, string? detail = null)
         {
             if (MissingSentLeadId == leadId)
                 throw new KeyNotFoundException("Không tìm thấy yêu cầu liên hệ.");
             LastReceivedReport = (userId, leadId, messageId, reason);
+            LastReportDetail = detail;
             return Task.FromResult(new LeadMessageDto(
                 messageId, leadId, Guid.NewGuid(), "Học sinh", UserRoles.Student, false, "Nội dung", null, "visible", DateTime.UtcNow));
         }

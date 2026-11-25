@@ -12,7 +12,7 @@ using StudyAbroad.Domain.Entities;
 namespace StudyAbroad.Application.Billing.Admin;
 
 /// <summary>
-/// Admin xử lý đơn (UC-132..134). Kích hoạt và kiểm lại đi qua <see cref="IOrderService.ApplyPaymentAsync"/> (một transaction riêng, xóa theo dõi DbContext),
+/// Admin xử lý đơn (UC-124..126). Kích hoạt đi qua <see cref="IOrderService.ApplyPaymentAsync"/> (một transaction riêng, xóa theo dõi DbContext),
 /// nên dòng nhật ký ghi SAU khi hàm trả về, ở lần lưu riêng; không bọc trong transaction ngoài (transaction không lồng nhau).
 /// Hai admin cùng thao tác trên một đơn: khóa dòng đơn quyết định ai thắng, bên thua nhận already_paid / not_mismatch.
 /// </summary>
@@ -29,16 +29,24 @@ public sealed class AdminOrderService(
     public const int MaxPageSize = 50;
     private const int MaxNoteLength = 1000;
     private const string AuditEntityType = "payment_transaction";
+    // Giữ tham số reconciler để không vỡ DI/constructor của caller hiện hữu dù Recheck không tự áp dụng nữa
+    private readonly OrderReconciler _reconciler = reconciler;
     // Ghi chú tiếng Việt giữ nguyên chữ trong nhật ký (không bị đổi thành mã thoát unicode); chuỗi chỉ lưu và hiện dạng văn bản, không nhúng vào HTML
     private static readonly JsonSerializerOptions AuditJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
-    public async Task<PagedResult<AdminOrderDto>> ListAsync(string? status, string? q, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<AdminOrderDto>> ListAsync(
+        string? status, string? q, int page, int pageSize,
+        DateOnly? from = null, DateOnly? to = null, CancellationToken ct = default)
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        if (from.HasValue && to.HasValue && from.Value > to.Value)
+            (from, to) = (to, from);
+        var fromUtc = StartOfDayVnUtc(from);
+        var toUtcExclusive = StartOfDayVnUtc(to?.AddDays(1));
         var (items, total) = await adminOrders.ListAsync(
             string.IsNullOrWhiteSpace(status) ? null : status.Trim().ToLowerInvariant(),
-            string.IsNullOrWhiteSpace(q) ? null : q.Trim(), page, pageSize, ct);
+            string.IsNullOrWhiteSpace(q) ? null : q.Trim(), page, pageSize, fromUtc, toUtcExclusive, ct);
         return new PagedResult<AdminOrderDto>(items.Select(AdminOrderDto.From).ToList(), page, pageSize, total);
     }
 
@@ -48,18 +56,6 @@ public sealed class AdminOrderService(
         return new AdminOrderDetailDto(AdminOrderDto.From(row), row.Order.PayloadJson);
     }
 
-    public async Task<RetainedBuyerDto> GetRetainedBuyerAsync(Guid adminUserId, long orderCode, CancellationToken ct = default)
-    {
-        var row = await adminOrders.FindAsync(orderCode, ct) ?? throw NotFound();
-        var buyer = row.Order.RetainedBuyerId is { } code ? await adminOrders.FindRetainedBuyerAsync(code, ct) : null;
-        if (buyer is null)
-            throw Rule("retained_buyer_not_found", 404, "Đơn này không có thông tin người mua được giữ lại.");
-
-        // Ghi nhật ký trước khi trả dữ liệu: không có dòng nhật ký thì không lộ họ tên, email
-        await AuditAsync(adminUserId, AuditLogConstants.RetainedBuyerViewed, row.Order, new { orderCode, buyerCode = buyer.Id }, ct);
-        return new RetainedBuyerDto(buyer.Id, buyer.FullName, buyer.Email, buyer.RetainUntil);
-    }
-
     public async Task<AdminOrderDto> ActivateAsync(Guid adminUserId, long orderCode, string? note, DateTime nowUtc, CancellationToken ct = default)
     {
         note = RequireNote(note);
@@ -67,19 +63,40 @@ public sealed class AdminOrderService(
         if (row.Order.Status == OrderStatuses.Paid)
             throw AlreadyPaid();
 
+        // [UC-126] Đơn thường (không phải MISMATCH): bắt buộc payOS xác nhận PAID trước khi kích hoạt thủ công (E1, E2)
+        // [UC-125] Đơn MISMATCH: tiền đã về với số tiền lệch, admin chấp nhận số tiền đã nhận kèm lý do → không chặn theo PAID
+        long amountPaid;
+        if (row.Order.Status != OrderStatuses.Mismatch)
+        {
+            GatewayStatus gatewayStatus;
+            try
+            {
+                gatewayStatus = await gateway.GetStatusAsync(orderCode, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                throw Rule("gateway_unavailable", 502, "Không kết nối được payOS, vui lòng thử lại sau.");
+            }
+            if (gatewayStatus.Status != GatewayStatuses.Paid)
+                throw Rule("gateway_not_paid", 409, "payOS chưa ghi nhận giao dịch đã thanh toán nên không thể kích hoạt.");
+            amountPaid = gatewayStatus.AmountPaid;
+        }
+        else
+        {
+            amountPaid = (long)(row.Order.ReceivedAmountVnd ?? row.Order.AmountVnd);
+        }
+
         // Đơn còn pending nghĩa là link payOS vẫn mở: sau khi nhận tiền tay thì đóng link để khách không trả lần nữa
         var wasPending = row.Order.Status == OrderStatuses.Pending;
 
-        // Số tiền lấy từ chính đơn: admin đã xác nhận tiền về, không so khớp với số payOS báo
         var result = await orderService.ApplyPaymentAsync(
-            orderCode, (long)row.Order.AmountVnd, null, nowUtc, ct, new PaymentApplyOptions(SkipAmountCheck: true, adminUserId, note));
+            orderCode, amountPaid, null, nowUtc, ct, new PaymentApplyOptions(SkipAmountCheck: true, adminUserId, note));
         if (result.Status is PaymentApplyStatus.AlreadyPaid)
             throw AlreadyPaid();
         if (result.Status is PaymentApplyStatus.UnknownOrder)
             throw NotFound();
 
         // Tiền đã được xác nhận, kể cả khi không kích hoạt được (người mua đã xóa): đóng link payOS và để lại dấu vết kiểm toán trước khi báo lỗi
-        // (đã commit, nên không theo token của request: admin đóng trang không làm mất nó)
         if (wasPending)
             await CloseGatewayLinkAsync(orderCode);
         var outcome = result.Status switch
@@ -92,7 +109,7 @@ public sealed class AdminOrderService(
         switch (result.Status)
         {
             case PaymentApplyStatus.Mismatch:
-                throw Rule("buyer_deleted", 409, "Tài khoản người mua đã bị xóa nên không có ai để nhận gói.");
+                throw Rule("buyer_deleted", 409, "Người mua đã xóa tài khoản nên không thể kích hoạt. Đơn đã chuyển sang Lệch số tiền để hủy và hoàn tiền ngoài hệ thống.");
         }
         return await LoadDtoAsync(orderCode, ct);
     }
@@ -106,7 +123,7 @@ public sealed class AdminOrderService(
             // Khóa dòng đơn rồi mới kiểm trạng thái: kích hoạt hoặc từ chối của admin khác cùng lúc chỉ một bên đi tiếp
             var order = await orders.LockByCodeAsync(orderCode, txCt) ?? throw NotFound();
             if (order.Status != OrderStatuses.Mismatch)
-                throw Rule("not_mismatch", 409, "Chỉ từ chối được đơn sai số tiền.");
+                throw Rule("not_mismatch", 409, "Chỉ từ chối được đơn lệch số tiền.");
             order.Status = OrderStatuses.Cancelled;
             order.AdminNote = note;
             order.HandledByUserId = adminUserId;
@@ -116,12 +133,13 @@ public sealed class AdminOrderService(
         }, ct);
 
         if (buyerId is { } buyer)
-            await notifications.NotifyAsync(buyer, NotificationTypes.BillingPaymentMismatch, "Đơn thanh toán bị từ chối",
-                "Quản trị viên đã hủy đơn này sau khi kiểm tra khoản chuyển. Nếu bạn đã bị trừ tiền, hãy liên hệ hỗ trợ.", $"/orders/{orderCode}", CancellationToken.None);   // đơn đã hủy (commit): báo người mua dù request đã bị hủy
+            await notifications.NotifyAsync(buyer, NotificationTypes.BillingPaymentMismatch, "Đơn thanh toán bị hủy",
+                "Quản trị viên đã hủy đơn lệch số tiền này sau khi kiểm tra khoản chuyển. Nếu bạn đã bị trừ tiền, hãy liên hệ hỗ trợ.", $"/orders/{orderCode}", CancellationToken.None);
         return await LoadDtoAsync(orderCode, ct);
     }
 
-    public async Task<AdminOrderDto> RecheckAsync(Guid adminUserId, long orderCode, DateTime nowUtc, CancellationToken ct = default)
+    /// <summary>[UC-126] Kiểm tra trạng thái giao dịch từ payOS và trả về kết quả cho Admin xem, KHÔNG tự động kích hoạt.</summary>
+    public async Task<AdminOrderRecheckDto> RecheckAsync(Guid adminUserId, long orderCode, DateTime nowUtc, CancellationToken ct = default)
     {
         var row = await adminOrders.FindAsync(orderCode, ct) ?? throw NotFound();
         if (row.Order.Status == OrderStatuses.Paid)
@@ -137,14 +155,45 @@ public sealed class AdminOrderService(
             throw Rule("gateway_unavailable", 502, "Không kết nối được payOS, vui lòng thử lại sau.");
         }
 
-        await reconciler.ApplyStatusAsync(orderCode, status, nowUtc, adminUserId, ct);
-        // Trạng thái payOS đã được áp dụng (đã commit): audit không theo token của request
         await AuditAsync(adminUserId, "order.recheck", row.Order,
-            new { orderCode, before = row.Order.Status, gatewayStatus = status.Status, amountPaid = status.AmountPaid }, CancellationToken.None);
-        return await LoadDtoAsync(orderCode, ct);
+            new { orderCode, orderStatus = row.Order.Status, gatewayStatus = status.Status, amountPaid = status.AmountPaid }, CancellationToken.None);
+        var canActivate = row.Order.Status == OrderStatuses.Mismatch || status.Status == GatewayStatuses.Paid;
+        return new AdminOrderRecheckDto(orderCode, row.Order.Status, status.Status, status.AmountPaid, canActivate, nowUtc);
+    }
+
+    /// <summary>[UC-124 2a, UC-75, UC-91] Xem họ tên + email của tài khoản đã xóa và ghi nhật ký truy cập dữ liệu nhạy cảm.</summary>
+    public async Task<AdminOrderBuyerInfoDto> RevealBuyerAsync(
+        Guid adminUserId, long orderCode, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default)
+    {
+        var row = await adminOrders.FindAsync(orderCode, ct) ?? throw NotFound();
+        var retention = await adminOrders.FindDeletedBuyerRetentionAsync(orderCode, ct);
+        if (retention is null)
+            throw Rule("buyer_info_not_found", 404, "Không có thông tin lưu trữ người mua đã xóa cho đơn này.");
+        // Hết hạn lưu trữ 10 năm thì coi như không còn thông tin (UC-124 2a), dù bản ghi chưa kịp bị xóa
+        if (retention.RetainUntilUtc <= DateTime.UtcNow)
+            throw Rule("buyer_info_not_found", 404, "Thông tin người mua đã hết thời hạn lưu trữ.");
+
+        await auditLogs.AddAsync(new AuditLog
+        {
+            ActorUserId = adminUserId,
+            Action = AuditLogConstants.OrderDeletedBuyerViewed,
+            EntityType = AuditEntityType,
+            EntityId = row.Order.Id.ToString(),
+            DetailJson = JsonSerializer.Serialize(new { orderCode, buyerCode = retention.BuyerCode }, AuditJson),
+            IpAddress = Clip(ipAddress, 64),
+            UserAgent = Clip(userAgent, 512),
+        }, CancellationToken.None);
+
+        return new AdminOrderBuyerInfoDto(retention.BuyerCode, retention.FullName, retention.Email, retention.RetainUntilUtc);
     }
 
     // ---- nội bộ
+
+    private static string? Clip(string? value, int max) =>
+        string.IsNullOrEmpty(value) ? null : value.Length <= max ? value : value[..max];
+
+    private static DateTime? StartOfDayVnUtc(DateOnly? day) =>
+        day is { } d ? DateTime.SpecifyKind(d.ToDateTime(TimeOnly.MinValue) - CycleRules.VietnamOffset, DateTimeKind.Utc) : null;
 
     /// <summary>Hủy link thanh toán ở payOS sau khi đã nhận tiền tay. Lỗi cổng không làm hỏng kết quả (đơn đã chốt), link tự hết hạn.</summary>
     private async Task CloseGatewayLinkAsync(long orderCode)

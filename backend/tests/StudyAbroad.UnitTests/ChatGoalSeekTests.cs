@@ -21,6 +21,76 @@ public class ChatGoalSeekTests
     private static GoalPlanDto Sat(decimal from, decimal to, string difficulty = "hard") =>
         new([new GoalChangeDto("sat", from, to)], 1.4, difficulty);
 
+    // ---------------------------------------------------------------- UC-155: goal-seeking riêng về tiếng Anh
+
+    [Fact]
+    public void Parse_ReadsTheFactorsTheStudentAskedAbout()
+    {
+        var q = ChatGoalSeek.Parse(Json("""{"school":"MIT","target":null,"factor":["English","gpa","english"]}"""))!;
+
+        Assert.Equal(["english", "gpa"], q.Factors);   // chữ thường, không trùng
+        Assert.Null(ChatGoalSeek.Parse(Json("""{"school":"MIT"}"""))!.Factors);
+        Assert.Equal(["english"], ChatGoalSeek.Parse(Json("""{"code":"mit","factor":["english"]}"""))!.Factors);
+    }
+
+    private static SchoolGoalResult WithEnglish(decimal? shortfall, decimal? ielts = 7m, decimal? toefl = 100m) =>
+        Result(current: "R", outcome: "blocked", best: "R") with
+        {
+            Position = new GoalPosition("in_list", "R", null, false),
+            EnglishRequirement = new GoalEnglishDto(ielts, toefl, null, shortfall),
+        };
+
+    private static readonly string[] OnlyEnglish = ["english"];
+
+    [Fact]
+    public void Summarize_WhenAskingOnlyEnglishAndTheStudentMeetsIt_SaysSoAndThatEnglishDoesNotChangeTheGroup()
+    {
+        var text = ChatGoalSeek.Summarize(WithEnglish(0m), OnlyEnglish);
+
+        Assert.Contains("Tiếng Anh: bạn đã đạt mức tối thiểu của trường (IELTS 7 hoặc TOEFL 100 (một bài là đủ))", text);
+        Assert.Contains("Tiếng Anh không làm đổi nhóm của trường (hiện là Khó vào)", text);
+    }
+
+    [Fact]
+    public void Summarize_WhenAskingOnlyEnglishAndTheStudentIsShort_SaysHowMuch()
+    {
+        var text = ChatGoalSeek.Summarize(WithEnglish(0.5m), OnlyEnglish);
+
+        Assert.Contains("thấp hơn mức tối thiểu khoảng 0,5 band, cần đạt IELTS 7", text);
+    }
+
+    [Fact]
+    public void Summarize_WhenTheSchoolHasNoPublishedMinimum_SaysSoInsteadOfGuessing()
+    {
+        var text = ChatGoalSeek.Summarize(WithEnglish(null, null, null) with { EnglishRequirement = null }, OnlyEnglish);
+
+        Assert.Contains("trường chưa công bố mức tối thiểu", text);
+    }
+
+    [Fact]
+    public void Summarize_WhenTheStudentHasNoCertificate_NamesTheMinimum()
+    {
+        var excluded = Excluded("ENGLISH_NO_CERT", new GoalEnglishDto(6.5m, null, null, null));
+
+        Assert.Contains("Tiếng Anh: bạn chưa có chứng chỉ nên cần đạt IELTS 6,5.", ChatGoalSeek.Summarize(excluded, OnlyEnglish));
+    }
+
+    [Fact]
+    public void Summarize_WithoutTheEnglishFactor_HasNoEnglishFocus()
+    {
+        Assert.DoesNotContain("Tiếng Anh không làm đổi nhóm", ChatGoalSeek.Summarize(WithEnglish(0m)));
+        Assert.DoesNotContain("Tiếng Anh không làm đổi nhóm", ChatGoalSeek.Summarize(WithEnglish(0m), ["gpa"]));
+        Assert.DoesNotContain("Tiếng Anh không làm đổi nhóm", ChatGoalSeek.Summarize(WithEnglish(0m), ["english", "gpa"]));
+    }
+
+    [Fact]
+    public void Note_GivesTheAiTheEnglishLinesAsFacts_WhenOnlyEnglishIsAsked()
+    {
+        var note = ChatGoalSeek.Note(WithEnglish(0m), [], OnlyEnglish);
+
+        Assert.Contains(note.Facts, f => f.StartsWith("Tiếng Anh: bạn đã đạt mức tối thiểu"));
+    }
+
     // ---------------------------------------------------------------- nút bước tiếp theo khi trường bị bộ lọc cứng loại
 
     private static SchoolGoalResult Excluded(string reason, GoalEnglishDto? english = null, GoalBudgetDto? budget = null) =>
@@ -180,7 +250,7 @@ public class ChatGoalSeekTests
         Result(outcome: "blocked", current: "M", target: "S", best: "M", reasons: [GroupReasons.CappedSelective],
             alternatives: [new("2", "Texas State University", "TX", "public", 28_000m, "S"), new("3", "Florida Gulf Coast University", "FL", "public", 27_000m, "S")]) with
         {
-            Stats = new GoalSchoolStats(0.194m, 0.428m, 2.2, 0.15, 0.5, 0.5),
+            Stats = new GoalSchoolStats(0.194m, 0.428m, 2.2, 0.15, 0.5, 0.428m, "international"),
             Comparison =
             [
                 SatRow(1300, 0.446),
@@ -200,7 +270,7 @@ public class ChatGoalSeekTests
         // 2. Vì sao không lên được: luật của trường, không phải do hồ sơ yếu
         Assert.Equal("Vì sao không lên được nhóm An toàn hơn:", lines[1]);
         Assert.Equal(
-            "- Trường nhận 19,4% hồ sơ, dưới mốc 50%, nên chỉ tối đa là Vừa sức. Đây là luật áp cho mọi hồ sơ, không phải do hồ sơ của bạn yếu và bạn không thể thay đổi.",
+            "- Trường nhận 42,8% du học sinh, dưới mốc 50%, nên chỉ tối đa là Vừa sức. Đây là luật áp cho mọi hồ sơ, không phải do hồ sơ của bạn yếu và bạn không thể thay đổi.",
             lines[2]);
         // 3. Đang đứng ở đâu so với trường
         Assert.Contains("Bạn đang ở đâu so với trường:", lines);
@@ -245,9 +315,9 @@ public class ChatGoalSeekTests
     }
 
     // Ca Oklahoma State: SAT trên mốc, GPA gần trung bình nhưng trường có nhiều sinh viên GPA 4,0, ngoại khóa thấp,
-    // và trường nhận du học sinh ít nên bị hạ một nhóm. Lời giải thích nói đúng các nguyên nhân đó và nói thẳng GPA 4,0 là mức tối đa
+    // (tỉ lệ nhận du học sinh thấp chỉ còn là luật chặn An toàn, không hạ nhóm). Lời giải thích nói đúng các nguyên nhân đó và nói thẳng GPA 4,0 là mức tối đa
     [Fact]
-    public void Summarize_OklahomaState_ExplainsTheDowngradeAndWhyGpa4IsNotRealistic()
+    public void Summarize_OklahomaState_ExplainsWhyGpa4IsNotRealistic()
     {
         var gpa4 = new GoalPlanDto([new("gpa", 3.7m, 4m)], 4, "veryHard");
         var result = Result(alone: [gpa4], cheapest: gpa4, recommended: gpa4) with
@@ -257,7 +327,7 @@ public class ChatGoalSeekTests
                 new("sat", "above", 1300, 1060, 1250, 50, 0.848, "considered"),
                 new("gpa", "below", 3.70m, 3.76m, 3.76m, -0.06m, 0.384, "considered"),
                 new("ec", "below", 2, 3, 3, -1, null, "considered"),
-                new("accept", "downgrade", null, 0.737m, 0.184m, 0.25m),
+                new("accept", "capped", null, 0.737m, 0.184m, 0.25m),
             ],
         };
 
@@ -265,9 +335,7 @@ public class ChatGoalSeekTests
 
         Assert.Equal("**Hiện tại Boston University đang ở nhóm Khó vào với bạn. Bạn có thể lên nhóm Vừa sức nếu cải thiện hồ sơ.**", lines[0]);
         Assert.Contains("- GPA 3,7: hơn khoảng 38% sinh viên của trường (trung bình của trường 3,76), thấp hơn trung bình 0,06", lines);
-        Assert.Contains(
-            "- Tỷ lệ nhận du học sinh 18,4% (chung 73,7%), chỉ bằng 25% mức chung, dưới một nửa nên hệ thống hạ trường xuống một nhóm. Đây là luật áp cho mọi hồ sơ, bạn không thể thay đổi",
-            lines);
+        Assert.DoesNotContain(lines, l => l.Contains("hạ trường xuống một nhóm"));   // luật hạ nhóm không còn (UC-22)
         Assert.Contains("Để lên nhóm Vừa sức:", lines);
         Assert.Contains("- GPA 3,7 → 4 (rất khó)", lines);
         Assert.Contains(lines, l => l.StartsWith("Lưu ý: GPA 4,0 là mức tối đa của thang điểm"));
@@ -329,15 +397,20 @@ public class ChatGoalSeekTests
     [Fact]
     public void Summarize_Blocked_StatesTheAcceptRateAndTheThresholds()
     {
-        var stats = new GoalSchoolStats(0.24m, 0.09m, 0.375, 0.15, 0.5, 0.5);
-        var intl = Result(outcome: "blocked", best: "R", reasons: ["INTL_DOWNGRADE"]) with { Stats = stats };
-        var low = Result(outcome: "blocked", best: "R", reasons: ["LOW_ACCEPT_RATE"]) with { Stats = new GoalSchoolStats(0.08m, 0.04m, 0.5, 0.15, 0.5, 0.5) };
+        var capped = Result(outcome: "blocked", best: "M", reasons: ["CAPPED_SELECTIVE"]) with
+        {
+            Stats = new GoalSchoolStats(0.70m, 0.24m, 0.34, 0.15, 0.5, 0.24m, "international"),
+        };
+        var low = Result(outcome: "blocked", best: "R", reasons: ["LOW_ACCEPT_RATE"]) with { Stats = new GoalSchoolStats(0.08m, 0.04m, 0.5, 0.15, 0.5, 0.04m, "international") };
+        var overallOnly = Result(outcome: "blocked", best: "R", reasons: ["LOW_ACCEPT_RATE"]) with { Stats = new GoalSchoolStats(0.08m, null, null, 0.15, 0.5, 0.08m, "overall") };
 
-        var intlText = ChatGoalSeek.Summarize(intl);
+        var cappedText = ChatGoalSeek.Summarize(capped);
         var lowText = ChatGoalSeek.Summarize(low);
 
-        Assert.Contains("nhận du học sinh 9% trong khi tỷ lệ nhận chung là 24%, chỉ bằng 37,5% mức chung và dưới mốc 50%", intlText);
-        Assert.Contains("chỉ nhận 8% hồ sơ, dưới mốc 15%", lowText);
+        // UC-22: luật nói tỉ lệ nhận của du học sinh khi trường có số riêng, nói "hồ sơ" khi chỉ có tỉ lệ chung
+        Assert.Contains("nhận 24% du học sinh, dưới mốc 50%, nên chỉ tối đa là Vừa sức", cappedText);
+        Assert.Contains("chỉ nhận 4% du học sinh, dưới mốc 15%", lowText);
+        Assert.Contains("chỉ nhận 8% hồ sơ, dưới mốc 15%", ChatGoalSeek.Summarize(overallOnly));
         Assert.Contains("Đây là luật áp cho mọi hồ sơ", lowText);
     }
 

@@ -22,6 +22,9 @@ public interface ICenterReviewModerationRepository
 public interface ICenterReviewModerationService
 {
     Task<CenterReviewRemovalDto> RemoveAsync(Guid moderatorUserId, Guid centerId, Guid reviewId, string? reason, CancellationToken ct = default);
+    /// <summary>[UC-53 2b / UC-152] Moderator gỡ phản hồi vi phạm của trung tâm (đánh giá gốc vẫn hiển thị).</summary>
+    Task<CenterReviewRemovalDto> RemoveReplyAsync(Guid moderatorUserId, Guid centerId, Guid reviewId, string? reason, CancellationToken ct = default) =>
+        throw new NotImplementedException();
 }
 
 /// <summary>
@@ -31,7 +34,8 @@ public interface ICenterReviewModerationService
 /// </summary>
 public class CenterReviewModerationService(
     ICenterReviewModerationRepository reviews,
-    IAuditLogRepository auditLogs) : ICenterReviewModerationService
+    IAuditLogRepository auditLogs,
+    ICenterReviewReportRepository? reviewReports = null) : ICenterReviewModerationService
 {
     public const int MaxReasonLength = 500;
     public const string RemovedStatus = "removed";
@@ -59,9 +63,14 @@ public class CenterReviewModerationService(
         if (!string.Equals(review.Status, RemovedStatus, StringComparison.OrdinalIgnoreCase))
         {
             var previousStatus = review.Status;
+            var now = DateTime.UtcNow;
             review.Status = RemovedStatus;
-            review.UpdatedAt = DateTime.UtcNow;
+            review.UpdatedAt = now;
             await reviews.SaveAsync(review, ct);
+
+            // [UC-151 / UC-53] Đóng mọi báo cáo đang mở của đánh giá này
+            if (reviewReports is not null)
+                await reviewReports.ResolveOpenReportsForRemovedReviewAsync(review.Id, moderatorUserId, trimmedReason, now, ct);
 
             await auditLogs.AddAsync(new AuditLog
             {
@@ -82,5 +91,53 @@ public class CenterReviewModerationService(
         }
 
         return new CenterReviewRemovalDto(review.Id, review.StudyCenterId, review.Status);
+    }
+
+    public async Task<CenterReviewRemovalDto> RemoveReplyAsync(
+        Guid moderatorUserId,
+        Guid centerId,
+        Guid reviewId,
+        string? reason,
+        CancellationToken ct = default)
+    {
+        if (centerId == Guid.Empty || reviewId == Guid.Empty)
+            throw new ArgumentException("Mã trung tâm hoặc mã đánh giá không hợp lệ.");
+
+        var trimmedReason = reason?.Trim();
+        if (string.IsNullOrEmpty(trimmedReason))
+            throw new ArgumentException("Vui lòng nhập lý do gỡ phản hồi.");
+        if (trimmedReason.Length > MaxReasonLength)
+            throw new ArgumentException($"Lý do gỡ tối đa {MaxReasonLength} ký tự.");
+
+        var review = await reviews.GetForUpdateAsync(centerId, reviewId, ct)
+            ?? throw new KeyNotFoundException("Không tìm thấy đánh giá của trung tâm này.");
+
+        if (!review.CenterReplyCreatedAt.HasValue)
+            throw new KeyNotFoundException("Đánh giá này chưa có phản hồi của trung tâm.");
+
+        if (!string.Equals(review.CenterReplyStatus, RemovedStatus, StringComparison.OrdinalIgnoreCase))
+        {
+            review.CenterReplyStatus = RemovedStatus;
+            review.CenterReplyRemovedByUserId = moderatorUserId;
+            review.CenterReplyRemoveReason = trimmedReason;
+            review.UpdatedAt = DateTime.UtcNow;
+            await reviews.SaveAsync(review, ct);
+
+            await auditLogs.AddAsync(new AuditLog
+            {
+                ActorUserId = moderatorUserId,
+                Action = "center_review.reply_remove",
+                EntityType = "center_review",
+                EntityId = review.Id.ToString(),
+                DetailJson = JsonSerializer.Serialize(new
+                {
+                    studyCenterId = centerId,
+                    replyAuthorUserId = review.CenterReplyAuthorUserId,
+                    reason = trimmedReason,
+                }),
+            }, ct);
+        }
+
+        return new CenterReviewRemovalDto(review.Id, review.StudyCenterId, review.CenterReplyStatus ?? RemovedStatus);
     }
 }

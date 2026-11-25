@@ -41,6 +41,8 @@ def context_for_model(state: ChatState) -> dict[str, Any] | None:
         out["service"] = ctx.service
     if ctx.city:
         out["city"] = ctx.city
+    if ctx.scenario:
+        out["scenario"] = ctx.scenario
     return out or None
 
 
@@ -120,7 +122,7 @@ def update_context(state: ChatState, output: Any) -> None:
                 ctx.schools = [str(data["school"])]
             if data.get("fields"):
                 ctx.fields = list(data["fields"])
-        case "school_compare":
+        case "school_compare" | "school_fit_compare":
             if data.get("schools"):
                 ctx.schools = list(data["schools"])
             if data.get("fields"):

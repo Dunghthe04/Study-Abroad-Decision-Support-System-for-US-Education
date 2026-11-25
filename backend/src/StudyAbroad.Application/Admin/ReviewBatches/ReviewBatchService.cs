@@ -12,10 +12,13 @@ public interface IReviewBatchService
     /// <summary>
     /// Tạo đợt duyệt mẫu: bốc ngẫu nhiên (có seed, chia nhóm theo skill) từ các câu đã trả lời được trong khoảng ngày, lưu cố định danh sách câu
     /// và người được giao. Ghi nhật ký (review_batch.create) cùng lúc, không chứa nội dung chat. Tham số sai (tên, số câu, khoảng ngày, người
-    /// duyệt không phải Admin đang hoạt động, không có câu nào để bốc) thì ném ArgumentException và không lưu gì.
+    /// duyệt không phải Admin hoặc Moderator đang hoạt động, không có câu nào để bốc) thì ném ArgumentException và không lưu gì.
     /// </summary>
     Task<ReviewBatchCreatedDto> CreateAsync(
         CreateReviewBatchRequest request, Guid actorUserId, string? ipAddress, string? userAgent, CancellationToken ct = default);
+
+    /// <summary>Các tài khoản có thể được giao duyệt (Admin và Moderator đang hoạt động), để người tạo đợt chọn.</summary>
+    Task<IReadOnlyList<ReviewerOptionDto>> ListReviewerOptionsAsync(CancellationToken ct = default);
 
     /// <summary>Các đợt người dùng đã tạo hoặc được giao duyệt, mới nhất trước. Chỉ số đo, không có nội dung chat.</summary>
     Task<IReadOnlyList<ReviewBatchListItemDto>> ListAsync(Guid actorUserId, CancellationToken ct = default);
@@ -148,12 +151,14 @@ public class ReviewBatchService(IReviewBatchRepository repository, IAuditLogRepo
         if (rows is null)
             return null;   // không được giao, không thuộc đợt hoặc tin gốc đã mất: không có gì để xem và cũng không ghi nhật ký
 
-        // Học sinh đã xóa cuộc trò chuyện: không có nội dung nào rời đi nên không ghi nhật ký xem, chỉ báo lý do
-        if (rows.DeletedByUser)
+        // Học sinh đã xóa cuộc trò chuyện, hoặc chủ phiên dưới 16 tuổi không còn đồng ý của phụ huynh: không có nội dung nào rời đi
+        // nên không ghi nhật ký xem, chỉ báo lý do. Kết luận đã chấm trước đó vẫn giữ
+        if (rows.DeletedByUser || rows.MinorWithoutConsent)
             return new ReviewItemDetailDto(
                 rows.ItemId, rows.Position, rows.Stratum, null,
                 new ChatReviewMessageDto(rows.Reply.MessageId, "assistant", rows.Reply.CreatedAt, ""),
-                [], rows.MyVerdict is { } kept ? ToDto(kept) : null, DeletedByUser: true);
+                [], rows.MyVerdict is { } kept ? ToDto(kept) : null,
+                DeletedByUser: rows.DeletedByUser, MinorWithoutConsent: rows.MinorWithoutConsent);
 
         // Ghi nhật ký TRƯỚC khi trả nội dung. Không bắt lỗi: ghi lỗi thì ném lên, nội dung không rời khỏi hàm này
         await auditLogs.AddAsync(new AuditLog
@@ -236,14 +241,19 @@ public class ReviewBatchService(IReviewBatchRepository repository, IAuditLogRepo
             .ToList();
 
         var report = ReviewReportCalculator.Compute(ReviewSampler.ReadStrata(rows.StrataJson), graded);
-        return new ReviewReportDto(rows.BatchId, rows.BatchName, rows.Seed, rows.TotalItems, graded.Count, rows.ReviewerCount, report);
+        // Đồng thuận tính trên MỌI kết luận của các câu có từ hai người chấm (khác tỷ lệ sai ở trên: mỗi câu chỉ lấy kết luận sớm nhất)
+        var agreement = ReviewReportCalculator.Agreement(rows.Verdicts);
+        return new ReviewReportDto(rows.BatchId, rows.BatchName, rows.Seed, rows.TotalItems, graded.Count, rows.ReviewerCount, report, agreement);
     }
 
     private static ReviewVerdictDto ToDto(ReviewVerdict v) =>
         new(v.LabelVerdict, v.CorrectIntent, v.AnswerVerdict, v.Cause, v.UpdatedAt ?? v.CreatedAt);
 
+    public async Task<IReadOnlyList<ReviewerOptionDto>> ListReviewerOptionsAsync(CancellationToken ct = default) =>
+        await repository.ListAssignableReviewersAsync(ct);
+
     // Không chọn ai thì người tạo đợt tự duyệt (trường hợp thường gặp: một người làm hết). Có chọn thì không quá MaxReviewers người, không trùng.
-    // Mọi người duyệt (kể cả người tạo) phải là Admin đang hoạt động
+    // Mọi người duyệt (kể cả người tạo) phải là Admin hoặc Moderator đang hoạt động
     private async Task<IReadOnlyList<Guid>> ValidReviewersAsync(IReadOnlyList<Guid>? requested, Guid actorUserId, CancellationToken ct)
     {
         var ids = (requested ?? []).Where(id => id != Guid.Empty).Distinct().ToList();
@@ -252,9 +262,9 @@ public class ReviewBatchService(IReviewBatchRepository repository, IAuditLogRepo
         if (ids.Count > MaxReviewers)
             throw new ArgumentException($"Tối đa {MaxReviewers} người duyệt.");
 
-        var admins = (await repository.FindActiveAdminIdsAsync(ids, ct)).ToHashSet();
-        if (ids.Any(id => !admins.Contains(id)))
-            throw new ArgumentException("Người duyệt phải là tài khoản Admin đang hoạt động.");
+        var allowed = (await repository.FindActiveReviewerIdsAsync(ids, ct)).ToHashSet();
+        if (ids.Any(id => !allowed.Contains(id)))
+            throw new ArgumentException("Người duyệt phải là tài khoản Admin hoặc Moderator đang hoạt động.");
         return ids;
     }
 

@@ -13,6 +13,7 @@ from app.services.skill_call import SKILLS_DIR
 
 # Skill viết lời (Claude viết chữ cho học sinh đọc): mục 4 là NỘI DUNG CẦN NÓI
 WRITERS = {
+    "skill_cach_tinh_diem.md",
     "skill_explain.md",
     "skill_giai_thich_trung_tam.md",
     "skill_goal_seek.md",

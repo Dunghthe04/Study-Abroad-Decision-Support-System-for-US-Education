@@ -22,26 +22,31 @@ public class UniversityDetailService(IUniversityDetailRepository repository) : I
             o.StudyLevel, o.AcademicYear, o.TuitionUsd, o.LivingUsd, o.FeesUsd, o.OtherExpensesUsd,
             o.MinGpa4, o.MinIelts, o.MinToefl, o.MinDuolingo, o.AvgGpa4,
             o.Sat25, o.Sat75, o.Act25, o.Act75, o.ApplicantsTotal, o.AdmittedTotal,
-            o.IntlApplicants, o.IntlAdmitted, o.IntlAcceptanceRate, o.SatPolicy, o.DeadlinesJson,
-            o.C7GpaImportance, o.C7TestImportance, o.C7EcImportance, o.SatSubmitPct, o.GpaSubmitPct,
-            o.GpaPct40, o.GpaPct375To399, o.GpaPct350To374, o.GpaPct325To349, o.GpaPct300To324,
-            o.GpaPct250To299, o.GpaPctBelow250, o.IntlAidPolicy, o.IntlAidAvgUsd, o.IntlAidRecipients,
-            o.RetentionRate1Yr, o.GradRate6Yr,
+            o.IntlApplicants, o.IntlAdmitted, ValidRate(o.IntlAcceptanceRate), o.SatPolicy, o.DeadlinesJson,
+            o.C7GpaImportance, o.C7TestImportance, o.C7EcImportance, ValidRate(o.SatSubmitPct), ValidRate(o.GpaSubmitPct),
+            ValidRate(o.GpaPct40), ValidRate(o.GpaPct375To399), ValidRate(o.GpaPct350To374), ValidRate(o.GpaPct325To349), ValidRate(o.GpaPct300To324),
+            ValidRate(o.GpaPct250To299), ValidRate(o.GpaPctBelow250), o.IntlAidPolicy, o.IntlAidAvgUsd, o.IntlAidRecipients,
+            ValidRate(o.RetentionRate1Yr), ValidRate(o.GradRate6Yr),
             majors[o.Id].OrderBy(m => m.Name).Select(m => new UniversityMajorDto(m.Name, m.CipCode, m.IsStem, m.IsVerified)).ToList(),
             PublicUrl(o.SourceUrl), o.RetrievedAt, o.SourceReliability,
-            o.AvgGpaWeighted, o.GpaScaleType, o.FyOnCampusPct, o.UgOnCampusPct, o.HousingTypes,
+            o.AvgGpaWeighted, o.GpaScaleType, ValidRate(o.FyOnCampusPct), ValidRate(o.UgOnCampusPct), o.HousingTypes,
             o.IntlHousing, o.HousingOnlyUsd, o.HousingDepositUsd, o.StudentFacultyRatio,
-            o.Activities, o.CampusSetting, o.ActPolicy, o.ActSubmitPct, o.ApplicationFeeUsd, o.TuitionInStateUsd)).ToList();
+            o.Activities, o.CampusSetting, o.ActPolicy, ValidRate(o.ActSubmitPct), o.ApplicationFeeUsd, o.TuitionInStateUsd,
+            o.HealthInsuranceUsd)).ToList();
         var sources = data.Evidence.OrderByDescending(e => e.CreatedAt).ThenBy(e => e.FieldName).ThenBy(e => e.Id)
             .Select(MapSource).Where(s => s.SourceUrl is not null)
             .DistinctBy(s => new { s.FieldName, s.SourceUrl, s.FieldValue, s.Status, s.DataYear, s.AppliedToSnapshot, s.Normalization })
             .Take(100).ToList();
 
         return new UniversityDetailDto(university.Code, university.Name, university.City, university.State,
-            data.StateName, PublicUrl(university.Website), university.Control, university.AcceptanceRate,
+            data.StateName, PublicUrl(university.Website), university.Control, ValidRate(university.AcceptanceRate),
             university.InternationalStudentCount, university.IsIvy, MediaUrl("logo"), MediaUrl("cover"),
             media.Where(m => m.Type == "gallery").Select(m => PublicUrl(m.Url)).OfType<string>().Distinct().Take(20).ToList(),
-            offerings, data.Rankings.Select(r => r with { SourceUrl = PublicUrl(r.SourceUrl) }).ToList(), sources);
+            offerings, data.Rankings.Select(r => r with { SourceUrl = PublicUrl(r.SourceUrl) }).ToList(), sources,
+            // Ghi công ảnh bìa và ảnh trường đang hiện trên trang (logo là của trường, không cần)
+            media.Where(m => m.Type is "cover" or "gallery" && (m.License != null || m.Author != null))
+                .Select(m => new UniversityImageCreditDto(PublicUrl(m.Url) ?? m.Url, m.License, m.Author, PublicUrl(m.SourcePageUrl)))
+                .DistinctBy(c => c.Url).Take(21).ToList());
     }
 
     public Task<PagedResult<UniversityListItemDto>> SearchAsync(UniversitySearchQuery query, CancellationToken ct = default) =>
@@ -49,6 +54,9 @@ public class UniversityDetailService(IUniversityDetailRepository repository) : I
 
     public Task<UniversityFilterOptionsDto> GetFilterOptionsAsync(CancellationToken ct = default) =>
         repository.GetFilterOptionsAsync(ct);
+
+    /// <summary>Tỷ lệ hợp lệ nằm trong [0, 1]; giá trị ngoài khoảng coi như thiếu dữ liệu (UC-21).</summary>
+    public static decimal? ValidRate(decimal? value) => value is >= 0m and <= 1m ? value : null;
 
     public static string? PublicUrl(string? value)
     {

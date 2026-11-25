@@ -1,9 +1,11 @@
 """skill_chuyen_trung_tam (B6): học sinh cần một dịch vụ hệ thống không làm thay được thì gợi ý trung tâm.
 
 Luồng: SLM tách ý đã đọc nhu cầu (service, city trong entities của ý center_referral) -> code đổi mã dịch vụ sang mã DB,
-chuẩn hóa thành phố -> backend chọn tối đa 3 trung tâm -> Claude (skill giải thích trung tâm) viết đoạn mở đầu và mỗi
+chuẩn hóa thành phố -> backend lọc tối đa 20 trung tâm, chat hiện 3 trung tâm đầu -> Claude (skill giải thích trung tâm) viết đoạn mở đầu và mỗi
 trung tâm một câu "vì sao hợp" (AI không thấy tên trung tâm) -> code kiểm lời cấm, ghép tên và website.
-AI không chọn trung tâm, không xin liên hệ, không nêu giá, không khen chê. Đặt lịch và so sánh trung tâm chưa có backend.
+AI không chọn trung tâm, không xin liên hệ, không nêu giá, không khen chê.
+Đặt lịch (UC-39 4a): không có lịch hẹn riêng, thẻ mang lời nhắn điền sẵn dịch vụ và thành phố để mở form liên hệ (UC-42).
+So sánh (UC-39 4b): thẻ chọn sẵn hai trung tâm đầu để mở bảng so sánh (UC-142). Việc xử lý ở frontend, advisor chỉ gắn intent và lời nhắn.
 """
 
 import logging
@@ -17,6 +19,8 @@ from app.services.centers import SERVICES, CenterFinder, CenterHit, CityCount, d
 from app.services.chat_flow import SkillOutput
 from app.services.replies import (
     CENTER_ASK_SERVICE,
+    CENTER_BOOKING_NOTE,
+    CENTER_BOOKING_NOTE_IN_CITY,
     CENTER_CITY_ASK,
     CENTER_DISCLAIMER,
     CENTER_ELSEWHERE,
@@ -25,7 +29,6 @@ from app.services.replies import (
     CENTER_NONE,
     CENTER_NONE_IN_CITY,
     CENTER_NOT_PROVIDED,
-    CENTER_PAGE_BUTTON,
     CENTER_SERVICE_VALUE,
     CENTER_SERVICE_VALUE_IN_CITY,
     CENTER_TASK_NOTES,
@@ -234,8 +237,30 @@ def template_reason(center: CenterHit, service: str, level: str | None, city: st
 # Thẻ trung tâm cho giao diện: mỗi trung tâm có mã (để mở trang chi tiết và form liên hệ), tên, thành phố, website, một câu "vì sao hợp".
 # Giao diện hiện firstPage trung tâm đầu, nút Xem thêm mở phần còn lại, và thanh gõ thành phố (cities: thành phố đang có trung tâm cho
 # dịch vụ này, kèm số trung tâm và câu gửi lại khi chọn). answer vẫn có danh sách chữ của trang đầu (nhật ký, kiểm tra mẫu)
+def contact_note(service: str, city: str | None) -> str:
+    label = SERVICES[service]
+    return (
+        CENTER_BOOKING_NOTE_IN_CITY.format(label=label, city=city)
+        if city
+        else CENTER_BOOKING_NOTE.format(label=label)
+    )
+
+
+def center_intent(tasks: list[Any]) -> str | None:
+    """Việc học sinh nhờ trên danh sách trung tâm: đặt lịch được ưu tiên hơn so sánh khi nói cả hai."""
+    for name in ("booking", "compare"):
+        if name in tasks:
+            return name
+    return None
+
+
 def centers_widget(
-    centers: list[CenterHit], reasons: dict[int, str], cities: list[CityCount], service: str
+    centers: list[CenterHit],
+    reasons: dict[int, str],
+    cities: list[CityCount],
+    service: str,
+    intent: str | None = None,
+    city: str | None = None,
 ) -> Widget:
     items = [
         {"id": c.id, "name": c.name, "city": c.city, "website": c.website, "reason": reasons[i]}
@@ -246,7 +271,13 @@ def centers_widget(
         {"city": c.city, "count": c.count, "ask": CENTER_CITY_ASK.format(label=label, city=c.city)}
         for c in cities
     ]
-    return Widget(type="centers", data={"centers": items, "firstPage": FIRST_PAGE, "cities": options})
+    data: dict[str, Any] = {"centers": items, "firstPage": FIRST_PAGE, "cities": options}
+    # Khi có trung tâm: giao diện mở form liên hệ với lời nhắn điền sẵn (booking) hoặc chọn sẵn hai nơi đầu để so sánh (compare)
+    if intent and items:
+        data["intent"] = intent
+        if intent == "booking":
+            data["contactNote"] = contact_note(service, city)
+    return Widget(type="centers", data=data)
 
 
 def service_buttons(city: str | None = None) -> list[QuickReply]:
@@ -337,9 +368,10 @@ class ChuyenTrungTamHandler:
         )
         return SkillOutput(
             "\n\n".join(parts),
-            # Có câu so sánh hoặc đặt lịch (việc chưa làm trong chat): nút dẫn sang trang Trung tâm để học sinh đi tiếp
-            quick_replies=[CENTER_PAGE_BUTTON.model_copy()] if notes else [],
-            widget=centers_widget(centers, reasons, others, need.service),
+            quick_replies=[],
+            widget=centers_widget(
+                centers, reasons, others, need.service, center_intent(entities.get("tasks") or []), need.city
+            ),
             disclaimer=DISCLAIMER,
         )
 

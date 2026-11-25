@@ -34,6 +34,7 @@ namespace StudyAbroad.Application.Recommendations
 
     // Trường đưa vào lọc. TotalCostUsd = học phí + ăn ở + phí + chi khác.
     // HasIntlAid: có chính sách học bổng du học sinh thì true, chính sách "none" thì false, chưa có số thì null.
+    // TuitionUsd, IntlAidAvgUsd: để trừ hỗ trợ tài chính trung bình khi chi phí vượt ngưỡng (UC-22 4a).
     public record FilterSchool(
         string Code,
         IReadOnlyList<string> Majors,
@@ -43,7 +44,9 @@ namespace StudyAbroad.Application.Recommendations
         bool? HasIntlAid,
         decimal? MinIelts = null,
         decimal? MinToefl = null,
-        decimal? MinDuolingo = null);
+        decimal? MinDuolingo = null,
+        decimal? TuitionUsd = null,
+        decimal? IntlAidAvgUsd = null);
 
     // Cấu hình cổng tiếng Anh (B4). Mọi con số chỉnh được, không ghi cứng trong hàm tính.
     public record EnglishOptions(
@@ -66,7 +69,6 @@ namespace StudyAbroad.Application.Recommendations
         public const string ControlUnknown = "CONTROL_UNKNOWN";
         public const string CostUnknown = "COST_UNKNOWN";
         public const string NeedBigAid = "NEED_BIG_AID";
-        public const string AidUnknown = "AID_UNKNOWN";
         public const string EnglishMinUnknown = "ENGLISH_MIN_UNKNOWN";
         public const string EnglishNotComparable = "ENGLISH_NOT_COMPARABLE";
         public const string EnglishNear = "ENGLISH_NEAR";   // thiếu dưới 1 band: giữ, cần đạt mức tối thiểu trước hạn nộp
@@ -131,16 +133,26 @@ namespace StudyAbroad.Application.Recommendations
             if (cost <= ceiling)
                 return new FilterResult(school, FilterOutcome.Keep, flags, EnglishShortfall: gate.Shortfall);
 
-            //Nếu ngân sách *1,1 < cost -> loại
+            // Vượt ngưỡng và không cần học bổng (4c) -> loại với lý do ngân sách
             if (c.AidNeed == AidNeed.None) return Exclude(school, "BUDGET");
 
-            //Nếu ngân sách *1,1 < cost  && trường k có học bổng -> loại
-            if (school.HasIntlAid == false) return Exclude(school, "BUDGET_NO_AID");
+            // Vượt ngưỡng và cần học bổng (4a): trừ mức hỗ trợ trung bình cho du học sinh. Không có số dùng được -> loại với lý do ngân sách
+            if (UsableAid(school) is not decimal aid) return Exclude(school, "BUDGET_NO_AID");
 
-            //Nếu ngân sách *1,1 < cost && trường k có dữ liệu học bổng -> cờ (k rõ học bổng + cần số tiền lớn)
-            if (school.HasIntlAid is null) flags.Add(FilterFlags.AidUnknown);
+            // Chi phí sau hỗ trợ vẫn vượt ngưỡng -> loại; không vượt -> khối "Cần học bổng lớn"
+            if (cost - aid > ceiling) return Exclude(school, "BUDGET");
             flags.Add(FilterFlags.NeedBigAid);
             return new FilterResult(school, FilterOutcome.AidBlock, flags, OverBudgetUsd: cost - budget, EnglishShortfall: gate.Shortfall);
+        }
+
+        // Mức hỗ trợ trung bình cho du học sinh dùng để trừ (UC-22 4a). Không dùng được (trả null) khi: trường không có học bổng cho du học sinh,
+        // chưa có dữ liệu, không có số tiền, hoặc số tiền lớn hơn học phí (dữ liệu bất thường, coi như không có dữ liệu).
+        private static decimal? UsableAid(FilterSchool school)
+        {
+            if (school.HasIntlAid != true) return null;
+            if (school.IntlAidAvgUsd is not decimal avg || avg <= 0) return null;
+            if (school.TuitionUsd is decimal tuition && avg > tuition) return null;
+            return avg;
         }
 
         // Kết quả cổng tiếng Anh: mức thiếu (band), cờ gắn thêm, hoặc lý do loại.

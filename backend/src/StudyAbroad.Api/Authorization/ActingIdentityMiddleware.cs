@@ -17,6 +17,7 @@ public static class ActingScope
         "ProfileFlow", "ProfileMetadata", "AcademicProfile", "AcademicAnalysis", "FinancialProfile",
         "Recommendations", "RecommendationHistory", "Scenarios", "TargetSchools", "Dashboard",
         "Advisor",   // chat: phần hồ sơ dùng hồ sơ của con, câu hỏi khác trả lời như thường
+        "ChatHistory", // danh sách, tên, xóa cuộc trò chuyện: phiên chat được tạo dưới tên con nên phải đọc đúng chủ đó (UC-139)
         "Acting",    // đọc thanh "Đang nhập cho ..." từ token của con
     };
 

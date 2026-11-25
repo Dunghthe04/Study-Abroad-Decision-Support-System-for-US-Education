@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using StudyAbroad.Application.Admin.AiQuality;
 using StudyAbroad.Application.Admin.ChatReview;
 using StudyAbroad.Application.Admin.ReviewBatches;
 using StudyAbroad.Domain.Constants;
@@ -9,13 +10,33 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 public class ReviewBatchRepository(AppDbContext db) : IReviewBatchRepository
 {
     public async Task<IReadOnlyList<ReviewCandidate>> ListCandidatesAsync(
-        DateTime? fromUtc, DateTime? toUtcExclusive, CancellationToken ct = default) =>
-        await ReviewCandidateQuery.Candidates(db.ChatMessages.AsNoTracking(), fromUtc, toUtcExclusive, db.ChatSessions.AsNoTracking()).ToListAsync(ct);
+        DateTime? fromUtc, DateTime? toUtcExclusive, CancellationToken ct = default)
+    {
+        // Bước một chỉ đọc mã, meta, thời điểm và thông tin chủ phiên, không đọc cột nội dung chat nào
+        var rows = await ReviewCandidateQuery
+            .WithOwner(db.ChatMessages.AsNoTracking(), fromUtc, toUtcExclusive, db.ChatSessions.AsNoTracking(), db.Users.AsNoTracking())
+            .ToListAsync(ct);
+        if (rows.Count == 0)
+            return [];
 
-    public async Task<IReadOnlyList<Guid>> FindActiveAdminIdsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
+        // Người dưới 16 tuổi chưa có đồng ý của phụ huynh thì không được bốc (nội dung của họ không được cho người duyệt đọc)
+        var ownerIds = rows.Select(r => r.OwnerId).Distinct().ToList();
+        var consents = await ChildConsentVersions.LoadAsync(db, ownerIds, ct);
+        return ReviewCandidateQuery.AllowedToRead(rows, ownerId => consents[ownerId].ToList());
+    }
+
+    public async Task<IReadOnlyList<Guid>> FindActiveReviewerIdsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
         await db.Users.AsNoTracking()
-            .Where(u => userIds.Contains(u.Id) && u.Role == UserRoles.Admin && u.Status == UserStatuses.Active)
+            .Where(u => userIds.Contains(u.Id) && (u.Role == UserRoles.Admin || u.Role == UserRoles.Moderator) && u.Status == UserStatuses.Active)
             .Select(u => u.Id)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<ReviewerOptionDto>> ListAssignableReviewersAsync(CancellationToken ct = default) =>
+        await db.Users.AsNoTracking()
+            .Where(u => (u.Role == UserRoles.Admin || u.Role == UserRoles.Moderator) && u.Status == UserStatuses.Active)
+            .OrderBy(u => u.FullName)
+            .ThenBy(u => u.Id)
+            .Select(u => new ReviewerOptionDto(u.Id, u.FullName, u.Email, u.Role))
             .ToListAsync(ct);
 
     public async Task AddAsync(
@@ -113,8 +134,15 @@ public class ReviewBatchRepository(AppDbContext db) : IReviewBatchRepository
         {
             var mineOnDeleted = await db.ReviewVerdicts.AsNoTracking()
                 .FirstOrDefaultAsync(v => v.ReviewBatchItemId == itemId && v.ReviewerUserId == reviewerUserId, ct);
-            var placeholder = new ChatReviewReplyRow(item.ChatMessageId, Guid.Empty, Guid.Empty, default, "assistant", "", "", "", null, null);
-            return new ReviewItemDetailRows(item.Id, item.Position, item.Stratum, placeholder, null, [], mineOnDeleted, DeletedByUser: true);
+            return new ReviewItemDetailRows(item.Id, item.Position, item.Stratum, Placeholder(item.ChatMessageId), null, [], mineOnDeleted, DeletedByUser: true);
+        }
+
+        // Phụ huynh rút đồng ý sau khi câu được bốc: chủ phiên dưới 16 tuổi không còn đồng ý hợp lệ thì không tải nội dung nào
+        if (!await IsContentReadableAsync(item.ChatMessageId, ct))
+        {
+            var mineHidden = await db.ReviewVerdicts.AsNoTracking()
+                .FirstOrDefaultAsync(v => v.ReviewBatchItemId == itemId && v.ReviewerUserId == reviewerUserId, ct);
+            return new ReviewItemDetailRows(item.Id, item.Position, item.Stratum, Placeholder(item.ChatMessageId), null, [], mineHidden, MinorWithoutConsent: true);
         }
 
         var reply = await ReviewItemQuery.AnsweredReply(messages, db.ChatSessions.AsNoTracking(), item.ChatMessageId).FirstOrDefaultAsync(ct);
@@ -157,17 +185,50 @@ public class ReviewBatchRepository(AppDbContext db) : IReviewBatchRepository
         return new ReviewReportRows(batch.Id, batch.Name, batch.Seed, batch.StrataJson, totalItems, reviewerCount, verdicts);
     }
 
+    private static ChatReviewReplyRow Placeholder(Guid chatMessageId) =>
+        new(chatMessageId, Guid.Empty, Guid.Empty, default, "assistant", "", "", "", null, null);
+
+    /// <summary>Chủ của một tin: chỉ thời điểm của lượt, mã và ngày sinh chủ phiên, cờ phụ huynh vận hành. KHÔNG có cột nội dung nào.</summary>
+    public static IQueryable<MessageOwnerRow> OwnerRows(AppDbContext db, Guid chatMessageId) =>
+        from m in db.ChatMessages.AsNoTracking()
+        where m.Id == chatMessageId
+        join session in db.ChatSessions.AsNoTracking() on m.ChatSessionId equals session.Id
+        join user in db.Users.AsNoTracking() on session.UserId equals user.Id into owners
+        from owner in owners.DefaultIfEmpty()
+        select new MessageOwnerRow(
+            m.CreatedAt, session.UserId,
+            owner == null ? (DateOnly?)null : owner.DateOfBirth,
+            owner != null && owner.Status == UserStatuses.Managed);
+
+    /// <summary>
+    /// Nội dung của tin này còn được cho người duyệt đọc không, theo đồng ý HIỆN TẠI của phụ huynh (cùng luật với lúc bốc mẫu:
+    /// AiQualityContentGate). Phụ huynh rút đồng ý sau khi câu được bốc thì từ lần mở kế tiếp là không. Không tìm thấy tin thì true:
+    /// các nhánh khác tự trả "không có gì để xem".
+    /// </summary>
+    private async Task<bool> IsContentReadableAsync(Guid chatMessageId, CancellationToken ct)
+    {
+        var owner = await OwnerRows(db, chatMessageId).FirstOrDefaultAsync(ct);
+        if (owner is null)
+            return true;
+        var consents = await ChildConsentVersions.LoadAsync(db, [owner.OwnerId], ct);
+        return AiQualityContentGate.CanReadContent(
+            new AiQualityCandidate(chatMessageId, owner.CreatedAt, owner.Birth, consents[owner.OwnerId].ToList(), owner.ParentOperated));
+    }
+
     public async Task<ReviewVerdict?> UpsertVerdictAsync(
         Guid batchId, Guid itemId, Guid reviewerUserId, string labelVerdict, string? correctIntent, string answerVerdict, string? cause,
         CancellationToken ct = default)
     {
         // Câu thuộc cuộc trò chuyện học sinh đã xóa thì không chấm được nữa (người duyệt không còn thấy nội dung)
-        var allowed = await db.ReviewBatchItems.AnyAsync(
-            i => i.Id == itemId && i.ReviewBatchId == batchId
-                 && db.ReviewBatchReviewers.Any(r => r.ReviewBatchId == batchId && r.UserId == reviewerUserId)
-                 && !db.ChatMessages.Any(m => m.Id == i.ChatMessageId
-                                              && db.ChatSessions.Any(s => s.Id == m.ChatSessionId && s.DeletedAt != null)), ct);
-        if (!allowed)
+        var item = await db.ReviewBatchItems.AsNoTracking()
+            .Where(i => i.Id == itemId && i.ReviewBatchId == batchId
+                        && db.ReviewBatchReviewers.Any(r => r.ReviewBatchId == batchId && r.UserId == reviewerUserId)
+                        && !db.ChatMessages.Any(m => m.Id == i.ChatMessageId
+                                                     && db.ChatSessions.Any(s => s.Id == m.ChatSessionId && s.DeletedAt != null)))
+            .Select(i => new { i.ChatMessageId })
+            .FirstOrDefaultAsync(ct);
+        // Chủ phiên dưới 16 tuổi không còn đồng ý của phụ huynh: nội dung đã ẩn nên cũng không chấm được nữa
+        if (item is null || !await IsContentReadableAsync(item.ChatMessageId, ct))
             return null;
 
         var verdict = await db.ReviewVerdicts.FirstOrDefaultAsync(

@@ -2,9 +2,8 @@
 
 from datetime import date
 from typing import Any, Literal
-from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from app.core.study_levels import StudyLevel
 from app.schemas.common import CamelModel
@@ -46,6 +45,9 @@ class ChatContext(CamelModel):
     sort: str | None = None
     service: str | None = None
     city: str | None = None
+    # Kịch bản vừa thử (UC-155), đúng dạng model trả và nhận: {"mode": "what_if", "changes": [{factor, value, unit}]} hoặc
+    # {"mode": "goal_seeking", "school": ..., "factor": [...], "target_group": ...}. Câu nối tiếp chỉ nói phần đổi, code gộp vào đây
+    scenario: dict[str, Any] | None = None
 
 
 # Một dòng bảng quy đổi grade_scale.10, khớp record GradeScaleRuleDto bên .NET. min_score là mốc điểm, GPA nội suy giữa
@@ -106,22 +108,8 @@ class Citation(CamelModel):
     url: str | None = None
     snippet: str | None = None
     retrieved_at: date | None = None  # ngày thu thập thông tin của nguồn (UC-37); None là kho chưa ghi ngày
-
-
-# Ảnh minh họa kèm câu trả lời (ví dụ ảnh mẫu form I-20). url lấy từ cột image_url của dòng kho được dùng, chỉ nhận https;
-# frontend vẽ ảnh bằng thẻ img và tự chuyển sang link khi ảnh không tải được
-class Media(CamelModel):
-    kind: Literal["image"]
-    url: str
-    alt: str  # chữ thay thế khi ảnh lỗi và cho người đọc màn hình
-
-    @field_validator("url")
-    @classmethod
-    def _https_only(cls, value: str) -> str:
-        parsed = urlparse(value)
-        if parsed.scheme != "https" or not parsed.netloc or any(c.isspace() for c in value):
-            raise ValueError("url phải là link https hợp lệ")
-        return value
+    entry_no: int | None = None  # mã mục tri thức (UC-36/UC-115)
+    version: int | None = None  # phiên bản của mục tri thức lúc trả lời (UC-36/UC-115)
 
 
 # Nút gợi ý: label là chữ trên nút, value là chữ gửi đi như tin nhắn của học sinh khi bấm
@@ -239,7 +227,6 @@ class AiUsageMixin(BaseModel):
 class ChatResponse(CamelModel):
     answer: str
     citations: list[Citation] = []
-    media: list[Media] = []  # ảnh minh họa của câu trả lời (từ dòng kho được dùng), rỗng nếu không có
     disclaimer: str | None = None  # Lời lưu ý
     state: ChatState
     skills: list[str] = []  # skill đã chạy ở lượt này, để ghi log
@@ -257,6 +244,7 @@ class ChatResponse(CamelModel):
     # "school_info" = câu kiến thức có thể hỏi số liệu một trường: .NET thử lấy số từ cơ sở dữ liệu, không có thì giữ câu trả lời của kho kiến thức
     #   (action_data["question"]: câu hỏi, ["school"]: tên trường SLM trích hoặc None, ["kb_answer"]: câu trả lời của kho, ["kb_found"]: kho có nguồn thật),
     # "school_compare" = so sánh sự thật của từ hai trường (action_data["schools"]: tên như học sinh gõ, ["fields"]: mã mục, ["question"]),
+    # "school_fit_compare" = so sánh 2 đến 4 trường theo độ phù hợp với hồ sơ (UC-154): nhóm và điểm năm thành phần; action_data như school_compare,
     # "school_search" = tìm trường theo điều kiện (action_data["filters"]: bộ lọc đã chuẩn hóa camelCase, ["sort"]: cách xếp, ["unresolved"]: điều chưa đọc được),
     # "premium_required" = mọi ý của tin đều cần gói Premium (allowed_intents), không chạy nhánh nào,
     # None = không có
@@ -268,6 +256,7 @@ class ChatResponse(CamelModel):
             "goal_seek",
             "school_info",
             "school_compare",
+            "school_fit_compare",
             "school_search",
             "premium_required",
         ]

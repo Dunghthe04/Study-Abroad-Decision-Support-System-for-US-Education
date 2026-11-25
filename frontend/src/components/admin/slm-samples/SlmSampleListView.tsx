@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckIcon, DownloadIcon, FileInputIcon, FilterIcon, PlusIcon, RotateCcwIcon, SearchIcon, WrenchIcon, XIcon } from "lucide-react";
+import { DownloadIcon, FileInputIcon, FilterIcon, PlusIcon, RotateCcwIcon, SearchIcon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,14 +22,13 @@ import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
 import { SlmImportDialog } from "@/components/admin/slm-samples/SlmImportDialog";
 import { SlmImportResultDialog } from "@/components/admin/slm-samples/SlmImportResultDialog";
-import { SlmReviewDialog } from "@/components/admin/slm-samples/SlmReviewDialog";
 import { SlmSampleFormPanel } from "@/components/admin/slm-samples/SlmSampleFormPanel";
 import { slmSampleColumns } from "@/components/admin/slm-samples/slm-sample-columns";
 import { useAuth } from "@/contexts/AuthContext";
 import { adminSlmSampleApi } from "@/lib/slm-sample-api";
-import { REVIEW_STATUSES, SAMPLE_TYPE_OPTIONS, SPLIT_OPTIONS, sampleToRequest } from "@/lib/slm-sample-format";
+import { SAMPLE_TYPE_OPTIONS, SOURCE_LABELS, SPLIT_OPTIONS, sampleToRequest } from "@/lib/slm-sample-format";
 import { useFetched } from "@/lib/use-fetched";
-import type { SaveSlmSampleRequest, SlmImportResult, SlmReviewStatus, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
+import type { SaveSlmSampleRequest, SlmImportResult, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
 
 const FILTER_FIELD_BG = "bg-card dark:bg-input/30";
 const TOOLBAR_BUTTON_BG = "border-border bg-card text-foreground shadow-xs hover:bg-muted dark:bg-input/30 dark:hover:bg-input/50";
@@ -37,26 +36,15 @@ const PAGE_SIZE = 20;
 
 const TYPE_FILTER_OPTIONS = [{ value: "", label: "Mọi loại mẫu" }, ...SAMPLE_TYPE_OPTIONS];
 const SPLIT_FILTER_OPTIONS = [{ value: "", label: "Mọi tập" }, ...SPLIT_OPTIONS];
-const SOURCE_FILTER_OPTIONS = [
-  { value: "", label: "Mọi nguồn" },
-  { value: "manual", label: "Nhập tay" },
-  { value: "excel", label: "File Excel" },
-];
 
 const TAB_TRIGGER_CLASS =
   "flex-none rounded-none border-0 border-b-2 border-transparent px-3 data-active:border-b-brand data-active:bg-transparent data-active:text-foreground data-active:shadow-none dark:data-active:border-transparent dark:data-active:border-b-brand dark:data-active:bg-transparent after:hidden";
-
-const BULK_ACTIONS: { status: SlmReviewStatus; label: string; icon: typeof CheckIcon; className: string }[] = [
-  { status: "approved", label: "Duyệt", icon: CheckIcon, className: "border-ok/20 bg-ok-wash text-ok hover:bg-ok-wash/70" },
-  { status: "rejected", label: "Từ chối", icon: XIcon, className: "border-risk/20 bg-risk-wash text-risk hover:bg-risk-wash/70" },
-  { status: "needs_fix", label: "Cần sửa", icon: WrenchIcon, className: "border-warn/20 bg-warn-wash text-warn hover:bg-warn-wash/70" },
-];
 
 interface Filters {
   search: string;
   sampleType: string;
   split: string;
-  status: string;
+  deleted: boolean;
   createdBy: string;
   from: string;
   to: string;
@@ -64,7 +52,7 @@ interface Filters {
   page: number;
 }
 
-const EMPTY_FILTERS: Filters = { search: "", sampleType: "", split: "", status: "", createdBy: "", from: "", to: "", source: "", page: 1 };
+const EMPTY_FILTERS: Filters = { search: "", sampleType: "", split: "", deleted: false, createdBy: "", from: "", to: "", source: "", page: 1 };
 
 function errorText(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -79,10 +67,7 @@ export function SlmSampleListView() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [reloadCounter, setReloadCounter] = useState(0);
 
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [formState, setFormState] = useState<{ sample: SlmSample | null } | null>(null);
-  const [reviewStatus, setReviewStatus] = useState<SlmReviewStatus | null>(null);
-  const [reviewIds, setReviewIds] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<SlmSample | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [importResult, setImportResult] = useState<SlmImportResult | null>(null);
@@ -91,7 +76,6 @@ export function SlmSampleListView() {
 
   const list = useFetched(`list|${JSON.stringify(applied)}|${reloadCounter}`, () =>
     adminSlmSampleApi.list({
-      reviewStatus: applied.status === "" ? undefined : (applied.status as SlmReviewStatus),
       sampleType: applied.sampleType === "" ? undefined : (applied.sampleType as SlmSampleType),
       split: applied.split === "" ? undefined : (applied.split as SlmSplit),
       search: applied.search || undefined,
@@ -99,34 +83,27 @@ export function SlmSampleListView() {
       from: applied.from || undefined,
       to: applied.to || undefined,
       source: applied.source || undefined,
+      deleted: applied.deleted,
       page: applied.page,
       pageSize: PAGE_SIZE,
     }),
   );
   const summary = useFetched(`summary|${reloadCounter}`, () => adminSlmSampleApi.summary());
   const creators = useFetched("creators", () => adminSlmSampleApi.creators());
+  const sources = useFetched(`sources|${reloadCounter}`, () => adminSlmSampleApi.sources());
+
   const creatorOptions = [{ value: "", label: "Mọi người tạo" }, ...(creators.data ?? []).map((item) => ({ value: item.userId, label: item.name }))];
+  const sourceValues = sources.data ?? ["manual", "excel"];
+  const sourceOptions = [
+    { value: "", label: "Mọi nguồn" },
+    ...sourceValues.map((value) => ({ value, label: SOURCE_LABELS[value] ?? value })),
+  ];
 
   const items = list.data?.items ?? [];
-  const pendingSelectedIds = items.filter((sample) => selectedIds.has(sample.id) && sample.reviewStatus === "pending").map((sample) => sample.id);
   const reload = () => setReloadCounter((current) => current + 1);
 
   const apply = (next: Filters) => {
     setApplied(next);
-    setSelectedIds(new Set());
-  };
-
-  const countOf = (status: string): string => {
-    if (!summary.data) return "";
-    const value = status === "" ? summary.data.total : (summary.data.byStatus[status as SlmReviewStatus] ?? 0);
-    return ` (${value})`;
-  };
-
-  const toggleOne = (id: string, checked: boolean) => {
-    const next = new Set(selectedIds);
-    if (checked) next.add(id);
-    else next.delete(id);
-    setSelectedIds(next);
   };
 
   const handleSearch = (event: React.FormEvent<HTMLFormElement>) => {
@@ -152,8 +129,8 @@ export function SlmSampleListView() {
   };
 
   const handleReset = () => {
-    setDraft({ ...EMPTY_FILTERS, status: applied.status });
-    apply({ ...EMPTY_FILTERS, status: applied.status });
+    setDraft({ ...EMPTY_FILTERS, deleted: applied.deleted });
+    apply({ ...EMPTY_FILTERS, deleted: applied.deleted });
     setIsFilterOpen(false);
   };
 
@@ -170,12 +147,7 @@ export function SlmSampleListView() {
   const handleChangeField = async (sample: SlmSample, change: Partial<SaveSlmSampleRequest>) => {
     try {
       const saved = await adminSlmSampleApi.update(sample.id, { ...sampleToRequest(sample), ...change });
-      const resetToPending = saved.reviewStatus !== sample.reviewStatus;
-      toast.add({
-        type: "success",
-        title: "Đã lưu thay đổi",
-        description: resetToPending ? "Nội dung đã đổi nên mẫu quay về Chờ duyệt, cần duyệt lại." : undefined,
-      });
+      toast.add({ type: "success", title: "Đã lưu thay đổi" });
       if (formState?.sample?.id === sample.id) setFormState({ sample: saved });
       reload();
     } catch (error) {
@@ -183,11 +155,16 @@ export function SlmSampleListView() {
     }
   };
 
-  const handleReviewed = (message: string) => {
-    setReviewStatus(null);
-    setSelectedIds(new Set());
-    toast.add({ type: "success", title: message });
-    reload();
+  const handleRestore = async (sample: SlmSample) => {
+    try {
+      const restored = await adminSlmSampleApi.restore(sample.id);
+      toast.add({ type: "success", title: "Đã khôi phục mẫu" });
+      if (formState?.sample?.id === sample.id) setFormState(applied.deleted ? null : { sample: restored });
+      if (items.length === 1 && applied.page > 1) setApplied({ ...applied, page: applied.page - 1 });
+      reload();
+    } catch (error) {
+      toast.add({ type: "error", title: "Không khôi phục được mẫu", description: errorText(error, "Vui lòng thử lại sau.") });
+    }
   };
 
   const confirmDelete = async () => {
@@ -195,9 +172,6 @@ export function SlmSampleListView() {
     setDeleteBusy(true);
     try {
       await adminSlmSampleApi.remove(deleting.id);
-      const next = new Set(selectedIds);
-      next.delete(deleting.id);
-      setSelectedIds(next);
       if (formState?.sample?.id === deleting.id) setFormState(null);
       if (items.length === 1 && applied.page > 1) setApplied({ ...applied, page: applied.page - 1 });
       setDeleting(null);
@@ -223,10 +197,10 @@ export function SlmSampleListView() {
   };
 
   const columns = slmSampleColumns({
-    selectedIds,
-    onToggle: toggleOne,
+    deleted: applied.deleted,
     onEdit: (sample) => setFormState({ sample }),
     onDelete: setDeleting,
+    onRestore: (sample) => void handleRestore(sample),
     onChangeField: handleChangeField,
   });
 
@@ -235,8 +209,9 @@ export function SlmSampleListView() {
   const handleExport = async (format: "jsonl" | "xlsx") => {
     setExporting(format);
     try {
-      await adminSlmSampleApi.exportApproved(format);
-      toast.add({ type: "success", title: "Đã xuất mẫu đã duyệt", description: format === "jsonl" ? "File JSONL" : "File Excel" });
+      await adminSlmSampleApi.exportAll(format);
+      toast.add({ type: "success", title: "Đã xuất mẫu huấn luyện", description: format === "jsonl" ? "File JSONL" : "File Excel" });
+      reload();
     } catch (error) {
       toast.add({ type: "error", title: "Không xuất được file", description: errorText(error, "Vui lòng thử lại sau.") });
     } finally {
@@ -264,7 +239,7 @@ export function SlmSampleListView() {
             </div>
             <div className="space-y-1.5">
               <label htmlFor="slm-source-filter" className="text-sm font-medium">Nguồn</label>
-              <OptionSelect id="slm-source-filter" value={draft.source} options={SOURCE_FILTER_OPTIONS} onChange={(value) => setDraft({ ...draft, source: value })} className={FILTER_FIELD_BG} />
+              <OptionSelect id="slm-source-filter" value={draft.source} options={sourceOptions} onChange={(value) => setDraft({ ...draft, source: value })} className={FILTER_FIELD_BG} />
             </div>
             <div className="space-y-1.5">
               <label htmlFor="slm-creator-filter" className="text-sm font-medium">Người tạo</label>
@@ -339,30 +314,22 @@ export function SlmSampleListView() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-        <Tabs value={applied.status === "" ? "all" : applied.status} onValueChange={(value) => apply({ ...applied, status: value === "all" ? "" : String(value), page: 1 })}>
+        <Tabs
+          value={applied.deleted ? "deleted" : "active"}
+          onValueChange={(value) => {
+            setFormState(null);
+            apply({ ...applied, deleted: value === "deleted", page: 1 });
+          }}
+        >
           <TabsList variant="line" className="h-auto w-full justify-start gap-0 border-b border-border p-0">
-            <TabsTrigger value="all" className={TAB_TRIGGER_CLASS}>Tất cả{countOf("")}</TabsTrigger>
-            {REVIEW_STATUSES.map((item) => (
-              <TabsTrigger key={item.id} value={item.id} className={TAB_TRIGGER_CLASS}>{item.label}{countOf(item.id)}</TabsTrigger>
-            ))}
+            <TabsTrigger value="active" className={TAB_TRIGGER_CLASS}>
+              Đang dùng{summary.data ? ` (${summary.data.total})` : ""}
+            </TabsTrigger>
+            <TabsTrigger value="deleted" className={TAB_TRIGGER_CLASS}>
+              Đã xóa{summary.data ? ` (${summary.data.deleted})` : ""}
+            </TabsTrigger>
           </TabsList>
         </Tabs>
-
-        {selectedIds.size > 0 && (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/60 px-3 py-2 text-sm">
-            <span className="font-medium">Đã chọn {selectedIds.size} mẫu{pendingSelectedIds.length > 0 && pendingSelectedIds.length < selectedIds.size ? `, ${pendingSelectedIds.length} chờ duyệt` : ""}</span>
-            {pendingSelectedIds.length > 0 && BULK_ACTIONS.map((action) => (
-              <Button key={action.status} type="button" size="sm" variant="outline" className={action.className} onClick={() => {
-                  setReviewIds(pendingSelectedIds);
-                  setReviewStatus(action.status);
-                }}>
-                <action.icon />
-                {action.label}
-              </Button>
-            ))}
-            <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Bỏ chọn</Button>
-          </div>
-        )}
 
         <DataTable
           columns={columns}
@@ -372,7 +339,7 @@ export function SlmSampleListView() {
           onRowSelect={(sample) => setFormState({ sample })}
           isLoading={list.loading && !list.data}
           error={message}
-          emptyMessage="Không có mẫu nào khớp bộ lọc."
+          emptyMessage={applied.deleted ? "Không có mẫu đã xóa nào." : "Không có mẫu nào khớp bộ lọc."}
           label="Danh sách mẫu huấn luyện"
           toolbar={toolbar}
           footer={
@@ -392,18 +359,13 @@ export function SlmSampleListView() {
         <SlmSampleFormPanel
           sample={formState.sample}
           version={reloadCounter}
-          currentUserId={user?.id}
           onClose={() => setFormState(null)}
           onChanged={handlePanelChanged}
           onDelete={setDeleting}
-          onReview={(sample, status) => {
-            setReviewIds([sample.id]);
-            setReviewStatus(status);
-          }}
+          onRestore={(sample) => void handleRestore(sample)}
         />
       )}
 
-      <SlmReviewDialog status={reviewStatus} ids={reviewIds} onClose={() => setReviewStatus(null)} onDone={handleReviewed} />
       <SlmImportDialog key={importSession} open={importOpen} onOpenChange={setImportOpen} onImported={handleImported} />
       <SlmImportResultDialog result={importResult} onClose={() => setImportResult(null)} />
 
@@ -411,7 +373,7 @@ export function SlmSampleListView() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Xóa mẫu này?</AlertDialogTitle>
-            <AlertDialogDescription>Mẫu sẽ bị ẩn khỏi danh sách và không được xuất ra nữa.</AlertDialogDescription>
+            <AlertDialogDescription>Mẫu sẽ chuyển sang danh sách Đã xóa và không có trong các lần xuất sau. Bạn có thể khôi phục lại.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteBusy}>Hủy</AlertDialogCancel>

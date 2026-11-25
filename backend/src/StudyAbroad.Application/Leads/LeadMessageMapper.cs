@@ -17,14 +17,16 @@ public sealed record RawLeadMessageRow(
     DateTime CreatedAt,
     string SenderRole,
     string? SenderFullName,
-    DateTime? ReadAt = null);
+    DateTime? ReadAt = null,
+    bool IsFlagged = false,
+    string? FlagReason = null);
 
 /// <summary>
 /// [USAS-2053 / UC-74] Bộ chuyển đổi và truy vấn chuẩn cho luồng tin nhắn yêu cầu liên hệ.
 /// </summary>
 public static class LeadMessageMapper
 {
-    public const string RemovedContentPlaceholder = "Tin nhắn đã bị gỡ do vi phạm quy tắc.";
+    public const string RemovedContentPlaceholder = "Tin đã bị gỡ do vi phạm";
     public const string AnonymousStudentName = "Học sinh / Phụ huynh (Ẩn danh)";
     public const string DefaultCenterName = "Trung tâm tư vấn";
     /// <summary>[UC-75 lớp 1b, lớp 3] Tên người gửi / người đánh giá đã bị xóa hẳn tài khoản.</summary>
@@ -82,7 +84,9 @@ public static class LeadMessageMapper
             m.CreatedAt,
             u != null ? u.Role : UserRoles.Student,
             u != null ? u.FullName : null,
-            m.ReadAt);
+            m.ReadAt,
+            m.IsFlagged,
+            m.FlagReason);
 
     /// <summary>
     /// Chuyển đổi một bản ghi truy vấn thô sang DTO, tự động che nội dung/lý do nếu tin nhắn đã bị gỡ.
@@ -97,6 +101,7 @@ public static class LeadMessageMapper
             ? DeletedUserName
             : ResolveSenderDisplayName(row.SenderRole, row.SenderFullName, sharedProfile, centerName);
         var isRemoved = string.Equals(row.Status, "removed", StringComparison.OrdinalIgnoreCase);
+        var showPaymentReminder = isFromCenter && !isRemoved && LeadMessageContentFilter.IsPaymentSolicitation(row.Content);
 
         return new LeadMessageDto(
             row.Id,
@@ -109,7 +114,8 @@ public static class LeadMessageMapper
             isRemoved ? null : row.AttachmentUrl,
             row.Status,
             row.CreatedAt,
-            row.ReadAt);
+            row.ReadAt,
+            showPaymentReminder);
     }
 
     /// <summary>
@@ -132,7 +138,9 @@ public static class LeadMessageMapper
                 entity.CreatedAt,
                 senderRole,
                 senderFullName,
-                entity.ReadAt),
+                entity.ReadAt,
+                entity.IsFlagged,
+                entity.FlagReason),
             sharedProfile,
             centerName);
 }

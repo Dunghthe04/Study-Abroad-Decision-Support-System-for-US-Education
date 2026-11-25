@@ -43,7 +43,8 @@ public record AdminScholarshipDto(
     decimal? MinToefl = null,
     string? MajorRestriction = null,
     string? ApplicationMethod = null,
-    string? ApplyUrl = null);
+    string? ApplyUrl = null,
+    decimal? MinDuolingo = null);
 
 /// <summary>Dùng cho cả thêm mới và sửa; gửi đủ mọi trường.</summary>
 public record SaveScholarshipRequest(
@@ -76,6 +77,7 @@ public record SaveScholarshipRequest(
     decimal? MinToefl = null,
     string? MajorRestriction = null,
     string? ApplicationMethod = null,
-    string? ApplyUrl = null);
+    string? ApplyUrl = null,
+    decimal? MinDuolingo = null);
 
 public record SetScholarshipVisibilityRequest(bool IsActive, string? Reason = null);

@@ -60,10 +60,21 @@ export function ReviewReportView({ batchId }: { batchId: string }) {
 
       {report && data && data.itemsGraded > 0 ? (
         <>
-          <section aria-label="Số liệu chung" className="grid gap-3 sm:grid-cols-3">
+          <section
+            aria-label="Số liệu chung"
+            className={data.agreement ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-4" : "grid gap-3 sm:grid-cols-3"}
+          >
             <StatTile label="Đã chấm" value={`${formatInt(data.itemsGraded)} / ${formatInt(data.totalItems)}`} note="câu của đợt" />
             <RateTile label="Câu trả lời sai (chung)" estimate={report.answerWrong} />
             <RateTile label="Nhãn SLM gán sai (chung)" estimate={report.labelWrong} />
+            {/* UC-149: chỉ hiện khi có câu được từ hai người chấm trở lên */}
+            {data.agreement ? (
+              <StatTile
+                label="Đồng thuận giữa người chấm"
+                value={formatPct(data.agreement.rate, 0)}
+                note={`${formatInt(data.agreement.itemsAgreed)} / ${formatInt(data.agreement.itemsWithMultipleReviewers)} câu có từ 2 người chấm cùng kết luận`}
+              />
+            ) : null}
           </section>
 
           <Card>

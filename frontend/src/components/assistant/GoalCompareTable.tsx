@@ -101,7 +101,7 @@ function activitiesLine(row: GoalCompareRow): CompareLine {
   }
 }
 
-// Tỉ lệ nhận: luật "dưới 15% luôn Khó vào" và luật hạ một nhóm khi du học sinh nhận ít hơn một nửa mức chung
+// Tỉ lệ nhận: luật "dưới 15% luôn Khó vào" và luật "dưới 50% không được An toàn", xét tỉ lệ du học sinh nếu trường có, không thì tỉ lệ chung (UC-22)
 function acceptLine(row: GoalCompareRow): CompareLine {
   const school =
     row.low != null
@@ -111,16 +111,10 @@ function acceptLine(row: GoalCompareRow): CompareLine {
   switch (row.status) {
     case "always_reach":
       return { ...base, diff: "Dưới 15%: trường luôn xếp Khó vào, điểm cao đến đâu cũng không đổi", tone: "bad" };
-    case "downgrade":
-      return {
-        ...base,
-        diff: `Du học sinh chỉ bằng ${formatPct(row.gap)} mức chung (dưới một nửa): trường bị hạ một nhóm`,
-        tone: "bad",
-      };
     case "capped":
       return { ...base, diff: "Dưới 50%: trường chỉ có thể là Vừa sức, không bao giờ là An toàn hơn", tone: "muted" };
     case "ok":
-      return { ...base, diff: "Không bị hạ nhóm", tone: "good" };
+      return { ...base, diff: "Không bị chặn bởi tỉ lệ nhận", tone: "good" };
     default:
       return { ...base, diff: "Chưa so sánh được", tone: "muted" };
   }

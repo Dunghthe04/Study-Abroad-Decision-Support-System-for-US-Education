@@ -1,5 +1,5 @@
 from app.schemas.explain import ExplainRequest
-from app.services.explainer import Explainer, build_facts
+from app.services.explainer import Explainer, build_facts, build_user
 from tests.fakes import FakeLLM
 
 # Hồ sơ mẫu: An và Colgate. why là các mã lý do mà cloud đã chọn.
@@ -63,3 +63,61 @@ async def test_failed_when_qwen_breaks_shape_twice():
     assert res.status == "FAILED"
     assert res.summary == ""
     assert len(llm.calls) == 2  # gọi lại đúng 1 lần
+
+
+# ---- UC-153: AI diễn giải điểm phù hợp, giới hạn theo độ chọn lọc
+
+FIT = {
+    "total": 0.61,
+    "priorityAdjusted": True,
+    "parts": [
+        {"key": "position", "score": 0.4, "weight": 0.3},
+        {"key": "budget", "score": 0.9, "weight": 0.25},
+        {"key": "quality", "score": None, "weight": 0.2},
+        {"key": "aid", "score": 0.4, "weight": 0.15},
+        {"key": "english", "score": 1, "weight": 0.1},
+    ],
+}
+
+
+def with_school(**more):
+    return ExplainRequest.model_validate({**COLGATE, "school": {**COLGATE["school"], **more}})
+
+
+def test_the_school_may_carry_the_selectivity_codes_and_the_fit_the_backend_sends():
+    # Trước đây advisor từ chối LOW_RATE, RATE_CAP, WEAK_CAP nên cả lượt giải thích của trường rất chọn lọc hỏng
+    req = with_school(why=["LOW_RATE", "RATE_CAP", "WEAK_CAP", "GPA_LOW"], fit=FIT)
+
+    assert req.school.fit.priority_adjusted is True
+    facts = build_facts(req)
+    assert len(facts) == 4
+    assert "dưới 15%" in facts[0] and "không đổi nhóm" in facts[0]
+    assert "dưới 50%" in facts[1]
+    assert "thấp hơn mốc 25%" in facts[2]
+
+
+def test_the_fit_goes_to_the_ai_on_a_100_scale_with_the_lowest_parts_found_by_code():
+    sent = build_user(with_school(fit=FIT))["fit"]
+
+    assert sent["total"] == 61
+    assert [(p["name"], p["score"], p["weight"]) for p in sent["parts"]][:2] == [
+        ("vừa tầm học thuật", 40, 0.3),
+        ("ngân sách", 90, 0.25),
+    ]
+    # hai phần cùng thấp nhất (40); phần thiếu số không tính
+    assert sent["lowest"] == ["vừa tầm học thuật", "học bổng"]
+    assert sent["missing"] == ["chất lượng trường"]
+    assert sent["priorityAdjusted"] is True
+
+
+def test_without_a_fit_the_ai_is_not_given_one():
+    assert "fit" not in build_user(ExplainRequest.model_validate(COLGATE))
+
+
+def test_a_fit_with_no_scored_part_has_no_lowest():
+    sent = build_user(
+        with_school(fit={"total": None, "parts": [{"key": "aid", "score": None, "weight": 0.15}]})
+    )["fit"]
+
+    assert sent["total"] is None and "lowest" not in sent
+    assert sent["missing"] == ["học bổng"]

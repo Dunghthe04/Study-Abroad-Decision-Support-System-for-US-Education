@@ -41,6 +41,7 @@ public class Scholarship : BaseEntity
     public int? MinSat { get; set; }
     public int? MinAct { get; set; }
     public decimal? MinToefl { get; set; }
+    public decimal? MinDuolingo { get; set; }
     public string? MajorRestriction { get; set; }
     /// <summary>automatic | separate_application | nomination | unknown</summary>
     public string? ApplicationMethod { get; set; }

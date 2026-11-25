@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useAssistant } from "./AssistantProvider";
 import { Badge } from "@/components/ui/badge";
 import { BasisBadge } from "./BasisBadge";
-import type { ExplainBasis, ExplainCardData } from "@/types/recommendation";
+import type { ExplainBasis, ExplainCardData, FitBreakdown, FitPartKey } from "@/types/recommendation";
 
 const percent = (value: number | null | undefined) => (value == null ? "–" : `${Math.round(value)}%`);
 
@@ -57,6 +57,7 @@ export function ExplainCard({ code, card, basis }: { code: string; card: Explain
           </ul>
         </div>
       )}
+      {card.fit && <FitBreakdownView fit={card.fit} />}
       {/* Đang giải thích theo giả định: một cú bấm để xem lại theo hồ sơ thật */}
       {basis.kind === "simulated" && (
         <Button
@@ -84,6 +85,64 @@ export function ExplainCard({ code, card, basis }: { code: string; card: Explain
         </Button>
       )}
       <p className="text-xs text-ink-3">Tính từ hồ sơ thật của bạn, so với sinh viên đã trúng tuyển. Đây là mức tham chiếu, không phải cam kết đỗ.</p>
+    </div>
+  );
+}
+
+// UC-24: tên và lời diễn giải từng thành phần của điểm phù hợp, theo thứ tự đặc tả (khớp cách SchoolRanker tính)
+export const FIT_PART_INFO: Record<FitPartKey, { label: string; text: string }> = {
+  position: {
+    label: "Vừa tầm học thuật",
+    text: "Cao nhất khi hồ sơ của bạn ở giữa nhóm sinh viên của trường; quá khó hay quá dễ đều thấp.",
+  },
+  budget: { label: "Ngân sách", text: "Càng rẻ hơn ngân sách càng cao; vượt ngân sách thì bằng 0." },
+  quality: { label: "Chất lượng trường", text: "Tính từ thứ hạng của trường trong các bảng xếp hạng." },
+  aid: {
+    label: "Học bổng",
+    text: "Phần trăm chi phí cả năm mà học bổng trung bình dành cho du học sinh chi trả.",
+  },
+  english: {
+    label: "Tiếng Anh",
+    text: "Đạt mức tối thiểu của trường thì được điểm tối đa; mỗi band thiếu mất 1 điểm.",
+  },
+};
+
+const formatWeight = (weight: number) => weight.toFixed(2).replace(".", ",");
+
+// Điểm phù hợp của trường: năm thành phần kèm điểm, trọng số đã dùng và lời diễn giải. Chỉ dùng để sắp xếp trong cùng nhóm
+function FitBreakdownView({ fit }: { fit: FitBreakdown }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-xs font-bold text-brand">Điểm phù hợp</p>
+        <p className="text-xs font-semibold text-foreground">
+          {fit.total == null ? "Chưa tính được" : `${Math.round(fit.total * 100)} / 100`}
+        </p>
+      </div>
+      <ul className="space-y-1.5">
+        {fit.parts.map((part) => {
+          const info = FIT_PART_INFO[part.key];
+          return (
+            <li key={part.key} className="text-xs">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-medium text-ink-2">{info.label}</span>
+                <span className="tabular shrink-0 text-ink-2">
+                  {part.score == null ? "Chưa có dữ liệu" : `${Math.round(part.score * 100)} / 100`}
+                  <span className="text-ink-3"> · trọng số {formatWeight(part.weight)}</span>
+                </span>
+              </div>
+              <p className="text-ink-3">
+                {info.text}
+                {part.score == null ? " Thiếu dữ liệu nên thành phần này bị bỏ khỏi tổng điểm." : ""}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="text-xs text-ink-3">
+        {fit.priorityAdjusted ? "Trọng số đã đổi theo các nút ưu tiên của bạn. " : ""}
+        Điểm phù hợp chỉ dùng để sắp xếp các trường trong cùng một nhóm, không đổi nhóm của trường.
+      </p>
     </div>
   );
 }

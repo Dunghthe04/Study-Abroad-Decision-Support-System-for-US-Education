@@ -1449,6 +1449,18 @@ export function Step2Transcript({
                 aria-invalid={Boolean(validationError) || undefined}
                 className="h-10 w-full"
               />
+              {overallScale === "10" ? (
+                <div className="mt-1.5 text-xs text-muted-foreground">
+                  Quy đổi thang 4:{" "}
+                  <strong className="text-brand">
+                    {data.manualGpa10Scale != null ? toGpa4(data.manualGpa10Scale).toFixed(2) : "—"}
+                  </strong>
+                </div>
+              ) : (
+                <div className="mt-1.5 text-xs text-muted-foreground">
+                  GPA thang 10: <strong className="text-foreground">Chưa có dữ liệu</strong>
+                </div>
+              )}
             </FormSection>
 
             <FormSection

@@ -118,6 +118,35 @@ public class ChatNextStepsTests
         Assert.Equal("Purdue có học bổng cho du học sinh không?", steps[1].Value);
     }
 
+    // UC-156: câu hỏi học bổng dẫn tới trang Tìm học bổng, lọc theo tên trường
+    [Theory]
+    [InlineData(InfoField.Aid)]
+    [InlineData(InfoField.Scholarships)]
+    public void AfterSchoolInfo_ScholarshipQuestion_AddsALinkToTheScholarshipPage_FilteredByTheSchoolName(InfoField asked)
+    {
+        var steps = ChatNextSteps.AfterSchoolInfo("BU", "Boston University", [asked]);
+
+        var link = Assert.Single(steps, s => s.Label == ChatNextSteps.ScholarshipPageLabel);
+        Assert.Equal("/scholarships?search=Boston%20University", link.Href);
+        Assert.Null(link.Action);
+        Assert.Equal("Cần gì để vào Boston University?", steps[0].Label);   // nút "Cần gì để vào" vẫn đứng đầu
+        Assert.True(steps.Count <= 4);
+    }
+
+    [Fact]
+    public void AfterSchoolInfo_NonScholarshipQuestion_HasNoScholarshipPageLink()
+    {
+        var steps = ChatNextSteps.AfterSchoolInfo("PU", "Purdue", [InfoField.Cost]);
+
+        Assert.DoesNotContain(steps, s => s.Label == ChatNextSteps.ScholarshipPageLabel);
+    }
+
+    [Fact]
+    public void ScholarshipPage_WithoutASchoolName_OpensThePlainPage()
+    {
+        Assert.Equal("/scholarships", ChatNextSteps.ScholarshipPage().Href);
+    }
+
     [Fact]
     public void AfterSchoolOverview_KeepsTheSixFieldsInOrder()
     {

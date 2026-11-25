@@ -13,8 +13,6 @@ from app.schemas.chat import ProfileField
 from app.services.skills.skill_bac_hoc import (
     CURRENT_LEVELS,
     MAX_MAJOR_LEN,
-    TARGET_LEVELS,
-    UNKNOWN,
     check_grade,
 )
 from app.services.skills.validators import (
@@ -28,9 +26,6 @@ from app.services.skills.validators import (
     check_states,
 )
 
-# Bậc muốn học hợp lệ khi lưu: "chưa rõ" không lưu được (StudyLevels.IsValid)
-STUDY_LEVELS = {code for code in TARGET_LEVELS.values() if code != UNKNOWN}
-
 
 def ok_current_level(value: Any, profile: dict, today: date) -> bool:
     return value in CURRENT_LEVELS
@@ -40,10 +35,6 @@ def ok_current_level(value: Any, profile: dict, today: date) -> bool:
 def ok_current_grade(value: Any, profile: dict, today: date) -> bool:
     check_grade(profile.get("current_level"), value)
     return True
-
-
-def ok_target_level(value: Any, profile: dict, today: date) -> bool:
-    return value in STUDY_LEVELS
 
 
 # Ngành không bắt buộc khi lưu (B4 mới đòi), có thì tối đa 128 ký tự
@@ -111,7 +102,6 @@ def ok_states(value: Any, profile: dict, today: date) -> bool:
 RULES: dict[str, Callable[[Any, dict, date], bool]] = {
     "current_level": ok_current_level,
     "current_grade": ok_current_grade,
-    "target_level": ok_target_level,
     "major": ok_major,
     "gpa": ok_gpa,
     "english": ok_english,

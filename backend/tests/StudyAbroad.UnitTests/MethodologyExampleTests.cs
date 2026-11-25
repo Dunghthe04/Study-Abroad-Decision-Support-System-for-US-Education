@@ -76,7 +76,6 @@ public class MethodologyExampleTests
         Assert.Equal(0.75, options.UpperCut);          // "từ 75% là An toàn hơn"
         Assert.Equal(0.15, options.AlwaysReachRate);   // "nhận dưới 15%: luôn Khó vào"
         Assert.Equal(0.50, options.SafetyMinRate);     // "tỉ lệ nhận dưới 50%: không được An toàn"
-        Assert.Equal(0.5, options.IntlRatioCut);       // "thấp hơn một nửa tỉ lệ chung: hạ một nhóm"
         Assert.Equal(0.5, options.LowSubmitPct);       // "dưới 50% sinh viên nộp SAT"
         Assert.Equal(0.5, options.LowSubmitFactor);    // "trọng số điểm thi giảm một nửa"
         Assert.Equal(0.05, options.EcStep);            // "mỗi bậc lệch 5 điểm phần trăm"

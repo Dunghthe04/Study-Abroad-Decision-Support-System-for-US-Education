@@ -44,6 +44,12 @@ public record ReviewReport(
     IReadOnlyList<CorrectIntentCount> CorrectIntents);
 
 /// <summary>
+/// Đồng thuận giữa người chấm (UC-149): trong các câu được từ hai người chấm trở lên (ItemsWithMultipleReviewers), có ItemsAgreed câu mà mọi
+/// người chấm cùng một kết luận. Rate = ItemsAgreed / ItemsWithMultipleReviewers, nằm trong [0, 1]. Chỉ là số đếm, không nêu ai chấm thế nào.
+/// </summary>
+public record ReviewerAgreement(int ItemsWithMultipleReviewers, int ItemsAgreed, double Rate);
+
+/// <summary>
 /// Tính báo cáo từ kết luận đã chấm và số câu mỗi nhóm lúc bốc. Hàm thuần, không đọc database.
 /// Vì mỗi nhóm bốc số câu bằng nhau (không tỷ lệ theo kích thước nhóm), tỷ lệ chung PHẢI tính có trọng số theo số câu của nhóm,
 /// nếu không nhóm nhỏ sẽ bị tính nặng hơn thực tế.
@@ -51,6 +57,25 @@ public record ReviewReport(
 public static class ReviewReportCalculator
 {
     private const double Z = 1.96;   // 95%
+
+    /// <summary>
+    /// Tỷ lệ đồng thuận giữa người chấm trên các câu có từ hai người chấm trở lên; null khi chưa câu nào có hai người chấm.
+    /// "Cùng kết luận" là cùng cả bốn phần của một kết luận: nhãn ý đúng/sai, nhãn đúng đã chọn, câu trả lời đúng/sai/thiếu dữ liệu/ngoài phạm vi
+    /// và nguyên nhân (đúng như người duyệt lưu một kết luận ở UC-148). Câu chỉ một người chấm không tính vào cả tử số lẫn mẫu số.
+    /// </summary>
+    public static ReviewerAgreement? Agreement(IEnumerable<ReviewVerdictRow> verdicts)
+    {
+        var shared = verdicts
+            .GroupBy(v => v.ItemId)
+            .Where(group => group.Count() >= 2)
+            .ToList();
+        if (shared.Count == 0)
+            return null;
+
+        var agreed = shared.Count(group =>
+            group.Select(v => (v.LabelVerdict, v.CorrectIntent, v.AnswerVerdict, v.Cause)).Distinct().Count() == 1);
+        return new ReviewerAgreement(shared.Count, agreed, (double)agreed / shared.Count);
+    }
 
     public static ReviewReport Compute(IReadOnlyList<StratumCount> strata, IReadOnlyList<ReviewGradedItem> graded)
     {

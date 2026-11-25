@@ -21,8 +21,10 @@ public static class LeadStatuses
     public const string PendingParent = "pending_parent";
     /// <summary>Phụ huynh từ chối, hoặc học sinh xóa tài khoản khi còn chờ.</summary>
     public const string Cancelled = "cancelled";
-    /// <summary>Quá 7 ngày phụ huynh chưa trả lời.</summary>
+    /// <summary>Quá 7 ngày phụ huynh chưa trả lời hoặc quá 7 ngày trung tâm chưa phản hồi.</summary>
     public const string Expired = "expired";
+    /// <summary>[UC-57] Tài khoản trung tâm bị khóa bởi quản trị viên; các yêu cầu đang mở tạm dừng.</summary>
+    public const string CenterInactive = "center_inactive";
 
     /// <summary>[UC-116] Lead trung tâm chưa nhận (chờ phụ huynh / phụ huynh từ chối / hết hạn): ẩn khỏi mọi màn hình phía trung tâm.</summary>
     public static bool IsHiddenFromCenter(string? status) =>

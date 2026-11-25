@@ -27,7 +27,6 @@ def test_assessment_needs_the_b3_items_in_asking_order_without_the_major():
     profile = state("B3", gpa="confirmed").profile
 
     assert missing_fields(profile, REQUIRED_B3) == [
-        "target_level",
         "english",
         "sat",
         "budget",
@@ -88,9 +87,6 @@ def test_none_and_unknown_count_as_answered_but_not_for_must_have_fields():
 
     profile = dict(FULL_PROFILE, budget="said_in_B0")  # tự nói chưa xác nhận
     assert missing_fields(state(**profile).profile) == ["budget"]
-
-    profile = dict(FULL_PROFILE, target_level="unknown")  # bậc học không được bỏ qua
-    assert missing_fields(state(**profile).profile) == ["target_level"]
 
     profile = dict(FULL_PROFILE, major="unknown")  # "chưa rõ" ngành: B4 vẫn thiếu
     assert missing_fields(state(**profile).profile) == ["major"]

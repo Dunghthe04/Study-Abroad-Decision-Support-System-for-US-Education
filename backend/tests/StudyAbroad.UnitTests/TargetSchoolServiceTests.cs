@@ -456,11 +456,164 @@ public class TargetSchoolServiceTests
         Assert.Null(await _service.CheckTargetSchoolAsync(_userId, null, _uniId));
     }
 
+    [Fact]
+    public async Task AddTargetSchool_WhenRoundNotSupportedBySchool_ReturnsFail()
+    {
+        // MIT trong setup chỉ có EA và RD, không có ED
+        var result = await _service.AddTargetSchoolAsync(_userId, new AddTargetSchoolRequest(
+            UniversityId: _uniId,
+            ApplicationRound: "Early Decision"
+        ));
+
+        Assert.False(result.Success);
+        Assert.Contains("không hỗ trợ vòng nộp", result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task UpdateApplicationRound_WhenRoundNotSupported_ReturnsFail()
+    {
+        var added = await _service.AddTargetSchoolAsync(_userId, new AddTargetSchoolRequest(UniversityId: _uniId));
+        Assert.True(added.Success);
+
+        var updated = await _service.UpdateApplicationRoundAsync(_userId, added.TargetSchool!.Id, new UpdateApplicationRoundRequest("Early Decision"));
+
+        Assert.False(updated.Success);
+        Assert.False(updated.NotFound);
+        Assert.Contains("không hỗ trợ vòng nộp", updated.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task UpdateApplicationRound_WhenNotFound_ReturnsNotFoundFlag()
+    {
+        var updated = await _service.UpdateApplicationRoundAsync(_userId, Guid.NewGuid(), new UpdateApplicationRoundRequest("Regular Decision"));
+
+        Assert.False(updated.Success);
+        Assert.True(updated.NotFound);
+    }
+
+    [Fact]
+    public async Task AddAndList_InheritsLatestRecommendedCategoryUntilUserOverrides()
+    {
+        _repo.RecommendedCategories[_userId] = new Dictionary<Guid, string> { [_uniId] = "safety" };
+
+        var added = await _service.AddTargetSchoolAsync(_userId, new AddTargetSchoolRequest(UniversityId: _uniId));
+        Assert.True(added.Success);
+        Assert.Equal("safety", added.TargetSchool!.Category);
+        Assert.False(added.TargetSchool.IsCategoryUserSelected);
+
+        // Khi có gợi ý mới đổi nhóm thành reach, danh sách tự cập nhật nếu người dùng chưa đổi tay
+        _repo.RecommendedCategories[_userId][_uniId] = "reach";
+        var summary = await _service.GetTargetSchoolsAsync(_userId);
+        Assert.Equal("reach", summary.Items[0].Category);
+        Assert.Equal(1, summary.ReachCount);
+
+        // Khi người dùng tự đổi nhóm sang match, đánh dấu IsCategoryUserSelected = true và không bị gợi ý ghi đè
+        var changed = await _service.UpdateCategoryAsync(_userId, added.TargetSchool.Id, new UpdateTargetCategoryRequest("match"));
+        Assert.True(changed.Success);
+        Assert.Equal("match", changed.TargetSchool!.Category);
+        Assert.True(changed.TargetSchool.IsCategoryUserSelected);
+
+        var afterOverride = await _service.GetTargetSchoolsAsync(_userId);
+        Assert.Equal("match", afterOverride.Items[0].Category);
+        Assert.True(afterOverride.Items[0].IsCategoryUserSelected);
+        Assert.Equal(1, afterOverride.MatchCount);
+    }
+
+    [Fact]
+    public async Task GetDefaults_ReturnsRecommendedCategoryAndSupportedRounds()
+    {
+        _repo.RecommendedCategories[_userId] = new Dictionary<Guid, string> { [_uniId] = "match" };
+        _repo.DeadlinesJsonMap[_uniId] = "{\"RD\":\"2027-01-05\",\"RollingFinal\":\"2027-03-01\"}";
+
+        var defaults = await _service.GetDefaultsAsync(_userId, "MIT", null);
+
+        Assert.Equal("match", defaults.RecommendedCategory);
+        Assert.Equal(["Regular Decision", "Rolling"], defaults.AvailableRounds);
+    }
+
+    [Fact]
+    public async Task ExtractAvailableRounds_SupportsEd2AndReaAndScea()
+    {
+        var rounds = TargetSchoolService.ExtractAvailableRounds(
+            "{\"ED\":\"2026-11-01\",\"ED2\":\"2027-01-01\",\"EA\":\"2026-11-01\",\"REA\":\"2026-11-01\",\"RD\":\"2027-01-15\",\"Rolling\":\"2027-05-01\"}");
+
+        Assert.Equal(
+            ["Early Decision", "Early Decision II", "Early Action", "Restrictive Early Action", "Regular Decision", "Rolling"],
+            rounds);
+    }
+
+    [Fact]
+    public async Task UpdateApplicationRound_SecondEdOrEd2School_RejectedWithConflictingSchoolName()
+    {
+        var uni2 = Guid.NewGuid();
+        _repo.Universities.Add(new University { Id = uni2, Code = "NYU", Name = "New York University", IsActive = true });
+        _repo.DeadlinesJsonMap[_uniId] = "{\"ED\":\"2026-11-01\",\"ED2\":\"2027-01-01\",\"RD\":\"2027-01-05\"}";
+        _repo.DeadlinesJsonMap[uni2] = "{\"ED\":\"2026-11-01\",\"ED2\":\"2027-01-01\",\"RD\":\"2027-01-05\"}";
+
+        var first = await _service.AddTargetSchoolAsync(_userId, new AddTargetSchoolRequest(UniversityId: _uniId, ApplicationRound: "Early Decision"));
+        Assert.True(first.Success);
+
+        // E1: trường thứ 2 không được chọn ED khi đã có MIT ở ED
+        var secondAdd = await _service.AddTargetSchoolAsync(_userId, new AddTargetSchoolRequest(UniversityId: uni2, ApplicationRound: "Early Decision"));
+        Assert.False(secondAdd.Success);
+        Assert.Contains("Massachusetts Institute of Technology", secondAdd.ErrorMessage);
+
+        // Trường thứ 2 chọn ED II thì được phép (mỗi vòng ED và ED II tối đa 1 trường riêng biệt)
+        var secondEd2 = await _service.AddTargetSchoolAsync(_userId, new AddTargetSchoolRequest(UniversityId: uni2, ApplicationRound: "Early Decision II"));
+        Assert.True(secondEd2.Success);
+        Assert.Equal("Early Decision II", secondEd2.TargetSchool!.ApplicationRound);
+
+        // Chuyển MIT sang ED II bị chặn vì NYU đang giữ ED II
+        var mitToEd2 = await _service.UpdateApplicationRoundAsync(_userId, first.TargetSchool!.Id, new UpdateApplicationRoundRequest("Early Decision II"));
+        Assert.False(mitToEd2.Success);
+        Assert.Contains("New York University", mitToEd2.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task GetDefaults_AndSummary_ExposeMandatoryScholarshipAndExistingBindingSchools()
+    {
+        _repo.ScholarshipNeeds[_userId] = "mandatory";
+        _repo.DeadlinesJsonMap[_uniId] = "{\"ED\":\"2026-11-01\",\"RD\":\"2027-01-05\"}";
+        await _service.AddTargetSchoolAsync(_userId, new AddTargetSchoolRequest(UniversityId: _uniId, ApplicationRound: "Early Decision"));
+
+        var defaults = await _service.GetDefaultsAsync(_userId, "MIT", null);
+        Assert.True(defaults.IsScholarshipMandatory);
+        Assert.Equal("Massachusetts Institute of Technology", defaults.ExistingEdSchoolName);
+        Assert.Null(defaults.ExistingEd2SchoolName);
+
+        var summary = await _service.GetTargetSchoolsAsync(_userId);
+        Assert.True(summary.IsScholarshipMandatory);
+    }
+
     private sealed class FakeTargetSchoolRepository : ITargetSchoolRepository
     {
         public List<TargetSchool> TargetSchools { get; } = [];
         public List<University> Universities { get; } = [];
         public Dictionary<Guid, string> DeadlinesJsonMap { get; } = [];
+        public Dictionary<Guid, Dictionary<Guid, string>> RecommendedCategories { get; } = [];
+
+        public Task<Dictionary<Guid, string>> GetLatestRecommendedCategoriesAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(RecommendedCategories.TryGetValue(userId, out var map) ? new Dictionary<Guid, string>(map) : []);
+
+        public Task<string?> GetLatestRecommendedCategoryAsync(Guid userId, Guid universityId, CancellationToken ct = default) =>
+            Task.FromResult(RecommendedCategories.TryGetValue(userId, out var map) && map.TryGetValue(universityId, out var cat) ? cat : null);
+
+        public Dictionary<Guid, string?> ScholarshipNeeds { get; } = [];
+
+        public Task<string?> GetUserScholarshipNeedAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(ScholarshipNeeds.TryGetValue(userId, out var need) ? need : null);
+
+        public Task<string?> FindSchoolWithRoundAsync(Guid userId, string canonicalRound, Guid? excludeTargetId = null, CancellationToken ct = default)
+        {
+            var hit = TargetSchools.FirstOrDefault(ts =>
+                ts.UserId == userId
+                && ts.Status != "parent_suggested"
+                && ts.Id != excludeTargetId
+                && !string.IsNullOrWhiteSpace(ts.ApplicationRound)
+                && string.Equals(TargetSchoolService.CanonicalRound(ts.ApplicationRound!), canonicalRound, StringComparison.OrdinalIgnoreCase));
+            if (hit is null) return Task.FromResult<string?>(null);
+            return Task.FromResult(Universities.FirstOrDefault(u => u.Id == hit.UniversityId)?.Name);
+        }
 
         public Task<TargetSchool?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
             Task.FromResult(TargetSchools.FirstOrDefault(x => x.Id == id));
@@ -491,7 +644,8 @@ public class TargetSchoolServiceTests
                 ts.ApplicationRound,
                 ts.Deadline,
                 ts.CreatedAt,
-                ts.UpdatedAt));
+                ts.UpdatedAt,
+                IsCategoryUserSelected: ts.IsCategoryUserSelected));
         }
 
         public Task<List<TargetSchoolDto>> GetListByUserAsync(Guid userId, string? category = null, string? status = null, CancellationToken ct = default)
@@ -519,7 +673,8 @@ public class TargetSchoolServiceTests
                         ts.ApplicationRound,
                         ts.Deadline,
                         ts.CreatedAt,
-                        ts.UpdatedAt);
+                        ts.UpdatedAt,
+                        IsCategoryUserSelected: ts.IsCategoryUserSelected);
                 })
                 .ToList();
 

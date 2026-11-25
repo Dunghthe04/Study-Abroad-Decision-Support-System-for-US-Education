@@ -4,7 +4,8 @@ import { useState, type ReactNode } from "react";
 import Image from "next/image";
 import { Building2Icon, ExternalLinkIcon } from "lucide-react";
 import { cn } from "cn";
-import { universityHost, universityNumber, universityPercent, universityUrl } from "@/lib/university-display";
+import { isValidRate, universityHost, universityNumber, universityPercent, universityUrl } from "@/lib/university-display";
+import { MissingValue } from "@/components/shared/missing-value";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableRow } from "@/components/ui/table";
 
@@ -64,7 +65,7 @@ export function DetailRows({ rows }: { rows: { label: string; value: ReactNode }
           return (
             <TableRow key={row.label} className="hover:bg-transparent">
               <TableHead scope="row" className="h-auto w-1/2 py-3 pr-4 pl-0 align-top font-normal whitespace-normal text-muted-foreground">{row.label}</TableHead>
-              <TableCell className={cn("py-3 pr-0 text-right align-top font-medium whitespace-normal", isMissing && "text-muted-foreground/40 font-normal")}>{row.value}</TableCell>
+              <TableCell className={cn("py-3 pr-0 text-right align-top font-medium whitespace-normal", isMissing && "font-normal")}>{isMissing ? <MissingValue /> : row.value}</TableCell>
             </TableRow>
           );
         })}
@@ -88,8 +89,8 @@ export function GridDataItem({
       <Icon className="size-6 shrink-0 text-muted-foreground/80" />
       <div className="min-w-0 space-y-0.5">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className={cn("text-base font-semibold tracking-tight", isMissing ? "text-muted-foreground/40 font-normal" : "text-foreground")}>
-          {isMissing ? "—" : value}
+        <p className={cn("text-base font-semibold tracking-tight", isMissing ? "font-normal" : "text-foreground")}>
+          {isMissing ? <MissingValue /> : value}
         </p>
       </div>
     </div>
@@ -109,7 +110,8 @@ export function SourceLink({ url, label }: { url: string | null; label?: string 
 export type GaugeTone = "brand" | "reach" | "warn" | "ok";
 
 export function acceptanceRateTone(rate: number): GaugeTone {
-  const pct = rate > 1 ? rate : rate * 100;
+  if (!isValidRate(rate)) return "brand";
+  const pct = rate * 100;
   if (pct < 15) return "reach";
   if (pct <= 40) return "warn";
   return "ok";
@@ -128,7 +130,7 @@ export function Gauge({
   colorClassName?: string;
   className?: string;
 }) {
-  const rawFraction = Math.max(0, Math.min(1, value > 1 ? value / 100 : value));
+  const rawFraction = isValidRate(value) ? value : 0;
   // Đảm bảo cung quét tối thiểu (ít nhất 7%) để số nhỏ như 4.6% vẫn hiện rõ vệt màu và đầu bo tròn
   const fraction = rawFraction > 0 ? Math.max(0.07, rawFraction) : 0;
   const radius = 42;
@@ -298,24 +300,27 @@ export function GaugeDataItem({
   className?: string;
   wrapValue?: (value: ReactNode) => ReactNode;
 }) {
-  const display = formattedValue ?? universityPercent(value);
+  const valid = isValidRate(value);
+  const display = valid ? (formattedValue ?? universityPercent(value)) : <MissingValue />;
   return (
     <div className={cn("flex items-center justify-between gap-3.5 py-1", className)}>
       <div className="flex items-center gap-3.5 min-w-0">
         {Icon && <Icon className="size-6 shrink-0 text-muted-foreground/80" />}
         <div className="min-w-0 space-y-0.5">
           <p className="text-xs text-ink-3">{label}</p>
-          <p className="text-base font-semibold tracking-tight text-ink">{wrapValue ? wrapValue(display) : display}</p>
+          <p className="text-base font-semibold tracking-tight text-ink">{wrapValue && valid ? wrapValue(display) : display}</p>
           {subtitle && <p className="text-xs text-ink-3">{subtitle}</p>}
         </div>
       </div>
-      <Gauge
-        value={value}
-        label={label}
-        tone={tone}
-        colorClassName={colorClassName}
-        className={gaugeClassName}
-      />
+      {valid && (
+        <Gauge
+          value={value}
+          label={label}
+          tone={tone}
+          colorClassName={colorClassName}
+          className={gaugeClassName}
+        />
+      )}
     </div>
   );
 }

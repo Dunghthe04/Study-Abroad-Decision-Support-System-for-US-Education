@@ -17,6 +17,7 @@ from app.services.branches import (
     ASK_SCHOOL,
     ASK_WHICH_SCHOOLS,
     CANNOT_ANSWER,
+    FIT_METHOD,
     GREETING_REPLY,
     HANDOFF_INTRO,
     LOOKING_UP,
@@ -26,6 +27,7 @@ from app.services.branches import (
     NOTHING_TO_TRY,
     OUT_OF_SCOPE,
     RECOMMENDING,
+    ROUND_KNOWLEDGE_JOIN,
     KnowledgeBranch,
     NotReadyBranch,
     build_branches,
@@ -122,14 +124,14 @@ async def test_what_if_asks_again_instead_of_simulating_a_bad_value():
 async def test_what_if_says_what_it_cannot_try():
     state = ChatState(has_results=True)
 
-    only_major = await run_scenario(state, **what_if({"factor": "major", "value": "CS"}))
+    only_type = await run_scenario(state, **what_if({"factor": "school_type", "value": "public"}))
     mixed = await run_scenario(
-        state, **what_if({"factor": "sat", "value": "1450"}, {"factor": "major", "value": "CS"})
+        state, **what_if({"factor": "sat", "value": "1450"}, {"factor": "school_type", "value": "public"})
     )
 
-    assert only_major.answer.startswith("Ngành là điều kiện lọc trường") and only_major.action is None
-    assert mixed.action == "simulate" and "ngành" in mixed.answer
-    assert mixed.action_data["unsupported"] == ["ngành"]
+    assert only_type.answer.startswith("Loại trường là điều kiện lọc trường") and only_type.action is None
+    assert mixed.action == "simulate" and "loại trường" in mixed.answer
+    assert mixed.action_data["unsupported"] == ["loại trường"]
 
 
 # Mục lọc trường: kèm nút mở luồng sửa đúng nhóm của ô chọn sửa hồ sơ, mỗi nhóm một nút
@@ -137,17 +139,12 @@ async def test_what_if_filter_factors_offer_edit_buttons():
     state = ChatState(has_results=True)
     out = await run_scenario(
         state,
-        **what_if(
-            {"factor": "major", "value": "CS"},
-            {"factor": "school_type", "value": "public"},
-            {"factor": "target_level", "value": "graduate"},
-        ),
+        **what_if({"factor": "school_type", "value": "public"}),
     )
 
-    assert out.answer.startswith("Ngành, loại trường và bậc học là điều kiện lọc trường")
+    assert out.answer.startswith("Loại trường là điều kiện lọc trường")
     assert "gợi ý trường lại" in out.answer
     assert [(r.label, r.value) for r in out.quick_replies] == [
-        ("Sửa Mục tiêu", "Em muốn sửa Mục tiêu"),
         ("Sửa Nguyện vọng", "Em muốn sửa Nguyện vọng"),
     ]
     assert out.action is None
@@ -161,6 +158,73 @@ async def test_what_if_no_effect_factors_say_list_unchanged(factor, name):
     assert out.answer.startswith(f"{name} không làm thay đổi danh sách trường gợi ý.")
     assert "Bạn thử đổi được: GPA" in out.answer
     assert [r.label for r in out.quick_replies] == ["Thử SAT 1400", "Thử IELTS 6.5"] and out.action is None
+
+
+# UC-155: vòng nộp ED, EA, RD không có trong công thức: kết quả không đổi, kèm nút hỏi kiến thức về vòng nộp
+async def test_what_if_about_the_application_round_says_the_list_is_unchanged_and_offers_the_knowledge():
+    out = await run_scenario(
+        ChatState(has_results=True), **what_if({"factor": "application_round", "value": "ED"})
+    )
+
+    assert out.answer.startswith("Vòng nộp (ED, EA, RD) không làm thay đổi danh sách trường gợi ý.")
+    assert out.action is None
+    assert out.quick_replies[0].label == "Tìm hiểu vòng nộp ED, EA, RD"
+    assert out.quick_replies[0].value == "ED, EA và RD khác nhau thế nào?"
+
+
+class FakeKnowledge:
+    def __init__(self, answer: str | None = None, error: bool = False) -> None:
+        self.answer, self.error, self.asked = answer, error, []
+
+    async def run(self, state, message):
+        self.asked.append(message)
+        if self.error:
+            raise RuntimeError("kho lỗi")
+        return SkillOutput(self.answer or "")
+
+
+# UC-155: giả định vòng nộp thì trả luôn câu trả lời của Kho tri thức trong cùng lượt, nút vẫn còn
+async def test_what_if_about_the_application_round_includes_the_knowledge_answer():
+    kb = FakeKnowledge("ED có ràng buộc, EA và RD thì không.")
+    branch = build_branches(skills([]) | {"skill_tra_loi": kb})["scenario"]
+
+    out = await branch.run(
+        ChatState(has_results=True),
+        "nếu nộp ED",
+        scenario(**what_if({"factor": "application_round", "value": "ED"})),
+    )
+
+    assert out.answer.startswith("Vòng nộp (ED, EA, RD) không làm thay đổi danh sách trường gợi ý.")
+    assert out.answer.endswith("ED có ràng buộc, EA và RD thì không.")
+    assert kb.asked == ["ED, EA và RD khác nhau thế nào?"]
+    assert out.quick_replies[0].label == "Tìm hiểu vòng nộp ED, EA, RD"
+
+
+@pytest.mark.parametrize("kb", [FakeKnowledge(error=True), FakeKnowledge("")])
+async def test_the_round_answer_stays_the_same_when_the_knowledge_gives_nothing(kb):
+    branch = build_branches(skills([]) | {"skill_tra_loi": kb})["scenario"]
+
+    out = await branch.run(
+        ChatState(has_results=True),
+        "nếu nộp ED",
+        scenario(**what_if({"factor": "application_round", "value": "ED"})),
+    )
+
+    assert out.answer.startswith("Vòng nộp (ED, EA, RD) không làm thay đổi danh sách trường gợi ý.")
+    assert ROUND_KNOWLEDGE_JOIN not in out.answer
+
+
+async def test_what_if_with_a_new_state_and_a_rate_goes_to_simulate_with_both():
+    out = await run_scenario(
+        ChatState(has_results=True),
+        **what_if(
+            {"factor": "state", "value": "tx"}, {"factor": "exchange_rate", "value": "10", "unit": "percent"}
+        ),
+    )
+
+    assert out.action == "simulate"
+    assert out.action_data["changes"] == {"states": ["TX"], "exchangeRatePercent": 10.0}
+    assert "bang TX" in out.answer and "tỉ giá tăng 10%" in out.answer
 
 
 # Mục không thuộc hai nhóm trên (hoạt động, giải thưởng...) vẫn trả câu chung
@@ -206,8 +270,27 @@ async def test_goal_seeking_hands_the_school_and_target_to_dotnet():
     )
 
     assert out.action == "goal_seek"
-    assert out.action_data == {"school": "MIT", "target": "match"}
+    assert out.action_data == {"school": "MIT", "target": "match", "factor": ["sat"]}
     assert "MIT" in out.answer
+
+
+# UC-155: yếu tố học sinh hỏi đi sang .NET (để nói riêng tiếng Anh khi chỉ hỏi tiếng Anh); mã lạ bị bỏ
+async def test_goal_seeking_about_english_passes_the_factor_on():
+    out = await run_scenario(ChatState(), mode="goal_seeking", school="MIT", factor=["english"])
+
+    assert out.action_data == {"school": "MIT", "target": None, "factor": ["english"]}
+
+
+async def test_goal_seeking_drops_factors_the_contract_does_not_know():
+    out = await run_scenario(ChatState(), mode="goal_seeking", school="MIT", factor=["luck", "gpa"])
+
+    assert out.action_data["factor"] == ["gpa"]
+    assert (
+        "factor"
+        not in (
+            await run_scenario(ChatState(), mode="goal_seeking", school="MIT", factor=["luck"])
+        ).action_data
+    )
 
 
 async def test_goal_seeking_without_a_target_leaves_it_to_the_system():
@@ -585,10 +668,10 @@ async def test_advice_on_the_opening_question_offers_chat_or_form():
 
 
 async def test_advice_with_a_partial_profile_says_how_many_items_are_missing():
-    out = await new_advice([]).run(ChatState(profile=filled(["target_level"])), "x",
+    out = await new_advice([]).run(ChatState(profile=filled(["gpa"])), "x",
                                                          tin("profile_review"))  # fmt: skip
 
-    assert "còn thiếu 5 mục" in out.answer  # GPA, tiếng Anh, SAT/ACT, ngân sách, học bổng
+    assert "còn thiếu 4 mục" in out.answer  # tiếng Anh, SAT/ACT, ngân sách, học bổng
 
 
 async def test_advice_while_answering_in_chat_keeps_asking_the_missing_items():
@@ -857,19 +940,33 @@ async def test_a_school_list_with_template_tasks_asks_the_major_first():
     assert writer.skills == []
 
 
+# UC-154: câu so sánh theo hồ sơ ("hợp với em hơn") đi sang .NET tính nhóm và điểm phù hợp từng trường (công thức gợi ý)
 @pytest.mark.parametrize("tasks", [["compare"], ["compare", "explain_school"]])
-async def test_only_comparing_runs_the_school_data_comparison(tasks):
+async def test_comparing_for_the_profile_runs_the_fit_comparison_on_a_complete_profile(tasks):
     writer = FakeWriter()
     question = "Iowa và Purdue trường nào hợp với em hơn"
     entities = {"tasks": tasks, "schools": ["Iowa", "Purdue"]}
 
     out = await new_advice([], writer=writer).run(
-        ChatState(), question, tin(("profile_review", entities, question))
+        ChatState(profile=filled(REQUIRED_B4)), question, tin(("profile_review", entities, question))
     )
 
-    assert out.action == "school_compare"
+    assert out.action == "school_fit_compare"
     assert out.action_data["schools"] == ["Iowa", "Purdue"] and out.action_data["question"] == question
-    assert writer.skills == []  # không cần hồ sơ, không gọi Claude
+    assert writer.skills == []  # nhóm và điểm do .NET tính, nhánh này không gọi Claude
+
+
+async def test_comparing_for_the_profile_asks_for_the_missing_profile_first_and_remembers_the_question():
+    state = ChatState()  # chưa có hồ sơ
+    question = "Iowa và Purdue trường nào hợp với em hơn"
+    entities = {"tasks": ["compare"], "schools": ["Iowa", "Purdue"]}
+
+    out = await new_advice([], writer=FakeWriter()).run(
+        state, question, tin(("profile_review", entities, question))
+    )
+
+    assert out.action is None  # chưa so sánh được: thiếu hồ sơ (UC-22 E1)
+    assert state.pending_advice is not None and state.pending_advice.entities["schools"] == ["Iowa", "Purdue"]
 
 
 async def test_explaining_a_school_without_its_name_asks_which_school():
@@ -886,6 +983,47 @@ async def test_explaining_a_school_without_its_name_asks_which_school():
     assert out.widget.type == "school" and out.widget.data["kind"] == "explain"
     assert out.widget.data["suggested"] is None  # chưa có danh sách gợi ý nào
     assert writer.skills == []
+
+
+# UC-153 1a: câu explain_fit hỏi cách tính điểm phù hợp, không nêu trường: giải thích cách tính, dẫn tới trang tham số
+@pytest.mark.parametrize(
+    "question",
+    [
+        "fit score tính thế nào",
+        "điểm phù hợp được tính ra sao",
+        "cong thuc tinh diem hop la gi",
+        "cách tính điểm phù hợp",
+    ],
+)
+async def test_explain_fit_about_the_method_explains_the_score_and_points_to_the_parameters_page(question):
+    writer = FakeWriter()
+
+    out = await new_advice([], writer=writer).run(
+        ChatState(profile=filled(REQUIRED_B4)),
+        question,
+        tin(("profile_review", {"tasks": ["explain_fit"]}, question)),
+    )
+
+    assert out.answer == FIT_METHOD and out.action is None and out.widget is None
+    assert [(b.label, b.href) for b in out.quick_replies] == [("Xem căn cứ tham số", "/methodology")]
+    assert writer.skills == []  # câu cố định, không gọi Claude, không dùng số liệu của trường nào
+
+
+async def test_explain_fit_that_is_not_about_the_method_still_asks_which_school():
+    question = "vì sao điểm hợp thấp thế"
+
+    out = await new_advice([], writer=FakeWriter()).run(
+        ChatState(profile=filled(REQUIRED_B4)),
+        question,
+        tin(("profile_review", {"tasks": ["explain_fit"]}, question)),
+    )
+
+    assert out.answer == ASK_WHICH_SCHOOLS
+    assert out.widget.type == "school"
+
+
+def test_the_fit_method_text_has_no_numbers_that_could_drift_from_the_published_weights():
+    assert not any(ch.isdigit() for ch in FIT_METHOD.replace("100", ""))
 
 
 async def test_the_explain_picker_suggests_the_first_schools_of_the_list():
@@ -1025,7 +1163,9 @@ async def test_confirming_the_profile_without_a_question_waiting_does_not_advise
     assert out.quick_replies == NEXT_AFTER_SAVE_REPLIES
 
 
-CLAUDE_FILTER = {"answer": "Ngành là điều kiện lọc trường. Bạn bấm Sửa Mục tiêu rồi nhờ mình gợi ý lại nhé."}
+CLAUDE_FILTER = {
+    "answer": "Loại trường là điều kiện lọc trường. Bạn bấm Sửa Nguyện vọng rồi nhờ mình gợi ý lại nhé."
+}
 
 
 async def run_with_writer(llm: FakeLLM, *changes: dict):
@@ -1036,10 +1176,10 @@ async def run_with_writer(llm: FakeLLM, *changes: dict):
 # Có writer: lời do Claude viết, nút sửa vẫn do code gắn
 async def test_what_if_writer_writes_cannot_try_answer():
     llm = FakeLLM(CLAUDE_FILTER)
-    out = await run_with_writer(llm, {"factor": "major", "value": "CS"})
+    out = await run_with_writer(llm, {"factor": "school_type", "value": "public"})
 
     assert out.answer == CLAUDE_FILTER["answer"]
-    assert [r.label for r in out.quick_replies] == ["Sửa Mục tiêu"]
+    assert [r.label for r in out.quick_replies] == ["Sửa Nguyện vọng"]
     assert out.action is None and len(llm.calls) == 1
 
 
@@ -1047,10 +1187,10 @@ async def test_what_if_writer_writes_cannot_try_answer():
 async def test_what_if_writer_failure_keeps_fixed_answer():
     bad = {"answer": "Mục này mình không thử tạm được đâu bạn nhé."}
     llm = FakeLLM(bad, bad)
-    out = await run_with_writer(llm, {"factor": "major", "value": "CS"})
+    out = await run_with_writer(llm, {"factor": "school_type", "value": "public"})
 
-    assert out.answer.startswith("Ngành là điều kiện lọc trường")
-    assert [r.label for r in out.quick_replies] == ["Sửa Mục tiêu"]
+    assert out.answer.startswith("Loại trường là điều kiện lọc trường")
+    assert [r.label for r in out.quick_replies] == ["Sửa Nguyện vọng"]
     assert len(llm.calls) == 2
 
 
@@ -1058,7 +1198,9 @@ async def test_what_if_writer_failure_keeps_fixed_answer():
 async def test_what_if_writer_not_called_for_other_factors_or_simulate():
     llm = FakeLLM()
     other = await run_with_writer(llm, {"factor": "activities", "value": "x"})
-    sat = await run_with_writer(llm, {"factor": "sat", "value": "1450"}, {"factor": "major", "value": "CS"})
+    sat = await run_with_writer(
+        llm, {"factor": "sat", "value": "1450"}, {"factor": "school_type", "value": "public"}
+    )
 
     assert other.answer == NOTHING_TO_TRY.format(supported=SUPPORTED_TEXT)
     assert sat.action == "simulate" and sat.action_data["changes"] == {"sat": 1450}
@@ -1084,3 +1226,63 @@ async def test_what_if_asking_again_for_a_number_offers_quick_buttons():
 
     assert "SAT bao nhiêu" in out.answer and out.action is None
     assert out.quick_replies and out.quick_replies[0].label == "Thử SAT 1400"
+
+
+# ---- UC-155 1a: câu nối tiếp gộp vào kịch bản lượt trước, ngữ cảnh nhớ kịch bản đã gộp ----
+async def test_a_follow_up_what_if_is_merged_with_the_previous_scenario_and_remembered():
+    state = ChatState(has_results=True)
+    first = await run_scenario(state, **what_if({"factor": "sat", "value": "1400"}))
+    second = await run_scenario(
+        state, **what_if({"factor": "english", "value": "7", "unit": "ielts"}) | {"follow_up": True}
+    )
+
+    assert first.action_data["changes"] == {"sat": 1400}
+    assert second.action_data["changes"] == {"sat": 1400, "ielts": 7.0}  # SAT của lượt trước vẫn còn
+    assert "SAT 1400" in second.answer and "IELTS 7" in second.answer
+    assert state.context.scenario == {
+        "mode": "what_if",
+        "changes": [{"factor": "sat", "value": "1400"}, {"factor": "english", "value": "7", "unit": "ielts"}],
+    }
+
+
+async def test_a_follow_up_that_replaces_a_value_keeps_one_entry_per_factor():
+    state = ChatState(has_results=True)
+    await run_scenario(state, **what_if({"factor": "sat", "value": "1400"}))
+
+    out = await run_scenario(state, **what_if({"factor": "sat", "value": "1450"}) | {"follow_up": True})
+
+    assert out.action_data["changes"] == {"sat": 1450}
+
+
+async def test_dropping_a_factor_in_a_follow_up_removes_it_from_the_simulation():
+    state = ChatState(has_results=True)
+    await run_scenario(state, **what_if({"factor": "sat", "value": "1400"}, {"factor": "act", "value": "30"}))
+
+    out = await run_scenario(state, **what_if({"factor": "sat", "action": "skip"}) | {"follow_up": True})
+
+    assert out.action_data["changes"] == {"act": 30}
+
+
+async def test_a_what_if_without_the_follow_up_flag_starts_over():
+    state = ChatState(has_results=True)
+    await run_scenario(state, **what_if({"factor": "sat", "value": "1400"}))
+
+    out = await run_scenario(
+        state, **what_if({"factor": "act", "value": "30"})
+    )  # không có từ nối tiếp: mô phỏng mới
+
+    assert out.action_data["changes"] == {"act": 30}
+
+
+async def test_a_goal_seeking_remembers_the_school_and_a_follow_up_reuses_it():
+    state = ChatState()
+    await run_scenario(state, mode="goal_seeking", school="Purdue", factor=["gpa"], target_group="safety")
+
+    out = await run_scenario(state, mode="goal_seeking", target_group="target", follow_up=True)
+
+    assert out.action == "goal_seek"
+    assert out.action_data == {
+        "school": "Purdue",
+        "target": "match",
+    }  # "target" của model là nhóm Vừa sức (match)
+    assert state.context.scenario["school"] == "Purdue"

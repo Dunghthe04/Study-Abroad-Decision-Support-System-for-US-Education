@@ -7,13 +7,17 @@ import type {
   ReviewItemDetail,
   ReviewItemList,
   ReviewVerdict,
+  ReviewerOption,
   SaveReviewVerdictRequest,
 } from "@/types/review-batch";
 
 const base = "/api/v1/admin/review-batches";
 
-// Đợt duyệt mẫu cho admin. Danh sách đợt và danh sách câu không có nội dung chat.
+// Đợt duyệt mẫu cho admin và moderator. Danh sách đợt và danh sách câu không có nội dung chat.
 export const adminReviewBatchApi = {
+  /** Admin và Moderator đang hoạt động, để chọn người duyệt khi tạo đợt. Chỉ Admin (người tạo đợt) gọi được. */
+  reviewers: () => apiFetch<ReviewerOption[]>(`${base}/reviewers`),
+
   /** Tạo đợt: bốc ngẫu nhiên có seed, chia nhóm theo skill. Lỗi 400 kèm lý do (tên, số câu, khoảng ngày, không có câu nào để bốc). */
   create: (request: CreateReviewBatchRequest) =>
     apiFetch<ReviewBatchCreated>(base, { method: "POST", body: JSON.stringify(request) }),

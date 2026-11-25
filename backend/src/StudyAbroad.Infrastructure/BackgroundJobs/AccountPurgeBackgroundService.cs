@@ -42,9 +42,9 @@ public class AccountPurgeBackgroundService(
 
                 // [UC-75] Dữ liệu giữ lại của tài khoản đã xóa hẳn: tin nhắn quá 90 ngày, đơn hàng quá 10 năm
                 var retained = await service.PurgeExpiredRetainedDataAsync(DateTime.UtcNow, stoppingToken);
-                if (retained.Messages + retained.Leads + retained.Orders + retained.Buyers > 0)
-                    logger.LogInformation("[Background Job] Dọn dữ liệu giữ lại: {Messages} tin, {Leads} yêu cầu liên hệ, {Orders} đơn, {Buyers} người mua.",
-                        retained.Messages, retained.Leads, retained.Orders, retained.Buyers);
+                if (retained.Messages + retained.Leads + retained.Orders > 0)
+                    logger.LogInformation("[Background Job] Dọn dữ liệu giữ lại: {Messages} tin, {Leads} yêu cầu liên hệ, {Orders} đơn.",
+                        retained.Messages, retained.Leads, retained.Orders);
 
                 // [UC-93] Trung tâm Admin đã duyệt xóa, tới hạn thì xóa hẳn (cùng thời hạn chờ)
                 var centerService = scope.ServiceProvider.GetRequiredService<StudyAbroad.Application.StudyCenters.ICenterDeletionService>();

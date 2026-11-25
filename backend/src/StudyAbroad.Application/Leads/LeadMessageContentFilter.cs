@@ -195,6 +195,33 @@ public static partial class LeadMessageContentFilter
         return BankAccountRegex().IsMatch(normalized);
     }
 
+    private static readonly string[] NormalizedPaymentCuePhrases =
+    [
+        "chuyen khoan",
+        "dat coc",
+        "so tai khoan",
+        "chuyen tien",
+        "stk",
+    ];
+
+    /// <summary>[UC-44] Nhận diện tin nhắn từ trung tâm có chứa số tài khoản ngân hàng hoặc đề nghị chuyển khoản / đặt cọc.</summary>
+    public static bool IsPaymentSolicitation(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return false;
+        var sanitized = StripInvisibleCharacters(content).Trim();
+        if (string.IsNullOrEmpty(sanitized)) return false;
+
+        if (ContainsBankAccount(sanitized)) return true;
+
+        var normalized = NormalizeForKeywordMatch(sanitized);
+        foreach (var phrase in NormalizedPaymentCuePhrases)
+        {
+            if (ContainsWholePhrase(normalized, phrase))
+                return true;
+        }
+        return false;
+    }
+
     private static string CollapseSpelledDigits(string run)
     {
         var sb = new StringBuilder(run.Length);

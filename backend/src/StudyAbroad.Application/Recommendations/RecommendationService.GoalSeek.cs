@@ -31,12 +31,12 @@ public record GoalEnglishDto(decimal? MinIelts, decimal? MinToefl, decimal? MinD
 public record GoalPosition(string Status, string Group, string? ExcludeReason, bool NeedAid);
 
 // Số liệu tuyển sinh dùng trong các luật chặn, để lời giải thích nói được con số cụ thể thay vì "ít hơn hẳn".
-// AcceptRate: tỉ lệ nhận chung (0..1). IntlAcceptRate: tỉ lệ nhận du học sinh (0..1). IntlRatio: IntlAcceptRate / AcceptRate.
-// Các mốc lấy từ chính cấu hình xếp nhóm: dưới AlwaysReachRate luôn Khó vào; dưới SafetyMinRate không được An toàn;
-// IntlRatio dưới IntlRatioCut thì hạ một nhóm.
+// AcceptRate: tỉ lệ nhận chung (0..1). IntlAcceptRate: tỉ lệ nhận du học sinh (0..1). IntlRatio: IntlAcceptRate / AcceptRate (chỉ để tham khảo).
+// EffectiveRate: tỉ lệ dùng cho các luật chặn, của du học sinh nếu có, không thì chung; RateSource: "international" | "overall" (UC-22).
+// Các mốc lấy từ chính cấu hình xếp nhóm: EffectiveRate dưới AlwaysReachRate luôn Khó vào; dưới SafetyMinRate không được An toàn.
 public record GoalSchoolStats(
     decimal? AcceptRate, decimal? IntlAcceptRate, double? IntlRatio,
-    double AlwaysReachRate, double SafetyMinRate, double IntlRatioCut);
+    double AlwaysReachRate, double SafetyMinRate, decimal? EffectiveRate = null, string? RateSource = null);
 
 // Kết quả cho MỘT mức đích (nhóm cao hơn nhóm hiện tại). Target: M | S.
 // Outcome: reachable | blocked | no_data (không có already_reached vì mức đích luôn cao hơn nhóm hiện tại).
@@ -81,7 +81,10 @@ public record SchoolGoalResult(
     // Cơ sở của kết quả: real (hồ sơ thật) | simulated (có giá trị giả định đang xem được phủ lên hồ sơ)
     string Basis = "real",
     // Bảng "bạn so với trường" theo từng tiêu chí bộ chấm dùng (điểm thi, GPA, ngoại khóa, tỉ lệ nhận); tài chính và tiếng Anh nằm ở Budget, English
-    IReadOnlyList<GoalCompareRow>? Comparison = null);
+    IReadOnlyList<GoalCompareRow>? Comparison = null,
+    // UC-155: mức tiếng Anh tối thiểu của trường kèm mức thiếu của học sinh, CÓ CẢ KHI trường chưa bị loại vì tiếng Anh (English chỉ có khi bị loại).
+    // ShortfallBand: 0 là đạt, lớn hơn 0 là thiếu bao nhiêu band, null là chưa so được (chưa có chứng chỉ cùng loại). Null khi trường không công bố mức nào.
+    GoalEnglishDto? EnglishRequirement = null);
 
 // ============================== GOAL-SEEKING ==============================
 
@@ -126,6 +129,8 @@ public partial class RecommendationService
             ?? throw new InvalidOperationException("Chưa có hồ sơ.");
         if (string.IsNullOrWhiteSpace(real.TargetLevel))
             throw new InvalidOperationException("Hồ sơ chưa có bậc học muốn theo.");
+        if (overrides is not null)
+            overrides = await ResolveExchangeAsync(real, overrides, ct);
         var simulated = HasValues(overrides);
         var profile = simulated ? Overlay(real, overrides!) : real;
         EnsureRunnable(profile);
@@ -171,14 +176,25 @@ public partial class RecommendationService
             budget, NonBudgetFilter(filter), alternatives, EnglishOf(filter, school),
             PositionOf(filter, current), TargetsAbove(student, academics, current), StatsOf(school),
             simulated ? "simulated" : "real",
-            GoalComparison.Rows(student, academics, grade));
+            GoalComparison.Rows(student, academics, grade),
+            EnglishRequirementOf(filter, school));
+    }
+
+    private static GoalEnglishDto? EnglishRequirementOf(FilterResult filter, RecommendSchoolInput school)
+    {
+        var o = school.Offering;
+        return o.MinIelts is null && o.MinToefl is null && o.MinDuolingo is null
+            ? null
+            : new GoalEnglishDto(o.MinIelts, o.MinToefl, o.MinDuolingo, filter.EnglishShortfall);
     }
 
     private static GoalSchoolStats StatsOf(RecommendSchoolInput school)
     {
         var o = new GroupingOptions();
+        var intl = IntlAcceptRate(school);
         return new GoalSchoolStats(
-            AcceptRate(school), IntlAcceptRate(school), IntlRatio(school), o.AlwaysReachRate, o.SafetyMinRate, o.IntlRatioCut);
+            AcceptRate(school), intl, IntlRatio(school), o.AlwaysReachRate, o.SafetyMinRate,
+            intl ?? AcceptRate(school), intl is not null ? "international" : "overall");
     }
 
     // Vị trí của trường với hồ sơ thật: có trong danh sách hay bị loại (và vì sao), kèm nhóm học thuật

@@ -355,7 +355,7 @@ async def test_all_questions_done_shows_review_with_buttons():
     assert res.state.question_id == "X1"
     assert res.widget.type == "review"
     assert res.widget.data["profile"]["budget"] == {"value": "tier_35k_50k", "status": "confirmed"}
-    assert res.widget.data["missing"] == ["target_level", "gpa"]  # said_in_B0 chưa xác nhận
+    assert res.widget.data["missing"] == ["gpa"]  # said_in_B0 chưa xác nhận
     assert [r.label for r in res.quick_replies] == ["Đúng rồi", "Cần sửa"]
 
 
@@ -494,22 +494,6 @@ async def test_required_question_cannot_be_skipped():
     assert "Bỏ qua" not in [r.label for r in res.quick_replies]
 
 
-async def test_target_level_button_in_b1():
-    llm = FakeLLM()
-    res = await turn(
-        llm,
-        "Thạc sĩ",
-        current_step="B1",
-        question_id="B1.2",
-        profile={"current_level": field("college_university")},
-    )
-
-    assert llm.calls == []
-    assert res.state.profile["target_level"] == field("master")
-    assert res.state.question_id == "B1.3"
-    assert [r.label for r in res.quick_replies] == ["Em chưa rõ ngành"]
-
-
 async def test_current_level_select_saves_level_and_grade_without_qwen():
     llm = FakeLLM()
     res = await turn(llm, "Trung học phổ thông, Lớp 11", current_step="B1", question_id="B1.1")
@@ -517,7 +501,7 @@ async def test_current_level_select_saves_level_and_grade_without_qwen():
     assert llm.calls == []
     assert res.state.profile["current_level"] == field("high_school")
     assert res.state.profile["current_grade"] == field("Lớp 11")
-    assert res.state.question_id == "B1.2"
+    assert res.state.question_id == "B1.3"  # không hỏi bậc học
 
 
 async def test_intake_select_saves_intake_without_qwen():
@@ -534,13 +518,7 @@ async def test_intake_select_saves_intake_without_qwen():
 
 
 async def test_major_question_comes_with_major_widget():
-    res = await turn(
-        FakeLLM(),
-        "Thạc sĩ",
-        current_step="B1",
-        question_id="B1.2",
-        profile={"current_level": field("college_university")},
-    )
+    res = await turn(FakeLLM(), "Trung học phổ thông, Lớp 11", current_step="B1", question_id="B1.1")
 
     assert res.widget.type == "major"
 
@@ -548,10 +526,10 @@ async def test_major_question_comes_with_major_widget():
 async def test_select_questions_come_with_form_fields():
     res = await turn(
         FakeLLM(),
-        "Thạc sĩ",
+        "Em chưa rõ ngành",
         current_step="B1",
-        question_id="B1.2",
-        profile={"current_level": field("college_university"), "major": field("CS")},
+        question_id="B1.3",
+        profile={"current_level": field("college_university")},
     )
 
     assert res.state.question_id == "B1.4"
@@ -723,7 +701,7 @@ async def test_unfinished_activity_from_b0_is_asked_at_d4_and_hidden_in_review()
     assert "activity_pending" not in res.widget.data["profile"]
 
 
-# 29/10: D1 chỉ hỏi học sinh cấp 3; N1 chỉ hỏi khi chưa có bang muốn học; N4 không hỏi ở B2
+# 29/10: D1 chỉ hỏi học sinh cấp 3; N1 chỉ hỏi khi chưa có bang muốn học; N4 (visa) hỏi một lần sau N1
 def required_done(**extra) -> ChatState:
     profile = {
         "gpa": field({"value": 8.5, "scale": 10}),
@@ -755,10 +733,67 @@ def test_relatives_question_skipped_when_states_known():
     assert next_question(state) == "N3"
 
 
-def test_visa_question_is_not_asked_in_b2():
-    assert "N4" not in OPTIONAL_QUESTIONS
+# UC-35, UC-08: câu visa (N4) là câu thêm cuối cùng, hỏi một lần sau câu người thân (N1), luôn có nút Bỏ qua
+def test_visa_question_is_asked_once_and_last():
+    assert "N4" in OPTIONAL_QUESTIONS
     state = required_done(preferred_states=field(["CA"]), school_type=field("all"))
+    assert next_question(state) == "N4"
+    state.asked["N4"] = 1
     assert next_question(state) is None
+
+
+def test_visa_question_comes_right_after_the_relatives_question():
+    state = required_done(school_type=field("all"))
+    state.asked["N2"] = 1
+    assert next_question(state) == "N1"
+    state.asked["N1"] = 1
+    assert next_question(state) == "N4"
+
+
+def visa_stage_asked() -> dict:
+    return {question: 1 for question in OPTIONAL_QUESTIONS if question != "N4"}
+
+
+async def test_visa_question_has_two_answer_buttons_and_a_skip_button():
+    profile = {**b3_profile(), "current_level": field("college_university")}
+    res = await turn(
+        FakeLLM(), "Bỏ qua", current_step="B2", question_id="N1", asked=visa_stage_asked(), profile=profile
+    )
+
+    assert res.state.question_id == "N4"
+    assert [r.label for r in res.quick_replies] == ["Chưa từng", "Đã từng bị từ chối", "Bỏ qua"]
+
+
+async def test_skipping_the_visa_question_saves_nothing_and_is_not_asked_again():
+    llm = FakeLLM()
+    profile = {**b3_profile(), "current_level": field("college_university")}
+    res = await turn(
+        llm,
+        "Bỏ qua",
+        current_step="B2",
+        question_id="N4",
+        asked=visa_stage_asked() | {"N4": 1},
+        profile=profile,
+    )
+
+    assert llm.calls == []  # nút do code xử lý, không gửi qua SLM
+    assert "visa_refused" not in res.state.profile
+    assert res.widget.type == "review"  # hết câu hỏi: sang bảng rà soát, không hỏi lại visa
+
+
+@pytest.mark.parametrize(("label", "refused"), [("Chưa từng", False), ("Đã từng bị từ chối", True)])
+async def test_visa_buttons_save_the_answer(label, refused):
+    profile = {**b3_profile(), "current_level": field("college_university")}
+    res = await turn(
+        FakeLLM(),
+        label,
+        current_step="B2",
+        question_id="N4",
+        asked=visa_stage_asked() | {"N4": 1},
+        profile=profile,
+    )
+
+    assert res.state.profile["visa_refused"] == field(refused)
 
 
 async def test_funding_button_saves_db_code():
@@ -786,7 +821,7 @@ async def test_edit_button_after_results_skips_slm():
     res = await flow.reply(req)
 
     assert res.state.question_id == "B1.1"
-    assert res.state.edit_queue == ["B1.2", "B1.3", "B1.4"]
+    assert res.state.edit_queue == ["B1.3", "B1.4"]
 
 
 # Hồ sơ đã có từ trước (DB / form): chỉ hỏi mục bắt buộc còn thiếu, không hỏi câu tùy chọn

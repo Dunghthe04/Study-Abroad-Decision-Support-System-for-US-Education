@@ -91,14 +91,16 @@ public static class AlgorithmParameters
         // B9: xếp nhóm
         Add("lower_cut", "B9", "Ngưỡng Khó vào / Vừa sức", N(g.LowerCut), "Vị trí học thuật dưới mức này là Khó vào.");
         Add("upper_cut", "B9", "Ngưỡng Vừa sức / An toàn", N(g.UpperCut), "Vị trí học thuật từ mức này là An toàn, nếu qua các luật chặn.");
-        Add("always_reach_rate", "B9", "Tỉ lệ nhận luôn Khó vào", Pct(g.AlwaysReachRate), "Trường nhận dưới mức này luôn là Khó vào.");
-        Add("safety_min_rate", "B9", "Tỉ lệ nhận tối thiểu để An toàn", Pct(g.SafetyMinRate), "Trường nhận dưới mức này không được xếp An toàn.");
-        Add("intl_ratio_cut", "B9", "Ngưỡng tỉ lệ du học sinh / chung", N(g.IntlRatioCut), "Dưới mức này thì hạ trường một nhóm.");
+        Add("always_reach_rate", "B9", "Tỉ lệ nhận luôn Khó vào", Pct(g.AlwaysReachRate),
+            "Trường nhận dưới mức này luôn là Khó vào. Dùng tỉ lệ nhận của du học sinh nếu trường có, không thì tỉ lệ chung.");
+        Add("safety_min_rate", "B9", "Tỉ lệ nhận tối thiểu để An toàn", Pct(g.SafetyMinRate),
+            "Trường nhận dưới mức này không được xếp An toàn. Dùng tỉ lệ nhận của du học sinh nếu trường có, không thì tỉ lệ chung.");
 
         // B10, B11: điểm phù hợp và chọn trường
         Add("fit_weights", "B10", "Trọng số điểm phù hợp",
-            Join($"Vừa tầm {N(fit.Position)}", $"Ngân sách {N(fit.Budget)}", $"Học bổng {N(fit.Aid)}",
-                 $"Chất lượng {N(fit.Quality)}", $"Tiếng Anh {N(fit.English)}"),
+            // Thứ tự theo đặc tả UC-24: vừa tầm, ngân sách, chất lượng, học bổng, tiếng Anh
+            Join($"Vừa tầm {N(fit.Position)}", $"Ngân sách {N(fit.Budget)}", $"Chất lượng {N(fit.Quality)}",
+                 $"Học bổng {N(fit.Aid)}", $"Tiếng Anh {N(fit.English)}"),
             "Dùng để sắp thứ tự các trường trong cùng một nhóm; thiếu thành phần nào thì chia lại trọng số.");
         Add("max_per_block", "B11", "Số trường mỗi nhóm", RecommendationService.MaxPerBlock.ToString(),
             "Mỗi nhóm giữ tối đa chừng này trường.");

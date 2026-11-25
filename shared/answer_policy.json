@@ -16,11 +16,11 @@
     "profile_review": {
       "branch": "GeneratedAdviceBranch",
       "who": "claude",
-      "skills": ["skill_ho_so_khuon", "viet_tra_loi_ho_so"],
+      "skills": ["skill_ho_so_khuon", "viet_tra_loi_ho_so", "skill_cach_tinh_diem"],
       "writer": "app.services.advice_writer.AdviceWriter",
       "fallback": "Câu cố định CANNOT_ANSWER (replies.py) kèm nút hỏi lại; nếu chỉ thiếu một việc thì dùng phần câu trả lời đã qua kiểm.",
-      "may_emit": ["recommend", "explain", "goal_seek"],
-      "why": "Đánh giá hồ sơ và lộ trình: code tính mức và dựng khuôn skill, Claude viết lời. Chỉ xin danh sách trường thì phát action recommend."
+      "may_emit": ["recommend", "explain", "goal_seek", "school_fit_compare"],
+      "why": "Đánh giá hồ sơ và lộ trình: code tính mức và dựng khuôn skill, Claude viết lời. Chỉ xin danh sách trường thì phát action recommend. Câu hỏi cách tính điểm phù hợp (UC-153) do FitMethodWriter viết từ tham số backend công bố, lỗi thì dùng câu cố định FIT_METHOD."
     },
     "scenario": {
       "branch": "ScenarioBranch",
@@ -87,6 +87,13 @@
       "writer": "app.services.compare_writer.CompareWriter",
       "fallback": "Chỉ hiện bảng số liệu, không có nhận xét.",
       "why": "So sánh trường: bảng số liệu do code tra, Claude chỉ nhận xét ngắn, không phán trường nào tốt hơn."
+    },
+    "school_fit_compare": {
+      "who": "claude",
+      "skills": ["skill_so_sanh"],
+      "writer": "app.services.compare_writer.CompareWriter",
+      "fallback": "Chỉ hiện bảng nhóm và điểm phù hợp do code dựng, không có nhận xét.",
+      "why": "So sánh theo hồ sơ (UC-154): nhóm và điểm năm thành phần do code tính bằng công thức gợi ý, Claude chỉ diễn giải số đã tính, không chọn trường và không đổi nhóm."
     },
     "school_info": {
       "who": "code",

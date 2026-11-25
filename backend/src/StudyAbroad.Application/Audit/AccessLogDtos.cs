@@ -1,7 +1,7 @@
 namespace StudyAbroad.Application.Audit;
 
 /// <summary>
-/// DTO thông tin một dòng nhật ký truy cập dữ liệu nhạy cảm (UC-97).
+/// DTO thông tin một dòng nhật ký truy cập dữ liệu nhạy cảm và nhật ký thao tác (UC-91).
 /// </summary>
 public record AccessLogDto(
     Guid Id,
@@ -21,7 +21,7 @@ public record AccessLogDto(
 );
 
 /// <summary>
-/// Bộ lọc nhật ký truy cập (UC-97).
+/// Bộ lọc nhật ký truy cập và thao tác (UC-91).
 /// </summary>
 public record AccessLogFilter(
     string? Category = "all_sensitive",

@@ -24,21 +24,18 @@ public static class SlmSampleSplits
     public static readonly IReadOnlyList<string> All = new[] { Train, Val, Test };
 }
 
-public static class SlmReviewStatuses
-{
-    public const string Draft = "draft";
-    public const string Pending = "pending";
-    public const string Approved = "approved";
-    public const string Rejected = "rejected";
-    public const string NeedsFix = "needs_fix";
-
-    public static readonly IReadOnlyList<string> All = new[] { Draft, Pending, Approved, Rejected, NeedsFix };
-}
-
 public static class SlmSampleSources
 {
     public const string Manual = "manual";
     public const string Excel = "excel";
 
     public static readonly IReadOnlyList<string> All = new[] { Manual, Excel };
+}
+
+public static class VersionActions
+{
+    public const string Create = "create";
+    public const string Edit = "edit";
+    public const string Restore = "restore";
+    public const string Import = "import";
 }

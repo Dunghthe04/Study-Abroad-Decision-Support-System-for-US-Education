@@ -76,7 +76,7 @@ def test_values_read_like_the_training_data():
     assert ho_so["sat"] == "1200"
     assert ho_so["english"] == "IELTS 6.5"
     assert ho_so["budget"] == "khoảng 35.000 đến 50.000 USD mỗi năm"
-    assert ho_so["target_level"] == "đại học"
+    assert "target_level" not in ho_so
     assert ho_so["scholarship"] == "nên có"
     assert ho_so["intake"] == "Fall 2027"
     assert ho_so["preferred_states"] == "California, Texas"

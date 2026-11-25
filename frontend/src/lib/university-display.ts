@@ -13,8 +13,13 @@ export function universityMoney(value: number | null | undefined): string {
   return value == null || !Number.isFinite(value) ? MISSING_UNIVERSITY_DATA : dollars.format(value);
 }
 
+/** Tỷ lệ hợp lệ trong [0, 1] (UC-21); ngoài khoảng coi là dữ liệu thiếu. */
+export function isValidRate(value: number | null | undefined): value is number {
+  return value != null && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
 export function universityPercent(value: number | null | undefined): string {
-  return value == null || !Number.isFinite(value) || value < 0 || value > 1 ? MISSING_UNIVERSITY_DATA : percentages.format(value);
+  return !isValidRate(value) ? MISSING_UNIVERSITY_DATA : percentages.format(value);
 }
 
 export function universityDate(value: string | null | undefined): string {
@@ -166,14 +171,25 @@ export function scoreRange(low: number | null, high: number | null): string {
 }
 
 export function annualPublishedCost(offering: UniversityOffering): number | null {
-  const values = [offering.tuitionUsd, offering.livingUsd, offering.feesUsd, offering.otherExpensesUsd];
-  if (values.some((value) => value == null || !Number.isFinite(value))) return null;
-  return values.reduce<number>((total, value) => total + (value ?? 0), 0);
+  const base = [offering.tuitionUsd, offering.livingUsd, offering.feesUsd, offering.otherExpensesUsd];
+  if (base.some((value) => value == null || !Number.isFinite(value))) return null;
+  const insurance = offering.healthInsuranceUsd != null && Number.isFinite(offering.healthInsuranceUsd) ? offering.healthInsuranceUsd : 0;
+  return base.reduce<number>((total, value) => total + (value ?? 0), 0) + insurance;
 }
 
 export function universityDeadlines(value: string | null): { round: string; label: string; date: string; rawDate: string }[] {
   if (!value) return [];
-  const labels: Record<string, string> = { ED: "Early Decision", ED2: "Early Decision II", EA: "Early Action", RD: "Regular Decision", Rolling: "Rolling Admission" };
+  const labels: Record<string, string> = {
+    ED: "Early Decision",
+    ED1: "Early Decision",
+    ED2: "Early Decision II",
+    EA: "Early Action",
+    EA2: "Early Action II",
+    REA: "Restrictive Early Action",
+    SCEA: "Single-Choice Early Action",
+    RD: "Regular Decision",
+    Rolling: "Rolling Admission",
+  };
   try {
     const parsed: unknown = JSON.parse(value);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [];
@@ -223,7 +239,7 @@ export function deadlineRemainingText(
 
 export const UNIVERSITY_FIELD_LABELS: Record<string, string> = {
   name: "Tên trường", city: "Thành phố", state: "Bang", website: "Website", control: "Loại trường", is_ivy: "Ivy League",
-  acceptance_rate: "Tỷ lệ nhận", international_student_count: "Số sinh viên quốc tế", tuition_usd: "Học phí", living_usd: "Sinh hoạt phí", fees_usd: "Phí bắt buộc", other_expenses_usd: "Chi phí khác", cost_year: "Năm chi phí", academic_year: "Năm học",
+  acceptance_rate: "Tỷ lệ nhận", international_student_count: "Số sinh viên quốc tế", tuition_usd: "Học phí", living_usd: "Sinh hoạt phí", fees_usd: "Phí bắt buộc", other_expenses_usd: "Chi phí khác", health_insurance_usd: "Bảo hiểm y tế", cost_year: "Năm chi phí", academic_year: "Năm học",
   min_gpa4: "GPA tối thiểu", avg_gpa4: "GPA trung bình", min_ielts: "IELTS", min_toefl: "TOEFL", min_duolingo: "Duolingo",
   sat25: "SAT mốc 25%", sat75: "SAT mốc 75%", act25: "ACT mốc 25%", act75: "ACT mốc 75%", sat_policy: "Chính sách SAT/ACT", sat_submit_pct: "Tỷ lệ nộp SAT", act_policy: "Chính sách ACT", act_submit_pct: "Tỷ lệ nộp ACT", application_fee_usd: "Phí nộp hồ sơ", tuition_in_state_usd: "Học phí in-state", gpa_submit_pct: "Tỷ lệ nộp GPA",
   applicants_total: "Số hồ sơ nộp", admitted_total: "Số hồ sơ được nhận", intl_applicants: "Hồ sơ quốc tế", intl_admitted: "Hồ sơ quốc tế được nhận", intl_acceptance_rate: "Tỷ lệ nhận quốc tế",

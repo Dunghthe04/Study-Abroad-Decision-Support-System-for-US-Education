@@ -49,7 +49,7 @@ public static class ChatActions
                 Widget: ChatGoalSeek.SchoolPicker(null, ChatExplanation.Action, only, Clean(action.Suggested, MaxSuggested)));
         }
         // So sánh các trường (nút "So sánh hai trường đầu" sau danh sách tìm trường): mã các trường, 2 đến MaxCompare
-        if (action is { Type: ChatSchoolInfo.CompareAction })
+        if (action is { Type: ChatSchoolInfo.CompareAction or ChatFitCompare.Action })
         {
             var codes = (action.SchoolCodes ?? []).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).Distinct().ToList();
             var fieldCodes = (action.Fields ?? []).Where(f => !string.IsNullOrWhiteSpace(f)).Select(f => f.Trim()).ToList();
@@ -65,7 +65,7 @@ public static class ChatActions
                 ["fields"] = new JsonArray(fieldCodes.Select(f => (JsonNode?)JsonValue.Create(f)).ToArray()),
             };
             return new AdvisorChatResponse(
-                "", [], null, state, Action: ChatSchoolInfo.CompareAction, ActionData: JsonSerializer.SerializeToElement(compare));
+                "", [], null, state, Action: action.Type, ActionData: JsonSerializer.SerializeToElement(compare));
         }
         // Lọc lại sau tìm trường (nút "Chỉ top 20", "Bỏ điều kiện bang"...): bộ điều kiện dựng sẵn, chạy tìm thẳng không qua SLM.
         // Dữ liệu từ trình duyệt: phải đọc được bằng đúng hàm đọc của advisor (ParseSearch), không thì chạy như thường qua advisor

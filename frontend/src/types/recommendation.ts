@@ -63,6 +63,8 @@ export interface ScoredSchool {
   r: number | null;
   acceptRate?: number | null; // tỷ lệ nhận chung 0–1; lần gợi ý cũ chưa có
   intlAcceptRate?: number | null; // tỷ lệ nhận du học sinh 0–1
+  effectiveRate?: number | null; // tỷ lệ dùng cho luật chặn (UC-22): du học sinh nếu có, không thì chung; lần gợi ý cũ chưa có
+  rateSource?: "international" | "overall" | null;
   gpaTopShare?: number | null; // tỷ lệ sinh viên trúng tuyển có GPA đúng 4,0 (0–1)
   aidAvg?: number | null; // học bổng trung bình (USD/năm) của người được nhận; không phải mức bạn chắc chắn nhận
   aidPolicy?: string | null; // none | need_only | merit_only | need_and_merit
@@ -143,6 +145,11 @@ export interface SimulationOverrides {
   scholarshipNeed?: ScholarshipNeed | null;
   ecTier?: number | null;
   pref?: Pref | null;
+  // UC-77: bang (mã hai chữ), ngành (tên tiếng Anh như lưu trong hồ sơ) thay điều kiện lọc; tỉ giá giả định (VNĐ mỗi USD hoặc % tăng, chỉ nhận mức tăng)
+  states?: string[] | null;
+  major?: string | null;
+  exchangeRateVnd?: number | null;
+  exchangeRatePercent?: number | null;
 }
 
 // Giá trị của hồ sơ thật, để thanh kéo hiện "hồ sơ" cạnh "giả định"
@@ -269,14 +276,16 @@ export interface GoalPosition {
 }
 
 // Số liệu tuyển sinh dùng trong các luật chặn (tỉ lệ là 0..1) và các mốc của luật, để lời giải thích nói được con số cụ thể.
-// intlRatio = intlAcceptRate / acceptRate; dưới alwaysReachRate luôn Khó vào; dưới safetyMinRate không được An toàn; intlRatio dưới intlRatioCut thì hạ một nhóm.
+// effectiveRate là tỉ lệ dùng cho các luật chặn (UC-22): của du học sinh nếu có, không thì chung; rateSource nói đó là số nào.
+// Dưới alwaysReachRate luôn Khó vào; dưới safetyMinRate không được An toàn. intlRatio = intlAcceptRate / acceptRate chỉ để tham khảo.
 export interface GoalSchoolStats {
   acceptRate: number | null;
   intlAcceptRate: number | null;
   intlRatio: number | null;
   alwaysReachRate: number;
   safetyMinRate: number;
-  intlRatioCut: number;
+  effectiveRate?: number | null;
+  rateSource?: "international" | "overall" | null;
 }
 
 // Kết quả cho MỘT mức đích (nhóm cao hơn nhóm hiện tại): target M | S
@@ -307,6 +316,7 @@ export interface SchoolGoalResult {
   budget: GoalBudget;
   filterReason: "MAJOR" | "STATE" | "CONTROL" | "ENGLISH" | "ENGLISH_NO_CERT" | null; // trường không nằm trong danh sách vì bộ lọc ngoài ngân sách
   english?: GoalEnglish | null; // có khi bị loại vì tiếng Anh
+  englishRequirement?: GoalEnglish | null; // UC-155: mức tối thiểu của trường kể cả khi chưa bị loại vì tiếng Anh; shortfallBand 0 là đạt
   alternatives: GoalAlternative[];
   position?: GoalPosition | null; // bản backend cũ chưa trả
   stats?: GoalSchoolStats | null; // số liệu tuyển sinh và mốc của các luật chặn
@@ -319,7 +329,7 @@ export interface SchoolGoalResult {
 // Một dòng "bạn so với trường", mỗi dòng là một tiêu chí bộ chấm nhóm dùng. factor: sat | act | gpa | ec | accept.
 // status: sat/act/gpa: below | within | above | unknown (trường chưa công bố) | no_profile (hồ sơ chưa có);
 //   ec: below | within | above so với bậc trung bình 3, unknown khi trường không xét ngoại khóa;
-//   accept: always_reach (nhận dưới 15%, luôn Khó vào) | downgrade (nhận du học sinh ít, bị hạ một nhóm) | capped (nhận dưới 50%, tối đa Vừa sức) | ok | unknown.
+//   accept: always_reach (nhận dưới 15%, luôn Khó vào) | capped (nhận dưới 50%, tối đa Vừa sức) | ok | unknown.
 // student: số của học sinh (ec: bậc 1 đến 5). low, high: khoảng của trường (GPA chỉ có trung bình nên low = high);
 //   riêng accept: low = tỉ lệ nhận chung, high = tỉ lệ nhận du học sinh (0..1).
 // gap: âm là thiếu, dương là vượt, 0 là trong khoảng; ec: bậc trừ 3; accept: du học sinh chia chung.
@@ -351,6 +361,24 @@ export interface ExplainCardData {
   ps: number | null;
   cost: number | null;
   gap: number | null;
+  /** Điểm phù hợp và năm thành phần (UC-24). Thẻ của lần gợi ý cũ không có thì không hiện phần này. */
+  fit?: FitBreakdown | null;
+}
+
+// UC-24: năm thành phần của điểm phù hợp theo thứ tự đặc tả. score 0..1, null là thiếu dữ liệu nên bị bỏ khỏi tổng; weight là trọng số đã dùng cho lần gợi ý đó.
+export type FitPartKey = "position" | "budget" | "quality" | "aid" | "english";
+
+export interface FitPart {
+  key: FitPartKey;
+  score: number | null;
+  weight: number;
+}
+
+export interface FitBreakdown {
+  total: number | null;
+  /** Trọng số đã đổi theo nút ưu tiên (UC-25), khác trọng số mặc định. */
+  priorityAdjusted: boolean;
+  parts: FitPart[];
 }
 
 // Gốc của lời giải thích: hồ sơ thật, hoặc giả định học sinh đang xem (label: "GPA 3.6, SAT 1500")
@@ -429,6 +457,27 @@ export interface SchoolCompareData {
   aiNote: string | null; // nhận xét do AI viết; null khi AI lỗi hoặc không qua kiểm tra
   verify: boolean; // có chi phí hoặc hạn nộp: nhắc kiểm tra lại trên trang chính thức
   coveredText: string | null;
+}
+
+// ---- So sánh theo độ phù hợp với hồ sơ (UC-154; widget "fit_compare", backend: ChatFitCompare.WidgetOf).
+// status: in_list | aid | no_data | excluded. group: R | M | S | NA (null khi bị loại). total và score theo thang 0 đến 1; parts đủ năm thành phần kèm trọng số.
+export interface FitCompareSchool {
+  code: string;
+  name: string;
+  state: string | null;
+  status: "in_list" | "aid" | "no_data" | "excluded";
+  group: string | null;
+  excludeReason: string | null;
+  total: number | null;
+  parts: FitPart[];
+  why: string[];
+}
+
+export interface FitCompareData {
+  schools: FitCompareSchool[];
+  priorityAdjusted: boolean;
+  aiNote?: string | null; // nhận xét do AI viết; vắng khi AI lỗi hoặc không qua kiểm tra
+  coveredText?: string | null; // đoạn chữ thẻ đã nói đủ: giao diện bỏ đoạn đó và chỉ hiện thẻ
 }
 
 // ---- Tìm trường theo điều kiện trong chat (widget "school_search"; backend: ChatSchoolInfo.WidgetOfSearch).

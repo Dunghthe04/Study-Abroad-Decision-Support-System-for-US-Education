@@ -49,7 +49,23 @@ public record StudyCenterDto(
     string? RegistrantPosition = null,
     string? Fanpage = null,
     IReadOnlyList<string>? ServiceAreas = null,
-    IReadOnlyList<string>? Branches = null);
+    IReadOnlyList<string>? Branches = null,
+    double? MedianResponseHours = null,
+    double? ResponseRatePercent = null,
+    int ResponseSampleCount = 0);
+
+/// <summary>[UC-40 / UC-44] Thẻ hướng dẫn từ Kho tri thức (CENTER_ASK / CENTER_WARNING).</summary>
+public record CenterGuidanceCardDto(
+    string TopicCode,
+    string DocType,
+    string Title,
+    string Content,
+    string? Source = null,
+    string? SourceUrl = null);
+
+public record CenterGuidanceCardsDto(
+    CenterGuidanceCardDto? AskCard,
+    CenterGuidanceCardDto? WarningCard);
 
 /// <summary>[UC-59] Moderator / Admin gửi yêu cầu xác minh hoặc hủy xác minh trung tâm tư vấn.</summary>
 public record VerifyStudyCenterRequest(bool IsVerified, string? VerificationNote = null);

@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { StepHeader, StepNav } from "./StepChrome";
 import {
   ActionRow,
-  ChoiceCards,
   ChoicePicker,
   FormBody,
   FormGroup,
@@ -118,7 +117,6 @@ export function Step1Goal({ data, metadata, onUpdate, onNext, goals, onEditNeeds
   const [levelError, setLevelError] = useState<string | null>(null);
   // Đánh giá hồ sơ thì cho qua mà không cần ngành; lộ trình, gợi ý trường lọc theo ngành nên cần ngành thật
   const needMajor = goalsNeedMajor(goals);
-  const [degreeError, setDegreeError] = useState<string | null>(null);
   // Mới chọn kỳ hoặc năm thì giữ tạm ở đây; đủ cả hai mới ghi vào nháp
   const [intakePending, setIntakePending] = useState({ term: "", year: "" });
   const savedIntake = parseIntake(data.targetIntake);
@@ -138,7 +136,6 @@ export function Step1Goal({ data, metadata, onUpdate, onNext, goals, onEditNeeds
   const [showStateDropdown, setShowStateDropdown] = useState(false);
 
   const majorInputId = useId();
-  const degreeSectionId = useId();
   const stateDropdownRef = useRef<HTMLDivElement>(null);
 
   // Đóng danh sách bang khi bấm ra ngoài
@@ -249,12 +246,6 @@ export function Step1Goal({ data, metadata, onUpdate, onNext, goals, onEditNeeds
       return;
     }
     setLevelError(null);
-    if (!data.targetDegreeLevel) {
-      setDegreeError("Chọn bậc học bạn muốn theo.");
-      document.getElementById(degreeSectionId)?.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
-    setDegreeError(null);
     const noMajor = !data.targetMajor || !data.targetMajor.trim();
     if (majorNotInList || (noMajor && (needMajor || !majorUnknown))) {
       setMajorError(
@@ -270,41 +261,6 @@ export function Step1Goal({ data, metadata, onUpdate, onNext, goals, onEditNeeds
     setMajorError(null);
     onNext();
   };
-
-  const studyLevels = metadata?.studyLevels ?? [
-    {
-      key: "community_college",
-      label: "Cao đẳng",
-      description: "Community college · 2 năm",
-      durationYears: 2,
-      defaultGradingScale: "scale_10",
-      allowedGradingScales: [],
-    },
-    {
-      key: "undergraduate",
-      label: "Đại học",
-      description: "Bachelor · 4 năm",
-      durationYears: 4,
-      defaultGradingScale: "scale_10",
-      allowedGradingScales: [],
-    },
-    {
-      key: "master",
-      label: "Thạc sĩ",
-      description: "Master · 1–2 năm",
-      durationYears: 2,
-      defaultGradingScale: "scale_10",
-      allowedGradingScales: [],
-    },
-    {
-      key: "phd",
-      label: "Tiến sĩ",
-      description: "PhD · 4–6 năm",
-      durationYears: 5,
-      defaultGradingScale: "scale_10",
-      allowedGradingScales: [],
-    },
-  ];
 
   const majorErrorText = guidanceConflict
     ? null
@@ -388,25 +344,6 @@ export function Step1Goal({ data, metadata, onUpdate, onNext, goals, onEditNeeds
         </FormGroup>
 
         <FormGroup title="Mục tiêu du học">
-        {/* Câu 2: bậc học muốn theo ở Mỹ */}
-        <FormSection id={degreeSectionId} title="Bạn muốn học bậc nào ở Mỹ?" required error={degreeError}>
-          <ChoiceCards
-            options={studyLevels.map((l) => ({ value: l.key, label: l.label, description: l.description }))}
-            value={data.targetDegreeLevel}
-            ariaLabel="Bậc học ở Mỹ"
-            onChange={(key) => {
-              onUpdate({ targetDegreeLevel: key });
-              setDegreeError(null);
-            }}
-          />
-          {(data.targetDegreeLevel === "master" || data.targetDegreeLevel === "phd") && (
-            <p className="flex items-center gap-1.5 text-xs font-medium text-warn">
-              <AlertCircleIcon className="size-3.5 shrink-0" />
-              Hiện hệ thống mới gợi ý trường cho Cao đẳng và Đại học.
-            </p>
-          )}
-        </FormSection>
-
         {/* Kỳ nhập học — chọn kỳ rồi chọn năm, giống câu B1.4 bên chat */}
         <FormSection title="Bạn muốn nhập học kỳ nào?">
             <ChoicePicker

@@ -12,8 +12,12 @@ namespace StudyAbroad.Api.Controllers;
 [Route("api/v1/study-centers")]
 public class StudyCentersController(IStudyCenterService service) : ControllerBase
 {
+    /// <summary>[UC-40] Ẩn SĐT, email liên hệ trực tiếp và tỷ lệ đỗ visa khỏi API công khai (chỉ Moderator thấy).</summary>
+    private static StudyCenterDto SanitizeForPublic(StudyCenterDto dto) =>
+        dto with { Phone = null, Email = null, VisaSuccessRate = null };
+
     [HttpGet]
-    public Task<PagedResult<StudyCenterDto>> Search([FromQuery] StudyCenterQuery query, CancellationToken ct)
+    public async Task<PagedResult<StudyCenterDto>> Search([FromQuery] StudyCenterQuery query, CancellationToken ct)
     {
         // BR-C1: Chỉ trung tâm ở trạng thái "Đã xác minh" mới hiển thị trong danh bạ công khai
         var isAdminOrMod = User.IsInRole(UserRoles.Moderator);
@@ -22,7 +26,13 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
             // Người dùng thường không được xem trung tâm đã ẩn.
             query = query with { VerifiedOnly = true, IncludeInactive = false, OnlyInactive = false };
         }
-        return service.SearchAsync(query, ct);
+        var result = await service.SearchAsync(query, ct);
+        if (isAdminOrMod) return result;
+        return new PagedResult<StudyCenterDto>(
+            result.Items.Select(SanitizeForPublic).ToList(),
+            result.Page,
+            result.PageSize,
+            result.TotalCount);
     }
 
     [HttpGet("{id:guid}")]
@@ -37,8 +47,13 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
             return NotFound();
         }
 
-        return Ok(center);
+        return Ok(isAdminOrMod ? center : SanitizeForPublic(center));
     }
+
+    /// <summary>[UC-40 / UC-44] Thẻ "Nên hỏi trung tâm" (CENTER_ASK) và "Dấu hiệu cảnh giác" (CENTER_WARNING) từ Kho tri thức.</summary>
+    [HttpGet("guidance-cards")]
+    public Task<CenterGuidanceCardsDto> GetGuidanceCards(CancellationToken ct) =>
+        service.GetGuidanceCardsAsync(ct);
 
     /// <summary>
     /// Đánh giá công khai của trung tâm (UC-41): lấy từ dữ liệu thật, chỉ gồm đánh giá đang hiển thị.
@@ -110,7 +125,8 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
     {
         if (string.IsNullOrWhiteSpace(query.Service))
             return BadRequest("service is required");
-        return Ok(await service.ReferAsync(query, ct));
+        var list = await service.ReferAsync(query, ct);
+        return Ok(User.IsInRole(UserRoles.Moderator) ? list : list.Select(SanitizeForPublic).ToList());
     }
 
     /// <summary>Các thành phố đang có trung tâm gợi ý được (chat đưa cho AI chọn thành phố của học sinh).</summary>

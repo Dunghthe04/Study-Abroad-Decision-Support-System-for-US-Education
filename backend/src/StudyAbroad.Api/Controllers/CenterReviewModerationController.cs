@@ -44,4 +44,34 @@ public class CenterReviewModerationController(ICenterReviewModerationService ser
             return NotFound(new ProblemDetails { Title = "Không tìm thấy", Detail = ex.Message, Status = StatusCodes.Status404NotFound });
         }
     }
+
+    /// <summary>[UC-53 2b / UC-152] Moderator gỡ phản hồi vi phạm của trung tâm dưới một đánh giá.</summary>
+    [HttpPost("reply/remove")]
+    [ProducesResponseType(typeof(CenterReviewRemovalDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveReply(
+        Guid centerId,
+        Guid reviewId,
+        [FromBody] RemoveCenterReviewRequest? request,
+        CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized(new { message = "Vui lòng đăng nhập." });
+
+        try
+        {
+            return Ok(await service.RemoveReplyAsync(userId, centerId, reviewId, request?.Reason, ct));
+        }
+        catch (ArgumentException ex)
+        {
+            return ValidationProblem(ex.Message);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new ProblemDetails { Title = "Không tìm thấy", Detail = ex.Message, Status = StatusCodes.Status404NotFound });
+        }
+    }
 }

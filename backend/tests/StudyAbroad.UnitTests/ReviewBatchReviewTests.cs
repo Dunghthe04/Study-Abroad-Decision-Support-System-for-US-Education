@@ -81,7 +81,9 @@ public class ReviewBatchReviewTests
         // Không dùng ở nhóm test này
         public Task<IReadOnlyList<ReviewCandidate>> ListCandidatesAsync(DateTime? fromUtc, DateTime? toUtcExclusive, CancellationToken ct = default) =>
             throw new NotSupportedException();
-        public Task<IReadOnlyList<Guid>> FindActiveAdminIdsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
+        public Task<IReadOnlyList<Guid>> FindActiveReviewerIdsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public Task<IReadOnlyList<ReviewerOptionDto>> ListAssignableReviewersAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task AddAsync(ReviewBatch batch, IReadOnlyList<ReviewBatchItem> items, IReadOnlyList<ReviewBatchReviewer> reviewers, AuditLog audit, CancellationToken ct = default) =>
             throw new NotSupportedException();
@@ -519,6 +521,11 @@ public class ReviewBatchReviewTests
             return Task.FromResult(Created!);
         }
 
+        public IReadOnlyList<ReviewerOptionDto> ReviewerOptions { get; init; } = [];
+
+        public Task<IReadOnlyList<ReviewerOptionDto>> ListReviewerOptionsAsync(CancellationToken ct = default) =>
+            Task.FromResult(ReviewerOptions);
+
         public Task<IReadOnlyList<ReviewBatchListItemDto>> ListAsync(Guid actorUserId, CancellationToken ct = default)
         {
             AskedActor = actorUserId;
@@ -657,12 +664,44 @@ public class ReviewBatchReviewTests
     }
 
     [Fact]
-    public void Controller_IsForAdminsOnly_WithTheExpectedRoutes()
+    public void Controller_IsOpenToAdminsAndModerators_ButOnlyAdminsCreateBatchesAndPickReviewers()
     {
         var type = typeof(AdminReviewBatchesController);
 
-        Assert.Equal(UserRoles.Admin, type.GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+        // Moderator được giao duyệt thì chấm câu và xem báo cáo (UC-148, UC-149); tạo đợt chỉ Admin (UC-147)
+        var roles = type.GetCustomAttribute<AuthorizeAttribute>()!.Roles!.Split(',');
+        Assert.Contains(UserRoles.Admin, roles);
+        Assert.Contains(UserRoles.Moderator, roles);
+        Assert.Equal(UserRoles.Admin, type.GetMethod(nameof(AdminReviewBatchesController.Create))!.GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+        Assert.Equal(UserRoles.Admin, type.GetMethod(nameof(AdminReviewBatchesController.Reviewers))!.GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+
+        // Các thao tác còn lại không bị siết riêng: Moderator dùng được, quyền theo việc được giao đợt (kiểm ở truy vấn)
+        foreach (var name in new[]
+                 {
+                     nameof(AdminReviewBatchesController.List), nameof(AdminReviewBatchesController.GetItems),
+                     nameof(AdminReviewBatchesController.GetItem), nameof(AdminReviewBatchesController.SaveVerdict),
+                     nameof(AdminReviewBatchesController.GetReport),
+                 })
+            Assert.Null(type.GetMethod(name)!.GetCustomAttribute<AuthorizeAttribute>());
+    }
+
+    [Fact]
+    public async Task Reviewers_ReturnsTheAssignableAccounts()
+    {
+        var options = new[] { new ReviewerOptionDto(Me, "An", "an@x.vn", UserRoles.Admin), new ReviewerOptionDto(Id(2), "Bình", "binh@x.vn", UserRoles.Moderator) };
+
+        var result = await ControllerFor(new FakeService { ReviewerOptions = options }, Me).Reviewers(default);
+
+        Assert.Same(options, Assert.IsType<OkObjectResult>(result.Result).Value);
+    }
+
+    [Fact]
+    public void Controller_HasTheExpectedRoutes()
+    {
+        var type = typeof(AdminReviewBatchesController);
+
         Assert.Equal("api/v1/admin/review-batches", type.GetCustomAttribute<RouteAttribute>()!.Template);
+        Assert.Equal("reviewers", type.GetMethod(nameof(AdminReviewBatchesController.Reviewers))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
         Assert.NotNull(type.GetMethod(nameof(AdminReviewBatchesController.Create))!.GetCustomAttribute<HttpPostAttribute>());
         Assert.NotNull(type.GetMethod(nameof(AdminReviewBatchesController.List))!.GetCustomAttribute<HttpGetAttribute>());
         Assert.Equal("{batchId:guid}/items", type.GetMethod(nameof(AdminReviewBatchesController.GetItems))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
@@ -687,5 +726,58 @@ public class ReviewBatchReviewTests
         Assert.Equal("", detail.Reply.Content);
         Assert.Empty(detail.Context);
         Assert.Empty(audit.Entries);   // không có nội dung nào được xem
+    }
+
+    // ---- phụ huynh rút đồng ý sau khi câu được bốc (UC-01 Q11: rút đồng ý thì ngừng xử lý ngay, dữ liệu cũ giữ nguyên)
+
+    [Fact]
+    public async Task Detail_WhenTheParentWithdrewConsent_SaysSo_WithoutContentOrAudit_AndKeepsMyEarlierVerdict()
+    {
+        var audit = new FakeAudit();
+        var placeholder = new ChatReviewReplyRow(Id(202), Guid.Empty, Guid.Empty, default, "assistant", "", "", "", null, null);
+        var earlier = new ReviewVerdict { LabelVerdict = "correct", AnswerVerdict = "correct" };
+        var repo = new FakeRepo { Detail = new ReviewItemDetailRows(Item, 3, "scenario", placeholder, null, [], earlier, MinorWithoutConsent: true) };
+
+        var detail = (await Svc(repo, audit).GetItemDetailAsync(Batch, Item, Me, null, null))!;
+
+        Assert.True(detail.MinorWithoutConsent);
+        Assert.False(detail.DeletedByUser);
+        Assert.Null(detail.Question);
+        Assert.Equal("", detail.Reply.Content);
+        Assert.Empty(detail.Context);
+        Assert.Empty(audit.Entries);                  // không có nội dung nào được xem nên không ghi nhật ký xem
+        Assert.Equal("correct", detail.MyVerdict!.LabelVerdict);   // kết luận đã chấm trước đó vẫn giữ
+    }
+
+    [Fact]
+    public async Task Detail_WhenConsentIsStillValid_ReturnsTheContentAsBefore_AndLogsTheView()
+    {
+        var audit = new FakeAudit();
+        var reply = new ChatReviewReplyRow(Id(202), Guid.Empty, Guid.Empty, DateTime.UtcNow, "assistant", "answered", "", "câu trả lời", null, null);
+        var repo = new FakeRepo { Detail = new ReviewItemDetailRows(Item, 3, "scenario", reply, null, [], null) };
+
+        var detail = (await Svc(repo, audit).GetItemDetailAsync(Batch, Item, Me, null, null))!;
+
+        Assert.False(detail.MinorWithoutConsent);
+        Assert.Equal("câu trả lời", detail.Reply.Content);
+        Assert.Single(audit.Entries);
+    }
+
+    [Fact]
+    public void OwnerQuery_TranslatesToSql_AndNeverSelectsTheChatText()
+    {
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<StudyAbroad.Infrastructure.Persistence.AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=usas_schema_check")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        using var db = new StudyAbroad.Infrastructure.Persistence.AppDbContext(options);
+
+        var sql = Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+            .ToQueryString(StudyAbroad.Infrastructure.Persistence.Repositories.ReviewBatchRepository.OwnerRows(db, Id(202)));
+
+        Assert.Contains("date_of_birth", sql);
+        Assert.Contains("LEFT JOIN", sql);
+        Assert.DoesNotContain("content", sql);
+        Assert.DoesNotContain("meta_json", sql);
     }
 }

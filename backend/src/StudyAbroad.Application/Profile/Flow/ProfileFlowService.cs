@@ -89,7 +89,9 @@ public class ProfileFlowService(
     private const int MaxAcademicYears = 8;
     private const int MaxSubjectsPerYear = 40;
     private const int MaxCertifications = 30;
-    private const int MaxActivities = 50;
+    private const int MaxExtracurricularActivities = 10;
+    private const int MaxAwards = 5;
+    private const int MaxActivityDescriptionLength = 500;
     private const int MaxTargetStates = 60;
     private const int MinGraduationYear = 1950;
     private const int MaxGraduationYearsAhead = 15;
@@ -273,8 +275,9 @@ public class ProfileFlowService(
         var budgetTiers = await LoadBudgetTiersAsync(ct);
         var certificationTypes = await LoadCertificationTypesAsync(ct);
         var majorNames = (await repository.GetMajorOptionsAsync(ct)).Select(m => m.Name).ToList();
+        var userBirthYear = users is null ? null : (await users.GetUserById(userId, ct))?.DateOfBirth?.Year;
         var now = DateTime.UtcNow;
-        ValidateForCommit(draft, budgetTiers, certificationTypes, majorNames, now);
+        ValidateForCommit(draft, budgetTiers, certificationTypes, majorNames, now, userBirthYear);
         draft = await ResolveExactBudgetAsync(draft, budgetTiers, ct);
 
         var scale = await GetGradeScaleAsync(ct);
@@ -409,14 +412,14 @@ public class ProfileFlowService(
     /// <summary>Kiểm tra giới hạn rồi ghi nháp; dùng chung cho form (SaveDraftAsync) và chat (PatchDraftAsync)</summary>
     private async Task WriteStoredStateAsync(StudentProfile profile, StoredFlowState stored)
     {
+        var json = JsonSerializer.Serialize(stored, JsonOptions);
+        if (json.Length > MaxDraftJsonChars)
+            throw new ArgumentException("Dữ liệu nháp quá lớn, vui lòng rút gọn nội dung.");
+
         var limitErrors = new List<string>();
         ValidateDraftLimits(stored.Draft!, limitErrors);
         if (limitErrors.Count > 0)
             throw new ArgumentException(string.Join(" ", limitErrors));
-
-        var json = JsonSerializer.Serialize(stored, JsonOptions);
-        if (json.Length > MaxDraftJsonChars)
-            throw new ArgumentException("Dữ liệu nháp quá lớn, vui lòng rút gọn nội dung.");
 
         profile.DraftFlowStateJson = json;
         await repository.UpdateProfileAsync(profile, CancellationToken.None);
@@ -633,15 +636,14 @@ public class ProfileFlowService(
         IReadOnlyDictionary<string, BudgetTier> budgetTiers,
         IReadOnlyDictionary<string, CertificationMetadataItem> certificationTypes,
         IReadOnlyList<string> majorNames,
-        DateTime now)
+        DateTime now,
+        int? userBirthYear = null)
     {
         var errors = new List<string>();
         ValidateDraftLimits(draft, errors);
 
         // Bước 1
         var step1 = draft.Step1;
-        if (!StudyLevels.IsValid(step1?.TargetDegreeLevel))
-            errors.Add("Bước 1: chưa chọn bậc học muốn theo học.");
         if (step1?.CurrentEducationLevel is null || !EducationLevelCodes.Contains(step1.CurrentEducationLevel))
             errors.Add("Bước 1: chưa chọn cấp học hiện tại.");
         if (step1?.EducationSystem is { } system && !EducationSystems.IsValid(system))
@@ -724,8 +726,9 @@ public class ProfileFlowService(
         if (draft.Step4?.FundingSource is { } funding && !ProfileConstants.FundingSources.All.Contains(funding))
             errors.Add($"Bước 4: nguồn tài chính '{funding}' không hợp lệ.");
 
-        // Bước 5
-        var currentYear = DateTime.UtcNow.Year;
+        // Bước 5 [UC-16]: tối đa 10 hoạt động và 5 giải thưởng, mô tả <= 500 ký tự, năm đạt giải từ (năm sinh + 14) đến hiện tại
+        var currentYear = now.Year;
+        var minAwardYear = userBirthYear is int by ? by + 14 : 1900;
         foreach (var item in draft.Step5?.Activities ?? [])
         {
             var name = item.Name?.Trim();
@@ -739,15 +742,17 @@ public class ProfileFlowService(
                 errors.Add("Bước 5: tên hoạt động / giải thưởng tối đa 256 ký tự.");
                 continue;
             }
-            if (item.Description?.Trim().Length > 1000)
-                errors.Add($"Bước 5: mô tả cho '{name}' tối đa 1000 ký tự.");
+            if (item.Description?.Trim().Length > MaxActivityDescriptionLength)
+                errors.Add($"Bước 5: mô tả cho '{name}' tối đa {MaxActivityDescriptionLength} ký tự.");
             if (item.ImpactLevel is null || !ProfileConstants.ImpactLevelCodes.ToLevel.ContainsKey(item.ImpactLevel))
                 errors.Add($"Bước 5: '{name}' chưa chọn phạm vi.");
 
             if (IsAward(item))
             {
-                if (item.Year is null || item.Year < 1900 || item.Year > currentYear)
+                if (item.Year is null)
                     errors.Add($"Bước 5: giải thưởng '{name}' chưa có năm đạt giải hợp lệ.");
+                else if (item.Year < minAwardYear || item.Year > currentYear)
+                    errors.Add($"Bước 5: giải thưởng '{name}' phải có năm đạt giải từ {minAwardYear} đến {currentYear}.");
                 continue;
             }
 
@@ -784,8 +789,13 @@ public class ProfileFlowService(
         if (draft.Step3?.Certifications?.Count > MaxCertifications)
             errors.Add($"Bước 3: tối đa {MaxCertifications} chứng chỉ.");
 
-        if (draft.Step5?.Activities?.Count > MaxActivities)
-            errors.Add($"Bước 5: tối đa {MaxActivities} hoạt động / giải thưởng.");
+        var step5Items = draft.Step5?.Activities ?? [];
+        var extracurricularCount = step5Items.Count(item => !IsAward(item));
+        var awardCount = step5Items.Count(IsAward);
+        if (extracurricularCount > MaxExtracurricularActivities)
+            errors.Add($"Bước 5: tối đa {MaxExtracurricularActivities} hoạt động ngoại khóa.");
+        if (awardCount > MaxAwards)
+            errors.Add($"Bước 5: tối đa {MaxAwards} giải thưởng.");
     }
 
     /// <summary>Thang điểm, điểm thành phần, môn bắt buộc đều theo danh mục trong DB</summary>
@@ -929,7 +939,8 @@ public class ProfileFlowService(
         }
     }
 
-    private const int MaxEcItems = 10;          // advisor nhận tối đa 10 hoạt động và 10 giải thưởng
+    private const int MaxEcItems = 10;          // advisor nhận tối đa 10 hoạt động và 5 giải thưởng [UC-16]
+    private const int MaxEcAwards = 5;
     private const int MaxEcActivityText = 500;  // giới hạn độ dài text bên EcActivity (Python)
     private const int MaxEcAwardText = 300;     // giới hạn độ dài text bên EcAward (Python)
     private static readonly HashSet<string> EcRoleCodes = ["founder", "leader", "vice_leader", "member"];
@@ -952,7 +963,7 @@ public class ProfileFlowService(
             .ToList();
         var awards = valid
             .Where(IsAwardKind)
-            .Take(MaxEcItems)
+            .Take(MaxEcAwards)
             .Select(a => new EcAwardDto(Clip(EcText(a), MaxEcAwardText), a.ImpactLevel!.Value))
             .ToList();
 
@@ -999,7 +1010,8 @@ public class ProfileFlowService(
     {
         // Bước 1
         var step1 = draft.Step1!;
-        profile.TargetLevel = step1.TargetDegreeLevel!.Trim();
+        // Hệ thống chỉ phục vụ bậc đại học (UC-08): bậc học cố định, không lấy từ người dùng
+        profile.TargetLevel = StudyLevels.Undergraduate;
         profile.CurrentEducationLevel = step1.CurrentEducationLevel;
         profile.CurrentGrade = NullIfBlank(step1.CurrentGrade);
         // Hệ chương trình chỉ có nghĩa với học sinh cấp 3

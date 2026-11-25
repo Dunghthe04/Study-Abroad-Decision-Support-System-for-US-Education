@@ -9,6 +9,29 @@ public static class CostConstants
     /// </summary>
     public const string ReferenceFeesAppSettingKey = "cost.reference_fees";
 
+    /// <summary>
+    /// Khóa trong app_settings cho 4 tham số ước tính chi phí UC-26:
+    /// { "visaIntegrityFeeUsd", "annualEscalationRate", "bankSellRateSpread", "undergraduateYears" }.
+    /// </summary>
+    public const string CostParametersAppSettingKey = "cost.parameters";
+
     /// <summary>Số năm học của chương trình đại học, dùng cho tổng chi phí 4 năm.</summary>
     public const int UndergraduateYears = 4;
+
+    /// <summary>Phí Visa Integrity Fee mặc định (USD, thu một lần năm đầu theo UC-26 / UC-83) khi chưa cấu hình trong app_settings.</summary>
+    public const decimal DefaultVisaIntegrityFeeUsd = 250m;
+
+    /// <summary>Tỷ lệ tăng chi phí hằng năm cho công thức 4 năm (1 + r)^(k - 1) (UC-26 / UC-83).</summary>
+    public const decimal AnnualCostEscalationRate = 0.04m;
+
+    /// <summary>Biên độ giá bán ra của ngân hàng cộng lên tỷ giá trung bình thị trường khi quy đổi USD→VND ở UC-26 (UC-83 / UC-65).</summary>
+    public const decimal BankSellRateSpread = 0.015m;
+
+    /// <summary>Biên ngân sách 10% dùng để gắn nhãn "Trong biên 10%" (UC-26, khớp UC-22).</summary>
+    public const decimal BudgetTolerance = 0.10m;
+
+    /// <summary>
+    /// Tỉ giá dự phòng (VNĐ cho 1 USD) khi chưa từng lấy được tỉ giá từ nguồn công khai (UC-65 E2). Công bố ở UC-83.
+    /// </summary>
+    public const decimal FallbackVndPerUsd = 25_000m;
 }

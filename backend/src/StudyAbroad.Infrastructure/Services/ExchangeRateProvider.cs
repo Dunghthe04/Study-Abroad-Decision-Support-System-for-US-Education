@@ -19,7 +19,7 @@ public class ExchangeRateProvider(HttpClient http, IMemoryCache cache, ILogger<E
     : IExchangeRateProvider
 {
     public const string RateUrl = "https://open.er-api.com/v6/latest/USD";
-    public const decimal FallbackVndPerUsd = 25_000m;
+    public const decimal FallbackVndPerUsd = StudyAbroad.Domain.Constants.CostConstants.FallbackVndPerUsd;
     public const string SourceName = "open.er-api.com";
     private const string CacheKey = "exchange_rate_vnd_per_usd";
     private const string LastGoodKey = "exchange_rate_vnd_per_usd_last_good";

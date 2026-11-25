@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using StudyAbroad.Application.Admin.SlmSamples;
-using StudyAbroad.Domain.Constants;
+using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Infrastructure.Persistence.Repositories;
@@ -13,7 +14,8 @@ public class SlmSampleRepository(AppDbContext db) : ISlmSampleRepository
     public async Task<(IReadOnlyList<SlmSampleListRow> Rows, int Total)> PageAsync(
         SlmSampleFilter filter, int skip, int take, CancellationToken ct = default)
     {
-        var query = Filtered(Live.AsNoTracking(), filter);
+        var source = filter.Deleted ? db.SlmTrainingSamples.Where(x => x.DeletedAt != null) : Live;
+        var query = Filtered(source.AsNoTracking(), filter);
 
         var total = await query.CountAsync(ct);
         var rows = await query
@@ -35,8 +37,6 @@ public class SlmSampleRepository(AppDbContext db) : ISlmSampleRepository
             query = query.Where(x => x.SampleType == filter.SampleType);
         if (!string.IsNullOrWhiteSpace(filter.Split))
             query = query.Where(x => x.Split == filter.Split);
-        if (!string.IsNullOrWhiteSpace(filter.ReviewStatus))
-            query = query.Where(x => x.ReviewStatus == filter.ReviewStatus);
         if (!string.IsNullOrWhiteSpace(filter.Source))
             query = query.Where(x => x.Source == filter.Source);
         if (filter.CreatedByUserId is { } creator)
@@ -57,8 +57,23 @@ public class SlmSampleRepository(AppDbContext db) : ISlmSampleRepository
         return query;
     }
 
-    public Task<SlmTrainingSample?> FindAsync(Guid id, CancellationToken ct = default) =>
-        Live.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+    public Task<SlmTrainingSample?> FindAsync(Guid id, bool includeDeleted = false, CancellationToken ct = default) =>
+        (includeDeleted ? db.SlmTrainingSamples : Live).AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+
+    public async Task<IReadOnlyList<SlmSampleVersionRow>> VersionsAsync(Guid sampleId, CancellationToken ct = default)
+    {
+        var rows = await db.SlmSampleVersions.AsNoTracking()
+            .Where(v => v.SampleId == sampleId)
+            .GroupJoin(db.Users, v => v.ActorUserId, u => u.Id, (v, users) => new { v, users })
+            .SelectMany(x => x.users.DefaultIfEmpty(), (x, u) => new { x.v, Name = u == null ? null : u.FullName })
+            .OrderByDescending(x => x.v.Version)
+            .ToListAsync(ct);
+        return rows.Select(x => new SlmSampleVersionRow(x.v, x.Name)).ToList();
+    }
+
+    public Task<SlmSampleVersion?> FindVersionAsync(Guid sampleId, int version, CancellationToken ct = default) =>
+        db.SlmSampleVersions.AsNoTracking()
+            .FirstOrDefaultAsync(v => v.SampleId == sampleId && v.Version == version, ct);
 
     public async Task<IReadOnlyDictionary<Guid, string>> UserNamesAsync(
         IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
@@ -66,57 +81,69 @@ public class SlmSampleRepository(AppDbContext db) : ISlmSampleRepository
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
 
-    public async Task AddAsync(SlmTrainingSample sample, CancellationToken ct = default)
+    public async Task AddAsync(SlmTrainingSample sample, SlmSampleVersion initialVersion, CancellationToken ct = default)
     {
         db.SlmTrainingSamples.Add(sample);
+        initialVersion.SampleId = sample.Id;
+        db.SlmSampleVersions.Add(initialVersion);
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task AddRangeAsync(IReadOnlyList<SlmTrainingSample> samples, CancellationToken ct = default)
+    public async Task AddRangeAsync(
+        IReadOnlyList<SlmTrainingSample> samples, IReadOnlyList<SlmSampleVersion> initialVersions, CancellationToken ct = default)
     {
         db.SlmTrainingSamples.AddRange(samples);
+        db.SlmSampleVersions.AddRange(initialVersions);
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<int> UpdateManyAsync(
-        IReadOnlyList<Guid> ids, Func<SlmTrainingSample, bool> apply, CancellationToken ct = default)
+    public async Task<bool> UpdateAsync(
+        Guid id, Func<SlmTrainingSample, (bool Changed, SlmSampleVersion? NewVersion)> apply,
+        bool includeDeleted = false, CancellationToken ct = default)
     {
-        var distinctIds = ids.Distinct().ToList();
-        var samples = await Live.Where(x => distinctIds.Contains(x.Id)).ToListAsync(ct);
-        var now = DateTime.UtcNow;
-        foreach (var sample in samples)
+        var source = includeDeleted ? db.SlmTrainingSamples : Live;
+        var sample = await source.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (sample is null)
+            return false;
+
+        var (changed, newVersion) = apply(sample);
+        if (!changed)
+            return true;
+
+        sample.UpdatedAt = DateTime.UtcNow;
+        if (newVersion is not null)
         {
-            if (!apply(sample))
-                continue;
-            sample.UpdatedAt = now;
+            newVersion.SampleId = sample.Id;
+            db.SlmSampleVersions.Add(newVersion);
         }
-        await db.SaveChangesAsync(ct);
-        return samples.Count;
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        // Hai người cùng Version++ thì unique (sample_id, version) chặn bên chậm: trả 409 thay vì 500
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            throw new ConcurrencyConflictException("Mẫu vừa được người khác thay đổi. Hãy tải lại rồi thử lại.", ex);
+        }
+        return true;
     }
 
     public async Task<IReadOnlyList<SlmSampleCountRow>> CountsAsync(CancellationToken ct = default) =>
-        await Live.AsNoTracking()
-            .GroupBy(x => new { x.SampleType, x.ReviewStatus })
-            .Select(g => new SlmSampleCountRow(g.Key.SampleType, g.Key.ReviewStatus, g.Count()))
+        await db.SlmTrainingSamples.AsNoTracking()
+            .GroupBy(x => new { x.SampleType, Deleted = x.DeletedAt != null })
+            .Select(g => new SlmSampleCountRow(g.Key.SampleType, g.Key.Deleted, g.Count()))
             .ToListAsync(ct);
 
     public async Task<IReadOnlyList<SlmSampleKeyRow>> ExistingKeysAsync(CancellationToken ct = default) =>
-        await db.SlmTrainingSamples.AsNoTracking()
-            .Select(x => new SlmSampleKeyRow(x.SampleType, x.Question, x.PendingQuestion, x.Profile, x.Context, x.Intents))
+        await Live.AsNoTracking()
+            .Select(x => new SlmSampleKeyRow(x.Id, x.SampleType, x.Question, x.PendingQuestion, x.Profile, x.Context, x.Intents))
             .ToListAsync(ct);
 
-    public async Task<IReadOnlyList<SlmTrainingSample>> SameQuestionAsync(
-        string question, bool includeDeleted, CancellationToken ct = default)
-    {
-        var source = includeDeleted ? db.SlmTrainingSamples : Live;
-        return await SameQuestion(source.AsNoTracking(), question).ToListAsync(ct);
-    }
-
-    public static IQueryable<SlmTrainingSample> SameQuestion(IQueryable<SlmTrainingSample> query, string question)
-    {
-        var lowered = question.Trim().ToLower();
-        return query.Where(x => x.Question.Trim().ToLower() == lowered);
-    }
+    public async Task<IReadOnlyList<SlmSampleKeyRow>> LiveKeysByTypeAsync(string sampleType, CancellationToken ct = default) =>
+        await Live.AsNoTracking()
+            .Where(x => x.SampleType == sampleType)
+            .Select(x => new SlmSampleKeyRow(x.Id, x.SampleType, x.Question, x.PendingQuestion, x.Profile, x.Context, x.Intents))
+            .ToListAsync(ct);
 
     public async Task<IReadOnlyList<SlmSampleCreatorDto>> CreatorsAsync(CancellationToken ct = default) =>
         await Creators(Live.AsNoTracking(), db.Users).ToListAsync(ct);
@@ -130,9 +157,15 @@ public class SlmSampleRepository(AppDbContext db) : ISlmSampleRepository
             .OrderBy(u => u.FullName)
             .Select(u => new SlmSampleCreatorDto(u.Id, u.FullName));
 
-    public async Task<IReadOnlyList<SlmTrainingSample>> ApprovedAsync(CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<string>> SourcesAsync(CancellationToken ct = default) =>
         await Live.AsNoTracking()
-            .Where(x => x.ReviewStatus == SlmReviewStatuses.Approved)
+            .Select(x => x.Source)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<SlmTrainingSample>> ExportableAsync(CancellationToken ct = default) =>
+        await Live.AsNoTracking()
             .OrderBy(x => x.CreatedAt)
             .ThenBy(x => x.Id)
             .ToListAsync(ct);

@@ -7,11 +7,11 @@ public class PaymentTransaction : BaseEntity
 {
     /// <summary>[UC-80] Null khi tài khoản đã bị xóa hẳn: giao dịch giữ lại ẩn danh theo nghĩa vụ kế toán.</summary>
     public Guid? UserId { get; set; }
-    /// <summary>[UC-75 lớp 2] Mã người mua ngẫu nhiên, gán khi tài khoản bị xóa hẳn; họ tên/email nằm ở bảng retained_buyers.</summary>
-    public Guid? RetainedBuyerId { get; set; }
     /// <summary>Kỳ được kích hoạt bởi đơn này, gán lúc thanh toán.</summary>
     public Guid? UserSubscriptionId { get; set; }
     public decimal AmountVnd { get; set; }
+    /// <summary>[UC-125] Số tiền thực nhận do payOS báo (webhook/đối soát), dùng hiển thị cạnh giá đơn với đơn lệch số tiền.</summary>
+    public decimal? ReceivedAmountVnd { get; set; }
     /// <summary>payos</summary>
     public string Gateway { get; set; } = string.Empty;
     /// <summary>paymentLinkId của payOS.</summary>
@@ -36,4 +36,6 @@ public class PaymentTransaction : BaseEntity
     public DateTime ExpiresAt { get; set; }
     public string? AdminNote { get; set; }
     public Guid? HandledByUserId { get; set; }
+    /// <summary>[UC-75, UC-124] Bản chụp thông tin người mua lưu theo quy định kế toán 10 năm sau khi tài khoản bị xóa hẳn.</summary>
+    public Guid? DeletedBuyerRetentionId { get; set; }
 }

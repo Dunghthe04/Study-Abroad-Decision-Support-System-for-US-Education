@@ -27,7 +27,8 @@ public class ReviewReportTests
         }
 
         public Task<IReadOnlyList<ReviewCandidate>> ListCandidatesAsync(DateTime? fromUtc, DateTime? toUtcExclusive, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Guid>> FindActiveAdminIdsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Guid>> FindActiveReviewerIdsAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<ReviewerOptionDto>> ListAssignableReviewersAsync(CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddAsync(ReviewBatch batch, IReadOnlyList<ReviewBatchItem> items, IReadOnlyList<ReviewBatchReviewer> reviewers, AuditLog audit, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<ReviewBatchListRow>> ListForUserAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<ReviewItemsRows?> ListItemsAsync(Guid batchId, Guid reviewerUserId, CancellationToken ct = default) => throw new NotSupportedException();
@@ -100,6 +101,92 @@ public class ReviewReportTests
         Assert.Empty(report.Report.Causes);
     }
 
+    // ---- UC-149: tỷ lệ đồng thuận giữa người chấm (tỷ lệ câu có cùng kết luận, trên các câu có từ hai người chấm)
+
+    private static readonly Guid Third = Id(803);
+
+    [Fact]
+    public void Agreement_IsNull_WhenNoItemWasGradedByTwoReviewers()
+    {
+        var rows = new[] { Row(1, "scenario", "correct"), Row(2, "scenario", "wrong", "technical", reviewer: Other) };
+
+        Assert.Null(ReviewReportCalculator.Agreement(rows));
+        Assert.Null(ReviewReportCalculator.Agreement([]));
+    }
+
+    [Fact]
+    public void Agreement_CountsOnlyItemsWithTwoOrMoreReviewers_AndThoseWhereTheyAllConcluded_TheSame()
+    {
+        var rows = new[]
+        {
+            Row(1, "scenario", "correct", reviewer: Me), Row(1, "scenario", "correct", reviewer: Other),            // cùng kết luận
+            Row(2, "scenario", "correct", reviewer: Me), Row(2, "scenario", "wrong", "technical", reviewer: Other),  // khác nhau
+            Row(3, "knowledge", "correct", reviewer: Me),                                                           // một người: không tính
+        };
+
+        var agreement = ReviewReportCalculator.Agreement(rows)!;
+
+        Assert.Equal((2, 1), (agreement.ItemsWithMultipleReviewers, agreement.ItemsAgreed));
+        Assert.Equal(0.5, agreement.Rate, 6);
+    }
+
+    [Fact]
+    public void Agreement_NeedsAllFourPartsOfTheConclusionToMatch()
+    {
+        var rows = new[]
+        {
+            // cùng nhãn "sai" và cùng câu trả lời nhưng nhãn đúng khác nhau
+            Row(1, "scenario", "correct", label: "wrong", intent: "knowledge", reviewer: Me),
+            Row(1, "scenario", "correct", label: "wrong", intent: "school_info", reviewer: Other),
+            // cùng câu trả lời sai nhưng nguyên nhân khác nhau
+            Row(2, "scenario", "wrong", "technical", reviewer: Me), Row(2, "scenario", "wrong", "hallucination", reviewer: Other),
+            // giống hệt nhau ở cả bốn phần (nhãn đúng và nguyên nhân cùng để trống)
+            Row(3, "scenario", "missing_data", reviewer: Me), Row(3, "scenario", "missing_data", reviewer: Other),
+        };
+
+        var agreement = ReviewReportCalculator.Agreement(rows)!;
+
+        Assert.Equal((3, 1), (agreement.ItemsWithMultipleReviewers, agreement.ItemsAgreed));
+    }
+
+    [Fact]
+    public void Agreement_WithThreeReviewers_RequiresEveryoneToAgree()
+    {
+        var rows = new[]
+        {
+            Row(1, "scenario", "correct", reviewer: Me), Row(1, "scenario", "correct", reviewer: Other), Row(1, "scenario", "correct", reviewer: Third),
+            Row(2, "scenario", "correct", reviewer: Me), Row(2, "scenario", "correct", reviewer: Other), Row(2, "scenario", "out_of_scope", reviewer: Third),
+        };
+
+        var agreement = ReviewReportCalculator.Agreement(rows)!;
+
+        Assert.Equal((2, 1), (agreement.ItemsWithMultipleReviewers, agreement.ItemsAgreed));
+    }
+
+    [Fact]
+    public async Task Report_CarriesTheAgreement_AndKeepsCountingEachItemOnceForTheRates()
+    {
+        var rows = Rows(
+        [
+            Row(1, "scenario", "wrong", "technical", reviewer: Other, at: Day(5)),
+            Row(1, "scenario", "correct", reviewer: Me, at: Day(3)),
+            Row(2, "scenario", "correct", reviewer: Me), Row(2, "scenario", "correct", reviewer: Other),
+        ], totalItems: 2, reviewers: 2);
+
+        var report = (await Svc(rows).GetReportAsync(Batch, Me))!;
+
+        Assert.Equal((2, 1, 0.5), (report.Agreement!.ItemsWithMultipleReviewers, report.Agreement.ItemsAgreed, report.Agreement.Rate));
+        Assert.Equal(2, report.ItemsGraded);   // tỷ lệ sai vẫn mỗi câu một kết luận (chấm sớm nhất)
+    }
+
+    [Fact]
+    public async Task Report_HasNoAgreement_WhenEveryItemWasGradedByOnePerson()
+    {
+        var report = (await Svc(Rows([Row(1, "scenario", "correct"), Row(2, "knowledge", "correct")], totalItems: 2)).GetReportAsync(Batch, Me))!;
+
+        Assert.Null(report.Agreement);
+    }
+
     [Fact]
     public async Task Report_WhenNothingIsGradedYet_HasNoRatesButStillShowsTheStrata()
     {
@@ -125,7 +212,7 @@ public class ReviewReportTests
     public void Report_Dtos_CarryNoChatContentAndNoReviewerIdentity()
     {
         // Báo cáo chỉ gồm số đếm và mã nhóm: không có trường nào mang nội dung chat, và không nêu người chấm nào chấm thế nào
-        var names = new[] { typeof(ReviewReportDto), typeof(ReviewReport), typeof(StratumReport), typeof(RateEstimate), typeof(AnswerCounts), typeof(CauseCount), typeof(CorrectIntentCount) }
+        var names = new[] { typeof(ReviewReportDto), typeof(ReviewReport), typeof(StratumReport), typeof(RateEstimate), typeof(AnswerCounts), typeof(CauseCount), typeof(CorrectIntentCount), typeof(ReviewerAgreement) }
             .SelectMany(t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance))
             .Select(p => p.Name)
             .ToList();

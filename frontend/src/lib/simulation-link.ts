@@ -24,6 +24,42 @@ function inRange(key: NumberKey, value: number): boolean {
   return Number.isFinite(value) && value >= min && value <= max;
 }
 
+const EC_TIER_RANGE = [1, 5] as const;
+const MAX_STATES = 10;
+const MAX_MAJOR_LENGTH = 200;
+const MAX_RATE_PERCENT = 100;
+const MAX_RATE_VND = 1_000_000;
+
+// Bang: mã hai chữ cái (chữ thường vẫn nhận, đổi thành hoa), không trùng, tối đa MAX_STATES. Sai thì bỏ cả bộ
+function toStates(value: unknown): string[] | null {
+  const list = typeof value === "string" ? value.split(",") : value;
+  if (!Array.isArray(list) || list.length === 0) return null;
+  const codes = list.map((v) => (typeof v === "string" ? v.trim().toUpperCase() : ""));
+  if (codes.length > MAX_STATES || !codes.every((c) => /^[A-Z]{2}$/.test(c))) return null;
+  return [...new Set(codes)];
+}
+
+function toMajor(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" && value.length <= MAX_MAJOR_LENGTH ? value.trim() : null;
+}
+
+// Tỉ giá giả định: số VNĐ mỗi USD hoặc phần trăm tăng. Chỉ kiểm khoảng, "chỉ nhận mức tăng so với hiện nay" do backend kiểm vì cần tỉ giá hiện nay
+function addExtras(overrides: SimulationOverrides, get: (key: string) => unknown): void {
+  const tier = Number(get("ecTier"));
+  if (get("ecTier") != null && String(get("ecTier")).trim() !== "" && Number.isInteger(tier) && tier >= EC_TIER_RANGE[0] && tier <= EC_TIER_RANGE[1])
+    overrides.ecTier = tier;
+  const states = toStates(get("states"));
+  if (states) overrides.states = states;
+  const major = toMajor(get("major"));
+  if (major) overrides.major = major;
+  const vnd = Number(get("exchangeRateVnd"));
+  const percent = Number(get("exchangeRatePercent"));
+  // Nhập cả hai thì lấy số VNĐ (backend cũng từ chối nhập cả hai)
+  if (get("exchangeRateVnd") != null && String(get("exchangeRateVnd")).trim() !== "" && vnd > 0 && vnd <= MAX_RATE_VND) overrides.exchangeRateVnd = vnd;
+  else if (get("exchangeRatePercent") != null && String(get("exchangeRatePercent")).trim() !== "" && percent > 0 && percent <= MAX_RATE_PERCENT)
+    overrides.exchangeRatePercent = percent;
+}
+
 function isNeed(value: unknown): value is ScholarshipNeed {
   return typeof value === "string" && NEEDS.includes(value as ScholarshipNeed);
 }
@@ -43,6 +79,7 @@ export function overridesFromValues(values: Record<string, unknown> | null | und
     if (typeof value === "number" && inRange(key, value)) overrides[key] = value;
   }
   if (isNeed(values?.scholarshipNeed)) overrides.scholarshipNeed = values.scholarshipNeed;
+  addExtras(overrides, (key) => values?.[key]);
   const pref = toPref(values?.pref);
   if (pref) overrides.pref = pref;
   return overrides;
@@ -67,6 +104,7 @@ export function overridesFromParams(params: Params): SimulationOverrides {
     if (inRange(key, value)) overrides[key] = value;
   }
   if (isNeed(params.scholarshipNeed)) overrides.scholarshipNeed = params.scholarshipNeed;
+  addExtras(overrides, (key) => params[key]);
   const pref = toPref(params.pref);
   if (pref) overrides.pref = pref;
   return overrides;
@@ -102,6 +140,11 @@ export function describeSimulation(o: SimulationOverrides | null | undefined): s
   if (o.duolingo != null) parts.push(`Duolingo ${NUMBER.format(o.duolingo)}`);
   if (o.budgetUsd != null) parts.push(`ngân sách ${NUMBER.format(o.budgetUsd)} USD`);
   if (o.scholarshipNeed != null) parts.push(`học bổng ${NEED_TEXT[o.scholarshipNeed] ?? o.scholarshipNeed}`);
+  if (o.ecTier != null) parts.push(`bậc ngoại khóa ${o.ecTier}`);
+  if (o.states != null && o.states.length > 0) parts.push(`bang ${o.states.join(", ")}`);
+  if (o.major != null) parts.push(`ngành ${o.major}`);
+  if (o.exchangeRateVnd != null) parts.push(`tỉ giá ${NUMBER.format(o.exchangeRateVnd)} VNĐ/USD`);
+  if (o.exchangeRatePercent != null) parts.push(`tỉ giá tăng ${NUMBER.format(o.exchangeRatePercent)}%`);
   if (o.pref != null) parts.push(`ưu tiên: chi phí ${o.pref[0]}, học bổng ${o.pref[1]}, danh tiếng ${o.pref[2]}`);
   return parts.join(" · ");
 }

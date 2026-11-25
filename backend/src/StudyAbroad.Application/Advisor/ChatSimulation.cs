@@ -98,8 +98,14 @@ public static class ChatSimulation
         }
 
         var need = c.TryGetProperty("scholarshipNeed", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null;
-        var overrides = new SimulationOverrides(gpa, Number("sat"), Number("act"), Number("ielts"), Number("budgetUsd"), need, null,
-            Number("toefl"), Number("duolingo"));
+        // UC-155: bang (mã hai chữ), ngành và tỉ giá giả định. Tỉ giá: số VNĐ mỗi USD hoặc phần trăm tăng, backend đổi sang ngân sách USD
+        var states = c.TryGetProperty("states", out var st) && st.ValueKind == JsonValueKind.Array
+            ? st.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(e.GetString())).Select(e => e.GetString()!.Trim()).ToList()
+            : null;
+        var major = c.TryGetProperty("major", out var mj) && mj.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(mj.GetString()) ? mj.GetString()!.Trim() : null;
+        var overrides = new SimulationOverrides(gpa, Number("sat"), Number("act"), Number("ielts"), Number("budgetUsd"), need, (int?)Number("ecTier"),
+            Number("toefl"), Number("duolingo"), null,
+            states is { Count: > 0 } ? states : null, major, Number("exchangeRateVnd"), Number("exchangeRatePercent"));
         var priorities = ParsePriorities(d);
         if (overrides == new SimulationOverrides(null, null, null, null, null, null, null) && priorities is null)
             return null;
@@ -259,6 +265,11 @@ public static class ChatSimulation
         if (o.Duolingo is { } duolingo) parts.Add($"Duolingo {Dec(duolingo)}");
         if (o.BudgetUsd is { } budget) parts.Add($"ngân sách {Money(budget)} USD mỗi năm");
         if (o.ScholarshipNeed is { } need) parts.Add($"mức cần học bổng {NeedName(need)}");
+        if (o.EcTier is { } tier) parts.Add($"bậc ngoại khóa {tier}");
+        if (o.States is { Count: > 0 } states) parts.Add($"bang {string.Join(", ", states)}");
+        if (o.Major is { } major) parts.Add($"ngành {major}");
+        if (o.ExchangeRateVnd is { } rate) parts.Add($"tỉ giá {Money(rate)} VNĐ mỗi USD");
+        if (o.ExchangeRatePercent is { } percent) parts.Add($"tỉ giá tăng {Dec(percent)}%");
         return parts.Count == 0 ? null : string.Join(", ", parts);
     }
 
@@ -276,6 +287,11 @@ public static class ChatSimulation
         if (o.BudgetUsd is { } budget) parts.Add($"ngân sách {Money(budget)} USD mỗi năm{Now(p.BudgetUsd is { } b ? Money(b) + " USD" : null)}");
         if (o.ScholarshipNeed is { } need)
             parts.Add($"mức cần học bổng {NeedName(need)}{Now(p.ScholarshipNeed is { } pn ? NeedName(pn) : null)}");
+        if (o.EcTier is { } tier) parts.Add($"bậc ngoại khóa {tier}{Now(p.EcTier.ToString(CultureInfo.InvariantCulture))}");
+        if (o.States is { Count: > 0 } states) parts.Add($"bang {string.Join(", ", states)}");
+        if (o.Major is { } major) parts.Add($"ngành {major}");
+        if (o.ExchangeRateVnd is { } rate) parts.Add($"tỉ giá {Money(rate)} VNĐ mỗi USD");
+        if (o.ExchangeRatePercent is { } percent) parts.Add($"tỉ giá tăng {Dec(percent)}%");
         return string.Join(", ", parts);
     }
 
@@ -291,6 +307,10 @@ public static class ChatSimulation
         if (o.Duolingo is not null) factors.Add("duolingo");
         if (o.BudgetUsd is not null) factors.Add("budget");
         if (o.ScholarshipNeed is not null) factors.Add("scholarship");
+        if (o.EcTier is not null) factors.Add("ec_tier");
+        if (o.States is not null) factors.Add("state");
+        if (o.Major is not null) factors.Add("major");
+        if (o.ExchangeRateVnd is not null || o.ExchangeRatePercent is not null) factors.Add("exchange");
         return factors;
     }
 
@@ -380,6 +400,11 @@ public static class ChatSimulation
         if (o.Duolingo is { } duolingo) values["duolingo"] = duolingo;
         if (o.BudgetUsd is { } budget) values["budgetUsd"] = budget;
         if (o.ScholarshipNeed is { } need) values["scholarshipNeed"] = need;
+        if (o.EcTier is { } tier) values["ecTier"] = tier;
+        if (o.States is { Count: > 0 } states) values["states"] = new JsonArray(states.Select(s => (JsonNode?)JsonValue.Create(s)).ToArray());
+        if (o.Major is { } major) values["major"] = major;
+        if (o.ExchangeRateVnd is { } rateVnd) values["exchangeRateVnd"] = rateVnd;
+        if (o.ExchangeRatePercent is { } ratePercent) values["exchangeRatePercent"] = ratePercent;
         if (pref is { Count: 3 }) values["pref"] = new JsonArray(pref[0], pref[1], pref[2]);   // thanh ưu tiên trên trang nhúc nhích theo
         return new Widget(WidgetType, JsonSerializer.SerializeToElement(values));
     }

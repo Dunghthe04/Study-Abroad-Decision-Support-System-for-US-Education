@@ -16,8 +16,8 @@ public record GroupingOptions(
     double LowerCut = 0.25,          // p' dưới mốc này: Khó vào
     double UpperCut = 0.75,          // p' từ mốc này: An toàn
     double AlwaysReachRate = 0.15,   // tỉ lệ nhận dưới mốc này: luôn Khó vào
-    double SafetyMinRate = 0.50,     // tỉ lệ nhận dưới mốc này: không được là An toàn
-    double IntlRatioCut = 0.5);      // tỉ lệ nhận du học sinh / tỉ lệ chung dưới mốc này: hạ một nhóm
+    double SafetyMinRate = 0.50);    // tỉ lệ nhận dưới mốc này: không được là An toàn
+// Hai luật tỉ lệ nhận (AlwaysReachRate, SafetyMinRate) xét tỉ lệ nhận của DU HỌC SINH nếu trường có, không thì tỉ lệ chung (UC-22).
 
 // Mốc SAT của trường phải là SAT TỔNG (400 đến 1600). Dữ liệu trường đôi khi nhập nhầm mốc của MỘT phần thi (đọc hoặc toán, tối đa 800),
 // khi đó điểm tổng của học sinh (ví dụ 1200) luôn "vượt" mốc 75% và vị trí thành 100%, làm nhóm trường sai.
@@ -73,10 +73,10 @@ public static class GroupReasons
     public const string AboveRange = "P_ABOVE_RANGE";             // p' từ 0,75 trở lên
     public const string CappedSelective = "CAPPED_SELECTIVE";     // lẽ ra An toàn nhưng tỉ lệ nhận dưới 50%
     public const string CappedWeakMetric = "CAPPED_WEAK_METRIC";  // lẽ ra An toàn nhưng một chỉ số dưới 0,25
-    public const string IntlDowngrade = "INTL_DOWNGRADE";         // tỉ lệ nhận du học sinh thấp hơn hẳn: hạ một nhóm
     public const string NoAcceptRate = "NO_ACCEPT_RATE";          // thiếu tỉ lệ nhận nên bỏ luật theo tỉ lệ nhận
     public const string NeedTest = "NEED_TEST";                   // trường bắt buộc SAT mà học sinh chưa có điểm thi
     public const string NoAcademicData = "NO_ACADEMIC_DATA";      // thiếu cả GPA lẫn điểm thi để so sánh
+    public const string NoCostData = "NO_COST_DATA";              // thiếu học phí nên không tính được chi phí năm (UC-22 4b)
 }
 // ---- Bước 5: fit score và chọn trường ----
 
@@ -250,10 +250,12 @@ public static class SchoolGrouper
     {
         var o = options ?? new GroupingOptions();
         var reasons = new List<string>();
-        if (acceptRate is null) reasons.Add(GroupReasons.NoAcceptRate);
+        // UC-22: luật theo độ chọn lọc dùng tỉ lệ nhận của du học sinh nếu có, không có thì tỉ lệ chung
+        var rate = EffectiveRate(acceptRate, intlAcceptRate);
+        if (rate is null) reasons.Add(GroupReasons.NoAcceptRate);
 
         SchoolGroup group;
-        if (acceptRate < o.AlwaysReachRate)
+        if (rate < o.AlwaysReachRate)
         {
             // Trường chọn lọc rất cao: điểm tốt đến đâu vẫn không chắc, không bao giờ coi là Vừa sức hay An toàn.
             group = SchoolGroup.Reach;
@@ -274,7 +276,7 @@ public static class SchoolGrouper
             reasons.Add(GroupReasons.AboveRange);
             // p' đủ cao cho An toàn, nhưng trường nhận ít hơn một nửa hồ sơ, hoặc có một chỉ số dưới mốc
             // (chỉ số mạnh không được che chỉ số yếu) thì chỉ Vừa sức.
-            if (acceptRate < o.SafetyMinRate)
+            if (rate < o.SafetyMinRate)
             {
                 group = SchoolGroup.Match;
                 reasons.Add(GroupReasons.CappedSelective);
@@ -290,15 +292,11 @@ public static class SchoolGrouper
             }
         }
 
-        // Trường nhận du học sinh ít hơn hẳn tỉ lệ chung thì khó hơn con số trung bình: hạ một nhóm.
-        if (acceptRate is double rate && rate > 0 && intlAcceptRate is double intl
-            && intl / rate < o.IntlRatioCut && group > SchoolGroup.Reach)
-        {
-            group--;
-            reasons.Add(GroupReasons.IntlDowngrade);
-        }
         return new GroupDecision(group, reasons);
     }
+
+    /// <summary>Tỉ lệ nhận dùng cho các luật chặn (UC-22): của du học sinh nếu trường có, không thì tỉ lệ chung; thiếu cả hai thì null.</summary>
+    public static double? EffectiveRate(double? acceptRate, double? intlAcceptRate) => intlAcceptRate ?? acceptRate;
 
     // Chấm một trường cho một học sinh: ghép bước 1 đến 4.
     // Thiếu dữ liệu thì không đoán: trả NoData kèm lý do.
@@ -343,7 +341,7 @@ public static class SchoolRanker
 {
     public const int DefaultMaxPerGroup = 4;
 
-    // Fit = 0,30·A + 0,25·C + 0,15·H + 0,20·Q + 0,10·E, mỗi thành phần trong 0..1.
+    // Fit = 0,30·A + 0,25·C + 0,20·Q + 0,15·H + 0,10·E (vừa tầm, ngân sách, chất lượng, học bổng, tiếng Anh: thứ tự của UC-24), mỗi thành phần trong 0..1.
     // Thành phần nào thiếu dữ liệu thì bỏ khỏi tổng và chia lại trọng số cho các thành phần còn lại.
     public static FitScore Score(double pAdjusted, FitStudent student, FitSchool school, FitWeights? weights = null)
     {

@@ -1,7 +1,8 @@
 """Lấy trung tâm tư vấn cho B6 (skill_chuyen_trung_tam) từ backend .NET.
 
 Luật chọn trung tâm nằm ở backend (CenterReferral): đã xác minh, đang hoạt động, đúng dịch vụ và bậc học,
-cùng thành phố xếp trước, tối đa 3. Advisor chỉ gọi API, không đọc bảng study_centers,
+học sinh nêu thành phố thì chỉ lấy trung tâm ở thành phố đó, xếp theo tên, tối đa 20. Chat chỉ hiện 3 trung tâm đầu,
+còn lại bấm Xem thêm. Advisor chỉ gọi API, không đọc bảng study_centers,
 giống phần gợi ý trường: lọc theo luật ở backend, advisor chỉ làm phần AI.
 """
 
@@ -122,7 +123,7 @@ class CenterFinder:
     def __init__(self, http: httpx.AsyncClient) -> None:
         self._http = http
 
-    # Tối đa 3 trung tâm cho một dịch vụ; study_level, city để None thì backend không xét
+    # Tối đa 20 trung tâm cho một dịch vụ (CenterReferral.MaxCenters), xếp theo tên; study_level, city để None thì backend không xét
     async def find(
         self, service: str, study_level: str | None = None, city: str | None = None
     ) -> list[CenterHit]:

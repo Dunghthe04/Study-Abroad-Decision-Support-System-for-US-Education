@@ -8,19 +8,28 @@ namespace StudyAbroad.Api.Controllers;
 
 /// <summary>
 /// Đợt duyệt mẫu: bốc ngẫu nhiên một số câu hệ thống đã trả lời được để người duyệt đọc và chấm đúng sai (đo tỷ lệ lỗi mà hàng đợi không thấy).
-/// Chỉ Admin. Danh sách đợt và danh sách câu KHÔNG có nội dung chat; nội dung một câu chỉ trả cho người được giao duyệt đợt đó và mỗi lần xem
-/// được ghi nhật ký. Người không được giao (kể cả người tạo đợt) nhận 404, không phân biệt với đợt không tồn tại.
+/// Admin và Moderator vào được controller này, nhưng chỉ Admin tạo đợt (UC-147); Moderator chỉ thấy các đợt được giao, chấm câu (UC-148) và
+/// xem báo cáo của đợt đó (UC-149). Danh sách đợt và danh sách câu KHÔNG có nội dung chat; nội dung một câu chỉ trả cho người được giao duyệt
+/// đợt đó và mỗi lần xem được ghi nhật ký. Người không được giao (kể cả người tạo đợt khi không tự giao mình) nhận 404 khi xem câu;
+/// Moderator không được giao nhận 404 khi mở câu hoặc báo cáo của đợt, không phân biệt với đợt không tồn tại, và không thấy đợt đó trong danh sách.
 /// </summary>
 [ApiController]
-[Authorize(Roles = UserRoles.Admin)]
+[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
 [Route("api/v1/admin/review-batches")]
 public class AdminReviewBatchesController(IReviewBatchService batches) : ControllerBase
 {
+    /// <summary>Admin và Moderator đang hoạt động, để chọn người duyệt khi tạo đợt. Chỉ Admin (người tạo đợt).</summary>
+    [HttpGet("reviewers")]
+    [Authorize(Roles = UserRoles.Admin)]
+    public async Task<ActionResult<IReadOnlyList<ReviewerOptionDto>>> Reviewers(CancellationToken ct) =>
+        Ok(await batches.ListReviewerOptionsAsync(ct));
+
     /// <summary>
-    /// Tạo đợt: bốc tối đa SizePerStratum câu cho mỗi nhóm skill trong khoảng ngày (không giới hạn nếu bỏ trống), giao cho 1 đến 5 Admin duyệt.
-    /// Seed bỏ trống thì tự sinh. Tham số sai (hoặc không có câu nào để bốc) trả 400 kèm lý do và không tạo gì.
+    /// Tạo đợt (chỉ Admin): bốc tối đa SizePerStratum câu cho mỗi nhóm skill trong khoảng ngày (không giới hạn nếu bỏ trống), giao cho 1 đến 5
+    /// Admin hoặc Moderator duyệt. Seed bỏ trống thì tự sinh. Tham số sai (hoặc không có câu nào để bốc) trả 400 kèm lý do và không tạo gì.
     /// </summary>
     [HttpPost]
+    [Authorize(Roles = UserRoles.Admin)]
     public async Task<ActionResult<ReviewBatchCreatedDto>> Create([FromBody] CreateReviewBatchRequest request, CancellationToken ct)
     {
         if (User.GetUserId() is not { } actorId)

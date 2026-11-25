@@ -63,6 +63,25 @@ export interface StudyCenter {
   /** [UC-92] Khu vực phục vụ và chi nhánh do trung tâm công bố. */
   serviceAreas?: string[] | null;
   branches?: string[] | null;
+  /** [UC-40] Chỉ số phản hồi 90 ngày gần nhất (null nếu mẫu < 5 lead). */
+  medianResponseHours?: number | null;
+  responseRatePercent?: number | null;
+  responseSampleCount?: number;
+}
+
+/** [UC-40 / UC-44] Thẻ hướng dẫn từ Kho tri thức (CENTER_ASK / CENTER_WARNING). */
+export interface CenterGuidanceCardDto {
+  topicCode: string;
+  docType: string;
+  title: string;
+  content: string;
+  source?: string | null;
+  sourceUrl?: string | null;
+}
+
+export interface CenterGuidanceCardsDto {
+  askCard: CenterGuidanceCardDto | null;
+  warningCard: CenterGuidanceCardDto | null;
 }
 
 export interface RegisterCenterRequest {
@@ -136,6 +155,7 @@ export interface CenterVerificationDto {
   centerEmail?: string | null;
   centerPhone?: string | null;
   emailVerifiedAt?: string | null;
+  isServiceContractValid?: boolean;
 }
 
 export interface CenterVerificationStatusDto {
@@ -151,6 +171,7 @@ export interface ReviewCenterVerificationRequest {
   isNationalRegistryMatched?: boolean;
   isBusinessOperating?: boolean;
   isRepresentativeValid?: boolean;
+  isServiceContractValid?: boolean;
   reviewNotes?: string | null;
   rejectionReason?: string | null;
 }
@@ -359,12 +380,10 @@ export interface Citation {
   snippet: string | null;
   /** Ngày thu thập thông tin của nguồn, dạng yyyy-MM-dd. Null là kho chưa ghi ngày. */
   retrievedAt?: string | null;
-}
-/** Ảnh minh họa kèm câu trả lời: link https tới ảnh (lấy từ cột image_url của dòng kho tri thức), trình duyệt tải thẳng từ link. */
-export interface ChatMedia {
-  kind: "image";
-  url: string;
-  alt: string;
+  /** Mã mục kho tri thức (id / entry_no) đã dùng (UC-36). */
+  entryNo?: number | null;
+  /** Số phiên bản của mục kho tri thức lúc trả lời (UC-36, UC-115). */
+  version?: number | null;
 }
 // Nút gợi ý: bấm thì gửi `value` như tin nhắn của học sinh
 export interface QuickReply {
@@ -376,7 +395,7 @@ export interface QuickReply {
 
 // Công cụ nhập ngay trong chat; frontend vẽ theo `type`
 export interface ChatWidget {
-  type: "major" | "review" | "budget" | "scholarship" | "form" | "select" | "recommend" | "simulate" | "goal_seek" | "explain" | "school_info" | "school_compare" | "school_search" | "school" | "centers";
+  type: "major" | "review" | "budget" | "scholarship" | "form" | "select" | "recommend" | "simulate" | "goal_seek" | "explain" | "school_info" | "school_compare" | "school_search" | "fit_compare" | "school" | "centers";
   data?: Record<string, unknown> | null;
 }
 
@@ -385,7 +404,7 @@ export interface ChatWidget {
  * không qua SLM hiểu câu nên nhanh và không nhầm tên trường. target chỉ dùng cho goal_seek (bỏ trống thì hệ thống chọn nhóm cao hơn một bậc).
  */
 export interface AssistantAction {
-  type: "goal_seek" | "explain" | "school_info" | "school_compare" | "school_search";
+  type: "goal_seek" | "explain" | "school_info" | "school_compare" | "school_fit_compare" | "school_search";
   schoolCodes?: string[] | null; // school_compare: mã từ hai đến bốn trường (hoặc tên chưa được chọn)
   fields?: string[] | null; // school_compare: mã mục so sánh, giữ nguyên khi chọn lại trường mơ hồ
   schoolCode?: string | null; // goal_seek không kèm trường: hỏi lại bằng ô chọn trường
@@ -401,7 +420,6 @@ export interface AssistantAction {
 export interface AdvisorChatResponse {
   answer: string;
   citations: Citation[];
-  media?: ChatMedia[] | null; // ảnh minh họa của câu trả lời, trống nếu không có
   disclaimer: string | null;
   sessionId: string | null;
   quickReplies?: QuickReply[] | null;
@@ -415,7 +433,7 @@ export interface AdvisorChatResponse {
 }
 
 export interface ChatLock {
-  reason: "premium_required" | "quota_exhausted";
+  reason: "premium_required" | "quota_exhausted" | "premium_tokens_exhausted";
   resetsAt: string | null;
 }
 
@@ -612,6 +630,7 @@ export interface TargetSchoolSummaryDto {
   safetyCount: number;
   undecidedCategoryCount: number;
   nextDeadline?: string | null;
+  isScholarshipMandatory?: boolean;
 }
 
 export interface UpdateApplicationRoundRequest {
@@ -690,6 +709,7 @@ export interface AddTargetSchoolRequest {
   applicationRound?: string | null;
   deadline?: string | null;
   notes?: string | null;
+  isUserCategory?: boolean | null;
 }
 
 export interface TargetSchoolDto {
@@ -711,22 +731,17 @@ export interface TargetSchoolDto {
   deadline?: string | null;
   createdAt: string;
   updatedAt?: string | null;
+  estimatedAnnualCostUsd?: number | null;
+  isCategoryUserSelected?: boolean;
+  availableRounds?: string[];
 }
 
-export interface TargetSchoolSummaryDto {
-  items: TargetSchoolDto[];
-  totalCount: number;
-  reachCount: number;
-  matchCount: number;
-  safetyCount: number;
-  undecidedCategoryCount: number;
-  nextDeadline?: string | null;
-}
-
-export interface UpdateApplicationRoundRequest {
-  applicationRound: string;
-  deadline?: string | null;
-  autoResolveDeadline?: boolean;
+export interface TargetSchoolDefaultsDto {
+  recommendedCategory?: "reach" | "match" | "safety" | string | null;
+  availableRounds: string[];
+  isScholarshipMandatory?: boolean;
+  existingEdSchoolName?: string | null;
+  existingEd2SchoolName?: string | null;
 }
 // [UC-73] Quản lý yêu cầu liên hệ nhận được phía Trung tâm tư vấn (Leads)
 export interface SharedProfileSummaryDto {
@@ -761,6 +776,9 @@ export interface CenterReceivedLeadDto {
   dataHidden?: boolean;
   /** [UC-111 bước 5] Ẩn vì phụ huynh đã rút đồng ý của học sinh dưới 16. */
   consentRevoked?: boolean;
+  /** [UC-68] Thời hạn 7 ngày để trung tâm phản hồi lead ở trạng thái Mới. */
+  expiresAt?: string | null;
+  daysUntilExpiry?: number | null;
 }
 
 export interface CenterLeadsSummaryDto {
@@ -795,6 +813,8 @@ export interface LeadMessageDto {
   createdAt: string;
   /** [Chat realtime] Lúc phía đối diện đã xem tin này, null nếu chưa xem. */
   readAt?: string | null;
+  /** [UC-44] True khi tin nhắn trung tâm chứa STK/chuyển khoản/đặt cọc để hiện nhắc nhở thanh toán theo hợp đồng. */
+  showPaymentReminder?: boolean;
 }
 
 export interface LeadMessagesThreadDto {
@@ -833,10 +853,14 @@ export interface AdminLeadMessageReportDto {
   reportedByUserId?: string | null;
   reportedAt?: string | null;
   reportReason?: string | null;
+  /** [UC-143] Chi tiết bổ sung do người báo cáo nhập (tùy chọn, tối đa 1000 ký tự). */
+  reportDetail?: string | null;
   createdAt: string;
-  /** Kết quả Admin xử lý: removed (gỡ tin), warned (cảnh cáo), locked (khóa tài khoản). Trống là chưa xử lý. */
-  reportResolution?: "removed" | "warned" | "locked" | string | null;
+  /** Kết quả Admin xử lý: removed (gỡ tin), warned (cảnh cáo), locked (khóa tài khoản), dismissed (bác bỏ). Trống là chưa xử lý. */
+  reportResolution?: "removed" | "warned" | "locked" | "dismissed" | string | null;
   reportResolvedAt?: string | null;
+  isFlagged?: boolean;
+  flagReason?: string | null;
 }
 
 /** [UC-58] Một tin trong phần ngữ cảnh quanh tin bị báo cáo. */
@@ -851,6 +875,8 @@ export interface AdminReportContextMessageDto {
   createdAt: string;
   /** Chính là tin bị báo cáo. */
   isReported: boolean;
+  isFlagged?: boolean;
+  flagReason?: string | null;
 }
 
 /** [UC-58] Tin bị báo cáo kèm tối đa contextSize tin liền trước và liền sau. Admin không đọc cả cuộc trò chuyện. */
@@ -859,6 +885,13 @@ export interface AdminLeadMessageReportContextDto {
   messageId: string;
   contextSize: number;
   messages: AdminReportContextMessageDto[];
+}
+
+/** [UC-152] Phản hồi công khai của trung tâm dưới một đánh giá. */
+export interface CenterReviewReplyDto {
+  content: string;
+  createdAt: string;
+  editedAt?: string | null;
 }
 
 /** Đánh giá công khai của trung tâm (tên người đánh giá đã được rút gọn ở backend). */
@@ -871,6 +904,42 @@ export interface CenterReviewDto {
   createdAt: string;
   rating: number;
   comment?: string | null;
+  /** [UC-152] Phản hồi công khai của trung tâm (nếu có và đang hiển thị). */
+  centerReply?: CenterReviewReplyDto | null;
+}
+
+/** [UC-151] Lý do báo cáo đánh giá trung tâm. */
+export type CenterReviewReportReason =
+  | "offensive_language"
+  | "personal_info"
+  | "not_real_experience"
+  | "spam_ad"
+  | "other";
+
+export type CenterReviewReportFilter = "open" | "resolved" | "all";
+
+/** [UC-151] Báo cáo đánh giá trung tâm hiển thị cho Moderator (UC-53). */
+export interface CenterReviewReportDto {
+  id: string;
+  centerReviewId: string;
+  studyCenterId: string;
+  studyCenterName: string;
+  reviewRating: number;
+  reviewComment?: string | null;
+  reviewStatus: string;
+  reviewerName: string;
+  reporterUserId: string;
+  reporterName: string;
+  reporterRole: string;
+  /** Trung tâm tự báo cáo đánh giá về chính trung tâm mình (Moderator cần lưu ý xung đột lợi ích). */
+  isCenterSelfReport: boolean;
+  reason: CenterReviewReportReason | string;
+  detail?: string | null;
+  status: "open" | "resolved_removed" | "dismissed" | string;
+  createdAt: string;
+  resolvedByUserId?: string | null;
+  resolvedAt?: string | null;
+  resolutionNote?: string | null;
 }
 
 /** [USAS-2070 / UC-45] Gửi đánh giá trung tâm: số sao 1 đến 5, nhận xét tùy chọn (tối đa 2000 ký tự). */
@@ -971,17 +1040,19 @@ export interface CenterProfileChangeDto {
   reviewReason?: string | null;
 }
 
-/** [UC-97] Danh mục lọc nhật ký truy cập dữ liệu nhạy cảm. */
+/** [UC-91] Danh mục lọc nhật ký truy cập dữ liệu nhạy cảm và nhật ký thao tác. */
 export type AccessLogCategory =
   | "all"
   | "all_sensitive"
   | "center_document"
   | "reported_message"
   | "slm_export"
+  | "knowledge_base"
+  | "slm_sample"
   | "parent"
   | "account";
 
-/** [UC-97] Một dòng nhật ký truy cập hoặc xuất dữ liệu nhạy cảm (Administrator only). */
+/** [UC-91] Một dòng nhật ký truy cập hoặc thao tác (Administrator only). */
 export interface AccessLogDto {
   id: string;
   createdAt: string;
@@ -999,7 +1070,7 @@ export interface AccessLogDto {
   userAgent?: string | null;
 }
 
-/** [UC-97] Tham số truy vấn bộ lọc nhật ký truy cập. */
+/** [UC-91] Tham số truy vấn bộ lọc nhật ký truy cập và thao tác. */
 export interface AccessLogFilterQuery {
   category?: AccessLogCategory | string;
   action?: string;
@@ -1012,7 +1083,7 @@ export interface AccessLogFilterQuery {
   pageSize?: number;
 }
 
-/** [UC-97] Thống kê tổng quan số lượt truy cập nhạy cảm theo nhóm thao tác. */
+/** [UC-91] Thống kê tổng quan số lượt truy cập nhạy cảm theo nhóm thao tác. */
 export interface AccessLogSummaryDto {
   totalSensitiveCount: number;
   centerDocumentViews: number;

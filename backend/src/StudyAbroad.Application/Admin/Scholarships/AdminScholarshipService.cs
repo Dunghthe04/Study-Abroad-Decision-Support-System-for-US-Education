@@ -23,7 +23,8 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
     private const int MaxPageSize = 100;
     private const decimal MaxAmountUsd = 9_999_999_999.99m;
     private static readonly string[] CoverageTypes = ["full", "partial", "tuition", "stipend"];
-    private static readonly string[] Kinds = ["merit", "need", "merit_and_need", "athletic", "program", "external", "other"];
+    // UC-103: học bổng do trường cấp, không nhận loại external
+    private static readonly string[] Kinds = ["merit", "need", "merit_and_need", "athletic", "program", "other"];
     private static readonly string[] AmountTypes = ["fixed", "range", "percent_tuition", "full_tuition", "full_ride", "varies"];
     private static readonly string[] ApplicationMethods = ["automatic", "separate_application", "nomination", "unknown"];
 
@@ -128,13 +129,14 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
 
         if (v.Provider is { Length: > 256 })
             errors["provider"] = "Đơn vị cấp tối đa 256 ký tự.";
-        if (v.UniversityId is { } universityId && await repository.GetUniversityNameAsync(universityId, ct) is null)
+        // UC-103: học bổng bắt buộc gắn với một trường và chỉ dành cho bậc undergraduate
+        if (v.UniversityId is null)
+            errors["universityId"] = "Học bổng bắt buộc phải gắn với một trường.";
+        else if (await repository.GetUniversityNameAsync(v.UniversityId.Value, ct) is null)
             errors["universityId"] = "Trường không tồn tại.";
-        else if (v.UniversityId is null && v.Provider is null)
-            errors["provider"] = "Cần chọn trường hoặc nhập đơn vị cấp học bổng.";
 
-        if (!StudyLevels.IsValid(v.StudyLevel))
-            errors["studyLevel"] = "Bậc học không hợp lệ.";
+        if (v.StudyLevel != StudyLevels.Undergraduate)
+            errors["studyLevel"] = "Chỉ hỗ trợ học bổng bậc đại học (undergraduate).";
         if (v.AmountUsd is < 0 or > MaxAmountUsd)
             errors["amountUsd"] = "Giá trị học bổng phải từ 0 đến 9.999.999.999,99 USD.";
         if (v.CoverageType is not null && !CoverageTypes.Contains(v.CoverageType))
@@ -148,7 +150,7 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
 
         // [USAS-2067] Cột bộ dữ liệu học bổng; null = chưa rõ.
         if (v.Kind is not null && !Kinds.Contains(v.Kind))
-            errors["kind"] = "Loại học bổng chỉ nhận merit, need, merit_and_need, athletic, program, external hoặc other.";
+            errors["kind"] = "Loại học bổng chỉ nhận merit, need, merit_and_need, athletic, program hoặc other.";
         if (v.AmountType is not null && !AmountTypes.Contains(v.AmountType))
             errors["amountType"] = "Kiểu giá trị chỉ nhận fixed, range, percent_tuition, full_tuition, full_ride hoặc varies.";
         if (v.AmountMinUsd is < 0 or > MaxAmountUsd)
@@ -167,6 +169,8 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
             errors["minAct"] = "ACT tối thiểu phải trong khoảng 1–36.";
         if (v.MinToefl is < 0 or > 120)
             errors["minToefl"] = "TOEFL tối thiểu phải trong khoảng 0–120.";
+        if (v.MinDuolingo is < 10 or > 160)
+            errors["minDuolingo"] = "Duolingo tối thiểu phải trong khoảng 10–160.";
         if (v.MajorRestriction is { Length: > 500 })
             errors["majorRestriction"] = "Giới hạn ngành tối đa 500 ký tự.";
         if (v.ApplicationMethod is not null && !ApplicationMethods.Contains(v.ApplicationMethod))
@@ -208,6 +212,7 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
         AddChange(changes, "minSat", s?.MinSat, v.MinSat);
         AddChange(changes, "minAct", s?.MinAct, v.MinAct);
         AddChange(changes, "minToefl", s?.MinToefl, v.MinToefl);
+        AddChange(changes, "minDuolingo", s?.MinDuolingo, v.MinDuolingo);
         AddChange(changes, "majorRestriction", s?.MajorRestriction, v.MajorRestriction);
         AddChange(changes, "applicationMethod", s?.ApplicationMethod, v.ApplicationMethod);
         AddChange(changes, "applyUrl", s?.ApplyUrl, v.ApplyUrl);
@@ -243,6 +248,7 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
         s.MinSat = v.MinSat;
         s.MinAct = v.MinAct;
         s.MinToefl = v.MinToefl;
+        s.MinDuolingo = v.MinDuolingo;
         s.MajorRestriction = v.MajorRestriction;
         s.ApplicationMethod = v.ApplicationMethod;
         s.ApplyUrl = v.ApplyUrl;
@@ -254,5 +260,5 @@ public class AdminScholarshipService(IAdminScholarshipRepository repository) : I
         s.SourceReliability, s.IsActive, s.UpdatedAt, await repository.GetUserDisplayNameAsync(s.LastEditedByUserId, ct),
         s.Kind, s.AmountType, s.AmountMinUsd, s.AmountMaxUsd, s.DurationYears, s.Renewable, s.RenewalCriteria,
         s.IntlEligible, s.VnEligible, s.NeedBased, s.MeritBased, s.MinSat, s.MinAct, s.MinToefl,
-        s.MajorRestriction, s.ApplicationMethod, s.ApplyUrl);
+        s.MajorRestriction, s.ApplicationMethod, s.ApplyUrl, s.MinDuolingo);
 }

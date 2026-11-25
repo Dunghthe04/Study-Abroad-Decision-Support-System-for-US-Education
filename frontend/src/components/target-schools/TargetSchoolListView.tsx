@@ -19,7 +19,7 @@ import {
   CheckCircle2Icon,
   ShieldCheckIcon,
 } from "lucide-react";
-import { targetSchoolsApi } from "@/lib/api";
+import { targetSchoolsApi, ApiError } from "@/lib/api";
 import { ParentSuggestions } from "@/components/target-schools/ParentSuggestions";
 import type { TargetSchoolDto, TargetSchoolSummaryDto } from "@/types/api";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,18 @@ export function TargetSchoolListView() {
   // State cho dialog xác nhận xóa
   const [deletingSchool, setDeletingSchool] = useState<TargetSchoolDto | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // State cho dialog đổi nhóm phân loại [UC-33]
+  const [editingCategorySchool, setEditingCategorySchool] = useState<TargetSchoolDto | null>(null);
+  const [nextCategory, setNextCategory] = useState<"reach" | "match" | "safety">("match");
+  const [isUpdatingCategory, setIsUpdatingCategory] = useState(false);
+
+  // State cho dialog chọn / đổi vòng nộp hồ sơ [UC-32]
+  const [editingRoundSchool, setEditingRoundSchool] = useState<TargetSchoolDto | null>(null);
+  const [nextRound, setNextRound] = useState("");
+  const [confirmBindingRound, setConfirmBindingRound] = useState(false);
+  const [roundError, setRoundError] = useState<string | null>(null);
+  const [isUpdatingRound, setIsUpdatingRound] = useState(false);
 
   const fetchData = React.useCallback(async () => {
     setIsLoading(true);
@@ -89,6 +101,86 @@ export function TargetSchoolListView() {
       setIsDeleting(false);
     }
   };
+
+  // Đổi nhóm phân loại [UC-33]
+  const handleUpdateCategoryConfirm = async () => {
+    if (!editingCategorySchool) return;
+    setIsUpdatingCategory(true);
+    try {
+      await targetSchoolsApi.updateCategory(editingCategorySchool.id, { category: nextCategory });
+      toast.add({
+        type: "success",
+        title: "Đã đổi nhóm trường mục tiêu",
+        description: `${editingCategorySchool.universityName} đã chuyển sang nhóm ${getCategoryConfig(nextCategory).label} (do bạn chọn).`,
+      });
+      setEditingCategorySchool(null);
+      await fetchData();
+    } catch {
+      toast.add({
+        type: "error",
+        title: "Lỗi",
+        description: "Không thể đổi nhóm trường mục tiêu. Vui lòng thử lại.",
+      });
+    } finally {
+      setIsUpdatingCategory(false);
+    }
+  };
+
+  // Chọn / đổi vòng nộp hồ sơ [UC-32]
+  const ALL_ROUND_OPTIONS = [
+    { value: "Early Decision", label: "Early Decision (ED)" },
+    { value: "Early Decision II", label: "Early Decision II (ED II)" },
+    { value: "Early Action", label: "Early Action (EA)" },
+    { value: "Restrictive Early Action", label: "Restrictive / Single-Choice Early Action (REA/SCEA)" },
+    { value: "Regular Decision", label: "Regular Decision (RD)" },
+    { value: "Rolling", label: "Rolling Admission" },
+  ];
+
+  const isBindingRound = (r?: string | null) => r === "Early Decision" || r === "Early Decision II";
+  const isRestrictiveRound = (r?: string | null) => r === "Restrictive Early Action";
+
+  const openRoundModal = (item: TargetSchoolDto) => {
+    const supported = item.availableRounds && item.availableRounds.length > 0
+      ? ALL_ROUND_OPTIONS.filter((o) => item.availableRounds!.includes(o.value))
+      : ALL_ROUND_OPTIONS;
+    const defaultVal = item.applicationRound && supported.some((o) => o.value === item.applicationRound)
+      ? item.applicationRound
+      : (supported[0]?.value ?? "");
+    setNextRound(defaultVal);
+    setConfirmBindingRound(false);
+    setRoundError(null);
+    setEditingRoundSchool(item);
+  };
+
+  const handleUpdateRoundConfirm = async () => {
+    if (!editingRoundSchool || !nextRound) return;
+    setIsUpdatingRound(true);
+    setRoundError(null);
+    try {
+      await targetSchoolsApi.updateRound(editingRoundSchool.id, {
+        applicationRound: nextRound,
+        autoResolveDeadline: true,
+      });
+      toast.add({
+        type: "success",
+        title: "Đã cập nhật vòng nộp",
+        description: `${editingRoundSchool.universityName}: ${nextRound}.`,
+      });
+      setEditingRoundSchool(null);
+      await fetchData();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 400) {
+        setRoundError(err.message || "Không thể cập nhật vòng nộp hồ sơ.");
+      } else {
+        setRoundError("Không thể cập nhật vòng nộp hồ sơ. Vui lòng thử lại.");
+      }
+    } finally {
+      setIsUpdatingRound(false);
+    }
+  };
+
+  const formatEstimatedCost = (usd?: number | null) =>
+    usd !== null && usd !== undefined ? `$${Math.round(usd).toLocaleString("en-US")} / năm` : "Chưa có";
 
   const items = data?.items;
 
@@ -480,9 +572,15 @@ export function TargetSchoolListView() {
                 : "Thử thay đổi từ khóa tìm kiếm hoặc bấm chọn lại phân loại mục tiêu."}
             </p>
             {total === 0 ? (
-              <div className="flex justify-center gap-3 pt-2">
-                <Link href="/recommendations">
+              <div className="flex flex-wrap justify-center gap-3 pt-2">
+                <Link href="/universities">
                   <Button size="sm" className="gap-1.5">
+                    <SearchIcon className="size-4" />
+                    Tìm trường
+                  </Button>
+                </Link>
+                <Link href="/recommendations">
+                  <Button variant="outline" size="sm" className="gap-1.5">
                     <Sparkles className="size-4" />
                     Khám phá gợi ý trường
                   </Button>
@@ -524,9 +622,16 @@ export function TargetSchoolListView() {
               >
                 <CardHeader className="p-4 pb-2">
                   <div className="flex items-start justify-between gap-2">
-                    <Badge variant={catConfig.badgeVariant} className="text-xs font-semibold">
-                      {catConfig.label}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant={catConfig.badgeVariant} className="text-xs font-semibold">
+                        {catConfig.label}
+                      </Badge>
+                      {item.isCategoryUserSelected && (
+                        <Badge variant="outline" className="text-[11px] font-normal text-muted-foreground">
+                          Do bạn chọn
+                        </Badge>
+                      )}
+                    </div>
                     <span className="font-mono text-xs text-muted-foreground">Mã {item.universityCode}</span>
                   </div>
                   <CardTitle className="pt-2 text-base font-bold leading-snug">
@@ -552,6 +657,13 @@ export function TargetSchoolListView() {
                       <span className="text-muted-foreground">Vòng nộp:</span>
                       <span className="font-semibold text-foreground">
                         {item.applicationRound || "Chưa xác định"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Chi phí ước tính:</span>
+                      <span className="font-semibold text-foreground">
+                        {formatEstimatedCost(item.estimatedAnnualCostUsd)}
                       </span>
                     </div>
 
@@ -619,7 +731,7 @@ export function TargetSchoolListView() {
                   )}
 
                   {/* Các nút hành động */}
-                  <div className="flex items-center justify-between border-t border-line/60 pt-3">
+                  <div className="flex flex-wrap items-center justify-between gap-1 border-t border-line/60 pt-3">
                     <Link href={`/university/${item.universityCode}`}>
                       <Button variant="ghost" size="sm" className="gap-1 text-brand">
                         <span>Chi tiết trường</span>
@@ -627,15 +739,41 @@ export function TargetSchoolListView() {
                       </Button>
                     </Link>
 
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDeletingSchool(item)}
-                      className="gap-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    >
-                      <Trash2Icon className="size-3.5" />
-                      <span>Xóa</span>
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openRoundModal(item)}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Đổi vòng
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const cur = (item.category || "match").toLowerCase();
+                          setNextCategory(cur === "reach" || cur === "safety" ? cur : "match");
+                          setEditingCategorySchool(item);
+                        }}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Đổi nhóm
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeletingSchool(item)}
+                        className="gap-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Trash2Icon className="size-3.5" />
+                        <span>Xóa</span>
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -685,9 +823,14 @@ export function TargetSchoolListView() {
                             <Badge variant={catConfig.badgeVariant} className="text-xs">
                               {catConfig.label}
                             </Badge>
+                            {item.isCategoryUserSelected && (
+                              <Badge variant="outline" className="text-[11px] font-normal text-muted-foreground">
+                                Do bạn chọn
+                              </Badge>
+                            )}
                           </div>
                           <p className="mt-0.5 text-xs text-muted-foreground">
-                            {[item.city, item.state].filter(Boolean).join(", ")} · Mã {item.universityCode}
+                            {[item.city, item.state].filter(Boolean).join(", ")} · Mã {item.universityCode} · Chi phí ước tính: {formatEstimatedCost(item.estimatedAnnualCostUsd)}
                           </p>
                         </div>
 
@@ -735,7 +878,29 @@ export function TargetSchoolListView() {
                         </p>
                       )}
 
-                      <div className="mt-3 flex items-center justify-end gap-2">
+                      <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openRoundModal(item)}
+                          className="text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          Đổi vòng
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const cur = (item.category || "match").toLowerCase();
+                            setNextCategory(cur === "reach" || cur === "safety" ? cur : "match");
+                            setEditingCategorySchool(item);
+                          }}
+                          className="text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          Đổi nhóm
+                        </Button>
                         <Link href={`/university/${item.universityCode}`}>
                           <Button variant="outline" size="sm">
                             Xem trường
@@ -788,14 +953,184 @@ export function TargetSchoolListView() {
             >
               Hủy
             </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleDeleteConfirm}
+                loading={isDeleting}
+                className="gap-2"
+              >
+                Xác nhận xóa
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+      {/* Dialog Đổi Nhóm Phân Loại [UC-33] */}
+      <Dialog open={Boolean(editingCategorySchool)} onOpenChange={(open) => !open && setEditingCategorySchool(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-lg">Đổi nhóm trường mục tiêu</DialogTitle>
+            <DialogDescription>
+              Chọn nhóm phân loại mới cho{" "}
+              <span className="font-semibold text-foreground">{editingCategorySchool?.universityName}</span>. Nhóm sau khi đổi sẽ được đánh dấu là do bạn chọn.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 gap-2 py-2">
+            {(
+              [
+                { value: "reach", label: groupLabel("R"), desc: "Trường có tính cạnh tranh cao so với hồ sơ" },
+                { value: "match", label: groupLabel("M"), desc: "Điểm và hồ sơ nằm trong khoảng tuyển sinh" },
+                { value: "safety", label: groupLabel("S"), desc: "Hồ sơ vượt trội so với yêu cầu đầu vào" },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setNextCategory(opt.value)}
+                className={cn(
+                  "cursor-pointer rounded-xl border p-3 text-left transition-colors",
+                  nextCategory === opt.value
+                    ? "border-brand bg-brand/5 text-foreground"
+                    : "border-line hover:bg-muted/50"
+                )}
+              >
+                <div className="text-sm font-semibold">{opt.label}</div>
+                <p className="mt-0.5 text-xs text-muted-foreground">{opt.desc}</p>
+              </button>
+            ))}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button
               type="button"
-              variant="destructive"
-              onClick={handleDeleteConfirm}
-              loading={isDeleting}
-              className="gap-2"
+              variant="ghost"
+              onClick={() => setEditingCategorySchool(null)}
+              disabled={isUpdatingCategory}
             >
-              Xác nhận xóa
+              Hủy
+            </Button>
+            <Button
+              type="button"
+              onClick={handleUpdateCategoryConfirm}
+              loading={isUpdatingCategory}
+            >
+              Lưu nhóm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Dialog Chọn / Đổi Vòng Nộp [UC-32] */}
+      <Dialog open={Boolean(editingRoundSchool)} onOpenChange={(open) => !open && setEditingRoundSchool(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg">Chọn vòng nộp hồ sơ</DialogTitle>
+            <DialogDescription>
+              Chỉ hiển thị các vòng nộp mà{" "}
+              <span className="font-semibold text-foreground">{editingRoundSchool?.universityName}</span> hỗ trợ.
+            </DialogDescription>
+          </DialogHeader>
+
+          {(() => {
+            const supported = editingRoundSchool?.availableRounds && editingRoundSchool.availableRounds.length > 0
+              ? ALL_ROUND_OPTIONS.filter((o) => editingRoundSchool.availableRounds!.includes(o.value))
+              : ALL_ROUND_OPTIONS;
+            const conflictSchool =
+              isBindingRound(nextRound) && editingRoundSchool
+                ? (data?.items ?? []).find(
+                    (it) =>
+                      it.id !== editingRoundSchool.id &&
+                      it.applicationRound?.toLowerCase() === nextRound.toLowerCase()
+                  )?.universityName ?? null
+                : null;
+
+            return (
+              <div className="space-y-3 py-1">
+                {roundError && (
+                  <div className="rounded-md border border-risk/25 bg-risk-wash p-2.5 text-xs text-risk">
+                    {roundError}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 gap-2">
+                  {supported.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setNextRound(opt.value);
+                        setConfirmBindingRound(false);
+                        setRoundError(null);
+                      }}
+                      className={cn(
+                        "cursor-pointer rounded-xl border p-2.5 text-left text-sm font-medium transition-colors",
+                        nextRound === opt.value
+                          ? "border-brand bg-brand/5 text-foreground"
+                          : "border-line hover:bg-muted/50"
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                {isBindingRound(nextRound) && (
+                  <div className="rounded-lg border border-warn/40 bg-warn-wash/60 p-3 text-xs space-y-2 text-foreground">
+                    <p className="font-semibold text-warn">Cảnh báo vòng ràng buộc ({nextRound})</p>
+                    <p>
+                      Đây là vòng ràng buộc: nếu trúng tuyển, bạn phải nhập học tại trường này và rút các hồ sơ đã nộp ở trường khác.
+                    </p>
+                    {data?.isScholarshipMandatory && (
+                      <p className="font-medium text-risk">
+                        Lưu ý rủi ro tài chính: Hồ sơ của bạn có nhu cầu học bổng &ldquo;Bắt buộc&rdquo;. Hãy cân nhắc kỹ trước khi chọn {nextRound}.
+                      </p>
+                    )}
+                    {conflictSchool && (
+                      <p className="font-semibold text-risk">
+                        Bạn đã chọn {nextRound} cho {conflictSchool}. Mỗi học sinh chỉ được chọn tối đa một trường ở vòng này.
+                      </p>
+                    )}
+                    <label className="flex items-start gap-2 cursor-pointer pt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={confirmBindingRound}
+                        onChange={(e) => setConfirmBindingRound(e.target.checked)}
+                        className="mt-0.5 rounded border-line"
+                      />
+                      <span>Tôi đã hiểu quy định ràng buộc của {nextRound} và xác nhận chọn vòng này.</span>
+                    </label>
+                  </div>
+                )}
+
+                {isRestrictiveRound(nextRound) && (
+                  <div className="rounded-lg border border-brand/30 bg-brand-wash/50 p-3 text-xs space-y-1 text-foreground">
+                    <p className="font-semibold text-brand">Lưu ý vòng nộp sớm có giới hạn (REA / SCEA)</p>
+                    <p>
+                      Vòng này thường giới hạn việc nộp sớm vào các trường tư thục khác theo quy định riêng của trường.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setEditingRoundSchool(null)}
+              disabled={isUpdatingRound}
+            >
+              Hủy
+            </Button>
+            <Button
+              type="button"
+              onClick={handleUpdateRoundConfirm}
+              disabled={!nextRound || (isBindingRound(nextRound) && !confirmBindingRound)}
+              loading={isUpdatingRound}
+            >
+              Lưu vòng nộp
             </Button>
           </DialogFooter>
         </DialogContent>

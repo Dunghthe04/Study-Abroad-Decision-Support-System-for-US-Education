@@ -40,22 +40,66 @@ interface InfoRow {
   node: React.ReactNode;
 }
 
-// Chỉ các thông tin trang danh sách và trang chi tiết đã công khai; không có phí, số điện thoại, email
+function formatMedianHours(hours: number): string {
+  return hours < 1 ? "< 1 giờ" : hours < 24 ? `${hours.toFixed(1)} giờ` : `${(hours / 24).toFixed(1)} ngày`;
+}
+
+// [UC-142] Chỉ các thông tin trang danh sách và trang chi tiết đã công khai; không có phí, tỷ lệ đỗ Visa, SĐT, email
 function infoRows(center: StudyCenter): InfoRow[] {
   const profile = getEnrichedCenterProfile(center);
   const place = [center.district, center.city].filter(Boolean).join(", ") || MISSING;
   const hasReviews = (center.reviewCount ?? 0) > 0;
   const accreditations = profile.accreditations.length ? profile.accreditations.join(", ") : MISSING;
+  const isVerified = center.verificationStatus === "verified";
+  const verifiedDate = center.verifiedAt ? new Date(center.verifiedAt).toLocaleDateString("vi-VN") : null;
+  const verificationText = isVerified
+    ? verifiedDate
+      ? `Đã xác minh (${verifiedDate})`
+      : "Đã xác minh"
+    : "Chờ xác minh";
+  const hasResponseSample = (center.responseSampleCount ?? 0) >= 5;
+  const medianText =
+    hasResponseSample && center.medianResponseHours != null
+      ? formatMedianHours(center.medianResponseHours)
+      : "Chưa đủ dữ liệu";
+  const rateText =
+    hasResponseSample && center.responseRatePercent != null
+      ? `${center.responseRatePercent}%`
+      : "Chưa đủ dữ liệu";
+
   return [
     { label: "Khu vực", text: place, node: <span className="text-base">{place}</span> },
     {
-      label: "Tỷ lệ đỗ Visa",
-      text: String(center.visaSuccessRate ?? ""),
+      label: "Xác minh",
+      text: verificationText,
+      node: isVerified ? (
+        <span className="inline-flex flex-wrap items-center gap-1.5 text-sm font-medium text-ok">
+          <CheckIcon className="size-4" />
+          <span>Đã xác minh</span>
+          {verifiedDate && <span className="font-normal text-ink-3">· {verifiedDate}</span>}
+        </span>
+      ) : (
+        <span className="text-ink-3">Chờ xác minh</span>
+      ),
+    },
+    {
+      label: "Thời gian phản hồi thường gặp",
+      text: medianText,
       node:
-        center.visaSuccessRate != null ? (
-          <span className="font-heading text-2xl font-bold text-ok">{center.visaSuccessRate}%</span>
+        hasResponseSample && center.medianResponseHours != null ? (
+          <span className="text-base font-medium">{medianText}</span>
         ) : (
-          <span className="text-ink-3">{MISSING}</span>
+          <span className="text-sm text-ink-3">Chưa đủ dữ liệu</span>
+        ),
+    },
+    {
+      label: "Tỷ lệ phản hồi",
+      text: rateText,
+      node:
+        hasResponseSample && center.responseRatePercent != null ? (
+          <span className="font-heading text-xl font-bold text-ok">{rateText}</span>
+        ) : (
+          <span className="text-sm text-ink-3">Chưa đủ dữ liệu</span>
         ),
     },
     {

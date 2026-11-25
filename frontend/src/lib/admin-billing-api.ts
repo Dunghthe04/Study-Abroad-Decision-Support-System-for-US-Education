@@ -3,14 +3,7 @@
 import { apiFetch } from "@/lib/api";
 import { getBillingError } from "@/lib/billing-api";
 import type { PagedResult } from "@/types/api";
-import type {
-  AdminOrderDetailDto,
-  AdminOrderDto,
-  AdminOrderFilters,
-  AdminPlanDto,
-  RetainedBuyerDto,
-  SavePlanRequest,
-} from "@/types/admin-billing";
+import type { AdminOrderBuyerInfoDto, AdminOrderDetailDto, AdminOrderDto, AdminOrderFilters, AdminOrderRecheckDto, AdminPlanDto, SavePlanRequest } from "@/types/admin-billing";
 
 const PLANS = "/api/v1/admin/plans";
 const ORDERS = "/api/v1/admin/orders";
@@ -25,10 +18,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   free_plan_locked: "Gói Miễn phí luôn giá 0đ, luôn mở bán và không xóa được.",
   plan_in_use: "Gói đã có đơn hàng hoặc chu kỳ sử dụng, không xóa được. Hãy tắt mở bán thay vì xóa.",
   already_paid: "Đơn này đã được thanh toán.",
-  not_mismatch: "Chỉ từ chối được đơn sai số tiền.",
+  not_mismatch: "Chỉ từ chối được đơn lệch số tiền.",
   note_required: "Cần nhập ghi chú.",
+  gateway_not_paid: "payOS chưa ghi nhận giao dịch đã thanh toán nên không thể kích hoạt.",
   gateway_unavailable: "Không kết nối được payOS. Thử lại sau ít phút.",
-  retained_buyer_not_found: "Đơn này không có thông tin người mua được giữ lại.",
+  buyer_deleted: "Người mua đã xóa tài khoản nên không thể kích hoạt. Đơn đã chuyển sang Lệch số tiền để hủy và hoàn tiền ngoài hệ thống.",
+  buyer_info_not_found: "Không có thông tin lưu trữ người mua đã xóa cho đơn này.",
 };
 
 /** Câu báo lỗi tiếng Việt: theo code nếu biết, rồi lời server, rồi câu dự phòng. */
@@ -49,6 +44,8 @@ export const adminBillingApi = {
     const params = new URLSearchParams({ page: String(filters.page), pageSize: String(pageSize) });
     if (filters.status) params.set("status", filters.status);
     if (filters.q.trim()) params.set("q", filters.q.trim());
+    if (filters.from) params.set("from", filters.from);
+    if (filters.to) params.set("to", filters.to);
     return apiFetch<PagedResult<AdminOrderDto>>(`${ORDERS}?${params}`);
   },
   order: (orderCode: number) => apiFetch<AdminOrderDetailDto>(`${ORDERS}/${orderCode}`),
@@ -56,9 +53,8 @@ export const adminBillingApi = {
     apiFetch<AdminOrderDto>(`${ORDERS}/${orderCode}/activate`, { method: "POST", body: JSON.stringify({ note }) }),
   reject: (orderCode: number, note: string) =>
     apiFetch<AdminOrderDto>(`${ORDERS}/${orderCode}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
-  recheck: (orderCode: number) => apiFetch<AdminOrderDto>(`${ORDERS}/${orderCode}/recheck`, { method: "POST" }),
-  /** [UC-75 lớp 2] Mỗi lần gọi được ghi nhật ký kiểm toán. */
-  retainedBuyer: (orderCode: number) => apiFetch<RetainedBuyerDto>(`${ORDERS}/${orderCode}/retained-buyer`),
+  recheck: (orderCode: number) => apiFetch<AdminOrderRecheckDto>(`${ORDERS}/${orderCode}/recheck`, { method: "POST" }),
+  revealBuyer: (orderCode: number) => apiFetch<AdminOrderBuyerInfoDto>(`${ORDERS}/${orderCode}/reveal-buyer`, { method: "POST" }),
 };
 
 export const PLAN_KIND_LABELS = { free: "Miễn phí", personal: "Cá nhân", family: "Gia đình" } as const;

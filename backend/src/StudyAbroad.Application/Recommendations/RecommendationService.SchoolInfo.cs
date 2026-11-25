@@ -26,7 +26,26 @@ public record SchoolAidInfo(string? Policy, decimal? AvgUsd, int? Recipients);
 public record SchoolOutcomeInfo(decimal? RetentionRate1Yr, decimal? GradRate6Yr);
 
 // GPA của sinh viên đã trúng tuyển (thang 4): trung bình, tỉ lệ có GPA 4,0 và tỉ lệ có GPA từ 3,75 trở lên (0..1)
+/// <summary>Số liệu bổ sung của trường (v14): phí nộp hồ sơ, bảo hiểm, học phí trong bang, tỷ lệ nộp điểm thi.</summary>
+public record SchoolExtraInfo(
+    decimal? ApplicationFeeUsd, decimal? HealthInsuranceUsd, decimal? TuitionInStateUsd, decimal? SatSubmitPct, decimal? ActSubmitPct);
+
 public record SchoolGpaInfo(decimal? Avg, decimal? ShareFour, decimal? ShareAbove375);
+
+/// <summary>
+/// [UC-156] Đời sống khuôn viên: bối cảnh khuôn viên (mã gốc như "City: Large"), nhà ở, tỷ lệ sinh viên trên giảng viên, hoạt động sinh viên.
+/// Tỷ lệ phần trăm dạng 0..1. HousingTypes và Activities đã tách thành danh sách (dữ liệu lưu cách nhau bằng dấu |).
+/// </summary>
+public record SchoolCampusInfo(
+    string? Setting,
+    IReadOnlyList<string> HousingTypes,
+    bool? IntlHousing,
+    decimal? HousingOnlyUsd,
+    decimal? HousingDepositUsd,
+    decimal? FirstYearOnCampusPct,
+    decimal? UndergradOnCampusPct,
+    int? StudentFacultyRatio,
+    IReadOnlyList<string> Activities);
 
 // Một vòng nộp hồ sơ. Round là mã vòng (ED, EA, RD, Spring...), Date là chữ gốc trong dữ liệu (thường yyyy-MM-dd).
 public record SchoolDeadline(string Round, string Date);
@@ -52,7 +71,9 @@ public record SchoolInfoDto(
     IReadOnlyList<SchoolRanking> Rankings,
     string? SourceUrl,
     DateOnly? RetrievedAt,
-    SchoolGpaInfo? Gpa = null);
+    SchoolGpaInfo? Gpa = null,
+    SchoolExtraInfo? Extra = null,
+    SchoolCampusInfo? Campus = null);
 
 public partial class RecommendationService
 {
@@ -93,8 +114,19 @@ public partial class RecommendationService
             input.Majors,
             rankings,
             o.SourceUrl, o.RetrievedAt,
-            new SchoolGpaInfo(o.AvgGpa4, o.GpaPct40, o.GpaPct375To399 is { } a && o.GpaPct40 is { } b ? a + b : null));
+            new SchoolGpaInfo(o.AvgGpa4, o.GpaPct40, o.GpaPct375To399 is { } a && o.GpaPct40 is { } b ? a + b : null),
+            new SchoolExtraInfo(o.ApplicationFeeUsd, o.HealthInsuranceUsd, o.TuitionInStateUsd, o.SatSubmitPct, o.ActSubmitPct),
+            new SchoolCampusInfo(
+                string.IsNullOrWhiteSpace(o.CampusSetting) ? null : o.CampusSetting.Trim(),
+                SplitList(o.HousingTypes), o.IntlHousing, o.HousingOnlyUsd, o.HousingDepositUsd,
+                o.FyOnCampusPct, o.UgOnCampusPct, o.StudentFacultyRatio, SplitList(o.Activities)));
     }
+
+    // Dữ liệu lưu danh sách cách nhau bằng dấu |
+    private static IReadOnlyList<string> SplitList(string? raw) =>
+        string.IsNullOrWhiteSpace(raw)
+            ? []
+            : raw.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
     // DeadlinesJson dạng {"ED":"2026-11-01","RD":"2027-01-05"}. Hỏng hoặc không đúng dạng thì coi như không có hạn nộp, không làm hỏng câu trả lời.
     public static IReadOnlyList<SchoolDeadline> ParseDeadlines(string? json)

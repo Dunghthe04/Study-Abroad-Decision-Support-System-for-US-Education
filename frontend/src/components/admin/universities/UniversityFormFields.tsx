@@ -84,7 +84,7 @@ export function buildUniversityEditRows({
         <Input
           id="uni-code"
           value={form.code ?? ""}
-          onChange={(e) => setField("code", e.target.value.toUpperCase().trim())}
+          onChange={(e) => setField("code", e.target.value)}
           aria-invalid={Boolean(fieldErrors.code) || undefined}
           placeholder="Ví dụ: HARVARD"
           maxLength={32}

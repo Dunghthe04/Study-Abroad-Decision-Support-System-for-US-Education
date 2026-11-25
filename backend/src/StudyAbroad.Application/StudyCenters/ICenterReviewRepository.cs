@@ -1,5 +1,11 @@
 namespace StudyAbroad.Application.StudyCenters;
 
+/// <summary>[UC-152] Phản hồi công khai của trung tâm dưới một đánh giá.</summary>
+public record CenterReviewReplyDto(
+    string Content,
+    DateTime CreatedAt,
+    DateTime? EditedAt = null);
+
 /// <summary>Một đánh giá công khai của học sinh / phụ huynh về trung tâm (tên người đánh giá đã rút gọn).</summary>
 public record CenterReviewDto(
     Guid Id,
@@ -9,7 +15,8 @@ public record CenterReviewDto(
     bool IsVerified,
     DateTime CreatedAt,
     int Rating,
-    string? Comment);
+    string? Comment,
+    CenterReviewReplyDto? CenterReply = null);
 
 /// <summary>
 /// Đánh giá hiển thị của một trung tâm. <see cref="TotalCount"/> và <see cref="AverageRating"/> tính trên toàn bộ

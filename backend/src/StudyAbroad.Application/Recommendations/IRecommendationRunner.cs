@@ -29,5 +29,7 @@ namespace StudyAbroad.Application.Recommendations
         /// <summary>Tìm trường theo điều kiện (đã chuẩn hóa), không dùng hồ sơ học sinh; trả tổng số và tối đa 100 trường đầu theo cách sắp xếp.</summary>
         Task<SchoolSearchResult> SearchSchoolsAsync(Guid userId, SchoolSearchFilters filters, SchoolSort sort, CancellationToken ct);
         Task<SimulationResult> SimulateAsync(Guid userId, SimulationOverrides overrides, IReadOnlyList<int>? pref, CancellationToken ct);
+        /// <summary>[UC-154] Nhóm và điểm phù hợp của 2 đến 4 trường được nêu (cùng công thức UC-22), trên hồ sơ thật.</summary>
+        Task<FitCompareResult> CompareFitAsync(Guid userId, IReadOnlyList<string> codes, CancellationToken ct);
     }
 }

@@ -17,7 +17,8 @@ public record UpdateGradeScaleRequest(List<GradeScaleRuleInput>? Rules, string? 
 
 /// <summary>Một lần sửa bảng, đọc từ audit_logs (action grade_scale.update).</summary>
 public record GradeScaleHistoryItemDto(
-    DateTime ChangedAt, Guid? ActorUserId, string? ActorName, GradeScaleConfigDto? Old, GradeScaleConfigDto? New);
+    DateTime ChangedAt, Guid? ActorUserId, string? ActorName, GradeScaleConfigDto? Old, GradeScaleConfigDto? New,
+    int? RecomputedProfiles = null);
 
 /// <summary>Kết quả lưu: bảng mới và số hồ sơ đã tính lại GPA (chỉ hồ sơ có GPA lấy từ học bạ).</summary>
 public record GradeScaleSavedDto(GradeScaleSettingDto Setting, int RecomputedProfiles);

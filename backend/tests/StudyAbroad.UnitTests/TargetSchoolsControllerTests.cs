@@ -1,7 +1,10 @@
+using System.Reflection;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Controllers;
 using StudyAbroad.Application.TargetSchools;
+using StudyAbroad.Domain.Constants;
 using System.Security.Claims;
 using Xunit;
 
@@ -53,6 +56,9 @@ public class TargetSchoolsControllerTests
 
         public Task<UpdateApplicationRoundResult> UpdateApplicationRoundAsync(Guid userId, Guid targetSchoolId, UpdateApplicationRoundRequest request, CancellationToken ct = default)
         {
+            if (targetSchoolId == Guid.Empty)
+                return Task.FromResult(UpdateApplicationRoundResult.NotFoundError("Không tìm thấy trường mục tiêu trong danh sách của bạn."));
+
             var dto = new TargetSchoolDto(
                 targetSchoolId,
                 userId,
@@ -74,6 +80,18 @@ public class TargetSchoolsControllerTests
                 DateTime.UtcNow
             );
             return Task.FromResult(UpdateApplicationRoundResult.Ok(dto));
+        }
+
+        public Task<UpdateTargetCategoryResult> UpdateCategoryAsync(Guid userId, Guid targetSchoolId, UpdateTargetCategoryRequest request, CancellationToken ct = default)
+        {
+            if (targetSchoolId == Guid.Empty)
+                return Task.FromResult(UpdateTargetCategoryResult.NotFoundError("Không tìm thấy trường mục tiêu trong danh sách của bạn."));
+
+            var dto = new TargetSchoolDto(
+                targetSchoolId, userId, Guid.NewGuid(), "110653", "UC Irvine", "Irvine", "CA", "https://uci.edu",
+                "public", 0.21m, request.Category, "considering", 0, null, null, null, DateTime.UtcNow, DateTime.UtcNow,
+                IsCategoryUserSelected: true);
+            return Task.FromResult(UpdateTargetCategoryResult.Ok(dto));
         }
     }
 
@@ -166,5 +184,65 @@ public class TargetSchoolsControllerTests
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
         var summary = Assert.IsType<TargetSchoolSummaryDto>(okResult.Value);
         Assert.Equal(0, summary.TotalCount);
+    }
+
+    [Fact]
+    public async Task UpdateApplicationRound_WhenNotFound_Returns404()
+    {
+        var controller = new TargetSchoolsController(new FakeTargetSchoolService())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [
+                        new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+                        new Claim(ClaimTypes.Role, "student")
+                    ], "TestAuth"))
+                }
+            }
+        };
+
+        var result = await controller.UpdateApplicationRound(Guid.Empty, new UpdateApplicationRoundRequest("Regular Decision"), default);
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UpdateCategory_WhenValid_ReturnsOkWithUserSelectedFlag()
+    {
+        var controller = new TargetSchoolsController(new FakeTargetSchoolService())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [
+                        new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+                        new Claim(ClaimTypes.Role, "student")
+                    ], "TestAuth"))
+                }
+            }
+        };
+
+        var result = await controller.UpdateCategory(Guid.NewGuid(), new UpdateTargetCategoryRequest("safety"), default);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<TargetSchoolDto>(ok.Value);
+        Assert.Equal("safety", dto.Category);
+        Assert.True(dto.IsCategoryUserSelected);
+    }
+
+    [Fact]
+    public void Controller_RestrictsAllActionsToStudentAndParent()
+    {
+        var type = typeof(TargetSchoolsController);
+        var authorize = type.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(authorize);
+        Assert.Equal($"{UserRoles.Student},{UserRoles.Parent}", authorize!.Roles);
+        Assert.Null(type.GetCustomAttribute<AllowAnonymousAttribute>());
+        Assert.All(
+            type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+            m => Assert.Null(m.GetCustomAttribute<AllowAnonymousAttribute>()));
     }
 }

@@ -13,17 +13,15 @@ public class SlmTrainingSampleConfiguration : IEntityTypeConfiguration<SlmTraini
         {
             t.HasComment(
                 "Dữ liệu huấn luyện SLM: mỗi dòng là một tin nhắn của học sinh và nhãn intents mà model phải trả về. " +
-                "Chỉ dòng approved được xuất ra JSONL để train.");
+                "Mọi mẫu chưa xóa được xuất ra JSONL/Excel để train (UC-96).");
             t.HasCheckConstraint("ck_slm_training_samples_type",
                 "sample_type IN ('collect_profile','profile_review','scenario','knowledge','center_referral','out_of_scope')");
             t.HasCheckConstraint("ck_slm_training_samples_split", "split IN ('train','val','test')");
-            t.HasCheckConstraint("ck_slm_training_samples_review_status",
-                "review_status IN ('draft','pending','approved','rejected','needs_fix')");
         });
 
         b.HasKey(x => x.Id);
-        b.HasOne<User>().WithMany().HasForeignKey(x => x.ReviewedByUserId).OnDelete(DeleteBehavior.SetNull);
         b.HasOne<User>().WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.DeletedByUserId).OnDelete(DeleteBehavior.SetNull);
 
         b.Property(x => x.SampleType).HasMaxLength(32).IsRequired()
             .HasComment("Loại mẫu, tương ứng một sheet của file nguồn.");
@@ -41,22 +39,18 @@ public class SlmTrainingSampleConfiguration : IEntityTypeConfiguration<SlmTraini
             .HasComment("Tập dùng cho model: train, val hoặc test.");
         b.Property(x => x.SourceReview).HasMaxLength(16)
             .HasComment("Nhãn phiên bản rà soát trong file nguồn. Chỉ để tham khảo.");
-        b.Property(x => x.ReviewStatus).HasMaxLength(16).IsRequired().HasDefaultValue(SlmReviewStatuses.Draft)
-            .HasComment("Trạng thái duyệt: draft, pending, approved, rejected hoặc needs_fix.");
-        b.Property(x => x.ReviewNote).HasMaxLength(1000)
-            .HasComment("Ghi chú của người duyệt.");
-        b.Property(x => x.ReviewedByUserId).HasComment("Người duyệt gần nhất. Xóa tài khoản thì để trống.");
-        b.Property(x => x.ReviewedAt).HasComment("Thời điểm duyệt gần nhất.");
+        b.Property(x => x.Version).IsRequired().HasDefaultValue(1)
+            .HasComment("Phiên bản hiện tại của mẫu.");
         b.Property(x => x.CreatedByUserId).HasComment("Người tạo hoặc import dòng này. Xóa tài khoản thì để trống.");
 
-        b.HasOne<User>().WithMany().HasForeignKey(x => x.DeletedByUserId).OnDelete(DeleteBehavior.SetNull);
         b.Property(x => x.Source).HasMaxLength(256).IsRequired().HasDefaultValue(SlmSampleSources.Manual)
             .HasComment("Nguồn: manual, excel hoặc nguồn tham khảo.");
-        b.Property(x => x.DeletedAt).HasComment("Xóa mềm: khác null thì không hiện, không xuất.");
+        b.Property(x => x.DeletedAt).HasComment("Xóa mềm: khác null thì không hiện ở Đang dùng và không xuất.");
         b.Property(x => x.DeletedByUserId).HasComment("Người xóa.");
-        b.Property(x => x.ExportedAt).HasComment("Lần xuất gần nhất.");
+        b.Property(x => x.ExportedAt).HasComment("Lần xuất gần nhất (UC-96).");
 
-        b.HasIndex(x => new { x.ReviewStatus, x.SampleType });
+        b.HasIndex(x => x.SampleType);
+        b.HasIndex(x => x.DeletedAt);
         b.HasIndex(x => x.CreatedByUserId);
         b.HasIndex(x => x.CreatedAt);
     }

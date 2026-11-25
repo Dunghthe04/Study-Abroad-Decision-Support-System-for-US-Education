@@ -1,5 +1,6 @@
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Recommendations;
+using StudyAbroad.Application.Scholarships;
 
 namespace StudyAbroad.UnitTests;
 
@@ -68,9 +69,9 @@ public class ChatSchoolInfoTests
     }
 
     [Theory]
-    [InlineData("ký túc xá của BU thế nào", true)]
+    [InlineData("thời tiết ở Boston thế nào", true)]
     [InlineData("sinh viên Harvard ra trường lương bao nhiêu", true)]
-    [InlineData("MIT có câu lạc bộ nào không", true)]
+    [InlineData("MIT có câu lạc bộ nào không", false)]   // UC-156: hoạt động sinh viên đã có số liệu
     [InlineData("xếp hạng của MIT", false)]          // xếp hạng có trong dữ liệu, không phải mục chưa lưu
     [InlineData("học phí Harvard bao nhiêu", false)]
     public void AsksUnstored_DetectsWhatTheTableDoesNotHold(string question, bool expected)
@@ -244,7 +245,7 @@ public class ChatSchoolInfoTests
 
         Assert.True(answer.Complete);
         Assert.Contains("học phí 59.000 USD", answer.Text);
-        Assert.Contains("ký túc xá, đời sống) hệ thống chưa lưu", answer.Text);
+        Assert.Contains("việc làm, thời tiết) hệ thống chưa lưu", answer.Text);
     }
 
     [Fact]
@@ -398,15 +399,115 @@ public class ChatSchoolInfoTests
         Assert.False(ChatSchoolInfo.ModelSaysUnstored(["cost"]));
     }
 
+    // UC-156: bốn mục đời sống khuôn viên đã có số liệu nên không còn là "chưa lưu"
     [Theory]
-    [InlineData("housing")]
-    [InlineData("student_faculty_ratio")]
-    [InlineData("student_activities")]
-    [InlineData("campus_setting")]
-    public void ModelSaysUnstored_AlsoForTheFourNewSchoolFieldsThatHaveNoInfoFieldYet(string code)
+    [InlineData("housing", InfoField.Housing)]
+    [InlineData("student_faculty_ratio", InfoField.StudentFacultyRatio)]
+    [InlineData("student_activities", InfoField.StudentActivities)]
+    [InlineData("campus_setting", InfoField.CampusSetting)]
+    public void TheFourCampusCodes_AreNowSchoolFields_NotUnstored(string code, InfoField expected)
     {
-        Assert.True(ChatSchoolInfo.ModelSaysUnstored(["cost", code]));
-        Assert.Equal([InfoField.Cost], ChatSchoolInfo.FieldsFromModel(["cost", code]));   // vẫn không thành mục số liệu
+        Assert.False(ChatSchoolInfo.ModelSaysUnstored(["cost", code]));
+        Assert.Equal([InfoField.Cost, expected], ChatSchoolInfo.FieldsFromModel(["cost", code]));
+    }
+
+    private static SchoolInfoDto WithCampus(SchoolInfoDto s) =>
+        s with
+        {
+            Campus = new SchoolCampusInfo(
+                "Suburb: Large", ["Coed residence halls", "Apartments for single students"], true, 14_500m, 500m, 0.97m, 0.56m, 8,
+                ["Student government", "Dance", "Radio station"]),
+        };
+
+    [Theory]
+    [InlineData("ký túc xá của BU thế nào", InfoField.Housing)]
+    [InlineData("trường có nhà ở cho du học sinh không", InfoField.Housing)]
+    [InlineData("tỷ lệ sinh viên trên giảng viên của BU", InfoField.StudentFacultyRatio)]
+    [InlineData("sĩ số lớp ở MIT", InfoField.StudentFacultyRatio)]
+    [InlineData("MIT có câu lạc bộ nào không", InfoField.StudentActivities)]
+    [InlineData("khuôn viên của trường ra sao", InfoField.CampusSetting)]
+    public void FieldsOf_RecognizesTheCampusQuestions_AndTheyAreNotUnstoredAnyMore(string question, InfoField expected)
+    {
+        Assert.Contains(expected, ChatSchoolInfo.FieldsOf(question));
+        Assert.False(ChatSchoolInfo.AsksUnstored(question));
+    }
+
+    [Fact]
+    public void Answer_Housing_ListsTheTypesCostAndShareLivingOnCampus()
+    {
+        var answer = ChatSchoolInfo.Answer(WithCampus(Full()), [InfoField.Housing], false);
+
+        Assert.True(answer.Complete);
+        Assert.Contains("Coed residence halls", answer.Text);
+        Assert.Contains("14.500 USD", answer.Text);
+        Assert.Contains("500 USD", answer.Text);
+        Assert.Contains("97%", answer.Text);
+        Assert.Contains("có nhà ở dành cho du học sinh", answer.Text);
+    }
+
+    [Fact]
+    public void Answer_StudentFacultyRatio_ActivitiesAndSetting_UseTheStoredValues()
+    {
+        var text = ChatSchoolInfo.Answer(
+            WithCampus(Full()), [InfoField.StudentFacultyRatio, InfoField.StudentActivities, InfoField.CampusSetting], false).Text;
+
+        Assert.Contains("8:1", text);
+        Assert.Contains("Student government, Dance, Radio station", text);
+        Assert.Contains("vùng ngoại ô của thành phố lớn", text);
+    }
+
+    [Fact]
+    public void Answer_ManyActivities_AreCappedAndTheRestCounted()
+    {
+        var many = Enumerable.Range(1, 20).Select(i => $"Club {i}").ToList();
+        var school = Full() with { Campus = WithCampus(Full()).Campus! with { Activities = many } };
+
+        var text = ChatSchoolInfo.Answer(school, [InfoField.StudentActivities], false).Text;
+
+        Assert.Contains("Club 12", text);
+        Assert.DoesNotContain("Club 13", text);
+        Assert.Contains("và 8 loại khác", text);
+    }
+
+    [Theory]
+    [InlineData(InfoField.Housing, "chưa có số liệu về nhà ở")]
+    [InlineData(InfoField.StudentFacultyRatio, "chưa có số liệu")]
+    [InlineData(InfoField.StudentActivities, "chưa có danh sách hoạt động")]
+    [InlineData(InfoField.CampusSetting, "chưa có số liệu về bối cảnh khuôn viên")]
+    public void Answer_CampusFields_SayThereIsNoDataInsteadOfGuessing(InfoField field, string expected)
+    {
+        Assert.Contains(expected, ChatSchoolInfo.Answer(Empty(), [field], false).Text);
+        Assert.Contains(expected, ChatSchoolInfo.Answer(Empty() with { Campus = new SchoolCampusInfo(null, [], null, null, null, null, null, null, []) }, [field], false).Text);
+    }
+
+    [Fact]
+    public void Answer_UnknownCampusSettingCode_IsShownAsStored_NotGuessed()
+    {
+        var school = Full() with { Campus = WithCampus(Full()).Campus! with { Setting = "Island: Tiny" } };
+
+        Assert.Contains("Island: Tiny", ChatSchoolInfo.Answer(school, [InfoField.CampusSetting], false).Text);
+    }
+
+    [Fact]
+    public void Compare_ShowsTheCampusFields()
+    {
+        var b = WithCampus(Full()) with { Name = "Other University", Campus = WithCampus(Full()).Campus! with { StudentFacultyRatio = 15 } };
+
+        var text = ChatSchoolInfo.Compare([WithCampus(Full()), b], [InfoField.StudentFacultyRatio]);
+
+        Assert.Contains("Sinh viên trên giảng viên", text);
+        Assert.Contains("8:1", text);
+        Assert.Contains("15:1", text);
+    }
+
+    [Fact]
+    public void Widget_CoveredText_OnlyWhenTheCardCanDrawEveryShownField()
+    {
+        var drawable = ChatSchoolInfo.WidgetOf(Full(), [InfoField.Cost], "text");
+        var notDrawable = ChatSchoolInfo.WidgetOf(Full(), [InfoField.Cost, InfoField.Housing], "text");
+
+        Assert.True(drawable.Data!.Value.TryGetProperty("coveredText", out _));
+        Assert.False(notDrawable.Data!.Value.TryGetProperty("coveredText", out _));   // thẻ chưa vẽ nhà ở: chữ là câu trả lời duy nhất
     }
 
     [Fact]
@@ -453,5 +554,143 @@ public class ChatSchoolInfoTests
         Assert.Equal([InfoField.Aid], ChatSchoolInfo.FieldsOf(buttons[1].Value));
         Assert.Contains(InfoField.English, ChatSchoolInfo.FieldsOf(buttons[2].Value));
         Assert.Contains(InfoField.Deadline, ChatSchoolInfo.FieldsOf(buttons[3].Value));
+    }
+
+    // ---------------------------------------------------------------- v14: mục mới của hợp đồng SLM
+
+    private static SchoolInfoDto WithExtra(SchoolInfoDto s) =>
+        s with { Extra = new SchoolExtraInfo(ApplicationFeeUsd: 75m, HealthInsuranceUsd: 2_500m, TuitionInStateUsd: 18_000m, SatSubmitPct: 0.42m, ActSubmitPct: 0.2m) };
+
+    [Fact]
+    public void FieldsFromModel_MapsTheTenV14Codes()
+    {
+        var codes = new[]
+        {
+            "tuition_in_state", "tuition_out_of_state", "living_cost", "insurance", "application_fee",
+            "act_range", "sat_range", "sat_submit_rate", "international_acceptance_rate", "scholarships",
+        };
+
+        var fields = ChatSchoolInfo.FieldsFromModel(codes);
+
+        Assert.Equal(10, fields.Count);
+        Assert.Contains(InfoField.Scholarships, fields);
+        Assert.Contains(InfoField.SatRange, fields);
+    }
+
+    [Fact]
+    public void FieldsFromModel_DropsTheOldInternationalAidCode_ItWasMergedIntoAid()
+    {
+        Assert.Empty(ChatSchoolInfo.FieldsFromModel(["international_aid"]));
+        Assert.Equal([InfoField.Aid], ChatSchoolInfo.FieldsFromModel(["aid"]));
+    }
+
+    [Theory]
+    [InlineData(InfoField.TuitionInState, "in-state", "18.000")]
+    [InlineData(InfoField.TuitionOutOfState, "ngoài bang", "59.000")]
+    [InlineData(InfoField.LivingCost, "ăn ở", "21.000")]
+    [InlineData(InfoField.Insurance, "Bảo hiểm y tế", "2.500")]
+    [InlineData(InfoField.ApplicationFee, "Phí nộp hồ sơ", "75")]
+    [InlineData(InfoField.ActRange, "ACT", "31–35")]
+    [InlineData(InfoField.SatRange, "SAT", "1370–1530")]
+    [InlineData(InfoField.SatSubmitRate, "nộp điểm SAT", "42")]
+    [InlineData(InfoField.IntlAcceptance, "du học sinh", "10")]
+    public void Answer_AnswersEachV14FieldFromTheRealNumbers(InfoField field, string label, string number)
+    {
+        var answer = ChatSchoolInfo.Answer(WithExtra(Full()), [field], false);
+
+        Assert.True(answer.Complete);
+        Assert.Contains(label, answer.Text);
+        Assert.Contains(number, answer.Text);
+    }
+
+    [Theory]
+    [InlineData(InfoField.TuitionInState)]
+    [InlineData(InfoField.Insurance)]
+    [InlineData(InfoField.ApplicationFee)]
+    [InlineData(InfoField.SatSubmitRate)]
+    [InlineData(InfoField.ActRange)]
+    [InlineData(InfoField.SatRange)]
+    public void Answer_SaysThereIsNoDataInsteadOfGuessing_WhenTheSchoolHasNoNumber(InfoField field)
+    {
+        var answer = ChatSchoolInfo.Answer(Empty(), [field], false);
+
+        Assert.Contains("chưa có", answer.Text);
+    }
+
+    [Fact]
+    public void Answer_InternationalAcceptance_MentionsTheOverallRateWhenThereIsNoSeparateOne()
+    {
+        var school = Full() with { Admission = new SchoolAdmissionInfo(0.305m, null) };
+
+        var text = ChatSchoolInfo.Answer(school, [InfoField.IntlAcceptance], false).Text;
+
+        Assert.Contains("chưa có số liệu riêng", text);
+        Assert.Contains("30,5%", text);
+    }
+
+    [Fact]
+    public void Compare_ShowsTheV14FieldsWithTheirOwnLabels()
+    {
+        var a = WithExtra(Full());
+        var b = WithExtra(Full()) with { Name = "Other University", Extra = new SchoolExtraInfo(90m, 1_800m, null, 0.6m, null) };
+
+        var text = ChatSchoolInfo.Compare([a, b], [InfoField.ApplicationFee, InfoField.Insurance]);
+
+        Assert.Contains("Phí nộp hồ sơ", text);
+        Assert.Contains("Bảo hiểm y tế", text);
+        Assert.Contains("90 USD", text);
+    }
+
+    private static ScholarshipDto Scholarship(string name, decimal? amount, DateOnly? deadline) =>
+        new(Guid.NewGuid(), "S", "Boston University", name, "BU", "undergraduate", amount, null, null, null, deadline, null, null, null, null);
+
+    [Fact]
+    public void Answer_Scholarships_ListsUpToThreeNamedScholarshipsWithAWorkingLink()
+    {
+        var future = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1);
+        var list = new[]
+        {
+            Scholarship("Trustee Scholarship", 20_000m, future),
+            Scholarship("Global Merit Award", 10_000m, null),
+            Scholarship("Presidential Award", 5_000m, future),
+            Scholarship("Fourth Award", 1_000m, null),
+        };
+
+        var text = ChatSchoolInfo.Answer(Full(), [InfoField.Scholarships], false, list).Text;
+
+        Assert.Contains("Trustee Scholarship", text);
+        Assert.Contains("Presidential Award", text);
+        Assert.DoesNotContain("Fourth Award", text);   // tối đa 3
+        // trang /scholarships đọc tham số search (tìm cả theo tên trường), không đọc tham số school
+        Assert.Contains("/scholarships?search=Boston%20University", text);
+        Assert.DoesNotContain("?school=", text);
+    }
+
+    [Fact]
+    public void Answer_Scholarships_MarksADeadlineThatHasPassed()
+    {
+        var past = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(-1);
+
+        var text = ChatSchoolInfo.Answer(Full(), [InfoField.Scholarships], false, [Scholarship("Old Award", 3_000m, past)]).Text;
+
+        Assert.Contains("đã qua", text);
+    }
+
+    [Fact]
+    public void Answer_Scholarships_SaysSoWhenTheSchoolHasNone_AndAidAloneDoesNotListThem()
+    {
+        var none = ChatSchoolInfo.Answer(Full(), [InfoField.Scholarships], false, []).Text;
+        var aidOnly = ChatSchoolInfo.Answer(Full(), [InfoField.Aid], false, []).Text;
+
+        Assert.Contains("chưa có học bổng riêng", none);
+        Assert.DoesNotContain("Các học bổng cụ thể", aidOnly);
+    }
+
+    [Fact]
+    public void Answer_Aid_AlsoListsTheNamedScholarshipsWhenTheSchoolHasThem()
+    {
+        var text = ChatSchoolInfo.Answer(Full(), [InfoField.Aid], false, [Scholarship("Trustee Scholarship", 20_000m, null)]).Text;
+
+        Assert.Contains("Trustee Scholarship", text);
     }
 }

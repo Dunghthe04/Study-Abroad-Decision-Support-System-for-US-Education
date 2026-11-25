@@ -19,7 +19,7 @@ Excel gán nhãn → JSONL → hội thoại train/val → [Colab: fine-tune] �
 
 ## 2. Khái niệm và thuật ngữ
 
-**Fine-tune** là lấy một model đã biết nhiều thứ rồi cho học thêm một việc cụ thể bằng các ví dụ của mình (mỗi ví dụ gồm đề và đáp án đúng). Rẻ hơn train từ đầu rất nhiều: vài nghìn ví dụ và vài giờ GPU.
+**Fine-tune** là lấy một model đã biết nhiều thứ rồi cho học thêm một việc cụ thể bằng các ví dụ của mình (mỗi ví dụ gồm đề và đáp án đúng). Rẻ hơn train từ đầu rất nhiều: vài nghìn ví dụ; thời gian chạy từ vài giờ đến hơn một ngày tùy GPU.
 
 | Thuật ngữ | Nghĩa | Trong dự án này |
 |---|---|---|
@@ -35,7 +35,7 @@ Excel gán nhãn → JSONL → hội thoại train/val → [Colab: fine-tune] �
 | **Token / tokenizer** | Token là mảnh chữ model đọc; tokenizer là bộ chia chữ thành token. Độ dài đo bằng token | Prompt khoảng 1.500 token |
 | `MAX_SEQ` | Số token tối đa của một hội thoại; dài hơn bị cắt mất đáp án | 4096 |
 | **Chat template** (ChatML) | Khuôn ghép system, user, assistant bằng `<|im_start|>vai trò ... <|im_end|>` mà Qwen quen | `get_chat_template(..., "qwen3-instruct")` |
-| **Epoch** | Một lượt đi qua hết dữ liệu train | `EPOCHS = 2` |
+| **Epoch** | Một lượt đi qua hết dữ liệu train | `EPOCHS = 1` |
 | **Batch** | Số hội thoại xử lý cùng lúc | `BATCH = 2` |
 | **Gradient accumulation** | Gom nhiều batch rồi mới cập nhật một lần | `GRAD_ACCUM = 8`, nên mỗi lần cập nhật dùng 2 × 8 = 16 hội thoại |
 | **Bước** (step) | Một lần cập nhật. Số bước = số mẫu ÷ 16 mỗi epoch | 7.507 mẫu: 470 bước/epoch, 940 bước hai epoch |
@@ -68,9 +68,18 @@ Excel gán nhãn → JSONL → hội thoại train/val → [Colab: fine-tune] �
 | `python -m slm.prepare.build_slm_jsonl` | Đổi Excel thành `du_lieu_slm.jsonl`, kiểm từng dòng, sai thì báo tên sheet và số dòng | `slm/data/du_lieu_slm.jsonl` |
 | `python -m slm.prepare.check_slm_data` | Kiểm dữ liệu (chỉ đọc): span nguyên văn; một ý `collect_profile`; dòng test không trùng đầu vào với train hoặc val; một hồ sơ chỉ ở một tập; đủ dòng test cho mỗi nhãn, mỗi mục `fields`, câu từ 3 ý và mỗi khóa hồ sơ | Phải báo `Tổng số lỗi: 0` |
 | `python -m slm.prepare.resplit_slm` | Chia lại train, val, test **theo nhóm** (cùng hồ sơ hoặc cùng khuôn câu vào một tập) theo tỉ lệ 70/15/15. Mặc định chỉ in thử; thêm `--apply` mới ghi Excel | Chỉ chạy khi cần chia lại. Test đổi thì không so được với số đo cũ |
-| `python -m slm.prepare.export_slm_chat` | Đổi JSONL thành hội thoại `[system = prompt, user = JSON đầu vào, assistant = JSON đáp án]`. Chỉ xuất train và val, bỏ câu trùng chữ với test | `slm/data/finetune/train.jsonl` (7.507), `val.jsonl` (1.321) |
+| `python -m slm.prepare.export_slm_chat` | Đổi JSONL thành hội thoại `[system = prompt, user = JSON đầu vào, assistant = JSON đáp án]`. Chỉ xuất train và val, bỏ câu trùng chữ với test | `slm/data/finetune/train.jsonl`, `val.jsonl` (không nằm trong git, xem bên dưới) |
 
 Mỗi dòng của `train.jsonl` có dạng `{"messages": [system, user, assistant]}`. Tập **test không bao giờ đưa vào** hai file này: model thấy trước thì điểm đo vô nghĩa.
+
+**`train.jsonl` và `val.jsonl` không nằm trong git** (quá 100 MB, GitHub không nhận; đã khai trong `.gitignore`). Chúng chỉ là bản "ghép sẵn" sinh ra từ `du_lieu_slm.jsonl` (có trong git). Người mới kéo code về hoặc đổi máy thì sinh lại, trong thư mục `advisor`:
+
+```
+python -m slm.prepare.check_slm_data      # phải 0 lỗi
+python -m slm.prepare.export_slm_chat     # ra slm/data/finetune/train.jsonl và val.jsonl
+```
+
+Chỉ khi sửa `du_lieu_slm.xlsx` mới cần chạy thêm `python -m slm.prepare.build_slm_jsonl` trước `export_slm_chat`. Muốn chạy tiếp một lần train dở ở máy khác thì phải tải lên **đúng** hai file lúc bắt đầu (chép chúng sang máy kia), đừng sinh lại.
 
 Nếu đã kích hoạt môi trường ảo (dòng nhắc có `(.venv)`) thì gõ `python`; nếu chưa, gọi `.venv\Scripts\python.exe` (PowerShell) hoặc `.venv/Scripts/python.exe` (Git Bash).
 
@@ -90,7 +99,7 @@ Chạy lần lượt từng ô từ trên xuống. Không cần tạo gì trên 
 | 8 | Kiểm độ dài | Đếm token của toàn bộ train | Số token lớn nhất **dưới 4096** |
 | 9 | Cấu hình huấn luyện | `SFTTrainer` + `SFTConfig`, `EarlyStoppingCallback`, `train_on_responses_only` | |
 | 10 | Kiểm phần bị che | In nhãn của một mẫu | Chỉ còn đáp án JSON. Thấy cả prompt thì **dừng, sửa Bước 9** |
-| 11 | Huấn luyện | `trainer.train(resume_from_checkpoint=...)` | `loss` mỗi 10 bước, `eval_loss` mỗi 100 bước |
+| 11 | Huấn luyện | `trainer.train(resume_from_checkpoint=...)` | `loss` mỗi 10 bước, `eval_loss` mỗi `EVAL_EVERY` bước (mặc định 250) |
 | 12 | Lưu nhật ký và bản LoRA | `training_log.csv`, `trainer_state.json`, thư mục `lora/` | File trong `OUT_DIR` |
 | 13 | Thử nhanh 4 câu | `model.generate(...)` | Ra JSON đúng khuôn. Chỉ để nhìn, **không phải phép đo** |
 | 14 | Xuất `.gguf` | `save_pretrained_gguf(RUN_NAME, tokenizer, quantization_method="q4_k_m")` | `.gguf` (khoảng 2,5 GB) và `Modelfile` chép vào `OUT_DIR` |
@@ -99,22 +108,23 @@ Chạy lần lượt từng ô từ trên xuống. Không cần tạo gì trên 
 
 | Tham số | Mặc định | Nghĩa | Khi nào đổi |
 |---|---|---|---|
-| `VERSION` | `v5` | Tên lần train, đặt tên thư mục lưu | **Đổi mỗi lần train bằng dữ liệu mới** (v6, v7...). Giữ nguyên khi chạy tiếp một lần bị ngắt |
+| `VERSION` | `v7` | Tên lần train, đặt tên thư mục lưu | **Đổi mỗi lần train bằng dữ liệu mới** (v8, v9...). Giữ nguyên khi chạy tiếp một lần bị ngắt |
 | `MODEL_NAME` | `unsloth/Qwen3-4B-Instruct-2507` | Model gốc | Khi thử model khác (phải train lại) |
-| `MAX_SEQ` | 4096 | Độ dài tối đa (token) | Bước 8 báo có hội thoại vượt |
-| `EPOCHS` | 2 | Số lượt tối đa (có dừng sớm) | Thêm lượt dễ học thuộc và tốn giờ GPU |
+| `MAX_SEQ` | 2048 | Độ dài tối đa (token). Hạ xuống chỉ tiết kiệm bộ nhớ, ít làm nhanh hơn | Ô kiểm tra độ dài báo có hội thoại vượt (dữ liệu mới dài hơn thì tăng lên 2560, 3072) |
+| `EPOCHS` | 1 | Số lượt tối đa (có dừng sớm) | Thêm lượt dễ học thuộc và tốn giờ GPU |
 | `LR` | 2e-4 | Learning rate | Mức quen dùng cho LoRA |
 | `LORA_R` | 16 | Độ rộng LoRA | Tăng nếu học chưa đủ |
 | `BATCH`, `GRAD_ACCUM` | 2, 8 | Batch hiệu dụng 2 × 8 = 16 | Hết bộ nhớ GPU: đổi thành 1 và 16 (giữ 16) |
-| `EVAL_EVERY` | 100 | Cứ 100 bước kiểm val loss và lưu checkpoint | |
+| `EVAL_EVERY` | 250 | Cứ 250 bước kiểm val loss và lưu checkpoint (mỗi lần kiểm 300 mẫu val khoảng 4 phút, lưu lên Drive cũng chậm) | Đặt nhỏ hơn thì an toàn hơn khi hay bị ngắt nhưng chậm hơn |
 | `VAL_MAX` | 300 | Số mẫu val dùng khi kiểm giữa chừng | Val đầy đủ dùng khi đo |
-| `PATIENCE` | 4 | Dừng sau 4 lần kiểm không tốt hơn | |
+| `PATIENCE` | 2 | Dừng sau 2 lần kiểm không tốt hơn (= 500 bước với `EVAL_EVERY` 250) | Đổi cùng lúc với `EVAL_EVERY`: số bước chờ = `PATIENCE` × `EVAL_EVERY` |
+| `BENCH_STEPS` | 0 | **Chạy thử:** đặt 40 để chỉ chạy 40 bước, in giây mỗi bước, bộ nhớ GPU đỉnh và ước lượng tổng giờ. Không kiểm val, không lưu gì | Trước mỗi lần train dài, hoặc khi muốn thử `BATCH` 4 và `GRAD_ACCUM` 4. Xong **đặt lại 0** |
 | `SEED` | 3407 | Hạt ngẫu nhiên | |
 | `RUN_NAME` | `usas-slm-<VERSION>` | Tên model xuất ra và nạp vào Ollama | |
 
-Cố định trong Bước 9: `warmup_ratio=0.05`, `lr_scheduler_type="linear"`, `optim="adamw_8bit"`, `weight_decay=0.01`, `save_total_limit=2`, `load_best_model_at_end=True` (theo `eval_loss`).
+Cố định trong Bước 9: `warmup_ratio=0.05`, `lr_scheduler_type="linear"`, `optim="adamw_8bit"`, `weight_decay=0.01`, `group_by_length=True` (gom hội thoại gần độ dài nhau vào chung batch cho bớt phần đệm thừa), `save_total_limit=2`, `load_best_model_at_end=True` (theo `eval_loss`).
 
-**Ví dụ lần train v5** (`training_log.csv`): 940 bước, khoảng 1,8 giờ, `eval_loss` giảm đều từ 0,0356 (bước 100) xuống 0,0092 (bước 940) và không tăng lại, nên dừng sớm không kích hoạt.
+**Ví dụ lần train v5** (`training_log.csv`): 940 bước, `eval_loss` giảm đều từ 0,0356 (bước 100) xuống 0,0092 (bước 940) và không tăng lại, nên dừng sớm không kích hoạt. **Thời gian thực tế mất hơn một ngày** (đã gồm các lần bị ngắt rồi chạy tiếp). Cột `train_runtime` trong log (6.624 giây, khoảng 1,8 giờ) **không phải tổng thời gian**: Hugging Face tính lại từ đầu mỗi lần gọi `trainer.train()`, nên khi chạy tiếp từ checkpoint thì con số đó chỉ là lần chạy cuối. Mỗi lần kiểm `eval_loss` trên 300 mẫu tốn khoảng 4 phút.
 
 **Đọc kết quả lúc train:**
 

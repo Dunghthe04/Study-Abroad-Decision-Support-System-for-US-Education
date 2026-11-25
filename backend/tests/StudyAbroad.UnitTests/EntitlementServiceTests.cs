@@ -366,19 +366,20 @@ public class EntitlementServiceTests
     }
 
     [Fact]
-    public async Task OnlyClaudeCallsOfChatTurnsAreCounted()
+    public async Task ClaudeAndOllamaCallsOfChatTurnsAreCounted_NonChatAndEmbeddingExcluded()
     {
         var repo = new FakeBilling();
         var personal = repo.AddActive(Me, "personal-1m");
-        repo.Use(Me, personal, 100_000);
-        repo.Calls.Add(Call(Me, 300_000, "ollama", personal.Id, "personal-1m"));        // SLM tự host: miễn phí
+        repo.Use(Me, personal, 100_000);                                                  // claude chat: tính (20%)
+        repo.Calls.Add(Call(Me, 300_000, "ollama", personal.Id, "personal-1m"));          // SLM chat: tính (60%) → tổng 80%
         repo.Calls.Add(Call(Me, 300_000, "embedding", null, "free"));                     // embedding: miễn phí
-        repo.Calls.Add(Call(Me, 300_000, "claude", null, null));                          // OCR, ngoại khóa: không đóng dấu gói
+        repo.Calls.Add(Call(Me, 300_000, "claude", null, null));                          // OCR: không đóng dấu gói
+        repo.Calls.Add(Call(Me, 300_000, "ollama", null, null));                          // ngoại khóa SLM: không đóng dấu gói
         repo.Calls.Add(Call(Me, 300_000, "claude", null, "family-1m"));                   // kỳ đã bị xóa (FK set null): không sang Free
 
         var summary = await Service(repo).GetSummaryAsync(Me, Now);
 
-        Assert.Equal((20, 0), (summary.Personal!.UsedPercent, summary.Free.UsedPercent));
+        Assert.Equal((80, 0), (summary.Personal!.UsedPercent, summary.Free.UsedPercent));
     }
 
     [Fact]

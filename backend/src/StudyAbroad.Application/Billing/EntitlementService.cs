@@ -53,7 +53,7 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
         }
 
         var (pool, lowQuota, expiringSoon) = e.Charged is { } charged
-            ? (charged.Cycle.Kind, Pool(charged, e, nowUtc).LowQuota, CycleRules.IsExpiringSoon(charged.Cycle.EndsAt, nowUtc))
+            ? (charged.Cycle.Kind, Pool(charged, e, nowUtc).LowQuota, CycleRules.IsExpiringSoon(charged.Cycle.EndsAt, nowUtc, charged.Cycle.DurationDays))
             : (PlanKinds.Free, CycleRules.IsLowQuota(freePercent), false);
 
         return new SubscriptionSummaryDto(
@@ -63,17 +63,30 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
 
     public async Task<QuotaOverviewDto> GetQuotaOverviewAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default)
     {
-        var e = await LoadAsync(userId, nowUtc, ct);
-        var freePlan = e.FreePlan;
-        var (freeStart, _) = CycleRules.FreeWindowUtc(nowUtc, freePlan?.QuotaPeriodDays);
-        var freeQuota = freePlan?.TokenQuota ?? 0;
-        var freeUsed = await repository.SumFreeTokensAsync(userId, freeStart, ct);
-
+        var (e, freeUsed, freeQuota) = await LoadQuotaNumbersAsync(userId, nowUtc, ct);
         // Mỗi nguồn góp tối đa bằng hạn mức của nó (dùng lố không làm âm phần còn lại của nguồn khác)
         var quota = e.Usable.Sum(c => (long)c.Cycle.TokenQuota) + freeQuota;
         var used = e.Usable.Sum(c => Math.Min(c.Used, c.Cycle.TokenQuota)) + Math.Min(freeUsed, freeQuota);
         var usedPercent = CycleRules.UsedPercent(used, quota);
         return new QuotaOverviewDto(100 - usedPercent, usedPercent, CycleRules.IsLowQuota(usedPercent));
+    }
+
+    public async Task<UserQuotaUsageDto> GetCurrentQuotaUsageAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default)
+    {
+        var (e, freeUsed, freeQuota) = await LoadQuotaNumbersAsync(userId, nowUtc, ct);
+        var quota = e.Usable.Sum(c => (long)c.Cycle.TokenQuota) + freeQuota;
+        var used = e.Usable.Sum(c => c.Used) + freeUsed;
+        return new UserQuotaUsageDto(used, quota, e.IsPremium ? AccountTiers.Premium : AccountTiers.Free);
+    }
+
+    private async Task<(Entitlement Ent, long FreeUsed, long FreeQuota)> LoadQuotaNumbersAsync(Guid userId, DateTime nowUtc, CancellationToken ct)
+    {
+        var e = await LoadAsync(userId, nowUtc, ct);
+        var freePlan = e.FreePlan;
+        var (freeStart, _) = CycleRules.FreeWindowUtc(nowUtc, freePlan?.QuotaPeriodDays);
+        var freeQuota = freePlan?.TokenQuota ?? 0;
+        var freeUsed = await repository.SumFreeTokensAsync(userId, freeStart, ct);
+        return (e, freeUsed, freeQuota);
     }
 
     public async Task<IReadOnlyList<ExpiredCycleDto>> GetExpiredCyclesAsync(Guid userId, CancellationToken ct = default)
@@ -120,7 +133,7 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
         var (_, windowEnd, isFinal) = CycleRules.CycleWindowUtc(cycle, nowUtc);
         DateTimeOffset? quotaResetsAt = !isFinal ? CycleRules.ToVietnamTime(windowEnd) : null;
         return new PoolDto(e.CodeOf(cycle) ?? string.Empty, cycle.PlanName, cycle.StartsAt, cycle.EndsAt, percent,
-            active.Exhausted, CycleRules.IsLowQuota(percent), CycleRules.IsExpiringSoon(cycle.EndsAt, nowUtc), null,
+            active.Exhausted, CycleRules.IsLowQuota(percent), CycleRules.IsExpiringSoon(cycle.EndsAt, nowUtc, cycle.DurationDays), null,
             cycle.QuotaPeriodDays, quotaResetsAt);
     }
 
@@ -204,8 +217,26 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
         }, ct);
         // Báo hết hạn khi kỳ cuối của chủ ở loại này vừa hết (còn kỳ khác thì người dùng vẫn đang Premium, không cần báo)
         if (saved && remaining == 0 && ended.OrderBy(c => c.EndsAt).Last() is { } last)
+        {
             await NotifyAsync(deferred, last.UserId, NotificationTypes.BillingExpired, $"Gói {last.PlanName} đã hết hạn",
                 "Gia hạn để tiếp tục dùng các tính năng Premium.", "/plans", ct);
+            // [UC-128] Gói Gia đình hết hạn: thông báo cho cả chủ gói và các thành viên đang hoạt động
+            if (last.Kind == PlanKinds.Family && last.FamilyGroupId is { } groupId)
+            {
+                var activeMemberIds = (await repository.GetOpenMembersAsync(groupId, ct))
+                    .Where(m => m.Status == FamilyMemberStatuses.Active && m.UserId is { } uid && uid != last.UserId)
+                    .Select(m => m.UserId!.Value)
+                    .Distinct()
+                    .ToList();
+                if (activeMemberIds.Count > 0)
+                {
+                    var ownerName = await repository.GetUserNameAsync(last.UserId, ct) ?? string.Empty;
+                    foreach (var memberId in activeMemberIds)
+                        await NotifyAsync(deferred, memberId, NotificationTypes.BillingExpired, "Gói Gia đình đã hết hạn",
+                            $"Gói {last.PlanName} của {ownerName} đã hết hạn.", "/plans", ct);
+                }
+            }
+        }
         return (await repository.GetActiveCyclesAsync(ownerUserId, kind, ct)).Where(c => !IsDue(c, nowUtc)).ToList();   // thực thể mới nạp (đã theo dõi), người gọi sửa tiếp được
     }
 

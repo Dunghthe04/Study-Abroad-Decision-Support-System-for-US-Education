@@ -1,12 +1,14 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { ChevronDownIcon } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { ChevronDownIcon, RefreshCwIcon } from "lucide-react";
 import { PremiumLockedCard } from "@/components/billing/PremiumLockedCard";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+import { useSimulationOptions } from "@/lib/simulation-options";
 import type { ProfileSimulation } from "@/lib/use-profile-simulation";
 import type { Pref, ScholarshipNeed, SimulationOverrides } from "@/types/recommendation";
 
@@ -32,10 +34,11 @@ const PREF_ROWS: { index: 0 | 1 | 2; label: string }[] = [
 interface ProfileSimulatorProps {
   sim: ProfileSimulation;
   basePref: Pref; // ưu tiên của lần gợi ý đã lưu
+  onRerun?: () => void; // Gợi ý lại: lưu mức ưu tiên đang chọn và tính lại danh sách thật (UC-25)
 }
 
 // Trình mô phỏng hồ sơ: kéo GPA, SAT, ngân sách... để xem danh sách trường đổi thế nào. Không đổi hồ sơ thật.
-export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
+export function ProfileSimulator({ sim, basePref, onRerun }: ProfileSimulatorProps) {
   const profile = sim.result?.profile ?? null;
   const o = sim.overrides;
 
@@ -183,6 +186,8 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
             </div>
           </Section>
 
+          <FiltersAndRate sim={sim} />
+
           <Section title="Ngoại khóa" changed={false}>
             <ExtracurricularSummary
               tier={profile.ecTier}
@@ -193,7 +198,8 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
 
           <Section title="Ưu tiên của bạn" onReset={() => sim.reset(["pref"])} changed={o.pref != null}>
             <p className="text-xs text-muted-foreground">
-              Chỉ đổi thứ tự các trường trong cùng một nhóm, không đổi nhóm.
+              Chỉ đổi thứ tự các trường trong cùng một nhóm, không đổi nhóm. Kéo thanh để xem thử; bấm Gợi ý lại để lưu mức
+              ưu tiên mới và tính lại danh sách.
             </p>
             {PREF_ROWS.map((row) => (
               <SliderRow
@@ -210,6 +216,12 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
                 onChange={(v) => setPref(row.index, v)}
               />
             ))}
+            {o.pref != null && onRerun && (
+              <Button type="button" size="sm" onClick={onRerun} className="mt-1 w-full gap-1 text-xs">
+                <RefreshCwIcon className="size-3.5" />
+                Gợi ý lại với ưu tiên này
+              </Button>
+            )}
           </Section>
 
           <div className="sticky bottom-0 border-t border-line bg-surface px-4 py-3 text-center">
@@ -220,6 +232,123 @@ export function ProfileSimulator({ sim, basePref }: ProfileSimulatorProps) {
         </>
       )}
     </aside>
+  );
+}
+
+const SELECT_CLASS =
+  "h-9 w-full cursor-pointer rounded-md border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
+
+// Bang, ngành và tỉ giá giả định (UC-77). Bang và ngành thay điều kiện lọc của hồ sơ trên bản sao; tỉ giá đổi ngân sách USD (chỉ nhận mức tăng).
+// Để trống là giữ như hồ sơ. Giá trị sai thì backend báo lỗi, hiện ở đầu khung.
+function FiltersAndRate({ sim }: { sim: ProfileSimulation }) {
+  const { states, majors } = useSimulationOptions();
+  const o = sim.overrides;
+  const [rateUnit, setRateUnit] = useState<"percent" | "vnd">(o.exchangeRateVnd != null ? "vnd" : "percent");
+  const picked = o.states ?? [];
+  const rate = o.exchangeRateVnd ?? o.exchangeRatePercent ?? null;
+  const nameOf = (code: string) => states.find((s) => s.code.toUpperCase() === code)?.name ?? code;
+
+  const setStates = (next: string[]) => sim.set({ states: next.length > 0 ? next : null });
+  const setRate = (text: string, unit: "percent" | "vnd") => {
+    const value = Number(text);
+    const empty = text.trim() === "" || !Number.isFinite(value) || value <= 0;
+    sim.set({
+      exchangeRateVnd: !empty && unit === "vnd" ? value : null,
+      exchangeRatePercent: !empty && unit === "percent" ? value : null,
+    });
+  };
+
+  return (
+    <Section
+      title="Điều kiện lọc và tỉ giá"
+      onReset={() => sim.reset(["states", "major", "exchangeRateVnd", "exchangeRatePercent"])}
+      changed={picked.length > 0 || o.major != null || rate != null}
+    >
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-foreground">Bang muốn học</p>
+        <p className="text-xs text-muted-foreground">Thay các bang đã chọn trong hồ sơ. Không chọn bang nào: giữ như hồ sơ.</p>
+        {picked.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {picked.map((code) => (
+              <button
+                key={code}
+                type="button"
+                onClick={() => setStates(picked.filter((c) => c !== code))}
+                aria-label={`Bỏ bang ${nameOf(code)}`}
+                className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-brand-wash px-2.5 py-1 text-xs font-medium text-brand hover:bg-brand/15"
+              >
+                {nameOf(code)} ✕
+              </button>
+            ))}
+          </div>
+        )}
+        <select
+          aria-label="Thêm bang"
+          value=""
+          disabled={states.length === 0}
+          onChange={(e) => e.target.value && setStates([...new Set([...picked, e.target.value.toUpperCase()])])}
+          className={SELECT_CLASS}
+        >
+          <option value="">{states.length === 0 ? "Chưa tải được danh sách bang" : "Thêm bang..."}</option>
+          {states
+            .filter((s) => !picked.includes(s.code.toUpperCase()))
+            .map((s) => (
+              <option key={s.code} value={s.code}>
+                {s.name}
+              </option>
+            ))}
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-foreground">Ngành</p>
+        <select
+          aria-label="Ngành giả định"
+          value={o.major ?? ""}
+          disabled={majors.length === 0}
+          onChange={(e) => sim.set({ major: e.target.value || null })}
+          className={SELECT_CLASS}
+        >
+          <option value="">{majors.length === 0 ? "Chưa tải được danh sách ngành" : "Giữ như hồ sơ"}</option>
+          {majors.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-foreground">Tỉ giá USD sang VNĐ tăng</p>
+        <p className="text-xs text-muted-foreground">
+          Chỉ thử mức tăng so với tỉ giá hiện nay: ngân sách tính bằng USD sẽ giảm tương ứng.
+        </p>
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            min={0}
+            inputMode="decimal"
+            aria-label="Tỉ giá giả định"
+            placeholder={rateUnit === "percent" ? "Ví dụ: 5" : "Ví dụ: 27000"}
+            value={rate ?? ""}
+            onChange={(e) => setRate(e.target.value, rateUnit)}
+          />
+          <select
+            aria-label="Đơn vị tỉ giá"
+            value={rateUnit}
+            onChange={(e) => {
+              const unit = e.target.value as "percent" | "vnd";
+              setRateUnit(unit);
+              if (rate != null) setRate(String(rate), unit);
+            }}
+            className={cn(SELECT_CLASS, "w-28 shrink-0")}
+          >
+            <option value="percent">%</option>
+            <option value="vnd">VNĐ/USD</option>
+          </select>
+        </div>
+      </div>
+    </Section>
   );
 }
 

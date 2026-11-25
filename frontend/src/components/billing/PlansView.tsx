@@ -86,7 +86,8 @@ export function PlansView() {
   const [selectedByKind, setSelectedByKind] = useState<Partial<Record<PlanKind, string>>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [messages, setMessages] = useState<Record<string, string>>({});
-  const [ageBlocked, setAgeBlocked] = useState(false);
+  const [ageBlockReason, setAgeBlockReason] = useState<string | null>(null);
+  const ageBlocked = ageBlockReason !== null;
   const [cancellingPending, setCancellingPending] = useState(false);
   const [pendingError, setPendingError] = useState<string | null>(null);
 
@@ -119,7 +120,7 @@ export function PlansView() {
         router.push(`/orders/${e.orderCode}`);
         return;
       }
-      if (e?.code === "age_restricted") setAgeBlocked(true);
+      if (e?.code === "age_restricted") setAgeBlockReason(e.message || AGE_REASON);
       else setMessages((m) => ({ ...m, [code]: e?.message ?? (err instanceof Error ? err.message : "Chưa tạo được đơn hàng.") }));
     } finally {
       setBusy(null);
@@ -210,7 +211,7 @@ export function PlansView() {
         className={ctaClass}
         loading={busy === plan.code}
         disabled={ageBlocked || (busy !== null && busy !== plan.code)}
-        title={ageBlocked ? AGE_REASON : undefined}
+        title={ageBlockReason ?? undefined}
         onClick={() => void buy(plan.code)}
       >
         {more ? "Mua thêm" : "Thanh toán"}
@@ -258,9 +259,9 @@ export function PlansView() {
           {pendingError && <p className="mt-2.5 text-sm text-risk">{pendingError}</p>}
         </div>
       )}
-      {ageBlocked && (
+      {ageBlockReason && (
         <Alert variant="warning">
-          <AlertDescription>{AGE_REASON}.</AlertDescription>
+          <AlertDescription>{ageBlockReason}</AlertDescription>
         </Alert>
       )}
 

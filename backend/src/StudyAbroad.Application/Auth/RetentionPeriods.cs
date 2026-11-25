@@ -12,11 +12,7 @@ public static class RetentionPeriods
     // Năm tài chính trùng năm dương lịch (Luật Kế toán), tính theo giờ Việt Nam
     private static readonly TimeSpan VietnamOffset = TimeSpan.FromHours(7);
 
-    /// <summary>Thời điểm (UTC) hết hạn giữ đơn có giao dịch lúc <paramref name="transactionUtc"/>: 0h ngày 1/1 năm (năm giao dịch + 11) giờ Việt Nam.</summary>
-    public static DateTime OrderRetainUntil(DateTime transactionUtc) =>
-        StartOfVietnamYearUtc((transactionUtc + VietnamOffset).Year + OrderYears + 1);
-
-    /// <summary>Đơn có thời điểm giao dịch trước mốc này (UTC) đã hết hạn giữ tại <paramref name="nowUtc"/>.</summary>
+    /// <summary>Cùng mốc với <see cref="AccountPurgeService.ComputeRetentionExpiryUtc"/>. Đơn có thời điểm tạo trước mốc này (UTC) đã hết hạn giữ tại <paramref name="nowUtc"/>.</summary>
     public static DateTime OrderPurgeCutoff(DateTime nowUtc) =>
         StartOfVietnamYearUtc((nowUtc + VietnamOffset).Year - OrderYears);
 

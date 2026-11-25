@@ -1,6 +1,7 @@
 using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
+using StudyAbroad.Application.Scholarships;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 using Microsoft.Extensions.Logging;
@@ -37,7 +38,8 @@ namespace StudyAbroad.Application.Advisor
         IChatBenchmarkRepository? benchmarks = null, IGradeScaleProvider? gradeScale = null,
         IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null,
         IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null, AiPricing? pricing = null,
-        StudyAbroad.Application.Billing.IEntitlementService? entitlements = null) : History.IChatPendingQuestion
+        StudyAbroad.Application.Billing.IEntitlementService? entitlements = null,
+        IScholarshipSearchRepository? scholarshipSearch = null) : History.IChatPendingQuestion
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
@@ -116,7 +118,10 @@ namespace StudyAbroad.Application.Advisor
             // Action premium_required không khớp nhánh nào bên dưới nên không chạy gợi ý, giải thích, mô phỏng, goal-seeking hay tra trường;
             // chỉ có lockedIntents thì Action là của ý được phép và vẫn chạy bình thường
             if (gate is null && ReferenceEquals(beforeParentGate, response))
+            {
+                response = ChatPremiumGate.AdjustAdvisorLock(charge, response, state);
                 locked = ChatPremiumGate.LockOf(charge, response);
+            }
             // Chạy TRƯỚC lớp chặn Premium bên dưới: câu hỏi số liệu mà SLM lỡ xếp vào giải thích / goal-seeking của tài khoản Free là câu tra cứu Free được dùng, phải được trả lời chứ không bị khóa.
             // SLM đôi khi xếp câu hỏi số liệu một trường ("UCLA xếp hạng bao nhiêu", "MIT cần IELTS bao nhiêu") vào giải thích hoặc goal-seeking:
             // câu tự gõ (không phải nút) mà chỉ hỏi số liệu thì chuyển sang trả lời số liệu
@@ -186,6 +191,10 @@ namespace StudyAbroad.Application.Advisor
             if (response.Action == ChatSchoolInfo.CompareAction && recommender is not null)
                 response = await AnswerSchoolCompareAsync(userId, response, ct);
 
+            // Học sinh hỏi trường nào trong 2 đến 4 trường hợp với hồ sơ hơn (UC-154): nhóm và điểm phù hợp của từng trường bằng công thức gợi ý
+            if (response.Action == ChatFitCompare.Action && recommender is not null)
+                response = await AnswerSchoolCompareAsync(userId, response, ct, fit: true);
+
             // Học sinh hỏi thông tin một trường ("học phí Harvard bao nhiêu"): lấy số thật từ cơ sở dữ liệu, không có mới giữ câu của kho kiến thức
             if (response.Action == ChatSchoolInfo.Action && recommender is not null)
                 response = await AnswerSchoolInfoAsync(userId, response, ct);
@@ -206,7 +215,6 @@ namespace StudyAbroad.Application.Advisor
             // Đến đây mọi lần gọi advisor của lượt đã xong: lấy cả giỏ số đo (không chỉ lần gọi chat đầu) để outcome, meta_json và ai_calls đủ
             var turnSignals = advisorSignals with { Usage = TurnUsage(advisorSignals.Usage) };
             // Ảnh chỉ đi tiếp khi link hợp lệ (https): kiểm một lần ở đây rồi cùng giá trị đó được lưu và trả trình duyệt
-            response = response with { Media = ChatMedia.Clean(response.Media) };
             var replyId = await RecordTurnAsync(session, request, response, turnSignals, turnClock.ElapsedMilliseconds, ct);
             // Token ghi sau tin trả lời để nối được (chat_message_id). Tin không lưu (tắt công tắc hoặc lỗi) thì vẫn ghi token, chỉ không có liên kết
             // ai_calls.user_id là người trả (hạn mức Free đếm theo user_id), không phải chủ phiên chat
@@ -281,7 +289,7 @@ namespace StudyAbroad.Application.Advisor
             var transcript = ChatTranscript.From(flow.Draft.Step2) is { } years ? JsonSerializer.SerializeToElement(years) : (JsonElement?)null;
 
             // Mốc so sánh GPA / tiếng Anh từ dữ liệu trường, cùng bậc học với gợi ý trường
-            var marks = await BenchmarksAsync(flow.Draft.Step1?.TargetDegreeLevel, ct);
+            var marks = await BenchmarksAsync(StudyLevels.Undergraduate, ct);
 
             // Bảng quy đổi điểm thang 10 sang GPA thang 4 trong DB (moderator sửa) để advisor đổi GPA giống .NET và form.
             // Luôn lấy từ server, không tin bảng trình duyệt gửi; không có provider thì null, advisor dùng bảng mặc định
@@ -335,9 +343,8 @@ namespace StudyAbroad.Application.Advisor
                     ReplyToMessageId = question?.Id,
                     Content = response.Answer,
                     SourcesJson = response.Citations is { Count: > 0 } cites
-                        ? JsonSerializer.Serialize(cites.Select(c => new { title = c.Title, url = c.Url, retrievedAt = c.RetrievedAt }))
+                        ? JsonSerializer.Serialize(cites.Select(c => new { title = c.Title, url = c.Url, retrievedAt = c.RetrievedAt, entryNo = c.EntryNo, version = c.Version }))
                         : null,
-                    MediaJson = ChatMedia.ToJson(response.Media),
                     Outcome = outcome,
                     ReviewStatus = ChatTurn.ReviewStatus(outcome),
                     MetaJson = ChatTurn.ReplyMeta(signals.Usage, signals.Action, signals.Skills, turnMs),
@@ -638,7 +645,11 @@ namespace StudyAbroad.Application.Advisor
                     return query.KbFound ? response : response with { NoBasis = true };   // giữ câu của kho: chỉ là câu trả lời thật khi kho có nguồn
 
                 var info = await recommender!.SchoolInfoAsync(userId, code, ct);
-                var answer = ChatSchoolInfo.Answer(info, fields, unstored);
+                // Lấy học bổng cụ thể (tối đa 3) của trường khi câu hỏi nhắc mục Aid hoặc Scholarships
+                IReadOnlyList<ScholarshipDto> scholarships = [];
+                if (scholarshipSearch is not null && (fields.Contains(InfoField.Aid) || fields.Contains(InfoField.Scholarships)))
+                    scholarships = await scholarshipSearch.GetByUniversityCodeAsync(code, 3, ct);
+                var answer = ChatSchoolInfo.Answer(info, fields, unstored, scholarships);
                 if (noTopic)
                     answer = answer with { Text = $"{ChatSchoolInfo.NoTopicLead(info.Name)}\n{answer.Text}" };
                 if (!answer.Complete)
@@ -720,7 +731,9 @@ namespace StudyAbroad.Application.Advisor
 
         // So sánh từ hai trường: mỗi tên khớp bằng bộ khớp tên chặt, trường nào chưa chắc thì nói rõ để học sinh gõ lại (không đoán).
         // Mục lấy từ điều model trả; model không trả mục thì dùng bộ mục mặc định. Lỗi dữ liệu thì báo chưa tra được, không để câu tạm.
-        private async Task<AdvisorChatResponse> AnswerSchoolCompareAsync(Guid userId, AdvisorChatResponse response, CancellationToken ct)
+        // fit = true: so sánh theo độ phù hợp với hồ sơ (UC-154); mặc định là so sánh số liệu của trường (UC-156)
+        private async Task<AdvisorChatResponse> AnswerSchoolCompareAsync(
+            Guid userId, AdvisorChatResponse response, CancellationToken ct, bool fit = false)
         {
             var query = ChatSchoolInfo.ParseCompare(response.ActionData);
             if (query is null)
@@ -747,7 +760,7 @@ namespace StudyAbroad.Application.Advisor
                         var picked = entries.ToList();
                         picked[ambiguousAt] = c.Code;
                         return new QuickReply(c.Name, c.Name, new ChatAction(
-                            ChatSchoolInfo.CompareAction, SchoolCodes: picked, Question: query.Question, Fields: query.Fields));
+                            fit ? ChatFitCompare.Action : ChatSchoolInfo.CompareAction, SchoolCodes: picked, Question: query.Question, Fields: query.Fields));
                     }).ToList();
                     var clarify = ChatGoalSeek.Clarify(typedNames[ambiguousAt], matches[ambiguousAt].Schools.Count);
                     return MergeSchoolInfo(response, asQuery, clarify, clearKb: true) with { QuickReplies = choices };
@@ -756,6 +769,9 @@ namespace StudyAbroad.Application.Advisor
                 codes = codes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 if (codes.Count < 2)
                     return MergeSchoolInfo(response, asQuery, ChatSchoolInfo.CompareNeedsTwo, clearKb: true) with { QuickReplies = ChatNextSteps.NoSchoolData() };
+
+                if (fit)
+                    return await AnswerFitCompareAsync(userId, response, asQuery, codes, ct);
 
                 var infos = new List<SchoolInfoDto>();
                 foreach (var code in codes)
@@ -778,6 +794,27 @@ namespace StudyAbroad.Application.Advisor
             }
         }
 
+        // UC-154: nhóm và điểm phù hợp của các trường đã khớp tên. Hồ sơ chưa đủ dữ liệu (UC-22 E1) thì nói thiếu gì và mời sửa hồ sơ, không so sánh
+        private async Task<AdvisorChatResponse> AnswerFitCompareAsync(
+            Guid userId, AdvisorChatResponse response, ChatSchoolInfo.Query asQuery, IReadOnlyList<string> codes, CancellationToken ct)
+        {
+            FitCompareResult compared;
+            try
+            {
+                compared = await recommender!.CompareFitAsync(userId, codes, ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return MergeSchoolInfo(response, asQuery, ex.Message, clearKb: true) with { QuickReplies = [ChatNextSteps.EditProfile] };
+            }
+            var names = (await recommender!.ListSchoolOptionsAsync(userId, ct)).Select(o => o.Name).ToList();
+            var note = await WriteCompareNoteAsync(
+                new CompareNoteRequestDto(compared.Schools.Select(s => s.Name).ToList(), ChatFitCompare.Facts(compared), names), ct);
+            var text = ChatFitCompare.Text(compared, note);
+            return MergeSchoolInfo(response, asQuery, text, clearKb: true)
+                with { Widget = ChatFitCompare.WidgetOf(compared, note, text), QuickReplies = ChatFitCompare.NextSteps(compared) };
+        }
+
         // Thay câu trả lời của kho kiến thức bằng câu từ cơ sở dữ liệu. Trả lời nhiều ý gộp một văn bản: thay đúng đoạn của kho, giữ các đoạn khác.
         // Số liệu cơ sở dữ liệu không dựa vào nguồn của kho nên bỏ nguồn trích và lời lưu ý của kho (clearKb).
         private static AdvisorChatResponse MergeSchoolInfo(AdvisorChatResponse response, ChatSchoolInfo.Query query, string text, bool clearKb)
@@ -789,7 +826,6 @@ namespace StudyAbroad.Application.Advisor
             {
                 Answer = answer,
                 Citations = clearKb ? [] : response.Citations,
-                Media = clearKb ? null : response.Media,   // số liệu từ cơ sở dữ liệu thay câu của kho: ảnh của dòng kho không còn hợp
                 Disclaimer = clearKb ? null : response.Disclaimer,
                 QuickReplies = null,
             };
@@ -836,7 +872,7 @@ namespace StudyAbroad.Application.Advisor
                 // Thẻ kết quả do code dựng: gửi ngay để học sinh thấy đáp án, rồi mới chờ Gemini viết lời (chậm hơn nhiều)
                 if (onEvent is not null)
                     await onEvent(new AdvisorStreamEvent("card", Widget: ChatGoalSeek.WidgetOf(result, ChatSimulation.Describe(overrides))));
-                var answer = await WriteGoalNoteAsync(ChatGoalSeek.Note(result, names), result, ct);
+                var answer = await WriteGoalNoteAsync(ChatGoalSeek.Note(result, names, query.Factors), result, query.Factors, ct);
                 // Trang đang xem giả định: câu đầu nói rõ đã tính theo cơ sở nào (thẻ có nhãn riêng, lời văn không tự nói)
                 if (ChatGoalSeek.BasisLine(result.Basis, ChatSimulation.Describe(viewing)) is { } basisLine)
                     answer = $"{basisLine}\n{answer}";
@@ -877,7 +913,7 @@ namespace StudyAbroad.Application.Advisor
             return ChatRecommendation.Summarize(saved);
         }
 
-        private async Task<string> WriteGoalNoteAsync(GoalNoteRequestDto note, SchoolGoalResult result, CancellationToken ct)
+        private async Task<string> WriteGoalNoteAsync(GoalNoteRequestDto note, SchoolGoalResult result, IReadOnlyList<string>? factors, CancellationToken ct)
         {
             try
             {
@@ -890,7 +926,7 @@ namespace StudyAbroad.Application.Advisor
             {
                 // Gemini không trả lời được: dùng câu ghép, số liệu vẫn đúng
             }
-            return ChatGoalSeek.Summarize(result);
+            return ChatGoalSeek.Summarize(result, factors);
         }
 
         private async Task<string> WriteNoteAsync(ScenarioNoteRequestDto note, CancellationToken ct)

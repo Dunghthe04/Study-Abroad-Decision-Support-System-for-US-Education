@@ -205,7 +205,11 @@ public class CenterRegistrationAndVerificationTests
             TaxCode: "0101234567",
             Address: "Hà Nội",
             LegalRepresentative: "Nguyễn Văn A",
-            Documents: [new("business_registration", "/uploads/biz.pdf", "biz.pdf", 2048, "application/pdf")]
+            Documents:
+            [
+                new("business_registration", "/uploads/biz.pdf", "biz.pdf", 2048, "application/pdf"),
+                new("sample_service_contract", "/uploads/contract.pdf", "contract.pdf", 2048, "application/pdf"),
+            ]
         );
 
         var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, req);
@@ -256,12 +260,13 @@ public class CenterRegistrationAndVerificationTests
         Assert.False(resultIncomplete.Success);
         Assert.Contains("Điều kiện (2)", resultIncomplete.ErrorMessage);
 
-        // Moderator tick đủ cả 3 điều kiện
+        // Moderator tick đủ 4 điều kiện (bao gồm hợp đồng dịch vụ mẫu - UC-55)
         var reviewReqComplete = new ReviewCenterVerificationRequest(
             Action: "approve",
             IsNationalRegistryMatched: true,
             IsBusinessOperating: true,
             IsRepresentativeValid: true,
+            IsServiceContractValid: true,
             ReviewNotes: "Hồ sơ đối chiếu hoàn toàn trùng khớp"
         );
         var resultComplete = await service.ReviewVerificationAsync(req.Id, reviewReqComplete, Guid.NewGuid());
@@ -420,6 +425,7 @@ public class CenterRegistrationAndVerificationTests
 
         var result = await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(
             Action: "reject", IsNationalRegistryMatched: false, IsBusinessOperating: true, IsRepresentativeValid: false,
+            IsServiceContractValid: true,
             RejectionReason: "  Ảnh ĐKKD bị mờ  "), Guid.NewGuid());
 
         Assert.True(result.Success);
@@ -441,6 +447,7 @@ public class CenterRegistrationAndVerificationTests
 
         await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(
             Action: "changes_requested", IsNationalRegistryMatched: true, IsBusinessOperating: true, IsRepresentativeValid: true,
+            IsServiceContractValid: true,
             RejectionReason: "Bổ sung giấy ủy quyền"), Guid.NewGuid());
 
         var sent = Assert.Single(email.CenterVerificationEmails);
@@ -455,6 +462,7 @@ public class CenterRegistrationAndVerificationTests
 
         await service.ReviewVerificationAsync(req.Id, new ReviewCenterVerificationRequest(
             Action: "approve", IsNationalRegistryMatched: true, IsBusinessOperating: true, IsRepresentativeValid: true,
+            IsServiceContractValid: true,
             ReviewNotes: "Khớp hoàn toàn"), Guid.NewGuid());
 
         var sent = Assert.Single(email.CenterVerificationEmails);
@@ -564,7 +572,9 @@ public class CenterRegistrationAndVerificationTests
         Address: "Hà Nội",
         LegalRepresentative: "Nguyễn Văn A",
         Documents: Enumerable.Range(0, documentCount)
-            .Select(i => new VerificationDocumentUploadDto(i == 0 ? "business_registration" : "power_of_attorney", $"/uploads/f{i}.pdf", $"f{i}.pdf", 1000, "application/pdf"))
+            .Select(i => new VerificationDocumentUploadDto(
+                i == 0 ? "business_registration" : i == 1 ? "sample_service_contract" : "power_of_attorney",
+                $"/uploads/f{i}.pdf", $"f{i}.pdf", 1000, "application/pdf"))
             .ToList());
 
     [Fact]
@@ -587,7 +597,7 @@ public class CenterRegistrationAndVerificationTests
     {
         var (service, email, _, center) = SubmitSetup();
 
-        var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(1));
+        var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(2));
 
         Assert.True(result.Success);
         var sent = Assert.Single(email.CenterVerificationEmails);
@@ -678,13 +688,17 @@ public class CenterRegistrationAndVerificationTests
 
         var without = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, new SubmitVerificationDto(
             "Công ty ABC", "0101234567", "Hà Nội", "Nguyễn Văn A",
-            Documents: [new VerificationDocumentUploadDto("business_registration", "/uploads/a.pdf", "a.pdf", 1000, "application/pdf")]));
+            Documents:
+            [
+                new VerificationDocumentUploadDto("business_registration", "/uploads/a.pdf", "a.pdf", 1000, "application/pdf"),
+                new VerificationDocumentUploadDto("sample_service_contract", "/uploads/c.pdf", "c.pdf", 1000, "application/pdf"),
+            ]));
         Assert.False(without.Success);
         Assert.Contains("Giấy ủy quyền", without.ErrorMessage);
         Assert.Equal(CenterVerificationStatuses.Unverified, center.VerificationStatus);
         Assert.Empty(email.CenterVerificationEmails);
 
-        var with = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(2));
+        var with = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(3));
         Assert.True(with.Success);
     }
 
@@ -696,7 +710,11 @@ public class CenterRegistrationAndVerificationTests
 
         var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, new SubmitVerificationDto(
             "Công ty ABC", "0101234567", "Hà Nội", "Nguyễn Văn A",
-            Documents: [new VerificationDocumentUploadDto("business_registration", "/uploads/a.pdf", "a.pdf", 1000, "application/pdf")]));
+            Documents:
+            [
+                new VerificationDocumentUploadDto("business_registration", "/uploads/a.pdf", "a.pdf", 1000, "application/pdf"),
+                new VerificationDocumentUploadDto("sample_service_contract", "/uploads/c.pdf", "c.pdf", 1000, "application/pdf"),
+            ]));
 
         Assert.True(result.Success);
     }
@@ -708,9 +726,31 @@ public class CenterRegistrationAndVerificationTests
         var (service, _, _, center) = SubmitSetup();
         center.PhoneVerifiedAt = null;
 
-        var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(1));
+        var result = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, SubmitRequest(2));
 
         Assert.True(result.Success);
+    }
+
+    [Fact]
+    public async Task Submit_WithoutSampleServiceContract_IsRejected_And13DigitTaxCodeWithoutHyphenIsAccepted()
+    {
+        var (service, _, _, center) = SubmitSetup();
+
+        var missingContract = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, new SubmitVerificationDto(
+            "Công ty ABC", "0101234567001", "Hà Nội", "Nguyễn Văn A",
+            Documents: [new VerificationDocumentUploadDto("business_registration", "/uploads/a.pdf", "a.pdf", 1000, "application/pdf")]));
+        Assert.False(missingContract.Success);
+        Assert.Contains("Hợp đồng dịch vụ mẫu", missingContract.ErrorMessage);
+
+        var ok = await service.SubmitVerificationAsync(center.OwnerUserId!.Value, new SubmitVerificationDto(
+            "Công ty ABC", "0101234567001", "Hà Nội", "Nguyễn Văn A",
+            Documents:
+            [
+                new VerificationDocumentUploadDto("business_registration", "/uploads/a.pdf", "a.pdf", 1000, "application/pdf"),
+                new VerificationDocumentUploadDto("sample_service_contract", "/uploads/c.pdf", "c.pdf", 1000, "application/pdf"),
+            ]));
+        Assert.True(ok.Success);
+        Assert.Equal("0101234567001", center.TaxCode);
     }
     // ===== [UC-92] Phân loại thay đổi khi trung tâm tự sửa hồ sơ, yêu cầu xóa tài khoản =====
 
@@ -969,8 +1009,9 @@ public class CenterRegistrationAndVerificationTests
             Website: "https://abc-moi.edu.vn", Fanpage: "https://facebook.com/abc"));
 
         Assert.True(result.Success);
-        Assert.Equal("https://abc-moi.edu.vn", s.Center.Website);
-        Assert.Equal("https://facebook.com/abc", s.Center.Fanpage);
+        // [UC-86 / UC-108] Trung tâm đã xác minh đổi website / fanpage: giữ giá trị cũ công khai tới khi Moderator duyệt Đạt
+        Assert.Equal("https://abc.edu.vn", s.Center.Website);
+        Assert.Null(s.Center.Fanpage);
         Assert.Equal(CenterVerificationStatuses.Verified, s.Center.VerificationStatus);
         Assert.Equal([CenterProfileChangeFields.Website, CenterProfileChangeFields.Fanpage], result.Outcome!.ReviewFields);
 

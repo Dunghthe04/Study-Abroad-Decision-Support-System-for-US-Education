@@ -56,14 +56,15 @@ public class BillingJobRepository(AppDbContext db) : IBillingJobRepository
     public Task<UserSubscription?> FindCycleAsync(Guid cycleId, CancellationToken ct = default) =>
         db.UserSubscriptions.FirstOrDefaultAsync(c => c.Id == cycleId, ct);
 
-    // Cùng luật với MeteringFilters.Cycle (kỳ này, chỉ lần gọi Claude), gom theo kỳ
+    // Cùng luật với MeteringFilters.Cycle (kỳ này, lần gọi LLM claude + SLM ollama), gom theo kỳ
     public async Task<IReadOnlyDictionary<Guid, long>> SumCycleTokensAsync(IReadOnlyCollection<Guid> cycleIds, CancellationToken ct = default)
     {
         if (cycleIds.Count == 0)
             return new Dictionary<Guid, long>();
         var ids = cycleIds.ToList();
         var rows = await db.AiCalls
-            .Where(a => a.UserSubscriptionId != null && ids.Contains(a.UserSubscriptionId.Value) && a.Kind == BillingRules.MeteredAiKind)
+            .Where(a => a.UserSubscriptionId != null && ids.Contains(a.UserSubscriptionId.Value)
+                && (a.Kind == BillingRules.ClaudeAiKind || a.Kind == BillingRules.OllamaAiKind))
             .GroupBy(a => a.UserSubscriptionId!.Value)
             .Select(g => new { CycleId = g.Key, Tokens = g.Sum(a => (long?)a.TotalTokens) ?? 0 })
             .ToListAsync(ct);

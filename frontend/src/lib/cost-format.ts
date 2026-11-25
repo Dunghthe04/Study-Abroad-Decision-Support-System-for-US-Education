@@ -1,4 +1,4 @@
-import type { CostLine } from "@/types/cost";
+import type { BudgetCompare, CostLine } from "@/types/cost";
 
 export const COST_LABELS: Record<string, string> = {
   tuition: "Học phí",
@@ -6,8 +6,9 @@ export const COST_LABELS: Record<string, string> = {
   fees: "Phí trường",
   other: "Chi phí khác",
   insurance: "Bảo hiểm y tế",
-  visa: "Phí visa (một lần)",
-  sevis: "Phí SEVIS (một lần)",
+  visa: "Phí xin visa MRV (một lần)",
+  sevis: "Phí SEVIS I-901 (một lần)",
+  visa_integrity: "Phí Visa Integrity Fee (một lần)",
 };
 
 export const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
@@ -17,19 +18,61 @@ export const vnd = (n: number, rate: number) => `${Math.round(n * rate).toLocale
 export const TUITION_MISSING_TEXT = "Chưa đủ dữ liệu học phí nên chưa tính tổng chi phí";
 export const tuitionMissing = (school: { missingKeys: string[] }) => school.missingKeys.includes("tuition");
 
+export function budgetSourceLabel(source: BudgetCompare["source"]): string {
+  switch (source) {
+    case "parent":
+      return "của phụ huynh";
+    case "input":
+      return "tự nhập";
+    case "student":
+    case "profile":
+    default:
+      return "của học sinh";
+  }
+}
+
 /** Số âm là dư, dương là thiếu; viết bằng lời để không phải đọc dấu. */
 export function gapText(gap: number | null): string | null {
   if (gap === null) return null;
   return gap > 0 ? `Thiếu ${usd(gap)}` : gap < 0 ? `Dư ${usd(-gap)}` : "Vừa đủ ngân sách";
 }
 
-/** Gộp khoản nhỏ để thanh biểu đồ chỉ có 4 phần: học phí, sinh hoạt, bảo hiểm, còn lại. */
-export function chartSegments(lines: CostLine[]): { key: string; label: string; value: number }[] {
-  const get = (k: string) => lines.find((l) => l.key === k && !l.isOneTime)?.amountUsd ?? 0;
-  return [
-    { key: "tuition", label: COST_LABELS.tuition, value: get("tuition") },
-    { key: "living", label: COST_LABELS.living, value: get("living") },
-    { key: "insurance", label: COST_LABELS.insurance, value: get("insurance") },
-    { key: "rest", label: "Phí và khác", value: get("fees") + get("other") },
-  ];
+export interface ChartSegment {
+  key: string;
+  label: string;
+  value: number;
+}
+
+/**
+ * Tách riêng các khoản có số liệu thật và các khoản bị thiếu (null), không gộp null thành $0 (UC-26).
+ */
+export function chartData(lines: CostLine[]): { segments: ChartSegment[]; missingLabels: string[] } {
+  const find = (k: string) => lines.find((l) => l.key === k && !l.isOneTime)?.amountUsd ?? null;
+  const tuition = find("tuition");
+  const living = find("living");
+  const insurance = find("insurance");
+  const fees = find("fees");
+  const other = find("other");
+
+  const segments: ChartSegment[] = [];
+  const missingLabels: string[] = [];
+
+  const pushSingle = (key: string, label: string, val: number | null, required: boolean) => {
+    if (val === null) {
+      if (required) missingLabels.push(label);
+    } else if (val > 0) {
+      segments.push({ key, label, value: val });
+    }
+  };
+
+  pushSingle("tuition", COST_LABELS.tuition, tuition, true);
+  pushSingle("living", COST_LABELS.living, living, true);
+  pushSingle("insurance", COST_LABELS.insurance, insurance, true);
+
+  if (fees !== null || other !== null) {
+    const rest = (fees ?? 0) + (other ?? 0);
+    if (rest > 0) segments.push({ key: "rest", label: "Phí và khác", value: rest });
+  }
+
+  return { segments, missingLabels };
 }

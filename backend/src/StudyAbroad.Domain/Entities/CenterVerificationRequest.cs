@@ -49,6 +49,9 @@ public class CenterVerificationRequest : BaseEntity
     /// <summary>Người đăng ký là người đại diện pháp luật hoặc có giấy ủy quyền hợp lệ (Moderator).</summary>
     public bool IsRepresentativeValid { get; set; }
 
+    /// <summary>[UC-55] Hợp đồng dịch vụ mẫu nêu rõ phạm vi dịch vụ, phí và chính sách hoàn phí (Moderator).</summary>
+    public bool IsServiceContractValid { get; set; }
+
     /// <summary>Danh sách tài liệu đính kèm minh chứng.</summary>
     public List<CenterVerificationDocument> Documents { get; set; } = [];
 }

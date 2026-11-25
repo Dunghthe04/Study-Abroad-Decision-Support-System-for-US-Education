@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StudyAbroad.Api.Authorization;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Domain.Constants;
@@ -17,16 +18,18 @@ public record SaveParentBudgetRequest(long? BudgetVnd);
 [Route("api/v1/parent/children/{studentId:guid}/preference")]
 public class ParentChildPreferenceController(ParentPreferenceService preferences) : ControllerBase
 {
-    // GET: ý đã lưu (data null nếu chưa lưu lần nào)
+    // GET: ý đã lưu (data null nếu chưa lưu lần nào) — [UC-71 E4, UC-127] yêu cầu Premium của phụ huynh
     [HttpGet]
+    [Authorize(Policy = PremiumPolicies.ParentPreferenceCompare)]
     public async Task<IActionResult> Get(Guid studentId, CancellationToken ct)
     {
         if (User.GetUserId() is not { } parentId) return Unauthorized(new { message = "Vui lòng đăng nhập." });
         return PreferenceResults.ToResult(this, await preferences.GetAsync(parentId, studentId, ct));
     }
 
-    // PUT: lưu ý, chốt tỷ giá, tính sẵn danh sách theo cha mẹ, báo cho con
+    // PUT: lưu ý, chốt tỷ giá, tính sẵn danh sách theo cha mẹ, báo cho con — [UC-71 E4, UC-127] yêu cầu Premium của phụ huynh
     [HttpPut]
+    [Authorize(Policy = PremiumPolicies.ParentPreferenceCompare)]
     public async Task<IActionResult> Save(Guid studentId, [FromBody] SaveParentPreferenceRequest request, CancellationToken ct)
     {
         if (User.GetUserId() is not { } parentId) return Unauthorized(new { message = "Vui lòng đăng nhập." });
@@ -41,8 +44,9 @@ public class ParentChildPreferenceController(ParentPreferenceService preferences
         return PreferenceResults.ToResult(this, await preferences.SaveBudgetAsync(parentId, studentId, request.BudgetVnd, ct));
     }
 
-    // GET compare?pref=4,2,0&budgetVnd=...: có tham số là xem thử (không lưu), không có là so với ý đã lưu
+    // GET compare?pref=4,2,0&budgetVnd=...: có tham số là xem thử (không lưu), không có là so với ý đã lưu — [UC-71 E4, UC-127] yêu cầu Premium của phụ huynh
     [HttpGet("compare")]
+    [Authorize(Policy = PremiumPolicies.ParentPreferenceCompare)]
     public async Task<IActionResult> Compare(Guid studentId, [FromQuery] string? pref, [FromQuery] long? budgetVnd, CancellationToken ct)
     {
         if (User.GetUserId() is not { } parentId) return Unauthorized(new { message = "Vui lòng đăng nhập." });

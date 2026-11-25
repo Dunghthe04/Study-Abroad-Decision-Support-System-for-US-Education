@@ -25,10 +25,17 @@ public interface IAccountPurgeRepository
     Task<ForumPurgeResult> PurgeForumPostsAsync(Guid userId, DateTime now, CancellationToken ct = default);
 
     /// <summary>
-    /// [UC-75 lớp 2] Chụp họ tên, email người mua vào bảng retained_buyers (mã ngẫu nhiên) và gắn mã vào mọi đơn của người dùng.
-    /// Giữ tới hết 10 năm kể từ khi kết thúc năm tài chính có giao dịch mới nhất. Không có đơn thì không tạo. Trả về số đơn.
+    /// [UC-75, UC-124] Nếu tài khoản có đơn hàng, chụp họ tên + email vào bảng lưu trữ kế toán 10 năm kèm mã người mua ngẫu nhiên
+    /// và gắn vào các đơn hàng trước khi dòng users bị xóa. Trả về mã người mua đã tạo (null nếu không có đơn).
     /// </summary>
-    Task<int> RetainBuyerIdentityAsync(Guid userId, DateTime now, CancellationToken ct = default);
+    Task<string?> SnapshotBuyerForOrdersAsync(Guid userId, DateTime now, CancellationToken ct = default) =>
+        Task.FromResult<string?>(null);
+
+    /// <summary>
+    /// [UC-75] Xóa hẳn các bản ghi lưu thông tin người mua đã quá hạn 10 năm sau năm tài chính. Trả số bản ghi đã xóa.
+    /// </summary>
+    Task<int> PurgeExpiredBuyerRetentionsAsync(DateTime now, CancellationToken ct = default) =>
+        Task.FromResult(0);
 
     /// <summary>
     /// [UC-75 lớp 1b] Yêu cầu liên hệ của người dùng còn giữ tin tới mốc 90 ngày: xóa trắng số điện thoại, email và dấu vết đồng ý
@@ -54,10 +61,10 @@ public interface IAccountPurgeRepository
     Task<RetainedLeadPurgeResult> PurgeExpiredLeadMessagesAsync(DateTime now, CancellationToken ct = default);
 
     /// <summary>
-    /// [UC-75 lớp 2] Đơn của tài khoản đã xóa hẳn quá 10 năm kể từ khi kết thúc năm tài chính có giao dịch thì xóa hẳn;
-    /// dòng người mua hết hạn và không còn đơn thì xóa. Trả về (số đơn, số người mua) đã xóa.
+    /// [UC-75 lớp 2] Đơn của tài khoản đã xóa hẳn quá 10 năm kể từ khi kết thúc năm tài chính có giao dịch thì xóa hẳn.
+    /// Họ tên/email người mua hết hạn do <see cref="PurgeExpiredBuyerRetentionsAsync"/> xóa. Trả về số đơn đã xóa.
     /// </summary>
-    Task<(int Orders, int Buyers)> PurgeExpiredOrdersAsync(DateTime now, CancellationToken ct = default);
+    Task<int> PurgeExpiredOrdersAsync(DateTime now, CancellationToken ct = default);
 }
 
 /// <summary>Số tin và số yêu cầu liên hệ đã xóa hẳn.</summary>

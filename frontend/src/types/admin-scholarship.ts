@@ -31,6 +31,7 @@ export interface AdminScholarship {
   minSat: number | null;
   minAct: number | null;
   minToefl: number | null;
+  minDuolingo: number | null;
   majorRestriction: string | null;
   applicationMethod: string | null;
   applyUrl: string | null;
@@ -64,6 +65,7 @@ export interface SaveScholarshipRequest {
   minSat: number | null;
   minAct: number | null;
   minToefl: number | null;
+  minDuolingo: number | null;
   majorRestriction: string | null;
   applicationMethod: string | null;
   applyUrl: string | null;

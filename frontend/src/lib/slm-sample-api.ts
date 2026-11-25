@@ -5,8 +5,6 @@ import type {
   SaveSlmSampleRequest,
   SlmImportPreview,
   SlmImportResult,
-  SlmReviewResult,
-  SlmReviewStatus,
   SlmSample,
   SlmSampleCreator,
   SlmSampleDetail,
@@ -20,20 +18,20 @@ const base = "/api/v1/admin/slm-samples";
 export interface SlmSampleFilters {
   sampleType?: SlmSampleType;
   split?: SlmSplit;
-  reviewStatus?: SlmReviewStatus;
   search?: string;
   createdBy?: string;
   from?: string;
   to?: string;
   source?: string;
+  deleted?: boolean;
   page?: number;
   pageSize?: number;
 }
 
-function query(params: Record<string, string | number | undefined>): string {
+function query(params: Record<string, string | number | boolean | undefined>): string {
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== "") qs.set(key, String(value));
+    if (value !== undefined && value !== "" && value !== false) qs.set(key, String(value));
   }
   const text = qs.toString();
   return text ? `?${text}` : "";
@@ -71,6 +69,8 @@ export const adminSlmSampleApi = {
 
   creators: () => apiFetch<SlmSampleCreator[]>(`${base}/creators`),
 
+  sources: () => apiFetch<string[]>(`${base}/sources`),
+
   create: (data: SaveSlmSampleRequest) =>
     apiFetch<SlmSample>(base, { method: "POST", body: JSON.stringify(data) }),
 
@@ -79,11 +79,11 @@ export const adminSlmSampleApi = {
 
   remove: (id: string) => apiFetch<null>(`${base}/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
-  review: (ids: string[], status: SlmReviewStatus, note?: string) =>
-    apiFetch<SlmReviewResult>(`${base}/review`, {
-      method: "POST",
-      body: JSON.stringify({ ids, status, note: note || undefined }),
-    }),
+  restore: (id: string) =>
+    apiFetch<SlmSample>(`${base}/${encodeURIComponent(id)}/restore`, { method: "POST" }),
+
+  restoreVersion: (id: string, version: number) =>
+    apiFetch<SlmSample>(`${base}/${encodeURIComponent(id)}/versions/${version}/restore`, { method: "POST" }),
 
   previewXlsx: (file: File, signal?: AbortSignal) => postXlsx<SlmImportPreview>("preview", file, signal),
 
@@ -91,8 +91,8 @@ export const adminSlmSampleApi = {
 
   downloadTemplate: () => download(`${base}/template`, TEMPLATE_FILE_NAME),
 
-  exportApproved: (format: "jsonl" | "xlsx") =>
-    download(`${base}/export?format=${format}`, `slm-samples-approved.${format}`),
+  exportAll: (format: "jsonl" | "xlsx") =>
+    download(`${base}/export?format=${format}`, `slm-samples.${format}`),
 };
 
 function fileNameOf(res: Response, fallback: string): string {

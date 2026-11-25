@@ -20,7 +20,6 @@ from app.schemas.chat import (
     ChatResponse,
     ChatState,
     Citation,
-    Media,
     PendingQuestionResponse,
     ProfileField,
     QuickReply,
@@ -42,6 +41,7 @@ from app.services.replies import (
     CHAT_BUTTON,
     CONTINUE_CHAT,
     FORM_BUTTON,
+    HANDOFF_FREE,
     INTAKE_FORM,
     INTAKE_MORE,
     MENU,
@@ -63,7 +63,6 @@ QUESTIONS = {
     "B0.1": "Chào bạn, mình là trợ lý tư vấn du học Mỹ. Bạn đang cần mình giúp điều gì?",
     "B0.2": "Bạn muốn mình tìm trường theo hồ sơ của bạn, hay bạn đang có câu hỏi cụ thể?",
     "B1.1": "Hiện bạn đang học lớp mấy, hoặc đang làm gì?",
-    "B1.2": "Bạn muốn sang Mỹ học bậc nào?",
     "B1.3": "Bạn định học ngành gì? Chưa chắc cũng không sao, bạn cứ kể vài môn bạn thích.",
     "B1.4": "Bạn dự định nhập học khoảng khi nào?",
     "D1": "Bạn học chương trình nào: THPT Việt Nam, IB, A-level hay AP?",
@@ -127,7 +126,6 @@ class SkillOutput:
     quick_replies: list[QuickReply] = field(default_factory=list)
     widget: Widget | None = None
     citations: list[Citation] = field(default_factory=list)  # nguồn của thông tin trong câu trả lời
-    media: list[Media] = field(default_factory=list)  # ảnh minh họa (từ dòng kho được dùng)
     disclaimer: str | None = None  # lời lưu ý kèm theo
     action: str | None = None  # việc .NET cần làm sau lượt này, xem ChatResponse.action
     action_data: dict[str, Any] = field(default_factory=dict)  # dữ liệu kèm action
@@ -152,7 +150,6 @@ def combine(first: SkillOutput, second: SkillOutput) -> SkillOutput:
         quick_replies=second.quick_replies or first.quick_replies,
         widget=second.widget or first.widget,
         citations=first.citations + [c for c in second.citations if c not in first.citations],
-        media=first.media + [m for m in second.media if m not in first.media],
         disclaimer=second.disclaimer or first.disclaimer,
         action=second.action or first.action,
         action_data=second.action_data if second.action else first.action_data,
@@ -423,6 +420,10 @@ class ChatFlow:
             response.slm = slm_summary(slm, asked_slm, fell_back, model_intents)
             return response
 
+        # Gói không cho gợi ý trung tâm trong chat (Miễn phí): "cho em gặp người thật" dẫn tới trang danh bạ Trung tâm (UC-157)
+        if not allows(req, "center_referral"):
+            intents = [free_handoff(y) for y in intents]
+
         # 2. Chạy từng ý theo thứ tự, ghép câu trả lời
         names, output = await self._run_intents(state, message, slm, intents, emit)
 
@@ -540,7 +541,6 @@ class ChatFlow:
             quick_replies=output.quick_replies,
             widget=output.widget,
             citations=output.citations,
-            media=output.media,
             disclaimer=output.disclaimer,
             profile=state.profile,
             profile_changed=changed_keys(profile_before, state.profile),
@@ -553,6 +553,14 @@ class ChatFlow:
 # Gói của học sinh cho chạy loại ý này không (allowed_intents None = mọi loại)
 def allows(req: ChatRequest, kind: str) -> bool:
     return req.allowed_intents is None or kind in req.allowed_intents
+
+
+# Muốn gặp người thật mà gói không cho gợi ý trung tâm: đổi ý sang loại dẫn tới trang Trung tâm.
+# Chỉ đổi ý sẽ chạy; nhãn model gán vẫn giữ nguyên trong log và trong slm_summary
+def free_handoff(y: SlmY) -> SlmY:
+    if y.type == "out_of_scope" and y.entities.get("subtype") == "human_handoff":
+        return y.model_copy(update={"entities": {**y.entities, "subtype": HANDOFF_FREE}})
+    return y
 
 
 # Tin nhắn mới nhất của học sinh

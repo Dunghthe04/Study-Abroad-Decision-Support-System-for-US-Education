@@ -25,7 +25,7 @@ public static class AcademicConstants
     public const string TrendConsistent = "consistent";
     public const string TrendDownward = "downward";
 
-    // [USAS-365] Dòng lưu ý tham khảo bắt buộc hiển thị theo SOW v6
+    // [UC-18] Dòng lưu ý tham khảo bắt buộc hiển thị cho GPA thang 4 quy đổi
     public const string DefaultDisclaimer =
-        "Kết quả quy đổi GPA mang tính tham khảo theo chuẩn thông dụng (WES). Mỗi trường đại học tại Mỹ có hội đồng tuyển sinh và phương thức tính toán GPA riêng biệt.";
+        "Điểm GPA thang 4.0 ở đây là quy đổi tham khảo, không thay cho đánh giá chính thức của trường đại học Mỹ.";
 }

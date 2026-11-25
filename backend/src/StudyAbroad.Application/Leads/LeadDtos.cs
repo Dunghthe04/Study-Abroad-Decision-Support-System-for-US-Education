@@ -111,6 +111,11 @@ public record CenterReceivedLeadDto(
 
     /// <summary>[UC-111 bước 5] Dữ liệu bị ẩn vì phụ huynh đã rút đồng ý của học sinh dưới 16 (không phải vì quá 90 ngày).</summary>
     public bool ConsentRevoked { get; init; }
+
+    /// <summary>[UC-68] Thời hạn 7 ngày để trung tâm phản hồi yêu cầu ở trạng thái Mới (UTC).</summary>
+    public DateTime? ExpiresAt { get; init; }
+    /// <summary>[UC-68] Số ngày còn lại trước khi yêu cầu ở trạng thái Mới tự hết hạn.</summary>
+    public int? DaysUntilExpiry { get; init; }
 }
 
 /// <summary>
@@ -150,7 +155,8 @@ public record LeadMessageDto(
     string? AttachmentUrl,
     string Status,
     DateTime CreatedAt,
-    DateTime? ReadAt = null);
+    DateTime? ReadAt = null,
+    bool ShowPaymentReminder = false);
 
 /// <summary>
 /// [USAS-2053 / UC-74] Toàn bộ luồng tin nhắn của một yêu cầu liên hệ kèm trạng thái hiện tại.
@@ -188,7 +194,10 @@ public record AdminLeadMessageReportDto(
     string? ReportReason,
     DateTime CreatedAt,
     string? ReportResolution = null,
-    DateTime? ReportResolvedAt = null);
+    DateTime? ReportResolvedAt = null,
+    bool IsFlagged = false,
+    string? FlagReason = null,
+    string? ReportDetail = null);
 
 /// <summary>[UC-58] Một tin trong phần ngữ cảnh quanh tin bị báo cáo. <paramref name="IsReported"/> đánh dấu chính tin bị báo cáo.</summary>
 public record AdminReportContextMessageDto(
@@ -200,7 +209,9 @@ public record AdminReportContextMessageDto(
     string? AttachmentUrl,
     string Status,
     DateTime CreatedAt,
-    bool IsReported);
+    bool IsReported,
+    bool IsFlagged = false,
+    string? FlagReason = null);
 
 /// <summary>
 /// [UC-58] Tin bị báo cáo kèm tối đa <paramref name="ContextSize"/> tin liền trước và liền sau (theo thứ tự thời gian).
@@ -215,8 +226,8 @@ public record AdminLeadMessageReportContextDto(
 /// <summary>[UC-58] Admin gỡ tin vi phạm hoặc cảnh cáo người gửi. Lý do bắt buộc, tối đa 500 ký tự.</summary>
 public record ResolveReportedMessageRequest(string? Reason = null);
 
-/// <summary>[UC-58] Học sinh / phụ huynh / trung tâm báo cáo một tin nhắn (thô tục, quấy rối...). Lý do tối đa 500 ký tự.</summary>
-public record ReportLeadMessageRequest(string? Reason = null);
+/// <summary>[UC-143] Học sinh / phụ huynh / trung tâm báo cáo tin nhắn vi phạm: lý do 3–64 ký tự và chi tiết thêm tùy chọn tối đa 1.000 ký tự.</summary>
+public record ReportLeadMessageRequest(string? Reason = null, string? Detail = null);
 
 /// <summary>[UC-58] Admin khóa tài khoản người gửi tin bị báo cáo. Lý do bắt buộc, tối đa 500 ký tự.</summary>
 public record LockReportedSenderRequest(string? Reason = null);

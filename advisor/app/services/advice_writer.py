@@ -56,6 +56,7 @@ TASK_LABEL = {
     "school_list": "chọn trường",
     "compare": "so sánh trường",
     "explain_school": "giải thích về trường",
+    "explain_fit": "giải thích điểm phù hợp và nhóm của trường",
 }
 # Việc kiểm được bằng chữ trong câu trả lời: học sinh có hỏi lộ trình mà câu trả lời không nhắc "lộ trình" là
 # thiếu phần đó (skill có lúc ghi "chỉ đánh giá, không đưa lộ trình" ở cuối và Claude làm theo)

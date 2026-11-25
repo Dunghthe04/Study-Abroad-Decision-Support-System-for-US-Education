@@ -4,6 +4,8 @@
 // Hiện firstPage trung tâm đầu, nút "Xem thêm" mở phần còn lại ngay trong thẻ (dữ liệu đã có sẵn, không gọi lại).
 // Thanh gõ "Tìm ở thành phố khác" chỉ liệt kê thành phố đang có trung tâm cho dịch vụ này, nên chọn xong luôn có kết quả.
 // Mỗi thẻ có ô tick "So sánh" (tối đa 3); từ 2 thẻ trở lên hiện nút mở trang /centers/compare. Hệ thống không tự chấm hay xếp hạng.
+// UC-39 4a: học sinh nói đặt lịch (intent = booking) thì form Liên hệ mang lời nhắn điền sẵn dịch vụ và thành phố, và tự mở khi chỉ có một trung tâm.
+// UC-39 4b: học sinh nói so sánh (intent = compare) thì hai trung tâm đầu được tick sẵn.
 // Dữ liệu do advisor dựng (chỉ trung tâm đã xác minh), phần chữ "vì sao hợp" do AI viết và code đã kiểm.
 
 import { useState } from "react";
@@ -31,12 +33,20 @@ interface CityOption {
 }
 
 const DEFAULT_FIRST_PAGE = 3;
+const COMPARE_PRESELECT = 2;
 const MAX_CITY_BUTTONS = 8;
 
 function parseCenters(data: Record<string, unknown> | null | undefined): CenterCard[] {
   const raw = data?.centers;
   if (!Array.isArray(raw)) return [];
   return raw.filter((c): c is CenterCard => typeof c === "object" && c !== null && typeof (c as CenterCard).name === "string");
+}
+
+// Việc học sinh nhờ trên danh sách (advisor gắn khi có trung tâm); lời nhắn chỉ có khi đặt lịch
+function parseIntent(data: Record<string, unknown> | null | undefined): { intent: "booking" | "compare" | null; note: string } {
+  const intent = data?.intent === "booking" || data?.intent === "compare" ? data.intent : null;
+  const note = intent === "booking" && typeof data?.contactNote === "string" ? data.contactNote : "";
+  return { intent, note };
 }
 
 function parseCities(data: Record<string, unknown> | null | undefined): CityOption[] {
@@ -92,14 +102,27 @@ export function CenterCardsWidget({
   const cities = parseCities(data);
   const firstPage = typeof data?.firstPage === "number" ? data.firstPage : DEFAULT_FIRST_PAGE;
   const [expanded, setExpanded] = useState(false);
-  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const { intent, note } = parseIntent(data);
+  const [compareIds, setCompareIds] = useState<string[]>(() =>
+    intent === "compare"
+      ? centers
+          .slice(0, COMPARE_PRESELECT)
+          .map((c) => c.id)
+          .filter((id): id is string => id !== null)
+      : [],
+  );
   const toggleCompare = (id: string) =>
     setCompareIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= COMPARE_MAX ? prev : [...prev, id]));
   if (centers.length === 0 && cities.length === 0) return null;
   const shown = expanded ? centers : centers.slice(0, firstPage);
   const hidden = centers.length - shown.length;
+  // Chỉ một trung tâm và học sinh muốn đặt lịch: mở sẵn form, không bắt bấm thêm
+  const autoOpenId = intent === "booking" && centers.length === 1 ? centers[0].id : null;
   return (
     <div>
+      {intent === "booking" && centers.length > 1 && (
+        <p className="mt-2 text-xs font-medium text-ink-2">Bấm Liên hệ ở trung tâm bạn muốn hẹn, lời nhắn đã điền sẵn.</p>
+      )}
       {shown.length > 0 && (
         <ul className="mt-2 space-y-2">
           {shown.map((center) => (
@@ -128,7 +151,14 @@ export function CenterCardsWidget({
                     Chi tiết
                   </Link>
                   {/* Advisor chỉ trả trung tâm đã xác minh nên cho phép gửi yêu cầu; server vẫn kiểm lại */}
-                  <ContactRequestDialog centerId={center.id} centerName={center.name} isVerified compact />
+                  <ContactRequestDialog
+                    centerId={center.id}
+                    centerName={center.name}
+                    isVerified
+                    compact
+                    defaultNote={note}
+                    autoOpen={center.id === autoOpenId}
+                  />
                   <label
                     className={cn(
                       "ml-auto flex items-center gap-1.5 text-xs text-ink-2",

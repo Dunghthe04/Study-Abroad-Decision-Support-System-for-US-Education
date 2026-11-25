@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.chat import AiUsageMixin
 
@@ -19,9 +19,14 @@ WhyCode = Literal[
     "INTL_LOW",
     "EC_PLUS",
     "EC_MINUS",
+    # Giới hạn theo độ chọn lọc (UC-22): backend vẫn gửi các mã này cho trường rất chọn lọc, thiếu thì cả lượt giải thích bị từ chối
+    "LOW_RATE",
+    "RATE_CAP",
+    "WEAK_CAP",
 ]
 
 MAX_POINTS = 3  # tối đa 3 ý
+FIT_PART_KEYS = ("position", "budget", "quality", "aid", "english")  # thứ tự theo đặc tả (UC-24)
 
 
 # Dữ liệu đầu vào sinh viên
@@ -33,6 +38,22 @@ class ExplainStudent(BaseModel):
     major: str | None = Field(default=None, max_length=200)
 
 
+# Một thành phần của điểm phù hợp: score 0–1 (null = thiếu dữ liệu nên bị bỏ khỏi tổng), weight là trọng số đã dùng
+class ExplainFitPart(BaseModel):
+    key: Literal["position", "budget", "quality", "aid", "english"]
+    score: float | None = Field(default=None, ge=0, le=1)
+    weight: float = Field(ge=0, le=1)
+
+
+# Điểm phù hợp của trường (UC-24) để AI diễn giải: tổng 0–1 và năm thành phần
+class ExplainFit(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    total: float | None = Field(default=None, ge=0, le=1)
+    priority_adjusted: bool = Field(default=False, alias="priorityAdjusted")
+    parts: list[ExplainFitPart] = Field(default=[], max_length=len(FIT_PART_KEYS))
+
+
 # Dữ liệu 1 trường
 class ExplainSchool(BaseModel):
     name: str = Field(min_length=1, max_length=256)
@@ -40,7 +61,7 @@ class ExplainSchool(BaseModel):
     control: str | None = None  # public | private
     g2: Literal["R", "RF", "M", "S", "NA", "O"]
     blk: Literal["MAIN", "AID"] = "MAIN"
-    why: list[WhyCode] = Field(default=[], max_length=11)  # mã lý do cloud đã chọn
+    why: list[WhyCode] = Field(default=[], max_length=14)  # mã lý do cloud đã chọn
     acc: float | None = None  # tỷ lệ nhận chung, 0–1
     sat25: int | None = None
     sat75: int | None = None
@@ -48,6 +69,7 @@ class ExplainSchool(BaseModel):
     ps: float | None = None
     cost: float | None = None
     gap: float | None = None  # USD còn thiếu khi vượt ngân sách
+    fit: ExplainFit | None = None  # điểm phù hợp và trọng số (UC-24), không có thì AI không nói về điểm
 
 
 # Dữ liệu đầu vào để tư vấn

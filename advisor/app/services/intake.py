@@ -16,7 +16,6 @@ INTAKE_ID = "INTAKE"
 
 # Khóa hồ sơ còn thiếu -> (bước hội thoại, mã câu hỏi trong QUESTIONS) dùng để hỏi
 FIELD_QUESTION = {
-    "target_level": ("B1", "B1.2"),
     "major": ("B1", "B1.3"),
     "gpa": ("B2", "D2"),
     "english": ("B2", "E1"),

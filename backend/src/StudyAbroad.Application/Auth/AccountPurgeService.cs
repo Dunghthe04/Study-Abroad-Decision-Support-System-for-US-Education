@@ -14,13 +14,13 @@ public interface IAccountPurgeService
 
     /// <summary>
     /// [UC-75] Xóa hẳn dữ liệu giữ lại của tài khoản đã xóa khi tới hạn: tin nhắn với trung tâm sau 90 ngày (hoặc khi báo cáo
-    /// đang mở được xử lý xong), đơn hàng và họ tên/email người mua sau 10 năm.
+    /// đang mở được xử lý xong), đơn hàng sau 10 năm (họ tên/email người mua dọn ở <see cref="PurgeDueAccountsAsync"/>).
     /// </summary>
     Task<RetainedDataPurgeSummary> PurgeExpiredRetainedDataAsync(DateTime now, CancellationToken ct = default);
 }
 
-/// <summary>Số tin nhắn, yêu cầu liên hệ, đơn hàng và người mua đã xóa hẳn trong một lượt dọn.</summary>
-public record RetainedDataPurgeSummary(int Messages, int Leads, int Orders, int Buyers);
+/// <summary>Số tin nhắn, yêu cầu liên hệ và đơn hàng đã xóa hẳn trong một lượt dọn.</summary>
+public record RetainedDataPurgeSummary(int Messages, int Leads, int Orders);
 
 /// <summary>
 /// Kết quả một lượt chạy: số tài khoản đã xóa, số bỏ qua (vừa khôi phục), các tài khoản lỗi,
@@ -50,8 +50,21 @@ public class AccountPurgeService(
     IBillingAccountHooks? billingHooks = null) : IAccountPurgeService
 {
     public const string AuditAction = "user.purge_account";
+    public const int AccountingRetentionYears = 10;
 
     private readonly AccountDeletionOptions _options = options ?? new AccountDeletionOptions();
+
+    /// <summary>
+    /// [UC-75] Mốc hết hạn lưu thông tin người mua: 10 năm kể từ khi kết thúc năm tài chính (theo giờ Việt Nam, 31/12) của giao dịch.
+    /// Ví dụ giao dịch trong năm tài chính 2026 (VN) → kết thúc năm tài chính là 01/01/2027 00:00 +07:00 → giữ tới 01/01/2037 00:00 +07:00 (31/12/2036 17:00 UTC).
+    /// </summary>
+    public static DateTime ComputeRetentionExpiryUtc(DateTime orderCreatedAtUtc)
+    {
+        var vnOffset = TimeSpan.FromHours(7);
+        var vnTime = DateTime.SpecifyKind(orderCreatedAtUtc, DateTimeKind.Utc) + vnOffset;
+        var endOfFiscalYearVn = new DateTime(vnTime.Year + 1, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        return endOfFiscalYearVn.AddYears(AccountingRetentionYears) - vnOffset;
+    }
 
     public async Task<AccountPurgeSummary> PurgeDueAccountsAsync(DateTime now, CancellationToken ct = default)
     {
@@ -77,9 +90,10 @@ public class AccountPurgeService(
                     if (!await purge.LockIfStillDueAsync(userId, deletedBefore, roles, txCt))
                         return;
 
+                    // [UC-75, UC-124] Chụp họ tên + email vào bảng lưu kế toán 10 năm trước khi xóa dòng user (UserId sẽ bị SetNull)
+                    await purge.SnapshotBuyerForOrdersAsync(userId, now, txCt);
                     await purge.ClearPaymentPayloadsAsync(userId, txCt);
-                    // [UC-75] Ba lớp giữ dữ liệu: chụp người mua trước khi dòng user mất; tin nhắn, đánh giá còn lại qua set null
-                    await purge.RetainBuyerIdentityAsync(userId, now, txCt);
+                    // [UC-75] Lớp 1b và 3: tin nhắn, đánh giá còn lại qua set null; liên hệ trên yêu cầu và mức dùng AI bỏ dấu người dùng
                     await purge.ScrubRetainedLeadsAsync(userId, txCt);
                     await purge.AnonymizeAiUsageAsync(userId, txCt);
                     await purge.PurgeForumPostsAsync(userId, now, txCt);
@@ -128,18 +142,21 @@ public class AccountPurgeService(
             }
         }
 
+        // [UC-75] Dọn các bản ghi thông tin người mua đã quá hạn lưu 10 năm
+        await purge.PurgeExpiredBuyerRetentionsAsync(now, ct);
+
         return new AccountPurgeSummary(purged, skipped, failures, fileFailures);
     }
 
     public async Task<RetainedDataPurgeSummary> PurgeExpiredRetainedDataAsync(DateTime now, CancellationToken ct = default)
     {
         RetainedLeadPurgeResult leads = new(0, 0);
-        (int Orders, int Buyers) orders = (0, 0);
+        var orders = 0;
         await unitOfWork.ExecuteInTransactionAsync(async txCt =>
         {
             leads = await purge.PurgeExpiredLeadMessagesAsync(now, txCt);
             orders = await purge.PurgeExpiredOrdersAsync(now, txCt);
         }, ct);
-        return new RetainedDataPurgeSummary(leads.Messages, leads.Leads, orders.Orders, orders.Buyers);
+        return new RetainedDataPurgeSummary(leads.Messages, leads.Leads, orders);
     }
 }

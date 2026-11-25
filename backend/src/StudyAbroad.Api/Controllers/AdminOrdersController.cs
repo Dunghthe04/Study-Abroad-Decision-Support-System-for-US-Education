@@ -7,32 +7,24 @@ using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Api.Controllers;
 
-/// <summary>[UC-132..134] Admin xem và xử lý đơn hàng. Lỗi quy tắc trả { code, message } qua BillingRuleExceptionFilter.</summary>
+/// <summary>[UC-124..126] Admin xem và xử lý đơn hàng. Lỗi quy tắc trả { code, message } qua BillingRuleExceptionFilter.</summary>
 [ApiController]
 [Authorize(Roles = UserRoles.Admin)]
 [Route("api/v1/admin/orders")]
 public class AdminOrdersController(IAdminOrderService orders) : ControllerBase
 {
-    /// <summary>Danh sách đơn, mới nhất trước. status chữ thường (tùy chọn); q là mã đơn hoặc một phần email người mua (tùy chọn).</summary>
+    /// <summary>Danh sách đơn, mới nhất trước. status chữ thường; q là mã đơn, mã GD payOS, tên/email người mua hoặc mã người mua đã xóa; from/to là khoảng ngày (VN).</summary>
     [HttpGet]
     [ProducesResponseType(typeof(PagedResult<AdminOrderDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> List(
-        [FromQuery] string? status, [FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>
-        Ok(await orders.ListAsync(status, q, page, pageSize, ct));
+        [FromQuery] string? status, [FromQuery] string? q,
+        [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>
+        Ok(await orders.ListAsync(status, q, page, pageSize, from, to, ct));
 
     [HttpGet("{orderCode:long}")]
     [ProducesResponseType(typeof(AdminOrderDetailDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Get(long orderCode, CancellationToken ct) => Ok(await orders.GetAsync(orderCode, ct));
-
-    /// <summary>[UC-75 lớp 2] Họ tên, email người mua của tài khoản đã xóa hẳn. Mỗi lần gọi ghi nhật ký truy cập.</summary>
-    [HttpGet("{orderCode:long}/retained-buyer")]
-    [ProducesResponseType(typeof(RetainedBuyerDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetRetainedBuyer(long orderCode, CancellationToken ct)
-    {
-        if (User.GetUserId() is not { } adminId)
-            return Unauthorized();
-        return Ok(await orders.GetRetainedBuyerAsync(adminId, orderCode, ct));
-    }
 
     [HttpPost("{orderCode:long}/activate")]
     [ProducesResponseType(typeof(AdminOrderDto), StatusCodes.Status200OK)]
@@ -53,11 +45,23 @@ public class AdminOrdersController(IAdminOrderService orders) : ControllerBase
     }
 
     [HttpPost("{orderCode:long}/recheck")]
-    [ProducesResponseType(typeof(AdminOrderDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AdminOrderRecheckDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Recheck(long orderCode, CancellationToken ct)
     {
         if (User.GetUserId() is not { } adminId)
             return Unauthorized();
         return Ok(await orders.RecheckAsync(adminId, orderCode, DateTime.UtcNow, ct));
+    }
+
+    /// <summary>[UC-124 2a, UC-91] Xem họ tên và email của tài khoản đã xóa (giữ 10 năm theo UC-75); mỗi lần xem ghi nhật ký truy cập.</summary>
+    [HttpPost("{orderCode:long}/reveal-buyer")]
+    [ProducesResponseType(typeof(AdminOrderBuyerInfoDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RevealBuyer(long orderCode, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } adminId)
+            return Unauthorized();
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var ua = Request.Headers.UserAgent.ToString();
+        return Ok(await orders.RevealBuyerAsync(adminId, orderCode, ip, string.IsNullOrWhiteSpace(ua) ? null : ua, ct));
     }
 }

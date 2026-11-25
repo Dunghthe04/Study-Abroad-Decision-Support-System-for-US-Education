@@ -98,7 +98,7 @@ async def test_the_slm_sends_the_prompt_that_was_chosen():
     await reader.read("em lớp 12", None, "")
 
     assert slm.messages[0]["content"].startswith(f"# PHÂN LOẠI TIN NHẮN ({NAME})")
-    assert reader.prompt_version == "3.1"
+    assert reader.prompt_version == "3.2"
 
 
 def test_an_unknown_prompt_name_is_rejected_at_start_up():

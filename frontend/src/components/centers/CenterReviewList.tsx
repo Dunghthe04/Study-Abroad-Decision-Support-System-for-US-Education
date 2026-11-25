@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { StarIcon, Trash2Icon } from "lucide-react";
+import { Building2Icon, FlagIcon, StarIcon, Trash2Icon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -14,13 +14,27 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError, studyCentersApi } from "@/lib/api";
-import type { CenterReviewDto, CenterReviewsDto } from "@/types/api";
+import type { CenterReviewDto, CenterReviewReportReason, CenterReviewsDto } from "@/types/api";
 
 const MAX_STARS = 5;
+
+export const CENTER_REVIEW_REPORT_REASON_OPTIONS: { value: CenterReviewReportReason; label: string }[] = [
+  { value: "offensive_language", label: "Ngôn từ xúc phạm, công kích" },
+  { value: "personal_info", label: "Tiết lộ thông tin cá nhân" },
+  { value: "not_real_experience", label: "Không phải trải nghiệm thực tế" },
+  { value: "spam_ad", label: "Spam hoặc quảng cáo" },
+  { value: "other", label: "Lý do khác" },
+];
+
+export const CENTER_REVIEW_REPORT_REASON_LABELS: Record<string, string> = Object.fromEntries(
+  CENTER_REVIEW_REPORT_REASON_OPTIONS.map((o) => [o.value, o.label]),
+);
 
 interface CenterReviewListProps {
   reviews: CenterReviewsDto | null;
@@ -32,9 +46,9 @@ interface CenterReviewListProps {
   loadingMore?: boolean;
   loadMoreError?: boolean;
   onLoadMore?: () => void;
-  /** [UC-57] Có truyền thì Moderator thấy nút "Gỡ" trên từng đánh giá. */
+  /** [UC-57 / UC-151 / UC-53] Truyền mã trung tâm để Moderator gỡ đánh giá/phản hồi và người dùng báo cáo đánh giá. */
   centerId?: string;
-  /** Gọi sau khi gỡ thành công để tải lại danh sách và điểm trung bình. */
+  /** Gọi sau khi gỡ đánh giá hoặc gỡ phản hồi thành công để tải lại danh sách và điểm trung bình. */
   onReviewRemoved?: () => void;
 }
 
@@ -67,17 +81,45 @@ export function CenterReviewList({
 }: CenterReviewListProps) {
   const total = reviews?.totalCount ?? 0;
 
-  // [UC-57] Chỉ Moderator gỡ được đánh giá vi phạm
   const { user } = useAuth();
+  // [UC-57 / UC-53 2b] Chỉ Moderator gỡ được đánh giá hoặc phản hồi vi phạm
   const canRemove = user?.role === "moderator" && !!centerId;
+  // [UC-151] Học sinh, phụ huynh hoặc trung tâm (cho đánh giá về chính mình — backend kiểm tra sở hữu) có thể báo cáo
+  const canReport = (user?.role === "student" || user?.role === "parent" || user?.role === "center") && !!centerId;
+
   const [removeTarget, setRemoveTarget] = useState<CenterReviewDto | null>(null);
   const [removeReason, setRemoveReason] = useState("");
   const [isRemoving, setIsRemoving] = useState(false);
+
+  // [UC-53 2b] Moderator gỡ phản hồi của trung tâm
+  const [removeReplyTarget, setRemoveReplyTarget] = useState<CenterReviewDto | null>(null);
+  const [removeReplyReason, setRemoveReplyReason] = useState("");
+  const [isRemovingReply, setIsRemovingReply] = useState(false);
+
+  // [UC-151] Báo cáo đánh giá vi phạm
+  const [reportTarget, setReportTarget] = useState<CenterReviewDto | null>(null);
+  const [reportReason, setReportReason] = useState<CenterReviewReportReason>("offensive_language");
+  const [reportDetail, setReportDetail] = useState("");
+  const [isReporting, setIsReporting] = useState(false);
+  const [reportedIds, setReportedIds] = useState<Set<string>>(() => new Set());
 
   const closeRemoveDialog = () => {
     if (isRemoving) return;
     setRemoveTarget(null);
     setRemoveReason("");
+  };
+
+  const closeRemoveReplyDialog = () => {
+    if (isRemovingReply) return;
+    setRemoveReplyTarget(null);
+    setRemoveReplyReason("");
+  };
+
+  const closeReportDialog = () => {
+    if (isReporting) return;
+    setReportTarget(null);
+    setReportReason("offensive_language");
+    setReportDetail("");
   };
 
   const confirmRemove = async () => {
@@ -97,6 +139,51 @@ export function CenterReviewList({
       });
     } finally {
       setIsRemoving(false);
+    }
+  };
+
+  const confirmRemoveReply = async () => {
+    if (!removeReplyTarget || !centerId || isRemovingReply || removeReplyReason.trim().length === 0) return;
+    setIsRemovingReply(true);
+    try {
+      await studyCentersApi.removeReviewReply(centerId, removeReplyTarget.id, removeReplyReason);
+      toast.add({ type: "success", title: "Đã gỡ phản hồi của trung tâm", description: "Đánh giá gốc vẫn hiển thị bình thường." });
+      setRemoveReplyTarget(null);
+      setRemoveReplyReason("");
+      onReviewRemoved?.();
+    } catch (err: unknown) {
+      toast.add({
+        type: "error",
+        title: "Gỡ phản hồi thất bại",
+        description: err instanceof ApiError ? err.message : "Không thể gỡ phản hồi. Vui lòng thử lại.",
+      });
+    } finally {
+      setIsRemovingReply(false);
+    }
+  };
+
+  const confirmReport = async () => {
+    if (!reportTarget || !centerId || isReporting) return;
+    setIsReporting(true);
+    try {
+      await studyCentersApi.reportReview(centerId, reportTarget.id, reportReason, reportDetail);
+      setReportedIds((prev) => new Set(prev).add(reportTarget.id));
+      toast.add({
+        type: "success",
+        title: "Đã gửi báo cáo đánh giá",
+        description: "Kiểm duyệt viên sẽ xem xét báo cáo của bạn.",
+      });
+      setReportTarget(null);
+      setReportReason("offensive_language");
+      setReportDetail("");
+    } catch (err: unknown) {
+      toast.add({
+        type: "error",
+        title: "Báo cáo thất bại",
+        description: err instanceof ApiError ? err.message : "Không thể gửi báo cáo. Vui lòng thử lại.",
+      });
+    } finally {
+      setIsReporting(false);
     }
   };
 
@@ -125,7 +212,7 @@ export function CenterReviewList({
                 </span>
                 {rev.isVerified && (
                   <Badge variant="ok" className="text-xs py-0">
-                    ✓ Đã xác thực
+                    ✓ Đã sử dụng dịch vụ
                   </Badge>
                 )}
                 <span className="text-xs text-ink-3">
@@ -136,27 +223,81 @@ export function CenterReviewList({
             </div>
           </CardHeader>
           {rev.comment && (
-            <CardContent className="px-4 sm:px-6 pb-4 text-xs sm:text-sm text-ink-2 leading-relaxed whitespace-pre-line">
+            <CardContent className="px-4 sm:px-6 pb-3 text-xs sm:text-sm text-ink-2 leading-relaxed whitespace-pre-line">
               {rev.comment}
             </CardContent>
           )}
-          {canRemove && (
-            <CardContent className="flex justify-end px-4 sm:px-6 pb-3 pt-0">
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                onClick={() => setRemoveTarget(rev)}
-                className="h-6 gap-1 px-1.5 text-[11px] text-risk hover:text-risk hover:bg-risk-wash"
-              >
-                <Trash2Icon className="size-3" />
-                Gỡ đánh giá
-              </Button>
+
+          {/* [UC-152] Phản hồi công khai từ trung tâm */}
+          {rev.centerReply && (
+            <CardContent className="px-4 sm:px-6 pb-3 pt-0">
+              <div className="rounded-lg border border-brand/20 bg-brand-wash/30 px-3.5 py-2.5 space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="inline-flex items-center gap-1.5 font-semibold text-brand-ink">
+                    <Building2Icon className="size-3.5 text-brand" />
+                    Phản hồi từ trung tâm
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-ink-3">
+                      {new Date(rev.centerReply.createdAt).toLocaleDateString("vi-VN")}
+                      {rev.centerReply.editedAt ? " · Đã chỉnh sửa" : ""}
+                    </span>
+                    {canRemove && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => setRemoveReplyTarget(rev)}
+                        className="h-6 gap-1 px-1.5 text-[11px] text-risk hover:text-risk hover:bg-risk-wash"
+                      >
+                        <Trash2Icon className="size-3" />
+                        Gỡ phản hồi
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs sm:text-sm text-ink-2 leading-relaxed whitespace-pre-line">
+                  {rev.centerReply.content}
+                </p>
+              </div>
+            </CardContent>
+          )}
+
+          {(canRemove || canReport) && (
+            <CardContent className="flex items-center justify-end gap-2 px-4 sm:px-6 pb-3 pt-0">
+              {canReport &&
+                (reportedIds.has(rev.id) ? (
+                  <span className="text-[11px] text-ink-3">Đã báo cáo đánh giá này</span>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => setReportTarget(rev)}
+                    className="h-6 gap-1 px-1.5 text-[11px] text-ink-3 hover:text-risk hover:bg-risk-wash"
+                  >
+                    <FlagIcon className="size-3" />
+                    Báo cáo
+                  </Button>
+                ))}
+              {canRemove && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setRemoveTarget(rev)}
+                  className="h-6 gap-1 px-1.5 text-[11px] text-risk hover:text-risk hover:bg-risk-wash"
+                >
+                  <Trash2Icon className="size-3" />
+                  Gỡ đánh giá
+                </Button>
+              )}
             </CardContent>
           )}
         </Card>
       ))}
 
+      {/* [UC-57] Moderator gỡ đánh giá */}
       <AlertDialog open={removeTarget !== null} onOpenChange={(open) => !open && closeRemoveDialog()}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -183,9 +324,107 @@ export function CenterReviewList({
           />
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isRemoving}>Hủy</AlertDialogCancel>
-            <Button type="button" variant="destructive" onClick={() => void confirmRemove()} disabled={isRemoving || removeReason.trim().length === 0} className="gap-1.5" loading={isRemoving}>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void confirmRemove()}
+              disabled={isRemoving || removeReason.trim().length === 0}
+              className="gap-1.5"
+              loading={isRemoving}
+            >
               <Trash2Icon className="size-3.5" />
               Gỡ đánh giá
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* [UC-53 2b] Moderator gỡ phản hồi của trung tâm */}
+      <AlertDialog open={removeReplyTarget !== null} onOpenChange={(open) => !open && closeRemoveReplyDialog()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Gỡ phản hồi của trung tâm?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Phản hồi vi phạm sẽ bị ẩn khỏi trang công khai; đánh giá gốc của học sinh / phụ huynh vẫn giữ nguyên. Việc gỡ được ghi nhật ký kèm lý do.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {removeReplyTarget?.centerReply && (
+            <p className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              {removeReplyTarget.centerReply.content}
+            </p>
+          )}
+          <Textarea
+            value={removeReplyReason}
+            onChange={(e) => setRemoveReplyReason(e.target.value)}
+            maxLength={500}
+            rows={2}
+            disabled={isRemovingReply}
+            placeholder="Lý do gỡ phản hồi (bắt buộc, tối đa 500 ký tự)"
+            required
+            aria-label="Lý do gỡ phản hồi"
+            className="text-sm resize-y"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRemovingReply}>Hủy</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void confirmRemoveReply()}
+              disabled={isRemovingReply || removeReplyReason.trim().length === 0}
+              className="gap-1.5"
+              loading={isRemovingReply}
+            >
+              <Trash2Icon className="size-3.5" />
+              Gỡ phản hồi
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* [UC-151] Người dùng / trung tâm báo cáo đánh giá */}
+      <AlertDialog open={reportTarget !== null} onOpenChange={(open) => !open && closeReportDialog()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Báo cáo đánh giá vi phạm</AlertDialogTitle>
+            <AlertDialogDescription>
+              Chọn lý do báo cáo để kiểm duyệt viên xem xét. Đánh giá vẫn hiển thị trong khi chờ xử lý.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <RadioGroup
+            value={reportReason}
+            onValueChange={(v) => setReportReason(v as CenterReviewReportReason)}
+            className="gap-2"
+          >
+            {CENTER_REVIEW_REPORT_REASON_OPTIONS.map((opt) => (
+              <div key={opt.value} className="flex items-center gap-2.5">
+                <RadioGroupItem id={`review-report-${opt.value}`} value={opt.value} disabled={isReporting} />
+                <Label htmlFor={`review-report-${opt.value}`} className="cursor-pointer text-sm font-normal">
+                  {opt.label}
+                </Label>
+              </div>
+            ))}
+          </RadioGroup>
+          <Textarea
+            value={reportDetail}
+            onChange={(e) => setReportDetail(e.target.value)}
+            maxLength={1000}
+            rows={3}
+            disabled={isReporting}
+            placeholder="Chi tiết bổ sung (tùy chọn, tối đa 1.000 ký tự)"
+            aria-label="Chi tiết báo cáo đánh giá"
+            className="text-sm resize-y"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isReporting}>Hủy</AlertDialogCancel>
+            <Button
+              type="button"
+              onClick={() => void confirmReport()}
+              disabled={isReporting}
+              loading={isReporting}
+              className="gap-1.5"
+            >
+              <FlagIcon className="size-3.5" />
+              Gửi báo cáo
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -20,24 +20,29 @@ from app.services.chat_flow import (
     combine,
     start_intake,
 )
+from app.services.fit_method_writer import FitMethodWriter
 from app.services.goal_target import plain, target_code
 from app.services.priority import from_model as priority_from_model
 from app.services.priority import label as priority_label
 from app.services.replies import (
+    ABOUT_SYSTEM_PAGE_BUTTON,
     ASK_AGAIN_LABEL,
     ASK_SCHOOL,
     ASK_WHICH_SCHOOLS,
     CANNOT_ANSWER,
     CANNOT_TRY_OTHERS,
+    CENTER_PAGE_BUTTON,
     DEFAULT_QUESTION,
     EDIT_SECTION_LABEL,
     EDIT_SECTION_VALUE,
     EXPLAIN_ASK_SCHOOL,
     FILTER_TEXT,
+    FIT_METHOD,
     GOAL_SEEK_WORKING,
     GREETING_REPLY,
     GROUP_NEED_RESULTS,
     GROUP_TOO_SMALL,
+    HANDOFF_FREE,
     HANDOFF_INTRO,
     LOOKING_UP,
     MENU,
@@ -50,16 +55,25 @@ from app.services.replies import (
     NOTHING_TO_TRY,
     OUT_OF_SCOPE,
     RECOMMENDING,
+    ROUND_KNOWLEDGE_BUTTON,
     TRIED_SCENARIO,
     TRY_INSTEAD,
     TRY_WHAT,
     menu_buttons,
 )
-from app.services.scenario import FILTER_FACTORS, LABELS, SUPPORTED_TEXT, WhatIf, parse_what_if, try_buttons
+from app.services.scenario import (
+    FILTER_FACTORS,
+    LABELS,
+    SUPPORTED_TEXT,
+    WhatIf,
+    merge_follow_up,
+    parse_what_if,
+    try_buttons,
+)
 from app.services.skill_input import skill_request_of
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
 from app.services.skill_template import TEMPLATE_TASKS, build_skill, tasks_of
-from app.services.skills import skill_ho_so
+from app.services.skills import major_catalog, skill_ho_so, state_catalog
 from app.services.skills.profile_handler import ChatProfileHandler
 from app.services.skills.skill_danh_gia import gpa_table_of
 from app.services.skills.validators import AskAgain
@@ -203,6 +217,9 @@ def group_sentences(what_if: WhatIf) -> list[str]:
 def cannot_try(what_if: WhatIf, profile: dict[str, ProfileField] | None = None) -> SkillOutput:
     sentences = group_sentences(what_if)
     quick_try = try_buttons(profile or {})
+    # Vòng nộp (ED, EA, RD) không có trong công thức: kết quả không đổi, kèm nút hỏi kiến thức về vòng nộp
+    if "application_round" in what_if.no_effect:
+        quick_try = [ROUND_KNOWLEDGE_BUTTON.model_copy(), *quick_try]
     if not sentences:
         return SkillOutput(
             NOTHING_TO_TRY.format(supported=SUPPORTED_TEXT), quick_replies=quick_try or menu_buttons()
@@ -232,13 +249,15 @@ def cannot_try_note(what_if: WhatIf) -> str:
 # goal_seeking thì giao .NET tìm trường và chạy goal-seek (action "goal_seek")
 class ScenarioBranch:
     # writer: Claude viết lời khi không có gì thử được; None thì dùng câu cố định
-    def __init__(self, writer: WhatIfWriter | None = None) -> None:
+    def __init__(self, writer: WhatIfWriter | None = None, knowledge: SkillHandler | None = None) -> None:
         self._writer = writer
+        self._knowledge = knowledge
 
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
-        entities = slm.intents[0].entities
+        # Câu nối tiếp chỉ nói phần đổi: gộp vào kịch bản lượt trước (UC-155 1a)
+        entities = merge_follow_up(slm.intents[0].entities, state.context.scenario)
         if entities.get("mode") == "goal_seeking":
-            return self._goal_seek(entities)
+            return self._goal_seek(state, entities)
         if entities.get("mode") != "what_if":
             return SkillOutput(NOT_READY, quick_replies=menu_buttons())
         if not state.has_results:
@@ -246,7 +265,10 @@ class ScenarioBranch:
                 NEED_RESULTS, quick_replies=[MENU["schools"].model_copy(), MENU["assess"].model_copy()]
             )
         try:
-            what_if = parse_what_if(entities.get("changes", []))
+            # Bang và ngành đổi sang mã và tên chuẩn của hệ thống (đọc DB một lần rồi giữ); lỗi đọc thì hai yếu tố này chưa thử được
+            what_if = parse_what_if(
+                entities.get("changes", []), await state_catalog.states(), await major_catalog.majors()
+            )
         except AskAgain as ask:
             # Thiếu số hoặc số không hợp lệ: hỏi lại, kèm nút thử nhanh để bấm thay vì gõ
             return SkillOutput(ask.question, quick_replies=try_buttons(state.profile))
@@ -261,6 +283,8 @@ class ScenarioBranch:
         data: dict = {"changes": what_if.changes, "unsupported": what_if.unsupported}
         if priorities:
             data["priorities"] = priorities
+        # Nhớ kịch bản đã gộp, đúng dạng model nhận: lượt sau chỉ nói phần đổi
+        state.context.scenario = {"mode": "what_if", "changes": entities.get("changes", [])}
         return SkillOutput(TRIED_SCENARIO.format(tried=tried, note=note), action="simulate", action_data=data)
 
     # Học sinh muốn thử thay đổi nhưng chưa nói thay đổi gì (nút menu "Thử thay đổi hồ sơ"): hỏi thử gì, kèm nút thử nhanh
@@ -282,23 +306,54 @@ class ScenarioBranch:
     ) -> SkillOutput:
         fallback = cannot_try(what_if, profile)
         if self._writer is None or not (what_if.filters or what_if.no_effect):
-            return fallback
-        answer = await self._writer.write(what_if, changes)
-        return SkillOutput(answer, quick_replies=fallback.quick_replies) if answer else fallback
+            out = fallback
+        else:
+            answer = await self._writer.write(what_if, changes)
+            out = SkillOutput(answer, quick_replies=fallback.quick_replies) if answer else fallback
+        return await self._with_round_knowledge(what_if, out)
+
+    # UC-155: hỏi giả định vòng nộp (ED, EA, RD) thì trả luôn kiến thức về vòng nộp từ Kho tri thức (UC-36) trong cùng lượt,
+    # không chỉ đưa nút. Kho không trả lời được thì giữ nguyên câu cũ kèm nút
+    async def _with_round_knowledge(self, what_if: WhatIf, out: SkillOutput) -> SkillOutput:
+        if self._knowledge is None or "application_round" not in what_if.no_effect:
+            return out
+        try:
+            kb = await self._knowledge.run(ChatState(), ROUND_KNOWLEDGE_BUTTON.value)
+        except Exception:  # noqa: BLE001 - lỗi kho không được làm hỏng câu trả lời chính
+            return out
+        if not kb.answer or kb.answer == NOT_READY:
+            return out
+        return SkillOutput(
+            out.answer + ROUND_KNOWLEDGE_JOIN + kb.answer,
+            quick_replies=out.quick_replies,
+            citations=kb.citations,
+            disclaimer=kb.disclaimer,
+        )
 
     # "Cần gì để vào trường X": tên trường còn là chữ, .NET khớp với 249 trường rồi chạy goal-seek.
     # Không cần danh sách gợi ý có sẵn: goal-seek tính từ hồ sơ và dữ liệu trường
     @staticmethod
-    def _goal_seek(entities: dict) -> SkillOutput:
+    def _goal_seek(state: ChatState, entities: dict) -> SkillOutput:
         school = str(entities.get("school") or "").strip()
         target = target_code(entities.get("target_group"))
         if not school:
             # Chưa nêu trường: hiện ô chọn trường có gợi ý, giữ nhóm đích để câu hỏi gửi lại đúng ý
             return SkillOutput(ASK_SCHOOL, widget=Widget(type="school", data={"target": target}))
+        # Yếu tố học sinh hỏi (UC-155): chỉ để .NET nói rõ phần tiếng Anh khi hỏi riêng tiếng Anh. Tìm mức cần đạt vẫn tính cho mọi yếu tố
+        factors = [f for f in entities.get("factor") or [] if f in GOAL_FACTORS]
+        data: dict = {"school": school, "target": target}
+        if factors:
+            data["factor"] = factors
+        state.context.scenario = {
+            "mode": "goal_seeking",
+            "school": school,
+            "factor": entities.get("factor"),
+            "target_group": entities.get("target_group"),
+        }
         return SkillOutput(
             GOAL_SEEK_WORKING.format(school=school),
             action="goal_seek",
-            action_data={"school": school, "target": target},
+            action_data=data,
         )
 
 
@@ -319,6 +374,18 @@ class OutOfScopeBranch:
             output = await self._center.run(state, message, {"follow_up": True})
             output.answer = f"{HANDOFF_INTRO}\n\n{output.answer}"
             return output
+        if kind == HANDOFF_FREE:
+            # Gói không cho gợi ý trung tâm trong chat (Miễn phí): dẫn tới trang danh bạ Trung tâm, bỏ nút Tìm trung tâm vì nút đó cũng bị khóa
+            return SkillOutput(
+                OUT_OF_SCOPE[HANDOFF_FREE],
+                quick_replies=[CENTER_PAGE_BUTTON.model_copy(), *menu_buttons("centers")],
+            )
+        if kind == "about_system":
+            # Câu cố định kèm nút mở trang Căn cứ tham số (UC-83)
+            return SkillOutput(
+                OUT_OF_SCOPE["about_system"],
+                quick_replies=[ABOUT_SYSTEM_PAGE_BUTTON.model_copy(), *menu_buttons()],
+            )
         # Luật small_talk là lưới an toàn cho model chưa học nhãn greeting (bản cũ hay trả ambiguous hoặc farewell cho lời chào)
         if kind == "greeting" or (
             kind in ("ambiguous", "farewell") and small_talk.classify(message) == "greeting"
@@ -374,6 +441,31 @@ SCHOOL_LIST_WORDS = (
 MAX_SUGGESTED = 6
 
 
+# Chỗ nối câu giả định vòng nộp với câu trả lời của Kho tri thức (UC-155)
+ROUND_KNOWLEDGE_JOIN = "\n\n"
+
+# Yếu tố tìm mức cần đạt mà model được trả (hợp đồng SLM): activities là bậc ngoại khóa
+GOAL_FACTORS = ("gpa", "sat", "act", "english", "activities")
+
+# Câu explain_fit hỏi cách tính điểm phù hợp ("fit score tính thế nào"), không hỏi về một trường (UC-153 1a)
+FIT_METHOD_WORDS = (
+    "tinh the nao",
+    "tinh nhu the nao",
+    "tinh nhu nao",
+    "tinh ra sao",
+    "tinh sao",
+    "tinh kieu gi",
+    "cach tinh",
+    "cong thuc",
+    "duoc tinh",
+)
+
+
+def asks_how_fit_is_computed(text: str) -> bool:
+    folded = plain(text)
+    return any(word in folded for word in FIT_METHOD_WORDS)
+
+
 def asks_for_school_list(text: str) -> bool:
     folded = plain(text)
     return any(word in folded for word in SCHOOL_LIST_WORDS)
@@ -389,16 +481,21 @@ def others_only_output(
 ) -> SkillOutput | None:
     schools = [t.strip() for t in y.entities.get("schools") or []]
     if "compare" in tasks and len(schools) >= 2:
+        # UC-154: câu so sánh theo hồ sơ ("BU hay NYU hợp với em hơn"): .NET tính nhóm và điểm phù hợp từng trường bằng công thức gợi ý.
+        # Câu so sánh số liệu (học phí, hạn nộp) không hỏi độ phù hợp đã được đổi sang câu kiến thức ở with_comparison_intent (UC-156)
         return SkillOutput(
             LOOKING_UP,
-            action="school_compare",
-            action_data={
-                "question": y.span,
-                "schools": schools,
-                "fields": info_fields(y.entities),
-                "kb_answer": LOOKING_UP,
-            },
+            action="school_fit_compare",
+            action_data={"question": y.span, "schools": schools, "kb_answer": LOOKING_UP},
         )
+    # UC-153 1a: hỏi cách tính điểm phù hợp, không nêu trường: giải thích cách tính, dẫn tới trang tham số, không dùng số của trường nào
+    if (
+        "explain_fit" in tasks
+        and not school_list_words
+        and not single_school(y.entities)
+        and asks_how_fit_is_computed(y.span)
+    ):
+        return SkillOutput(FIT_METHOD, quick_replies=[ABOUT_SYSTEM_PAGE_BUTTON.model_copy()])
     if not school_list_words and not single_school(y.entities):
         # Ô chọn trường (chọn xong .NET giải thích trường đó), hiện sẵn vài trường đầu danh sách gợi ý nếu có
         suggested = [s.code for s in (state.schools if state else None) or []][:MAX_SUGGESTED]
@@ -416,9 +513,15 @@ def others_only_output(
 # lộ trình, hoặc cả hai: SLM tách sẵn trong tasks) thì code dựng skill từ khuôn (skill_ho_so_khuon),
 # Claude viết câu trả lời. Claude sai thì báo chưa trả lời được kèm nút hỏi lại, không dùng skill tĩnh
 class GeneratedAdviceBranch:
-    def __init__(self, skills: dict[str, SkillHandler], writer: AdviceWriter) -> None:
+    def __init__(
+        self,
+        skills: dict[str, SkillHandler],
+        writer: AdviceWriter,
+        method_writer: FitMethodWriter | None = None,
+    ) -> None:
         self._skills = skills
         self._writer = writer
+        self._method_writer = method_writer
 
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         y = slm.intents[0]
@@ -446,8 +549,21 @@ class GeneratedAdviceBranch:
             asks_for_school_list(question) or others_only or "school_list" in (tasks or [])
         )
         if others_only and "school_list" not in tasks:
+            # UC-154: so sánh theo hồ sơ cần hồ sơ đủ như gợi ý trường (UC-22 E1): thiếu thì hỏi tiếp, hồ sơ xong thì trả lời lại đúng câu này
+            if (
+                "compare" in tasks
+                and len([s for s in y.entities.get("schools") or [] if str(s).strip()]) >= 2
+            ):
+                asked = ask_missing_profile(state, y, REQUIRED_B4)
+                if asked is not None:
+                    return asked
             out = others_only_output(y, tasks, asks_for_school_list(question), state)
             if out is not None:
+                # UC-153 1a: Claude viết lời từ tham số công bố; không viết được thì giữ câu cố định FIT_METHOD
+                if out.answer == FIT_METHOD and self._method_writer is not None:
+                    written = await self._method_writer.write()
+                    if written is not None:
+                        return SkillOutput(written, quick_replies=out.quick_replies)
                 return out
         # Gợi ý trường cần ngành để lọc trường; tư vấn hồ sơ chỉ cần các mục cơ bản
         asked = ask_missing_profile(state, y, REQUIRED_B4 if school_list else REQUIRED_B3)
@@ -508,12 +624,15 @@ def build_branches(
     skills: dict[str, SkillHandler],
     writer: AdviceWriter | None = None,
     what_if_writer: WhatIfWriter | None = None,
+    method_writer: FitMethodWriter | None = None,
 ) -> dict[str, Branch]:
-    advice: Branch = GeneratedAdviceBranch(skills, writer) if writer is not None else NotReadyBranch()
+    advice: Branch = (
+        GeneratedAdviceBranch(skills, writer, method_writer) if writer is not None else NotReadyBranch()
+    )
     return {
         "collect_profile": ProfileBranch(ChatProfileHandler(skills), advice),
         "profile_review": advice,
-        "scenario": ScenarioBranch(what_if_writer),
+        "scenario": ScenarioBranch(what_if_writer, skills.get("skill_tra_loi")),
         "knowledge": KnowledgeBranch(skills["skill_tra_loi"])
         if "skill_tra_loi" in skills
         else NotReadyBranch(),

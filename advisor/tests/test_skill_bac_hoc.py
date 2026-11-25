@@ -5,7 +5,7 @@ from app.services.ollama import OllamaError
 from app.services.skills.skill_bac_hoc import UNKNOWN, BacHocRead, BacHocReader, can_ask, check_read
 from tests.fakes import FakeLLM
 
-TRONG = {"current_level": None, "current_grade": None, "target_level": None, "major": None, "intake": None}
+TRONG = {"current_level": None, "current_grade": None, "major": None, "intake": None}
 
 
 async def test_reads_current_level_and_grade():
@@ -36,19 +36,6 @@ def test_grade_in_two_levels_needs_level():
     assert check_read({**TRONG, "current_level": "master", "current_grade": "Năm 1"}).current_grade == "Năm 1"
 
 
-@pytest.mark.parametrize(
-    ("said", "code"),
-    [
-        ("bachelor", "undergraduate"),
-        ("college", "community_college"),
-        ("master", "master"),
-        ("unknown", UNKNOWN),
-    ],
-)
-def test_target_level_mapped_to_study_level(said, code):
-    assert check_read({**TRONG, "target_level": said}).target_level == code
-
-
 @pytest.mark.parametrize("major", ["unknown", "Undecided", " chưa rõ "])
 def test_major_not_sure_is_unknown(major):
     assert check_read({**TRONG, "major": major}).major == UNKNOWN
@@ -68,7 +55,6 @@ def test_major_kept_and_blank_is_none():
         {"current_grade": "Lớp 13"},
         {"current_level": "high_school", "current_grade": "Năm 2"},
         {"major": "x" * 129},
-        {"target_level": "đại học"},
         {"intake": "tháng 9/2027"},
     ],
 )
@@ -100,9 +86,9 @@ async def test_sends_question_id_and_message():
     assert '"question_id":"B1.4"' in llm.calls[0]["messages"][1]["content"]
 
 
-# Cấp học, bậc học, ngành bắt buộc (lưu hồ sơ cần): hỏi tới khi trả lời. Kỳ nhập học chỉ hỏi tối đa 2 lần
+# Cấp học và ngành bắt buộc (lưu hồ sơ cần), không hỏi bậc học (luôn là đại học): hỏi tới khi trả lời. Kỳ nhập học chỉ hỏi tối đa 2 lần
 def test_required_bac_hoc_questions_are_always_asked():
-    state = ChatState(current_step="B1", asked={"B1.1": 5, "B1.2": 5, "B1.3": 5, "B1.4": 2})
+    state = ChatState(current_step="B1", asked={"B1.1": 5, "B1.3": 5, "B1.4": 2})
 
-    assert can_ask(state, "B1.1") and can_ask(state, "B1.2") and can_ask(state, "B1.3")
+    assert can_ask(state, "B1.1") and can_ask(state, "B1.3")
     assert not can_ask(state, "B1.4")

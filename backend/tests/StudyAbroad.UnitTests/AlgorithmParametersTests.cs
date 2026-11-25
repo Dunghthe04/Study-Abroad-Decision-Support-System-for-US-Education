@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Controllers;
+using StudyAbroad.Application.Costs;
 using StudyAbroad.Application.Recommendations;
 using Xunit;
 
@@ -56,15 +57,45 @@ public class AlgorithmParametersTests
     }
 
     [Fact]
-    public void Controller_ReturnsVersionAndParameters()
+    public void Catalog_FitWeightsAreListedInTheOrderOfTheSpec()
     {
-        var controller = new MethodologyController { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+        // UC-24: vừa tầm, ngân sách, chất lượng, học bổng, tiếng Anh (0,30; 0,25; 0,20; 0,15; 0,10)
+        var value = AlgorithmParameters.All.Single(p => p.Key == "fit_weights").Value;
 
-        var response = controller.GetParameters().Value;
+        Assert.Equal(
+            "Vừa tầm 0.3 · Ngân sách 0.25 · Chất lượng 0.2 · Học bổng 0.15 · Tiếng Anh 0.1",
+            value);
+    }
+
+    private sealed class FakeCostParameters(params AlgorithmParameter[] parameters) : ICostParameterCatalog
+    {
+        public Task<IReadOnlyList<AlgorithmParameter>> ListAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<AlgorithmParameter>>(parameters);
+    }
+
+    private static MethodologyController ControllerWith(params AlgorithmParameter[] cost) =>
+        new(new FakeCostParameters(cost)) { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+
+    [Fact]
+    public async Task Controller_ReturnsVersionAndParameters_AlgorithmFirstThenTheCostOnes()
+    {
+        var visa = new AlgorithmParameter("cost_visa_fee", "Chi phí", "Phí xin visa (MRV)", "185 USD", "Khoản thu một lần");
+
+        var response = (await ControllerWith(visa).GetParameters(default)).Value;
 
         Assert.NotNull(response);
         Assert.Equal(AlgorithmParameters.Version, response.AlgorithmVersion);
-        Assert.Equal(AlgorithmParameters.All.Count, response.Parameters.Count);
+        Assert.Equal(AlgorithmParameters.All.Count + 1, response.Parameters.Count);
+        Assert.Equal(AlgorithmParameters.All.Select(p => p.Key), response.Parameters.Take(AlgorithmParameters.All.Count).Select(p => p.Key));
+        Assert.Equal(visa, response.Parameters[^1]);
+    }
+
+    [Fact]
+    public async Task Controller_WithoutCostParameters_StillReturnsTheAlgorithmOnes()
+    {
+        var response = (await ControllerWith().GetParameters(default)).Value;
+
+        Assert.Equal(AlgorithmParameters.All.Count, response!.Parameters.Count);
     }
 
     [Fact]

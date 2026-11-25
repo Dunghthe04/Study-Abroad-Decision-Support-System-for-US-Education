@@ -80,7 +80,7 @@ const SCENARIOS = [
   {
     id: "selective",
     title: "Trường rất chọn lọc",
-    condition: "Nhận dưới 15% hồ sơ",
+    condition: "Nhận dưới 15% hồ sơ (tính theo tỉ lệ nhận của du học sinh nếu trường có số riêng)",
     effect: "Luôn Khó vào",
     variant: "R" as const,
     example: "Hồ sơ C (vị trí 83%) ở trường chỉ nhận 12% vẫn là Khó vào, dù điểm cao hơn phần lớn sinh viên.",
@@ -88,7 +88,7 @@ const SCENARIOS = [
   {
     id: "under-half",
     title: "Trường nhận ít hơn nửa số hồ sơ",
-    condition: "Tỉ lệ nhận dưới 50%",
+    condition: "Tỉ lệ nhận dưới 50% (du học sinh nếu trường có số riêng)",
     effect: "Không được An toàn hơn",
     variant: "M" as const,
     example: "Hồ sơ C (vị trí 83%) ở trường nhận 40% bị hạ từ An toàn hơn xuống Vừa sức.",
@@ -103,11 +103,11 @@ const SCENARIOS = [
   },
   {
     id: "intl-rate",
-    title: "Trường nhận ít du học sinh",
-    condition: "Tỉ lệ nhận du học sinh thấp hơn nửa tỉ lệ chung",
-    effect: "Hạ một nhóm",
+    title: "Trường có tỉ lệ nhận riêng cho du học sinh",
+    condition: "Trường công bố tỉ lệ nhận của du học sinh",
+    effect: "Hai quy tắc về tỉ lệ nhận dùng số này",
     variant: "M" as const,
-    example: "Trường nhận 55% chung nhưng chỉ nhận 20% sinh viên quốc tế sẽ bị hạ một bậc so với vị trí học thuật.",
+    example: "Trường nhận 55% chung nhưng chỉ nhận 20% sinh viên quốc tế: quy tắc dưới 50% xét 20%, nên trường không được An toàn hơn. Không có số riêng thì dùng tỉ lệ chung.",
   },
 ];
 
@@ -156,10 +156,10 @@ const AI_RULES = [
 ];
 
 const RULES = [
-  { rule: "Tỉ lệ nhận của trường dưới 15%", effect: "Luôn là Khó vào, dù hồ sơ mạnh đến đâu." },
-  { rule: "Vị trí học thuật đủ cao nhưng tỉ lệ nhận dưới 50%", effect: "Chỉ là Vừa sức, không được An toàn hơn." },
+  { rule: "Tỉ lệ nhận của trường dưới 15% (của du học sinh nếu có, không thì chung)", effect: "Luôn là Khó vào, dù hồ sơ mạnh đến đâu." },
+  { rule: "Vị trí học thuật đủ cao nhưng tỉ lệ nhận dưới 50% (của du học sinh nếu có, không thì chung)", effect: "Chỉ là Vừa sức, không được An toàn hơn." },
   { rule: "Vị trí học thuật đủ cao nhưng GPA hoặc điểm thi riêng lẻ dưới 25%", effect: "Chỉ là Vừa sức: chỉ số mạnh không che được chỉ số yếu." },
-  { rule: "Tỉ lệ nhận du học sinh thấp hơn một nửa tỉ lệ nhận chung", effect: "Hạ một nhóm." },
+  { rule: "Trường công bố tỉ lệ nhận riêng cho du học sinh", effect: "Hai quy tắc tỉ lệ nhận ở trên dùng tỉ lệ này thay cho tỉ lệ chung." },
   { rule: "Dưới 50% sinh viên của trường nộp SAT", effect: "SAT chỉ đại diện nhóm có nộp (thường điểm cao) nên trọng số điểm thi giảm một nửa." },
   { rule: "Trường bắt buộc SAT mà bạn chưa có điểm thi", effect: "Chưa đủ dữ liệu để xếp nhóm." },
 ];

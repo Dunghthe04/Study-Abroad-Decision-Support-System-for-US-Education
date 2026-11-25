@@ -43,7 +43,7 @@ interface PublicCenterListViewProps {
   initialCenters: StudyCenter[];
 }
 
-type SortKey = "default" | "visa_desc" | "rating_desc" | "name_asc";
+type SortKey = "default" | "rating_desc" | "name_asc";
 
 const CITY_OPTIONS = [
   { value: "all", label: "Tất cả địa điểm" },
@@ -76,7 +76,6 @@ const SERVICE_OPTIONS = [
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "default", label: "Mặc định hệ thống" },
-  { value: "visa_desc", label: "Tỷ lệ đỗ Visa cao nhất" },
   { value: "rating_desc", label: "Đánh giá cao nhất" },
   { value: "name_asc", label: "Tên trung tâm (A–Z)" },
 ];
@@ -326,9 +325,6 @@ function CenterCard({
         </div>
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
-          {center.visaSuccessRate != null && (
-            <StatItem label="Tỷ lệ đỗ Visa" value={`${center.visaSuccessRate}%`} valueClassName="text-ok" />
-          )}
           {(center.reviewCount ?? 0) > 0 && (
             <StatItem
               label="Đánh giá"
@@ -458,7 +454,6 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
     return [...filtered].sort((a, b) => {
       if (sortBy === "name_asc") return a.name.localeCompare(b.name, "vi");
       // Sắp xếp theo số liệu thật; trung tâm chưa có số liệu xếp cuối
-      if (sortBy === "visa_desc") return (b.visaSuccessRate ?? -1) - (a.visaSuccessRate ?? -1);
       if (sortBy === "rating_desc") {
         const ra = (a.reviewCount ?? 0) > 0 ? Number(a.averageRating) : -1;
         const rb = (b.reviewCount ?? 0) > 0 ? Number(b.averageRating) : -1;
@@ -723,6 +718,11 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
               <span className="text-sm font-medium text-ink-2">
                 Đã chọn {comparedCenters.length}/{COMPARE_MAX}:
               </span>
+              {comparedCenters.length >= COMPARE_MAX && (
+                <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                  Đã chọn tối đa {COMPARE_MAX} trung tâm
+                </span>
+              )}
               {comparedCenters.map((c) => (
                 <span
                   key={c.id}

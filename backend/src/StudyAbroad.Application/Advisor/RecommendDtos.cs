@@ -94,6 +94,14 @@ public record ExplainStudentDto(
     int? Tier,     // bậc ngoại khóa, lấy từ lần gợi ý đã lưu
     string? Major);
 
+// UC-24: một thành phần của điểm phù hợp. Key theo thứ tự đặc tả: position (vừa tầm học thuật), budget (ngân sách), quality (chất lượng trường),
+// aid (học bổng), english (tiếng Anh). Score từ 0 đến 1, null là thiếu dữ liệu nên thành phần bị bỏ khỏi tổng. Weight là trọng số đã dùng cho lần gợi ý đó.
+public record FitPartDto(string Key, double? Score, double Weight);
+
+// Điểm phù hợp của một trường: Total (0 đến 1) và năm thành phần tạo nên nó. PriorityAdjusted: trọng số đã đổi theo nút ưu tiên (UC-25)
+// nên khác trọng số mặc định.
+public record FitBreakdownDto(double? Total, bool PriorityAdjusted, IReadOnlyList<FitPartDto> Parts);
+
 // Một trường: số đã lưu + mã lý do cloud đã chọn. Advisor đổi mã why thành câu, Qwen chỉ diễn đạt lại.
 public record ExplainSchoolDto(
     string Name,
@@ -108,7 +116,9 @@ public record ExplainSchoolDto(
     double? Pg,
     double? Ps,
     double? Cost,
-    double? Gap);
+    double? Gap,
+    // Điểm năm thành phần và trọng số (UC-24). Thẻ giải thích trong chat dùng để hiện, và advisor đưa cho AI diễn giải (UC-153).
+    FitBreakdownDto? Fit = null);
 
 // Basis: giả định học sinh đang xem ("GPA 3.6, SAT 1500"); null là hồ sơ thật. Số liệu của Student và School đã tính theo gốc này
 public record ExplainRequestDto(ExplainStudentDto Student, ExplainSchoolDto School, string? Basis = null);

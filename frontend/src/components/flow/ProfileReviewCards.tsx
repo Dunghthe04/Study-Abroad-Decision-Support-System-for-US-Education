@@ -23,9 +23,11 @@ import {
   IMPACT_LEVEL_OPTIONS,
   SCHOLARSHIP_NEED_OPTIONS,
   SCHOOL_TYPE_OPTIONS,
+  calculateGradeTrend,
   draftGpa,
   labelOf,
 } from "@/lib/profile-flow-options";
+import { GpaConversionNote } from "./GpaConversionNote";
 import { findCertType, formatCertSummary } from "@/lib/certification-utils";
 import type { DraftTranscriptFile, ProfileFlowDraft, ProfileMetadataResponse } from "@/types/profile-flow";
 
@@ -145,10 +147,12 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
   const need = SCHOLARSHIP_NEED_OPTIONS.find((o) => o.value === step4.needFinancialAid);
   const financialNeedLabel = need ? `${need.label} (${need.description.toLowerCase()})` : "Chưa chọn";
 
-  // Cùng cách tính với BE (TranscriptGpa): GPA tổng hoặc tính từ điểm môn
+  // Cùng cách tính với BE (TranscriptGpa): GPA tổng hoặc tính từ điểm môn [UC-18]
   const { gpa10, gpa4 } = draftGpa(step2);
+  const isDirectScale4 = gpa10 == null && gpa4 != null;
   const gpa = gpa4 != null ? gpa4.toFixed(2) : "–";
-  const gpa10Text = gpa10 != null ? gpa10.toFixed(1) : "–";
+  const gpa10Text = gpa10 != null ? gpa10.toFixed(1) : isDirectScale4 ? "Chưa có dữ liệu" : "–";
+  const gradeTrend = calculateGradeTrend(step2.academicYears);
 
   // Chỉ những năm có môn mới hiện ở phần "Xem điểm từng môn"
   const yearsWithSubjects = step2.academicYears.filter((y) => y.subjects.some((s) => s.subjectName));
@@ -199,9 +203,31 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
             </div>
           )}
           <div>
-            <strong className="text-ink">Điểm TB tự tính: </strong>
-            <span className="text-numeric">{gpa10Text}</span> · thang 4 (tham khảo): <span className="text-numeric">{gpa}</span>
+            <strong className="text-ink">
+              {isDirectScale4 ? "GPA thang 4.0: " : "Điểm TB tự tính: "}
+            </strong>
+            <span className="text-numeric">{isDirectScale4 ? gpa : gpa10Text}</span>
+            {" · "}
+            {isDirectScale4 ? (
+              <>thang 10: <span className="text-numeric">{gpa10Text}</span></>
+            ) : (
+              <>thang 4 (tham khảo): <span className="text-numeric">{gpa}</span></>
+            )}
           </div>
+          {gpa10 != null && <GpaConversionNote className="pt-1" />}
+          {gradeTrend.hasEnoughData && (
+            <div className="rounded-lg border border-line/80 bg-ground/60 p-2.5 text-xs space-y-1">
+              <div className="font-semibold text-foreground">Xu hướng điểm theo năm học</div>
+              <div className="flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
+                {gradeTrend.yearlyAverages.map((yr) => (
+                  <span key={yr.gradeName} className="rounded bg-surface px-1.5 py-0.5 border border-line">
+                    {yr.gradeName}: <strong className="text-foreground">{yr.gpa10.toFixed(1)}</strong> ({yr.gpa4.toFixed(2)})
+                  </span>
+                ))}
+              </div>
+              <p className="text-muted-foreground">{gradeTrend.summaryMessage}</p>
+            </div>
+          )}
           {yearsWithSubjects.length > 0 && (
             <details className="group">
               <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 font-medium text-brand">

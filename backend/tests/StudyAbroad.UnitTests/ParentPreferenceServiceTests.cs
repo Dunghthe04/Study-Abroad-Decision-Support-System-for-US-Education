@@ -568,6 +568,9 @@ public class ParentPreferenceServiceTests
 
         public Task<Recommendation?> GetLatestAsync(Guid userId, CancellationToken ct) => Task.FromResult(Latest);
 
+        public Task<FitCompareResult> CompareFitAsync(Guid userId, IReadOnlyList<string> codes, CancellationToken ct) =>
+            throw new NotSupportedException();
+
         public Task<SimulationResult> SimulateAsync(Guid userId, SimulationOverrides overrides, IReadOnlyList<int>? pref, CancellationToken ct)
         {
             if (Throw) throw new InvalidOperationException("Chưa có hồ sơ.");

@@ -156,7 +156,16 @@ function ItemPanel({
           </Alert>
         ) : null}
 
-        {data && !data.deletedByUser ? (
+        {/* Chủ cuộc trò chuyện dưới 16 tuổi và phụ huynh đã rút đồng ý: ngừng xử lý ngay, không hiện nội dung, không chấm được nữa */}
+        {data?.minorWithoutConsent ? (
+          <Alert>
+            <AlertDescription>
+              Nội dung không còn hiển thị vì phụ huynh đã rút đồng ý xử lý dữ liệu của học sinh này, nên câu này không chấm được nữa. Kết luận bạn đã chấm trước đó (nếu có) vẫn được giữ. Bạn chuyển sang câu khác.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {data && !data.deletedByUser && !data.minorWithoutConsent ? (
           <>
             <Block title="Câu hỏi của học sinh">
               {data.question ? (

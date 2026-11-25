@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Domain.Constants;
@@ -64,31 +66,50 @@ public class AccountPurgeRepository(AppDbContext db) : IAccountPurgeRepository
         return new ForumPurgeResult(deleted, tombstoned);
     }
 
-    public async Task<int> RetainBuyerIdentityAsync(Guid userId, DateTime now, CancellationToken ct = default)
-    {
-        var lastTransaction = await db.PaymentTransactions.AsNoTracking()
-            .Where(p => p.UserId == userId)
-            .MaxAsync(p => (DateTime?)(p.PaidAt ?? p.CreatedAt), ct);
-        if (lastTransaction is null)
-            return 0;
+    /// <summary>Đơn đã có tiền đi qua (paid, mismatch): chỉ những đơn này buộc phải lưu thông tin người mua 10 năm.</summary>
+    public static readonly Expression<Func<PaymentTransaction, bool>> MoneyMoved =
+        p => p.Status == OrderStatuses.Paid || p.Status == OrderStatuses.Mismatch;
 
-        var buyer = await db.Users.AsNoTracking().Where(u => u.Id == userId)
-            .Select(u => new { u.FullName, u.Email }).SingleAsync(ct);
-        var retained = new RetainedBuyer
+    public async Task<string?> SnapshotBuyerForOrdersAsync(Guid userId, DateTime now, CancellationToken ct = default)
+    {
+        // Chỉ đơn đã có tiền đi qua (paid, mismatch) mới phải lưu thông tin người mua; đơn chờ / hủy / hết hạn thì không
+        var latestOrderCreatedAt = await db.PaymentTransactions
+            .Where(p => p.UserId == userId).Where(MoneyMoved)
+            .Select(p => (DateTime?)p.CreatedAt)
+            .MaxAsync(ct);
+        if (latestOrderCreatedAt is null)
+            return null;
+
+        var user = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.FullName, u.Email })
+            .FirstOrDefaultAsync(ct);
+        if (user is null)
+            return null;
+
+        var buyerCode = $"DEL-{Convert.ToHexString(RandomNumberGenerator.GetBytes(4))}";
+        var retention = new DeletedBuyerRetention
         {
-            Id = Guid.NewGuid(),   // mã người mua ngẫu nhiên, không suy ra được từ id tài khoản
-            FullName = buyer.FullName,
-            Email = buyer.Email,
-            RetainUntil = RetentionPeriods.OrderRetainUntil(lastTransaction.Value),
+            BuyerCode = buyerCode,
+            FullName = user.FullName,
+            Email = user.Email,
+            RetainUntilUtc = AccountPurgeService.ComputeRetentionExpiryUtc(latestOrderCreatedAt.Value),
             CreatedAt = now,
+            UpdatedAt = now,
         };
-        db.RetainedBuyers.Add(retained);
+        db.DeletedBuyerRetentions.Add(retention);
         await db.SaveChangesAsync(ct);
 
-        return await db.PaymentTransactions
+        await db.PaymentTransactions
             .Where(p => p.UserId == userId)
-            .ExecuteUpdateAsync(s => s.SetProperty(p => p.RetainedBuyerId, retained.Id), ct);
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.DeletedBuyerRetentionId, retention.Id), ct);
+        return buyerCode;
     }
+
+    public Task<int> PurgeExpiredBuyerRetentionsAsync(DateTime now, CancellationToken ct = default) =>
+        db.DeletedBuyerRetentions
+            .Where(r => r.RetainUntilUtc <= now)
+            .ExecuteDeleteAsync(ct);
 
     // Tin nhắn và yêu cầu còn giữ để trung tâm đọc tới mốc 90 ngày; số điện thoại và dấu vết phụ huynh không cần cho việc đó
     public Task ScrubRetainedLeadsAsync(Guid userId, CancellationToken ct = default) =>
@@ -131,19 +152,13 @@ public class AccountPurgeRepository(AppDbContext db) : IAccountPurgeRepository
         return new RetainedLeadPurgeResult(messages, leads);
     }
 
-    public async Task<(int Orders, int Buyers)> PurgeExpiredOrdersAsync(DateTime now, CancellationToken ct = default)
+    public Task<int> PurgeExpiredOrdersAsync(DateTime now, CancellationToken ct = default)
     {
         var cutoff = RetentionPeriods.OrderPurgeCutoff(now);
 
         // Chỉ đơn của tài khoản đã xóa hẳn (user_id null); đơn của tài khoản còn sống không thuộc quy tắc này
-        var orders = await db.PaymentTransactions
-            .Where(p => p.UserId == null && (p.PaidAt ?? p.CreatedAt) < cutoff)
+        return db.PaymentTransactions
+            .Where(p => p.UserId == null && p.CreatedAt < cutoff)
             .ExecuteDeleteAsync(ct);
-
-        var buyers = await db.RetainedBuyers
-            .Where(b => b.RetainUntil <= now && !db.PaymentTransactions.Any(p => p.RetainedBuyerId == b.Id))
-            .ExecuteDeleteAsync(ct);
-
-        return (orders, buyers);
     }
 }

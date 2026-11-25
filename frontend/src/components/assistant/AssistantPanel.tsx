@@ -25,8 +25,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { describeSimulation, resetSimulation, showSimulation } from "@/lib/simulation-link";
 import { sourceDateText } from "@/lib/source-date";
-import { httpLink } from "@/lib/university-display";
-import { ChatImages } from "@/components/assistant/ChatImages";
+import { citationLinks } from "@/lib/citation-links";
 import { useAuth } from "@/contexts/AuthContext";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { isAuthRoute } from "@/lib/layout-routes";
@@ -35,6 +34,10 @@ import { BudgetWidget } from "./BudgetWidget";
 import { ChatHistoryPopover, ChatHistorySidebar } from "./ChatHistoryPopover";
 import { CenterCardsWidget } from "./CenterCardsWidget";
 import { ChatText } from "./ChatText";
+import { FitCompareCard } from "./FitCompareCard";
+import { SaveScenarioButton } from "@/components/recommendation/SavedScenarios";
+import { scenarioApi } from "@/lib/scenario-api";
+import { overridesFromValues } from "@/lib/simulation-link";
 import { MajorWidget } from "./MajorWidget";
 import { CurrentValues, ReviewWidget } from "./ReviewWidget";
 import { ScholarshipWidget } from "./ScholarshipWidget";
@@ -46,7 +49,7 @@ import { PremiumLockedCard } from "@/components/billing/PremiumLockedCard";
 import { formatVnDate } from "@/lib/billing-api";
 import type { QuickReply } from "@/types/api";
 import type { SubscriptionSummaryDto } from "@/types/billing";
-import type { SchoolGoalResult, SchoolSearchData } from "@/types/recommendation";
+import type { FitCompareData, SchoolGoalResult, SchoolSearchData } from "@/types/recommendation";
 
 // Trang đăng nhập / đăng ký không hiện trợ lý
 export function useAssistantVisible() {
@@ -731,6 +734,7 @@ function withoutInterview(replies: QuickReply[] | null | undefined): QuickReply[
 
 function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (value: string) => void; className?: string }) {
   const router = useRouter();
+  const { user } = useAuth();
   const { sendAction, subscription, panelMode, setPanelMode } = useAssistant();
   const shrinkIfFull = () => {
     if (panelMode === "full") setPanelMode("compact");
@@ -748,8 +752,13 @@ function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (va
       ? (turn.widget.data as unknown as SchoolSearchData)
       : null;
   // Thẻ trường đã nói đủ đoạn chữ này (tổng số, cách xếp, danh sách): bỏ đoạn đó, các đoạn khác của lượt vẫn hiện
-  const content =
-    searchData?.coveredText && turn.content ? turn.content.replace(searchData.coveredText, "").trim() : turn.content;
+  // UC-154: bảng so sánh theo độ phù hợp nói đủ cả số liệu lẫn nhận xét, nên cũng bỏ đoạn chữ trùng
+  const fitData =
+    turn.widget?.type === "fit_compare" && Array.isArray(turn.widget.data?.schools)
+      ? (turn.widget.data as unknown as FitCompareData)
+      : null;
+  const coveredText = searchData?.coveredText ?? fitData?.coveredText;
+  const content = coveredText && turn.content ? turn.content.replace(coveredText, "").trim() : turn.content;
   const goalData = turn.widget?.type === "goal_seek" ? turn.widget.data : null;
   const goalResult = (goalData?.result as SchoolGoalResult | undefined) ?? null;
   const goalBasisLabel = typeof goalData?.basisLabel === "string" ? goalData.basisLabel : null;
@@ -766,8 +775,11 @@ function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (va
           title={
             turn.locked.reason === "quota_exhausted"
               ? "Bạn đã dùng hết lượt hỏi miễn phí của tháng này"
-              : "Câu hỏi này cần tài khoản USDSS Premium"
+              : turn.locked.reason === "premium_tokens_exhausted"
+                ? "Đã hết token, hãy mua thêm gói"
+                : "Câu hỏi này cần tài khoản USDSS Premium"
           }
+          ctaLabel={turn.locked.reason === "premium_tokens_exhausted" ? "Mua thêm gói" : undefined}
           note={
             turn.locked.reason === "quota_exhausted" && turn.locked.resetsAt
               ? `Lượt hỏi miễn phí được làm mới ngày ${formatVnDate(turn.locked.resetsAt)}.`
@@ -777,19 +789,35 @@ function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (va
       )}
       {turn.widget?.type === "centers" && <CenterCardsWidget data={turn.widget.data} onPick={onReply} />}
       {searchData && <SchoolSearchCard data={searchData} />}
-      <ChatImages media={turn.media} />
+      {fitData && <FitCompareCard data={fitData} />}
       {turn.citations && turn.citations.length > 0 && (
         <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
           {turn.citations.map((c, j) => {
-            const link = httpLink(c.url?.split(";").map((s) => s.trim()).find(Boolean));
+            // UC-37: một liên kết thì tên nguồn là liên kết; nhiều liên kết thì hiển thị đủ, mỗi liên kết một nhãn tên miền
+            const links = citationLinks(c.url);
+            const only = links.length === 1 ? links[0] : null;
             return (
               <li key={j}>
-                {link ? (
-                  <a href={link.href} target="_blank" rel="noopener noreferrer" className="underline hover:text-brand">
+                {only ? (
+                  <a href={only.href} target="_blank" rel="noopener noreferrer" className="underline hover:text-brand">
                     {c.title}
                   </a>
                 ) : (
                   c.title
+                )}
+                {links.length > 1 && (
+                  <span>
+                    {" ("}
+                    {links.map((link, k) => (
+                      <span key={link.href}>
+                        {k > 0 ? ", " : ""}
+                        <a href={link.href} target="_blank" rel="noopener noreferrer" className="underline hover:text-brand">
+                          {link.label}
+                        </a>
+                      </span>
+                    ))}
+                    {")"}
+                  </span>
                 )}
                 <span className="text-ink-3"> · {sourceDateText(c.retrievedAt)}</span>
               </li>
@@ -855,6 +883,17 @@ function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (va
         >
           Xem trên thanh kéo
         </Button>
+      )}
+      {/* UC-81: lưu kịch bản vừa thử (chỉ học sinh; phụ huynh không có kịch bản riêng) */}
+      {turn.widget?.type === "simulate" && user?.role === "student" && Object.keys(overridesFromValues(turn.widget.data)).length > 0 && (
+        <span className="ml-2 mt-2.5 inline-block align-top">
+          <SaveScenarioButton
+            overrides={overridesFromValues(turn.widget.data)}
+            onSave={async (title) => {
+              await scenarioApi.save(title, overridesFromValues(turn.widget?.data));
+            }}
+          />
+        </span>
       )}
       {onReply && quickReplies && quickReplies.length > 0 && (
         <div className="mt-2.5 flex flex-wrap gap-2">

@@ -16,7 +16,6 @@ from app.schemas.slm import PROFILE_KEYS, SkillRequest
 from app.services.profile_calc import calc_profile
 from app.services.skills.buttons import (
     BUDGET_LABELS,
-    BUTTONS,
     CURRENT_LEVEL_LABELS,
     EDUCATION_SYSTEM_LABELS,
     FUNDING_SOURCE_LABELS,
@@ -33,12 +32,9 @@ VALUE_STATUSES = ("confirmed", "said_in_B0")
 NONE_TEXT = "không có"
 UNKNOWN_TEXT = "chưa rõ"
 
-# Bậc muốn học: lấy chữ từ nút B1.2, không chép tay
-TARGET_LEVEL_LABELS = {button.values["target_level"].value: button.label for button in BUTTONS["B1.2"]}
 # Khóa có mã → nhãn form
 CODE_LABELS = {
     "current_level": CURRENT_LEVEL_LABELS,
-    "target_level": TARGET_LEVEL_LABELS,
     "education_system": EDUCATION_SYSTEM_LABELS,
     "funding_source": FUNDING_SOURCE_LABELS,
     "scholarship": SCHOLARSHIP_LABELS,

@@ -182,6 +182,9 @@ public class ParentPreferenceRefresherTests
         public bool Throw { get; set; }
         public List<(Guid UserId, SimulationOverrides Overrides, IReadOnlyList<int>? Pref)> Calls { get; } = [];
 
+        public Task<FitCompareResult> CompareFitAsync(Guid userId, IReadOnlyList<string> codes, CancellationToken ct) =>
+            throw new NotSupportedException();
+
         public Task<SimulationResult> SimulateAsync(Guid userId, SimulationOverrides overrides, IReadOnlyList<int>? pref, CancellationToken ct)
         {
             if (Throw) throw new InvalidOperationException("Chưa có hồ sơ.");
