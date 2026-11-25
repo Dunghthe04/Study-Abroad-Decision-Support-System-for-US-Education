@@ -479,12 +479,6 @@ export interface LockUserAccountRequest {
 }
 
 /** [UC-62] Admin mở khóa tài khoản kèm lý do. */
-/** [UC-113] Admin sửa ngày sinh Học sinh / Phụ huynh theo yêu cầu hỗ trợ. birthDate dạng yyyy-MM-dd, lý do bắt buộc. */
-export interface UpdateUserBirthDateRequest {
-  birthDate: string;
-  reason: string;
-}
-
 export interface UnlockUserAccountRequest {
   reason: string;
 }

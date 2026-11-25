@@ -29,7 +29,6 @@ import type {
   CreateCenterAccountRequest,
   LockUserAccountRequest,
   UnlockUserAccountRequest,
-  UpdateUserBirthDateRequest,
   BirthDateChangeDto,
   SubmitBirthDateChangeInput,
   AdminBirthDateRequestDto,
@@ -475,13 +474,6 @@ export const adminUsersApi = {
   unlock: (id: string, data: UnlockUserAccountRequest) =>
     apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/unlock`, {
       method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  /** [UC-113] Sửa ngày sinh Học sinh / Phụ huynh theo yêu cầu hỗ trợ (admin, bắt buộc lý do). */
-  updateBirthDate: (id: string, data: UpdateUserBirthDateRequest) =>
-    apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/birth-date`, {
-      method: "PUT",
       body: JSON.stringify(data),
     }),
 };

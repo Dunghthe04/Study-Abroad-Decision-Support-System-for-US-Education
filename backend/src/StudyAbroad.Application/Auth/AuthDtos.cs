@@ -34,7 +34,6 @@ namespace StudyAbroad.Application.Auth
     public record UnlockUserAccountRequest(string Reason);
 
     /// <summary>[UC-113] Admin sửa ngày sinh theo yêu cầu hỗ trợ. Lý do bắt buộc (tối đa 500 ký tự).</summary>
-    public record UpdateUserBirthDateRequest(DateOnly? BirthDate, string? Reason);
 
     // [USAS-362] Thông tin người dùng trả về cho client (không chứa password_hash)
     // [Q11] AgeGroup (child/minor/adult, null nếu không áp), ParentConsentStatus (granted/pending/none/not_required),

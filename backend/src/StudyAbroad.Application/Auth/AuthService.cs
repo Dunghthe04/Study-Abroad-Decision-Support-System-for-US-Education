@@ -42,8 +42,6 @@ namespace StudyAbroad.Application.Auth
         Task<AuthResult> LockUserAccountAsync(Guid targetUserId, LockUserAccountRequest request, Guid actorAdminId, CancellationToken ct = default);
         /// <summary>[UC-62] Admin mở khóa tài khoản (status locked hoặc temp_locked) kèm lý do và audit.</summary>
         Task<AuthResult> UnlockUserAccountAsync(Guid targetUserId, UnlockUserAccountRequest request, Guid actorAdminId, CancellationToken ct = default);
-        /// <summary>[UC-113] Admin sửa ngày sinh Học sinh / Phụ huynh theo yêu cầu hỗ trợ, bắt buộc lý do, ghi audit giá trị cũ và mới.</summary>
-        Task<AuthResult> UpdateUserBirthDateAsync(Guid targetUserId, UpdateUserBirthDateRequest request, Guid actorAdminId, CancellationToken ct = default);
         /// <summary>[UC-80] Yêu cầu xóa tài khoản: xóa mềm, khôi phục được trong thời hạn, hết hạn thì job xóa hẳn.</summary>
         Task<AuthResult> AnonymizeUserAccountAsync(Guid userId, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
         /// <summary>[UC-80] Khôi phục tài khoản đang chờ xóa bằng mã khôi phục, đăng nhập luôn khi thành công.</summary>
@@ -74,9 +72,7 @@ namespace StudyAbroad.Application.Auth
         StudyAbroad.Application.Billing.IBillingAccountHooks? billingHooks = null,
         // [UC-104] Đồng ý Điều khoản và Chính sách bảo mật lúc đăng ký; null trong test cũ thì bỏ qua
         StudyAbroad.Application.Policies.IRegistrationConsent? registrationConsent = null,
-        StudyAbroad.Application.Leads.ILeadRepository? leadRepo = null,
-        // [SC-10 / UC-113] Gửi thông báo khi Admin cập nhật ngày sinh
-        StudyAbroad.Application.Notifications.INotificationService? notifications = null) : IAuthService, IParentRequestedDeletion
+        StudyAbroad.Application.Leads.ILeadRepository? leadRepo = null) : IAuthService, IParentRequestedDeletion
     {
         private readonly AccountDeletionOptions _accountDeletion = accountDeletion ?? new AccountDeletionOptions();
 
@@ -1151,92 +1147,6 @@ namespace StudyAbroad.Application.Auth
             _ = emailSender.SendAccountLockedEmailAsync(user.Email, user.FullName, reason, ct);
 
             return AuthResult.Ok(ToDto(user) with { LockReason = reason }, "Đã khóa tài khoản.");
-        }
-
-        /// <summary>
-        /// [UC-113] Admin sửa ngày sinh theo yêu cầu hỗ trợ (ngày sinh bị khóa sau đăng ký, UC-01). Chỉ Học sinh / Phụ huynh.
-        /// Tuổi và các quy tắc mốc 16 / 18 (đồng ý của phụ huynh, chức năng bị chặn theo tuổi) được tính lại từ ngày sinh mới
-        /// mỗi lần gọi (AgeAccess), không có dữ liệu suy ra nào lưu sẵn. Phụ huynh phải còn từ 18 tuổi.
-        /// </summary>
-        public async Task<AuthResult> UpdateUserBirthDateAsync(
-            Guid targetUserId,
-            UpdateUserBirthDateRequest request,
-            Guid actorAdminId,
-            CancellationToken ct = default)
-        {
-            var reason = request.Reason?.Trim() ?? string.Empty;
-            if (reason.Length == 0)
-                return AuthResult.Fail(AuthError.Validation, "Lý do sửa ngày sinh không được để trống.");
-            if (reason.Length > MaxLockReasonLength)
-                return AuthResult.Fail(AuthError.Validation, $"Lý do sửa ngày sinh tối đa {MaxLockReasonLength} ký tự.");
-
-            if (request.BirthDate is not { } newDob)
-                return AuthResult.Fail(AuthError.Validation, "Vui lòng nhập ngày sinh mới.");
-
-            var user = await users.GetUserById(targetUserId, ct);
-            // [1.5c] Con managed không phải tài khoản thật: admin thao tác theo id cũng coi như không tồn tại
-            if (user is null || user.Status == UserStatuses.Managed)
-                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản.");
-
-            if (user.Role != UserRoles.Student && user.Role != UserRoles.Parent)
-                return AuthResult.Fail(AuthError.Validation, "Chỉ sửa được ngày sinh của tài khoản Học sinh hoặc Phụ huynh.");
-
-            var today = AgePolicy.TodayInVietnam(DateTime.UtcNow);
-            if (newDob > today)
-                return AuthResult.Fail(AuthError.Validation, "Ngày sinh không được ở tương lai.");
-
-            var newAge = AgePolicy.GetAge(newDob, today);
-            if (newAge > MaxAge)
-                return AuthResult.Fail(AuthError.Validation, "Ngày sinh không hợp lệ.");
-
-            if (user.Role == UserRoles.Parent && newAge < AgeGroups.AdultAge)
-                return AuthResult.Fail(AuthError.Validation, $"Tài khoản phụ huynh phải từ {AgeGroups.AdultAge} tuổi.");
-
-            if (user.DateOfBirth == newDob)
-                return AuthResult.Fail(AuthError.Validation, "Ngày sinh mới trùng với ngày sinh hiện tại.");
-
-            var oldDob = user.DateOfBirth;
-            int? oldAge = oldDob is { } o ? AgePolicy.GetAge(o, today) : null;
-            user.DateOfBirth = newDob;
-            await users.UpdateUserAsync(user, ct);
-
-            await auditLogs.AddAsync(new AuditLog
-            {
-                ActorUserId = actorAdminId,
-                Action = "user.birth_date_update",
-                EntityType = "user",
-                EntityId = user.Id.ToString(),
-                DetailJson = JsonSerializer.Serialize(new
-                {
-                    reason,
-                    targetEmail = user.Email,
-                    oldBirthDate = oldDob?.ToString("yyyy-MM-dd"),
-                    newBirthDate = newDob.ToString("yyyy-MM-dd"),
-                    oldAge,
-                    newAge,
-                }),
-            }, ct);
-
-            // [SC-10 / UC-113] Gửi thông báo trong hệ thống cho người dùng khi Administrator cập nhật ngày sinh
-            if (notifications is not null)
-            {
-                try
-                {
-                    await notifications.NotifyAsync(
-                        user.Id,
-                        "user_birth_date_updated",
-                        "Ngày sinh của bạn đã được cập nhật",
-                        $"Administrator đã cập nhật ngày sinh của bạn thành {newDob:dd/MM/yyyy}. Lý do: {reason}",
-                        "/account",
-                        ct);
-                }
-                catch
-                {
-                    // Nuốt lỗi thông báo để không chặn luồng chính
-                }
-            }
-
-            return AuthResult.Ok(await ToDtoAsync(user, ct), $"Đã sửa ngày sinh. Tuổi hiện tại: {newAge}.");
         }
 
         /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (chỉ tài khoản đang bị locked hoặc temp_locked).</summary>

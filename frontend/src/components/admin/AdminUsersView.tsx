@@ -4,7 +4,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   BanIcon,
-  CakeIcon,
   EyeIcon,
   FilterIcon,
   KeyRoundIcon,
@@ -22,7 +21,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -69,21 +67,11 @@ function canAdminLock(target: UserDto, currentUserRole?: string, currentUserId?:
   return currentUserRole === "admin";
 }
 
-/** [UC-113] Sửa ngày sinh: chỉ Admin, chỉ tài khoản Học sinh / Phụ huynh (server kiểm tra lại). */
-function canAdminEditBirthDate(target: UserDto, currentUserRole?: string): boolean {
-  return currentUserRole === "admin" && (target.role === "student" || target.role === "parent");
-}
-
 /** yyyy-MM-dd -> dd/MM/yyyy để hiển thị. */
 function formatBirthDate(value?: string | null): string {
   if (!value) return "Chưa có";
   const [y, m, d] = value.split("-");
   return y && m && d ? `${d}/${m}/${y}` : value;
-}
-
-/** Hôm nay theo giờ Việt Nam (UTC+7), dạng yyyy-MM-dd, làm giới hạn trên cho ô chọn ngày. */
-function todayInVietnam(): string {
-  return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
 /** [UC-62] Mở khóa tài khoản: chỉ Admin (quyết định D2 bản 14/11), mở khóa được moderator, center, student, parent. */
@@ -200,14 +188,6 @@ export function AdminUsersView() {
   const [lockReason, setLockReason] = useState("");
   const [lockSubmitting, setLockSubmitting] = useState(false);
   const [lockDialogError, setLockDialogError] = useState<string | null>(null);
-
-  // [UC-113] Dialog sửa ngày sinh: tải chi tiết để có ngày sinh hiện tại
-  const [birthTarget, setBirthTarget] = useState<UserDto | null>(null);
-  const [birthDetailLoading, setBirthDetailLoading] = useState(false);
-  const [birthValue, setBirthValue] = useState("");
-  const [birthReason, setBirthReason] = useState("");
-  const [birthSubmitting, setBirthSubmitting] = useState(false);
-  const [birthDialogError, setBirthDialogError] = useState<string | null>(null);
 
   // Dialog mở khóa tài khoản
   const [unlockTarget, setUnlockTarget] = useState<UserDto | null>(null);
@@ -328,80 +308,6 @@ export function AdminUsersView() {
       setLockDialogError(err instanceof ApiError ? err.message : "Không khóa được tài khoản.");
     } finally {
       setLockSubmitting(false);
-    }
-  };
-
-  const openBirthDialog = useCallback(
-    async (user: UserDto) => {
-      if (!canAdminEditBirthDate(user, currentUser?.role)) return;
-      setBirthTarget(user);
-      setBirthValue(user.dateOfBirth ?? "");
-      setBirthReason("");
-      setBirthDialogError(null);
-      setBirthDetailLoading(true);
-      try {
-        const detail = await adminUsersApi.getById(user.id);
-        setBirthTarget((prev) => (prev?.id === user.id ? { ...prev, ...detail } : prev));
-        setBirthValue(detail.dateOfBirth ?? "");
-      } catch (err) {
-        setBirthDialogError(err instanceof ApiError ? err.message : "Không tải được ngày sinh hiện tại.");
-      } finally {
-        setBirthDetailLoading(false);
-      }
-    },
-    [currentUser?.role]
-  );
-
-  const closeBirthDialog = () => {
-    if (birthSubmitting) return;
-    setBirthTarget(null);
-    setBirthValue("");
-    setBirthReason("");
-    setBirthDialogError(null);
-  };
-
-  const handleConfirmBirthDate = async () => {
-    if (!birthTarget || !canAdminEditBirthDate(birthTarget, currentUser?.role)) return;
-    const reason = birthReason.trim();
-    if (!birthValue) {
-      setBirthDialogError("Vui lòng chọn ngày sinh mới.");
-      return;
-    }
-    if (birthValue > todayInVietnam()) {
-      setBirthDialogError("Ngày sinh không được ở tương lai.");
-      return;
-    }
-    if (birthValue === birthTarget.dateOfBirth) {
-      setBirthDialogError("Ngày sinh mới trùng với ngày sinh hiện tại.");
-      return;
-    }
-    if (!reason) {
-      setBirthDialogError("Vui lòng nhập lý do sửa ngày sinh.");
-      return;
-    }
-    setBirthDialogError(null);
-    setBirthSubmitting(true);
-    try {
-      const updated = await adminUsersApi.updateBirthDate(birthTarget.id, { birthDate: birthValue, reason });
-      toast.add({
-        type: "success",
-        priority: "high",
-        timeout: 6000,
-        title: "Đã sửa ngày sinh",
-        description:
-          updated.age != null ? `${birthTarget.email} · tuổi hiện tại: ${updated.age}` : birthTarget.email,
-      });
-      if (detailTarget?.id === birthTarget.id) {
-        setDetailTarget((prev) => (prev ? { ...prev, ...updated } : null));
-      }
-      setBirthTarget(null);
-      setBirthValue("");
-      setBirthReason("");
-      await loadUsers();
-    } catch (err) {
-      setBirthDialogError(err instanceof ApiError ? err.message : "Không sửa được ngày sinh.");
-    } finally {
-      setBirthSubmitting(false);
     }
   };
 
@@ -971,21 +877,6 @@ export function AdminUsersView() {
                 </div>
               )}
 
-              {canAdminEditBirthDate(detailTarget, currentUser?.role) && (
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void openBirthDialog(detailTarget)}
-                    className="gap-1.5"
-                  >
-                    <CakeIcon className="size-3.5" />
-                    Sửa ngày sinh
-                  </Button>
-                </div>
-              )}
-
               {(canAdminLock(detailTarget, currentUser?.role, currentUser?.id) ||
                 canAdminUnlock(detailTarget, currentUser?.role)) && (
                 <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line">
@@ -1171,86 +1062,6 @@ export function AdminUsersView() {
             >
               <BanIcon className="size-4" />
               Xác nhận khóa
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* [UC-113] Sửa ngày sinh theo yêu cầu hỗ trợ */}
-      <Dialog open={birthTarget !== null} onOpenChange={(open) => !open && closeBirthDialog()}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CakeIcon className="size-5" />
-              Sửa ngày sinh
-            </DialogTitle>
-            <DialogDescription>
-              {birthTarget
-                ? `Sửa ngày sinh của ${birthTarget.fullName} (${birthTarget.email}) theo yêu cầu hỗ trợ. Hệ thống tính lại tuổi và áp lại các quy tắc theo mốc 16 và 18 tuổi; thao tác được ghi nhật ký.`
-                : ""}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="rounded-lg border border-line bg-ground p-3 text-sm flex items-center justify-between gap-3">
-            <span className="text-ink-2">Ngày sinh hiện tại</span>
-            <span className="font-medium text-ink">
-              {birthDetailLoading ? (
-                <Spinner className="size-4" />
-              ) : (
-                <>
-                  {formatBirthDate(birthTarget?.dateOfBirth)}
-                  {birthTarget?.age != null ? ` (${birthTarget.age} tuổi)` : ""}
-                </>
-              )}
-            </span>
-          </div>
-
-          <Field>
-            <FieldLabel htmlFor="birth-date">Ngày sinh mới <span className="text-destructive">*</span></FieldLabel>
-            <Input
-              id="birth-date"
-              type="date"
-              value={birthValue}
-              max={todayInVietnam()}
-              onChange={(e) => setBirthValue(e.target.value)}
-              disabled={birthSubmitting || birthDetailLoading}
-            />
-            {birthTarget?.role === "parent" && (
-              <FieldDescription>Tài khoản phụ huynh phải từ 18 tuổi.</FieldDescription>
-            )}
-          </Field>
-
-          <Field>
-            <FieldLabel htmlFor="birth-reason">Lý do sửa <span className="text-destructive">*</span></FieldLabel>
-            <Input
-              id="birth-reason"
-              value={birthReason}
-              onChange={(e) => setBirthReason(e.target.value)}
-              placeholder="Ví dụ: Người dùng gửi yêu cầu hỗ trợ kèm giấy tờ, khai nhầm năm sinh khi đăng ký"
-              maxLength={500}
-              disabled={birthSubmitting}
-            />
-          </Field>
-
-          {birthDialogError && (
-            <Alert variant="destructive">
-              <AlertDescription>{birthDialogError}</AlertDescription>
-            </Alert>
-          )}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeBirthDialog} disabled={birthSubmitting}>
-              Hủy
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void handleConfirmBirthDate()}
-              disabled={birthDetailLoading}
-              loading={birthSubmitting}
-              className="gap-1.5 bg-brand text-white hover:bg-brand/90"
-            >
-              <CakeIcon className="size-4" />
-              Lưu ngày sinh
             </Button>
           </DialogFooter>
         </DialogContent>
