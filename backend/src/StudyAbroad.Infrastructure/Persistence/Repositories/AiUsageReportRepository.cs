@@ -46,6 +46,6 @@ public class AiUsageReportRepository(AppDbContext db) : IAiUsageReportRepository
             ? []
             : await db.Users.AsNoTracking()
                 .Where(u => ids.Contains(u.Id))
-                .Select(u => new AiUsageUserInfo(u.Id, u.FullName, u.Email))
+                .Select(u => new AiUsageUserInfo(u.Id, u.FullName, u.Email, u.Role))
                 .ToListAsync(ct);
 }

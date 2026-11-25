@@ -118,7 +118,10 @@ namespace StudyAbroad.Application.Advisor
             // Action premium_required không khớp nhánh nào bên dưới nên không chạy gợi ý, giải thích, mô phỏng, goal-seeking hay tra trường;
             // chỉ có lockedIntents thì Action là của ý được phép và vẫn chạy bình thường
             if (gate is null && ReferenceEquals(beforeParentGate, response))
+            {
+                response = ChatPremiumGate.AdjustAdvisorLock(charge, response, state);
                 locked = ChatPremiumGate.LockOf(charge, response);
+            }
             // Chạy TRƯỚC lớp chặn Premium bên dưới: câu hỏi số liệu mà SLM lỡ xếp vào giải thích / goal-seeking của tài khoản Free là câu tra cứu Free được dùng, phải được trả lời chứ không bị khóa.
             // SLM đôi khi xếp câu hỏi số liệu một trường ("UCLA xếp hạng bao nhiêu", "MIT cần IELTS bao nhiêu") vào giải thích hoặc goal-seeking:
             // câu tự gõ (không phải nút) mà chỉ hỏi số liệu thì chuyển sang trả lời số liệu
@@ -212,7 +215,6 @@ namespace StudyAbroad.Application.Advisor
             // Đến đây mọi lần gọi advisor của lượt đã xong: lấy cả giỏ số đo (không chỉ lần gọi chat đầu) để outcome, meta_json và ai_calls đủ
             var turnSignals = advisorSignals with { Usage = TurnUsage(advisorSignals.Usage) };
             // Ảnh chỉ đi tiếp khi link hợp lệ (https): kiểm một lần ở đây rồi cùng giá trị đó được lưu và trả trình duyệt
-            response = response with { Media = ChatMedia.Clean(response.Media) };
             var replyId = await RecordTurnAsync(session, request, response, turnSignals, turnClock.ElapsedMilliseconds, ct);
             // Token ghi sau tin trả lời để nối được (chat_message_id). Tin không lưu (tắt công tắc hoặc lỗi) thì vẫn ghi token, chỉ không có liên kết
             // ai_calls.user_id là người trả (hạn mức Free đếm theo user_id), không phải chủ phiên chat
@@ -341,9 +343,8 @@ namespace StudyAbroad.Application.Advisor
                     ReplyToMessageId = question?.Id,
                     Content = response.Answer,
                     SourcesJson = response.Citations is { Count: > 0 } cites
-                        ? JsonSerializer.Serialize(cites.Select(c => new { title = c.Title, url = c.Url, retrievedAt = c.RetrievedAt }))
+                        ? JsonSerializer.Serialize(cites.Select(c => new { title = c.Title, url = c.Url, retrievedAt = c.RetrievedAt, entryNo = c.EntryNo, version = c.Version }))
                         : null,
-                    MediaJson = ChatMedia.ToJson(response.Media),
                     Outcome = outcome,
                     ReviewStatus = ChatTurn.ReviewStatus(outcome),
                     MetaJson = ChatTurn.ReplyMeta(signals.Usage, signals.Action, signals.Skills, turnMs),
@@ -825,7 +826,6 @@ namespace StudyAbroad.Application.Advisor
             {
                 Answer = answer,
                 Citations = clearKb ? [] : response.Citations,
-                Media = clearKb ? null : response.Media,   // số liệu từ cơ sở dữ liệu thay câu của kho: ảnh của dòng kho không còn hợp
                 Disclaimer = clearKb ? null : response.Disclaimer,
                 QuickReplies = null,
             };

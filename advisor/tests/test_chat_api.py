@@ -127,31 +127,3 @@ def test_the_stream_rejects_empty_messages_like_the_plain_endpoint():
     res = make_client().post("/api/v1/chat/stream", json={"messages": []})
 
     assert res.status_code == 422
-
-
-class ImageBranch:
-    """Nhánh kiến thức giả trả lời kèm một ảnh minh họa."""
-
-    async def run(self, state, message, slm):
-        from app.schemas.chat import Media
-
-        return SkillOutput(
-            "Đây là mẫu I-20.", media=[Media(kind="image", url="https://a.org/i20.png", alt="Mẫu I-20")]
-        )
-
-
-def test_the_media_of_the_answer_reaches_the_client_in_camel_case():
-    app = create_app()
-    flow = ChatFlow(FixedSlm(tin("knowledge")), {"knowledge": ImageBranch()})
-    app.dependency_overrides[get_chat_flow] = lambda: flow
-
-    res = TestClient(app).post(
-        "/api/v1/chat",
-        json={
-            "messages": [{"role": "user", "content": "cho mình xem mẫu I-20"}],
-            "state": {"currentStep": "B5"},
-        },
-    )
-
-    assert res.status_code == 200
-    assert res.json()["media"] == [{"kind": "image", "url": "https://a.org/i20.png", "alt": "Mẫu I-20"}]

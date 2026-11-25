@@ -35,13 +35,11 @@ public sealed partial class PlanAdminService(IPlanAdminRepository plans, IAuditL
         if (code.Length is 0 or > MaxCodeLength || !CodePattern().IsMatch(code))
             throw Rule("invalid_code", 400, "Mã gói chỉ gồm chữ thường, số và dấu gạch ngang, tối đa 64 ký tự.");
         var kind = request.Kind?.Trim() ?? "";
-        if (!PlanKinds.All.Contains(kind))
-            throw Rule("invalid_kind", 400, "Loại gói phải là free, personal hoặc family.");
+        if (kind is not (PlanKinds.Personal or PlanKinds.Family))
+            throw Rule("invalid_kind", 400, "Chỉ có thể tạo gói loại personal hoặc family.");
         // Kiểm tra trước để báo lỗi sớm; hai admin tạo cùng lúc thì index duy nhất chặn và repository ném PlanConflictException (map bên dưới)
         if (await plans.CodeExistsAsync(code, ct))
             throw CodeTaken();
-        if (kind == PlanKinds.Free && await plans.KindExistsAsync(PlanKinds.Free, ct))
-            throw FreePlanExists();
         var fields = ValidateFields(request, kind);
 
         AdminPlanDto? result = null;
@@ -76,10 +74,32 @@ public sealed partial class PlanAdminService(IPlanAdminRepository plans, IAuditL
             // Kind đổi sẽ đổi làn và chỗ ngồi của kỳ đang chạy; code là khóa người dùng thấy: cả hai chỉ đặt một lần lúc tạo.
             if (!string.IsNullOrWhiteSpace(request.Kind) && request.Kind.Trim() != plan.Kind)
                 throw Rule("kind_immutable", 409, "Không đổi được loại gói sau khi tạo.");
-            var fields = ValidateFields(request, plan.Kind);
 
             var before = Snapshot(plan);
-            fields.ApplyTo(plan);
+            if (plan.Kind == PlanKinds.Free)
+            {
+                // [UC-74 2b] Sửa gói Miễn phí: chỉ sửa được hạn mức token và mô tả; giá 0, luôn mở bán, không đổi tên / chu kỳ / thứ tự
+                var reqName = request.Name?.Trim() ?? "";
+                if (reqName != plan.Name
+                    || request.PriceVnd != 0
+                    || !request.IsActive
+                    || request.DurationDays is not null
+                    || request.QuotaPeriodDays != plan.QuotaPeriodDays
+                    || request.DisplayOrder != plan.DisplayOrder)
+                    throw FreePlanEditLocked();
+                var description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+                if (description is { Length: > MaxDescriptionLength })
+                    throw Rule("invalid_value", 400, "Mô tả tối đa 1000 ký tự.");
+                if (request.TokenQuota < 0)
+                    throw Rule("invalid_value", 400, "Giá và hạn mức token phải là số không âm.");
+                plan.Description = description;
+                plan.TokenQuota = request.TokenQuota;
+            }
+            else
+            {
+                var fields = ValidateFields(request, plan.Kind);
+                fields.ApplyTo(plan);
+            }
             await plans.SaveAsync(txCt);
             await AuditAsync(adminUserId, "plan.update", plan, before, after: Snapshot(plan), txCt);
             var freePlan = plan.Kind == PlanKinds.Free
@@ -195,4 +215,6 @@ public sealed partial class PlanAdminService(IPlanAdminRepository plans, IAuditL
     private static BillingRuleException NotFound() => Rule("plan_not_found", 404, "Không tìm thấy gói.");
     private static BillingRuleException FreePlanLocked() =>
         Rule("free_plan_locked", 409, "Gói Miễn phí luôn giá 0đ, luôn mở bán và không xóa được.");
+    private static BillingRuleException FreePlanEditLocked() =>
+        Rule("free_plan_locked", 409, "Gói Miễn phí chỉ sửa được hạn mức token và mô tả.");
 }

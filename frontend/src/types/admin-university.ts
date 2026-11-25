@@ -201,6 +201,7 @@ export interface UpdateOfferingRequest {
   housingTypes: string | null;
   activities: string | null;
   intlHousing: boolean | null;
+  deadlinesJson: string | null;
   majors: { majorId: string; isStem: boolean }[];
 }
 

@@ -7,10 +7,12 @@ import { cn } from "@/lib/utils";
 export function PremiumLockedCard({
   title = "Tính năng này cần tài khoản USDSS Premium",
   note,
+  ctaLabel = "Nâng cấp USDSS Premium",
   className,
 }: {
   title?: string;
   note?: string | null;
+  ctaLabel?: string;
   className?: string;
 }) {
   return (
@@ -22,7 +24,7 @@ export function PremiumLockedCard({
           {note && <p className="text-xs leading-relaxed text-ink-2">{note}</p>}
         </div>
         <Link href="/plans" className={buttonVariants({ size: "sm", className: "rounded-lg font-semibold" })}>
-          Nâng cấp USDSS Premium
+          {ctaLabel}
           <ArrowRightIcon className="size-3.5" aria-hidden />
         </Link>
       </div>

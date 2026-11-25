@@ -25,6 +25,19 @@ public interface IAccountPurgeRepository
     Task<ForumPurgeResult> PurgeForumPostsAsync(Guid userId, DateTime now, CancellationToken ct = default);
 
     /// <summary>
+    /// [UC-75, UC-124] Nếu tài khoản có đơn hàng, chụp họ tên + email vào bảng lưu trữ kế toán 10 năm kèm mã người mua ngẫu nhiên
+    /// và gắn vào các đơn hàng trước khi dòng users bị xóa. Trả về mã người mua đã tạo (null nếu không có đơn).
+    /// </summary>
+    Task<string?> SnapshotBuyerForOrdersAsync(Guid userId, DateTime now, CancellationToken ct = default) =>
+        Task.FromResult<string?>(null);
+
+    /// <summary>
+    /// [UC-75] Xóa hẳn các bản ghi lưu thông tin người mua đã quá hạn 10 năm sau năm tài chính. Trả số bản ghi đã xóa.
+    /// </summary>
+    Task<int> PurgeExpiredBuyerRetentionsAsync(DateTime now, CancellationToken ct = default) =>
+        Task.FromResult(0);
+
+    /// <summary>
     /// Xóa dòng users. Dữ liệu cá nhân xóa theo (cascade); giao dịch và báo cáo diễn đàn
     /// còn lại với user_id null (set null).
     /// </summary>

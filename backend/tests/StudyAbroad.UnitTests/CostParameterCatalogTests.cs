@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Admin.Settings;
 using StudyAbroad.Application.Costs;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
@@ -42,11 +43,20 @@ public class CostParameterCatalogTests
             broken ? throw new HttpRequestException("mạng lỗi") : Task.FromResult(quote ?? new ExchangeRateQuote(26_340.5m, AsOf, "open.er-api.com", false));
     }
 
+    private sealed class Settings(CostParameters? current = null, bool broken = false) : ICostParametersSettingService
+    {
+        public Task<CostParametersSettingDto> GetAsync(CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<CostParameters> GetCurrentParametersAsync(CancellationToken ct = default) =>
+            broken ? throw new InvalidOperationException("DB lỗi") : Task.FromResult(current ?? CostParameters.Default);
+        public Task<CostParametersUpdateResult> UpdateAsync(UpdateCostParametersRequest request, Guid actorUserId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+    }
+
     private static StateLivingCostDto State(string code, decimal? index, short year = 2024) =>
         new(code, code, "West", index, null, index is null ? null : year, null, null);
 
-    private static async Task<Dictionary<string, AlgorithmParameter>> Catalog(Repo? repo = null, Rates? rates = null) =>
-        (await new CostParameterCatalog(repo ?? new Repo(states: [State("CA", 130m), State("TX", 95m), State("ZZ", null)]), rates ?? new Rates()).ListAsync())
+    private static async Task<Dictionary<string, AlgorithmParameter>> Catalog(Repo? repo = null, Rates? rates = null, Settings? settings = null) =>
+        (await new CostParameterCatalog(repo ?? new Repo(states: [State("CA", 130m), State("TX", 95m), State("ZZ", null)]), rates ?? new Rates(), settings ?? new Settings()).ListAsync())
         .ToDictionary(p => p.Key);
 
     [Fact]
@@ -95,12 +105,14 @@ public class CostParameterCatalogTests
     }
 
     [Fact]
-    public async Task ParametersTheEstimateDoesNotUseYet_AreMarkedNotInUse_NeverGivenANumber()
+    public async Task ModeratorCostParameters_ShowTheLiveValuesFromAppSettings()
     {
-        var c = await Catalog();
+        var c = await Catalog(settings: new Settings(new CostParameters(300m, 0.05m, 0.02m, 5)));
 
-        foreach (var key in new[] { "cost_visa_integrity_fee", "cost_cost_growth", "cost_exchange_margin" })
-            Assert.Equal(CostParameterCatalog.NotInUse, c[key].Value);
+        Assert.Equal("300 USD", c["cost_visa_integrity_fee"].Value);
+        Assert.Equal("5%", c["cost_cost_growth"].Value);
+        Assert.Equal("2%", c["cost_exchange_margin"].Value);
+        Assert.Contains("Đại học 5 năm", c["cost_study_years"].Value);
     }
 
     [Fact]
@@ -117,7 +129,7 @@ public class CostParameterCatalogTests
     {
         var value = (await Catalog())["cost_study_years"].Value;
 
-        Assert.Contains($"Đại học {CostCalculator.YearsFor(StudyLevels.Undergraduate)} năm", value);
+        Assert.Contains($"Đại học {CostParameters.Default.UndergraduateYears} năm", value);
         Assert.Contains($"Cao đẳng cộng đồng {CostCalculator.YearsFor(StudyLevels.CommunityCollege)} năm", value);
         Assert.Contains($"Thạc sĩ {CostCalculator.YearsFor(StudyLevels.Master)} năm", value);
     }
@@ -155,7 +167,7 @@ public class CostParameterCatalogTests
     [Fact]
     public async Task WhenEveryDataSourceFails_TheListStillComesBack_WithNoDataInsteadOfAnError()
     {
-        var c = await Catalog(new Repo(broken: true), new Rates(broken: true));
+        var c = await Catalog(new Repo(broken: true), new Rates(broken: true), new Settings(broken: true));
 
         Assert.Equal(10, c.Count);
         Assert.Equal(CostParameterCatalog.NoData, c["cost_visa_fee"].Value);
@@ -163,7 +175,7 @@ public class CostParameterCatalogTests
         Assert.Equal(CostParameterCatalog.NoData, c["cost_exchange_rate"].Value);
         Assert.Equal(CostParameterCatalog.NoData, c["cost_state_cost_index"].Value);
         // Tham số không phụ thuộc dữ liệu vẫn hiện đúng
-        Assert.Equal(CostParameterCatalog.NotInUse, c["cost_cost_growth"].Value);
+        Assert.Equal("4%", c["cost_cost_growth"].Value);   // lỗi đọc app_settings thì dùng giá trị mặc định
         Assert.Contains("25", c["cost_exchange_fallback"].Value);
     }
 }

@@ -12,8 +12,6 @@ export type SlmSampleType =
 
 export type SlmSplit = "train" | "val" | "test";
 
-export type SlmReviewStatus = "draft" | "pending" | "approved" | "rejected" | "needs_fix";
-
 export interface SlmSample {
   id: string;
   sampleType: SlmSampleType;
@@ -24,21 +22,38 @@ export interface SlmSample {
   context: string | null;
   split: SlmSplit;
   sourceReview: string | null;
-  reviewStatus: SlmReviewStatus;
-  reviewNote: string | null;
-  reviewedByUserId: string | null;
-  reviewedAt: string | null;
   createdAt: string;
   updatedAt: string | null;
   source: string;
   createdByUserId: string | null;
   createdByName: string | null;
   exportedAt: string | null;
+  version: number;
+  deletedAt: string | null;
+}
+
+export interface SlmSampleVersion {
+  id: string;
+  version: number;
+  action: "create" | "edit" | "restore" | "import" | string;
+  restoredFromVersion: number | null;
+  actorUserId: string | null;
+  actorName: string | null;
+  createdAt: string;
+  sampleType: SlmSampleType;
+  question: string;
+  profile: string | null;
+  pendingQuestion: string | null;
+  intents: string;
+  context: string | null;
+  split: SlmSplit;
+  sourceReview: string | null;
+  source: string;
 }
 
 export interface SlmSampleDetail {
   sample: SlmSample;
-  reviewedByName: string | null;
+  versions: SlmSampleVersion[];
 }
 
 export interface SlmSampleCreator {
@@ -56,21 +71,12 @@ export interface SaveSlmSampleRequest {
   split: SlmSplit;
   sourceReview: string | null;
   source: string | null;
-  submit?: boolean;
 }
 
 export interface SlmSampleSummary {
   total: number;
-  byStatus: Partial<Record<SlmReviewStatus, number>>;
+  deleted: number;
   byType: Partial<Record<SlmSampleType, number>>;
-}
-
-export interface SlmReviewResult {
-  updated: number;
-  notFound: number;
-  skippedOwn: number;
-  skippedNotReady: number;
-  skippedNotPending: number;
 }
 
 export interface SlmImportError {

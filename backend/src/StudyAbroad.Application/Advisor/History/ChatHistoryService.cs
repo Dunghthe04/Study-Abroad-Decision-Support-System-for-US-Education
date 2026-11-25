@@ -104,9 +104,9 @@ public class ChatHistoryService(IChatHistoryRepository repository, TimeProvider?
         repository.SoftDeleteAsync(sessionId, userId, (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime, ct);
 
     private static ChatHistoryMessageDto ToDto(ChatHistoryMessageRow row) =>
-        new(row.Id, row.Role, row.Role == "system" ? SystemFailureText : row.Content, row.CreatedAt, Citations(row.SourcesJson), ChatMedia.FromJson(row.MediaJson));
+        new(row.Id, row.Role, row.Role == "system" ? SystemFailureText : row.Content, row.CreatedAt, Citations(row.SourcesJson));
 
-    // sources_json do ChatService ghi: [{ title, url, retrievedAt }]. Dòng hỏng thì bỏ nguồn chứ không làm hỏng cả lịch sử
+    // sources_json do ChatService ghi: [{ title, url, retrievedAt, entryNo, version }]. Dòng hỏng thì bỏ nguồn chứ không làm hỏng cả lịch sử
     private static IReadOnlyList<Citation> Citations(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
@@ -122,7 +122,7 @@ public class ChatHistoryService(IChatHistoryRepository repository, TimeProvider?
                 if (item.ValueKind != JsonValueKind.Object || Text(item, "title") is not { Length: > 0 } title)
                     continue;
                 DateOnly? retrieved = Text(item, "retrievedAt") is { } d && DateOnly.TryParse(d, out var day) ? day : null;
-                list.Add(new Citation(title, Text(item, "url"), null, retrieved));
+                list.Add(new Citation(title, Text(item, "url"), null, retrieved, Int(item, "entryNo"), Int(item, "version")));
             }
             return list;
         }
@@ -134,4 +134,7 @@ public class ChatHistoryService(IChatHistoryRepository repository, TimeProvider?
 
     private static string? Text(JsonElement parent, string name) =>
         parent.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static int? Int(JsonElement parent, string name) =>
+        parent.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number) ? number : null;
 }

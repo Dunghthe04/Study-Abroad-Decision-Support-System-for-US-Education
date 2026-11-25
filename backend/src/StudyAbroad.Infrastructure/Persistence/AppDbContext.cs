@@ -44,7 +44,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ReviewBatchItem> ReviewBatchItems => Set<ReviewBatchItem>();
     public DbSet<ReviewVerdict> ReviewVerdicts => Set<ReviewVerdict>();
     public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
+    public DbSet<KnowledgeDocumentVersion> KnowledgeDocumentVersions => Set<KnowledgeDocumentVersion>();
     public DbSet<SlmTrainingSample> SlmTrainingSamples => Set<SlmTrainingSample>();
+    public DbSet<SlmSampleVersion> SlmSampleVersions => Set<SlmSampleVersion>();
     public DbSet<AiCall> AiCalls => Set<AiCall>();
     public DbSet<EvalCase> EvalCases => Set<EvalCase>();
     public DbSet<EvalRun> EvalRuns => Set<EvalRun>();
@@ -67,6 +69,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UserSubscription> UserSubscriptions => Set<UserSubscription>();
     public DbSet<UserDailyUsage> UserDailyUsages => Set<UserDailyUsage>();
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
+    public DbSet<DeletedBuyerRetention> DeletedBuyerRetentions => Set<DeletedBuyerRetention>();
     public DbSet<FamilyGroup> FamilyGroups => Set<FamilyGroup>();
     public DbSet<FamilyMember> FamilyMembers => Set<FamilyMember>();
     public DbSet<PolicyAlert> PolicyAlerts => Set<PolicyAlert>();

@@ -15,14 +15,12 @@ from app.services.skills.skill_tra_loi import (
     DISCLAIMER,
     FALLBACK_MIN_SCORE,
     MAX_CANDIDATES,
-    MAX_MEDIA,
     MAX_TOPIC_BUTTONS,
     NO_BASIS,
     UNAVAILABLE,
     TraLoiHandler,
     check_choice,
     citation_of,
-    media_of,
     mentioned_codes,
     topic_buttons,
 )
@@ -45,12 +43,12 @@ def hit(
     url=None,
     retrieved=None,
     question="câu hỏi mẫu",
-    image=None,
     doc_type="faq",
     topic_code=None,
+    version=1,
 ):
     return KnowledgeHit(
-        entry_no, question, content, source, url, image, doc_type, "LABEL_X", topic_code, retrieved, score
+        entry_no, question, content, source, url, doc_type, "LABEL_X", topic_code, retrieved, version, score
     )
 
 
@@ -188,6 +186,14 @@ def test_citation_snippet_is_cut_short():
     assert len(citation_of(hit(content="x" * 500)).snippet) == 200
 
 
+def test_citation_carries_entry_no_and_version_in_camel_case():
+    cited = citation_of(hit(entry_no=42, version=3))
+
+    assert (cited.entry_no, cited.version) == (42, 3)
+    dumped = cited.model_dump(by_alias=True, mode="json")
+    assert dumped["entryNo"] == 42 and dumped["version"] == 3
+
+
 # ---------- handler: Claude chọn, câu trả lời là nguyên văn ----------
 
 
@@ -288,7 +294,7 @@ async def test_refuses_when_claude_says_none_of_the_candidates_fits():
         ChatState(), "q"
     )
 
-    assert out.answer == NO_BASIS and not out.citations and out.disclaimer is None and out.media == []
+    assert out.answer == NO_BASIS and not out.citations and out.disclaimer is None
 
 
 async def test_a_candidate_below_the_threshold_is_never_sent_to_claude():
@@ -358,12 +364,9 @@ async def test_an_invalid_choice_is_retried_once_and_the_valid_second_one_is_use
 async def test_falls_back_to_the_top_row_when_claude_is_invalid_twice_and_the_row_is_a_clear_match():
     llm = FakeLLMWithEmbed(choose(9), choose(9))
 
-    out = await handler_with(llm, FakeRetriever([hit(score=0.9, image="https://b.org/x.png")])).run(
-        ChatState(), "q"
-    )
+    out = await handler_with(llm, FakeRetriever([hit(score=0.9)])).run(ChatState(), "q")
 
     assert out.answer == SEVIS and [c.title for c in out.citations] == ["8 CFR 214.13"]
-    assert [m.url for m in out.media] == ["https://b.org/x.png"]
 
 
 async def test_does_not_fall_back_to_a_row_that_is_not_clearly_the_right_one():
@@ -614,80 +617,18 @@ async def test_without_a_restorer_the_old_behaviour_is_unchanged():
     assert out.answer == NO_BASIS
 
 
-# ---------- ảnh minh họa: link lấy từ dòng được chọn, không bao giờ từ lời Claude ----------
-
-
-def test_media_of_returns_the_https_images_of_the_row_with_the_sample_question_as_alt():
-    row = hit(image="https://travel.state.gov/mau-i20.png", question="Mẫu I-20 trông thế nào?")
-
-    assert [(m.kind, m.url, m.alt) for m in media_of(row)] == [
-        ("image", "https://travel.state.gov/mau-i20.png", "Mẫu I-20 trông thế nào?")
-    ]
-
-
-def test_media_of_splits_several_links_keeps_only_https_and_caps_the_number():
-    links = "https://a.org/1.png; http://b.org/2.png ;javascript:alert(1);https://c.org/3.png;https://c.org/3.png;https://d.org/4.png;https://e.org/5.png"
-
-    urls = [m.url for m in media_of(hit(image=links))]
-
-    assert urls == [
-        "https://a.org/1.png",
-        "https://c.org/3.png",
-        "https://d.org/4.png",
-    ]  # không trùng, bỏ http và javascript
-    assert len(urls) <= MAX_MEDIA
-
-
-@pytest.mark.parametrize(
-    "image", [None, "", "   ", "ftp://x.org/a.png", "https://", "not a url", "data:image/png;base64,AAAA"]
-)
-def test_media_of_a_row_without_a_usable_link_is_empty(image):
-    assert media_of(hit(image=image)) == []
-
-
-async def test_answer_carries_the_image_of_the_chosen_row_only():
-    # Claude chọn dòng 2 (có ảnh); dòng 1 có ảnh khác nhưng không được chọn thì không hiện ảnh của nó
-    first = hit(1, FINANCE, score=0.8, image="https://a.org/dong-1.png")
-    second = hit(2, SEVIS, score=0.78, image="https://b.org/dong-2.png")
-
-    out = await handler_with(FakeLLMWithEmbed(choose(2)), FakeRetriever([first, second])).run(
-        ChatState(), "Phí SEVIS bao nhiêu?"
-    )
-
-    assert [m.url for m in out.media] == ["https://b.org/dong-2.png"]
-
-
-async def test_the_image_link_comes_from_the_row_whatever_claude_writes():
-    llm = FakeLLMWithEmbed({"chosen": 1, "answer": "Xem https://evil.example/fake.png"})
-
-    out = await handler_with(llm, FakeRetriever([hit(image="https://b.org/that.png")])).run(
-        ChatState(), "Phí SEVIS bao nhiêu?"
-    )
-
-    assert [m.url for m in out.media] == ["https://b.org/that.png"]  # media chỉ từ cơ sở dữ liệu
-    assert "evil.example" not in out.answer
-
-
-async def test_a_refusal_carries_no_media():
-    out = await handler_with(
-        FakeLLMWithEmbed(NONE_FITS), FakeRetriever([hit(image="https://b.org/x.png")])
-    ).run(ChatState(), "q")
-
-    assert out.answer == NO_BASIS and out.media == []
-
-
-async def test_a_structured_row_keeps_its_citation_and_image():
+async def test_a_structured_row_keeps_its_citation():
     row = KnowledgeHit(
         1,
         "q",
         STEPS,
         "CEAC",
         "https://ceac.state.gov",
-        "https://a.org/ds160.png",
         "proc_steps",
         "L",
         "DS-160",
         None,
+        2,
         0.9,
     )
 
@@ -696,9 +637,7 @@ async def test_a_structured_row_keeps_its_citation_and_image():
     )
 
     assert out.answer == STEPS
-    assert [c.title for c in out.citations] == ["CEAC"] and [m.url for m in out.media] == [
-        "https://a.org/ds160.png"
-    ]
+    assert [(c.title, c.entry_no, c.version) for c in out.citations] == [("CEAC", 1, 2)]
 
 
 # ---------- chặn trả nhầm form: hỏi mã nào chỉ nhận dòng của mã đó ----------

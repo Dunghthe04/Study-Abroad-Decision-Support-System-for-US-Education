@@ -11,6 +11,8 @@ public static class PremiumPolicies
 {
     /// <summary>Tạo, đổi ưu tiên và mô phỏng gợi ý trường; tạo kịch bản what-if. Chỉ xem lịch sử, đổi tên, xóa thì không chặn.</summary>
     public const string Recommendations = "premium_recommendations";
+    /// <summary>[UC-71, UC-127] So sánh ưu tiên của Học sinh và Phụ huynh (dùng gói Premium của phụ huynh).</summary>
+    public const string ParentPreferenceCompare = "premium_parent_preference_compare";
 }
 
 /// <summary>Yêu cầu của policy Premium; feature là tên tính năng trả về cho frontend ({ code: "premium_required", feature }).</summary>

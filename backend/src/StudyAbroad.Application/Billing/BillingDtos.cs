@@ -40,6 +40,9 @@ public sealed record FreePoolDto(int UsedPercent, DateTimeOffset ResetsAt, int? 
 /// <summary>Hạn mức chung còn lại ngay lúc này (GET subscription/quota): token còn lại của mọi kỳ dùng được cộng với Free, chia cho tổng hạn mức. Chỉ phần trăm.</summary>
 public sealed record QuotaOverviewDto(int RemainingPercent, int UsedPercent, bool LowQuota);
 
+/// <summary>Số token thô tính hạn mức trong chu kỳ hiện tại của một người dùng (chỉ dùng cho Admin UC-78, dùng chung luồng tính với QuotaOverview).</summary>
+public sealed record UserQuotaUsageDto(long UsedTokens, long QuotaTokens, string Tier);
+
 /// <summary>Một kỳ đã hết hạn của chính người gọi (GET subscription/expired).</summary>
 public sealed record ExpiredCycleDto(
     Guid Id, string Kind, string PlanCode, string PlanName,

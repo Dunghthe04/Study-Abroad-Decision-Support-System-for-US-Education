@@ -616,7 +616,7 @@ public class OrderPaymentTests
         Assert.Equal(PaymentApplyStatus.Mismatch, result.Status);
         var stored = h.Order(order.OrderCode);
         Assert.Equal(OrderStatuses.Mismatch, stored.Status);
-        Assert.Contains("đã bị xóa", stored.AdminNote);
+        Assert.Equal("Người mua đã xóa tài khoản", stored.AdminNote);
         Assert.Equal("{\"p\":1}", stored.PayloadJson);
         Assert.Empty(h.Store.Cycles);
         Assert.Empty(h.Notes.Sent);

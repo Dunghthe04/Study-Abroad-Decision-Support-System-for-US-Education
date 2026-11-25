@@ -104,11 +104,12 @@ public class OrderServiceTests
     }
 
     [Fact]
-    public async Task UnknownDateOfBirth_IsAllowed()
+    public async Task UnknownDateOfBirth_IsBlocked_UC73_E3()
     {
         var h = new OrderHarness();
 
-        Assert.Equal("pending", (await h.CreateOrder(h.AddUser(age: null), "personal-1m")).Status);
+        var ex = await Assert.ThrowsAsync<BillingRuleException>(() => h.CreateOrder(h.AddUser(age: null), "personal-1m"));
+        Assert.Equal(("age_restricted", 403), (ex.Code, ex.StatusCode));
     }
 
     [Theory]

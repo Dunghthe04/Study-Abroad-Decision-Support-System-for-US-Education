@@ -40,7 +40,6 @@ function positiveInt(text: string): number | null {
 
 export function PlanFormPanel({ plan, freePlan, onClose, onSaved }: PlanFormPanelProps) {
   const isNew = plan === null;
-  const hasFreePlan = freePlan !== null;
   const [code, setCode] = useState("");
   const [kind, setKind] = useState<PlanKind>(plan?.kind ?? "personal");
   const [name, setName] = useState(plan?.name ?? "");
@@ -105,17 +104,28 @@ export function PlanFormPanel({ plan, freePlan, onClose, onSaved }: PlanFormPane
       }
     }
 
-    const body: SavePlanRequest = {
-      ...(isNew ? { code: code.trim(), kind } : {}),
-      name: name.trim(),
-      description: description.trim() || null,
-      priceVnd: parsedPrice,
-      durationDays: isFree ? null : parsedDuration,
-      tokenQuota: parsedQuota,
-      quotaPeriodDays: parsedQuotaPeriod,
-      isActive: isFree ? true : isActive,
-      displayOrder: parsedOrder,
-    };
+    const body: SavePlanRequest = isFree && plan
+      ? {
+          name: plan.name,
+          description: description.trim() || null,
+          priceVnd: 0,
+          durationDays: null,
+          tokenQuota: parsedQuota,
+          quotaPeriodDays: plan.quotaPeriodDays,
+          isActive: true,
+          displayOrder: plan.displayOrder,
+        }
+      : {
+          ...(isNew ? { code: code.trim(), kind } : {}),
+          name: name.trim(),
+          description: description.trim() || null,
+          priceVnd: parsedPrice,
+          durationDays: isFree ? null : parsedDuration,
+          tokenQuota: parsedQuota,
+          quotaPeriodDays: parsedQuotaPeriod,
+          isActive: isFree ? true : isActive,
+          displayOrder: parsedOrder,
+        };
     setSaving(true);
     setError(null);
     try {
@@ -157,14 +167,18 @@ export function PlanFormPanel({ plan, freePlan, onClose, onSaved }: PlanFormPane
             ), "Chữ thường, số, dấu gạch ngang")}
             {field("plan-kind", "Loại gói", (
               <NativeSelect id="plan-kind" className="w-full" value={kind} onChange={(e) => setKind(e.target.value as PlanKind)}>
-                <NativeSelectOption value="free" disabled={hasFreePlan}>{PLAN_KIND_LABELS.free}</NativeSelectOption>
                 <NativeSelectOption value="personal">{PLAN_KIND_LABELS.personal}</NativeSelectOption>
                 <NativeSelectOption value="family">{PLAN_KIND_LABELS.family}</NativeSelectOption>
               </NativeSelect>
             ))}
           </div>
         )}
-        {field("plan-name", "Tên gói", <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} required />)}
+        {isFree && (
+          <Alert>
+            <AlertDescription>Gói Miễn phí chỉ sửa được hạn mức token và mô tả.</AlertDescription>
+          </Alert>
+        )}
+        {field("plan-name", "Tên gói", <Input id="plan-name" value={name} disabled={isFree} onChange={(e) => setName(e.target.value)} required />)}
         {field("plan-description", "Mô tả", (
           <Textarea id="plan-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
         ))}
@@ -211,6 +225,7 @@ export function PlanFormPanel({ plan, freePlan, onClose, onSaved }: PlanFormPane
               min={1}
               max={isFree ? 365 : (parsedDuration ?? 3650)}
               step={1}
+              disabled={isFree}
               placeholder={isFree ? "Mỗi tháng" : "Cả kỳ"}
               value={quotaPeriodDays}
               onChange={(e) => setQuotaPeriodDays(e.target.value)}
@@ -219,7 +234,7 @@ export function PlanFormPanel({ plan, freePlan, onClose, onSaved }: PlanFormPane
             ? "Để trống = làm mới ngày 1 mỗi tháng, hoặc nhập số ngày (vd 7, 30)."
             : "Để trống = cấp 1 lần cho cả kỳ. Nhập số ngày (vd 7, 30) để cấp lại token mỗi N ngày.")}
           {field("plan-order", "Thứ tự hiển thị", (
-            <Input id="plan-order" type="number" min={0} step={1} value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value)} />
+            <Input id="plan-order" type="number" min={0} step={1} disabled={isFree} value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value)} />
           ))}
         </div>
 

@@ -30,10 +30,32 @@ export interface KnowledgeEntry {
   sourceUrl: string | null;
   retrievedAt: string;
   topicCode: string | null;
-  imageUrl: string | null;
   note: string | null;
   createdAt: string;
   updatedAt: string | null;
+  version: number;
+  deletedAt: string | null;
+  /** Có chữ khi lưu xong nhưng không nhờ được advisor tạo vector (UC-114 4a / UC-115 3a). */
+  vectorWarning?: string | null;
+}
+
+export interface KnowledgeEntryVersion {
+  id: string;
+  version: number;
+  action: "create" | "edit" | "restore" | "import" | string;
+  restoredFromVersion: number | null;
+  actorUserId: string | null;
+  actorName: string | null;
+  createdAt: string;
+  docType: KnowledgeDocType;
+  label: string;
+  question: string;
+  answer: string;
+  source: string | null;
+  sourceUrl: string | null;
+  retrievedAt: string;
+  topicCode: string | null;
+  note: string | null;
 }
 
 export interface SaveKnowledgeEntryRequest {
@@ -46,7 +68,6 @@ export interface SaveKnowledgeEntryRequest {
   sourceUrl: string | null;
   retrievedAt: string;
   topicCode: string | null;
-  imageUrl: string | null;
   note: string | null;
 }
 
@@ -61,7 +82,6 @@ export interface KnowledgeImportRow {
   sourceUrl: string | null;
   retrievedAt: string | null;
   topicCode: string | null;
-  imageUrl: string | null;
   note: string | null;
 }
 
@@ -74,8 +94,6 @@ export interface KnowledgeImportPreview {
   totalRows: number;
   rows: KnowledgeImportRow[];
   errors: KnowledgeImportError[];
-  /** Dòng có note bắt đầu bằng "CHỜ DUYỆT": bị bỏ qua, không vào kho. */
-  pending: number;
 }
 
 export interface KnowledgeImportResult {
@@ -84,7 +102,6 @@ export interface KnowledgeImportResult {
   updated: number;
   unchanged: number;
   errors: KnowledgeImportError[];
-  pending: number;
   /** Advisor đã bắt đầu tạo vector cho dòng thiếu vector. */
   vectorsStarted: boolean;
   /** Có chữ khi không nhờ được advisor: dòng đã lưu nhưng chat chưa thấy. */

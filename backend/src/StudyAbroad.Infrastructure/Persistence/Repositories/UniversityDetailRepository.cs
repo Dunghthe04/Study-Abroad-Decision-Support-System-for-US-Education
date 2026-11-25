@@ -16,7 +16,11 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
         "c7_gpa_importance", "c7_test_importance", "c7_ec_importance", "sat_submit_pct", "gpa_submit_pct",
         "application_fee_usd", "tuition_in_state_usd", "act_policy", "act_submit_pct",
         "gpa_pct_4_0", "gpa_pct_375_399", "gpa_pct_350_374", "gpa_pct_325_349", "gpa_pct_300_324", "gpa_pct_250_299", "gpa_pct_below_250",
-        "intl_aid_policy", "intl_aid_avg_usd", "intl_aid_recipients", "retention_rate_1yr", "grad_rate_6yr"
+        "intl_aid_policy", "intl_aid_avg_usd", "intl_aid_recipients", "retention_rate_1yr", "grad_rate_6yr",
+        "health_insurance_usd", "avg_gpa_weighted", "gpa_scale_type", "fy_on_campus_pct", "ug_on_campus_pct",
+        "housing_types", "intl_housing", "housing_only_usd", "housing_deposit_usd", "student_faculty_ratio",
+        "activities", "campus_setting", "majors", "stem_majors", "coa_total_usd",
+        "deadline_ed", "deadline_ed2", "deadline_ea", "deadline_rea", "deadline_scea", "deadline_rd", "deadline_rolling"
     ];
 
     public async Task<UniversityDetailData?> GetByCodeAsync(string code, CancellationToken ct = default)
@@ -154,8 +158,8 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                 o.UniversityId == u.Id &&
                 (studyLevel == null || o.StudyLevel == studyLevel) &&
                 o.TuitionUsd != null &&
-                (!query.MinTotalCostUsd.HasValue || (o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)) >= query.MinTotalCostUsd.Value) &&
-                (!query.MaxTotalCostUsd.HasValue || (o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)) <= query.MaxTotalCostUsd.Value)));
+                (!query.MinTotalCostUsd.HasValue || (o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0) + (o.HealthInsuranceUsd ?? 0)) >= query.MinTotalCostUsd.Value) &&
+                (!query.MaxTotalCostUsd.HasValue || (o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0) + (o.HealthInsuranceUsd ?? 0)) <= query.MaxTotalCostUsd.Value)));
         }
 
         if (query.MaxMinIelts.HasValue)
@@ -493,22 +497,22 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                     .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
                     .Max(o => o.TuitionUsd))
                 .ThenBy(u => u.Name),
-            // Tổng chi phí một năm = học phí + ăn ở + phí + chi khác (cùng cách tính với chat: không có học phí thì không tính)
+            // Tổng chi phí một năm theo UC-26: học phí + ăn ở + phí + chi khác + bảo hiểm y tế (không có học phí thì không tính)
             "total_cost_asc" => q
                 .OrderBy(u => db.UniversityOfferings
                     .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
-                    .Min(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)) == null)
+                    .Min(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0) + (o.HealthInsuranceUsd ?? 0)) == null)
                 .ThenBy(u => db.UniversityOfferings
                     .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
-                    .Min(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)))
+                    .Min(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0) + (o.HealthInsuranceUsd ?? 0)))
                 .ThenBy(u => u.Name),
             "total_cost_desc" => q
                 .OrderBy(u => db.UniversityOfferings
                     .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
-                    .Max(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)) == null)
+                    .Max(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0) + (o.HealthInsuranceUsd ?? 0)) == null)
                 .ThenByDescending(u => db.UniversityOfferings
                     .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
-                    .Max(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0)))
+                    .Max(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0) + (o.HealthInsuranceUsd ?? 0)))
                 .ThenBy(u => u.Name),
             "acceptance_asc" => q
                 .OrderBy(u => u.AcceptanceRate == null || u.AcceptanceRate > 1)
@@ -609,8 +613,8 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
             decimal? totalCost = null;
             if (offering?.TuitionUsd != null)
             {
-                // Cùng công thức với chat và bộ gợi ý: học phí + ăn ở + phí + chi khác
-                totalCost = offering.TuitionUsd.Value + (offering.LivingUsd ?? 0) + (offering.FeesUsd ?? 0) + (offering.OtherExpensesUsd ?? 0);
+                // Công thức UC-26: học phí + ăn ở + phí + chi khác + bảo hiểm y tế
+                totalCost = offering.TuitionUsd.Value + (offering.LivingUsd ?? 0) + (offering.FeesUsd ?? 0) + (offering.OtherExpensesUsd ?? 0) + (offering.HealthInsuranceUsd ?? 0);
             }
 
             return new UniversityListItemDto(
@@ -679,6 +683,7 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                 o.LivingUsd,
                 o.FeesUsd,
                 o.OtherExpensesUsd,
+                o.HealthInsuranceUsd,
                 o.Sat25,
                 o.Sat75,
                 o.Act25,
@@ -694,10 +699,10 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
         var minTuition = withTuition.Count > 0 ? withTuition.Min(c => c.TuitionUsd!.Value) : 0m;
         var maxTuition = withTuition.Count > 0 ? withTuition.Max(c => c.TuitionUsd!.Value) : 100000m;
         var minTotal = withTuition.Count > 0
-            ? withTuition.Min(c => c.TuitionUsd!.Value + (c.LivingUsd ?? 0) + (c.FeesUsd ?? 0) + (c.OtherExpensesUsd ?? 0))
+            ? withTuition.Min(c => c.TuitionUsd!.Value + (c.LivingUsd ?? 0) + (c.FeesUsd ?? 0) + (c.OtherExpensesUsd ?? 0) + (c.HealthInsuranceUsd ?? 0))
             : 0m;
         var maxTotal = withTuition.Count > 0
-            ? withTuition.Max(c => c.TuitionUsd!.Value + (c.LivingUsd ?? 0) + (c.FeesUsd ?? 0) + (c.OtherExpensesUsd ?? 0))
+            ? withTuition.Max(c => c.TuitionUsd!.Value + (c.LivingUsd ?? 0) + (c.FeesUsd ?? 0) + (c.OtherExpensesUsd ?? 0) + (c.HealthInsuranceUsd ?? 0))
             : 120000m;
 
         var livingVals = offeringStats.Where(o => o.LivingUsd != null).Select(o => o.LivingUsd!.Value).ToList();

@@ -14,6 +14,10 @@ public interface IEntitlementService
     /// <summary>Hạn mức chung còn lại: cộng token còn lại (cửa sổ hiện tại) của mọi kỳ dùng được và hạn mức Free, chia cho tổng hạn mức (GET subscription/quota).</summary>
     Task<QuotaOverviewDto> GetQuotaOverviewAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default);
 
+    /// <summary>Số token tính hạn mức (chu kỳ hiện tại) dùng chung luồng với <see cref="GetQuotaOverviewAsync"/> (Admin UC-78).</summary>
+    Task<UserQuotaUsageDto> GetCurrentQuotaUsageAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default) =>
+        Task.FromResult(new UserQuotaUsageDto(0, 0, AccountTiers.Free));
+
     /// <summary>Chọn kỳ trả cho lượt chat kế tiếp: trong các kỳ dùng được còn token ở cửa sổ hiện tại, kỳ hết hạn sớm nhất; không có thì hạn mức Free.</summary>
     Task<ChatCharge> ResolveChatChargeAsync(Guid userId, string role, DateTime nowUtc, CancellationToken ct = default);
 

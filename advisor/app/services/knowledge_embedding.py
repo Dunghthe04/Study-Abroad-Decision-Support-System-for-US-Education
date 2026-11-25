@@ -24,7 +24,7 @@ RETRY_WAIT_SECONDS = 20
 
 SELECT_SQL = """
 SELECT id, question, embedding_hash, (embedding IS NOT NULL) AS has_vector
-FROM app.knowledge_documents ORDER BY entry_no
+FROM app.knowledge_documents WHERE deleted_at IS NULL ORDER BY entry_no
 """
 
 # AND question = ...: nếu moderator vừa sửa câu hỏi trong lúc đang tạo vector thì không ghi vector của câu cũ

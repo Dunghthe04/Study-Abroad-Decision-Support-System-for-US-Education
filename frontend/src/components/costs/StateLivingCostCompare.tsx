@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { MissingValue } from "@/components/shared/missing-value";
 import { httpLink } from "@/lib/university-display";
 import type { StateLivingCost } from "@/types/cost";
 
@@ -59,7 +60,7 @@ export function StateLivingCostCompare({ states }: { states: StateLivingCost[] }
                   <td className="py-2 pr-3 font-medium">{s.name}</td>
                   <td className="px-3 py-2">
                     {s.index === null ? (
-                      <span className="text-muted-foreground">Chưa có dữ liệu</span>
+                      <MissingValue />
                     ) : (
                       <div className="flex items-center gap-2">
                         <span className="w-12 tabular-nums">{s.index}</span>
@@ -69,12 +70,12 @@ export function StateLivingCostCompare({ states }: { states: StateLivingCost[] }
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-2 tabular-nums">{s.housingRentsIndex ?? "—"}</td>
-                  <td className="px-3 py-2">{s.year ?? "—"}</td>
+                  <td className="px-3 py-2 tabular-nums">{s.housingRentsIndex ?? <MissingValue />}</td>
+                  <td className="px-3 py-2">{s.year ?? <MissingValue />}</td>
                   <td className="px-3 py-2 text-xs">
                     {(() => {
                       const sourceLink = httpLink(s.sourceUrl);
-                      return sourceLink ? <a href={sourceLink.href} target="_blank" rel="noopener noreferrer" className="underline">{sourceLink.host}</a> : "—";
+                      return sourceLink ? <a href={sourceLink.href} target="_blank" rel="noopener noreferrer" className="underline">{sourceLink.host}</a> : <MissingValue />;
                     })()}
                     {s.retrievedAt && <div className="text-muted-foreground">Lấy ngày {new Date(s.retrievedAt).toLocaleDateString("vi-VN")}</div>}
                   </td>

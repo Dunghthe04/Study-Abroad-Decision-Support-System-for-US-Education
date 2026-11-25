@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 // UC-76 (2e): trang của con, chỉ đọc
 export default function ParentPreferencesPage() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute allowedRoles={["student"]}>
       <AgeGate feature="process_student_data">
         <Suspense
           fallback={

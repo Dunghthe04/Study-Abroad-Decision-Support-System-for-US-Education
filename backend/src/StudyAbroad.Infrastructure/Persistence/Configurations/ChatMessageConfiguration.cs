@@ -18,9 +18,7 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
         b.Property(x => x.Role).HasMaxLength(16).IsRequired().HasComment("user (học sinh), assistant (trợ lý) hoặc system.");
         b.Property(x => x.Content).IsRequired().HasComment("Nội dung tin nhắn.");
         b.Property(x => x.Step).HasMaxLength(8);
-        b.Property(x => x.SourcesJson).HasColumnType("jsonb").HasComment("Nguồn trích dẫn của câu trả lời (title, url).");
-        b.Property(x => x.MediaJson).HasColumnType("jsonb")
-            .HasComment("Ảnh minh họa của câu trả lời: [{kind, url, alt}]. Link https tới ảnh, lấy từ cột image_url của dòng kho tri thức được dùng; trình duyệt tải ảnh thẳng từ link. Null nếu không có ảnh.");
+        b.Property(x => x.SourcesJson).HasColumnType("jsonb").HasComment("Nguồn trích dẫn của câu trả lời (title, url, retrievedAt, entryNo, version).");
         b.Property(x => x.SuggestedCentersJson).HasColumnType("jsonb");
         b.Property(x => x.ReviewStatus).HasMaxLength(16)
             .HasComment(

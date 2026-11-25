@@ -15,12 +15,12 @@ interface UniversityVisibilitySwitchProps {
   onChanged: (university: AdminUniversityDetail) => void;
 }
 
-/** [UC-67] Tắt (ẩn trường) cần xác nhận ngay bên dưới; bật lại thì làm ngay. */
+/** [UC-63] Cả Ẩn (kèm lý do) và Hiện đều yêu cầu xác nhận trước khi lưu. */
 export function UniversityVisibilitySwitch({ university, onChanged }: UniversityVisibilitySwitchProps) {
-  // [UC-67] Chỉ Moderator ẩn hoặc hiện trường; Admin chỉ xem trạng thái
+  // [UC-63] Chỉ Moderator ẩn hoặc hiện trường; Admin chỉ xem trạng thái
   const { user } = useAuth();
   const canChange = user?.role === "moderator";
-  const [confirmingHide, setConfirmingHide] = useState(false);
+  const [confirming, setConfirming] = useState<"hide" | "show" | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [reason, setReason] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
@@ -41,7 +41,7 @@ export function UniversityVisibilitySwitch({ university, onChanged }: University
         description: saved.name,
       });
       onChanged(saved);
-      setConfirmingHide(false);
+      setConfirming(null);
       setReason("");
     } catch (err) {
       if (err instanceof AdminFormError && err.fieldErrors.reason) {
@@ -59,14 +59,11 @@ export function UniversityVisibilitySwitch({ university, onChanged }: University
   };
 
   const handleCheckedChange = (checked: boolean) => {
-    if (checked) {
-      changeVisibility(true);
-    } else {
-      setConfirmingHide(true);
-    }
+    setReasonError(null);
+    setConfirming(checked ? "show" : "hide");
   };
 
-  const switchChecked = university.isActive && !confirmingHide;
+  const switchChecked = confirming === "show" ? true : confirming === "hide" ? false : university.isActive;
 
   return (
     <div className="rounded-md border border-border">
@@ -85,13 +82,13 @@ export function UniversityVisibilitySwitch({ university, onChanged }: University
           <Switch
             checked={switchChecked}
             onCheckedChange={handleCheckedChange}
-            disabled={!canChange || isSaving || confirmingHide}
+            disabled={!canChange || isSaving || confirming !== null}
             aria-label="Hiển thị trường với học sinh"
           />
         </span>
       </label>
 
-      {confirmingHide && (
+      {confirming === "hide" && (
         <div className="space-y-2 border-t border-border bg-muted px-3 py-2">
           <p className="text-sm">
             Ẩn <span className="font-medium">{university.name}</span>? Học sinh sẽ không còn thấy trường này. Bạn có thể
@@ -113,7 +110,7 @@ export function UniversityVisibilitySwitch({ university, onChanged }: University
               variant="outline"
               size="sm"
               onClick={() => {
-                setConfirmingHide(false);
+                setConfirming(null);
                 setReasonError(null);
               }}
               disabled={isSaving}
@@ -129,6 +126,34 @@ export function UniversityVisibilitySwitch({ university, onChanged }: University
             >
               {isSaving && <Spinner />}
               Ẩn trường
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {confirming === "show" && (
+        <div className="space-y-2 border-t border-border bg-muted px-3 py-2">
+          <p className="text-sm">
+            Hiện lại <span className="font-medium">{university.name}</span>? Trường sẽ xuất hiện trở lại trong tìm kiếm và gợi ý.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirming(null)}
+              disabled={isSaving}
+            >
+              Hủy
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => changeVisibility(true)}
+              disabled={isSaving}
+            >
+              {isSaving && <Spinner />}
+              Xác nhận hiện trường
             </Button>
           </div>
         </div>

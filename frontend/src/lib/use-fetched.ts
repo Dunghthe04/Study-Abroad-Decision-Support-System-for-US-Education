@@ -8,6 +8,8 @@ export interface Fetched<T> {
   data: T | null;
   /** Lỗi của lần tải ứng với key hiện tại. */
   error: string | null;
+  /** Đối tượng lỗi gốc của lần tải ứng với key hiện tại (để kiểm tra mã lỗi như premium_required). */
+  rawError?: unknown;
   /** key hiện tại chưa có kết quả. */
   loading: boolean;
 }
@@ -23,16 +25,16 @@ function messageOf(error: unknown): string {
  * "đang tải" suy ra từ việc kết quả đang giữ chưa thuộc key hiện tại, nên bản cũ vẫn hiển thị (mờ) cho tới khi bản mới về.
  */
 export function useFetched<T>(key: string, load: () => Promise<T>): Fetched<T> {
-  const [result, setResult] = useState<{ key: string; data: T | null; error: string | null } | null>(null);
+  const [result, setResult] = useState<{ key: string; data: T | null; error: string | null; rawError?: unknown } | null>(null);
 
   useEffect(() => {
     let alive = true;
     load().then(
       (data) => {
-        if (alive) setResult({ key, data, error: null });
+        if (alive) setResult({ key, data, error: null, rawError: undefined });
       },
       (error: unknown) => {
-        if (alive) setResult((previous) => ({ key, data: previous?.data ?? null, error: messageOf(error) }));
+        if (alive) setResult((previous) => ({ key, data: previous?.data ?? null, error: messageOf(error), rawError: error }));
       },
     );
     return () => {
@@ -43,5 +45,5 @@ export function useFetched<T>(key: string, load: () => Promise<T>): Fetched<T> {
   }, [key]);
 
   const current = result?.key === key;
-  return { data: result?.data ?? null, error: current ? result.error : null, loading: !current };
+  return { data: result?.data ?? null, error: current ? result.error : null, rawError: current ? result.rawError : undefined, loading: !current };
 }

@@ -33,6 +33,7 @@ public class ScholarshipConfiguration : IEntityTypeConfiguration<Scholarship>
         b.Property(x => x.AmountMaxUsd).HasPrecision(12, 2);
         b.Property(x => x.RenewalCriteria).HasMaxLength(1000);
         b.Property(x => x.MinToefl).HasPrecision(5, 1);
+        b.Property(x => x.MinDuolingo).HasPrecision(5, 1);
         b.Property(x => x.MajorRestriction).HasMaxLength(500);
         b.Property(x => x.ApplicationMethod).HasMaxLength(32);
         b.Property(x => x.ApplyUrl).HasMaxLength(512);

@@ -59,18 +59,43 @@ public sealed class BillingJobService(
         var handled = 0;
         foreach (var cycle in await jobs.FindCyclesDueForReminderAsync(nowUtc, nowUtc.AddDays(options.ReminderDays), ct))
         {
+            // [UC-128] Gói thời hạn ≤ 7 ngày chỉ nhắc trước 1 ngày; các gói dài hơn nhắc trước options.ReminderDays (mặc định 7 ngày)
+            var leadDays = CycleRules.ReminderLeadDays(cycle.DurationDays, options.ReminderDays);
+            if (cycle.EndsAt is not { } endsAt || endsAt > nowUtc.AddDays(leadDays))
+                continue;
+
             var ok = await TryAsync($"nhắc gia hạn kỳ {cycle.Id}", async () =>
             {
                 // Ghi dấu trước rồi mới gửi: lỗi gửi thì mất một lần nhắc, không bao giờ nhắc lặp mỗi lượt
                 cycle.ReminderSentAt = nowUtc;
                 await jobs.SaveAsync(ct);
-                if (await users.GetUserById(cycle.UserId, ct) is not { DeletedAt: null } owner)
-                    return;
-                var endsAt = cycle.EndsAt!.Value;
-                await email.SendSubscriptionExpiringEmailAsync(owner.Email, owner.FullName, cycle.PlanName, endsAt, ct);
                 var days = Math.Max(1, (int)Math.Ceiling((endsAt - nowUtc).TotalDays));
-                await notifications.NotifyAsync(owner.Id, NotificationTypes.BillingExpiring, $"Gói {cycle.PlanName} sắp hết hạn",
-                    $"Gói {cycle.PlanName} còn khoảng {days} ngày. Gia hạn để không bị gián đoạn.", "/plans", ct);
+                var owner = await users.GetUserById(cycle.UserId, ct);
+                if (owner is { DeletedAt: null })
+                {
+                    await email.SendSubscriptionExpiringEmailAsync(owner.Email, owner.FullName, cycle.PlanName, endsAt, ct);
+                    await notifications.NotifyAsync(owner.Id, NotificationTypes.BillingExpiring, $"Gói {cycle.PlanName} sắp hết hạn",
+                        $"Gói {cycle.PlanName} còn khoảng {days} ngày. Gia hạn để không bị gián đoạn.", "/plans", ct);
+                }
+                // [UC-128] Gói Gia đình: thông báo thời hạn sắp hết gửi cho cả chủ gói VÀ các thành viên đang hoạt động
+                if (cycle.Kind == PlanKinds.Family && cycle.FamilyGroupId is { } groupId)
+                {
+                    var ownerName = owner?.FullName ?? string.Empty;
+                    var activeMemberIds = (await billing.GetOpenMembersAsync(groupId, ct))
+                        .Where(m => m.Status == FamilyMemberStatuses.Active && m.UserId is { } uid && uid != cycle.UserId)
+                        .Select(m => m.UserId!.Value)
+                        .Distinct()
+                        .ToList();
+                    foreach (var memberId in activeMemberIds)
+                    {
+                        if (await users.GetUserById(memberId, ct) is { DeletedAt: null } member)
+                        {
+                            await email.SendSubscriptionExpiringEmailAsync(member.Email, member.FullName, cycle.PlanName, endsAt, ct);
+                            await notifications.NotifyAsync(member.Id, NotificationTypes.BillingExpiring, "Gói Gia đình sắp hết hạn",
+                                $"Gói {cycle.PlanName} của {ownerName} còn khoảng {days} ngày.", "/account", ct);
+                        }
+                    }
+                }
             }, ct);
             // Lỗi thì dừng bước: TryAsync đã bỏ theo dõi mọi kỳ còn lại trong danh sách, nên gán dấu thời gian cho chúng sẽ không được lưu
             // mà thông báo vẫn gửi (lượt sau gửi lại). Lượt sau mở scope mới, nạp lại và làm tiếp phần còn lại.

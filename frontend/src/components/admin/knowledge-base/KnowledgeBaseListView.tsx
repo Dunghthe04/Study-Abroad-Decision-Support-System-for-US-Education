@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { DataTable, type DataTableToolbarSlots } from "@/components/admin/shared/DataTable";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
@@ -32,6 +33,9 @@ const FILTER_FIELD_BG = "bg-card dark:bg-input/30";
 const TOOLBAR_BUTTON_BG = "border-border bg-card text-foreground shadow-xs hover:bg-muted dark:bg-input/30 dark:hover:bg-input/50";
 const PAGE_SIZE = 20;
 
+const TAB_TRIGGER_CLASS =
+  "flex-none rounded-none border-0 border-b-2 border-transparent px-3 data-active:border-b-brand data-active:bg-transparent data-active:text-foreground data-active:shadow-none dark:data-active:border-transparent dark:data-active:border-b-brand dark:data-active:bg-transparent after:hidden";
+
 const LABEL_FILTER_OPTIONS = [{ value: "", label: "Mọi nhãn" }, ...LABEL_OPTIONS];
 const DOC_TYPE_FILTER_OPTIONS = [{ value: "", label: "Mọi loại" }, ...DOC_TYPE_OPTIONS];
 
@@ -41,10 +45,11 @@ interface Filters {
   label: string;
   topicCode: string;
   sort: string;
+  deleted: boolean;
   page: number;
 }
 
-const EMPTY_FILTERS: Filters = { search: "", docType: "", label: "", topicCode: "", sort: "newest", page: 1 };
+const EMPTY_FILTERS: Filters = { search: "", docType: "", label: "", topicCode: "", sort: "newest", deleted: false, page: 1 };
 
 function errorText(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -70,6 +75,7 @@ export function KnowledgeBaseListView() {
       label: applied.label || undefined,
       topicCode: applied.topicCode || undefined,
       sort: applied.sort as KnowledgeSort,
+      deleted: applied.deleted,
       page: applied.page,
       pageSize: PAGE_SIZE,
     }),
@@ -91,8 +97,8 @@ export function KnowledgeBaseListView() {
   };
 
   const handleReset = () => {
-    setDraft(EMPTY_FILTERS);
-    setApplied(EMPTY_FILTERS);
+    setDraft({ ...EMPTY_FILTERS, deleted: applied.deleted });
+    setApplied({ ...EMPTY_FILTERS, deleted: applied.deleted });
     setIsFilterOpen(false);
   };
 
@@ -101,6 +107,21 @@ export function KnowledgeBaseListView() {
       setFormState({ entry: await adminKnowledgeBaseApi.get(id) });
     } catch (error) {
       toast.add({ type: "error", title: "Không mở được tri thức", description: errorText(error, "Vui lòng thử lại sau.") });
+    }
+  };
+
+  const handleRestore = async (entry: KnowledgeEntry) => {
+    try {
+      const restored = await adminKnowledgeBaseApi.restore(entry.id);
+      toast.add({ type: "success", title: `Đã khôi phục tri thức #${entry.entryNo}` });
+      if (restored.vectorWarning) {
+        toast.add({ type: "warning", title: "Chưa tạo được vector ngay", description: restored.vectorWarning });
+      }
+      if (formState?.entry?.id === entry.id) setFormState(applied.deleted ? null : { entry: restored });
+      if (items.length === 1 && applied.page > 1) setApplied({ ...applied, page: applied.page - 1 });
+      reload();
+    } catch (error) {
+      toast.add({ type: "error", title: "Không khôi phục được tri thức", description: errorText(error, "Vui lòng thử lại sau.") });
     }
   };
 
@@ -129,7 +150,12 @@ export function KnowledgeBaseListView() {
     }
   };
 
-  const columns = knowledgeBaseColumns({ onOpen: (entry) => setFormState({ entry }), onDelete: setDeleting });
+  const columns = knowledgeBaseColumns({
+    deleted: applied.deleted,
+    onOpen: (entry) => setFormState({ entry }),
+    onDelete: setDeleting,
+    onRestore: (entry) => void handleRestore(entry),
+  });
 
   const activeFilterCount = [applied.docType, applied.label, applied.topicCode].filter((value) => value !== "").length
     + (applied.sort !== "newest" ? 1 : 0);
@@ -200,6 +226,19 @@ export function KnowledgeBaseListView() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+        <Tabs
+          value={applied.deleted ? "deleted" : "active"}
+          onValueChange={(value) => {
+            setFormState(null);
+            setApplied({ ...applied, deleted: value === "deleted", page: 1 });
+          }}
+        >
+          <TabsList variant="line" className="h-auto w-full justify-start gap-0 border-b border-border p-0">
+            <TabsTrigger value="active" className={TAB_TRIGGER_CLASS}>Đang dùng</TabsTrigger>
+            <TabsTrigger value="deleted" className={TAB_TRIGGER_CLASS}>Đã xóa</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
         <DataTable
           columns={columns}
           items={items}
@@ -208,7 +247,7 @@ export function KnowledgeBaseListView() {
           onRowSelect={(entry) => setFormState({ entry })}
           isLoading={list.loading && !list.data}
           error={list.error}
-          emptyMessage="Không có tri thức nào khớp bộ lọc."
+          emptyMessage={applied.deleted ? "Không có mục tri thức đã xóa nào." : "Không có tri thức nào khớp bộ lọc."}
           label="Danh sách kho tri thức"
           toolbar={toolbar}
           footer={
@@ -227,12 +266,14 @@ export function KnowledgeBaseListView() {
       {formState && (
         <KnowledgeEntryFormPanel
           entry={formState.entry}
+          reloadKey={reloadCounter}
           onClose={() => setFormState(null)}
           onChanged={(entry, isNew) => {
             setFormState(isNew ? null : { entry });
             reload();
           }}
           onDelete={setDeleting}
+          onRestore={(entry) => void handleRestore(entry)}
           onOpen={(id) => void openById(id)}
         />
       )}
@@ -253,7 +294,7 @@ export function KnowledgeBaseListView() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Xóa tri thức này?</AlertDialogTitle>
-            <AlertDialogDescription>Tri thức bị xóa hẳn và chat không còn dùng nó nữa.</AlertDialogDescription>
+            <AlertDialogDescription>Chat sẽ không còn dùng mục tri thức này để trả lời. Bạn có thể xem lại và khôi phục trong tab Đã xóa.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteBusy}>Hủy</AlertDialogCancel>

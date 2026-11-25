@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace StudyAbroad.Application.Audit;
 
-/// <summary>Ghi và đọc nhật ký thao tác và truy cập hệ thống (UC-61, UC-62, UC-97, ...).</summary>
+/// <summary>Ghi và đọc nhật ký thao tác và truy cập hệ thống (UC-61, UC-62, UC-91, ...).</summary>
 public interface IAuditLogRepository
 {
     Task AddAsync(AuditLog entry, CancellationToken cancellationToken = default);

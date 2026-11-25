@@ -83,9 +83,15 @@ public static class BillingRules
 {
     public const int LowQuotaUsedPercent = 80;
     public const int ExpiringSoonDays = 7;
+    public const int ShortPlanMaxDurationDays = 7;
+    public const int ShortPlanReminderDays = 1;
     public const int InviteExpiryDays = 7;
     public const int InviteResendCooldownSeconds = 60;
     public const int InviteMaxSendsPer24h = 5;
-    /// <summary>ai_calls.kind của lần gọi Claude, loại duy nhất bị tính vào hạn mức (SLM, embedding, Ollama miễn phí).</summary>
-    public const string MeteredAiKind = "claude";
+    /// <summary>ai_calls.kind của lần gọi AI bị tính vào hạn mức lượt chat: cả LLM (claude) và SLM (ollama); embedding không tính.</summary>
+    public const string ClaudeAiKind = "claude";
+    public const string OllamaAiKind = "ollama";
+    public static readonly IReadOnlyList<string> MeteredAiKinds = [ClaudeAiKind, OllamaAiKind];
+    /// <summary>Giữ tương thích tên cũ; dùng <see cref="MeteredAiKinds"/> cho bộ lọc hạn mức.</summary>
+    public const string MeteredAiKind = ClaudeAiKind;
 }

@@ -34,6 +34,28 @@ public class AdminOrderServiceTests
         return (j, buyer, admin, order);
     }
 
+    [Fact]
+    public async Task RevealBuyer_RefusesWhenRetentionExpired_AndClipsIpAndUserAgentInAudit()
+    {
+        var j = new JobHarness();
+        var (buyer, admin) = (j.AddUser(), j.AddAdmin());
+        var order = await j.H.CreateOrder(buyer, "personal-1m");
+        var raw = j.H.Order(order.OrderCode);
+        raw.UserId = null;
+        var retention = new DeletedBuyerRetention { BuyerCode = "DEL-0000AAAA", FullName = "A", Email = "a@test.vn", RetainUntilUtc = DateTime.UtcNow.AddDays(-1) };
+        j.Store.Retentions[retention.Id] = retention;
+        raw.DeletedBuyerRetentionId = retention.Id;
+
+        var ex = await Fails(j.Admin.RevealBuyerAsync(admin.Id, order.OrderCode, "127.0.0.1", "UA"));
+        Assert.Equal(404, ex.StatusCode);
+        Assert.Empty(j.Audit.Entries);
+
+        retention.RetainUntilUtc = DateTime.UtcNow.AddYears(1);
+        await j.Admin.RevealBuyerAsync(admin.Id, order.OrderCode, new string('1', 100), new string('u', 600));
+        var log = Assert.Single(j.Audit.Entries);
+        Assert.Equal((64, 512), (log.IpAddress!.Length, log.UserAgent!.Length));
+    }
+
     // ---- A6: lọc và tìm
 
     [Fact]
@@ -152,17 +174,19 @@ public class AdminOrderServiceTests
     }
 
     [Fact]
-    public async Task F6_RecheckAppliedAPayment_ThenTheRequestIsCancelled_TheAuditEntryIsStillWritten()
+    public async Task F6_Recheck_DoesNotAutoActivate_AndWritesAuditEvenIfCancelled()
     {
         var (j, _, admin, order) = await Mismatched();
         j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus(GatewayStatuses.Paid, 79_000);
-        using var cts = new CancellationTokenSource();
-        j.Notes.OnSent = cts.Cancel;
 
-        await j.Admin.RecheckAsync(admin.Id, order.OrderCode, ActAt, cts.Token);
+        var recheck = await j.Admin.RecheckAsync(admin.Id, order.OrderCode, ActAt);
 
         Assert.Equal("order.recheck", Assert.Single(j.Audit.Entries).Action);
-        Assert.Equal(OrderStatuses.Paid, j.H.Order(order.OrderCode).Status);
+        Assert.Equal(GatewayStatuses.Paid, recheck.GatewayStatus);
+        Assert.True(recheck.CanActivate);
+        // [UC-126] Recheck chỉ hiển thị trạng thái payOS, KHÔNG tự kích hoạt
+        Assert.Equal(OrderStatuses.Mismatch, j.H.Order(order.OrderCode).Status);
+        Assert.Empty(j.Store.Cycles);
     }
 
     [Theory]
@@ -240,54 +264,48 @@ public class AdminOrderServiceTests
     // ---- A8: kiểm lại với payOS
 
     [Theory]
-    [InlineData(OrderStatuses.Pending, "PAID", null, OrderStatuses.Paid)]
-    [InlineData(OrderStatuses.Pending, "UNDERPAID", 5_000L, OrderStatuses.Mismatch)]
-    [InlineData(OrderStatuses.Pending, "CANCELLED", 0L, OrderStatuses.Cancelled)]
-    [InlineData(OrderStatuses.Pending, "EXPIRED", 0L, OrderStatuses.Expired)]
-    [InlineData(OrderStatuses.Pending, "PENDING", 0L, OrderStatuses.Pending)]
-    [InlineData(OrderStatuses.Mismatch, "PAID", null, OrderStatuses.Paid)]          // đã bù đủ tiền
-    [InlineData(OrderStatuses.Mismatch, "PAID", 1_000L, OrderStatuses.Mismatch)]    // vẫn thiếu
-    [InlineData(OrderStatuses.Mismatch, "CANCELLED", 0L, OrderStatuses.Mismatch)]   // có tiền về rồi: không tự hủy
-    [InlineData(OrderStatuses.Mismatch, "EXPIRED", 0L, OrderStatuses.Mismatch)]
-    [InlineData(OrderStatuses.Expired, "PAID", null, OrderStatuses.Paid)]            // trả muộn: vẫn kích hoạt như webhook (P16)
-    [InlineData(OrderStatuses.Cancelled, "EXPIRED", 0L, OrderStatuses.Cancelled)]
-    public async Task A8_Recheck_AppliesThePayOsState_ToAnyUnpaidOrder(string from, string gatewayStatus, long? amountPaid, string expected)
+    [InlineData(OrderStatuses.Pending, "PAID", 79_000L, true)]
+    [InlineData(OrderStatuses.Pending, "UNDERPAID", 5_000L, false)]
+    [InlineData(OrderStatuses.Pending, "CANCELLED", 0L, false)]
+    [InlineData(OrderStatuses.Pending, "EXPIRED", 0L, false)]
+    [InlineData(OrderStatuses.Pending, "PENDING", 0L, false)]
+    [InlineData(OrderStatuses.Mismatch, "UNDERPAID", 50_000L, true)]   // đơn MISMATCH luôn kích hoạt được theo UC-125
+    [InlineData(OrderStatuses.Expired, "PAID", 79_000L, true)]
+    [InlineData(OrderStatuses.Cancelled, "EXPIRED", 0L, false)]
+    public async Task A8_Recheck_ReturnsPayOsStatus_WithoutAutoActivating(string from, string gatewayStatus, long amountPaid, bool expectedCanActivate)
     {
         var (j, _, admin, order) = await Mismatched();
         j.H.Order(order.OrderCode).Status = from;
-        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus(gatewayStatus, amountPaid ?? order.AmountVnd);
+        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus(gatewayStatus, amountPaid);
 
         var dto = await j.Admin.RecheckAsync(admin.Id, order.OrderCode, ActAt);
 
-        Assert.Equal(expected, dto.Status);
-        Assert.Equal(expected == OrderStatuses.Paid ? 1 : 0, j.Store.Cycles.Count);
+        Assert.Equal((from, gatewayStatus, amountPaid, expectedCanActivate), (dto.OrderStatus, dto.GatewayStatus, dto.GatewayAmountPaid, dto.CanActivate));
+        Assert.Equal(from, j.H.Order(order.OrderCode).Status);
+        Assert.Empty(j.Store.Cycles);
         var audit = Assert.Single(j.Audit.Entries);
         Assert.Equal("order.recheck", audit.Action);
         Assert.Contains(gatewayStatus, audit.DetailJson);
     }
 
     [Fact]
-    public async Task A8_Recheck_ThatActivates_RecordsTheAdminAsHandler()
-    {
-        var (j, _, admin, order) = await Mismatched();
-        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus("PAID", order.AmountVnd);
-
-        var dto = await j.Admin.RecheckAsync(admin.Id, order.OrderCode, ActAt);
-
-        Assert.Equal((OrderStatuses.Paid, admin.FullName), (dto.Status, dto.HandledBy));
-    }
-
-    [Fact]
-    public async Task A8_Recheck_PendingPastExpiryAndGrace_ExpiresIt()
+    public async Task A8_ActivateNormalOrder_RequiresPayOsPaid_BlocksWhenNotPaidOrDown()
     {
         var j = new JobHarness();
         var (buyer, admin) = (j.AddUser(), j.AddAdmin());
         var order = await j.H.CreateOrder(buyer, "personal-1m");
 
-        var dto = await j.Admin.RecheckAsync(admin.Id, order.OrderCode, order.ExpiresAt.AddMinutes(3));
+        // E1: payOS trả PENDING → không cho kích hoạt
+        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus(GatewayStatuses.Pending, 0);
+        var notPaid = await Fails(j.Admin.ActivateAsync(admin.Id, order.OrderCode, "lý do", ActAt));
+        Assert.Equal(("gateway_not_paid", 409), (notPaid.Code, notPaid.StatusCode));
+        Assert.Empty(j.Store.Cycles);
 
-        Assert.Equal(OrderStatuses.Expired, dto.Status);
-        Assert.Single(j.H.Gateway.Cancelled);
+        // E2: payOS sập → 502 và không kích hoạt
+        j.H.Gateway.FailStatusFor.Add(order.OrderCode);
+        var down = await Fails(j.Admin.ActivateAsync(admin.Id, order.OrderCode, "lý do", ActAt));
+        Assert.Equal(("gateway_unavailable", 502), (down.Code, down.StatusCode));
+        Assert.Empty(j.Store.Cycles);
     }
 
     [Fact]
@@ -412,12 +430,13 @@ public class AdminOrderServiceTests
     }
 
     [Fact]
-    public async Task Activate_ExpiredOrderWhoseMoneyArrivedAnyway_IsGrantedWithoutAnAmountCheck()
+    public async Task Activate_ExpiredOrderWhoseMoneyArrivedAnyway_RequiresPayOsPaid_ThenActivates()
     {
         var j = new JobHarness();
         var (buyer, admin) = (j.AddUser(), j.AddAdmin());
         var order = await j.H.CreateOrder(buyer, "personal-1m");
         j.H.Order(order.OrderCode).Status = OrderStatuses.Expired;
+        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus(GatewayStatuses.Paid, order.AmountVnd);
 
         var dto = await j.Admin.ActivateAsync(admin.Id, order.OrderCode, "khách đưa biên lai", ActAt);
 
@@ -448,6 +467,7 @@ public class AdminOrderServiceTests
         var j = new JobHarness();
         var (buyer, admin) = (j.AddUser(), j.AddAdmin());
         var order = await j.H.CreateOrder(buyer, "personal-1m");
+        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus(GatewayStatuses.Paid, order.AmountVnd);
 
         var dto = await j.Admin.ActivateAsync(admin.Id, order.OrderCode, "khách chuyển khoản tay", ActAt);
 
@@ -461,6 +481,7 @@ public class AdminOrderServiceTests
         var j = new JobHarness();
         var (buyer, admin) = (j.AddUser(), j.AddAdmin());
         var order = await j.H.CreateOrder(buyer, "personal-1m");
+        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus(GatewayStatuses.Paid, order.AmountVnd);
         j.H.Gateway.FailCancel = true;
 
         var dto = await j.Admin.ActivateAsync(admin.Id, order.OrderCode, "khách chuyển khoản tay", ActAt);
@@ -486,6 +507,7 @@ public class AdminOrderServiceTests
         var j = new JobHarness();
         var (buyer, admin) = (j.AddUser(), j.AddAdmin());
         var order = await j.H.CreateOrder(buyer, "personal-1m");
+        j.H.Gateway.Statuses[order.OrderCode] = new GatewayStatus(GatewayStatuses.Paid, order.AmountVnd);
         j.Store.AddActive(buyer.Id, "personal-1m", Now.AddDays(-1));
 
         var dto = await j.Admin.ActivateAsync(admin.Id, order.OrderCode, "chuyển tay", ActAt);
@@ -522,7 +544,7 @@ public class AdminOrderServiceTests
         var detail = await j.Admin.GetAsync(order.OrderCode);
 
         string[] orderDto = ["amountVnd", "checkoutUrl", "createdAt", "cycle", "description", "expiresAt", "orderCode", "paidAt", "planCode", "planKind", "planName", "qrCode", "status"];
-        string[] admin4 = ["adminNote", "buyerEmail", "buyerName", "handledBy"];
+        string[] admin4 = ["adminNote", "buyerEmail", "buyerName", "deletedBuyerCode", "gatewayTransactionId", "handledBy", "receivedAmountVnd"];
 
         Assert.Equal(orderDto.Concat(admin4).Order(), Keys(list.Items[0]));
         Assert.Equal(orderDto.Concat(admin4).Append("payloadJson").Order(), Keys(detail));
@@ -557,7 +579,7 @@ public class AdminOrderServiceTests
             .ToList();
         Assert.All(routes, r => Assert.Null(r.Anon));
         Assert.Equal(
-            ["GET:", "GET:{orderCode:long}", "POST:{orderCode:long}/activate", "POST:{orderCode:long}/recheck", "POST:{orderCode:long}/reject"],
+            ["GET:", "GET:{orderCode:long}", "POST:{orderCode:long}/activate", "POST:{orderCode:long}/recheck", "POST:{orderCode:long}/reject", "POST:{orderCode:long}/reveal-buyer"],
             routes.Select(r => $"{r.Verb.HttpMethods.Single()}:{r.Verb.Template}").Order());
     }
 }

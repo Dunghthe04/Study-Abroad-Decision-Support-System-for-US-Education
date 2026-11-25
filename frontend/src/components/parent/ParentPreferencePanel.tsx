@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Spinner } from "@/components/ui/spinner";
+import { PremiumLockedCard } from "@/components/billing/PremiumLockedCard";
 import { ApiError } from "@/lib/api";
+import { isPremiumRequired } from "@/lib/billing-api";
 import {
   DEFAULT_PREF,
   MAX_BUDGET_VND,
@@ -62,6 +64,7 @@ export function ParentPreferencePanel({ studentId }: { studentId: string }) {
 
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveLocked, setSaveLocked] = useState(false);
 
   const dirty =
     saved.data == null ||
@@ -86,7 +89,8 @@ export function ParentPreferencePanel({ studentId }: { studentId: string }) {
       setVersion((v) => v + 1);
       setSaveMessage("Đã lưu. Con sẽ thấy danh sách theo ưu tiên của bạn.");
     } catch (e) {
-      setSaveMessage(e instanceof ApiError ? e.message : "Không lưu được, thử lại sau.");
+      if (isPremiumRequired(e)) setSaveLocked(true);
+      else setSaveMessage(e instanceof ApiError ? e.message : "Không lưu được, thử lại sau.");
     } finally {
       setSaving(false);
     }
@@ -97,6 +101,14 @@ export function ParentPreferencePanel({ studentId }: { studentId: string }) {
       <div className="flex min-h-[20vh] items-center justify-center">
         <Spinner className="size-6 text-brand" />
       </div>
+    );
+  }
+  if (saveLocked || isPremiumRequired(saved.rawError) || isPremiumRequired(compare.rawError)) {
+    return (
+      <PremiumLockedCard
+        title="So sánh ưu tiên Học sinh & Phụ huynh cần tài khoản USDSS Premium"
+        note="Nâng cấp USDSS Premium để chọn ưu tiên, nhập ngân sách và so sánh danh sách trường với con."
+      />
     );
   }
   if (saved.error) {

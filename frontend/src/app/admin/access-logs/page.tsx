@@ -7,8 +7,8 @@ export const metadata: Metadata = {
 };
 
 /**
- * [UC-97] Administrator xem và lọc nhật ký truy cập và xuất dữ liệu nhạy cảm
- * (tài liệu xác minh trung tâm, tin nhắn bị báo cáo, xuất mẫu ở UC-102).
+ * [UC-91] Administrator xem và lọc nhật ký truy cập và xuất dữ liệu nhạy cảm
+ * (tài liệu xác minh trung tâm, tin nhắn bị báo cáo, xuất mẫu ở UC-96) và nhật ký thao tác.
  * Quy tắc: Nhật ký bất biến, không sửa và không xóa được.
  */
 export default function AdminAccessLogsPage() {

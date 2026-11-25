@@ -1,9 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { CheckIcon, SaveIcon, SendIcon, Trash2Icon, WrenchIcon, XIcon } from "lucide-react";
+import { HistoryIcon, RotateCcwIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
@@ -17,23 +26,21 @@ import {
   type TableRow,
 } from "@/components/admin/shared/EditableTable";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
-import { SlmStatusBadge } from "@/components/admin/slm-samples/SlmStatusBadge";
 import { adminSlmSampleApi } from "@/lib/slm-sample-api";
 import { useFetched } from "@/lib/use-fetched";
 import {
-  canSubmit,
   formatDateTime,
   isReady,
   jsonArrayProblem,
   optionalJsonProblem,
   prettyJson,
   SAMPLE_TYPE_OPTIONS,
-  sampleToRequest,
   sampleTypeLabel,
   SOURCE_LABELS,
   SPLIT_OPTIONS,
+  versionActionLabel,
 } from "@/lib/slm-sample-format";
-import type { SaveSlmSampleRequest, SlmReviewStatus, SlmSample, SlmSampleType, SlmSplit } from "@/types/slm-sample";
+import type { SaveSlmSampleRequest, SlmSample, SlmSampleType, SlmSampleVersion, SlmSplit } from "@/types/slm-sample";
 
 interface FormState {
   sampleType: SlmSampleType;
@@ -50,6 +57,10 @@ interface FormState {
 type FieldKey = "question" | "intents" | "profile" | "context";
 type FieldErrors = Partial<Record<FieldKey, string>>;
 type EditingTable = "info" | "labels";
+
+const Missing = () => (
+  <span title="Chưa có dữ liệu" aria-label="Chưa có dữ liệu" className="text-muted-foreground">—</span>
+);
 
 function toForm(sample: SlmSample | null): FormState {
   if (!sample) {
@@ -78,14 +89,13 @@ function toForm(sample: SlmSample | null): FormState {
   };
 }
 
-function toPayload(form: FormState, submit: boolean): SaveSlmSampleRequest {
+function toPayload(form: FormState): SaveSlmSampleRequest {
   const orNull = (text: string) => (text.trim() === "" ? null : text.trim());
   return {
     sampleType: form.sampleType,
     split: form.split,
     question: form.question.trim(),
     source: orNull(form.source),
-    submit,
     pendingQuestion: orNull(form.pendingQuestion),
     sourceReview: orNull(form.sourceReview),
     intents: form.intents,
@@ -94,12 +104,12 @@ function toPayload(form: FormState, submit: boolean): SaveSlmSampleRequest {
   };
 }
 
-function validate(form: FormState, submit: boolean): FieldErrors {
+function validate(form: FormState): FieldErrors {
   const errors: FieldErrors = {};
   if (form.question.trim() === "") errors.question = "Vui lòng nhập câu hỏi.";
   const intentsProblem = jsonArrayProblem(form.intents);
   if (intentsProblem) errors.intents = intentsProblem;
-  else if (submit && !isReady(form.intents)) errors.intents = "Cần nhập ý định trước khi gửi duyệt.";
+  else if (!isReady(form.intents)) errors.intents = "Danh sách ý định không được để trống.";
   const profileProblem = optionalJsonProblem(form.profile);
   if (profileProblem) errors.profile = profileProblem;
   const contextProblem = optionalJsonProblem(form.context);
@@ -114,30 +124,32 @@ function errorText(error: unknown, fallback: string): string {
 interface Props {
   sample: SlmSample | null;
   version: number;
-  currentUserId: string | undefined;
   onClose: () => void;
   onChanged: (sample: SlmSample, isNew: boolean) => void;
   onDelete: (sample: SlmSample) => void;
-  onReview: (sample: SlmSample, status: SlmReviewStatus) => void;
+  onRestore: (sample: SlmSample) => void;
 }
 
 export function SlmSampleFormPanel(props: Props) {
   return <SlmSampleForm key={props.sample?.id ?? "new"} {...props} />;
 }
 
-function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChanged, onDelete, onReview }: Props) {
+function SlmSampleForm({ sample: listed, version, onClose, onChanged, onDelete, onRestore }: Props) {
   const detail = useFetched(`detail|${listed?.id ?? "new"}|${version}`, () =>
     listed ? adminSlmSampleApi.get(listed.id) : Promise.resolve(null),
   );
   const sample = detail.data?.sample ?? listed;
+  const versions = detail.data?.versions ?? [];
   const [form, setForm] = useState<FormState>(() => toForm(listed));
   const [editing, setEditing] = useState<EditingTable | null>(null);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [inspecting, setInspecting] = useState<SlmSampleVersion | null>(null);
+  const [restoringVersion, setRestoringVersion] = useState(false);
 
   const isCreate = sample === null;
+  const isDeleted = sample?.deletedAt != null;
   const formEnabled = isCreate || editing !== null;
   const hasChanges = JSON.stringify(form) !== JSON.stringify(toForm(sample));
 
@@ -157,8 +169,8 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
     setEditing(null);
   };
 
-  const save = async (submit = false) => {
-    const found = validate(form, submit);
+  const save = async () => {
+    const found = validate(form);
     setErrors(found);
     if (Object.keys(found).length > 0) {
       setSubmitError("Dữ liệu chưa hợp lệ, xem các ô được đánh dấu.");
@@ -169,18 +181,13 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
     setSubmitError(null);
     try {
       if (sample) {
-        const saved = await adminSlmSampleApi.update(sample.id, toPayload(form, submit));
-        const resetToPending = saved.reviewStatus !== sample.reviewStatus;
-        toast.add({
-          type: "success",
-          title: submit ? "Đã gửi duyệt" : "Đã lưu mẫu",
-          description: resetToPending && !submit ? "Nội dung đã đổi nên mẫu quay về Chờ duyệt, cần duyệt lại." : undefined,
-        });
+        const saved = await adminSlmSampleApi.update(sample.id, toPayload(form));
+        toast.add({ type: "success", title: "Đã lưu mẫu" });
         setEditing(null);
         onChanged(saved, false);
       } else {
-        const created = await adminSlmSampleApi.create(toPayload(form, submit));
-        toast.add({ type: "success", title: submit ? "Đã thêm mẫu và gửi duyệt" : "Đã lưu nháp" });
+        const created = await adminSlmSampleApi.create(toPayload(form));
+        toast.add({ type: "success", title: "Đã thêm mẫu huấn luyện" });
         onChanged(created, true);
       }
     } catch (error) {
@@ -190,18 +197,18 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
     }
   };
 
-  const submitExisting = async () => {
+  const restoreOldVersion = async (target: SlmSampleVersion) => {
     if (!sample) return;
-    setSaving(true);
-    setActionError(null);
+    setRestoringVersion(true);
     try {
-      const saved = await adminSlmSampleApi.update(sample.id, { ...sampleToRequest(sample), submit: true });
-      toast.add({ type: "success", title: "Đã gửi duyệt" });
+      const saved = await adminSlmSampleApi.restoreVersion(sample.id, target.version);
+      toast.add({ type: "success", title: `Đã khôi phục nội dung phiên bản v${target.version} (tạo v${saved.version})` });
+      setInspecting(null);
       onChanged(saved, false);
     } catch (error) {
-      setActionError(errorText(error, "Không gửi duyệt được."));
+      toast.add({ type: "error", title: "Không khôi phục được phiên bản", description: errorText(error, "Vui lòng thử lại sau.") });
     } finally {
-      setSaving(false);
+      setRestoringVersion(false);
     }
   };
 
@@ -280,7 +287,7 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
 
   if (isCreate) {
     return (
-      <DetailPanel title="Thêm mẫu mới" description="Lưu nháp để sửa tiếp sau, hoặc gửi duyệt khi đã có ý định." onClose={onClose} closeDisabled={saving}>
+      <DetailPanel title="Thêm mẫu mới" description="Điền đầy đủ câu hỏi và danh sách ý định (mảng JSON không rỗng)." onClose={onClose} closeDisabled={saving}>
         <form onSubmit={(event) => event.preventDefault()} className="space-y-5">
           {submitError && <Alert variant="destructive"><AlertDescription>{submitError}</AlertDescription></Alert>}
           <TableFrame title="Thông tin mẫu">
@@ -291,11 +298,8 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
           </TableFrame>
           <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Hủy</Button>
-            <Button type="button" variant="outline" onClick={() => void save(false)} loading={saving}>
-              <SaveIcon /> Lưu nháp
-            </Button>
-            <Button type="button" onClick={() => void save(true)} loading={saving}>
-              <SendIcon /> Gửi duyệt
+            <Button type="button" onClick={() => void save()} loading={saving}>
+              <SaveIcon /> Lưu
             </Button>
           </div>
         </form>
@@ -307,7 +311,8 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
 
   const editState = (table: EditingTable): TableEditState => ({
     isEditing: editing === table,
-    canEdit: editing === null && !saving,
+    canEdit: !isDeleted && editing === null && !saving,
+    readOnly: isDeleted,
     isSaving: saving,
     hasChanges,
     error: editing === table ? submitError : null,
@@ -316,25 +321,25 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
     onSave: () => void save(),
   });
 
-  const pre = (text: string | null) => <span className="block whitespace-pre-wrap break-words text-left">{text && text.trim() !== "" ? text : "—"}</span>;
+  const pre = (text: string | null) =>
+    text && text.trim() !== "" ? (
+      <span className="block whitespace-pre-wrap break-words text-left">{text}</span>
+    ) : (
+      <Missing />
+    );
 
   const viewInfoRows: TableRow[] = [
+    { label: "Phiên bản", value: `v${sample.version}` },
     { label: "Loại mẫu", value: sampleTypeLabel(sample.sampleType) },
     { label: "Tập dữ liệu", value: sample.split },
     { label: "Câu hỏi", value: pre(sample.question) },
     { label: "Nguồn", value: SOURCE_LABELS[sample.source] ?? sample.source },
-    { label: "Câu hệ thống đã hỏi", value: sample.pendingQuestion ?? "—" },
-    { label: "Nhãn rà soát", value: sample.sourceReview ?? "—" },
-    { label: "Người tạo", value: sample.createdByName ?? "—" },
+    { label: "Câu hệ thống đã hỏi", value: pre(sample.pendingQuestion) },
+    { label: "Nhãn rà soát", value: sample.sourceReview ?? <Missing /> },
+    { label: "Người tạo", value: sample.createdByName ?? <Missing /> },
     { label: "Ngày tạo", value: formatDateTime(sample.createdAt) },
     { label: "Cập nhật", value: formatDateTime(sample.updatedAt ?? sample.createdAt) },
-  ];
-
-  const reviewRows: TableRow[] = [
-    { label: "Trạng thái", value: <div className="flex justify-end"><SlmStatusBadge status={sample.reviewStatus} /></div> },
-    { label: sample.reviewStatus === "approved" ? "Ghi chú duyệt" : "Lý do / ghi chú", value: pre(sample.reviewNote) },
-    { label: "Người duyệt", value: detail.data?.reviewedByName ?? "—" },
-    { label: "Duyệt lần cuối", value: formatDateTime(sample.reviewedAt) },
+    { label: "Ngày xuất gần nhất", value: sample.exportedAt ? formatDateTime(sample.exportedAt) : <Missing /> },
   ];
 
   const jsonBlocks: { label: string; text: string | null }[] = [
@@ -343,41 +348,31 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
     { label: "Ngữ cảnh", text: sample.context },
   ];
 
-  const canReview = sample.reviewStatus === "pending" && currentUserId !== undefined && sample.createdByUserId !== currentUserId;
-  const ready = isReady(sample.intents);
   const busy = saving || editing !== null;
 
   return (
     <DetailPanel title="Chi tiết mẫu huấn luyện" description={sampleTypeLabel(sample.sampleType)} onClose={onClose} closeDisabled={saving}>
       <div className="space-y-5">
-        {actionError && <Alert variant="destructive"><AlertDescription>{actionError}</AlertDescription></Alert>}
         {detail.error && <Alert variant="destructive"><AlertDescription>{detail.error}</AlertDescription></Alert>}
 
+        {isDeleted && (
+          <Alert>
+            <AlertDescription>Mẫu này đã bị xóa (chỉ đọc). Khôi phục mẫu để tiếp tục sử dụng hoặc chỉnh sửa.</AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex flex-wrap gap-2">
-          {canSubmit(sample.reviewStatus) && (
-            <Button type="button" size="sm" disabled={busy || !ready} loading={saving} title={ready ? undefined : "Cần có ý định trước khi gửi duyệt"} onClick={() => void submitExisting()}>
-              <SendIcon /> Gửi duyệt
+          {isDeleted ? (
+            <Button type="button" size="sm" variant="outline" className="ml-auto" disabled={busy} onClick={() => onRestore(sample)}>
+              <RotateCcwIcon /> Khôi phục mẫu
+            </Button>
+          ) : (
+            <Button type="button" size="sm" variant="outline" className="ml-auto text-destructive hover:text-destructive" disabled={busy} onClick={() => onDelete(sample)}>
+              <Trash2Icon /> Xóa
             </Button>
           )}
-          {canReview && (
-            <>
-              <Button type="button" size="sm" variant="outline" className="border-ok/20 bg-ok-wash text-ok hover:bg-ok-wash/70" disabled={busy} onClick={() => onReview(sample, "approved")}>
-                <CheckIcon /> Duyệt
-              </Button>
-              <Button type="button" size="sm" variant="outline" className="border-risk/20 bg-risk-wash text-risk hover:bg-risk-wash/70" disabled={busy} onClick={() => onReview(sample, "rejected")}>
-                <XIcon /> Từ chối
-              </Button>
-              <Button type="button" size="sm" variant="outline" className="border-warn/20 bg-warn-wash text-warn hover:bg-warn-wash/70" disabled={busy} onClick={() => onReview(sample, "needs_fix")}>
-                <WrenchIcon /> Cần sửa
-              </Button>
-            </>
-          )}
-          <Button type="button" size="sm" variant="outline" className="ml-auto text-destructive hover:text-destructive" disabled={busy} onClick={() => onDelete(sample)}>
-            <Trash2Icon /> Xóa
-          </Button>
         </div>
 
-        <EditableTable title="Duyệt" rows={reviewRows} />
         <EditableTable title="Thông tin mẫu" rows={formEnabled && editing === "info" ? infoRows : viewInfoRows} edit={editState("info")} />
         <TableFrame title="Nhãn đầu ra" edit={editState("labels")}>
           {editing === "labels" ? (
@@ -391,7 +386,83 @@ function SlmSampleForm({ sample: listed, version, currentUserId, onClose, onChan
             ))
           )}
         </TableFrame>
+
+        <TableFrame title={`Lịch sử phiên bản (${versions.length})`}>
+          {versions.length === 0 ? (
+            <BlockBody>
+              <span className="text-xs text-muted-foreground">Chưa có lịch sử phiên bản.</span>
+            </BlockBody>
+          ) : (
+            versions.map((ver) => (
+              <BlockBody key={ver.id}>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={ver.version === sample.version ? "brand" : "neutral"}>v{ver.version}</Badge>
+                    <span className="font-medium">{versionActionLabel(ver.action, ver.restoredFromVersion)}</span>
+                    <span className="text-muted-foreground">· {ver.actorName ?? "Hệ thống"}</span>
+                    <span className="text-muted-foreground">· {formatDateTime(ver.createdAt)}</span>
+                  </div>
+                  <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setInspecting(ver)}>
+                    <HistoryIcon className="size-3.5" /> Xem
+                  </Button>
+                </div>
+              </BlockBody>
+            ))
+          )}
+        </TableFrame>
       </div>
+
+      <Dialog open={inspecting !== null} onOpenChange={(open) => !open && !restoringVersion && setInspecting(null)}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
+          {inspecting && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Phiên bản v{inspecting.version}</DialogTitle>
+                <DialogDescription>
+                  {versionActionLabel(inspecting.action, inspecting.restoredFromVersion)} · {inspecting.actorName ?? "Hệ thống"} · {formatDateTime(inspecting.createdAt)}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 text-sm">
+                <div><span className="text-muted-foreground">Loại mẫu:</span> {sampleTypeLabel(inspecting.sampleType)} · <span className="text-muted-foreground">Tập:</span> {inspecting.split} · <span className="text-muted-foreground">Nguồn:</span> {SOURCE_LABELS[inspecting.source] ?? inspecting.source}</div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Câu hỏi</div>
+                  <div className="whitespace-pre-wrap rounded-md border border-border bg-muted/40 p-2">{inspecting.question}</div>
+                </div>
+                {inspecting.pendingQuestion && (
+                  <div>
+                    <div className="text-xs text-muted-foreground">Câu hệ thống đã hỏi</div>
+                    <div className="whitespace-pre-wrap rounded-md border border-border bg-muted/40 p-2">{inspecting.pendingQuestion}</div>
+                  </div>
+                )}
+                <div>
+                  <div className="text-xs text-muted-foreground">Ý định</div>
+                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-2 font-mono text-xs">{prettyJson(inspecting.intents)}</pre>
+                </div>
+                {inspecting.profile && (
+                  <div>
+                    <div className="text-xs text-muted-foreground">Hồ sơ</div>
+                    <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-2 font-mono text-xs">{prettyJson(inspecting.profile)}</pre>
+                  </div>
+                )}
+                {inspecting.context && (
+                  <div>
+                    <div className="text-xs text-muted-foreground">Ngữ cảnh</div>
+                    <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-2 font-mono text-xs">{prettyJson(inspecting.context)}</pre>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" disabled={restoringVersion} onClick={() => setInspecting(null)}>Đóng</Button>
+                {!isDeleted && inspecting.version !== sample.version && (
+                  <Button type="button" loading={restoringVersion} onClick={() => void restoreOldVersion(inspecting)}>
+                    <RotateCcwIcon /> Khôi phục phiên bản này
+                  </Button>
+                )}
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </DetailPanel>
   );
 }

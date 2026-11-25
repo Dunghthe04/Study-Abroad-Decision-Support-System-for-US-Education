@@ -26,22 +26,13 @@ public class SlmTrainingSample : BaseEntity
     /// <summary>Tập dùng cho model: train, val hoặc test.</summary>
     public string Split { get; set; } = "train";
 
-    /// <summary>Nhãn phiên bản rà soát ghi trong file nguồn (v9, v10, v11...). Chỉ để tham khảo, không điều khiển luồng duyệt.</summary>
+    /// <summary>Nhãn phiên bản rà soát ghi trong file nguồn (v9, v10, v11...). Chỉ để tham khảo.</summary>
     public string? SourceReview { get; set; }
 
-    /// <summary>Trạng thái duyệt: draft | pending | approved | rejected | needs_fix. Chỉ dòng approved được xuất.</summary>
-    public string ReviewStatus { get; set; } = "draft";
+    /// <summary>Phiên bản hiện tại của mẫu (bắt đầu từ 1, tăng mỗi khi sửa hoặc khôi phục phiên bản cũ).</summary>
+    public int Version { get; set; } = 1;
 
-    /// <summary>Ghi chú của người duyệt, ví dụ lý do từ chối hoặc chỗ nhãn cần sửa.</summary>
-    public string? ReviewNote { get; set; }
-
-    /// <summary>Người duyệt gần nhất.</summary>
-    public Guid? ReviewedByUserId { get; set; }
-
-    /// <summary>Thời điểm duyệt gần nhất.</summary>
-    public DateTime? ReviewedAt { get; set; }
-
-    /// <summary>Người tạo hoặc import dòng này. Null với câu lấy tự động từ chat.</summary>
+    /// <summary>Người tạo hoặc import dòng này.</summary>
     public Guid? CreatedByUserId { get; set; }
 
     /// <summary>Nguồn của mẫu: manual, excel hoặc nguồn tham khảo do người tạo ghi.</summary>
@@ -51,6 +42,6 @@ public class SlmTrainingSample : BaseEntity
 
     public Guid? DeletedByUserId { get; set; }
 
-    /// <summary>Lần xuất gần nhất (UC-102).</summary>
+    /// <summary>Lần xuất gần nhất (UC-96).</summary>
     public DateTime? ExportedAt { get; set; }
 }

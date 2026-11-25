@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRightIcon, Building2Icon, CalendarClockIcon } from "lucide-react";
+import { MissingValue } from "@/components/shared/missing-value";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -9,7 +10,6 @@ import { httpLink } from "@/lib/university-display";
 import { cn } from "@/lib/utils";
 import type { ScholarshipItem } from "@/types/scholarship";
 
-const LEVEL_LABELS: Record<string, string> = { undergraduate: "Đại học", graduate: "Sau đại học" };
 const DAY_MS = 86_400_000;
 
 /** "2026-12-01" → "01/12/2026"; đọc thẳng chuỗi để không lệch ngày theo múi giờ máy người xem. */
@@ -37,12 +37,20 @@ function deadlineStatus(deadline: string | null, today: string): { label: string
   return { label: `Còn ${days} ngày`, tone: "ok" };
 }
 
-function Fact({ label, value, fallback }: { label: string; value: string | null; fallback: string }) {
+function meritNeedText(merit: boolean | null | undefined, need: boolean | null | undefined): string | null {
+  if (merit == null && need == null) return null;
+  if (merit && need) return "Thành tích & Nhu cầu";
+  if (merit) return "Theo thành tích";
+  if (need) return "Theo nhu cầu tài chính";
+  return "Không xét theo thành tích/nhu cầu";
+}
+
+function Fact({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="min-w-0">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={cn("text-sm font-semibold text-pretty",value == null ? "font-normal text-muted-foreground/60" : "text-foreground")}>
-        {value ?? fallback}
+      <dd className={cn("text-sm font-semibold text-pretty", value == null ? "font-normal" : "text-foreground")}>
+        {value ?? <MissingValue />}
       </dd>
     </div>
   );
@@ -62,14 +70,32 @@ export function ScholarshipCard({ scholarship: s, today, showSchool = true }: { 
     .filter(Boolean)
     .join(", ");
 
+  const testScores = [
+    s.minSat != null ? `SAT ${s.minSat}` : null,
+    s.minAct != null ? `ACT ${s.minAct}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const englishScores = [
+    s.minIelts != null ? `IELTS ${Number(s.minIelts).toFixed(1)}` : null,
+    s.minToefl != null ? `TOEFL ${s.minToefl}` : null,
+    s.minDuolingo != null ? `Duolingo ${s.minDuolingo}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const criteria = meritNeedText(s.meritBased, s.needBased);
+
   return (
     <Card className="gap-0 py-0 transition-[box-shadow,ring-color] duration-150 hover:shadow-sm hover:ring-brand/45">
       <div className="grid gap-5 p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-8">
         <div className="min-w-0 space-y-2">
-          <div className="flex flex-wrap gap-1.5">
-            <Badge variant="neutral">{LEVEL_LABELS[s.studyLevel] ?? s.studyLevel}</Badge>
-            {s.kind && <Badge variant="neutral">{KIND_LABELS[s.kind] ?? s.kind}</Badge>}
-          </div>
+          {s.kind && (
+            <div className="flex flex-wrap gap-1.5">
+              <Badge variant="neutral">{KIND_LABELS[s.kind] ?? s.kind}</Badge>
+            </div>
+          )}
           <h3 className="font-heading text-lg font-bold leading-snug text-balance text-foreground">{s.name}</h3>
           {(showSchool || s.provider) && (
             <p className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
@@ -79,7 +105,7 @@ export function ScholarshipCard({ scholarship: s, today, showSchool = true }: { 
                   {s.universityName}
                 </Link>
               ) : (
-                <span className="truncate">{s.provider ?? "Chưa rõ đơn vị cấp"}</span>
+                <span className="truncate">{s.provider ?? <MissingValue />}</span>
               )}
             </p>
           )}
@@ -95,7 +121,7 @@ export function ScholarshipCard({ scholarship: s, today, showSchool = true }: { 
                 amount?.startsWith("$") ? "text-2xl text-brand" : "text-base text-foreground",
               )}
             >
-              {amount ?? "Chưa rõ giá trị"}
+              {amount ?? <MissingValue />}
             </p>
             <p className="text-xs text-muted-foreground">
               {s.coverageType ? `Hỗ trợ ${coverageLabel(s.coverageType).toLowerCase()}` : "Giá trị học bổng"}
@@ -108,18 +134,20 @@ export function ScholarshipCard({ scholarship: s, today, showSchool = true }: { 
         </div>
       </div>
 
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 border-t border-line px-5 py-4 md:grid-cols-5">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 border-t border-line px-5 py-4 md:grid-cols-4">
         <div className="min-w-0">
           <dt className="text-xs text-muted-foreground">Hạn nộp</dt>
           <dd className="text-sm font-semibold text-foreground tabular-nums">{s.deadline ? formatDate(s.deadline) : "Xét quanh năm"}</dd>
         </div>
-        <Fact label="GPA tối thiểu" value={s.minGpa4 !== null ? Number(s.minGpa4).toFixed(1) : null} fallback="Không yêu cầu" />
-        <Fact label="IELTS tối thiểu" value={s.minIelts !== null ? Number(s.minIelts).toFixed(1) : null} fallback="Không yêu cầu" />
-        <Fact label="Thời gian nhận" value={duration || null} fallback="Chưa rõ" />
+        <Fact label="GPA tối thiểu" value={s.minGpa4 !== null ? Number(s.minGpa4).toFixed(1) : null} />
+        <Fact label="SAT / ACT tối thiểu" value={testScores || null} />
+        <Fact label="Tiếng Anh tối thiểu" value={englishScores || null} />
+        <Fact label="Xét theo" value={criteria} />
+        <Fact label="Giới hạn ngành" value={s.majorRestriction ?? null} />
+        <Fact label="Thời gian nhận" value={duration || null} />
         <Fact
           label="Cách nộp"
-          value={s.applicationMethod ? (APPLICATION_METHOD_LABELS[s.applicationMethod] ?? s.applicationMethod) : null}
-          fallback="Chưa rõ"
+          value={s.applicationMethod && s.applicationMethod !== "unknown" ? (APPLICATION_METHOD_LABELS[s.applicationMethod] ?? s.applicationMethod) : null}
         />
       </dl>
 
@@ -137,7 +165,7 @@ export function ScholarshipCard({ scholarship: s, today, showSchool = true }: { 
               {sourceLink.host}
             </a>
           ) : (
-            "chưa có liên kết"
+            <MissingValue />
           )}
           {s.retrievedAt && <span className="tabular-nums"> · cập nhật {formatDate(s.retrievedAt)}</span>}
         </p>

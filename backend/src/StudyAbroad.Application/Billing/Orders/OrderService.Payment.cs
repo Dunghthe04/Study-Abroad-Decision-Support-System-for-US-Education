@@ -81,17 +81,17 @@ public sealed partial class OrderService
         }
 
         var alreadyMismatch = order.Status == OrderStatuses.Mismatch;
-        // Tài khoản người mua đã bị xóa hẳn: có tiền nhưng không có ai để nhận gói, admin xử lý
+        // [UC-126 E3] Tài khoản người mua đã bị xóa hẳn: có tiền nhưng không có ai để nhận gói, chuyển MISMATCH để admin hủy và hoàn tiền ngoài hệ thống
         if (order.UserId is not { } buyerId)
         {
-            await MarkMismatchAsync(order, payloadJson, "Tài khoản người mua đã bị xóa", ct);
+            await MarkMismatchAsync(order, amountPaid, payloadJson, "Người mua đã xóa tài khoản", ct);
             return new PaymentApplyResult(PaymentApplyStatus.Mismatch);
         }
 
         // 2. Số tiền phải khớp đơn (trừ khi admin kích hoạt tay)
         if (!options.SkipAmountCheck && (decimal)amountPaid != order.AmountVnd)
         {
-            await MarkMismatchAsync(order, payloadJson, null, ct);
+            await MarkMismatchAsync(order, amountPaid, payloadJson, null, ct);
             if (!alreadyMismatch)
                 afterCommit.Add(NotifyMismatch(buyerId, order.OrderCode, "Số tiền chuyển không khớp, quản trị viên sẽ xử lý."));
             return new PaymentApplyResult(PaymentApplyStatus.Mismatch);
@@ -152,6 +152,7 @@ public sealed partial class OrderService
         {
             order.Status = OrderStatuses.Paid;
             order.PaidAt = now;
+            order.ReceivedAmountVnd = options.SkipAmountCheck ? (order.ReceivedAmountVnd ?? amountPaid) : amountPaid;
             order.PayloadJson = payloadJson ?? order.PayloadJson;
             order.UserSubscriptionId = cycle.Id;
             order.AdminNote = options.AdminNote ?? order.AdminNote;
@@ -196,9 +197,10 @@ public sealed partial class OrderService
         return new PaymentApplyResult(PaymentApplyStatus.Activated, cycle.Id);
     }
 
-    private async Task MarkMismatchAsync(PaymentTransaction order, string? payloadJson, string? adminNote, CancellationToken ct)
+    private async Task MarkMismatchAsync(PaymentTransaction order, long receivedAmountVnd, string? payloadJson, string? adminNote, CancellationToken ct)
     {
         order.Status = OrderStatuses.Mismatch;
+        order.ReceivedAmountVnd = receivedAmountVnd;
         order.PayloadJson = payloadJson ?? order.PayloadJson;
         order.AdminNote = adminNote ?? order.AdminNote;
         await orders.SaveAsync(ct);
