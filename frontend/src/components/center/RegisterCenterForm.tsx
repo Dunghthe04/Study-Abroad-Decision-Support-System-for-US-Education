@@ -9,10 +9,32 @@ import { setPendingEmail } from "@/lib/pending-email";
 import { useAccountPolicies } from "@/lib/use-account-policies";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
+import { PasswordMatchStatus, PasswordStrengthMeter } from "@/components/auth/PasswordFeedback";
 import { AUTH_LIMITS, NETWORK_ERROR, PASSWORD_RULE_HINT, checkPhone, confirmPasswordError, emailError, fullNameError, passwordRuleError, requiredTextError } from "@/lib/auth-validation";
+
+interface FieldErrors {
+  centerName?: string;
+  registrantName?: string;
+  email?: string;
+  phone?: string;
+  password?: string;
+  confirmPassword?: string;
+}
+
+// [UC-64] Lỗi backend thuộc ô nào thì báo dưới ô đó (theo đầu câu lỗi của CenterAccountService); còn lại báo ở đầu form
+function fieldOfServerError(message: string): keyof FieldErrors | null {
+  const m = message.toLowerCase();
+  if (m.startsWith("email")) return "email";
+  if (m.startsWith("số điện thoại")) return "phone";
+  if (m.startsWith("tên trung tâm")) return "centerName";
+  if (m.startsWith("họ tên")) return "registrantName";
+  if (m.startsWith("mật khẩu xác nhận")) return "confirmPassword";
+  if (m.startsWith("mật khẩu")) return "password";
+  return null;
+}
 
 export function RegisterCenterForm() {
   const router = useRouter();
@@ -29,31 +51,53 @@ export function RegisterCenterForm() {
   // [UC-104] Bản Điều khoản và Chính sách bảo mật đang hiển thị; gửi kèm khi đăng ký để ghi bằng chứng đồng ý
   const accountPolicies = useAccountPolicies();
 
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isConfirmTouched = confirmPassword.length > 0;
+  const isPasswordMatch = isConfirmTouched && password === confirmPassword;
+  const isPasswordMismatch = isConfirmTouched && password !== confirmPassword;
+  // Giống form học sinh/phụ huynh: tích đủ các ô đồng ý mới bấm được nút đăng ký
+  const allAgreed = agreeTerms && agreeCommitment;
+
+  const clearFieldError = (fieldName: keyof FieldErrors) => {
+    if (fieldErrors[fieldName]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[fieldName];
+        return next;
+      });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!allAgreed) return;
 
-    if (!agreeTerms || !agreeCommitment) {
-      setError("Vui lòng đồng ý với Điều khoản sử dụng và cam kết tính trung thực của thông tin.");
+    // [UC-01] Cùng luật kiểm lỗi với đăng ký (khớp backend), báo dưới từng ô
+    const errors: FieldErrors = {};
+    const centerNameProblem = requiredTextError(centerName, "Tên trung tâm", AUTH_LIMITS.centerNameMax);
+    if (centerNameProblem) errors.centerName = centerNameProblem;
+    const registrantProblem = fullNameError(registrantName, "Họ tên người đăng ký");
+    if (registrantProblem) errors.registrantName = registrantProblem;
+    const emailProblem = emailError(email);
+    if (emailProblem) errors.email = emailProblem;
+    const phoneProblem = checkPhone(phone, true).error;
+    if (phoneProblem) errors.phone = phoneProblem;
+    const passwordProblem = passwordRuleError(password);
+    if (passwordProblem) errors.password = passwordProblem;
+    const confirmProblem = confirmPasswordError(password, confirmPassword);
+    if (confirmProblem) errors.confirmPassword = confirmProblem;
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      document.getElementById(Object.keys(errors)[0])?.focus();
       return;
     }
 
-    // [UC-01] Cùng luật kiểm lỗi với đăng ký (khớp backend), báo lỗi đầu tiên gặp
-    const inputError =
-      requiredTextError(centerName, "Tên trung tâm", AUTH_LIMITS.centerNameMax) ??
-      fullNameError(registrantName, "Họ tên người đăng ký") ??
-      emailError(email) ??
-      checkPhone(phone, true).error ??
-      passwordRuleError(password) ??
-      confirmPasswordError(password, confirmPassword);
-    if (inputError) {
-      setError(inputError);
-      return;
-    }
-
+    setFieldErrors({});
     setIsSubmitting(true);
     try {
       await centerAccountApi.register({
@@ -75,7 +119,14 @@ export function RegisterCenterForm() {
       if (err instanceof ApiError) {
         // Admin có thể vừa công bố bản mới: tải lại để người dùng đọc đúng bản trước khi đồng ý
         if (err.status === 400) accountPolicies.reload();
-        setError(err.message);
+        const msg = err.message || "Đăng ký không thành công. Vui lòng thử lại.";
+        const field = fieldOfServerError(msg);
+        if (field) {
+          setFieldErrors((prev) => ({ ...prev, [field]: msg }));
+          document.getElementById(field)?.focus();
+        } else {
+          setError(msg);
+        }
       } else {
         setError(NETWORK_ERROR);
       }
@@ -126,31 +177,48 @@ export function RegisterCenterForm() {
         </Alert>
       )}
 
-      <form onSubmit={handleSubmit}>
+      {/* noValidate: không dùng thông báo mặc định của trình duyệt, lỗi báo dưới từng ô như form học sinh/phụ huynh */}
+      <form onSubmit={handleSubmit} noValidate>
         <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="centerName">Tên trung tâm tư vấn</FieldLabel>
+          <Field data-invalid={Boolean(fieldErrors.centerName)}>
+            <FieldLabel htmlFor="centerName">
+              Tên trung tâm tư vấn <span className="text-destructive">*</span>
+            </FieldLabel>
             <Input
               id="centerName"
-              required
-              maxLength={200}
+              maxLength={AUTH_LIMITS.centerNameMax}
               value={centerName}
-              onChange={(e) => setCenterName(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.centerName)}
+              aria-describedby={fieldErrors.centerName ? "centerName-error" : undefined}
+              onChange={(e) => {
+                setCenterName(e.target.value);
+                clearFieldError("centerName");
+              }}
               placeholder="VD: Trung tâm Tư vấn Du học Quốc tế Ivy"
             />
+            {fieldErrors.centerName && <FieldError id="centerName-error">{fieldErrors.centerName}</FieldError>}
           </Field>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel htmlFor="registrantName">Họ tên người đăng ký</FieldLabel>
+            <Field data-invalid={Boolean(fieldErrors.registrantName)}>
+              <FieldLabel htmlFor="registrantName">
+                Họ tên người đăng ký <span className="text-destructive">*</span>
+              </FieldLabel>
               <Input
                 id="registrantName"
-                required
-                maxLength={100}
+                maxLength={AUTH_LIMITS.fullNameMax}
                 value={registrantName}
-                onChange={(e) => setRegistrantName(e.target.value)}
+                aria-invalid={Boolean(fieldErrors.registrantName)}
+                aria-describedby={fieldErrors.registrantName ? "registrantName-error" : undefined}
+                onChange={(e) => {
+                  setRegistrantName(e.target.value);
+                  clearFieldError("registrantName");
+                }}
                 placeholder="VD: Nguyễn Văn A"
               />
+              {fieldErrors.registrantName && (
+                <FieldError id="registrantName-error">{fieldErrors.registrantName}</FieldError>
+              )}
             </Field>
 
             <Field>
@@ -166,77 +234,127 @@ export function RegisterCenterForm() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel htmlFor="email">Email liên hệ / đăng nhập</FieldLabel>
+            <Field data-invalid={Boolean(fieldErrors.email)}>
+              <FieldLabel htmlFor="email">
+                Email liên hệ / đăng nhập <span className="text-destructive">*</span>
+              </FieldLabel>
               <Input
                 id="email"
                 type="email"
-                required
-                maxLength={100}
+                maxLength={AUTH_LIMITS.emailMax}
                 autoComplete="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                aria-invalid={Boolean(fieldErrors.email)}
+                aria-describedby={fieldErrors.email ? "email-error" : "email-desc"}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  clearFieldError("email");
+                }}
                 placeholder="contact@center.edu.vn"
               />
-              <FieldDescription>Mã OTP kích hoạt sẽ gửi đến email này</FieldDescription>
+              {fieldErrors.email ? (
+                <FieldError id="email-error">{fieldErrors.email}</FieldError>
+              ) : (
+                <FieldDescription id="email-desc">Mã OTP kích hoạt sẽ gửi đến email này</FieldDescription>
+              )}
             </Field>
 
-            <Field>
-              <FieldLabel htmlFor="phone">Số điện thoại liên hệ</FieldLabel>
+            <Field data-invalid={Boolean(fieldErrors.phone)}>
+              <FieldLabel htmlFor="phone">
+                Số điện thoại liên hệ <span className="text-destructive">*</span>
+              </FieldLabel>
               <Input
                 id="phone"
                 type="tel"
-                required
-                maxLength={20}
+                maxLength={AUTH_LIMITS.rawPhoneMax}
                 autoComplete="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="0912345678"
+                aria-invalid={Boolean(fieldErrors.phone)}
+                aria-describedby={fieldErrors.phone ? "phone-error" : "phone-desc"}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  clearFieldError("phone");
+                }}
+                placeholder="0912 345 678 hoặc +84912345678"
               />
-              <FieldDescription>Số điện thoại để học sinh và Moderator liên hệ</FieldDescription>
+              {fieldErrors.phone ? (
+                <FieldError id="phone-error">{fieldErrors.phone}</FieldError>
+              ) : (
+                <FieldDescription id="phone-desc">Số điện thoại để học sinh và Moderator liên hệ</FieldDescription>
+              )}
             </Field>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel htmlFor="password">Mật khẩu</FieldLabel>
+            <Field data-invalid={Boolean(fieldErrors.password)}>
+              <FieldLabel htmlFor="password">
+                Mật khẩu <span className="text-destructive">*</span>
+              </FieldLabel>
               <PasswordInput
                 id="password"
-                required
-                minLength={8}
-                maxLength={100}
+                maxLength={AUTH_LIMITS.passwordMax}
                 autoComplete="new-password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                aria-invalid={Boolean(fieldErrors.password)}
+                aria-describedby={fieldErrors.password ? "password-error" : undefined}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  clearFieldError("password");
+                }}
                 placeholder={PASSWORD_RULE_HINT}
               />
+              <PasswordStrengthMeter password={password} />
+              {fieldErrors.password && <FieldError id="password-error">{fieldErrors.password}</FieldError>}
             </Field>
 
-            <Field>
-              <FieldLabel htmlFor="confirmPassword">Xác nhận mật khẩu</FieldLabel>
+            <Field data-invalid={Boolean(fieldErrors.confirmPassword) || isPasswordMismatch}>
+              <FieldLabel htmlFor="confirmPassword">
+                Xác nhận mật khẩu <span className="text-destructive">*</span>
+              </FieldLabel>
               <PasswordInput
                 id="confirmPassword"
-                required
-                minLength={8}
-                maxLength={100}
+                maxLength={AUTH_LIMITS.passwordMax}
                 autoComplete="new-password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                aria-invalid={Boolean(fieldErrors.confirmPassword) || isPasswordMismatch}
+                aria-describedby={
+                  isConfirmTouched
+                    ? isPasswordMatch
+                      ? "confirmPassword-status"
+                      : "confirmPassword-error"
+                    : fieldErrors.confirmPassword
+                    ? "confirmPassword-error"
+                    : undefined
+                }
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  clearFieldError("confirmPassword");
+                }}
                 placeholder="Nhập lại mật khẩu"
               />
+              {isConfirmTouched ? (
+                <PasswordMatchStatus
+                  matched={isPasswordMatch}
+                  id={isPasswordMatch ? "confirmPassword-status" : "confirmPassword-error"}
+                />
+              ) : (
+                fieldErrors.confirmPassword && (
+                  <FieldError id="confirmPassword-error">{fieldErrors.confirmPassword}</FieldError>
+                )
+              )}
             </Field>
           </div>
 
-          <div className="space-y-3 pt-2 text-sm text-ink-2">
-            <label className="flex items-start gap-2.5 cursor-pointer">
+          <Field className="pt-1">
+            <div className="flex items-start gap-2.5">
               <input
+                id="agreeTerms"
                 type="checkbox"
-                required
                 checked={agreeTerms}
                 onChange={(e) => setAgreeTerms(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-line text-brand focus:ring-brand"
+                className="mt-0.5 size-4 rounded border-line text-brand focus:ring-brand cursor-pointer"
               />
-              <span>
+              <label htmlFor="agreeTerms" className="text-sm leading-snug text-ink-2 cursor-pointer select-none">
                 Tôi đồng ý với{" "}
                 <Link href="/terms" target="_blank" className="font-medium text-brand hover:underline">
                   Điều khoản sử dụng
@@ -246,35 +364,47 @@ export function RegisterCenterForm() {
                   Chính sách quyền riêng tư
                 </Link>{" "}
                 của USDSS (bao gồm điều khoản lưu trữ dữ liệu định danh và nhật ký giao dịch phục vụ phòng chống gian lận và tuân thủ quy định pháp luật).
-              </span>
-            </label>
+                {accountPolicies.ready && (accountPolicies.policies?.terms || accountPolicies.policies?.privacy) && (
+                  <span className="block text-body-s text-ink-3">
+                    Phiên bản hiện hành:
+                    {accountPolicies.policies?.terms && ` Điều khoản ${accountPolicies.policies.terms.version}`}
+                    {accountPolicies.policies?.terms && accountPolicies.policies?.privacy && ","}
+                    {accountPolicies.policies?.privacy && ` Chính sách bảo mật ${accountPolicies.policies.privacy.version}`}.
+                  </span>
+                )}
+              </label>
+            </div>
 
-            <label className="flex items-start gap-2.5 cursor-pointer">
+            <div className="flex items-start gap-2.5">
               <input
+                id="agreeCommitment"
                 type="checkbox"
-                required
                 checked={agreeCommitment}
                 onChange={(e) => setAgreeCommitment(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-line text-brand focus:ring-brand"
+                className="mt-0.5 size-4 rounded border-line text-brand focus:ring-brand cursor-pointer"
               />
-              <span>
+              <label htmlFor="agreeCommitment" className="text-sm leading-snug text-ink-2 cursor-pointer select-none">
                 Tôi cam kết: Các thông tin hồ sơ và mức phí dịch vụ tôi công bố trên USDSS là đúng sự thật và tuân thủ các quy định hiện hành.
-              </span>
-            </label>
-          </div>
+              </label>
+            </div>
 
-          {accountPolicies.error && (
-            <Alert variant="destructive">
-              <AlertDescription>
+            {accountPolicies.error && (
+              <FieldError className="pl-6.5">
                 Không tải được nội dung điều khoản.{" "}
                 <button type="button" className="underline" onClick={accountPolicies.reload}>
                   Thử lại
                 </button>
-              </AlertDescription>
-            </Alert>
-          )}
+              </FieldError>
+            )}
+          </Field>
 
-          <Button type="submit" size="xl" disabled={isSubmitting || !accountPolicies.ready} className="w-full mt-2" loading={isSubmitting}>
+          <Button
+            type="submit"
+            size="xl"
+            disabled={isSubmitting || !accountPolicies.ready || !allAgreed}
+            className="w-full"
+            loading={isSubmitting}
+          >
             {isSubmitting ? "Đang xử lý đăng ký..." : "Đăng ký tài khoản trung tâm"}
           </Button>
         </FieldGroup>
@@ -296,4 +426,3 @@ export function RegisterCenterForm() {
     </div>
   );
 }
-
