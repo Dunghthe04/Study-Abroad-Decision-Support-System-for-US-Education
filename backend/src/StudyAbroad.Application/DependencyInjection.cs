@@ -52,6 +52,7 @@ public static class DependencyInjection
         services.AddScoped<IParentRequestedDeletion>(sp => (AuthService)sp.GetRequiredService<IAuthService>());
         // [UC-03 3d] Bước 2 đăng nhập Moderator, Administrator dùng cùng AuthService trong scope
         services.AddScoped<ITwoFactorLogin>(sp => (AuthService)sp.GetRequiredService<IAuthService>());
+        services.AddScoped<ITwoFactorResetService, TwoFactorResetService>();   // [UC-58 2a] Admin đặt lại TOTP cho Moderator
         services.AddScoped<SessionRefreshService>();   // gia hạn phiên bằng refresh token (đổi token mỗi lần)
         services.AddScoped<IAccountPurgeService, AccountPurgeService>();   // [UC-80] job xóa hẳn tài khoản gọi qua scope
         // [Q11] Liên kết phụ huynh–học sinh và sự đồng ý xử lý dữ liệu trẻ em

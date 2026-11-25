@@ -297,4 +297,82 @@ public class AuthTwoFactorTests
         Assert.Null(result.TwoFactor);
         Assert.NotNull(result.Response);
     }
+    // ===== [UC-58 2a] Administrator đặt lại xác thực hai lớp cho Moderator =====
+
+    private TwoFactorResetService CreateReset() => new(_repo, _audit, _email, new FakeUnitOfWork());
+
+    [Fact]
+    public async Task Reset_Moderator_ClearsTotp_RecoveryCodes_Sessions_LogsAndEmails_ThenSetupAgain()
+    {
+        var mod = AddUser(UserRoles.Moderator);
+        var admin = AddUser(UserRoles.Admin, "admin@test.com");
+        var service = CreateService();
+        var oldCodes = await SetUpAsync(service, mod);
+        var pending = await service.LoginAsync(new LoginRequest(mod.Email, Password));
+
+        var result = await CreateReset().ResetModeratorAsync(mod.Id, new TwoFactorResetRequest("  Mất điện thoại  "), admin.Id, "9.9.9.9");
+
+        Assert.Equal(TwoFactorResetError.None, result.Error);
+        Assert.Null(mod.TotpSecret);
+        Assert.Null(mod.TotpEnabledAt);
+        Assert.DoesNotContain(_repo.Otps, o => o.UserId == mod.Id && o.UsedAt == null);
+        Assert.All(_repo.Sessions.Where(s => s.UserId == mod.Id), s => Assert.True(s.IsRevoked));
+        var log = Assert.Single(_audit.Entries, a => a.Action == "user.two_factor_reset");
+        Assert.Equal(admin.Id, log.ActorUserId);
+        Assert.Equal("Mất điện thoại", System.Text.Json.JsonDocument.Parse(log.DetailJson!).RootElement.GetProperty("reason").GetString());
+        Assert.Contains(_email.SentEmails, m => m.To == mod.Email && m.Purpose == "two_factor_reset" && m.Code == "Mất điện thoại");
+
+        // Phiếu bước 2 đang dở không dùng được nữa
+        Assert.Equal(AuthError.TwoFactorChallengeInvalid,
+            (await service.VerifyTwoFactorAsync(new TwoFactorLoginRequest(pending.TwoFactor!.Challenge, "123456", null))).Error);
+
+        // Đăng nhập lại: thiết lập từ đầu, mã khôi phục cũ không còn dùng được
+        var step1 = await service.LoginAsync(new LoginRequest(mod.Email, Password));
+        Assert.NotNull(step1.TwoFactor!.Setup);
+        var codes = await service.VerifyTwoFactorAsync(new TwoFactorLoginRequest(step1.TwoFactor.Challenge, CodeNow(step1.TwoFactor.Setup!.Secret), null));
+        Assert.Equal(10, codes.RecoveryCodes!.Count);
+        var step1b = await service.LoginAsync(new LoginRequest(mod.Email, Password));
+        Assert.Equal(AuthError.TwoFactorCodeInvalid,
+            (await service.VerifyTwoFactorAsync(new TwoFactorLoginRequest(step1b.TwoFactor!.Challenge, null, oldCodes[0]))).Error);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Reset_RequiresReason(string reason)
+    {
+        var mod = AddUser(UserRoles.Moderator);
+        var result = await CreateReset().ResetModeratorAsync(mod.Id, new TwoFactorResetRequest(reason), Guid.NewGuid());
+        Assert.Equal(TwoFactorResetError.Validation, result.Error);
+        Assert.Empty(_audit.Entries);
+    }
+
+    [Fact]
+    public async Task Reset_ReasonTooLong_IsRejected()
+    {
+        var mod = AddUser(UserRoles.Moderator);
+        var result = await CreateReset().ResetModeratorAsync(mod.Id, new TwoFactorResetRequest(new string('a', 501)), Guid.NewGuid());
+        Assert.Equal(TwoFactorResetError.Validation, result.Error);
+    }
+
+    [Theory]
+    [InlineData(UserRoles.Admin)]
+    [InlineData(UserRoles.Student)]
+    [InlineData(UserRoles.Center)]
+    public async Task Reset_OnlyForModerators(string role)
+    {
+        var user = AddUser(role);
+        user.TotpSecret = "x";
+        var result = await CreateReset().ResetModeratorAsync(user.Id, new TwoFactorResetRequest("lý do"), Guid.NewGuid());
+        Assert.Equal(TwoFactorResetError.Validation, result.Error);
+        Assert.Equal("x", user.TotpSecret);
+        Assert.Empty(_email.SentEmails);
+    }
+
+    [Fact]
+    public async Task Reset_UnknownUser_NotFound()
+    {
+        var result = await CreateReset().ResetModeratorAsync(Guid.NewGuid(), new TwoFactorResetRequest("lý do"), Guid.NewGuid());
+        Assert.Equal(TwoFactorResetError.NotFound, result.Error);
+    }
 }
