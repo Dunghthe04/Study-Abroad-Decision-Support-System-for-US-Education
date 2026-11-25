@@ -364,9 +364,7 @@ async def test_an_invalid_choice_is_retried_once_and_the_valid_second_one_is_use
 async def test_falls_back_to_the_top_row_when_claude_is_invalid_twice_and_the_row_is_a_clear_match():
     llm = FakeLLMWithEmbed(choose(9), choose(9))
 
-    out = await handler_with(llm, FakeRetriever([hit(score=0.9)])).run(
-        ChatState(), "q"
-    )
+    out = await handler_with(llm, FakeRetriever([hit(score=0.9)])).run(ChatState(), "q")
 
     assert out.answer == SEVIS and [c.title for c in out.citations] == ["8 CFR 214.13"]
 
