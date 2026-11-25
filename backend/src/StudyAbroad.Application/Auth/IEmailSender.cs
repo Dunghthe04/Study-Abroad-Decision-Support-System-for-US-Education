@@ -83,5 +83,14 @@ namespace StudyAbroad.Application.Auth
 
         /// <summary>Mời tham gia gói Gia đình. <paramref name="seatRole"/>: student | parent; link chứa token dùng một lần.</summary>
         Task SendFamilyInviteEmailAsync(string toEmail, string ownerName, string seatRole, string inviteToken, int expiryDays, CancellationToken ct = default);
+
+        /// <summary>
+        /// [UC-03 3d] Báo chủ tài khoản vừa đăng nhập bằng mã khôi phục (thêm theo ý nhóm 26/11, ngoài đặc tả):
+        /// thời điểm, IP, trình duyệt, số mã còn lại; không phải mình thì báo Administrator đặt lại xác thực hai lớp.
+        /// </summary>
+        Task SendRecoveryCodeUsedEmailAsync(string toEmail, string fullName, DateTime usedAtUtc, string? ipAddress, string? userAgent, int remainingCodes, CancellationToken ct = default);
+
+        /// <summary>[UC-58 2a] Báo Moderator: Administrator đã đặt lại xác thực hai lớp, lần đăng nhập sau phải quét QR thiết lập lại.</summary>
+        Task SendTwoFactorResetEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default);
     }
 }

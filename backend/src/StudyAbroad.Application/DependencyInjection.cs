@@ -50,6 +50,8 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         // [UC-75 1a] Cùng một AuthService trong scope, để dịch vụ liên kết gọi xóa tài khoản của con
         services.AddScoped<IParentRequestedDeletion>(sp => (AuthService)sp.GetRequiredService<IAuthService>());
+        // [UC-03 3d] Bước 2 đăng nhập Moderator, Administrator dùng cùng AuthService trong scope
+        services.AddScoped<ITwoFactorLogin>(sp => (AuthService)sp.GetRequiredService<IAuthService>());
         services.AddScoped<SessionRefreshService>();   // gia hạn phiên bằng refresh token (đổi token mỗi lần)
         services.AddScoped<IAccountPurgeService, AccountPurgeService>();   // [UC-80] job xóa hẳn tài khoản gọi qua scope
         // [Q11] Liên kết phụ huynh–học sinh và sự đồng ý xử lý dữ liệu trẻ em

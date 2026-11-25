@@ -78,7 +78,18 @@ namespace StudyAbroad.Application.Auth
         OtpInvalid,           // mã OTP sai / hết hạn / đã dùng / đã vô hiệu hóa (gộp một thông báo, chống dò) → 400
         PendingDeletion,      // [UC-80] tài khoản đang chờ xóa, đúng mật khẩu → 403 kèm mã khôi phục
         RoleNotAllowed,       // [UC-80] vai trò không được tự làm thao tác này (trung tâm, admin, mod tự xóa tài khoản) → 403
+        TwoFactorChallengeInvalid, // [UC-03 3d] phiếu bước 2 hết hạn, đã dùng hoặc thử quá 5 lần → 401, giao diện quay lại bước mật khẩu
+        TwoFactorCodeInvalid,      // [UC-03 E4] mã TOTP hoặc mã khôi phục sai (gộp một thông báo chung) → 401
     };
+
+    // [UC-03 3d] Bước 2 đăng nhập Moderator, Administrator: phiếu nhận ở bước 1 kèm mã TOTP 6 số hoặc mã khôi phục
+    public record TwoFactorLoginRequest(string Challenge, string? Code, string? RecoveryCode);
+
+    // [UC-03 3d] Lần đăng nhập đầu: khóa Base32 (nhập tay) và chuỗi otpauth:// để giao diện vẽ QR
+    public record TwoFactorSetupInfo(string Secret, string OtpAuthUri);
+
+    // [UC-03 3d] Mật khẩu đúng nhưng chưa tạo phiên: phiếu bước 2 (5 phút), Setup khác null khi chưa thiết lập TOTP
+    public record TwoFactorChallengeInfo(string Challenge, DateTime ExpiresAt, TwoFactorSetupInfo? Setup);
 
     // [UC-80] Khôi phục tài khoản đang chờ xóa bằng mã khôi phục nhận khi đăng nhập
     public record RestoreAccountRequest(string Email, string RestoreToken);
@@ -92,8 +103,11 @@ namespace StudyAbroad.Application.Auth
 
     // [USAS-362] Hộp trả kết quả từ AuthService
     public record AuthResult(UserDto? User, AuthResponse? Response = null, AuthError Error = AuthError.None, string? Message = null,
-        PendingDeletionInfo? PendingDeletion = null)
+        PendingDeletionInfo? PendingDeletion = null,
+        TwoFactorChallengeInfo? TwoFactor = null,
+        IReadOnlyList<string>? RecoveryCodes = null)
     {
+        public static AuthResult TwoFactorRequired(TwoFactorChallengeInfo info) => new(null, TwoFactor: info);
         public static AuthResult Ok(UserDto user, string? message = null) => new(user, null, AuthError.None, message);
         public static AuthResult Ok(AuthResponse response) => new(response.User, response);
         public static AuthResult Ok(string message) => new(null, null, AuthError.None, message);

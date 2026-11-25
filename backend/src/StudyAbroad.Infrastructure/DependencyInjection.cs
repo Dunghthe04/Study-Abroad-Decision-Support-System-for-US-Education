@@ -70,6 +70,7 @@ public static class DependencyInjection
         services.AddSingleton<StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeWorkbookReader, StudyAbroad.Infrastructure.Import.KnowledgeWorkbookReader>();
         services.AddSingleton<StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeTemplateWriter, StudyAbroad.Infrastructure.Import.KnowledgeTemplateWriter>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<ITwoFactorRepository, TwoFactorRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<StudyAbroad.Application.Common.IUnitOfWork, EfUnitOfWork>();   // [UC-80] gom nhiều bước ghi vào một transaction
         services.AddScoped<StudyAbroad.Application.ParentLinks.IParentLinkRepository, ParentLinkRepository>();

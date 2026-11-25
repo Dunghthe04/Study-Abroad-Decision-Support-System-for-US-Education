@@ -378,6 +378,18 @@ internal sealed class FakeEmailSender : IEmailSender
     /// <summary>Đặt thì thư mời gói Gia đình ném lỗi này (SMTP sập).</summary>
     public Exception? FamilyInviteError { get; set; }
 
+    public Task SendRecoveryCodeUsedEmailAsync(string toEmail, string fullName, DateTime usedAtUtc, string? ipAddress, string? userAgent, int remainingCodes, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "recovery_code_used", $"remaining:{remainingCodes};ip:{ipAddress}"));
+        return Task.CompletedTask;
+    }
+
+    public Task SendTwoFactorResetEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "two_factor_reset", reason));
+        return Task.CompletedTask;
+    }
+
     public Task SendFamilyInviteEmailAsync(string toEmail, string ownerName, string seatRole, string inviteToken, int expiryDays, CancellationToken ct = default)
     {
         if (FamilyInviteError is not null)

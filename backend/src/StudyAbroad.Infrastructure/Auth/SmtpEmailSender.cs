@@ -606,6 +606,58 @@ namespace StudyAbroad.Infrastructure.Auth
         }
 
         // Token là chuỗi dùng một lần nên mới đưa vào link; mở link chỉ dẫn tới trang xác nhận, chưa đổi trạng thái gì.
+        public async Task SendRecoveryCodeUsedEmailAsync(string toEmail, string fullName, DateTime usedAtUtc, string? ipAddress, string? userAgent, int remainingCodes, CancellationToken ct = default)
+        {
+            var subject = "[USAS] Cảnh báo bảo mật: Tài khoản vừa đăng nhập bằng mã khôi phục";
+            var encodedName = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(fullName) ? "Người dùng USAS" : fullName);
+            var lowNote = remainingCodes <= 2
+                ? $"<p style=\"font-size: 14px; color: #b91c1c; line-height: 1.6;\"><strong>Bạn chỉ còn {remainingCodes} mã khôi phục.</strong> Hãy liên hệ Quản trị viên để đặt lại xác thực hai lớp và nhận bộ mã mới.</p>"
+                : string.Empty;
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #fde68a; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #b45309; margin-bottom: 16px;">Tài khoản vừa đăng nhập bằng mã khôi phục</h2>
+                    <p style="font-size: 15px; color: #334155;">Xin chào <strong>{encodedName}</strong>,</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Tài khoản {WebUtility.HtmlEncode(toEmail)} vừa đăng nhập bằng một <strong>mã khôi phục</strong> thay cho mã từ ứng dụng xác thực. Mã đã dùng sẽ không dùng lại được.</p>
+                    <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 14px; margin: 20px 0; border-radius: 4px; font-size: 13px; color: #78350f; line-height: 1.7;">
+                        <div>Thời điểm: <strong>{usedAtUtc.AddHours(7):HH:mm dd/MM/yyyy} (giờ Việt Nam)</strong></div>
+                        <div>Địa chỉ IP: <strong>{WebUtility.HtmlEncode(ipAddress ?? "không rõ")}</strong></div>
+                        <div>Trình duyệt: <strong>{WebUtility.HtmlEncode(userAgent ?? "không rõ")}</strong></div>
+                        <div>Số mã khôi phục còn lại: <strong>{remainingCodes}</strong></div>
+                    </div>
+                    {lowNote}
+                    <p style="font-size: 13px; color: #64748b; line-height: 1.6;">Nếu không phải bạn đăng nhập, mật khẩu và mã khôi phục của bạn có thể đã bị lộ. Hãy đổi mật khẩu và báo ngay Quản trị viên để đặt lại xác thực hai lớp.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
+        public async Task SendTwoFactorResetEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
+        {
+            var subject = "[USAS] Xác thực hai lớp của bạn đã được đặt lại";
+            var encodedName = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(fullName) ? "Người dùng USAS" : fullName);
+            var loginUrl = $"{_options.AppBaseUrl.TrimEnd('/')}/login";
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-bottom: 16px;">Xác thực hai lớp đã được đặt lại</h2>
+                    <p style="font-size: 15px; color: #334155;">Xin chào <strong>{encodedName}</strong>,</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Quản trị viên đã đặt lại xác thực hai lớp cho tài khoản {WebUtility.HtmlEncode(toEmail)}. Khóa cũ trong ứng dụng xác thực và các mã khôi phục cũ không còn dùng được, mọi phiên đăng nhập đã bị đăng xuất.</p>
+                    <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 6px; padding: 14px; margin: 20px 0;">
+                        <p style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold; color: #1e3a8a;">Lý do:</p>
+                        <p style="margin: 0; font-size: 14px; color: #1e40af; line-height: 1.5;">{WebUtility.HtmlEncode(reason)}</p>
+                    </div>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Lần <a href="{loginUrl}">đăng nhập</a> tới, bạn sẽ quét mã QR mới bằng ứng dụng xác thực và nhận bộ mã khôi phục mới.</p>
+                    <p style="font-size: 13px; color: #64748b; line-height: 1.5;">Nếu bạn không yêu cầu đặt lại, hãy liên hệ ngay Quản trị viên.</p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">USAS - Hệ thống hỗ trợ ra quyết định du học Mỹ</p>
+                </div>
+                """;
+
+            await SendEmailAsync(toEmail, subject, body, ct);
+        }
+
         public async Task SendFamilyInviteEmailAsync(string toEmail, string ownerName, string seatRole, string inviteToken, int expiryDays, CancellationToken ct = default)
         {
             var subject = $"{ownerName} mời bạn tham gia gói Gia đình";

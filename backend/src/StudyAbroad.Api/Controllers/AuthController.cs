@@ -10,7 +10,7 @@ namespace StudyAbroad.Api.Controllers
 {
     [ApiController]
     [Route("api/v1/auth")]
-    public class AuthController(IAuthService auth, SessionRefreshService refresh) : ControllerBase
+    public class AuthController(IAuthService auth, SessionRefreshService refresh, ITwoFactorLogin twoFactorLogin) : ControllerBase
     {
 
         // [AC-1 / USAS-12] Đăng ký tài khoản: tạo user unverified và gửi mã OTP kích hoạt qua Email.
@@ -73,6 +73,18 @@ namespace StudyAbroad.Api.Controllers
                 return SetSessionCookie(result.Response);
             }
 
+            // [UC-03 3d] Moderator, Administrator nhập đúng mật khẩu: chưa tạo phiên, chuyển sang bước nhập mã TOTP
+            if (result.TwoFactor is { } twoFactor)
+            {
+                return Ok(new
+                {
+                    twoFactorRequired = true,
+                    challenge = twoFactor.Challenge,
+                    challengeExpiresAt = twoFactor.ExpiresAt,
+                    setup = twoFactor.Setup == null ? null : new { secret = twoFactor.Setup.Secret, otpauthUri = twoFactor.Setup.OtpAuthUri },
+                });
+            }
+
             return result.Error switch
             {
                 AuthError.Locked => Problem(result.Message, statusCode: StatusCodes.Status423Locked, title: "Tài khoản bị khóa bởi Admin"),
@@ -81,6 +93,33 @@ namespace StudyAbroad.Api.Controllers
                 AuthError.PendingDeletion => PendingDeletionProblem(result),
                 _ => Problem(result.Message, statusCode: StatusCodes.Status401Unauthorized),
             };
+        }
+
+        // [UC-03 3d, E4] Bước 2 đăng nhập Moderator, Administrator: phiếu từ bước 1 kèm mã TOTP hoặc mã khôi phục.
+        // Lần thiết lập đầu trả thêm 10 mã khôi phục (chỉ một lần). Phiếu hết hạn: code two_factor_challenge_invalid để quay lại bước 1.
+        [HttpPost("login/2fa")]
+        [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        public async Task<IActionResult> LoginTwoFactor(TwoFactorLoginRequest request, CancellationToken ct)
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var userAgent = Request.Headers.UserAgent.ToString();
+
+            var result = await twoFactorLogin.VerifyTwoFactorAsync(request, ip, userAgent, ct);
+            if (result.Error == AuthError.None && result.Response is { } response)
+            {
+                SessionCookies.AppendSession(HttpContext, response.AccessToken, response.ExpiresAt, response.RefreshToken, response.SessionExpiresAt);
+                return Ok(new { expiresAt = response.ExpiresAt, user = response.User, recoveryCodes = result.RecoveryCodes });
+            }
+
+            if (result.Error == AuthError.TempLocked)
+                return Problem(result.Message, statusCode: StatusCodes.Status423Locked, title: "Tài khoản bị tạm khóa");
+
+            var problem = ProblemDetailsFactory.CreateProblemDetails(
+                HttpContext, StatusCodes.Status401Unauthorized, title: "Xác thực hai lớp không thành công", detail: result.Message);
+            problem.Extensions["code"] = result.Error == AuthError.TwoFactorChallengeInvalid
+                ? "two_factor_challenge_invalid"
+                : "two_factor_code_invalid";
+            return new ObjectResult(problem) { StatusCode = StatusCodes.Status401Unauthorized };
         }
 
         // [UC-80] Đăng nhập vào tài khoản đang chờ xóa: 403 kèm code, ngày xóa vĩnh viễn và mã khôi phục
