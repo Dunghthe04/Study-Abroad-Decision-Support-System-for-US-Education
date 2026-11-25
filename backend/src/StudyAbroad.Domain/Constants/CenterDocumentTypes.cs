@@ -13,5 +13,8 @@ public static class CenterDocumentTypes
 
     /// <summary>Giấy chứng nhận đăng ký hoạt động tư vấn du học (tùy chọn).</summary>
     public const string ConsultingLicense = "consulting_license";
+
+    /// <summary>[UC-66] Hợp đồng dịch vụ mẫu nêu rõ phạm vi dịch vụ, phí và chính sách hoàn phí (bắt buộc).</summary>
+    public const string SampleServiceContract = "sample_service_contract";
 }
 
