@@ -10,7 +10,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 /// <summary>[UC-93] Câu lệnh dữ liệu cho việc Administrator xử lý và thực hiện xóa trung tâm.</summary>
 public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env = null) : ICenterDeletionWorkRepository
 {
-    public const string PurgedCenterName = "Trung tâm đã xóa";
+    public const string PurgedCenterName = "Trung tâm đã ngừng hoạt động";
     public const string DeletedAccountName = "Tài khoản đã xóa";
     public const string ErasedMessageContent = "Tin nhắn này đã được xóa theo yêu cầu xóa dữ liệu của trung tâm.";
 
@@ -226,57 +226,17 @@ public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<ErasedLeadMessages> ErasePrivateLeadMessagesAsync(
+    public Task<ErasedLeadMessages> ErasePrivateLeadMessagesAsync(
         Guid studyCenterId, Guid? ownerUserId, DateTime now, CancellationToken ct = default)
     {
-        if (ownerUserId is not { } owner) return new ErasedLeadMessages([], 0);
-
-        // Tin phía trung tâm = tin do chủ tài khoản trung tâm gửi. Giữ tin đang bị báo cáo mà Admin chưa xử lý (UC-58).
-        var centerSide = db.LeadMessages.Where(m =>
-            m.SenderUserId == owner
-            && m.Content != ErasedMessageContent
-            && db.Leads.Any(l => l.Id == m.LeadId && l.StudyCenterId == studyCenterId));
-        var kept = await centerSide.CountAsync(m => m.ReportedAt != null && m.ReportResolution == null, ct);
-        var erasable = centerSide.Where(m => !(m.ReportedAt != null && m.ReportResolution == null));
-
-        var attachments = await erasable
-            .Where(m => m.AttachmentUrl != null)
-            .Select(m => m.AttachmentUrl!)
-            .ToListAsync(ct);
-
-        await erasable.ExecuteUpdateAsync(s => s
-            .SetProperty(m => m.Content, ErasedMessageContent)
-            .SetProperty(m => m.AttachmentUrl, (string?)null)
-            .SetProperty(m => m.AttachmentPublicId, (string?)null)
-            .SetProperty(m => m.FlagReason, (string?)null)
-            .SetProperty(m => m.UpdatedAt, now), ct);
-
-        return new ErasedLeadMessages(attachments.Distinct(StringComparer.Ordinal).ToList(), kept);
+        // [UC-87] Lịch sử tin nhắn trong các lead đã trao đổi với người dùng được giữ lại cho tới khi người dùng tự xóa tài khoản.
+        return Task.FromResult(new ErasedLeadMessages([], 0));
     }
 
-    public async Task<IReadOnlyList<string>> EraseResolvedCenterMessagesAsync(DateTime now, CancellationToken ct = default)
+    public Task<IReadOnlyList<string>> EraseResolvedCenterMessagesAsync(DateTime now, CancellationToken ct = default)
     {
-        // Tin do tài khoản chủ đã ẩn danh hóa gửi, trong lead của trung tâm đã xóa hẳn, không còn báo cáo chờ xử lý
-        var erasable = db.LeadMessages.Where(m =>
-            m.Content != ErasedMessageContent
-            && !(m.ReportedAt != null && m.ReportResolution == null)
-            && db.Users.Any(u => u.Id == m.SenderUserId && u.Role == UserRoles.Center && u.Status == UserStatuses.Deleted)
-            && db.Leads.Any(l => l.Id == m.LeadId
-                && db.StudyCenters.Any(c => c.Id == l.StudyCenterId && c.Name == PurgedCenterName)));
-
-        var attachments = await erasable
-            .Where(m => m.AttachmentUrl != null)
-            .Select(m => m.AttachmentUrl!)
-            .ToListAsync(ct);
-
-        await erasable.ExecuteUpdateAsync(s => s
-            .SetProperty(m => m.Content, ErasedMessageContent)
-            .SetProperty(m => m.AttachmentUrl, (string?)null)
-            .SetProperty(m => m.AttachmentPublicId, (string?)null)
-            .SetProperty(m => m.FlagReason, (string?)null)
-            .SetProperty(m => m.UpdatedAt, now), ct);
-
-        return attachments.Distinct(StringComparer.Ordinal).ToList();
+        // [UC-87] Không xóa nội dung tin nhắn khi trung tâm ngừng hoạt động.
+        return Task.FromResult<IReadOnlyList<string>>([]);
     }
 
     public async Task<IReadOnlyList<string>> GetCenterMediaUrlsAsync(Guid studyCenterId, CancellationToken ct = default)
