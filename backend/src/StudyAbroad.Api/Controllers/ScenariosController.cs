@@ -17,7 +17,8 @@ public class ScenariosController(ScenarioService scenarios) : ControllerBase
     // Cùng các trường với SimulateRequest bên RecommendationsController, thêm tên kịch bản
     public record SaveScenarioRequest(
         string? Title, decimal? Gpa, decimal? Sat, decimal? Act, decimal? Ielts, decimal? BudgetUsd,
-        string? ScholarshipNeed, int? EcTier, IReadOnlyList<int>? Pref, decimal? Toefl = null, decimal? Duolingo = null);
+        string? ScholarshipNeed, int? EcTier, IReadOnlyList<int>? Pref, decimal? Toefl = null, decimal? Duolingo = null,
+        IReadOnlyList<string>? States = null, string? Major = null, decimal? ExchangeRateVnd = null, decimal? ExchangeRatePercent = null);
 
     public record RenameScenarioRequest(string? Title);
 
@@ -39,7 +40,8 @@ public class ScenariosController(ScenarioService scenarios) : ControllerBase
 
         var overrides = new SimulationOverrides(
             request.Gpa, request.Sat, request.Act, request.Ielts, request.BudgetUsd,
-            request.ScholarshipNeed, request.EcTier, request.Toefl, request.Duolingo);
+            request.ScholarshipNeed, request.EcTier, request.Toefl, request.Duolingo, null,
+            request.States, request.Major, request.ExchangeRateVnd, request.ExchangeRatePercent);
         try
         {
             var saved = await scenarios.SaveAsync(userId.Value, request.Title, overrides, request.Pref, ct);

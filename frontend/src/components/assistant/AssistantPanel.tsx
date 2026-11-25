@@ -36,6 +36,9 @@ import { ChatHistoryPopover, ChatHistorySidebar } from "./ChatHistoryPopover";
 import { CenterCardsWidget } from "./CenterCardsWidget";
 import { ChatText } from "./ChatText";
 import { FitCompareCard } from "./FitCompareCard";
+import { SaveScenarioButton } from "@/components/recommendation/SavedScenarios";
+import { scenarioApi } from "@/lib/scenario-api";
+import { overridesFromValues } from "@/lib/simulation-link";
 import { MajorWidget } from "./MajorWidget";
 import { CurrentValues, ReviewWidget } from "./ReviewWidget";
 import { ScholarshipWidget } from "./ScholarshipWidget";
@@ -732,6 +735,7 @@ function withoutInterview(replies: QuickReply[] | null | undefined): QuickReply[
 
 function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (value: string) => void; className?: string }) {
   const router = useRouter();
+  const { user } = useAuth();
   const { sendAction, subscription, panelMode, setPanelMode } = useAssistant();
   const shrinkIfFull = () => {
     if (panelMode === "full") setPanelMode("compact");
@@ -878,6 +882,17 @@ function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (va
         >
           Xem trên thanh kéo
         </Button>
+      )}
+      {/* UC-81: lưu kịch bản vừa thử (chỉ học sinh; phụ huynh không có kịch bản riêng) */}
+      {turn.widget?.type === "simulate" && user?.role === "student" && Object.keys(overridesFromValues(turn.widget.data)).length > 0 && (
+        <span className="ml-2 mt-2.5 inline-block align-top">
+          <SaveScenarioButton
+            overrides={overridesFromValues(turn.widget.data)}
+            onSave={async (title) => {
+              await scenarioApi.save(title, overridesFromValues(turn.widget?.data));
+            }}
+          />
+        </span>
       )}
       {onReply && quickReplies && quickReplies.length > 0 && (
         <div className="mt-2.5 flex flex-wrap gap-2">
