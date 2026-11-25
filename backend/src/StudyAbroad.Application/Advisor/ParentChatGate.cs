@@ -41,8 +41,13 @@ public static class ParentChatGate
     // Nhãn SLM của việc cần hồ sơ riêng (advisor/app: collect_profile, profile_review, scenario, recommend)
     private static readonly HashSet<string> ProfileIntents = ["collect_profile", "profile_review", "scenario", "recommend"];
 
-    // Hành động .NET chạy trên hồ sơ riêng; bấm nút thì không qua SLM nên phải xét cả hành động
-    private static readonly HashSet<string> ProfileActions = [ChatRecommendation.Action, ChatSimulation.Action];
+    // Hành động .NET chạy trên hồ sơ riêng; bấm nút thì không qua SLM nên phải xét cả hành động.
+    // Gồm cả so sánh theo độ phù hợp (UC-154), giải thích và goal-seeking: cả ba tính trên hồ sơ của người đang chat,
+    // phụ huynh không có hồ sơ nên phải chọn con (làm thay) trước. So sánh số liệu trường (school_compare) không cần hồ sơ nên không nằm đây.
+    private static readonly HashSet<string> ProfileActions =
+    [
+        ChatRecommendation.Action, ChatSimulation.Action, ChatFitCompare.Action, ChatExplanation.Action, ChatGoalSeek.Action,
+    ];
 
     /// <summary>Lượt này có đụng tới hồ sơ riêng không.</summary>
     public static bool TouchesOwnProfile(AdvisorChatResponse response) =>

@@ -2893,6 +2893,114 @@ public class ChatServiceTests
         Assert.Equal(["bu", "nyu"], Assert.Single(runner.FitCompared));
     }
 
+    // ---- UC-154 với phụ huynh: tài khoản phụ huynh không có hồ sơ riêng, nên phải chọn con (làm thay) rồi mới so sánh theo độ phù hợp
+
+    private static readonly ParentChatChild ManagedChild = new(Guid.NewGuid(), "An", true);
+    private static readonly ParentChatChild LinkedChild = new(Guid.NewGuid(), "Hoa", false);
+
+    [Fact]
+    public async Task FitCompare_ParentTypesIt_AsksWhichChild_AndNothingIsComparedOnTheParent()
+    {
+        var runner = CompareRunner(FitResult());
+        var flow = new FakeProfileFlow { CanEdit = false, ParentChildren = [ManagedChild, LinkedChild] };
+        var advisor = new FakeAdvisor("B4")
+        {
+            Action = "school_fit_compare", ActionData = CompareAction(["BU", "NYU"], []), Slm = Intent("profile_review"),
+            Answer = "Mình đang tra số liệu của trường này nhé.",
+        };
+
+        var res = await new ChatService(advisor, new FakeSessions(), flow, null, runner).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Empty(runner.FitCompared);                               // không so sánh trên hồ sơ của phụ huynh
+        Assert.Equal(ParentChatGate.ChooseChildAnswer, res.Answer);
+        Assert.Null(res.Widget);
+        Assert.Null(res.Action);                                        // việc nội bộ không đi tiếp
+        Assert.Equal(["An", "Thêm con", "Xem ở Con của tôi"], res.QuickReplies!.Select(q => q.Label));
+        Assert.Equal(ParentChatGate.ActHref(ManagedChild.Id), res.QuickReplies![0].Href);   // chọn con thì vào làm thay con đó
+    }
+
+    [Fact]
+    public async Task FitCompare_ParentWithNoChild_IsOfferedToAddOne()
+    {
+        var runner = CompareRunner(FitResult());
+        var flow = new FakeProfileFlow { CanEdit = false, ParentChildren = [] };
+        var advisor = new FakeAdvisor("B4") { Action = "school_fit_compare", ActionData = CompareAction(["BU", "NYU"], []), Slm = Intent("profile_review") };
+
+        var res = await new ChatService(advisor, new FakeSessions(), flow, null, runner).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.Empty(runner.FitCompared);
+        Assert.Equal(ParentChatGate.NoChildAnswer, res.Answer);
+        Assert.Equal(ParentChatGate.AddChildHref, Assert.Single(res.QuickReplies!).Href);
+    }
+
+    [Fact]
+    public async Task FitCompare_ParentTypesAFactsQuestionInstead_IsStillAnswered_BecauseItNeedsNoProfile()
+    {
+        var runner = CompareRunner(FitResult());
+        var flow = new FakeProfileFlow { CanEdit = false, ParentChildren = [ManagedChild] };
+        var advisor = new FakeAdvisor("B4")
+        {
+            Action = "school_compare", ActionData = CompareAction(["BU", "NYU"], ["cost"]), Slm = Intent("knowledge"),
+            Answer = "Mình đang tra số liệu của trường này nhé.",
+        };
+
+        var res = await new ChatService(advisor, new FakeSessions(), flow, null, runner).ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello));
+
+        Assert.StartsWith("So sánh Boston University và New York University:", res.Answer);   // UC-156: không cần hồ sơ
+        Assert.Empty(runner.FitCompared);
+    }
+
+    // Nút (không qua SLM): ParentChatGate phải xét cả hành động, không chỉ nhãn SLM
+    [Theory]
+    [InlineData("school_fit_compare")]
+    [InlineData("goal_seek")]
+    [InlineData("explain")]
+    public async Task ProfileActionButtons_ParentWithoutOwnProfile_AreBlockedAndAskWhichChild(string type)
+    {
+        var runner = CompareRunner(FitResult());
+        runner.MatchByName!["bu"] = Found("bu", "Boston University");
+        runner.MatchByName["nyu"] = Found("nyu", "New York University");
+        var flow = new FakeProfileFlow { CanEdit = false, ParentChildren = [ManagedChild] };
+        var action = type == "school_fit_compare"
+            ? new ChatAction(type, SchoolCodes: ["bu", "nyu"], Question: "So sánh")
+            : new ChatAction(type, "188429", "safety");
+
+        var res = await new ChatService(new FakeAdvisor("B4"), new FakeSessions(), flow, null, runner)
+            .ChatAsync(Guid.NewGuid(), new AdvisorChatRequest(Hello, Action: action));
+
+        Assert.Empty(runner.FitCompared);
+        Assert.Null(runner.GoalCalledWith);
+        Assert.Null(runner.ExplainedCode);
+        Assert.Equal(ParentChatGate.ChooseChildAnswer, res.Answer);
+        Assert.Equal(ParentChatGate.ActHref(ManagedChild.Id), res.QuickReplies![0].Href);
+    }
+
+    [Fact]
+    public async Task FitCompare_ParentActingForTheChild_ComparesOnTheChildsProfile_AndTheParentPays()
+    {
+        var runner = CompareRunner(FitResult());
+        var advisor = new FakeAdvisor("B4")
+        {
+            Action = "school_fit_compare", ActionData = CompareAction(["BU", "NYU"], []), Slm = Intent("profile_review"),
+            Answer = "Mình đang tra số liệu của trường này nhé.",
+            CompareNote = new("1.0", "gemini", "OK", "Hai trường khác nhau ở nhóm."),
+        };
+        var cycleId = Guid.NewGuid();
+        var entitlements = new FakeEntitlements(advisor, new StudyAbroad.Application.Billing.ChatCharge(
+            false, true, cycleId, "personal-1m", PlanKinds.Personal, null, false, DateTime.UtcNow));
+        var parentId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
+
+        // Đang làm thay: userId là con (CanEdit = true nên không qua ParentChatGate), người trả là phụ huynh
+        var res = await new ChatService(advisor, new FakeSessions(), new FakeProfileFlow(), null, runner, entitlements: entitlements)
+            .ChatAsync(childId, new AdvisorChatRequest(Hello), role: UserRoles.Student, chargeUserId: parentId, chargeRole: UserRoles.Parent);
+
+        Assert.Equal(childId, runner.FitComparedBy);                    // nhóm và điểm tính theo hồ sơ của con
+        Assert.Equal((parentId, UserRoles.Parent), (entitlements.UserId, entitlements.Role));   // gói và token của phụ huynh
+        Assert.Equal("fit_compare", res.Widget!.Type);
+        Assert.Contains("Boston University: nhóm Vừa sức", res.Answer);
+    }
+
     [Fact]
     public async Task SchoolCompare_TwoResolvedSchools_GiveATableOfTheirNumbersAndTheCostGap()
     {
@@ -3666,9 +3774,11 @@ public class ChatServiceTests
         public FitCompareResult? FitCompare { get; init; }
         public Exception? FitCompareError { get; init; }
         public List<IReadOnlyList<string>> FitCompared { get; } = [];
+        public Guid? FitComparedBy { get; private set; }
 
         public Task<FitCompareResult> CompareFitAsync(Guid userId, IReadOnlyList<string> codes, CancellationToken ct)
         {
+            FitComparedBy = userId;
             FitCompared.Add(codes);
             if (FitCompareError is not null)
                 throw FitCompareError;
@@ -3961,5 +4071,10 @@ public class ChatServiceTests
         // false = phụ huynh đã liên kết, không có hồ sơ riêng (1f)
         public bool CanEdit { get; init; } = true;
         public Task<bool> CanEditOwnProfileAsync(Guid userId, CancellationToken ct = default) => Task.FromResult(CanEdit);
+
+        // Các con của phụ huynh để chat hỏi "Bạn muốn làm cho con nào?" (null = không biết, như bản mặc định của giao diện)
+        public IReadOnlyList<ParentChatChild>? ParentChildren { get; init; }
+        public Task<IReadOnlyList<ParentChatChild>?> GetParentChatChildrenAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(ParentChildren);
     }
 }
