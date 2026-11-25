@@ -15,8 +15,10 @@ public class PaymentTransactionConfiguration : IEntityTypeConfiguration<PaymentT
         b.HasOne<UserSubscription>().WithMany().HasForeignKey(x => x.UserSubscriptionId).OnDelete(DeleteBehavior.SetNull);
         b.HasOne<SubscriptionPlan>().WithMany().HasForeignKey(x => x.SubscriptionPlanId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<User>().WithMany().HasForeignKey(x => x.HandledByUserId).OnDelete(DeleteBehavior.SetNull);
+        b.HasOne<DeletedBuyerRetention>().WithMany().HasForeignKey(x => x.DeletedBuyerRetentionId).OnDelete(DeleteBehavior.SetNull);
         b.Property(x => x.SubscriptionPlanId).HasColumnName("plan_id");
         b.Property(x => x.AmountVnd).HasPrecision(12, 2);
+        b.Property(x => x.ReceivedAmountVnd).HasPrecision(12, 2);
         b.Property(x => x.Gateway).HasMaxLength(64).IsRequired();
         b.Property(x => x.GatewayTransactionId).HasMaxLength(128);
         b.Property(x => x.Status).HasMaxLength(32).IsRequired().HasDefaultValue("pending");
@@ -28,6 +30,7 @@ public class PaymentTransactionConfiguration : IEntityTypeConfiguration<PaymentT
         b.Property(x => x.AdminNote).HasMaxLength(1000);
         b.HasIndex(x => x.OrderCode).IsUnique();
         b.HasIndex(x => x.UserId);
+        b.HasIndex(x => x.DeletedBuyerRetentionId);
         // Mỗi người tối đa 1 đơn đang chờ thanh toán
         b.HasIndex(x => x.UserId, "ux_payment_transactions_one_pending_per_user").IsUnique().HasFilter("status = 'pending'")
             .HasDatabaseName("ux_payment_transactions_one_pending_per_user");

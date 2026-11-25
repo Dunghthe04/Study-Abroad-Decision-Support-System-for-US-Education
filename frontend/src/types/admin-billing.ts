@@ -30,14 +30,35 @@ export interface AdminOrderDto extends OrderDto {
   buyerEmail: string | null;
   adminNote: string | null;
   handledBy: string | null;
+  gatewayTransactionId: string | null;
+  receivedAmountVnd: number | null;
+  deletedBuyerCode: string | null;
 }
 
 export interface AdminOrderDetailDto extends AdminOrderDto {
   payloadJson: string | null;
 }
 
+export interface AdminOrderRecheckDto {
+  orderCode: number;
+  orderStatus: OrderStatus;
+  gatewayStatus: string;
+  gatewayAmountPaid: number;
+  canActivate: boolean;
+  checkedAt: string;
+}
+
+export interface AdminOrderBuyerInfoDto {
+  buyerCode: string;
+  fullName: string;
+  email: string;
+  retainUntilUtc: string;
+}
+
 export interface AdminOrderFilters {
   status: OrderStatus | "";
   q: string;
+  from: string;
+  to: string;
   page: number;
 }

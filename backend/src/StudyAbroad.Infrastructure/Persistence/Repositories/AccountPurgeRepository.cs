@@ -1,6 +1,9 @@
+using System.Linq.Expressions;
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Domain.Constants;
+using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 
@@ -62,6 +65,51 @@ public class AccountPurgeRepository(AppDbContext db) : IAccountPurgeRepository
 
         return new ForumPurgeResult(deleted, tombstoned);
     }
+
+    /// <summary>Đơn đã có tiền đi qua (paid, mismatch): chỉ những đơn này buộc phải lưu thông tin người mua 10 năm.</summary>
+    public static readonly Expression<Func<PaymentTransaction, bool>> MoneyMoved =
+        p => p.Status == OrderStatuses.Paid || p.Status == OrderStatuses.Mismatch;
+
+    public async Task<string?> SnapshotBuyerForOrdersAsync(Guid userId, DateTime now, CancellationToken ct = default)
+    {
+        // Chỉ đơn đã có tiền đi qua (paid, mismatch) mới phải lưu thông tin người mua; đơn chờ / hủy / hết hạn thì không
+        var latestOrderCreatedAt = await db.PaymentTransactions
+            .Where(p => p.UserId == userId).Where(MoneyMoved)
+            .Select(p => (DateTime?)p.CreatedAt)
+            .MaxAsync(ct);
+        if (latestOrderCreatedAt is null)
+            return null;
+
+        var user = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.FullName, u.Email })
+            .FirstOrDefaultAsync(ct);
+        if (user is null)
+            return null;
+
+        var buyerCode = $"DEL-{Convert.ToHexString(RandomNumberGenerator.GetBytes(4))}";
+        var retention = new DeletedBuyerRetention
+        {
+            BuyerCode = buyerCode,
+            FullName = user.FullName,
+            Email = user.Email,
+            RetainUntilUtc = AccountPurgeService.ComputeRetentionExpiryUtc(latestOrderCreatedAt.Value),
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        db.DeletedBuyerRetentions.Add(retention);
+        await db.SaveChangesAsync(ct);
+
+        await db.PaymentTransactions
+            .Where(p => p.UserId == userId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.DeletedBuyerRetentionId, retention.Id), ct);
+        return buyerCode;
+    }
+
+    public Task<int> PurgeExpiredBuyerRetentionsAsync(DateTime now, CancellationToken ct = default) =>
+        db.DeletedBuyerRetentions
+            .Where(r => r.RetainUntilUtc <= now)
+            .ExecuteDeleteAsync(ct);
 
     public Task DeleteUserAsync(Guid userId, CancellationToken ct = default) =>
         db.Users.Where(u => u.Id == userId).ExecuteDeleteAsync(ct);

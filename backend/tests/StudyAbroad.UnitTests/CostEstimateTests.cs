@@ -10,28 +10,32 @@ public class CostEstimateTests
         string level = "undergraduate", string? year = "2026-27") =>
         new(code, code, "MA", level, year, tuition, living, 2_000m, null, insurance, null, null);
 
-    private static readonly ReferenceFees Fees = new(185m, 350m);
+    private static readonly ReferenceFees Fees = new(185m, 350m, 250m);
+    private static readonly decimal ExpectedFourYearEscalated75k = CostCalculator.EscalatedMultiYear(75_000m, 4, StudyAbroad.Domain.Constants.CostConstants.AnnualCostEscalationRate);
 
     [Fact]
-    public void Build_OneTimeFeesCountedOnceInTotal()
+    public void Build_OneTimeFeesCountedOnceInTotal_WithEscalation()
     {
         var s = CostCalculator.Build(Row(), Fees, 0m, null);
 
         Assert.Equal(75_000m, s.AnnualUsd);          // 50k + 20k + 2k + 3k
-        Assert.Equal(75_535m, s.FirstYearUsd);       // + 185 + 350
-        Assert.Equal(75_000m * 4 + 535m, s.TotalUsd);
+        Assert.Equal(75_785m, s.FirstYearUsd);       // + 185 + 350 + 250
+        Assert.Equal(ExpectedFourYearEscalated75k + 785m, s.TotalUsd);
         Assert.True(s.IsComplete);
     }
 
     [Fact]
-    public void Build_MissingItemIsNotZero_AndReportedMissing()
+    public void Build_MissingItemIsNotZero_AndHidesBudgetConclusion()
     {
-        var s = CostCalculator.Build(Row(insurance: null), new ReferenceFees(null, null), 0m, null);
+        var s = CostCalculator.Build(Row(insurance: null), new ReferenceFees(null, null, null), 0m,
+            new BudgetInput("student", 60_000m, false));
 
         Assert.False(s.IsComplete);
-        Assert.Equal(["insurance", "visa", "sevis"], s.MissingKeys);
+        Assert.Equal(["insurance", "visa", "sevis", "visa_integrity"], s.MissingKeys);
         Assert.Null(s.Lines.Single(l => l.Key == "visa").AmountUsd);
         Assert.Equal(72_000m, s.AnnualUsd);          // chỉ cộng khoản đã có
+        Assert.Null(s.Budget!.AnnualGapUsd);         // UC-26 E2: ẩn kết luận trong/vượt ngân sách khi thiếu khoản
+        Assert.Null(s.Budget.TotalGapUsd);
     }
 
     [Fact]
@@ -40,18 +44,23 @@ public class CostEstimateTests
         var s = CostCalculator.Build(Row(), Fees, 10_000m, null);
 
         Assert.Equal(65_000m, s.AnnualAfterScholarshipUsd);
-        Assert.Equal(75_000m * 4 + 535m - 40_000m, s.TotalAfterScholarshipUsd);
+        Assert.Equal(ExpectedFourYearEscalated75k + 785m - 40_000m, s.TotalAfterScholarshipUsd);
     }
 
     [Fact]
-    public void Build_BudgetCap_ReportsShortfallAndSurplus()
+    public void Build_BudgetCap_ReportsShortfallSurplusAndWithinTolerance()
     {
-        var short1 = CostCalculator.Build(Row(), Fees, 0m, new BudgetInput("profile", 60_000m, false));
-        var surplus = CostCalculator.Build(Row(), Fees, 0m, new BudgetInput("profile", 80_000m, false));
+        var short1 = CostCalculator.Build(Row(), Fees, 0m, new BudgetInput("student", 60_000m, false));
+        var within10 = CostCalculator.Build(Row(), Fees, 0m, new BudgetInput("parent", 70_000m, false));
+        var surplus = CostCalculator.Build(Row(), Fees, 0m, new BudgetInput("student", 80_000m, false));
 
         Assert.Equal(15_000m, short1.Budget!.AnnualGapUsd);
+        Assert.False(short1.Budget.WithinTolerance);
+        Assert.Equal(5_000m, within10.Budget!.AnnualGapUsd);
+        Assert.True(within10.Budget.WithinTolerance); // 5k / 70k <= 10%
         Assert.Equal(-5_000m, surplus.Budget!.AnnualGapUsd);
-        Assert.Equal(75_000m * 4 + 535m - 60_000m * 4, short1.Budget.TotalGapUsd);
+        Assert.False(surplus.Budget.WithinTolerance);
+        Assert.Equal(ExpectedFourYearEscalated75k + 785m - 60_000m * 4, short1.Budget.TotalGapUsd);
     }
 
     [Fact]
@@ -82,7 +91,7 @@ public class CostEstimateTests
         Assert.Equal(60_000m, s.Budget.AnnualBudgetUsd);
         Assert.False(s.IsComplete);
         Assert.Contains("tuition", s.MissingKeys);
-        Assert.Equal(7, s.Lines.Count);
+        Assert.Equal(8, s.Lines.Count);
     }
 
     [Fact]
@@ -116,9 +125,11 @@ public class CostEstimateTests
     private sealed class FakeRepo(params SchoolCostRow[] rows) : ICostRepository
     {
         public Guid? ProfileLookup;
+        public Dictionary<string, string?> Settings { get; } = new();
         public Task<IReadOnlyList<SchoolCostRow>> GetSchoolCostsAsync(IReadOnlyList<string> codes, string level, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<SchoolCostRow>>(rows.Where(r => codes.Contains(r.Code, StringComparer.OrdinalIgnoreCase)).ToList());
-        public Task<string?> GetSettingJsonAsync(string key, CancellationToken ct = default) => Task.FromResult<string?>(null);
+        public Task<string?> GetSettingJsonAsync(string key, CancellationToken ct = default) =>
+            Task.FromResult(Settings.TryGetValue(key, out var v) ? v : null);
         public Task<BudgetInput?> GetProfileBudgetAsync(Guid userId, CancellationToken ct = default)
         {
             ProfileLookup = userId;
@@ -143,7 +154,7 @@ public class CostEstimateTests
         Assert.All(r.Schools, s => Assert.Null(s.Budget));
         Assert.Equal(["ZZZ"], r.MissingCodes);
         Assert.True(r.AcademicYearsDiffer);
-        Assert.Equal(25_000m, r.Rate.VndPerUsd);
+        Assert.Equal(25_375m, r.Rate.VndPerUsd); // 25,000 * (1 + 1.5% biên độ bán ra ngân hàng)
     }
 
     [Fact]
@@ -181,5 +192,26 @@ public class CostEstimateTests
         Assert.Null(estimate.Schools[0].SourceUrl);
         Assert.Null(states[0].SourceUrl);
         Assert.Equal("https://bea.gov/rpp", states[1].SourceUrl);
+    }
+
+    [Fact]
+    public async Task Estimate_ReadsLiveCostParametersFromAppSettings()
+    {
+        var repo = new FakeRepo(Row("MIT"));
+        repo.Settings[StudyAbroad.Domain.Constants.CostConstants.ReferenceFeesAppSettingKey] =
+            """{"visaFeeUsd":185,"sevisFeeUsd":350}""";
+        repo.Settings[StudyAbroad.Domain.Constants.CostConstants.CostParametersAppSettingKey] =
+            """{"visaIntegrityFeeUsd":300,"annualEscalationRate":0.05,"bankSellRateSpread":0.02,"undergraduateYears":5}""";
+
+        var res = await new CostService(repo, new FakeRates()).EstimateAsync(["MIT"], null, null, null, null);
+        var school = Assert.Single(res.Schools);
+
+        Assert.Equal(25_500m, res.Rate.VndPerUsd); // 25,000 * (1 + 2%)
+        Assert.Equal(0.05m, res.AnnualEscalationRate);
+        Assert.Equal(0.02m, res.BankSellRateSpread);
+        Assert.Equal(5, res.UndergraduateYears);
+        Assert.Equal(5, school.Years);
+        Assert.Equal(300m, school.Lines.Single(l => l.Key == "visa_integrity").AmountUsd);
+        Assert.Equal(CostCalculator.EscalatedMultiYear(75_000m, 5, 0.05m) + 185m + 350m + 300m, school.TotalUsd);
     }
 }

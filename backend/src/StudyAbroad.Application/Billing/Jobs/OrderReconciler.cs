@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using StudyAbroad.Application.Billing.Orders;
 using StudyAbroad.Application.Billing.Payments;
 using StudyAbroad.Application.Common;
+using StudyAbroad.Application.Notifications;
 using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Application.Billing.Jobs;
@@ -16,7 +17,8 @@ public sealed class OrderReconciler(
     IPaymentGateway gateway,
     IUnitOfWork unitOfWork,
     BillingOptions options,
-    ILogger<OrderReconciler>? logger = null)
+    ILogger<OrderReconciler>? logger = null,
+    INotificationService? notifications = null)
 {
     /// <summary>
     /// Hỏi payOS rồi áp dụng. Lỗi cổng được ghi log và coi như không biết trạng thái: đơn chờ chưa bị coi là hết hạn tới ExpiresAt + UnknownStatusExpiryHours
@@ -56,15 +58,15 @@ public sealed class OrderReconciler(
                     await orderService.ApplyPaymentAsync(orderCode, status.AmountPaid, null, nowUtc, ct, new PaymentApplyOptions(AdminUserId: adminUserId));
                     return;
                 case GatewayStatuses.Underpaid when order.Status == OrderStatuses.Pending:
-                    // Đi qua ApplyPaymentAsync để có khóa dòng, trạng thái mismatch và thông báo cho người mua; số tiền luôn thấp hơn đơn để chắc chắn lệch
-                    await orderService.ApplyPaymentAsync(orderCode, Math.Min(status.AmountPaid, (long)order.AmountVnd - 1), null, nowUtc, ct,
+                    // Đi qua ApplyPaymentAsync để có khóa dòng, trạng thái mismatch, lưu ReceivedAmountVnd thật và thông báo cho người mua
+                    await orderService.ApplyPaymentAsync(orderCode, status.AmountPaid == (long)order.AmountVnd ? status.AmountPaid - 1 : status.AmountPaid, null, nowUtc, ct,
                         new PaymentApplyOptions(AdminUserId: adminUserId));
                     return;
                 case GatewayStatuses.Cancelled when order.Status == OrderStatuses.Pending:
                     await MovePendingAsync(orderCode, OrderStatuses.Cancelled, ct);
                     return;
                 case GatewayStatuses.Expired or GatewayStatuses.Failed when order.Status == OrderStatuses.Pending:
-                    await MovePendingAsync(orderCode, OrderStatuses.Expired, ct);
+                    await ExpirePendingAndNotifyAsync(orderCode, ct);
                     return;
             }
         }
@@ -73,7 +75,7 @@ public sealed class OrderReconciler(
         // Không hỏi được payOS (status null): có thể khách đã trả mà ta không biết, nên chỉ hết hạn tới hạn cứng ExpiresAt + UnknownStatusExpiryHours
         var expireAfter = status is null ? order.ExpiresAt.AddHours(options.UnknownStatusExpiryHours) : order.ExpiresAt.AddMinutes(options.PendingGraceMinutes);
         if (order.Status == OrderStatuses.Pending && nowUtc > expireAfter
-            && await MovePendingAsync(orderCode, OrderStatuses.Expired, ct))
+            && await ExpirePendingAndNotifyAsync(orderCode, ct))
         {
             try
             {
@@ -86,10 +88,33 @@ public sealed class OrderReconciler(
         }
     }
 
+    /// <summary>[UC-128] Chuyển đơn pending sang expired dưới khóa dòng rồi báo in-app cho người mua.</summary>
+    private async Task<bool> ExpirePendingAndNotifyAsync(long orderCode, CancellationToken ct)
+    {
+        var (moved, buyerId, planName) = await MovePendingAsync(orderCode, OrderStatuses.Expired, ct);
+        if (moved && buyerId is { } userId && notifications is not null)
+        {
+            try
+            {
+                await notifications.NotifyAsync(
+                    userId, NotificationTypes.BillingOrderExpired, "Đơn hàng đã hết hạn",
+                    $"Đơn mua gói {planName} đã hết hạn thanh toán.",
+                    $"/orders/{orderCode}", CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Không gửi được thông báo hết hạn cho đơn {OrderCode}", orderCode);
+            }
+        }
+        return moved;
+    }
+
     /// <summary>Đổi đơn đang chờ sang trạng thái mới dưới khóa dòng. False = đơn đã được xử lý (trả, hủy...) trong lúc đó, không đổi gì.</summary>
-    private async Task<bool> MovePendingAsync(long orderCode, string newStatus, CancellationToken ct)
+    private async Task<(bool Moved, Guid? BuyerId, string PlanName)> MovePendingAsync(long orderCode, string newStatus, CancellationToken ct)
     {
         var moved = false;
+        Guid? buyerId = null;
+        var planName = string.Empty;
         await unitOfWork.ExecuteInTransactionAsync(async txCt =>
         {
             var order = await orders.LockByCodeAsync(orderCode, txCt);
@@ -98,7 +123,9 @@ public sealed class OrderReconciler(
             order.Status = newStatus;
             await orders.SaveAsync(txCt);
             moved = true;
+            buyerId = order.UserId;
+            planName = order.PlanName;
         }, ct);
-        return moved;
+        return (moved, buyerId, planName);
     }
 }

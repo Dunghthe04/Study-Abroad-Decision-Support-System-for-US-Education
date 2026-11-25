@@ -15,11 +15,10 @@ public class SlmSampleService(
     ISlmTemplateWriter templateWriter, IAuditLogRepository auditLogs) : ISlmSampleService
 {
     public const int MaxPageSize = 100;
-    public const int MaxReviewIds = 500;
-    public const int MaxNoteLength = 1000;
     public const int MaxPreviewRows = 100;
     public const int MaxSourceLength = 256;
-    public const string ExportAction = "slm_sample.export";
+    public const string ExportAction = AuditLogConstants.SlmSampleExport;
+    private const string EntityType = "slm_training_sample";
     private const string XlsxContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     private const string PersonalDataMessage = "Nội dung có số điện thoại hoặc e-mail. Hãy bỏ thông tin cá nhân trước khi lưu.";
 
@@ -43,21 +42,25 @@ public class SlmSampleService(
     {
         var counts = await repository.CountsAsync(ct);
 
-        var byStatus = new Dictionary<string, int>();
-        foreach (var status in SlmReviewStatuses.All)
-            byStatus[status] = 0;
         var byType = new Dictionary<string, int>();
         foreach (var type in SlmSampleTypes.All)
             byType[type] = 0;
 
         var total = 0;
+        var deleted = 0;
         foreach (var row in counts)
         {
-            total += row.Count;
-            byStatus[row.ReviewStatus] = byStatus.GetValueOrDefault(row.ReviewStatus) + row.Count;
-            byType[row.SampleType] = byType.GetValueOrDefault(row.SampleType) + row.Count;
+            if (row.Deleted)
+            {
+                deleted += row.Count;
+            }
+            else
+            {
+                total += row.Count;
+                byType[row.SampleType] = byType.GetValueOrDefault(row.SampleType) + row.Count;
+            }
         }
-        return new SlmSampleSummaryDto(total, byStatus, byType);
+        return new SlmSampleSummaryDto(total, deleted, byType);
     }
 
     public async Task<SlmSampleDto?> GetAsync(Guid id, CancellationToken ct = default) =>
@@ -65,152 +68,206 @@ public class SlmSampleService(
 
     public async Task<SlmSampleDetailDto?> GetDetailAsync(Guid id, CancellationToken ct = default)
     {
-        var sample = await repository.FindAsync(id, ct);
+        var sample = await repository.FindAsync(id, includeDeleted: true, ct);
         if (sample is null)
             return null;
 
-        var userIds = new[] { sample.CreatedByUserId, sample.ReviewedByUserId }.OfType<Guid>().Distinct().ToList();
+        var userIds = new[] { sample.CreatedByUserId }.OfType<Guid>().Distinct().ToList();
         var names = userIds.Count == 0 ? new Dictionary<Guid, string>() : await repository.UserNamesAsync(userIds, ct);
+        var versions = await repository.VersionsAsync(id, ct);
 
         return new SlmSampleDetailDto(
             ToDto(sample, NameOf(names, sample.CreatedByUserId)),
-            NameOf(names, sample.ReviewedByUserId));
+            versions.Select(ToVersionDto).ToList());
     }
 
     public Task<IReadOnlyList<SlmSampleCreatorDto>> GetCreatorsAsync(CancellationToken ct = default) =>
         repository.CreatorsAsync(ct);
 
-    public async Task<SlmSampleDto> CreateAsync(SaveSlmSampleRequest request, Guid actorUserId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> GetSourcesAsync(CancellationToken ct = default)
+    {
+        var fromDb = await repository.SourcesAsync(ct);
+        var result = new List<string>(SlmSampleSources.All);
+        foreach (var source in fromDb)
+        {
+            if (!string.IsNullOrWhiteSpace(source) && !result.Contains(source, StringComparer.Ordinal))
+                result.Add(source);
+        }
+        return result;
+    }
+
+    public async Task<SlmSampleDto> CreateAsync(
+        SaveSlmSampleRequest request, Guid actorUserId,
+        string? ipAddress = null, string? userAgent = null, CancellationToken ct = default)
     {
         var valid = Validate(request);
         CheckPersonalData(valid);
         CheckSourceNotReserved(valid.Source, null);
         await CheckDuplicateAsync(valid, null, ct);
 
-        var status = SlmReviewStatuses.Draft;
-        if (request.Submit)
-        {
-            EnsureReady(valid.Intents);
-            status = SlmReviewStatuses.Pending;
-        }
-
-        var sample = NewSample(valid, status, actorUserId);
+        var sample = NewSample(valid, actorUserId);
         sample.Source = valid.Source ?? SlmSampleSources.Manual;
-        await repository.AddAsync(sample, ct);
+        var initialVersion = SnapshotOf(sample, VersionActions.Create, actorUserId);
+        await repository.AddAsync(sample, initialVersion, ct);
+
+        await WriteAuditAsync(
+            AuditLogConstants.SlmSampleCreate, actorUserId, sample.Id.ToString(),
+            new { sampleType = sample.SampleType, split = sample.Split, version = sample.Version },
+            ipAddress, userAgent, ct);
+
         return ToDto(sample, null);
     }
 
     public async Task<SlmSampleDto?> UpdateAsync(
-        Guid id, SaveSlmSampleRequest request, Guid actorUserId, CancellationToken ct = default)
+        Guid id, SaveSlmSampleRequest request, Guid actorUserId,
+        string? ipAddress = null, string? userAgent = null, CancellationToken ct = default)
     {
         var valid = Validate(request);
         CheckPersonalData(valid);
         await CheckDuplicateAsync(valid, id, ct);
 
-        var found = await repository.UpdateManyAsync([id], sample =>
+        List<string> changed = [];
+        int newVersion = 0;
+
+        var found = await repository.UpdateAsync(id, sample =>
         {
+            if (sample.DeletedAt is not null)
+                throw new SlmSampleDeletedException();
+
             CheckSourceNotReserved(valid.Source, sample.Source);
-            var changed = ChangedFields(sample, valid);
-            var contentChanged = changed.Except(["split", "sourceReview", "source"]).Any();
-            var from = sample.ReviewStatus;
-            var to = from;
-            if (from == SlmReviewStatuses.Approved && contentChanged)
-                to = SlmReviewStatuses.Pending;
-            else if (request.Submit && from is SlmReviewStatuses.Draft or SlmReviewStatuses.Rejected or SlmReviewStatuses.NeedsFix)
-                to = SlmReviewStatuses.Pending;
+            changed = ChangedFields(sample, valid);
+            if (changed.Count == 0)
+                return (false, null);
 
-            if (changed.Count == 0 && to == from)
-                return false;
-            if (to == SlmReviewStatuses.Pending)
-                EnsureReady(valid.Intents);
+            Apply(sample, valid);
+            sample.Version++;
+            newVersion = sample.Version;
+            return (true, SnapshotOf(sample, VersionActions.Edit, actorUserId));
+        }, includeDeleted: true, ct);
 
-            sample.SampleType = valid.SampleType;
-            sample.Question = valid.Question;
-            sample.Source = valid.Source ?? sample.Source;
-            sample.Profile = valid.Profile;
-            sample.PendingQuestion = valid.PendingQuestion;
-            sample.Intents = valid.Intents;
-            sample.Context = valid.Context;
-            sample.Split = valid.Split;
-            sample.SourceReview = valid.SourceReview;
+        if (!found)
+            return null;
 
-            if (to != from)
-            {
-                sample.ReviewStatus = to;
-                sample.ReviewNote = null;
-                sample.ReviewedByUserId = null;
-                sample.ReviewedAt = null;
-            }
+        if (changed.Count > 0)
+        {
+            await WriteAuditAsync(
+                AuditLogConstants.SlmSampleUpdate, actorUserId, id.ToString(),
+                new { version = newVersion, changedFields = changed },
+                ipAddress, userAgent, ct);
+        }
 
-            return true;
-        }, ct);
-
-        return found == 0 ? null : await GetAsync(id, ct);
+        return await GetAsync(id, ct);
     }
 
-    public async Task<bool> DeleteAsync(Guid id, Guid actorUserId, CancellationToken ct = default)
+    public async Task<bool> DeleteAsync(
+        Guid id, Guid actorUserId,
+        string? ipAddress = null, string? userAgent = null, CancellationToken ct = default)
     {
-        var found = await repository.UpdateManyAsync([id], sample =>
+        var found = await repository.UpdateAsync(id, sample =>
         {
             sample.DeletedAt = DateTime.UtcNow;
             sample.DeletedByUserId = actorUserId;
-            return true;
-        }, ct);
-        return found > 0;
+            return (true, null);
+        }, includeDeleted: false, ct);
+
+        if (!found)
+            return false;
+
+        await WriteAuditAsync(
+            AuditLogConstants.SlmSampleDelete, actorUserId, id.ToString(),
+            new { action = "soft_delete" },
+            ipAddress, userAgent, ct);
+        return true;
     }
 
-    public async Task<ReviewSlmSamplesResultDto> ReviewAsync(
-        ReviewSlmSamplesRequest request, Guid actorUserId, CancellationToken ct = default)
+    public async Task<SlmSampleDto?> RestoreAsync(
+        Guid id, Guid actorUserId,
+        string? ipAddress = null, string? userAgent = null, CancellationToken ct = default)
     {
-        var status = request?.Status?.Trim();
-        var allowed = new[] { SlmReviewStatuses.Approved, SlmReviewStatuses.Rejected, SlmReviewStatuses.NeedsFix };
-        if (string.IsNullOrEmpty(status) || !allowed.Contains(status))
-            throw new ArgumentException($"Trạng thái duyệt phải là một trong: {string.Join(", ", allowed)}.");
+        var existing = await repository.FindAsync(id, includeDeleted: true, ct);
+        if (existing is null)
+            return null;
+        if (existing.DeletedAt is null)
+            return await GetAsync(id, ct);
 
-        var ids = request!.Ids?.Distinct().ToList() ?? new List<Guid>();
-        if (ids.Count == 0)
-            throw new ArgumentException("Cần chọn ít nhất một dòng để duyệt.");
-        if (ids.Count > MaxReviewIds)
-            throw new ArgumentException($"Mỗi lần chỉ duyệt tối đa {MaxReviewIds} dòng.");
+        var candidate = ValidateForRestore(
+            existing.SampleType, existing.Question, existing.Profile, existing.PendingQuestion,
+            existing.Intents, existing.Context, existing.Split, existing.SourceReview, existing.Source);
+        await CheckDuplicateAsync(candidate, id, ct);
 
-        var note = Clean(request.Note);
-        if (note is not null && note.Length > MaxNoteLength)
-            throw new ArgumentException($"Ghi chú tối đa {MaxNoteLength} ký tự.");
-        if (note is null && status != SlmReviewStatuses.Approved)
-            throw new ArgumentException("Cần ghi lý do khi từ chối hoặc yêu cầu sửa.");
-
-        int skippedOwn = 0, skippedNotReady = 0, skippedNotPending = 0, updated = 0;
-        var now = DateTime.UtcNow;
-        var found = await repository.UpdateManyAsync(ids, sample =>
+        var found = await repository.UpdateAsync(id, sample =>
         {
-            if (sample.CreatedByUserId == actorUserId)
-            {
-                skippedOwn++;
-                return false;
-            }
-            if (sample.ReviewStatus != SlmReviewStatuses.Pending)
-            {
-                skippedNotPending++;
-                return false;
-            }
-            if (status == SlmReviewStatuses.Approved && !IsReady(sample.Intents))
-            {
-                skippedNotReady++;
-                return false;
-            }
+            if (sample.DeletedAt is null)
+                return (false, null);
+            sample.DeletedAt = null;
+            sample.DeletedByUserId = null;
+            return (true, null);
+        }, includeDeleted: true, ct);
 
-            sample.ReviewStatus = status;
-            sample.ReviewNote = note;
-            sample.ReviewedByUserId = actorUserId;
-            sample.ReviewedAt = now;
-            updated++;
-            return true;
-        }, ct);
+        if (!found)
+            return null;
 
-        return new ReviewSlmSamplesResultDto(updated, ids.Count - found, skippedOwn, skippedNotReady, skippedNotPending);
+        await WriteAuditAsync(
+            AuditLogConstants.SlmSampleRestore, actorUserId, id.ToString(),
+            new { version = existing.Version },
+            ipAddress, userAgent, ct);
+
+        return await GetAsync(id, ct);
     }
 
-    public async Task<SlmImportResultDto> ImportAsync(Stream workbook, Guid actorUserId, CancellationToken ct = default)
+    public async Task<SlmSampleDto?> RestoreVersionAsync(
+        Guid id, int version, Guid actorUserId,
+        string? ipAddress = null, string? userAgent = null, CancellationToken ct = default)
+    {
+        var existing = await repository.FindAsync(id, includeDeleted: true, ct);
+        if (existing is null)
+            return null;
+        if (existing.DeletedAt is not null)
+            throw new SlmSampleDeletedException();
+
+        var target = await repository.FindVersionAsync(id, version, ct);
+        if (target is null)
+            return null;
+
+        var candidate = ValidateForRestore(
+            target.SampleType, target.Question, target.Profile, target.PendingQuestion,
+            target.Intents, target.Context, target.Split, target.SourceReview, target.Source);
+        await CheckDuplicateAsync(candidate, id, ct);
+
+        var nextVersion = 0;
+        var found = await repository.UpdateAsync(id, sample =>
+        {
+            if (sample.DeletedAt is not null)
+                throw new SlmSampleDeletedException();
+
+            sample.SampleType = target.SampleType;
+            sample.Question = target.Question;
+            sample.Profile = target.Profile;
+            sample.PendingQuestion = target.PendingQuestion;
+            sample.Intents = target.Intents;
+            sample.Context = target.Context;
+            sample.Split = target.Split;
+            sample.SourceReview = target.SourceReview;
+            sample.Source = target.Source;
+            sample.Version++;
+            nextVersion = sample.Version;
+            return (true, SnapshotOf(sample, VersionActions.Restore, actorUserId, restoredFromVersion: version));
+        }, includeDeleted: true, ct);
+
+        if (!found)
+            return null;
+
+        await WriteAuditAsync(
+            AuditLogConstants.SlmSampleRestoreVersion, actorUserId, id.ToString(),
+            new { fromVersion = version, toVersion = nextVersion },
+            ipAddress, userAgent, ct);
+
+        return await GetAsync(id, ct);
+    }
+
+    public async Task<SlmImportResultDto> ImportAsync(
+        Stream workbook, Guid actorUserId,
+        string? ipAddress = null, string? userAgent = null, CancellationToken ct = default)
     {
         var rows = ReadRows(workbook, ct);
 
@@ -219,6 +276,7 @@ public class SlmSampleService(
             existingKeys.Add(BuildKey(key.SampleType, key.Question, key.PendingQuestion, key.Profile, key.Context, key.Intents));
 
         var toInsert = new List<SlmTrainingSample>();
+        var versions = new List<SlmSampleVersion>();
         var errors = new List<SlmImportErrorDto>();
         var duplicates = 0;
 
@@ -244,13 +302,19 @@ public class SlmSampleService(
                 continue;
             }
 
-            var sample = NewSample(valid, SlmReviewStatuses.Draft, actorUserId);
+            var sample = NewSample(valid, actorUserId);
             sample.Source = SlmSampleSources.Excel;
             toInsert.Add(sample);
+            versions.Add(SnapshotOf(sample, VersionActions.Import, actorUserId));
         }
 
         if (toInsert.Count > 0)
-            await repository.AddRangeAsync(toInsert, ct);
+            await repository.AddRangeAsync(toInsert, versions, ct);
+
+        await WriteAuditAsync(
+            AuditLogConstants.SlmSampleImport, actorUserId, null,
+            new { totalRows = rows.Count, inserted = toInsert.Count, duplicates, errors = errors.Count },
+            ipAddress, userAgent, ct);
 
         return new SlmImportResultDto(rows.Count, toInsert.Count, duplicates, errors);
     }
@@ -284,26 +348,43 @@ public class SlmSampleService(
         if (format is not ("jsonl" or "xlsx"))
             throw new ArgumentException("Định dạng xuất phải là jsonl hoặc xlsx.");
 
-        var rows = await repository.ApprovedAsync(ct);
-        var stamp = DateTime.UtcNow;
-        var fileName = $"slm-samples-approved-{stamp:yyyyMMdd-HHmmss}.{format}";
-        var file = format == "jsonl"
-            ? new SlmExportFile(Encoding.UTF8.GetBytes(ToJsonl(rows)), "application/x-ndjson", fileName)
-            : new SlmExportFile(templateWriter.BuildExport(rows), XlsxContentType, fileName);
+        var rows = await repository.ExportableAsync(ct);
 
+        // UC-96 bước 2 & E1: ghi nhật ký truy cập TRƯỚC khi tạo tệp; không ghi được thì không tạo tệp và không đánh dấu đã xuất
         await auditLogs.AddAsync(new AuditLog
         {
             ActorUserId = actorUserId,
             Action = ExportAction,
-            EntityType = "slm_training_sample",
+            EntityType = EntityType,
             DetailJson = JsonSerializer.Serialize(new { format, count = rows.Count }),
             IpAddress = Clip(ipAddress, 64),
             UserAgent = Clip(userAgent, 512),
         }, ct);
+
+        var stamp = DateTime.UtcNow;
+        var fileName = $"slm-samples-{stamp:yyyyMMdd-HHmmss}.{format}";
+        var file = format == "jsonl"
+            ? new SlmExportFile(Encoding.UTF8.GetBytes(ToJsonl(rows)), "application/x-ndjson", fileName)
+            : new SlmExportFile(templateWriter.BuildExport(rows), XlsxContentType, fileName);
+
         if (rows.Count > 0)
             await repository.MarkExportedAsync(rows.Select(r => r.Id).ToList(), stamp, ct);
         return file;
     }
+
+    private Task WriteAuditAsync(
+        string action, Guid actorUserId, string? entityId, object detail,
+        string? ipAddress, string? userAgent, CancellationToken ct) =>
+        auditLogs.AddAsync(new AuditLog
+        {
+            ActorUserId = actorUserId,
+            Action = action,
+            EntityType = EntityType,
+            EntityId = entityId,
+            DetailJson = JsonSerializer.Serialize(detail),
+            IpAddress = Clip(ipAddress, 64),
+            UserAgent = Clip(userAgent, 512),
+        }, ct);
 
     private static string ToJsonl(IReadOnlyList<SlmTrainingSample> rows)
     {
@@ -366,21 +447,34 @@ public class SlmSampleService(
         return valid;
     }
 
+    // Khôi phục đưa nội dung cũ trở lại đang dùng: kiểm tra như khi sửa (intents không rỗng, không có dữ liệu cá nhân)
+    private static ValidSample ValidateForRestore(
+        string sampleType, string question, string? profile, string? pendingQuestion,
+        string intents, string? context, string split, string? sourceReview, string? source)
+    {
+        var valid = Validate(new SaveSlmSampleRequest(sampleType, question, profile, pendingQuestion, intents, context, split, sourceReview, source));
+        CheckPersonalData(valid);
+        return valid;
+    }
+
     private async Task CheckDuplicateAsync(ValidSample valid, Guid? selfId, CancellationToken ct)
     {
-        var key = BuildKey(valid.SampleType, valid.Question.ToLowerInvariant(), valid.PendingQuestion, valid.Profile, valid.Context, valid.Intents);
-        foreach (var other in await repository.SameQuestionAsync(valid.Question, includeDeleted: false, ct))
+        var key = BuildKey(valid.SampleType, valid.Question, valid.PendingQuestion, valid.Profile, valid.Context, valid.Intents);
+        foreach (var other in await repository.LiveKeysByTypeAsync(valid.SampleType, ct))
         {
-            var otherKey = BuildKey(
-                other.SampleType, other.Question.Trim().ToLowerInvariant(), other.PendingQuestion, other.Profile, other.Context, other.Intents);
-            if (other.Id != selfId && otherKey == key)
+            if (other.Id == selfId)
+                continue;
+            var otherKey = BuildKey(other.SampleType, other.Question, other.PendingQuestion, other.Profile, other.Context, other.Intents);
+            if (otherKey == key)
                 throw new SlmDuplicateSampleException(other.Id);
         }
     }
 
     private static void CheckSourceNotReserved(string? source, string? current)
     {
-        if (source is not null && source != current && SlmSampleSources.All.Contains(source))
+        if (source is not null
+            && !string.Equals(source, current, StringComparison.Ordinal)
+            && SlmSampleSources.All.Contains(source, StringComparer.OrdinalIgnoreCase))
             throw new ArgumentException($"Nguồn \"{source}\" là giá trị của hệ thống, hãy nhập nguồn tham khảo khác.");
     }
 
@@ -390,12 +484,6 @@ public class SlmSampleService(
             || SlmPersonalDataCheck.HasContact(valid.PendingQuestion)
             || SlmPersonalDataCheck.HasContact(valid.Source))
             throw new ArgumentException(PersonalDataMessage);
-    }
-
-    private static void EnsureReady(string intents)
-    {
-        if (!IsReady(intents))
-            throw new ArgumentException("Cần nhập intents trước khi gửi duyệt.");
     }
 
     public static bool IsReady(string? intents)
@@ -409,6 +497,38 @@ public class SlmSampleService(
             return false;
         }
     }
+
+    private static void Apply(SlmTrainingSample sample, ValidSample valid)
+    {
+        sample.SampleType = valid.SampleType;
+        sample.Question = valid.Question;
+        sample.Source = valid.Source ?? sample.Source;
+        sample.Profile = valid.Profile;
+        sample.PendingQuestion = valid.PendingQuestion;
+        sample.Intents = valid.Intents;
+        sample.Context = valid.Context;
+        sample.Split = valid.Split;
+        sample.SourceReview = valid.SourceReview;
+    }
+
+    private static SlmSampleVersion SnapshotOf(
+        SlmTrainingSample sample, string action, Guid? actorUserId, int? restoredFromVersion = null) => new()
+    {
+        SampleId = sample.Id,
+        Version = sample.Version,
+        ActorUserId = actorUserId,
+        Action = action,
+        RestoredFromVersion = restoredFromVersion,
+        SampleType = sample.SampleType,
+        Question = sample.Question,
+        Profile = sample.Profile,
+        PendingQuestion = sample.PendingQuestion,
+        Intents = sample.Intents,
+        Context = sample.Context,
+        Split = sample.Split,
+        SourceReview = sample.SourceReview,
+        Source = sample.Source,
+    };
 
     private static List<string> ChangedFields(SlmTrainingSample sample, ValidSample valid)
     {
@@ -430,7 +550,7 @@ public class SlmSampleService(
         return changed;
     }
 
-    private static SlmTrainingSample NewSample(ValidSample valid, string status, Guid? actorUserId) => new()
+    private static SlmTrainingSample NewSample(ValidSample valid, Guid? actorUserId) => new()
     {
         SampleType = valid.SampleType,
         Question = valid.Question,
@@ -440,7 +560,7 @@ public class SlmSampleService(
         Context = valid.Context,
         Split = valid.Split,
         SourceReview = valid.SourceReview,
-        ReviewStatus = status,
+        Version = 1,
         CreatedByUserId = actorUserId,
     };
 
@@ -448,7 +568,6 @@ public class SlmSampleService(
     {
         var sampleType = Clean(filter?.SampleType);
         var split = Clean(filter?.Split);
-        var status = Clean(filter?.ReviewStatus);
         var search = Clean(filter?.Search);
         var source = Clean(filter?.Source);
 
@@ -456,11 +575,10 @@ public class SlmSampleService(
             throw new ArgumentException($"Loại mẫu phải là một trong: {string.Join(", ", SlmSampleTypes.All)}.");
         if (split is not null && !SlmSampleSplits.All.Contains(split))
             throw new ArgumentException($"Tập phải là một trong: {string.Join(", ", SlmSampleSplits.All)}.");
-        if (status is not null && !SlmReviewStatuses.All.Contains(status))
-            throw new ArgumentException($"Trạng thái phải là một trong: {string.Join(", ", SlmReviewStatuses.All)}.");
 
         return new SlmSampleFilter(
-            sampleType, split, status, search, filter?.CreatedByUserId, AsUtc(filter?.From), AsUtc(filter?.To), source);
+            sampleType, split, search, filter?.CreatedByUserId, AsUtc(filter?.From), AsUtc(filter?.To), source,
+            filter?.Deleted ?? false);
     }
 
     private static DateTime? AsUtc(DateTime? value) => value switch
@@ -497,10 +615,13 @@ public class SlmSampleService(
         if (sourceReview is not null && sourceReview.Length > 16)
             throw new ArgumentException("Nhãn rà soát tối đa 16 ký tự.");
 
-        var intents = Clean(request.Intents) ?? "[]";
+        var intents = Clean(request.Intents)
+            ?? throw new ArgumentException("Danh sách ý định (intents) không được để trống.");
         var intentsRoot = ParseJson(intents, "Intents");
         if (intentsRoot.ValueKind != JsonValueKind.Array)
             throw new ArgumentException("Intents phải là một mảng JSON.");
+        if (intentsRoot.GetArrayLength() == 0)
+            throw new ArgumentException("Danh sách ý định (intents) không được để trống.");
 
         var profile = Clean(request.Profile);
         if (profile is not null)
@@ -543,10 +664,22 @@ public class SlmSampleService(
     private static string? NameOf(IReadOnlyDictionary<Guid, string> names, Guid? id) =>
         id is { } key && names.TryGetValue(key, out var name) ? name : null;
 
+    /// <summary>Chuẩn hóa câu hỏi để so trùng theo UC-92: không phân biệt chữ hoa, chữ thường và khoảng trắng thừa.</summary>
+    public static string NormalizeQuestion(string question) =>
+        Regex.Replace(question.Trim(), @"\s+", " ").ToLowerInvariant();
+
     private static string BuildKey(
         string sampleType, string question, string? pendingQuestion, string? profile, string? context, string intents)
     {
-        var parts = new[] { sampleType, question, pendingQuestion ?? "", Canonical(profile), Canonical(context), Canonical(intents) };
+        var parts = new[]
+        {
+            sampleType,
+            NormalizeQuestion(question),
+            pendingQuestion ?? "",
+            Canonical(profile),
+            Canonical(context),
+            Canonical(intents),
+        };
         return string.Join("\u001f", parts);
     }
 
@@ -586,7 +719,12 @@ public class SlmSampleService(
 
     private static SlmSampleDto ToDto(SlmTrainingSample sample, string? creatorName) => new(
         sample.Id, sample.SampleType, sample.Question, sample.Profile, sample.PendingQuestion, sample.Intents,
-        sample.Context, sample.Split, sample.SourceReview, sample.ReviewStatus, sample.ReviewNote,
-        sample.ReviewedByUserId, sample.ReviewedAt, sample.CreatedAt, sample.UpdatedAt,
-        sample.Source, sample.CreatedByUserId, creatorName, sample.ExportedAt);
+        sample.Context, sample.Split, sample.SourceReview, sample.CreatedAt, sample.UpdatedAt,
+        sample.Source, sample.CreatedByUserId, creatorName, sample.ExportedAt, sample.Version, sample.DeletedAt);
+
+    private static SlmSampleVersionDto ToVersionDto(SlmSampleVersionRow row) => new(
+        row.Version.Id, row.Version.Version, row.Version.Action, row.Version.RestoredFromVersion,
+        row.Version.ActorUserId, row.ActorName, row.Version.CreatedAt,
+        row.Version.SampleType, row.Version.Question, row.Version.Profile, row.Version.PendingQuestion,
+        row.Version.Intents, row.Version.Context, row.Version.Split, row.Version.SourceReview, row.Version.Source);
 }

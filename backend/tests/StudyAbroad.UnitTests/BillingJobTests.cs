@@ -27,7 +27,7 @@ internal sealed class JobHarness
 
     public JobHarness()
     {
-        Reconciler = new OrderReconciler(H.Store, H.Orders, H.Gateway, H.Store, H.Billing);
+        Reconciler = new OrderReconciler(H.Store, H.Orders, H.Gateway, H.Store, H.Billing, notifications: H.Notes);
         Jobs = JobsWith(H.Entitlements);
         Admin = new AdminOrderService(H.Store, H.Store, H.Orders, Reconciler, H.Gateway, Audit, H.Store, H.Notes);
     }
@@ -548,7 +548,7 @@ public class BillingJobTests
     }
 
     [Fact]
-    public async Task R8_EachExpiringCycleIsRemindedOnce_FamilyRemindersGoToTheOwnerOnly()
+    public async Task R8_EachExpiringCycleIsRemindedOnce_FamilyRemindersGoToOwnerAndActiveMembers()
     {
         var j = new JobHarness();
         var (buyer, owner, member) = (j.AddUser(), j.AddUser(UserRoles.Parent, 40), j.AddUser());
@@ -561,8 +561,9 @@ public class BillingJobTests
 
         Assert.Equal(2, j.Notes.Sent.Count(n => n.UserId == buyer.Id));
         Assert.Single(j.Notes.Sent, n => n.UserId == owner.Id);
-        Assert.DoesNotContain(j.Notes.Sent, n => n.UserId == member.Id);
+        Assert.Single(j.Notes.Sent, n => n.UserId == member.Id);
         Assert.Single(j.H.Email.SentEmails, e => e.To == owner.Email);
+        Assert.Single(j.H.Email.SentEmails, e => e.To == member.Email);
     }
 
     [Fact]

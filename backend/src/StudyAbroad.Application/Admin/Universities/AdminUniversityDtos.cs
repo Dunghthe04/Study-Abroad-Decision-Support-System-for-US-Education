@@ -217,7 +217,8 @@ public record UpdateOfferingRequest(
     bool? IntlHousing = null,
     decimal? HousingOnlyUsd = null,
     decimal? HousingDepositUsd = null,
-    string? Activities = null);
+    string? Activities = null,
+    string? DeadlinesJson = null);
 
 public record SetUniversityVisibilityRequest(bool IsActive, string? Reason = null);
 

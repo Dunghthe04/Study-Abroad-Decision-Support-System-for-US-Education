@@ -50,6 +50,8 @@ export interface AiUsageUserRank {
   fullName: string | null;
   email: string | null;
   metrics: AiUsageMetrics;
+  quotaUsedTokens?: number | null;
+  quotaLimitTokens?: number | null;
 }
 
 export interface AiUsageUserOverview {
@@ -57,6 +59,8 @@ export interface AiUsageUserOverview {
   fullName: string;
   email: string;
   overview: AiUsageOverview;
+  quotaUsedTokens?: number | null;
+  quotaLimitTokens?: number | null;
 }
 
 export interface AiUsageTurnRow {

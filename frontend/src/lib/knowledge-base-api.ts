@@ -3,6 +3,7 @@ import type {
   KnowledgeDocType,
   KnowledgeEmbedStatus,
   KnowledgeEntry,
+  KnowledgeEntryVersion,
   KnowledgeImportPreview,
   KnowledgeImportResult,
   KnowledgeSort,
@@ -19,6 +20,7 @@ export interface KnowledgeFilters {
   label?: string;
   topicCode?: string;
   sort?: KnowledgeSort;
+  deleted?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -65,12 +67,19 @@ export const adminKnowledgeBaseApi = {
 
   get: (id: string) => apiFetch<KnowledgeEntry>(`${base}/${encodeURIComponent(id)}`),
 
+  versions: (id: string) => apiFetch<KnowledgeEntryVersion[]>(`${base}/${encodeURIComponent(id)}/versions`),
+
   create: (data: SaveKnowledgeEntryRequest) => apiFetch<KnowledgeEntry>(base, { method: "POST", body: JSON.stringify(data) }),
 
   update: (id: string, data: SaveKnowledgeEntryRequest) =>
     apiFetch<KnowledgeEntry>(`${base}/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(data) }),
 
   remove: (id: string) => apiFetch<null>(`${base}/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  restore: (id: string) => apiFetch<KnowledgeEntry>(`${base}/${encodeURIComponent(id)}/restore`, { method: "POST" }),
+
+  restoreVersion: (id: string, version: number) =>
+    apiFetch<KnowledgeEntry>(`${base}/${encodeURIComponent(id)}/versions/${version}/restore`, { method: "POST" }),
 
   previewXlsx: (file: File, signal?: AbortSignal) => postXlsx<KnowledgeImportPreview>("preview", file, signal),
 

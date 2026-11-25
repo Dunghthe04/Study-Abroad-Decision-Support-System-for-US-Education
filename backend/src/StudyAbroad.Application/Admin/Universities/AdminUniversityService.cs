@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
@@ -44,6 +46,20 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
     private static readonly string[] AidPolicies = ["need_and_merit", "merit_only", "need_only", "none"];
     private const string DuplicateLevelMessage = "Trường đã có bậc học này.";
     private static readonly Regex StateCode = new("^[A-Z]{2}$");
+    private static readonly Dictionary<string, string> AllowedDeadlineRounds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["ED"] = "ED",
+        ["ED2"] = "ED2",
+        ["EA"] = "EA",
+        ["REA"] = "REA",
+        ["SCEA"] = "SCEA",
+        ["RD"] = "RD",
+        ["Rolling"] = "Rolling",
+    };
+    private static readonly HashSet<string> EarlyDeadlineRounds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ED", "ED2", "EA", "REA", "SCEA",
+    };
 
     public Task<PagedResult<AdminUniversityListItemDto>> SearchAsync(AdminUniversityQuery query, CancellationToken ct = default)
     {
@@ -93,7 +109,8 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
     public async Task<AdminUpdateResult<AdminUniversityDetailDto>> CreateUniversityAsync(
         CreateUniversityRequest request, Guid actorUserId, CancellationToken ct = default)
     {
-        var code = Clean(request.Code)?.ToUpperInvariant();
+        // UC-61 E3: không tự chuyển chữ thường thành chữ hoa; chữ thường phải báo lỗi
+        var code = Clean(request.Code);
         var name = Clean(request.Name);
         var city = Clean(request.City);
         var state = Clean(request.State)?.ToUpperInvariant();
@@ -107,8 +124,8 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
             errors["code"] = "Mã trường không được để trống.";
         else if (code.Length > 32)
             errors["code"] = "Mã trường tối đa 32 ký tự.";
-        else if (!Regex.IsMatch(code, "^[A-Z0-9_.-]+$"))
-            errors["code"] = "Mã trường chỉ được chứa chữ hoa, số, dấu gạch và chấm.";
+        else if (!Regex.IsMatch(code, "^[A-Z0-9.-]+$"))
+            errors["code"] = "Mã trường chỉ được chứa chữ hoa, số, dấu gạch ngang và dấu chấm.";
         else if (await repository.ExistsCodeAsync(code, ct))
             errors["code"] = "Mã trường đã tồn tại trong hệ thống.";
 
@@ -210,8 +227,9 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
 
         var studyLevel = Clean(request.StudyLevel)?.ToLowerInvariant();
         var errors = new Dictionary<string, string>();
-        if (!StudyLevels.IsValid(studyLevel))
-            errors["studyLevel"] = "Bậc học không hợp lệ.";
+        // UC-61: chỉ cho phép thêm bậc đại học (undergraduate)
+        if (studyLevel != StudyLevels.Undergraduate)
+            errors["studyLevel"] = "Chỉ hỗ trợ thêm bậc học đại học (undergraduate).";
         else if ((await repository.ListOfferingsAsync(universityId, ct)).Any(o => o.StudyLevel == studyLevel))
             errors["studyLevel"] = DuplicateLevelMessage;
         if (errors.Count > 0) return AdminUpdateResult<AdminUniversityOfferingDto>.Invalid(errors);
@@ -254,9 +272,11 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         var campusSetting = Clean(request.CampusSetting);
         var housingTypes = Clean(request.HousingTypes);
         var activities = Clean(request.Activities);
+        var rawDeadlinesJson = Clean(request.DeadlinesJson);
 
         var errors = ValidateOffering(request, academicYear, satPolicy, actPolicy, notes,
             c7GpaImportance, c7TestImportance, c7EcImportance, gpaScaleType, intlAidPolicy, campusSetting);
+        var normalizedDeadlinesJson = ValidateAndNormalizeDeadlines(rawDeadlinesJson, errors);
         ValidateSource(sourceUrl, request.RetrievedAt, sourceReliability, errors);
         var knownMajors = await repository.ListMajorsAsync(ct);
         var knownMajorIds = knownMajors.Select(m => m.Id).ToHashSet();
@@ -328,6 +348,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         AddChange(changes, "housingOnlyUsd", offering.HousingOnlyUsd, request.HousingOnlyUsd);
         AddChange(changes, "housingDepositUsd", offering.HousingDepositUsd, request.HousingDepositUsd);
         AddChange(changes, "activities", offering.Activities, activities);
+        AddChange(changes, "deadlinesJson", offering.DeadlinesJson, normalizedDeadlinesJson);
 
         offering.AcademicYear = academicYear;
         offering.TuitionUsd = request.TuitionUsd;
@@ -386,6 +407,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         offering.HousingOnlyUsd = request.HousingOnlyUsd;
         offering.HousingDepositUsd = request.HousingDepositUsd;
         offering.Activities = activities;
+        offering.DeadlinesJson = normalizedDeadlinesJson;
 
         if (requestedMajors is not null)
         {
@@ -467,7 +489,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
 
         if (academicYear is not null && academicYear.Length > 16)
             errors["academicYear"] = "Năm học tối đa 16 ký tự, ví dụ 2026-27.";
-        if (request.TuitionUsd is < 0) errors["tuitionUsd"] = "Học phí không được âm.";
+        if (request.TuitionUsd is <= 0) errors["tuitionUsd"] = "Học phí phải lớn hơn 0.";
         if (request.LivingUsd is < 0) errors["livingUsd"] = "Chi phí sinh hoạt không được âm.";
         if (request.FeesUsd is < 0) errors["feesUsd"] = "Phí bắt buộc không được âm.";
         if (request.OtherExpensesUsd is < 0) errors["otherExpensesUsd"] = "Chi phí khác không được âm.";
@@ -558,6 +580,68 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         if (request.Activities is { Length: > 4000 }) errors["activities"] = "Hoạt động tối đa 4000 ký tự.";
 
         return errors;
+    }
+
+    /// <summary>
+    /// UC-62 E3: kiểm tra JSON vòng nộp hồ sơ (ED, ED2, EA, REA, SCEA, RD, Rolling),
+    /// định dạng ngày yyyy-MM-dd, không trùng loại vòng, và hạn Early không muộn hơn RD.
+    /// </summary>
+    private static string? ValidateAndNormalizeDeadlines(string? rawJson, Dictionary<string, string> errors)
+    {
+        if (rawJson is null) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(rawJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                errors["deadlinesJson"] = "Vòng nộp hồ sơ không đúng định dạng.";
+                return null;
+            }
+
+            var parsed = new Dictionary<string, DateOnly>(StringComparer.Ordinal);
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (!AllowedDeadlineRounds.TryGetValue(prop.Name.Trim(), out var canonical))
+                {
+                    errors["deadlinesJson"] = $"Loại vòng nộp \"{prop.Name}\" không hợp lệ (chỉ nhận ED, ED2, EA, REA, SCEA, RD, Rolling).";
+                    return null;
+                }
+                if (parsed.ContainsKey(canonical))
+                {
+                    errors["deadlinesJson"] = $"Trùng loại vòng nộp \"{canonical}\".";
+                    return null;
+                }
+                if (prop.Value.ValueKind != JsonValueKind.String
+                    || !DateOnly.TryParseExact(prop.Value.GetString()?.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                {
+                    errors["deadlinesJson"] = $"Vòng {canonical} sai định dạng ngày (cần yyyy-MM-dd).";
+                    return null;
+                }
+                parsed[canonical] = date;
+            }
+
+            if (parsed.Count == 0) return null;
+
+            if (parsed.TryGetValue("RD", out var rdDate))
+            {
+                foreach (var (round, date) in parsed)
+                {
+                    if (EarlyDeadlineRounds.Contains(round) && date > rdDate)
+                    {
+                        errors["deadlinesJson"] = $"Hạn vòng {round} không được muộn hơn Regular Decision (RD).";
+                        return null;
+                    }
+                }
+            }
+
+            var normalized = parsed.ToDictionary(kv => kv.Key, kv => kv.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            return JsonSerializer.Serialize(normalized);
+        }
+        catch (JsonException)
+        {
+            errors["deadlinesJson"] = "Vòng nộp hồ sơ không đúng định dạng JSON.";
+            return null;
+        }
     }
 
     /// <summary>Đưa danh sách ngành của offering về đúng danh sách gửi lên; trả về các thay đổi để ghi audit.</summary>

@@ -24,7 +24,7 @@ public class KnowledgeWorkbookReader : IKnowledgeWorkbookReader
             .Select(row => new KnowledgeImportRow(
                 row.RowNumber, row.Get("id"), row.Get("doc_type"), row.Get("label"), row.Get("question"),
                 row.Get("answer"), row.Get("source"), row.Get("source_url"), row.Get("retrieved_at"),
-                row.Get("topic_code"), null, row.Get("note")))
+                row.Get("topic_code"), row.Get("note")))
             .ToList();
     }
 }

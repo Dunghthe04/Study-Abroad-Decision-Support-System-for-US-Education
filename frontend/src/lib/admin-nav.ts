@@ -104,12 +104,12 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/slm-samples",
     label: "Mẫu huấn luyện SLM",
-    description: "Duyệt, sửa và nhập mẫu huấn luyện SLM từ Excel",
+    description: "Tra cứu, thêm, sửa, xóa và nhập mẫu huấn luyện SLM từ Excel",
     icon: BookOpenIcon,
     filledIcon: BookOpenFilledIcon,
     section: "data",
     roles: ["admin", "moderator"],
-    useCases: ["UC-51", "UC-52"],
+    useCases: ["UC-89", "UC-90", "UC-92", "UC-93", "UC-94", "UC-95", "UC-96"],
   },
   {
     href: "/admin/knowledge-base",
@@ -119,7 +119,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: LibraryBigFilledIcon,
     section: "data",
     roles: ["admin", "moderator"],
-    useCases: ["UC-118", "UC-119", "UC-120", "UC-121", "UC-122", "UC-123"],
+    useCases: ["UC-112", "UC-113", "UC-114", "UC-115", "UC-116", "UC-117"],
   },
   {
     href: "/admin/centers",
@@ -267,12 +267,12 @@ export const ADMIN_NAV: AdminNavItem[] = [
   {
     href: "/admin/access-logs",
     label: "Nhật ký truy cập",
-    description: "Xem và lọc nhật ký ai đã xem hoặc xuất dữ liệu nhạy cảm (tài liệu xác minh, tin nhắn báo cáo, xuất mẫu)",
+    description: "Xem và lọc nhật ký ai đã xem hoặc xuất dữ liệu nhạy cảm và nhật ký thao tác hệ thống",
     icon: ShieldAlertIcon,
     filledIcon: ShieldAlertFilledIcon,
     section: "system",
     roles: ["admin"],
-    useCases: ["UC-97"],
+    useCases: ["UC-91"],
   },
 ];
 

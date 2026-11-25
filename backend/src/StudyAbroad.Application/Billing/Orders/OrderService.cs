@@ -35,9 +35,11 @@ public sealed partial class OrderService(
         if (role is not (UserRoles.Student or UserRoles.Parent))
             throw Rule("role_not_allowed", 403, "Tài khoản của bạn không thể mua gói.");
 
-        // 2. Dưới 16 tuổi chưa mua được (D9). Chưa có ngày sinh thì không giới hạn; tuổi chỉ kiểm lúc tạo đơn (P20)
+        // 2. [UC-73 E3] Dưới 16 tuổi hoặc chưa có ngày sinh đều không cho tạo đơn; tuổi chỉ kiểm lúc tạo đơn (P20)
         var user = await users.GetUserById(userId, ct) ?? throw Rule("role_not_allowed", 403, "Tài khoản của bạn không thể mua gói.");
-        if (user.DateOfBirth is { } dob && AgePolicy.GetAge(dob, AgePolicy.TodayInVietnam(nowUtc)) < AgeGroups.ChildMaxAgeExclusive)
+        if (user.DateOfBirth is null)
+            throw Rule("age_restricted", 403, "Tài khoản chưa có ngày sinh chưa thể mua gói.");
+        if (AgePolicy.GetAge(user.DateOfBirth.Value, AgePolicy.TodayInVietnam(nowUtc)) < AgeGroups.ChildMaxAgeExclusive)
             throw Rule("age_restricted", 403, "Tài khoản dưới 16 tuổi chưa thể mua gói.");
 
         // 3. Gói đang bán (không phải gói Free)

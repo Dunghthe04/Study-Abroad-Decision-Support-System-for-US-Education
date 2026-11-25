@@ -12,10 +12,10 @@ from typing import Any
 from pgvector import Vector
 
 SEARCH_SQL = """
-SELECT entry_no, question, answer, source, source_url, image_url, doc_type, label, topic_code, retrieved_at,
+SELECT entry_no, question, answer, source, source_url, doc_type, label, topic_code, retrieved_at, version,
        1 - (embedding <=> %(vector)s) AS score
 FROM app.knowledge_documents
-WHERE embedding IS NOT NULL
+WHERE embedding IS NOT NULL AND deleted_at IS NULL
 ORDER BY embedding <=> %(vector)s
 LIMIT %(top_k)s
 """
@@ -24,7 +24,7 @@ LIMIT %(top_k)s
 BY_TOPIC_SQL = """
 SELECT entry_no, question, doc_type
 FROM app.knowledge_documents
-WHERE topic_code = %(code)s AND embedding IS NOT NULL
+WHERE topic_code = %(code)s AND embedding IS NOT NULL AND deleted_at IS NULL
 ORDER BY entry_no
 """
 
@@ -37,11 +37,11 @@ class KnowledgeHit:
     answer: str  # câu trả lời chuẩn
     source: str | None  # tên nguồn
     source_url: str | None
-    image_url: str | None
     doc_type: str
     label: str
     topic_code: str | None
     retrieved_at: date | None
+    version: int
     score: float  # độ tương đồng cosine (0 đến 1) giữa câu hỏi của học sinh và câu hỏi mẫu
 
 

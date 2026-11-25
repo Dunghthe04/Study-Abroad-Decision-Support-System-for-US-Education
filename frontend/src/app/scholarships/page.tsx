@@ -8,7 +8,7 @@ import type { ScholarshipItem, ScholarshipSearchParams } from "@/types/scholarsh
 
 export const metadata: Metadata = {
   title: "Tìm học bổng – USAS",
-  description: "Tìm và lọc học bổng du học Mỹ theo bậc học, giá trị, điều kiện và hạn nộp, mỗi học bổng đều có nguồn.",
+  description: "Tìm và lọc học bổng du học Mỹ bậc đại học theo giá trị, điều kiện và hạn nộp, mỗi học bổng đều có nguồn.",
 };
 
 interface PageProps {
@@ -26,29 +26,35 @@ export default async function ScholarshipsPage({ searchParams }: PageProps) {
   };
   // Ngày hôm nay theo giờ Việt Nam, dạng yyyy-MM-dd
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
-  // Mặc định chỉ lấy học bổng còn hạn: API xếp hạn nộp tăng dần nên nếu không lọc, trang đầu toàn học bổng đã hết hạn
   const includeExpired = str(raw.includeExpired) === "true" ? true : undefined;
+  const customDeadlineFrom = str(raw.deadlineFrom);
+  // UC-29: mặc định bật lọc mở cho người Việt; người dùng có thể tắt (?vnEligible=false)
+  const vnEligible = str(raw.vnEligible) === "false" ? false : true;
 
   const params: ScholarshipSearchParams = {
     search: str(raw.search),
-    studyLevel: str(raw.studyLevel),
     coverageType: str(raw.coverageType),
     minAmountUsd: num(raw.minAmountUsd),
     maxAmountUsd: num(raw.maxAmountUsd),
     maxMinGpa4: num(raw.maxMinGpa4),
     maxMinIelts: num(raw.maxMinIelts),
+    maxMinToefl: num(raw.maxMinToefl),
+    maxMinDuolingo: num(raw.maxMinDuolingo),
     kind: str(raw.kind),
-    // App chỉ phục vụ du học sinh Việt Nam: luôn chỉ lấy học bổng mở cho người Việt
-    vnEligible: true,
+    vnEligible,
     includeExpired,
-    deadlineFrom: includeExpired ? undefined : today,
+    deadlineFrom: customDeadlineFrom ?? (includeExpired ? undefined : today),
     page: num(raw.page) || 1,
     pageSize: 20,
   };
 
   let data: PagedResult<ScholarshipItem> | null = null;
   try {
-    data = await searchScholarships(params);
+    data = await searchScholarships({
+      ...params,
+      vnEligible: vnEligible ? true : undefined,
+      includeExpired: undefined,
+    });
   } catch {
     data = null;
   }
@@ -58,7 +64,7 @@ export default async function ScholarshipsPage({ searchParams }: PageProps) {
 
   return (
     <section className="mx-auto w-full max-w-[1560px] px-4 pt-4 pb-8 sm:px-8 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden lg:px-12 lg:pb-0">
-      <ScholarshipListView data={data} params={params} today={today} />
+      <ScholarshipListView data={data} params={params} today={today} hasCustomDeadline={Boolean(customDeadlineFrom)} />
     </section>
   );
 }

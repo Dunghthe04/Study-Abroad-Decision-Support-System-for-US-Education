@@ -1,4 +1,4 @@
-import { Trash2Icon } from "lucide-react";
+import { RotateCcwIcon, Trash2Icon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { DataTableColumn } from "@/components/admin/shared/DataTable";
@@ -6,11 +6,13 @@ import { docTypeName, firstLine, formatDateTime, labelName } from "@/lib/knowled
 import type { KnowledgeEntry } from "@/types/knowledge-base";
 
 interface ColumnHandlers {
+  deleted: boolean;
   onOpen: (entry: KnowledgeEntry) => void;
   onDelete: (entry: KnowledgeEntry) => void;
+  onRestore: (entry: KnowledgeEntry) => void;
 }
 
-export function knowledgeBaseColumns({ onOpen, onDelete }: ColumnHandlers): DataTableColumn<KnowledgeEntry>[] {
+export function knowledgeBaseColumns({ deleted, onOpen, onDelete, onRestore }: ColumnHandlers): DataTableColumn<KnowledgeEntry>[] {
   return [
     {
       id: "entryNo",
@@ -57,14 +59,11 @@ export function knowledgeBaseColumns({ onOpen, onDelete }: ColumnHandlers): Data
       label: "Nguồn",
       headerClassName: "w-48",
       cellClassName: "w-48 whitespace-normal",
-      render: (entry) => <span className="line-clamp-2" title={entry.source ?? entry.sourceUrl ?? undefined}>{entry.source ? firstLine(entry.source) : (entry.sourceUrl ?? "—")}</span>,
-    },
-    {
-      id: "topicCode",
-      label: "Mã chủ đề",
-      headerClassName: "w-28",
-      cellClassName: "w-28",
-      render: (entry) => entry.topicCode ?? "—",
+      render: (entry) => (
+        <span className="line-clamp-2" title={entry.source ?? entry.sourceUrl ?? undefined}>
+          {entry.source ? firstLine(entry.source) : (entry.sourceUrl ?? <span title="Chưa có dữ liệu" aria-label="Chưa có dữ liệu" className="text-muted-foreground">—</span>)}
+        </span>
+      ),
     },
     {
       id: "retrievedAt",
@@ -81,27 +80,49 @@ export function knowledgeBaseColumns({ onOpen, onDelete }: ColumnHandlers): Data
       render: (entry) => formatDateTime(entry.updatedAt ?? entry.createdAt),
     },
     {
+      id: "version",
+      label: "Phiên bản",
+      headerClassName: "w-24 text-right",
+      cellClassName: "w-24 text-right tabular",
+      render: (entry) => `v${entry.version}`,
+    },
+    {
       id: "actions",
       label: "Thao tác",
       required: true,
       headerClassName: "w-20 text-center",
       cellClassName: "w-20 text-center",
-      render: (entry) => (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Xóa tri thức"
-          title="Xóa tri thức"
-          className="bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={(event) => {
-            event.stopPropagation();
-            onDelete(entry);
-          }}
-        >
-          <Trash2Icon />
-        </Button>
-      ),
+      render: (entry) =>
+        deleted ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Khôi phục tri thức"
+            title="Khôi phục tri thức"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRestore(entry);
+            }}
+          >
+            <RotateCcwIcon />
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Xóa tri thức"
+            title="Xóa tri thức"
+            className="bg-transparent text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete(entry);
+            }}
+          >
+            <Trash2Icon />
+          </Button>
+        ),
     },
   ];
 }

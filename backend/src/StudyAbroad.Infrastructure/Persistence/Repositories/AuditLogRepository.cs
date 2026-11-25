@@ -71,7 +71,15 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
         }
         else if (category == AuditLogConstants.CategorySlmExport)
         {
-            baseQuery = baseQuery.Where(x => x.log.Action == AuditLogConstants.SlmSampleExport || x.log.Action.StartsWith("slm"));
+            baseQuery = baseQuery.Where(x => x.log.Action == AuditLogConstants.SlmSampleExport);
+        }
+        else if (category == AuditLogConstants.CategoryKnowledgeBase)
+        {
+            baseQuery = baseQuery.Where(x => x.log.Action.StartsWith("knowledge_base.")); 
+        }
+        else if (category == AuditLogConstants.CategorySlmSample)
+        {
+            baseQuery = baseQuery.Where(x => x.log.Action.StartsWith("slm_sample.") && x.log.Action != AuditLogConstants.SlmSampleExport);
         }
         else if (category == AuditLogConstants.CategoryParent)
         {
@@ -189,9 +197,10 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
         var reportedView = counts.FirstOrDefault(c => c.Action == AuditLogConstants.LeadMessageReportView)?.Count ?? 0;
         var slmExports = counts.FirstOrDefault(c => c.Action == AuditLogConstants.SlmSampleExport)?.Count ?? 0;
         var chatViews = counts.FirstOrDefault(c => c.Action == AuditLogConstants.ReviewBatchViewItem)?.Count ?? 0;
+        var deletedBuyerViews = counts.FirstOrDefault(c => c.Action == AuditLogConstants.OrderDeletedBuyerViewed)?.Count ?? 0;
 
         return new AccessLogSummaryDto(
-            TotalSensitiveCount: centerDocs + reportedQueue + reportedView + slmExports + chatViews,
+            TotalSensitiveCount: centerDocs + reportedQueue + reportedView + slmExports + chatViews + deletedBuyerViews,
             CenterDocumentViews: centerDocs,
             ReportedMessageViews: reportedQueue + reportedView,
             SlmSampleExports: slmExports,
@@ -207,7 +216,8 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
         AuditLogConstants.LeadMessageReportQueueView or AuditLogConstants.LeadMessageReportView => AuditLogConstants.CategoryReportedMessage,
         var a when a.StartsWith("lead_message.") => AuditLogConstants.CategoryReportedMessage,
         AuditLogConstants.SlmSampleExport => AuditLogConstants.CategorySlmExport,
-        var a when a.StartsWith("slm") => AuditLogConstants.CategorySlmExport,
+        var a when a.StartsWith("knowledge_base.") => AuditLogConstants.CategoryKnowledgeBase,
+        var a when a.StartsWith("slm_sample.") => AuditLogConstants.CategorySlmSample,
         var a when a.StartsWith("parent.") => AuditLogConstants.CategoryParent,
         var a when a.StartsWith("user.") || a.StartsWith("auth.") => AuditLogConstants.CategoryAccount,
         _ => "other"
@@ -218,8 +228,21 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
         AuditLogConstants.CenterDocumentViewed => "Xem tài liệu xác minh trung tâm",
         AuditLogConstants.LeadMessageReportQueueView => "Xem danh sách tin nhắn bị báo cáo",
         AuditLogConstants.LeadMessageReportView => "Đọc tin nhắn bị báo cáo và ngữ cảnh",
-        AuditLogConstants.SlmSampleExport => "Xuất dữ liệu mẫu huấn luyện SLM (UC-102)",
+        AuditLogConstants.SlmSampleExport => "Xuất dữ liệu mẫu huấn luyện SLM (UC-96)",
+        AuditLogConstants.SlmSampleCreate => "Thêm mẫu huấn luyện SLM (UC-92)",
+        AuditLogConstants.SlmSampleUpdate => "Sửa mẫu huấn luyện SLM (UC-93)",
+        AuditLogConstants.SlmSampleDelete => "Xóa mềm mẫu huấn luyện SLM (UC-94)",
+        AuditLogConstants.SlmSampleRestore => "Khôi phục mẫu huấn luyện SLM đã xóa (UC-94)",
+        AuditLogConstants.SlmSampleRestoreVersion => "Khôi phục phiên bản cũ của mẫu SLM (UC-90)",
+        AuditLogConstants.SlmSampleImport => "Nhập mẫu huấn luyện SLM từ Excel (UC-95)",
+        AuditLogConstants.KnowledgeBaseCreate => "Thêm mục kho tri thức (UC-114)",
+        AuditLogConstants.KnowledgeBaseUpdate => "Sửa mục kho tri thức (UC-115)",
+        AuditLogConstants.KnowledgeBaseDelete => "Xóa mềm mục kho tri thức (UC-116)",
+        AuditLogConstants.KnowledgeBaseRestore => "Khôi phục mục kho tri thức đã xóa (UC-116)",
+        AuditLogConstants.KnowledgeBaseRestoreVersion => "Khôi phục phiên bản cũ của mục kho tri thức (UC-113)",
+        AuditLogConstants.KnowledgeBaseImport => "Nhập kho tri thức từ Excel (UC-117)",
         AuditLogConstants.ReviewBatchViewItem => "Xem nội dung tin nhắn chat kiểm thử (đợt duyệt)",
+        AuditLogConstants.OrderDeletedBuyerViewed => "Xem thông tin người mua của tài khoản đã xóa (UC-124)",
         "parent.acting.start" => "Bắt đầu quyền đại diện con",
         "parent.acting.stop" => "Kết thúc quyền đại diện con",
         "parent.link.create" => "Gửi yêu cầu liên kết phụ huynh",

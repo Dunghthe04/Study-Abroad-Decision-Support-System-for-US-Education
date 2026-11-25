@@ -10,19 +10,20 @@ import { cn } from "@/lib/utils";
 import type { PagedResult } from "@/types/api";
 import type { ScholarshipItem, ScholarshipSearchParams } from "@/types/scholarship";
 import { ScholarshipCard } from "./ScholarshipCard";
-import { COVERAGE_FILTER_OPTIONS, KIND_FILTER_OPTIONS, LEVEL_OPTIONS, ScholarshipFilters } from "./ScholarshipFilters";
+import { COVERAGE_FILTER_OPTIONS, KIND_FILTER_OPTIONS, ScholarshipFilters } from "./ScholarshipFilters";
 
 interface ScholarshipListViewProps {
   data: PagedResult<ScholarshipItem>;
   params: ScholarshipSearchParams;
   /** yyyy-MM-dd theo giờ Việt Nam, tính ở server để thẻ "Còn N ngày" không lệch khi hydrate */
   today: string;
+  hasCustomDeadline?: boolean;
 }
 
 const label = (list: { value: string; label: string }[], v: string) => list.find((o) => o.value === v)?.label ?? v;
 const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 
-export function ScholarshipListView({ data, params, today }: ScholarshipListViewProps) {
+export function ScholarshipListView({ data, params, today, hasCustomDeadline = false }: ScholarshipListViewProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
@@ -35,26 +36,39 @@ export function ScholarshipListView({ data, params, today }: ScholarshipListView
     resultsRef.current?.scrollTo({ top: 0 });
   }, [paramsKey]);
 
-  const navigate = (next: ScholarshipSearchParams) => {
+  const navigate = (next: ScholarshipSearchParams, keepCustomDeadline = hasCustomDeadline) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(next)) {
-      // deadlineFrom (tính từ includeExpired) và vnEligible (luôn bật) do server đặt, không đưa lên URL
-      if (v === undefined || v === "" || k === "pageSize" || k === "deadlineFrom" || k === "vnEligible" || (k === "page" && v === 1)) continue;
+      if (v === undefined || v === "" || k === "pageSize" || (k === "page" && v === 1)) continue;
+      // vnEligible mặc định bật (true): chỉ ghi lên URL khi người dùng tắt (false)
+      if (k === "vnEligible") {
+        if (v === false) qs.set("vnEligible", "false");
+        continue;
+      }
+      // deadlineFrom mặc định là hôm nay: chỉ ghi lên URL khi người dùng chủ động chọn ngày
+      if (k === "deadlineFrom" && !keepCustomDeadline) continue;
       qs.set(k, String(v));
     }
     const q = qs.toString();
     startTransition(() => router.push(`/scholarships${q ? `?${q}` : ""}`));
   };
-  const apply = (patch: Partial<ScholarshipSearchParams>) => navigate({ ...params, ...patch, page: 1 });
-  const reset = () => navigate({});
+  const apply = (patch: Partial<ScholarshipSearchParams>) => {
+    const nextCustom = "deadlineFrom" in patch ? Boolean(patch.deadlineFrom) : hasCustomDeadline;
+    navigate({ ...params, ...patch, page: 1 }, nextCustom);
+  };
+  const reset = () => navigate({}, false);
 
   const chips: { key: string; label: string; clear: Partial<ScholarshipSearchParams> }[] = [];
   if (params.search) chips.push({ key: "search", label: `Từ khóa: "${params.search}"`, clear: { search: undefined } });
-  if (params.studyLevel) chips.push({ key: "level", label: label(LEVEL_OPTIONS, params.studyLevel), clear: { studyLevel: undefined } });
+  if (params.vnEligible === false) chips.push({ key: "vn", label: "Bao gồm học bổng ngoài danh sách VN", clear: { vnEligible: true } });
   if (params.kind) chips.push({ key: "kind", label: label(KIND_FILTER_OPTIONS, params.kind), clear: { kind: undefined } });
   if (params.coverageType)
     chips.push({ key: "coverage", label: `Hỗ trợ: ${label(COVERAGE_FILTER_OPTIONS, params.coverageType)}`, clear: { coverageType: undefined } });
   if (params.includeExpired) chips.push({ key: "expired", label: "Gồm cả đã hết hạn", clear: { includeExpired: undefined } });
+  if (hasCustomDeadline && params.deadlineFrom) {
+    const [y, m, d] = params.deadlineFrom.slice(0, 10).split("-");
+    chips.push({ key: "deadlineFrom", label: `Hạn từ ${d}/${m}/${y}`, clear: { deadlineFrom: undefined } });
+  }
   if (params.minAmountUsd !== undefined || params.maxAmountUsd !== undefined) {
     const { minAmountUsd: lo, maxAmountUsd: hi } = params;
     const range = lo !== undefined && hi !== undefined ? `${usd(lo)} – ${usd(hi)}` : lo !== undefined ? `≥ ${usd(lo)}` : `≤ ${usd(hi!)}`;
@@ -62,6 +76,8 @@ export function ScholarshipListView({ data, params, today }: ScholarshipListView
   }
   if (params.maxMinGpa4 !== undefined) chips.push({ key: "gpa", label: `Đủ GPA ${params.maxMinGpa4.toFixed(1)}`, clear: { maxMinGpa4: undefined } });
   if (params.maxMinIelts !== undefined) chips.push({ key: "ielts", label: `Đủ IELTS ${params.maxMinIelts.toFixed(1)}`, clear: { maxMinIelts: undefined } });
+  if (params.maxMinToefl !== undefined) chips.push({ key: "toefl", label: `Đủ TOEFL ${params.maxMinToefl}`, clear: { maxMinToefl: undefined } });
+  if (params.maxMinDuolingo !== undefined) chips.push({ key: "duolingo", label: `Đủ Duolingo ${params.maxMinDuolingo}`, clear: { maxMinDuolingo: undefined } });
   const filterCount = chips.filter((c) => c.key !== "search").length;
 
   const filterToggle = (
@@ -89,7 +105,7 @@ export function ScholarshipListView({ data, params, today }: ScholarshipListView
                     <SheetDescription className="text-xs">Chọn điều kiện để chỉ thấy học bổng bạn nộp được</SheetDescription>
                   </SheetHeader>
                   <div className="flex-1 overflow-y-auto p-4">
-                    <ScholarshipFilters values={params} onChange={apply} />
+                    <ScholarshipFilters values={params} hasCustomDeadline={hasCustomDeadline} onChange={apply} />
                   </div>
                   <div className="sticky bottom-0 border-t border-line bg-background p-4">
                     <Button type="button" className="w-full" onClick={() => setMobileFilterOpen(false)}>
@@ -176,7 +192,7 @@ export function ScholarshipListView({ data, params, today }: ScholarshipListView
             desktopFilterOpen && "lg:block",
           )}
         >
-          <ScholarshipFilters values={params} onChange={apply} />
+          <ScholarshipFilters values={params} hasCustomDeadline={hasCustomDeadline} onChange={apply} />
         </aside>
 
         <div ref={resultsRef} className="space-y-4 pt-1.5 lg:h-full lg:overflow-y-auto lg:px-1.5 lg:pb-8">
@@ -214,15 +230,22 @@ export function ScholarshipListView({ data, params, today }: ScholarshipListView
               <div className="space-y-1">
                 <h3 className="font-heading text-lg font-bold text-foreground">Chưa có học bổng khớp bộ lọc</h3>
                 <p className="mx-auto max-w-md text-sm text-muted-foreground">
-                  Thử bỏ bớt điều kiện về giá trị, GPA hoặc IELTS, hoặc tìm bằng từ khóa khác.
+                  Thử nới bộ lọc về giá trị, GPA, điểm tiếng Anh (IELTS, TOEFL, Duolingo) hoặc bỏ lọc «Chỉ học bổng mở cho người Việt».
                 </p>
               </div>
-              {chips.length > 0 && (
-                <Button onClick={reset} variant="outline" className="gap-2">
-                  <RotateCcwIcon className="size-4" />
-                  Đặt lại tất cả bộ lọc
-                </Button>
-              )}
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {params.vnEligible !== false && (
+                  <Button onClick={() => apply({ vnEligible: false })} variant="outline">
+                    Bỏ lọc chỉ dành cho người Việt
+                  </Button>
+                )}
+                {chips.length > 0 && (
+                  <Button onClick={reset} variant="outline" className="gap-2">
+                    <RotateCcwIcon className="size-4" />
+                    Đặt lại tất cả bộ lọc
+                  </Button>
+                )}
+              </div>
             </div>
           ) : (
             <ul aria-busy={isPending} className={cn("space-y-4", isPending && "pointer-events-none opacity-60 transition-opacity")}>

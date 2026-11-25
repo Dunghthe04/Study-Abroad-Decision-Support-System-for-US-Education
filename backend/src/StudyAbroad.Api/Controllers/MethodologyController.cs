@@ -23,8 +23,8 @@ public class MethodologyController(ICostParameterCatalog costParameters) : Contr
     [ProducesResponseType(typeof(ParametersResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<ParametersResponse>> GetParameters(CancellationToken ct)
     {
-        // Danh mục ít đổi nên cho trình duyệt giữ ngắn hạn
-        Response.Headers.CacheControl = "public, max-age=300";
+        // Tham số chi phí do Moderator sửa trong app_settings: không cache để trang hiện giá trị mới ngay
+        Response.Headers.CacheControl = "no-store";
         var cost = await costParameters.ListAsync(ct);
         return new ParametersResponse(AlgorithmParameters.Version, [.. AlgorithmParameters.All, .. cost]);
     }

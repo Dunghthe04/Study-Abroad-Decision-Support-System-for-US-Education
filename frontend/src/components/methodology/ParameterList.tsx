@@ -45,7 +45,7 @@ const SECTIONS: { id: string; title: string; description: string; steps: string[
     id: "cost",
     title: "Ước tính chi phí",
     description:
-      "Các khoản và tỉ giá dùng khi ước tính chi phí học và đối chiếu với ngân sách. Mục ghi “Chưa áp dụng” là khoản hệ thống chưa tính vào ước tính hiện tại.",
+      "Các khoản và tỉ giá dùng khi ước tính chi phí học và đối chiếu với ngân sách.",
     steps: ["Chi phí"],
   },
 ];

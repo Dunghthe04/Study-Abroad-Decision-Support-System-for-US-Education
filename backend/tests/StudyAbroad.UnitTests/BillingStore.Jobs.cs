@@ -11,6 +11,8 @@ internal sealed partial class BillingStore : IBillingJobRepository, IAdminOrderR
 {
     /// <summary>Tài khoản để nối tên và email người mua / admin (AdminOrderRepository nối bảng users).</summary>
     public Dictionary<Guid, User> Accounts { get; } = [];
+    /// <summary>[UC-75, UC-124] Bản chụp thông tin người mua đã xóa.</summary>
+    public Dictionary<Guid, DeletedBuyerRetention> Retentions { get; } = [];
 
     public Task<IReadOnlyList<PendingOrderRef>> ListPendingOrdersAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<PendingOrderRef>>(Orders.Where(o => o.Status == OrderStatuses.Pending).OrderBy(o => o.ExpiresAt)
@@ -41,30 +43,53 @@ internal sealed partial class BillingStore : IBillingJobRepository, IAdminOrderR
         Task.FromResult(Cycles.FirstOrDefault(c => c.Id == cycleId));
 
     public Task<IReadOnlyDictionary<Guid, long>> SumCycleTokensAsync(IReadOnlyCollection<Guid> cycleIds, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyDictionary<Guid, long>>(Calls.Where(a => a.UserSubscriptionId is { } id && cycleIds.Contains(id) && a.Kind == BillingRules.MeteredAiKind)
+        Task.FromResult<IReadOnlyDictionary<Guid, long>>(Calls.Where(a => a.UserSubscriptionId is { } id && cycleIds.Contains(id)
+                && (a.Kind == BillingRules.ClaudeAiKind || a.Kind == BillingRules.OllamaAiKind))
             .GroupBy(a => a.UserSubscriptionId!.Value).ToDictionary(g => g.Key, g => g.Sum(a => (long)(a.TotalTokens ?? 0))));
 
     private AdminOrderRow Row(PaymentTransaction o)
     {
         var buyer = o.UserId is { } b && Accounts.TryGetValue(b, out var u) ? u : null;
         var admin = o.HandledByUserId is { } a && Accounts.TryGetValue(a, out var h) ? h : null;
+        var retention = o.DeletedBuyerRetentionId is { } rid && Retentions.TryGetValue(rid, out var ret) ? ret : null;
         return new AdminOrderRow(o, Plans.FirstOrDefault(p => p.Id == o.SubscriptionPlanId)?.Code,
-            o.UserSubscriptionId is { } c ? Cycles.FirstOrDefault(x => x.Id == c) : null, buyer?.FullName, buyer?.Email, admin?.FullName);
+            o.UserSubscriptionId is { } c ? Cycles.FirstOrDefault(x => x.Id == c) : null,
+            buyer?.FullName, buyer?.Email, admin?.FullName, retention?.BuyerCode);
     }
 
-    public Task<(IReadOnlyList<AdminOrderRow> Items, int TotalCount)> ListAsync(string? status, string? q, int page, int pageSize, CancellationToken ct = default)
+    public Task<(IReadOnlyList<AdminOrderRow> Items, int TotalCount)> ListAsync(
+        string? status, string? q, int page, int pageSize,
+        DateTime? fromUtc = null, DateTime? toUtcExclusive = null, CancellationToken ct = default)
     {
         var rows = Orders.Select(Row).AsEnumerable();
         if (!string.IsNullOrEmpty(status))
             rows = rows.Where(r => r.Order.Status == status);
+        if (fromUtc.HasValue)
+            rows = rows.Where(r => r.Order.CreatedAt >= fromUtc.Value);
+        if (toUtcExclusive.HasValue)
+            rows = rows.Where(r => r.Order.CreatedAt < toUtcExclusive.Value);
         if (!string.IsNullOrEmpty(q))
-            rows = long.TryParse(q, out var code)
-                ? rows.Where(r => r.Order.OrderCode == code)
-                : rows.Where(r => r.BuyerEmail != null && r.BuyerEmail.Contains(q, StringComparison.OrdinalIgnoreCase));
+        {
+            if (long.TryParse(q, out var code))
+                rows = rows.Where(r => r.Order.OrderCode == code
+                    || (r.Order.GatewayTransactionId != null && r.Order.GatewayTransactionId.Equals(q, StringComparison.OrdinalIgnoreCase)));
+            else
+                rows = rows.Where(r =>
+                    (r.BuyerEmail != null && r.BuyerEmail.Contains(q, StringComparison.OrdinalIgnoreCase))
+                    || (r.BuyerName != null && r.BuyerName.Contains(q, StringComparison.OrdinalIgnoreCase))
+                    || (r.Order.GatewayTransactionId != null && r.Order.GatewayTransactionId.Contains(q, StringComparison.OrdinalIgnoreCase))
+                    || (r.DeletedBuyerCode != null && r.DeletedBuyerCode.Contains(q, StringComparison.OrdinalIgnoreCase)));
+        }
         var all = rows.OrderByDescending(r => r.Order.CreatedAt).ThenByDescending(r => r.Order.OrderCode).ToList();
         return Task.FromResult<(IReadOnlyList<AdminOrderRow>, int)>((all.Skip((page - 1) * pageSize).Take(pageSize).ToList(), all.Count));
     }
 
     public Task<AdminOrderRow?> FindAsync(long orderCode, CancellationToken ct = default) =>
         Task.FromResult(Orders.FirstOrDefault(o => o.OrderCode == orderCode) is { } order ? Row(order) : null);
+
+    public Task<DeletedBuyerRetention?> FindDeletedBuyerRetentionAsync(long orderCode, CancellationToken ct = default)
+    {
+        var order = Orders.FirstOrDefault(o => o.OrderCode == orderCode);
+        return Task.FromResult(order?.DeletedBuyerRetentionId is { } rid && Retentions.TryGetValue(rid, out var ret) ? ret : null);
+    }
 }

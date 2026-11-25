@@ -53,23 +53,42 @@ import type {
 const PAGE_SIZE = 20;
 
 const CATEGORY_TABS: { id: AccessLogCategory; label: string; icon: React.ElementType }[] = [
-  { id: "all_sensitive", label: "Dữ liệu nhạy cảm (UC-97)", icon: ShieldAlertIcon },
+  { id: "all_sensitive", label: "Dữ liệu nhạy cảm (UC-91)", icon: ShieldAlertIcon },
   { id: "center_document", label: "Tài liệu trung tâm", icon: FileTextIcon },
   { id: "reported_message", label: "Tin nhắn vi phạm", icon: MailWarningIcon },
-  { id: "slm_export", label: "Xuất mẫu SLM (UC-102)", icon: DownloadIcon },
+  { id: "slm_export", label: "Xuất mẫu SLM (UC-96)", icon: DownloadIcon },
+  { id: "knowledge_base", label: "Kho tri thức", icon: FileTextIcon },
+  { id: "slm_sample", label: "Thao tác mẫu SLM", icon: FileTextIcon },
   { id: "parent", label: "Đại diện & Phụ huynh", icon: UsersIcon },
   { id: "account", label: "Tài khoản & Phân quyền", icon: UserCheckIcon },
-  { id: "all", label: "Tất cả nhật ký", icon: ShieldCheckIcon },
+  { id: "all", label: "Nhật ký thao tác (Tất cả)", icon: ShieldCheckIcon },
 ];
 
 /** Ánh xạ tên thao tác sang mô tả tiếng Việt thân thiện */
 const ACTION_FRIENDLY_NAMES: Record<string, string> = {
-  // Dữ liệu nhạy cảm UC-97
+  // Dữ liệu nhạy cảm UC-91
   "center.document_viewed": "Xem tài liệu xác minh trung tâm",
   "lead_message.report_queue_view": "Xem danh sách tin nhắn bị báo cáo",
   "lead_message.report_view": "Đọc tin nhắn bị báo cáo & ngữ cảnh",
-  "slm_sample.export": "Xuất mẫu huấn luyện SLM (UC-102)",
+  "slm_sample.export": "Xuất mẫu huấn luyện SLM (UC-96)",
   "review_batch.view_item": "Xem tin nhắn chat kiểm thử (đợt duyệt)",
+  "order.deleted_buyer_viewed": "Xem thông tin người mua của tài khoản đã xóa (UC-124)",
+
+  // Kho tri thức (UC-113..117)
+  "knowledge_base.create": "Thêm mục kho tri thức (UC-114)",
+  "knowledge_base.update": "Sửa mục kho tri thức (UC-115)",
+  "knowledge_base.delete": "Xóa mềm mục kho tri thức (UC-116)",
+  "knowledge_base.restore": "Khôi phục mục kho tri thức đã xóa (UC-116)",
+  "knowledge_base.restore_version": "Khôi phục phiên bản cũ của mục kho tri thức (UC-113)",
+  "knowledge_base.import": "Nhập kho tri thức từ Excel (UC-117)",
+
+  // Mẫu huấn luyện SLM (UC-90, UC-92..95)
+  "slm_sample.create": "Thêm mẫu huấn luyện SLM (UC-92)",
+  "slm_sample.update": "Sửa mẫu huấn luyện SLM (UC-93)",
+  "slm_sample.delete": "Xóa mềm mẫu huấn luyện SLM (UC-94)",
+  "slm_sample.restore": "Khôi phục mẫu huấn luyện SLM đã xóa (UC-94)",
+  "slm_sample.restore_version": "Khôi phục phiên bản cũ của mẫu SLM (UC-90)",
+  "slm_sample.import": "Nhập mẫu huấn luyện SLM từ Excel (UC-95)",
 
   // Phụ huynh & Đại diện
   "parent.acting.start": "Bắt đầu quyền đại diện con",
@@ -120,6 +139,8 @@ const ENTITY_FRIENDLY_NAMES: Record<string, string> = {
   parent_link: "Liên kết phụ huynh",
   managed_child: "Hồ sơ con quản lý",
   slm_sample: "Mẫu huấn luyện SLM",
+  slm_training_sample: "Mẫu huấn luyện SLM",
+  knowledge_document: "Kho tri thức",
 };
 
 /** Ánh xạ tên trường trong JSON sang nhãn tiếng Việt */
@@ -266,11 +287,11 @@ function getRoleLabel(role: string | null | undefined): string {
 }
 
 /**
- * [UC-97] Xem và lọc nhật ký truy cập và xuất dữ liệu nhạy cảm (Administrator only).
+ * [UC-91] Xem và lọc nhật ký truy cập và xuất dữ liệu nhạy cảm (Administrator only).
  * Quy tắc: Nhật ký bất biến, không sửa và không xóa được.
  */
 export function AccessLogsView() {
-  // Mặc định là "all_sensitive" (Dữ liệu nhạy cảm theo đúng đặc tả UC-97)
+  // Mặc định là "all_sensitive" (Dữ liệu nhạy cảm theo đúng đặc tả UC-91)
   const [category, setCategory] = useState<AccessLogCategory>("all_sensitive");
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -516,7 +537,7 @@ export function AccessLogsView() {
                           Chưa ghi nhận lượt truy cập dữ liệu nhạy cảm nào
                         </p>
                         <p className="text-xs text-muted-foreground max-w-md">
-                          Chưa có lượt xem tài liệu xác minh (UC-59), đọc tin nhắn báo cáo (UC-58) hay xuất mẫu SLM (UC-102) trong khoảng thời gian này.
+                          Chưa có lượt xem tài liệu xác minh (UC-55), đọc tin nhắn báo cáo (UC-54) hay xuất mẫu SLM (UC-96) trong khoảng thời gian này.
                         </p>
                         <Button
                           type="button"

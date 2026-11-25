@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using StudyAbroad.Application.Admin.Settings;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.Recommendations;
 using StudyAbroad.Domain.Constants;
@@ -11,20 +12,19 @@ namespace StudyAbroad.Application.Costs;
 /// Chỉ xem. Khác AlgorithmParameters (hằng số trong code), phần lớn giá trị ở đây là DỮ LIỆU đang chạy: phí visa và SEVIS nằm trong
 /// app_settings, mức ngân sách trong metadata hồ sơ, tỉ giá lấy mỗi ngày, chỉ số giá theo bang trong bảng riêng. Nên danh mục đọc lúc gọi.
 /// Mỗi nguồn đọc lỗi thì tham số tương ứng ghi "Chưa có số liệu", không làm hỏng cả trang.
-/// Ba tham số đặc tả có (phí Visa Integrity Fee, tỷ lệ tăng chi phí hằng năm, biên độ giá bán ra) CHƯA được ước tính chi phí dùng:
-/// ghi rõ "Chưa áp dụng" thay vì bỏ qua hoặc điền số.
+/// Phí Visa Integrity Fee, tỷ lệ tăng chi phí hằng năm, biên độ giá bán ra và số năm học đại học đọc từ app_settings (cost.parameters,
+/// Moderator sửa), giống giá trị ước tính chi phí đang dùng.
 /// </summary>
 public interface ICostParameterCatalog
 {
     Task<IReadOnlyList<AlgorithmParameter>> ListAsync(CancellationToken ct = default);
 }
 
-public class CostParameterCatalog(ICostRepository costs, IExchangeRateProvider rates) : ICostParameterCatalog
+public class CostParameterCatalog(ICostRepository costs, IExchangeRateProvider rates, ICostParametersSettingService settings) : ICostParameterCatalog
 {
     /// <summary>Mã bước của các tham số chi phí (giao diện gom thành phần "Ước tính chi phí").</summary>
     public const string Step = "Chi phí";
 
-    public const string NotInUse = "Chưa áp dụng";
     public const string NoData = "Chưa có số liệu";
 
     public async Task<IReadOnlyList<AlgorithmParameter>> ListAsync(CancellationToken ct = default)
@@ -33,6 +33,7 @@ public class CostParameterCatalog(ICostRepository costs, IExchangeRateProvider r
         var metadataJson = await Attempt(() => costs.GetSettingJsonAsync(ProfileConstants.ProfileMetadataAppSettingKey, ct));
         var quote = await Attempt(() => rates.GetQuoteAsync(ct));
         var states = await Attempt(() => costs.GetStateLivingCostsAsync(ct));
+        var p = await Attempt(() => settings.GetCurrentParametersAsync(ct)) ?? CostParameters.Default;
 
         var fees = CostService.ParseFees(feesJson);
         var withIndex = states?.Where(s => s.Index is not null).ToList() ?? [];
@@ -45,18 +46,18 @@ public class CostParameterCatalog(ICostRepository costs, IExchangeRateProvider r
                 "Khoản thu một lần, cộng vào chi phí năm đầu. Số tiền lấy từ cài đặt hệ thống" + Source(feesJson, "visaSourceUrl")),
             Parameter("sevis_fee", "Phí SEVIS I-901", Money(fees.SevisFeeUsd, "USD"),
                 "Khoản thu một lần, cộng vào chi phí năm đầu. Số tiền lấy từ cài đặt hệ thống" + Source(feesJson, "sevisSourceUrl")),
-            Parameter("visa_integrity_fee", "Phí Visa Integrity Fee", NotInUse,
-                "Khoản thu một lần của visa Mỹ, nhưng ước tính chi phí hiện chưa cộng vào chi phí năm đầu."),
-            Parameter("cost_growth", "Tỷ lệ tăng chi phí hằng năm", NotInUse,
-                "Tổng chi phí cả khóa hiện tính bằng chi phí năm đầu nhân số năm, cộng các khoản thu một lần; chưa tăng theo từng năm."),
+            Parameter("visa_integrity_fee", "Phí Visa Integrity Fee", Money(p.VisaIntegrityFeeUsd, "USD"),
+                "Khoản thu một lần của visa Mỹ, cộng vào chi phí năm đầu cùng phí MRV và SEVIS. Moderator sửa trên màn quản lý tham số."),
+            Parameter("cost_growth", "Tỷ lệ tăng chi phí hằng năm", Pct(p.AnnualEscalationRate),
+                "Chi phí năm thứ k bằng chi phí năm đầu nhân (1 + tỷ lệ)^(k − 1) khi tính tổng cả khóa."),
             Parameter("study_years", "Số năm học",
-                $"Đại học {Years(StudyLevels.Undergraduate)} năm · Cao đẳng cộng đồng {Years(StudyLevels.CommunityCollege)} năm · Thạc sĩ {Years(StudyLevels.Master)} năm",
+                $"Đại học {p.UndergraduateYears} năm · Cao đẳng cộng đồng {Years(StudyLevels.CommunityCollege)} năm · Thạc sĩ {Years(StudyLevels.Master)} năm",
                 "Dùng để tính tổng chi phí cả khóa."),
             Parameter("exchange_rate", "Tỉ giá USD sang VNĐ",
                 quote is null ? NoData : $"{Number(quote.VndPerUsd)} VNĐ/USD",
                 RateMeaning(quote)),
-            Parameter("exchange_margin", "Biên độ giá bán ra của ngân hàng", NotInUse,
-                "Số VNĐ tham khảo hiện là tỉ giá trung bình thị trường, chưa cộng biên độ giá bán ra của ngân hàng."),
+            Parameter("exchange_margin", "Biên độ giá bán ra của ngân hàng", Pct(p.BankSellRateSpread),
+                "Cộng lên tỉ giá trung bình thị trường khi quy đổi USD sang VNĐ; số VNĐ chỉ để tham khảo."),
             Parameter("exchange_fallback", "Tỉ giá dự phòng", $"{Number(CostConstants.FallbackVndPerUsd)} VNĐ/USD",
                 "Dùng khi chưa từng lấy được tỉ giá từ nguồn công khai."),
             Parameter("state_cost_index", "Chỉ số giá sinh hoạt theo bang",
@@ -132,6 +133,8 @@ public class CostParameterCatalog(ICostRepository costs, IExchangeRateProvider r
             : null;
 
     private static int Years(string level) => CostCalculator.YearsFor(level) ?? 0;
+
+    private static string Pct(decimal rate) => $"{(rate * 100m).ToString("0.##", CultureInfo.InvariantCulture)}%";
 
     private static string Money(decimal? amount, string unit) => amount is { } value ? $"{Number(value)} {unit}" : NoData;
 

@@ -796,7 +796,7 @@ export const notificationsApi = {
   markAllRead: () => apiFetch<{ updated: number }>("/api/v1/notifications/read-all", { method: "POST" }),
 };
 
-// [UC-97] Admin xem và lọc nhật ký truy cập dữ liệu nhạy cảm
+// [UC-91] Admin xem và lọc nhật ký truy cập dữ liệu nhạy cảm
 export const accessLogsApi = {
   list: (params?: AccessLogFilterQuery) => {
     const sp = new URLSearchParams();

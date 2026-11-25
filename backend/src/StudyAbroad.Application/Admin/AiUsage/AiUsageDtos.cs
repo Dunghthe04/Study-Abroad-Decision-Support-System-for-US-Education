@@ -29,10 +29,14 @@ public record AiUsageOverviewDto(
     IReadOnlyList<AiUsageByDay> ByDay);
 
 /// <summary>Một người trong bảng xếp hạng token. FullName và Email trống nếu tài khoản đã bị xóa (dòng nhật ký vẫn còn).</summary>
-public record AiUsageUserRankDto(Guid UserId, string? FullName, string? Email, AiUsageMetrics Metrics);
+public record AiUsageUserRankDto(
+    Guid UserId, string? FullName, string? Email, AiUsageMetrics Metrics,
+    long? QuotaUsedTokens = null, long? QuotaLimitTokens = null);
 
 /// <summary>Tổng quan token riêng của một người: cùng cấu trúc với tổng thể nhưng chỉ tính các lần gọi của người đó.</summary>
-public record AiUsageUserOverviewDto(Guid UserId, string FullName, string Email, AiUsageOverviewDto Overview);
+public record AiUsageUserOverviewDto(
+    Guid UserId, string FullName, string Email, AiUsageOverviewDto Overview,
+    long? QuotaUsedTokens = null, long? QuotaLimitTokens = null);
 
 /// <summary>
 /// Một lượt chat trong danh sách của một người: tin trả lời của hệ thống (Role assistant) hoặc dòng báo lỗi khi advisor sập (Role system),
@@ -87,8 +91,8 @@ public record AiUsageTurnRow(
 /// <summary>Thông tin chung của một lượt chat (tin nhắn và phiên chứa nó), để dựng chi tiết một lượt.</summary>
 public record AiUsageTurnHeader(Guid MessageId, Guid SessionId, Guid UserId, DateTime CreatedAt, string Role, string? Outcome);
 
-/// <summary>Họ tên và email của người dùng, lấy từ bảng users để gắn vào số liệu.</summary>
-public record AiUsageUserInfo(Guid Id, string FullName, string Email);
+/// <summary>Họ tên, email và vai trò của người dùng, lấy từ bảng users để gắn vào số liệu.</summary>
+public record AiUsageUserInfo(Guid Id, string FullName, string Email, string? Role = null);
 
 /// <summary>Dòng thô theo người do truy vấn gộp trả về (chưa tính trung bình), cùng ý nghĩa với AiUsageGroupRow.</summary>
 public record AiUsageUserRow(

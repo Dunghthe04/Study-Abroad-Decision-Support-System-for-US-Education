@@ -9,7 +9,10 @@ import {
   BookOpenIcon,
   BookmarkCheckIcon,
   Building2Icon,
+  CalculatorIcon,
   ChevronDownIcon,
+  MapPinIcon,
+  ScaleIcon,
   CreditCardIcon,
   CrownIcon,
   GaugeIcon,
@@ -124,9 +127,16 @@ export function SiteHeader() {
     ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ", icon: InboxIcon }] : []),
   ];
 
+  const isCostActive =
+    pathname.startsWith("/costs") ||
+    pathname.startsWith("/universities/compare") ||
+    pathname.startsWith("/universities/living-costs");
+
   const isLinkActive = (href: string) => {
     if (href === "/") return pathname === href;
-    if (href === "/universities") return pathname.startsWith("/universities") || pathname.startsWith("/university");
+    if (href === "/universities") {
+      return !isCostActive && (pathname.startsWith("/universities") || pathname.startsWith("/university"));
+    }
     return pathname.startsWith(href);
   };
 
@@ -449,6 +459,37 @@ export function SiteHeader() {
                 </li>
               );
             })}
+            <li>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label="Menu Chi phí"
+                  className={cn(
+                    "relative inline-flex h-11 cursor-pointer items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium outline-none transition-colors",
+                    "after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:rounded-full after:transition-transform after:duration-300 hover:after:scale-x-100 motion-reduce:after:transition-none",
+                    "after:bg-white",
+                    isCostActive ? "font-semibold text-white after:scale-x-100" : "text-white/80 hover:text-white",
+                  )}
+                >
+                  <CalculatorIcon className="size-4 shrink-0" aria-hidden />
+                  Chi phí
+                  <ChevronDownIcon className="size-3.5 shrink-0 opacity-80" aria-hidden />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" sideOffset={4} className="w-60 p-1.5">
+                  <DropdownMenuItem className={MENU_ITEM} render={<Link href="/costs" />}>
+                    <CalculatorIcon />
+                    Ước tính chi phí trường
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className={MENU_ITEM} render={<Link href="/universities/compare" />}>
+                    <ScaleIcon />
+                    So sánh chi phí trường
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className={MENU_ITEM} render={<Link href="/universities/living-costs" />}>
+                    <MapPinIcon />
+                    Chi phí sinh hoạt theo bang
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </li>
           </ul>
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             {rightLinks.map((l) => {

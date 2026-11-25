@@ -6,7 +6,6 @@ namespace StudyAbroad.Application.Scholarships;
 /// <summary>[USAS-2030] Bộ lọc tìm học bổng công khai (UC-29).</summary>
 public record ScholarshipSearchQuery(
     string? Search = null,
-    string? StudyLevel = null,
     decimal? MinAmountUsd = null,
     decimal? MaxAmountUsd = null,
     string? CoverageType = null,
@@ -16,10 +15,12 @@ public record ScholarshipSearchQuery(
     DateOnly? DeadlineFrom = null,
     int Page = 1,
     int PageSize = 20,
-    /// <summary>loại học bổng: merit | need | merit_and_need | athletic | program | external | other</summary>
+    /// <summary>loại học bổng: merit | need | merit_and_need | athletic | program | other (không nhận external)</summary>
     string? Kind = null,
     /// <summary>true: chỉ học bổng mở cho người Việt (chưa rõ thì bị loại)</summary>
-    bool? VnEligible = null);
+    bool? VnEligible = null,
+    decimal? MaxMinToefl = null,
+    decimal? MaxMinDuolingo = null);
 
 /// <summary>Không có cột quản trị (người sửa, trạng thái ẩn).</summary>
 public record ScholarshipDto(
@@ -46,7 +47,14 @@ public record ScholarshipDto(
     bool? Renewable = null,
     bool? VnEligible = null,
     string? ApplicationMethod = null,
-    string? ApplyUrl = null);
+    string? ApplyUrl = null,
+    int? MinSat = null,
+    int? MinAct = null,
+    decimal? MinToefl = null,
+    decimal? MinDuolingo = null,
+    bool? MeritBased = null,
+    bool? NeedBased = null,
+    string? MajorRestriction = null);
 
 public interface IScholarshipSearchRepository
 {

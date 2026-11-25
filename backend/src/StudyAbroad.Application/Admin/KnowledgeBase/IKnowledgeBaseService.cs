@@ -4,25 +4,47 @@ namespace StudyAbroad.Application.Admin.KnowledgeBase;
 
 public interface IKnowledgeBaseService
 {
-    /// <summary>Danh sách một trang. page từ 1; pageSize bị giới hạn 1 đến 100. Bộ lọc lạ thì ném ArgumentException.</summary>
+    /// <summary>UC-112: danh sách một trang. page từ 1; pageSize bị giới hạn 1 đến 100. Bộ lọc lạ thì ném ArgumentException.</summary>
     Task<PagedResult<KnowledgeEntryDto>> GetPageAsync(KnowledgeEntryFilter filter, int page, int pageSize, CancellationToken ct = default);
 
+    /// <summary>UC-113: xem chi tiết mục tri thức (kể cả mục đã xóa - chỉ đọc).</summary>
     Task<KnowledgeEntryDto?> GetAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Dữ liệu sai thì ArgumentException; entry_no đã dùng thì KnowledgeDuplicateEntryException. Bỏ trống entry_no thì lấy số lớn nhất cộng 1.</summary>
-    Task<KnowledgeEntryDto> CreateAsync(SaveKnowledgeEntryRequest request, CancellationToken ct = default);
+    /// <summary>UC-113: danh sách phiên bản bất biến của một mục tri thức, mới nhất trước. Null nếu không tồn tại mục.</summary>
+    Task<IReadOnlyList<KnowledgeEntryVersionDto>?> GetVersionsAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Sửa mọi trường trừ entry_no. Null nếu không có dòng. Câu hỏi đổi thì vector bị xóa để tạo lại.</summary>
-    Task<KnowledgeEntryDto?> UpdateAsync(Guid id, SaveKnowledgeEntryRequest request, CancellationToken ct = default);
+    /// <summary>UC-114: tạo mục mới ở phiên bản 1, ghi nhật ký thao tác. Dữ liệu sai thì ArgumentException; entry_no đã dùng thì KnowledgeDuplicateEntryException.</summary>
+    Task<KnowledgeEntryDto> CreateAsync(
+        SaveKnowledgeEntryRequest request, Guid actorUserId,
+        string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
 
-    /// <summary>Xóa hẳn. False nếu không có dòng.</summary>
-    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
+    /// <summary>UC-115: sửa mọi trường trừ entry_no, tạo phiên bản mới nếu đổi và ghi nhật ký. Null nếu không có dòng; mục đã xóa thì KnowledgeEntryDeletedException.</summary>
+    Task<KnowledgeEntryDto?> UpdateAsync(
+        Guid id, SaveKnowledgeEntryRequest request, Guid actorUserId,
+        string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
 
-    /// <summary>Đọc file xlsx, kiểm tra mọi dòng, trả 100 dòng đầu và mọi lỗi. Không ghi gì. File hỏng thì InvalidDataException.</summary>
+    /// <summary>UC-116: xóa mềm mục tri thức, xóa vector để chat ngừng dùng và ghi nhật ký. False nếu không có hoặc đã xóa.</summary>
+    Task<bool> DeleteAsync(
+        Guid id, Guid actorUserId,
+        string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
+
+    /// <summary>UC-116 3a: khôi phục mục đã xóa mềm, tạo lại vector và ghi nhật ký. Null nếu không tồn tại.</summary>
+    Task<KnowledgeEntryDto?> RestoreAsync(
+        Guid id, Guid actorUserId,
+        string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
+
+    /// <summary>UC-113 3a: khôi phục phiên bản cũ bằng cách tạo phiên bản mới có nội dung đó, tạo lại vector nếu câu hỏi đổi và ghi nhật ký.</summary>
+    Task<KnowledgeEntryDto?> RestoreVersionAsync(
+        Guid id, int version, Guid actorUserId,
+        string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
+
+    /// <summary>UC-117: đọc file xlsx, kiểm tra mọi dòng, trả 100 dòng đầu và mọi lỗi. Không ghi gì. File hỏng thì InvalidDataException.</summary>
     Task<KnowledgeImportPreviewDto> PreviewAsync(Stream workbook, CancellationToken ct = default);
 
-    /// <summary>Thêm hoặc cập nhật theo entry_no trong một transaction; dòng lỗi được báo và bỏ qua.</summary>
-    Task<KnowledgeImportResultDto> ImportAsync(Stream workbook, CancellationToken ct = default);
+    /// <summary>UC-117: thêm hoặc cập nhật theo entry_no trong một transaction, tạo phiên bản mới, ghi nhật ký; dòng lỗi được báo và bỏ qua.</summary>
+    Task<KnowledgeImportResultDto> ImportAsync(
+        Stream workbook, Guid actorUserId,
+        string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
 
     /// <summary>Tiến độ tạo vector. Không hỏi được advisor thì trả Available = false chứ không ném lỗi.</summary>
     Task<KnowledgeEmbedStatusDto> GetEmbedStatusAsync(CancellationToken ct = default);

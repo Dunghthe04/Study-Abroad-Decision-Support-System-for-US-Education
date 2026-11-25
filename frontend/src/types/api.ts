@@ -359,12 +359,10 @@ export interface Citation {
   snippet: string | null;
   /** Ngày thu thập thông tin của nguồn, dạng yyyy-MM-dd. Null là kho chưa ghi ngày. */
   retrievedAt?: string | null;
-}
-/** Ảnh minh họa kèm câu trả lời: link https tới ảnh (lấy từ cột image_url của dòng kho tri thức), trình duyệt tải thẳng từ link. */
-export interface ChatMedia {
-  kind: "image";
-  url: string;
-  alt: string;
+  /** Mã mục kho tri thức (id / entry_no) đã dùng (UC-36). */
+  entryNo?: number | null;
+  /** Số phiên bản của mục kho tri thức lúc trả lời (UC-36, UC-115). */
+  version?: number | null;
 }
 // Nút gợi ý: bấm thì gửi `value` như tin nhắn của học sinh
 export interface QuickReply {
@@ -401,7 +399,6 @@ export interface AssistantAction {
 export interface AdvisorChatResponse {
   answer: string;
   citations: Citation[];
-  media?: ChatMedia[] | null; // ảnh minh họa của câu trả lời, trống nếu không có
   disclaimer: string | null;
   sessionId: string | null;
   quickReplies?: QuickReply[] | null;
@@ -415,7 +412,7 @@ export interface AdvisorChatResponse {
 }
 
 export interface ChatLock {
-  reason: "premium_required" | "quota_exhausted";
+  reason: "premium_required" | "quota_exhausted" | "premium_tokens_exhausted";
   resetsAt: string | null;
 }
 
@@ -954,17 +951,19 @@ export interface CenterProfileChangeDto {
   reviewReason?: string | null;
 }
 
-/** [UC-97] Danh mục lọc nhật ký truy cập dữ liệu nhạy cảm. */
+/** [UC-91] Danh mục lọc nhật ký truy cập dữ liệu nhạy cảm và nhật ký thao tác. */
 export type AccessLogCategory =
   | "all"
   | "all_sensitive"
   | "center_document"
   | "reported_message"
   | "slm_export"
+  | "knowledge_base"
+  | "slm_sample"
   | "parent"
   | "account";
 
-/** [UC-97] Một dòng nhật ký truy cập hoặc xuất dữ liệu nhạy cảm (Administrator only). */
+/** [UC-91] Một dòng nhật ký truy cập hoặc thao tác (Administrator only). */
 export interface AccessLogDto {
   id: string;
   createdAt: string;
@@ -982,7 +981,7 @@ export interface AccessLogDto {
   userAgent?: string | null;
 }
 
-/** [UC-97] Tham số truy vấn bộ lọc nhật ký truy cập. */
+/** [UC-91] Tham số truy vấn bộ lọc nhật ký truy cập và thao tác. */
 export interface AccessLogFilterQuery {
   category?: AccessLogCategory | string;
   action?: string;
@@ -995,7 +994,7 @@ export interface AccessLogFilterQuery {
   pageSize?: number;
 }
 
-/** [UC-97] Thống kê tổng quan số lượt truy cập nhạy cảm theo nhóm thao tác. */
+/** [UC-91] Thống kê tổng quan số lượt truy cập nhạy cảm theo nhóm thao tác. */
 export interface AccessLogSummaryDto {
   totalSensitiveCount: number;
   centerDocumentViews: number;

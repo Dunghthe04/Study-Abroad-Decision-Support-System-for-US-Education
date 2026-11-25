@@ -14,7 +14,9 @@ namespace StudyAbroad.Api.Controllers;
 [ApiController]
 [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Moderator}")]
 [Route("api/v1/admin/settings")]
-public class AdminSettingsController(IGradeScaleSettingService gradeScale) : ControllerBase
+public class AdminSettingsController(
+    IGradeScaleSettingService gradeScale,
+    ICostParametersSettingService costParameters) : ControllerBase
 {
     [HttpGet("grade-scale")]
     public Task<GradeScaleSettingDto> GetGradeScale(CancellationToken ct) => gradeScale.GetAsync(ct);
@@ -39,6 +41,25 @@ public class AdminSettingsController(IGradeScaleSettingService gradeScale) : Con
             GradeScaleUpdateStatus.Invalid => BadRequest(new { errors = result.Errors }),
             GradeScaleUpdateStatus.Conflict => Conflict(new { errors = result.Errors, current = result.Value }),
             _ => Ok(new GradeScaleSavedDto(result.Value!, result.RecomputedProfiles)),
+        };
+    }
+
+    [HttpGet("cost-parameters")]
+    public Task<CostParametersSettingDto> GetCostParameters(CancellationToken ct) => costParameters.GetAsync(ct);
+
+    [HttpPut("cost-parameters")]
+    [Authorize(Roles = UserRoles.Moderator)]
+    public async Task<ActionResult<CostParametersSettingDto>> UpdateCostParameters(
+        [FromBody] UpdateCostParametersRequest request, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } actorId) return Unauthorized();
+
+        var result = await costParameters.UpdateAsync(request, actorId, ct);
+        return result.Status switch
+        {
+            CostParametersUpdateStatus.Invalid => BadRequest(new { errors = result.Errors }),
+            CostParametersUpdateStatus.Conflict => Conflict(new { errors = result.Errors, current = result.Value }),
+            _ => Ok(result.Value!),
         };
     }
 }

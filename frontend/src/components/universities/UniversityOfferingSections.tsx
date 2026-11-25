@@ -23,15 +23,20 @@ import {
   deadlineRemainingText,
   gpaScaleTypeLabel,
   housingTypeLabel,
+  isValidRate,
   MISSING_UNIVERSITY_DATA,
   schoolAidPolicy,
   schoolImportanceClass,
   schoolImportanceLabel,
   scoreRange,
+  universityDate,
   universityDeadlines,
+  universityHost,
   universityMoney,
   universityNumber,
+  universityUrl,
 } from "@/lib/university-display";
+import { MissingValue } from "@/components/shared/missing-value";
 import { actPolicyLabel, satPolicyLabel } from "@/lib/admin-university-display";
 import {
   DetailRows,
@@ -41,6 +46,36 @@ import {
   RangeTrack,
 } from "./UniversityDetailParts";
 import { findFieldSource, SourceTooltip } from "./UniversitySourceTooltip";
+
+function GroupSourceFooter({
+  sources,
+  fields,
+  fallbackUrl,
+  fallbackDate,
+}: {
+  sources: UniversitySource[];
+  fields: string[];
+  fallbackUrl?: string | null;
+  fallbackDate?: string | null;
+}) {
+  const matched = findFieldSource(sources, ...fields);
+  const url = universityUrl(matched?.sourceUrl ?? fallbackUrl);
+  const retrievedAt = matched?.retrievedAt ?? fallbackDate ?? null;
+  if (!url && !retrievedAt) return null;
+  return (
+    <p className="text-xs text-ink-3">
+      Nguồn:{" "}
+      {url ? (
+        <a href={url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-ink-2">
+          {universityHost(url)}
+        </a>
+      ) : (
+        <MissingValue />
+      )}
+      {retrievedAt && ` · lấy ngày ${universityDate(retrievedAt)}`}
+    </p>
+  );
+}
 
 export function UniversityCosts({
   offering,
@@ -57,12 +92,14 @@ export function UniversityCosts({
     living: findFieldSource(sources, "living_usd"),
     fees: findFieldSource(sources, "fees_usd"),
     other: findFieldSource(sources, "other_expenses_usd"),
+    insurance: findFieldSource(sources, "health_insurance_usd"),
   };
   const total = annualPublishedCost(offering);
   const tuition = offering.tuitionUsd;
   const living = offering.livingUsd;
   const fees = offering.feesUsd;
   const other = offering.otherExpensesUsd;
+  const insurance = offering.healthInsuranceUsd;
 
   const costBreakdown = [
     {
@@ -97,6 +134,15 @@ export function UniversityCosts({
       subNote: null,
     },
     {
+      key: "insurance",
+      label: "Bảo hiểm y tế bắt buộc",
+      amount: insurance,
+      colorClass: "bg-warn/70",
+      indicatorClass: "bg-warn/70",
+      note: null,
+      subNote: null,
+    },
+    {
       key: "other",
       label: "Chi phí khác (sách vở, đi lại)",
       amount: other,
@@ -111,7 +157,7 @@ export function UniversityCosts({
   const displayTotal = total ?? (breakdownSum > 0 ? breakdownSum : null);
 
   // [USAS-2067] Phí nộp hồ sơ là khoản một lần, không nằm trong tổng chi phí hằng năm; in-state chỉ để tham khảo
-  const hasExtraFees = offering.applicationFeeUsd != null || offering.tuitionInStateUsd != null || offering.healthInsuranceUsd != null;
+  const hasExtraFees = offering.applicationFeeUsd != null || offering.tuitionInStateUsd != null;
 
   const hasAid = Boolean(
     offering.intlAidPolicy ||
@@ -206,10 +252,11 @@ export function UniversityCosts({
         ) : (
           <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
             <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-              <GridDataItem icon={GraduationCapIcon} label="Học phí" value={<SourceTooltip source={costSourceByKey.tuition}>{universityMoney(offering.tuitionUsd)}</SourceTooltip>} />
-              <GridDataItem icon={HomeIcon} label="Sinh hoạt phí" value={<SourceTooltip source={costSourceByKey.living}>{universityMoney(offering.livingUsd)}</SourceTooltip>} />
-              <GridDataItem icon={FileTextIcon} label="Phí bắt buộc" value={<SourceTooltip source={costSourceByKey.fees}>{universityMoney(offering.feesUsd)}</SourceTooltip>} />
-              <GridDataItem icon={WalletIcon} label="Chi phí khác" value={<SourceTooltip source={costSourceByKey.other}>{universityMoney(offering.otherExpensesUsd)}</SourceTooltip>} />
+              <GridDataItem icon={GraduationCapIcon} label="Học phí" value={offering.tuitionUsd != null ? <SourceTooltip source={costSourceByKey.tuition}>{universityMoney(offering.tuitionUsd)}</SourceTooltip> : <MissingValue />} />
+              <GridDataItem icon={HomeIcon} label="Sinh hoạt phí" value={offering.livingUsd != null ? <SourceTooltip source={costSourceByKey.living}>{universityMoney(offering.livingUsd)}</SourceTooltip> : <MissingValue />} />
+              <GridDataItem icon={FileTextIcon} label="Phí bắt buộc" value={offering.feesUsd != null ? <SourceTooltip source={costSourceByKey.fees}>{universityMoney(offering.feesUsd)}</SourceTooltip> : <MissingValue />} />
+              <GridDataItem icon={ShieldPlusIcon} label="Bảo hiểm y tế" value={offering.healthInsuranceUsd != null ? <SourceTooltip source={costSourceByKey.insurance}>{universityMoney(offering.healthInsuranceUsd)}</SourceTooltip> : <MissingValue />} />
+              <GridDataItem icon={WalletIcon} label="Chi phí khác" value={offering.otherExpensesUsd != null ? <SourceTooltip source={costSourceByKey.other}>{universityMoney(offering.otherExpensesUsd)}</SourceTooltip> : <MissingValue />} />
             </div>
           </div>
         )}
@@ -222,13 +269,6 @@ export function UniversityCosts({
                   icon={FileTextIcon}
                   label="Phí nộp hồ sơ (một lần, chưa tính vào tổng/năm)"
                   value={<SourceTooltip source={findFieldSource(sources, "application_fee_usd")}>{universityMoney(offering.applicationFeeUsd)}</SourceTooltip>}
-                />
-              )}
-              {offering.healthInsuranceUsd != null && (
-                <GridDataItem
-                  icon={ShieldPlusIcon}
-                  label="Bảo hiểm y tế bắt buộc"
-                  value={<SourceTooltip source={findFieldSource(sources, "health_insurance_usd")}>{`${universityMoney(offering.healthInsuranceUsd)} / năm`}</SourceTooltip>}
                 />
               )}
               {offering.tuitionInStateUsd != null && (
@@ -296,6 +336,13 @@ export function UniversityCosts({
             </div>
           </div>
         )}
+
+        <GroupSourceFooter
+          sources={sources}
+          fields={["coa_total_usd", "tuition_usd", "health_insurance_usd", "living_usd", "intl_aid_avg_usd"]}
+          fallbackUrl={offering.sourceUrl}
+          fallbackDate={offering.retrievedAt}
+        />
 
         {scholarships}
       </div>
@@ -378,13 +425,13 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
     { label: "3.00 – 3.24", value: offering.gpaPct300To324 },
     { label: "2.50 – 2.99", value: offering.gpaPct250To299 },
     { label: "Dưới 2.50", value: offering.gpaPctBelow250 },
-  ].filter((row): row is { label: string; value: number } => row.value != null);
+  ].filter((row): row is { label: string; value: number } => isValidRate(row.value));
 
   // Chính sách nộp của SAT và ACT nằm trên thẻ điểm của từng kỳ thi; dòng C7 chỉ là mức coi trọng điểm thi
-  const importanceFactors: { label: string; value: string | null; note?: string }[] = [
-    { label: "Điểm trung bình (GPA)", value: offering.c7GpaImportance },
-    { label: "Điểm thi chuẩn hóa (SAT/ACT)", value: offering.c7TestImportance },
-    { label: "Hoạt động ngoại khóa", value: offering.c7EcImportance },
+  const importanceFactors: { label: string; value: string | null; sourceField: string; note?: string }[] = [
+    { label: "Điểm trung bình (GPA)", value: offering.c7GpaImportance, sourceField: "c7_gpa_importance" },
+    { label: "Điểm thi chuẩn hóa (SAT/ACT)", value: offering.c7TestImportance, sourceField: "c7_test_importance" },
+    { label: "Hoạt động ngoại khóa", value: offering.c7EcImportance, sourceField: "c7_ec_importance" },
   ].filter((item) => item.value != null);
 
   return (
@@ -602,11 +649,19 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
                     {item.note && <p className="text-xs text-ink-3">{item.note}</p>}
                   </div>
                   <span className={cn("text-sm", schoolImportanceClass(item.value))}>
-                    {schoolImportanceLabel(item.value)}
+                    <SourceTooltip source={findFieldSource(sources, item.sourceField)}>
+                      {schoolImportanceLabel(item.value)}
+                    </SourceTooltip>
                   </span>
                 </div>
               ))}
             </div>
+            <GroupSourceFooter
+              sources={sources}
+              fields={["c7_gpa_importance", "c7_test_importance", "c7_ec_importance"]}
+              fallbackUrl={offering.sourceUrl}
+              fallbackDate={offering.retrievedAt}
+            />
           </div>
         )}
 
@@ -636,9 +691,15 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
                 })}
               </div>
             ) : (
-              <p className="text-sm text-ink-3">{MISSING_UNIVERSITY_DATA}</p>
+              <p className="text-sm"><MissingValue /></p>
             )}
           </div>
+          <GroupSourceFooter
+            sources={sources}
+            fields={["deadlines_json", "deadline_ed", "deadline_ed2", "deadline_ea", "deadline_rea", "deadline_scea", "deadline_rd", "deadline_rolling"]}
+            fallbackUrl={offering.sourceUrl}
+            fallbackDate={offering.retrievedAt}
+          />
         </div>
       </div>
     </DetailSection>
@@ -755,6 +816,13 @@ export function UniversityCampusLife({ offering, sources }: { offering: Universi
             </div>
           </div>
         )}
+
+        <GroupSourceFooter
+          sources={sources}
+          fields={["housing_types", "activities", "intl_housing", "fy_on_campus_pct", "ug_on_campus_pct", "housing_only_usd"]}
+          fallbackUrl={offering.sourceUrl}
+          fallbackDate={offering.retrievedAt}
+        />
       </div>
     </DetailSection>
   );
@@ -820,7 +888,7 @@ export function UniversityStatistics({
     { label: "Hồ sơ quốc tế nộp", value: universityNumber(offering.intlApplicants), sourceField: "intl_applicants" },
     { label: "Hồ sơ quốc tế được nhận", value: universityNumber(offering.intlAdmitted), sourceField: "intl_admitted" },
     { label: "Số sinh viên quốc tế đang theo học", value: universityNumber(internationalStudentCount), sourceField: "international_student_count" },
-    { label: "Tỷ lệ SV / giảng viên", value: offering.studentFacultyRatio != null ? `${offering.studentFacultyRatio} : 1` : MISSING_UNIVERSITY_DATA },
+    { label: "Tỷ lệ SV / giảng viên", value: offering.studentFacultyRatio != null ? `${offering.studentFacultyRatio} : 1` : MISSING_UNIVERSITY_DATA, sourceField: "student_faculty_ratio" },
   ].filter((r) => r.value !== MISSING_UNIVERSITY_DATA);
 
   return (
@@ -853,6 +921,13 @@ export function UniversityStatistics({
             </div>
           </div>
         )}
+
+        <GroupSourceFooter
+          sources={sources}
+          fields={["retention_rate_1yr", "grad_rate_6yr", "intl_acceptance_rate", "student_faculty_ratio", "applicants_total"]}
+          fallbackUrl={offering.sourceUrl}
+          fallbackDate={offering.retrievedAt}
+        />
       </div>
     </DetailSection>
   );
@@ -897,7 +972,7 @@ export function UniversityMajors({ offering, sources }: { offering: UniversityOf
               ))}
             </div>
           ) : (
-            <p className="text-sm text-ink-3">{MISSING_UNIVERSITY_DATA}</p>
+            <p className="text-sm"><MissingValue /></p>
           )}
         </div>
         {majorsSource && (
