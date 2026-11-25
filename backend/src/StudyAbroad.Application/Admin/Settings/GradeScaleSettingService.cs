@@ -79,8 +79,8 @@ public class GradeScaleSettingService(
         var (rows, total) = await repository.GetHistoryAsync(page, pageSize, ct);
         var items = rows.Select(r =>
         {
-            var (oldConfig, newConfig) = ReadDetail(r.Log.DetailJson);
-            return new GradeScaleHistoryItemDto(r.Log.CreatedAt, r.Log.ActorUserId, r.ActorName, oldConfig, newConfig);
+            var (oldConfig, newConfig, recomputedCount) = ReadDetail(r.Log.DetailJson);
+            return new GradeScaleHistoryItemDto(r.Log.CreatedAt, r.Log.ActorUserId, r.ActorName, oldConfig, newConfig, recomputedCount);
         }).ToList();
         return new PagedResult<GradeScaleHistoryItemDto>(items, page, pageSize, total);
     }
@@ -93,20 +93,25 @@ public class GradeScaleSettingService(
     private async Task<int> RecomputeTranscriptGpasAsync(GradeScaleConfigDto oldConfig, GradeScaleConfigDto newConfig, CancellationToken ct)
     {
         var oldIsTable = oldConfig.Method != GradeScale.LinearMethod;
-        var count = 0;
+        var changedIds = new List<Guid>();
         foreach (var (profile, scores) in await repository.GetTranscriptGpaProfilesAsync(ct))
         {
             if (TranscriptGpa.SubjectAverage10(scores) is not { } average10) continue;
-            var fromTranscript = profile.OverallGpa == ToStored(GradeScale.Interpolate(average10, oldConfig))
+            var fromTranscript = string.Equals(profile.GpaMode, "transcript", StringComparison.OrdinalIgnoreCase)
+                || profile.OverallGpa == ToStored(GradeScale.Interpolate(average10, oldConfig))
                 || (oldIsTable && profile.OverallGpa == GradeScale.Lookup(average10, oldConfig));
             if (!fromTranscript) continue;
 
             var newGpa = ToStored(GradeScale.Interpolate(average10, newConfig));
             if (newGpa == profile.OverallGpa) continue;
             profile.OverallGpa = newGpa;
-            count++;
+            changedIds.Add(profile.Id);
         }
-        return count;
+
+        if (changedIds.Count > 0)
+            await repository.InvalidateGpaAnalysisCacheAsync(changedIds, ct);
+
+        return changedIds.Count;
     }
 
     // overall_gpa là numeric(5,2): Postgres làm tròn 2 số lẻ, nửa lên (3.625 → 3.63), nên so và lưu theo đúng cách đó
@@ -150,17 +155,20 @@ public class GradeScaleSettingService(
             ? current is null && sent is null
             : current.Value.ToUniversalTime().Ticks / 10 == sent.Value.ToUniversalTime().Ticks / 10;
 
-    private static (GradeScaleConfigDto? Old, GradeScaleConfigDto? New) ReadDetail(string? json)
+    private static (GradeScaleConfigDto? Old, GradeScaleConfigDto? New, int? RecomputedProfiles) ReadDetail(string? json)
     {
-        if (string.IsNullOrWhiteSpace(json)) return (null, null);
+        if (string.IsNullOrWhiteSpace(json)) return (null, null, null);
         try
         {
             using var doc = JsonDocument.Parse(json);
-            return (Read(doc.RootElement, "old"), Read(doc.RootElement, "new"));
+            int? recomputed = doc.RootElement.TryGetProperty("recomputedProfiles", out var rp) && rp.ValueKind == JsonValueKind.Number
+                ? rp.GetInt32()
+                : null;
+            return (Read(doc.RootElement, "old"), Read(doc.RootElement, "new"), recomputed);
         }
         catch (JsonException)
         {
-            return (null, null);
+            return (null, null, null);
         }
 
         static GradeScaleConfigDto? Read(JsonElement root, string name) =>
