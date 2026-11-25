@@ -5,7 +5,11 @@ public record UniversityDetailDto(
     string? Website, string? Control, decimal? AcceptanceRate, int? InternationalStudentCount,
     bool IsIvy, string? LogoUrl, string? CoverUrl, IReadOnlyList<string> GalleryUrls,
     IReadOnlyList<UniversityOfferingDto> Offerings, IReadOnlyList<UniversityRankingDto> Rankings,
-    IReadOnlyList<UniversitySourceDto> Sources);
+    IReadOnlyList<UniversitySourceDto> Sources,
+    IReadOnlyList<UniversityImageCreditDto>? ImageCredits = null);
+
+/// <summary>Ghi công ảnh bìa / ảnh trường theo giấy phép (Commons).</summary>
+public record UniversityImageCreditDto(string Url, string? License, string? Author, string? SourcePageUrl);
 
 public record UniversityMajorDto(string Name, string? CipCode, bool IsStem, bool IsVerified);
 
@@ -37,7 +41,8 @@ public record UniversityOfferingDto(
     string? ActPolicy = null,
     decimal? ActSubmitPct = null,
     decimal? ApplicationFeeUsd = null,
-    decimal? TuitionInStateUsd = null);
+    decimal? TuitionInStateUsd = null,
+    decimal? HealthInsuranceUsd = null);
 
 public record UniversityRankingDto(
     string Publisher, string Name, int Rank, bool IsTie, string RankDisplay,

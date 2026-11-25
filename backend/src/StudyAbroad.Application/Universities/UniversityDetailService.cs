@@ -31,7 +31,8 @@ public class UniversityDetailService(IUniversityDetailRepository repository) : I
             PublicUrl(o.SourceUrl), o.RetrievedAt, o.SourceReliability,
             o.AvgGpaWeighted, o.GpaScaleType, o.FyOnCampusPct, o.UgOnCampusPct, o.HousingTypes,
             o.IntlHousing, o.HousingOnlyUsd, o.HousingDepositUsd, o.StudentFacultyRatio,
-            o.Activities, o.CampusSetting, o.ActPolicy, o.ActSubmitPct, o.ApplicationFeeUsd, o.TuitionInStateUsd)).ToList();
+            o.Activities, o.CampusSetting, o.ActPolicy, o.ActSubmitPct, o.ApplicationFeeUsd, o.TuitionInStateUsd,
+            o.HealthInsuranceUsd)).ToList();
         var sources = data.Evidence.OrderByDescending(e => e.CreatedAt).ThenBy(e => e.FieldName).ThenBy(e => e.Id)
             .Select(MapSource).Where(s => s.SourceUrl is not null)
             .DistinctBy(s => new { s.FieldName, s.SourceUrl, s.FieldValue, s.Status, s.DataYear, s.AppliedToSnapshot, s.Normalization })
@@ -41,7 +42,11 @@ public class UniversityDetailService(IUniversityDetailRepository repository) : I
             data.StateName, PublicUrl(university.Website), university.Control, university.AcceptanceRate,
             university.InternationalStudentCount, university.IsIvy, MediaUrl("logo"), MediaUrl("cover"),
             media.Where(m => m.Type == "gallery").Select(m => PublicUrl(m.Url)).OfType<string>().Distinct().Take(20).ToList(),
-            offerings, data.Rankings.Select(r => r with { SourceUrl = PublicUrl(r.SourceUrl) }).ToList(), sources);
+            offerings, data.Rankings.Select(r => r with { SourceUrl = PublicUrl(r.SourceUrl) }).ToList(), sources,
+            // Ghi công ảnh bìa và ảnh trường đang hiện trên trang (logo là của trường, không cần)
+            media.Where(m => m.Type is "cover" or "gallery" && (m.License != null || m.Author != null))
+                .Select(m => new UniversityImageCreditDto(PublicUrl(m.Url) ?? m.Url, m.License, m.Author, PublicUrl(m.SourcePageUrl)))
+                .DistinctBy(c => c.Url).Take(21).ToList());
     }
 
     public Task<PagedResult<UniversityListItemDto>> SearchAsync(UniversitySearchQuery query, CancellationToken ct = default) =>
