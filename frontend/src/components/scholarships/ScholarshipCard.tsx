@@ -69,7 +69,6 @@ export function ScholarshipCard({ scholarship: s, today, showSchool = true }: { 
           <div className="flex flex-wrap gap-1.5">
             <Badge variant="neutral">{LEVEL_LABELS[s.studyLevel] ?? s.studyLevel}</Badge>
             {s.kind && <Badge variant="neutral">{KIND_LABELS[s.kind] ?? s.kind}</Badge>}
-            {s.vnEligible === true && <Badge variant="brand">Mở cho du học sinh Việt Nam</Badge>}
           </div>
           <h3 className="font-heading text-lg font-bold leading-snug text-balance text-foreground">{s.name}</h3>
           {(showSchool || s.provider) && (

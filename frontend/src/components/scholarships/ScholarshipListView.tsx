@@ -38,8 +38,8 @@ export function ScholarshipListView({ data, params, today }: ScholarshipListView
   const navigate = (next: ScholarshipSearchParams) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(next)) {
-      // deadlineFrom do server tự tính từ includeExpired, không đưa lên URL
-      if (v === undefined || v === "" || k === "pageSize" || k === "deadlineFrom" || (k === "page" && v === 1)) continue;
+      // deadlineFrom (tính từ includeExpired) và vnEligible (luôn bật) do server đặt, không đưa lên URL
+      if (v === undefined || v === "" || k === "pageSize" || k === "deadlineFrom" || k === "vnEligible" || (k === "page" && v === 1)) continue;
       qs.set(k, String(v));
     }
     const q = qs.toString();
@@ -54,7 +54,6 @@ export function ScholarshipListView({ data, params, today }: ScholarshipListView
   if (params.kind) chips.push({ key: "kind", label: label(KIND_FILTER_OPTIONS, params.kind), clear: { kind: undefined } });
   if (params.coverageType)
     chips.push({ key: "coverage", label: `Hỗ trợ: ${label(COVERAGE_FILTER_OPTIONS, params.coverageType)}`, clear: { coverageType: undefined } });
-  if (params.vnEligible) chips.push({ key: "vn", label: "Mở cho người Việt", clear: { vnEligible: undefined } });
   if (params.includeExpired) chips.push({ key: "expired", label: "Gồm cả đã hết hạn", clear: { includeExpired: undefined } });
   if (params.minAmountUsd !== undefined || params.maxAmountUsd !== undefined) {
     const { minAmountUsd: lo, maxAmountUsd: hi } = params;

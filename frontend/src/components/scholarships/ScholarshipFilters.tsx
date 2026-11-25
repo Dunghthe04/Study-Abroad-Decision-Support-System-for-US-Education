@@ -73,11 +73,6 @@ export function ScholarshipFilters({ values, onChange, className }: ScholarshipF
         {choice("Loại học bổng", KIND_FILTER_OPTIONS, values.kind, (kind) => onChange({ kind }))}
         {choice("Phần được hỗ trợ", COVERAGE_FILTER_OPTIONS, values.coverageType, (coverageType) => onChange({ coverageType }))}
         <BooleanFilterRow
-          label="Mở cho du học sinh Việt Nam"
-          checked={values.vnEligible === true}
-          onCheckedChange={(checked) => onChange({ vnEligible: checked ? true : undefined })}
-        />
-        <BooleanFilterRow
           label="Hiện cả học bổng đã hết hạn"
           checked={values.includeExpired === true}
           onCheckedChange={(checked) => onChange({ includeExpired: checked ? true : undefined })}

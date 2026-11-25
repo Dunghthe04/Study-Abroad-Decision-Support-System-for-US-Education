@@ -38,7 +38,8 @@ export default async function ScholarshipsPage({ searchParams }: PageProps) {
     maxMinGpa4: num(raw.maxMinGpa4),
     maxMinIelts: num(raw.maxMinIelts),
     kind: str(raw.kind),
-    vnEligible: str(raw.vnEligible) === "true" ? true : undefined,
+    // App chỉ phục vụ du học sinh Việt Nam: luôn chỉ lấy học bổng mở cho người Việt
+    vnEligible: true,
     includeExpired,
     deadlineFrom: includeExpired ? undefined : today,
     page: num(raw.page) || 1,
