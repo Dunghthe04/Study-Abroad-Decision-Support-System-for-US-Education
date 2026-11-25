@@ -247,10 +247,13 @@ export function ParentConsentForm() {
             </div>
               </>
             )}
-            <p className="text-body-s text-ink-3">
-              Căn cứ: Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15 (Điều 24) và Nghị định 356/2025/NĐ-CP. Hệ thống lưu thời điểm,
-              email nhận thư mời và địa chỉ IP khi bạn trả lời.
-            </p>
+            {/* Văn bản do admin công bố đã có dòng căn cứ; chỉ ghi khi dùng nội dung dự phòng để không lặp */}
+            {policy === null && (
+              <p className="text-body-s text-ink-3">
+                Căn cứ: Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15 (Điều 24) và Nghị định 356/2025/NĐ-CP. Hệ thống lưu thời điểm,
+                email nhận thư mời và địa chỉ IP khi bạn trả lời.
+              </p>
+            )}
           </div>
 
           <Separator />
