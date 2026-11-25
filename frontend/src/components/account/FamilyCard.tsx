@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   LogOutIcon,
   MailIcon,
@@ -23,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -73,12 +74,25 @@ function useNow(intervalMs: number): number | null {
   return now;
 }
 
-// [UC-126..131] Mục "Chia sẻ cho gia đình": chỉ hiện khi GET subscription có family (AccountView quyết định).
+// [UC-126..131] Mục "Chia sẻ cho gia đình": luôn có với Học sinh, Phụ huynh (UC-105 bước 2). hasFamily do AccountView suy ra
+// từ GET subscription: false thì không gọi GET family (sẽ 404 not_in_family) mà hiện lời mời mua gói; undefined là đang tải.
 // Tối đa 4 thành viên (2 Học sinh + 2 Phụ huynh) dùng chung hạn mức của mọi gói Gia đình của chủ gói. Hạn mức xem ở mục "Hạn mức".
 // Chủ gói: thành viên, chỗ trống, lời mời, mời/gửi lại/hủy/xóa. Thành viên: chỉ xem và Rời gói.
-export function FamilyCard({ version, onChanged, familyCycleCount }: { version: number; onChanged: () => void; familyCycleCount: number }) {
+export function FamilyCard({
+  version,
+  onChanged,
+  familyCycleCount,
+  hasFamily,
+}: {
+  version: number;
+  onChanged: () => void;
+  familyCycleCount: number;
+  hasFamily?: boolean;
+}) {
   const { user } = useAuth();
-  const family = useFetched(`family:${user?.id}:${version}`, familyApi.get);
+  const family = useFetched<FamilyDto | null>(hasFamily ? `family:${user?.id}:${version}` : "none", () =>
+    hasFamily ? familyApi.get() : Promise.resolve(null),
+  );
   const f = family.data;
   const now = useNow(5000);
 
@@ -119,6 +133,30 @@ export function FamilyCard({ version, onChanged, familyCycleCount }: { version: 
       setBusy(null);
     }
   };
+
+  if (hasFamily === false) {
+    return (
+      <div>
+        <AccountSectionHeader
+          title="Chia sẻ cho gia đình"
+          description="Mời tối đa 2 Học sinh và 2 Phụ huynh dùng chung hạn mức các gói Gia đình của bạn."
+        />
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyTitle>Bạn chưa có gói Gia đình</EmptyTitle>
+            <EmptyDescription>
+              Mua gói Gia đình để mời người thân dùng chung hạn mức. Nếu được mời, bạn mở link trong email mời để tham gia.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Link href="/plans" className={buttonVariants({ variant: "outline" })}>
+              Xem các gói
+            </Link>
+          </EmptyContent>
+        </Empty>
+      </div>
+    );
+  }
 
   if (!f) {
     return (
