@@ -96,17 +96,18 @@ public class FamilyServiceTests
     }
 
     [Fact]
-    public async Task Shares_IgnoreOtherCyclesAndNonClaudeCalls_AndClampAt100()
+    public async Task Shares_CountClaudeAndOllama_IgnoreOtherCyclesAndEmbedding_AndClampAt100()
     {
         var env = new Env();
         env.AddActive(env.Student, FamilySeats.Student);
-        env.Store.Calls.Add(new AiCall { UserId = env.Student.Id, Kind = "ollama", TotalTokens = 400_000, UserSubscriptionId = env.Cycle.Id });
+        env.Store.Calls.Add(new AiCall { UserId = env.Student.Id, Kind = "ollama", TotalTokens = 100_000, UserSubscriptionId = env.Cycle.Id });
+        env.Store.Calls.Add(new AiCall { UserId = env.Student.Id, Kind = "embedding", TotalTokens = 400_000, UserSubscriptionId = env.Cycle.Id });
         env.Store.Calls.Add(new AiCall { UserId = env.Student.Id, Kind = BillingRules.MeteredAiKind, TotalTokens = 400_000, UserSubscriptionId = Guid.NewGuid() });
         env.Use(env.Owner.Id, 900_000);   // vượt hạn mức: hiện 100
 
         var dto = await env.Service.GetAsync(env.Student.Id, UserRoles.Student, Now);
 
-        Assert.Equal([100, 0], dto.Members.Select(m => m.SharePercent));
+        Assert.Equal([100, 20], dto.Members.Select(m => m.SharePercent));
         Assert.Equal(100, dto.Cycle!.UsedPercent);
     }
 
@@ -415,6 +416,50 @@ public class FamilyServiceTests
     }
 
     // ---- Cancel (UC-127): F8
+
+    [Fact]
+    public async Task ResendInvite_SendsInAppNotificationWithNewLink()
+    {
+        var env = new Env();
+        var (invite, _) = env.AddPending(env.Student.Email, FamilySeats.Student);
+        invite.LastInviteSentAt = Now.AddMinutes(-5);
+        env.Notes.Sent.Clear();
+
+        await env.Service.ResendInviteAsync(env.Owner.Id, invite.Id, Now);
+
+        var note = Assert.Single(env.Notes.Sent, n => n.UserId == env.Student.Id && n.Type == NotificationTypes.FamilyInvite);
+        Assert.StartsWith("/family/invite?token=", note.LinkUrl);
+    }
+
+    [Fact]
+    public async Task CancelInvite_NotifiesInvitee_AndRejectsExpiredPending()
+    {
+        var env = new Env();
+        var (live, _) = env.AddPending(env.Student.Email, FamilySeats.Student);
+        var (expired, _) = env.AddPending("old@x.vn", FamilySeats.Parent, expiresAt: Now.AddSeconds(-1));
+        env.Notes.Sent.Clear();
+
+        var ex = await Assert.ThrowsAsync<BillingRuleException>(() => env.Service.CancelInviteAsync(env.Owner.Id, expired.Id, Now));
+        Assert.Equal(("not_pending", 409), (ex.Code, ex.StatusCode));
+
+        await env.Service.CancelInviteAsync(env.Owner.Id, live.Id, Now);
+        Assert.Single(env.Notes.Sent, n => n.UserId == env.Student.Id && n.Type == NotificationTypes.FamilyInviteCancelled);
+    }
+
+    [Fact]
+    public async Task DeclineInvite_ChecksExpiryAndOwnerCycleActive()
+    {
+        var env = new Env();
+        var (_, expiredToken) = env.AddPending(env.Student.Email, FamilySeats.Student, expiresAt: Now.AddSeconds(-1));
+        var exExpired = await Assert.ThrowsAsync<BillingRuleException>(() => env.Service.DeclineAsync(env.Student.Id, expiredToken, Now));
+        Assert.Equal(("invite_expired", 410), (exExpired.Code, exExpired.StatusCode));
+
+        var env2 = new Env();
+        var (_, token2) = env2.AddPending(env2.Student.Email, FamilySeats.Student);
+        env2.Cycle.EndsAt = Now.AddSeconds(-1); // owner cycle lapsed
+        var exLapsed = await Assert.ThrowsAsync<BillingRuleException>(() => env2.Service.DeclineAsync(env2.Student.Id, token2, Now));
+        Assert.Equal(("invite_expired", 410), (exLapsed.Code, exLapsed.StatusCode));
+    }
 
     [Fact]
     public async Task F8_CancelInvite_LinkDies_SeatFreed()

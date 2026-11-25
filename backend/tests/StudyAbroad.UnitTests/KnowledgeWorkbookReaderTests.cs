@@ -58,7 +58,7 @@ public class KnowledgeWorkbookReaderTests
         var row = Assert.Single(new KnowledgeWorkbookReader().Read(RealShapedWorkbook()));
 
         Assert.Equal(
-            new KnowledgeImportRow(2, "1", "faq", "LABEL_VISA_F1", "OPT là gì?", "Trả lời", "Nguồn\nMã: EXP-KB-1", null, "2026-11-01", null, null, null),
+            new KnowledgeImportRow(2, "1", "faq", "LABEL_VISA_F1", "OPT là gì?", "Trả lời", "Nguồn\nMã: EXP-KB-1", null, "2026-11-01", null, null),
             row);
     }
 
@@ -68,7 +68,6 @@ public class KnowledgeWorkbookReaderTests
         var row = Assert.Single(new KnowledgeWorkbookReader().Read(RealShapedWorkbook(withImageColumn: false)));
 
         Assert.Equal("OPT là gì?", row.Question);
-        Assert.Null(row.ImageUrl);
     }
 
     [Fact]
@@ -76,7 +75,7 @@ public class KnowledgeWorkbookReaderTests
     {
         var row = Assert.Single(new KnowledgeWorkbookReader().Read(RealShapedWorkbook(imageValue: "https://example.org/i20.png")));
 
-        Assert.Null(row.ImageUrl);
+        Assert.Equal("OPT là gì?", row.Question);
     }
 
     [Fact]
@@ -109,7 +108,7 @@ public class KnowledgeWorkbookReaderTests
         var rows = new KnowledgeWorkbookReader().Read(template);
         template.Position = 0;
 
-        var preview = await new KnowledgeBaseService(new FakeKnowledgeRepository(), new KnowledgeWorkbookReader(), new FakeKnowledgeAdvisor(), NullLogger<KnowledgeBaseService>.Instance).PreviewAsync(template);
+        var preview = await new KnowledgeBaseService(new FakeKnowledgeRepository(), new KnowledgeWorkbookReader(), new FakeKnowledgeAdvisor(), new FakeAuditLogs(), NullLogger<KnowledgeBaseService>.Instance).PreviewAsync(template);
 
         Assert.Equal(2, rows.Count);
         Assert.Empty(preview.Errors);

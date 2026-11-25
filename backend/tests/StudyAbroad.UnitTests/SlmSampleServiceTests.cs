@@ -1,781 +1,287 @@
+using System.Text;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Admin.SlmSamples;
+using StudyAbroad.Application.Audit;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
-using StudyAbroad.Application.Audit;
 using StudyAbroad.Infrastructure.Import;
+using StudyAbroad.Infrastructure.Persistence;
 using StudyAbroad.Infrastructure.Persistence.Repositories;
-using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace StudyAbroad.UnitTests;
 
 public class SlmSampleServiceTests
 {
-    private static SlmSampleService Svc(ISlmSampleRepository repo, ISlmWorkbookReader reader, FakeAuditLogs? audit = null) =>
-        new(repo, reader, new SlmTemplateWriter(), audit ?? new FakeAuditLogs());
-
     private static readonly Guid Actor = Guid.NewGuid();
     private const string ValidIntents = "[{\"type\":\"knowledge\",\"span\":\"OPT là gì\",\"entities\":{}}]";
+    private const string OtherIntents = "[{\"type\":\"knowledge\",\"span\":\"CPT là gì\",\"entities\":{}}]";
 
-    private static SaveSlmSampleRequest Request(
-        string? type = SlmSampleTypes.Knowledge, string? question = "OPT là gì", string? intents = ValidIntents,
-        string? profile = null, string? context = null, string? split = null) =>
-        new(type, question, profile, null, intents, context, split, null);
+    private static SlmSampleService Svc(FakeSlmRepository repo, ISlmWorkbookReader? reader = null, FakeAuditLogs? audit = null) =>
+        new(repo, reader ?? new FakeReader(), new SlmTemplateWriter(), audit ?? new FakeAuditLogs());
+
+    private static SaveSlmSampleRequest ValidRequest(string question = "OPT là gì", string? source = null) =>
+        new(SlmSampleTypes.Knowledge, question, null, null, ValidIntents, null, null, null, source);
 
     [Fact]
-    public async Task CreateAsync_StartsAsDraftWithTrainSplitAndCreator()
+    public async Task CreateAsync_CreatesVersion1_DefaultsSplitAndSource_AndWritesAuditLog()
     {
         var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
+        var audit = new FakeAuditLogs();
 
-        var created = await service.CreateAsync(Request(question: "  OPT là gì  "), Actor);
+        var created = await Svc(repo, audit: audit).CreateAsync(ValidRequest(), Actor);
 
-        Assert.Equal(SlmReviewStatuses.Draft, created.ReviewStatus);
-        Assert.Equal(SlmSampleSplits.Train, created.Split);
-        Assert.Equal("OPT là gì", created.Question);
-        Assert.Equal(Actor, Assert.Single(repo.Items).CreatedByUserId);
+        Assert.Equal((1, SlmSampleSplits.Train, SlmSampleSources.Manual, Actor), (created.Version, created.Split, created.Source, created.CreatedByUserId));
+        var ver = Assert.Single(repo.Versions.Where(v => v.SampleId == created.Id));
+        Assert.Equal((1, VersionActions.Create, Actor), (ver.Version, ver.Action, ver.ActorUserId));
+        Assert.Contains(audit.Entries, a => a.Action == AuditLogConstants.SlmSampleCreate && a.ActorUserId == Actor);
     }
 
     [Theory]
-    [InlineData("unknown_type", "câu hỏi", ValidIntents)]
-    [InlineData(SlmSampleTypes.Knowledge, "   ", ValidIntents)]
-    [InlineData(SlmSampleTypes.Knowledge, "câu hỏi", "{\"a\":1}")]
-    [InlineData(SlmSampleTypes.Knowledge, "câu hỏi", "[not json")]
-    public async Task CreateAsync_RejectsInvalidInput(string type, string question, string? intents)
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("[]")]
+    [InlineData("{}")]
+    [InlineData("not-json")]
+    public async Task CreateAndUpdate_RejectEmptyOrInvalidIntents_PerUc92E1(string? intents)
     {
         var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
+        var existing = repo.AddSample();
 
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            service.CreateAsync(Request(type, question, intents), Actor));
-        Assert.Empty(repo.Items);
-    }
-
-    [Fact]
-    public async Task CreateAsync_RejectsInvalidProfileJsonAndSplit()
-    {
-        var service = Svc(new FakeSlmRepository(), new FakeReader());
-
-        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAsync(Request(profile: "{broken"), Actor));
-        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAsync(Request(split: "dev"), Actor));
-    }
-
-    [Fact]
-    public async Task UpdateAsync_ChangingIntentsOfApprovedSampleReturnsToPending()
-    {
-        var repo = new FakeSlmRepository();
-        var approved = repo.AddApproved();
-        var service = Svc(repo, new FakeReader());
-
-        var updated = await service.UpdateAsync(
-            approved.Id, Request(intents: "[{\"type\":\"knowledge\",\"span\":\"khác\",\"entities\":{}}]"), Actor);
-
-        Assert.Equal(SlmReviewStatuses.Pending, updated!.ReviewStatus);
-        Assert.Null(updated.ReviewedByUserId);
-        Assert.Null(updated.ReviewedAt);
-        Assert.Null(updated.ReviewNote);
-    }
-
-    [Fact]
-    public async Task UpdateAsync_ChangingOnlySplitKeepsApproval()
-    {
-        var repo = new FakeSlmRepository();
-        var approved = repo.AddApproved();
-        var service = Svc(repo, new FakeReader());
-
-        var updated = await service.UpdateAsync(approved.Id, Request(split: SlmSampleSplits.Test), Actor);
-
-        Assert.Equal(SlmReviewStatuses.Approved, updated!.ReviewStatus);
-        Assert.Equal(SlmSampleSplits.Test, updated.Split);
-    }
-
-    [Fact]
-    public async Task UpdateAsync_SameJsonWithDifferentKeyOrderAndSpacingKeepsApproval()
-    {
-        var repo = new FakeSlmRepository();
-        var approved = repo.AddApproved();
-        approved.Intents = "[{\"type\":\"knowledge\",\"span\":\"OPT là gì\",\"entities\":{\"a\":1,\"b\":2}}]";
-        var service = Svc(repo, new FakeReader());
-
-        var reordered = "[ { \"entities\": { \"b\": 2, \"a\": 1 }, \"span\": \"OPT là gì\", \"type\": \"knowledge\" } ]";
-        var updated = await service.UpdateAsync(approved.Id, Request(intents: reordered), Actor);
-
-        Assert.Equal(SlmReviewStatuses.Approved, updated!.ReviewStatus);
-    }
-
-    [Fact]
-    public async Task UpdateAsync_ReturnsNullWhenMissing()
-    {
-        var service = Svc(new FakeSlmRepository(), new FakeReader());
-
-        Assert.Null(await service.UpdateAsync(Guid.NewGuid(), Request(), Actor));
-    }
-
-    [Fact]
-    public async Task DeleteAsync_ReturnsFalseWhenMissing()
-    {
-        var repo = new FakeSlmRepository();
-        var existing = repo.AddDraft();
-        var service = Svc(repo, new FakeReader());
-
-        Assert.True(await service.DeleteAsync(existing.Id, Actor));
-        Assert.False(await service.DeleteAsync(existing.Id, Actor));
-    }
-
-    [Fact]
-    public async Task ReviewAsync_UpdatesManyAndCountsMissing()
-    {
-        var repo = new FakeSlmRepository();
-        var first = repo.AddPending();
-        var second = repo.AddPending();
-        var service = Svc(repo, new FakeReader());
-
-        var result = await service.ReviewAsync(
-            new ReviewSlmSamplesRequest([first.Id, second.Id, Guid.NewGuid(), first.Id], SlmReviewStatuses.Rejected, "  sai nhãn  "), Actor);
-
-        Assert.Equal(2, result.Updated);
-        Assert.Equal(1, result.NotFound);
-        Assert.All(new[] { first, second }, x =>
-        {
-            Assert.Equal(SlmReviewStatuses.Rejected, x.ReviewStatus);
-            Assert.Equal("sai nhãn", x.ReviewNote);
-            Assert.Equal(Actor, x.ReviewedByUserId);
-            Assert.NotNull(x.ReviewedAt);
-        });
-    }
-
-    [Fact]
-    public async Task ReviewAsync_RejectsBadRequests()
-    {
-        var service = Svc(new FakeSlmRepository(), new FakeReader());
-        var tooMany = Enumerable.Range(0, SlmSampleService.MaxReviewIds + 1).Select(_ => Guid.NewGuid()).ToList();
-
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            service.ReviewAsync(new ReviewSlmSamplesRequest([Guid.NewGuid()], "verified", null), Actor));
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            service.ReviewAsync(new ReviewSlmSamplesRequest([], SlmReviewStatuses.Approved, null), Actor));
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            service.ReviewAsync(new ReviewSlmSamplesRequest(tooMany, SlmReviewStatuses.Approved, null), Actor));
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            service.ReviewAsync(new ReviewSlmSamplesRequest([Guid.NewGuid()], SlmReviewStatuses.Approved, new string('x', 1001)), Actor));
-    }
-
-    [Fact]
-    public async Task ImportAsync_InsertsValidRowsAsDraftAndReportsErrorsAndDuplicates()
-    {
-        var repo = new FakeSlmRepository();
-        repo.Items.Add(new SlmTrainingSample
-        {
-            SampleType = SlmSampleTypes.Knowledge, Question = "đã có", Intents = ValidIntents,
-        });
-        var reader = new FakeReader(
-            new SlmImportRow(SlmSampleTypes.Knowledge, 2, "mới", null, null, ValidIntents, null, "val", "v10"),
-            new SlmImportRow(SlmSampleTypes.Knowledge, 3, "đã có", null, null, "[ { \"entities\": {}, \"span\": \"OPT là gì\", \"type\": \"knowledge\" } ]", null, "train", null),
-            new SlmImportRow(SlmSampleTypes.Knowledge, 4, "mới", null, null, ValidIntents, null, "val", "v10"),
-            new SlmImportRow(SlmSampleTypes.Scenario, 5, "lỗi json", null, null, "[oops", null, "train", null),
-            new SlmImportRow(SlmSampleTypes.Scenario, 6, "", null, null, ValidIntents, null, "train", null));
-        var service = Svc(repo, reader);
-
-        var result = await service.ImportAsync(new MemoryStream(), Actor);
-
-        Assert.Equal(5, result.TotalRows);
-        Assert.Equal(1, result.Inserted);
-        Assert.Equal(2, result.Duplicates);
-        Assert.Equal([5, 6], result.Errors.Select(e => e.RowNumber).ToArray());
-        var inserted = repo.Items.Single(x => x.Question == "mới");
-        Assert.Equal(SlmReviewStatuses.Draft, inserted.ReviewStatus);
-        Assert.Equal("val", inserted.Split);
-        Assert.Equal("v10", inserted.SourceReview);
-        Assert.Equal(SlmSampleSources.Excel, inserted.Source);
-        Assert.Equal(Actor, inserted.CreatedByUserId);
-    }
-
-    [Fact]
-    public async Task ImportAsync_InsertsNothingWhenAllRowsFail()
-    {
-        var repo = new FakeSlmRepository();
-        var reader = new FakeReader(new SlmImportRow(SlmSampleTypes.Knowledge, 2, null, null, null, ValidIntents, null, null, null));
-        var service = Svc(repo, reader);
-
-        var result = await service.ImportAsync(new MemoryStream(), Actor);
-
-        Assert.Equal(0, result.Inserted);
-        Assert.Single(result.Errors);
-        Assert.Empty(repo.Items);
-        Assert.Equal(0, repo.AddRangeCalls);
-    }
-
-    [Fact]
-    public async Task GetSummaryAsync_ListsEveryStatusAndTypeEvenWhenZero()
-    {
-        var repo = new FakeSlmRepository();
-        repo.AddApproved();
-        repo.AddDraft();
-        var service = Svc(repo, new FakeReader());
-
-        var summary = await service.GetSummaryAsync();
-
-        Assert.Equal(2, summary.Total);
-        Assert.Equal(1, summary.ByStatus[SlmReviewStatuses.Approved]);
-        Assert.Equal(0, summary.ByStatus[SlmReviewStatuses.Rejected]);
-        Assert.Equal(2, summary.ByType[SlmSampleTypes.Knowledge]);
-        Assert.Equal(0, summary.ByType[SlmSampleTypes.Scenario]);
-    }
-
-    [Fact]
-    public async Task GetPageAsync_ClampsPagingAndRejectsUnknownFilter()
-    {
-        var repo = new FakeSlmRepository();
-        for (var i = 0; i < 3; i++)
-            repo.AddDraft();
-        var service = Svc(repo, new FakeReader());
-
-        var page = await service.GetPageAsync(new SlmSampleFilter(null, null, null, null), -4, 1000);
-
-        Assert.Equal(1, page.Page);
-        Assert.Equal(SlmSampleService.MaxPageSize, page.PageSize);
-        Assert.Equal(3, page.TotalCount);
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            service.GetPageAsync(new SlmSampleFilter("nope", null, null, null), 1, 20));
-    }
-
-    [Fact]
-    public async Task UpdateAsync_RejectsInvalidIntentsJsonAndDoesNotChangeData()
-    {
-        var repo = new FakeSlmRepository();
-        var sample = repo.AddApproved();
-        var originalQuestion = sample.Question;
-        var service = Svc(repo, new FakeReader());
-
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            service.UpdateAsync(sample.Id, Request(intents: "[oops"), Actor));
-
-        Assert.Equal(originalQuestion, repo.Items.Single().Question);
-        Assert.Equal(SlmReviewStatuses.Approved, repo.Items.Single().ReviewStatus);
-    }
-
-    [Fact]
-    public async Task UpdateAsync_RejectsIntentsNotArrayAndDoesNotChangeData()
-    {
-        var repo = new FakeSlmRepository();
-        var sample = repo.AddApproved();
-        var originalStatus = sample.ReviewStatus;
-        var service = Svc(repo, new FakeReader());
-
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            service.UpdateAsync(sample.Id, Request(intents: "{\"a\":1}"), Actor));
-
-        Assert.Equal(originalStatus, repo.Items.Single().ReviewStatus);
-    }
-
-    [Fact]
-    public async Task ReviewAsync_ToApproved_SetsReviewerAndTimeAndNote()
-    {
-        var repo = new FakeSlmRepository();
-        var sample = repo.AddPending();
-        var service = Svc(repo, new FakeReader());
-
-        var before = DateTime.UtcNow;
-        await service.ReviewAsync(
-            new ReviewSlmSamplesRequest([sample.Id], SlmReviewStatuses.Approved, "LGTM"), Actor);
-
-        Assert.Equal(SlmReviewStatuses.Approved, sample.ReviewStatus);
-        Assert.Equal("LGTM", sample.ReviewNote);
-        Assert.Equal(Actor, sample.ReviewedByUserId);
-        Assert.True(sample.ReviewedAt >= before);
-    }
-
-    [Fact]
-    public async Task ReviewAsync_ToNeedsFix_SetsReviewerAndTimeAndNote()
-    {
-        var repo = new FakeSlmRepository();
-        var sample = repo.AddPending();
-        var service = Svc(repo, new FakeReader());
-
-        var before = DateTime.UtcNow;
-        await service.ReviewAsync(
-            new ReviewSlmSamplesRequest([sample.Id], SlmReviewStatuses.NeedsFix, "cần sửa câu hỏi"), Actor);
-
-        Assert.Equal(SlmReviewStatuses.NeedsFix, sample.ReviewStatus);
-        Assert.Equal("cần sửa câu hỏi", sample.ReviewNote);
-        Assert.Equal(Actor, sample.ReviewedByUserId);
-        Assert.True(sample.ReviewedAt >= before);
-    }
-
-    [Fact]
-    public async Task ReviewAsync_WhitespaceOnlyNote_BecomesNull()
-    {
-        var repo = new FakeSlmRepository();
-        var sample = repo.AddPending();
-        var service = Svc(repo, new FakeReader());
-
-        await service.ReviewAsync(
-            new ReviewSlmSamplesRequest([sample.Id], SlmReviewStatuses.Approved, "   "), Actor);
-
-        Assert.Null(sample.ReviewNote);
-    }
-
-    [Fact]
-    public async Task GetAsync_UnknownId_ReturnsNull()
-    {
-        var service = Svc(new FakeSlmRepository(), new FakeReader());
-
-        Assert.Null(await service.GetAsync(Guid.NewGuid()));
-    }
-
-    [Fact]
-    public async Task GetPageAsync_PassesTrimmedFilters()
-    {
-        var repo = new FakeSlmRepository();
-        repo.AddDraft();
-        var service = Svc(repo, new FakeReader());
-
-        var page = await service.GetPageAsync(
-            new SlmSampleFilter("  " + SlmSampleTypes.Knowledge + "  ", null, null, null), 1, 10);
-
-        Assert.Equal(1, page.TotalCount);
-    }
-
-    [Fact]
-    public async Task ReviewAsync_NoteAtExactlyMaxLength_Passes()
-    {
-        var repo = new FakeSlmRepository();
-        var sample = repo.AddPending();
-        var service = Svc(repo, new FakeReader());
-        var note = new string('x', SlmSampleService.MaxNoteLength);
-
-        await service.ReviewAsync(
-            new ReviewSlmSamplesRequest([sample.Id], SlmReviewStatuses.Approved, note), Actor);
-
-        Assert.Equal(note, sample.ReviewNote);
-    }
-
-    [Fact]
-    public async Task ReviewAsync_AtMaxReviewIds_Passes()
-    {
-        var repo = new FakeSlmRepository();
-        for (var i = 0; i < SlmSampleService.MaxReviewIds; i++)
-            repo.AddPending();
-        var ids = repo.Items.Select(x => x.Id).ToList();
-        var service = Svc(repo, new FakeReader());
-
-        var result = await service.ReviewAsync(
-            new ReviewSlmSamplesRequest(ids, SlmReviewStatuses.Approved, null), Actor);
-
-        Assert.Equal(SlmSampleService.MaxReviewIds, result.Updated);
-    }
-
-    [Fact]
-    public async Task PreviewAsync_ValidatesAllRowsCapsRowsAndWritesNothing()
-    {
-        var repo = new FakeSlmRepository();
-        var rows = new List<SlmImportRow>();
-        for (var i = 0; i < SlmSampleService.MaxPreviewRows + 20; i++)
-            rows.Add(new SlmImportRow(SlmSampleTypes.Knowledge, i + 2, $"câu {i}", null, null, ValidIntents, null, "train", null));
-        rows.Add(new SlmImportRow(SlmSampleTypes.Scenario, 500, "", null, null, ValidIntents, null, "train", null));
-        rows.Add(new SlmImportRow(SlmSampleTypes.Scenario, 501, "lỗi json", null, null, "[oops", null, "train", null));
-        var service = Svc(repo, new FakeReader(rows.ToArray()));
-
-        var preview = await service.PreviewAsync(new MemoryStream());
-
-        Assert.Equal(rows.Count, preview.TotalRows);
-        Assert.Equal(SlmSampleService.MaxPreviewRows, preview.Rows.Count);
-        Assert.Equal(2, preview.Rows[0].RowNumber);
-        Assert.Equal([500, 501], preview.Errors.Select(e => e.RowNumber).ToArray());
-        Assert.All(preview.Errors, e => Assert.Equal(SlmSampleTypes.Scenario, e.SheetName));
-        Assert.All(preview.Errors, e => Assert.False(string.IsNullOrWhiteSpace(e.Message)));
-        Assert.Empty(repo.Items);
-        Assert.Equal(0, repo.AddRangeCalls);
-        Assert.Equal(0, repo.AddCalls);
-        Assert.Equal(0, repo.ExistingKeysCalls);
-    }
-
-    [Fact]
-    public async Task PreviewAsync_ReportsErrorsBeyondTheCappedRows()
-    {
-        var rows = new List<SlmImportRow>();
-        for (var i = 0; i < SlmSampleService.MaxPreviewRows; i++)
-            rows.Add(new SlmImportRow(SlmSampleTypes.Knowledge, i + 2, $"câu {i}", null, null, ValidIntents, null, null, null));
-        rows.Add(new SlmImportRow(SlmSampleTypes.Knowledge, 9999, "sai tập", null, null, ValidIntents, null, "dev", null));
-        var service = Svc(new FakeSlmRepository(), new FakeReader(rows.ToArray()));
-
-        var preview = await service.PreviewAsync(new MemoryStream());
-
-        Assert.Equal(SlmSampleService.MaxPreviewRows, preview.Rows.Count);
-        var error = Assert.Single(preview.Errors);
-        Assert.Equal(9999, error.RowNumber);
-    }
-
-    [Fact]
-    public async Task PreviewAsync_DoesNotCountDuplicatesAsErrors()
-    {
-        var repo = new FakeSlmRepository();
-        repo.Items.Add(new SlmTrainingSample { SampleType = SlmSampleTypes.Knowledge, Question = "đã có", Intents = ValidIntents });
-        var reader = new FakeReader(new SlmImportRow(SlmSampleTypes.Knowledge, 2, "đã có", null, null, ValidIntents, null, "train", null));
-        var service = Svc(repo, reader);
-
-        var preview = await service.PreviewAsync(new MemoryStream());
-
-        Assert.Empty(preview.Errors);
-        Assert.Single(preview.Rows);
-    }
-
-    [Fact]
-    public async Task PreviewAsync_NoDataRows_ThrowsInvalidDataException()
-    {
-        var service = Svc(new FakeSlmRepository(), new FakeReader());
-
-        await Assert.ThrowsAsync<InvalidDataException>(() => service.PreviewAsync(new MemoryStream()));
-    }
-
-    [Fact]
-    public async Task PreviewAsync_PassesCancellationToReader()
-    {
-        var reader = new FakeReader(new SlmImportRow(SlmSampleTypes.Knowledge, 2, "câu", null, null, ValidIntents, null, null, null));
-        var service = Svc(new FakeSlmRepository(), reader);
-        using var cts = new CancellationTokenSource();
-
-        await service.PreviewAsync(new MemoryStream(), cts.Token);
-
-        Assert.Equal(cts.Token, reader.LastToken);
-    }
-
-    [Fact]
-    public async Task PreviewAsync_CancelledToken_Throws()
-    {
-        var reader = new FakeReader(new SlmImportRow(SlmSampleTypes.Knowledge, 2, "câu", null, null, ValidIntents, null, null, null));
-        var service = Svc(new FakeSlmRepository(), reader);
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
-
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.PreviewAsync(new MemoryStream(), cts.Token));
-    }
-
-    [Fact]
-    public async Task ImportAsync_NoDataRows_ThrowsInvalidDataExceptionAndInsertsNothing()
-    {
-        var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
-
-        await Assert.ThrowsAsync<InvalidDataException>(() => service.ImportAsync(new MemoryStream(), Actor));
-        Assert.Equal(0, repo.AddRangeCalls);
-    }
-
-    [Fact]
-    public async Task ImportAsync_CanRunAgainAfterEarlierImport()
-    {
-        var repo = new FakeSlmRepository();
-        var first = new FakeReader(new SlmImportRow(SlmSampleTypes.Knowledge, 2, "lần một", null, null, ValidIntents, null, null, null));
-        var second = new FakeReader(new SlmImportRow(SlmSampleTypes.Knowledge, 2, "lần hai", null, null, ValidIntents, null, null, null));
-
-        var firstResult = await Svc(repo, first).ImportAsync(new MemoryStream(), Actor);
-        var secondResult = await Svc(repo, second).ImportAsync(new MemoryStream(), Actor);
-
-        Assert.Equal(1, firstResult.Inserted);
-        Assert.Equal(1, secondResult.Inserted);
-        Assert.Equal(2, repo.Items.Count);
-    }
-
-    private static readonly Guid Other = Guid.NewGuid();
-
-    private static SaveSlmSampleRequest QA(string question = "Visa F-1 cần gì?", string intents = "[{\"type\":\"knowledge\"}]", bool submit = false) =>
-        new(SlmSampleTypes.Knowledge, question, null, null, intents, null, null, null, "Website ĐSQ", submit);
-
-    [Fact]
-    public async Task CreateAsync_QuestionAndIntentsDraft_StoresFields()
-    {
-        var repo = new FakeSlmRepository();
-
-        var created = await Svc(repo, new FakeReader()).CreateAsync(QA(), Actor);
-
-        Assert.Equal((SlmReviewStatuses.Draft, "Website ĐSQ", "[{\"type\":\"knowledge\"}]"),
-            (created.ReviewStatus, created.Source, created.Intents));
-        Assert.Equal(Actor, Assert.Single(repo.Items).CreatedByUserId);
-    }
-
-    [Fact]
-    public async Task CreateAsync_Submit_NeedsIntents()
-    {
-        var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
-
-        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAsync(QA(intents: "[]", submit: true), Actor));
-        var draft = await service.CreateAsync(QA(intents: "[]"), Actor);
-        var pending = await service.CreateAsync(QA(question: "OPT là gì?", submit: true), Actor);
-
-        Assert.Equal(SlmReviewStatuses.Draft, draft.ReviewStatus);
-        Assert.Equal(SlmReviewStatuses.Pending, pending.ReviewStatus);
-    }
-
-    [Fact]
-    public async Task CreateAsync_DuplicateIgnoringCaseAndSpaces_ThrowsWithExistingId_ButDeletedRowsDoNotBlock()
-    {
-        var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
-        var first = await service.CreateAsync(QA(), Actor);
-
-        var ex = await Assert.ThrowsAsync<SlmDuplicateSampleException>(() => service.CreateAsync(QA(question: "  visa f-1 CẦN gì?  "), Actor));
-        Assert.Equal(first.Id, ex.ExistingId);
-
-        await service.DeleteAsync(first.Id, Actor);
-        await service.CreateAsync(QA(), Actor);
-        Assert.Equal(2, repo.Items.Count);
+        await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo).CreateAsync(ValidRequest() with { Intents = intents }, Actor));
+        await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo).UpdateAsync(existing.Id, ValidRequest() with { Intents = intents }, Actor));
     }
 
     [Theory]
-    [InlineData("Số em là 0912 345 678, tư vấn giúp em", null)]
-    [InlineData("Học bổng nào phù hợp?", "Liên hệ an.nguyen@gmail.com")]
-    public async Task CreateAsync_PersonalData_IsRejected(string question, string? answer)
+    [InlineData("manual")]
+    [InlineData("MANUAL")]
+    [InlineData("Manual")]
+    [InlineData("excel")]
+    [InlineData("EXCEL")]
+    public async Task CreateAsync_RejectsReservedSourceCaseInsensitive_PerUc92E3(string source)
     {
         var repo = new FakeSlmRepository();
 
-        await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo, new FakeReader()).CreateAsync(QA(question, answer), Actor));
-        Assert.Empty(repo.Items);
+        await Assert.ThrowsAsync<ArgumentException>(() => Svc(repo).CreateAsync(ValidRequest(source: source), Actor));
     }
 
     [Fact]
-    public async Task UpdateAsync_SubmitDraft_GoesToPending_AndNoChangeWritesNothing()
+    public async Task CreateAsync_RejectsDuplicateCaseInsensitiveAndExtraWhitespace_AndAllowsAfterSoftDelete()
     {
         var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
-        var draft = await service.CreateAsync(QA(), Actor);
+        var svc = Svc(repo);
 
-        await service.UpdateAsync(draft.Id, QA(), Actor);
-        var submitted = await service.UpdateAsync(draft.Id, QA(submit: true), Actor);
+        var first = await svc.CreateAsync(ValidRequest("Visa   F-1 là gì?"), Actor);
 
-        Assert.Equal(SlmReviewStatuses.Pending, submitted!.ReviewStatus);
+        var dup = await Assert.ThrowsAsync<SlmDuplicateSampleException>(() =>
+            svc.CreateAsync(ValidRequest("  visa f-1   LÀ GÌ?  "), Actor));
+        Assert.Equal(first.Id, dup.ExistingId);
+
+        // Soft delete allows re-creating the same sample (UC-94)
+        Assert.True(await svc.DeleteAsync(first.Id, Actor));
+        var recreated = await svc.CreateAsync(ValidRequest("visa f-1 là gì?"), Actor);
+        Assert.NotEqual(first.Id, recreated.Id);
     }
 
     [Fact]
-    public async Task DeleteAsync_IsSoft_KeepsTheRowWithActor_AndHidesIt()
+    public async Task UpdateAsync_CreatesNewVersion_WritesAudit_AndRejectsDeletedSample()
     {
         var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
-        var sample = repo.AddDraft();
+        var audit = new FakeAuditLogs();
+        var svc = Svc(repo, audit: audit);
+        var created = await svc.CreateAsync(ValidRequest("Câu cũ"), Actor);
 
-        Assert.True(await service.DeleteAsync(sample.Id, Actor));
+        var updated = await svc.UpdateAsync(created.Id, ValidRequest("Câu mới") with { Intents = OtherIntents, Split = SlmSampleSplits.Val }, Actor);
 
-        Assert.Equal(Actor, Assert.Single(repo.Items).DeletedByUserId);
+        Assert.NotNull(updated);
+        Assert.Equal((2, "Câu mới", SlmSampleSplits.Val), (updated!.Version, updated.Question, updated.Split));
+        Assert.Equal(2, repo.Versions.Count(v => v.SampleId == created.Id));
+        Assert.Contains(audit.Entries, a => a.Action == AuditLogConstants.SlmSampleUpdate);
+
+        Assert.True(await svc.DeleteAsync(created.Id, Actor));
+        await Assert.ThrowsAsync<SlmSampleDeletedException>(() => svc.UpdateAsync(created.Id, ValidRequest("Sửa khi đã xóa"), Actor));
+    }
+
+    [Fact]
+    public async Task RestoreVersionAsync_CreatesNewVersionWithOldContent_AndLogsAudit()
+    {
+        var repo = new FakeSlmRepository();
+        var audit = new FakeAuditLogs();
+        var svc = Svc(repo, audit: audit);
+        var created = await svc.CreateAsync(ValidRequest("Bản 1", source: "Nguồn A"), Actor);
+        await svc.UpdateAsync(created.Id, ValidRequest("Bản 2", source: "Nguồn B"), Actor);
+
+        var restored = await svc.RestoreVersionAsync(created.Id, 1, Actor);
+
+        Assert.NotNull(restored);
+        Assert.Equal((3, "Bản 1", "Nguồn A"), (restored!.Version, restored.Question, restored.Source));
+        var detail = await svc.GetDetailAsync(created.Id);
+        Assert.Equal(3, detail!.Versions.Count);
+        Assert.Equal((3, VersionActions.Restore, 1), (detail.Versions[0].Version, detail.Versions[0].Action, detail.Versions[0].RestoredFromVersion));
+        Assert.Contains(audit.Entries, a => a.Action == AuditLogConstants.SlmSampleRestoreVersion);
+    }
+
+    [Fact]
+    public async Task RestoreAndRestoreVersion_RunUpdateValidation_EmptyIntentsAndPersonalData()
+    {
+        var repo = new FakeSlmRepository();
+        var svc = Svc(repo);
+        var sample = repo.AddSample();
+        repo.Versions[0].Intents = "[]";                       // phiên bản cũ có intents rỗng (UC-92 E1)
+        await Assert.ThrowsAsync<ArgumentException>(() => svc.RestoreVersionAsync(sample.Id, 1, Actor));
+
+        repo.Versions[0].Intents = ValidIntents;
+        repo.Versions[0].Question = "Gọi em số 0912345678";    // có số điện thoại
+        await Assert.ThrowsAsync<ArgumentException>(() => svc.RestoreVersionAsync(sample.Id, 1, Actor));
+
+        sample.DeletedAt = DateTime.UtcNow;
+        sample.Intents = "[]";
+        await Assert.ThrowsAsync<ArgumentException>(() => svc.RestoreAsync(sample.Id, Actor));
         Assert.NotNull(sample.DeletedAt);
-        Assert.Null(await service.GetAsync(sample.Id));
-        Assert.Equal(0, (await service.GetPageAsync(new SlmSampleFilter(null, null, null, null), 1, 20)).TotalCount);
-    }
-
-    [Theory]
-    [InlineData("gọi 0987654321")]
-    [InlineData("hs.lop12@yahoo.com")]
-    public async Task SaveAsync_PersonalDataInSource_IsRejected(string source)
-    {
-        var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
-        var request = QA() with { Source = source };
-        var existing = await service.CreateAsync(QA(question: "câu khác"), Actor);
-
-        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAsync(request, Actor));
-        await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync(existing.Id, request, Actor));
-        Assert.Single(repo.Items);
-    }
-
-    [Theory]
-    [InlineData(SlmSampleSources.Manual)]
-    [InlineData(SlmSampleSources.Excel)]
-    public async Task SaveAsync_ReservedSource_CannotBeTypedButUnchangedValueCanBeResent(string reserved)
-    {
-        var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
-
-        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAsync(QA() with { Source = reserved }, Actor));
-
-        var created = await service.CreateAsync(QA(), Actor);
-        await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync(created.Id, QA() with { Source = reserved }, Actor));
-        repo.Items.Single().Source = reserved;
-        Assert.NotNull(await service.UpdateAsync(created.Id, QA(question: "đổi") with { Source = reserved }, Actor));
-        Assert.Equal(reserved, repo.Items.Single().Source);
     }
 
     [Fact]
-    public async Task ReviewAsync_SkipsSamplesTheReviewerCreated()
-    {
-        var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
-        var own = await service.CreateAsync(QA(question: "câu của tôi", submit: true), Actor);
-        var others = await service.CreateAsync(QA(question: "câu người khác", submit: true), Other);
-
-        var result = await service.ReviewAsync(
-            new ReviewSlmSamplesRequest([own.Id, others.Id], SlmReviewStatuses.Approved, null), Actor);
-
-        Assert.Equal((1, 1, 0), (result.Updated, result.SkippedOwn, result.SkippedNotPending));
-        Assert.Equal(SlmReviewStatuses.Approved, repo.Items.Single(x => x.Id == others.Id).ReviewStatus);
-        Assert.Equal(SlmReviewStatuses.Pending, repo.Items.Single(x => x.Id == own.Id).ReviewStatus);
-    }
-
-    [Theory]
-    [InlineData(SlmReviewStatuses.Approved)]
-    [InlineData(SlmReviewStatuses.Rejected)]
-    [InlineData(SlmReviewStatuses.NeedsFix)]
-    public async Task ReviewAsync_OnlyPendingSamplesCanBeReviewed(string status)
-    {
-        var repo = new FakeSlmRepository();
-        var draft = repo.AddDraft();
-        var approved = repo.AddApproved();
-        var rejected = repo.AddDraft();
-        rejected.ReviewStatus = SlmReviewStatuses.Rejected;
-        var needsFix = repo.AddDraft();
-        needsFix.ReviewStatus = SlmReviewStatuses.NeedsFix;
-        var pending = repo.AddPending();
-
-        var result = await Svc(repo, new FakeReader()).ReviewAsync(
-            new ReviewSlmSamplesRequest([draft.Id, approved.Id, rejected.Id, needsFix.Id, pending.Id], status, "ghi chú"), Actor);
-
-        Assert.Equal((1, 4), (result.Updated, result.SkippedNotPending));
-        Assert.Equal(status, pending.ReviewStatus);
-        Assert.Equal(SlmReviewStatuses.Draft, draft.ReviewStatus);
-        Assert.Equal(SlmReviewStatuses.Approved, approved.ReviewStatus);
-        Assert.Equal(SlmReviewStatuses.Rejected, rejected.ReviewStatus);
-        Assert.Equal(SlmReviewStatuses.NeedsFix, needsFix.ReviewStatus);
-    }
-
-    [Theory]
-    [InlineData(SlmReviewStatuses.Rejected)]
-    [InlineData(SlmReviewStatuses.NeedsFix)]
-    public async Task ReviewAsync_RejectOrNeedsFix_RequiresAReason(string status)
-    {
-        var repo = new FakeSlmRepository();
-        var sample = repo.AddPending();
-
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            Svc(repo, new FakeReader()).ReviewAsync(new ReviewSlmSamplesRequest([sample.Id], status, "  "), Actor));
-        Assert.Equal(SlmReviewStatuses.Pending, sample.ReviewStatus);
-    }
-
-    [Theory]
-    [InlineData(SlmReviewStatuses.Draft)]
-    [InlineData(SlmReviewStatuses.Pending)]
-    public async Task ReviewAsync_CannotMoveToDraftOrPending(string status)
-    {
-        var repo = new FakeSlmRepository();
-        var sample = repo.AddApproved();
-
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            Svc(repo, new FakeReader()).ReviewAsync(new ReviewSlmSamplesRequest([sample.Id], status, "x"), Actor));
-    }
-
-    [Fact]
-    public async Task ReviewAsync_ApproveSkipsRowsWithoutIntents()
-    {
-        var repo = new FakeSlmRepository();
-        var service = Svc(repo, new FakeReader());
-        var ready = repo.AddPending();
-        var empty = repo.AddPending();
-        empty.Intents = "[]";
-
-        var result = await service.ReviewAsync(new ReviewSlmSamplesRequest([ready.Id, empty.Id], SlmReviewStatuses.Approved, null), Actor);
-
-        Assert.Equal((1, 1), (result.Updated, result.SkippedNotReady));
-        Assert.Equal(SlmReviewStatuses.Pending, empty.ReviewStatus);
-        Assert.Equal((SlmReviewStatuses.Approved, Actor), (ready.ReviewStatus, ready.ReviewedByUserId));
-    }
-
-    [Fact]
-    public async Task ExportAsync_Jsonl_HasOnlyApprovedLiveRows_AsParsedJson_AndIsLogged()
+    public async Task DeleteAndRestoreAsync_SoftDeletes_FiltersByDeleted_ChecksDuplicateOnRestore_AndLogsAudit()
     {
         var repo = new FakeSlmRepository();
         var audit = new FakeAuditLogs();
-        var approved = repo.AddApproved();
-        var deleted = repo.AddApproved();
-        deleted.Question = "đã xóa";
+        var svc = Svc(repo, audit: audit);
+        var created = await svc.CreateAsync(ValidRequest("Câu cần xóa"), Actor);
+
+        Assert.True(await svc.DeleteAsync(created.Id, Actor));
+        Assert.Empty((await svc.GetPageAsync(new SlmSampleFilter(null, null, null, Deleted: false), 1, 20)).Items);
+        Assert.Single((await svc.GetPageAsync(new SlmSampleFilter(null, null, null, Deleted: true), 1, 20)).Items);
+        Assert.NotNull(await svc.GetDetailAsync(created.Id));
+        Assert.Contains(audit.Entries, a => a.Action == AuditLogConstants.SlmSampleDelete);
+
+        // If a duplicate was added while deleted, restore is blocked with 409
+        var dup = await svc.CreateAsync(ValidRequest("câu   cần xóa"), Actor);
+        await Assert.ThrowsAsync<SlmDuplicateSampleException>(() => svc.RestoreAsync(created.Id, Actor));
+
+        // Remove the duplicate, now restore succeeds
+        await svc.DeleteAsync(dup.Id, Actor);
+        var restored = await svc.RestoreAsync(created.Id, Actor);
+        Assert.NotNull(restored);
+        Assert.Null(restored!.DeletedAt);
+        Assert.Contains(audit.Entries, a => a.Action == AuditLogConstants.SlmSampleRestore);
+    }
+
+    [Fact]
+    public async Task ImportAsync_RejectsEmptyIntents_IgnoresDeletedForDuplicateCheck_AndCollapsesWhitespace()
+    {
+        var repo = new FakeSlmRepository();
+        var audit = new FakeAuditLogs();
+        var live = repo.AddSample("Visa  F-1 là gì?");
+        var deleted = repo.AddSample("Câu đã xóa");
         deleted.DeletedAt = DateTime.UtcNow;
-        repo.AddDraft();
-        var service = Svc(repo, new FakeReader(), audit);
 
-        var file = await service.ExportAsync("JSONL", Actor, "1.2.3.4", "test");
+        var rows = new[]
+        {
+            new SlmImportRow(SlmSampleTypes.Knowledge, 2, "visa f-1 là gì?", null, null, ValidIntents, null, "train", null), // dup of live
+            new SlmImportRow(SlmSampleTypes.Knowledge, 3, "Câu đã xóa", null, null, ValidIntents, null, "train", null),      // allowed because deleted
+            new SlmImportRow(SlmSampleTypes.Knowledge, 4, "Thiếu intent", null, null, "[]", null, "train", null),            // error (empty intents)
+            new SlmImportRow(SlmSampleTypes.Knowledge, 5, "Câu hợp lệ", null, null, ValidIntents, null, "val", null),
+            new SlmImportRow(SlmSampleTypes.Knowledge, 6, "câu   hợp lệ", null, null, ValidIntents, null, "val", null),      // dup within file
+        };
 
-        var lines = System.Text.Encoding.UTF8.GetString(file.Content).Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        using var line = System.Text.Json.JsonDocument.Parse(Assert.Single(lines));
-        var root = line.RootElement;
-        Assert.Equal(approved.Id.ToString(), root.GetProperty("id").GetString());
-        Assert.Equal("OPT là gì", root.GetProperty("input").GetProperty("question").GetString());
-        Assert.Equal(System.Text.Json.JsonValueKind.Array, root.GetProperty("output").GetProperty("intents").ValueKind);
-        Assert.EndsWith(".jsonl", file.FileName);
-        Assert.NotNull(approved.ExportedAt);
-        Assert.Null(deleted.ExportedAt);
-        var entry = Assert.Single(audit.Entries);
-        Assert.Equal((SlmSampleService.ExportAction, (Guid?)Actor, "1.2.3.4"), (entry.Action, entry.ActorUserId, entry.IpAddress));
-        Assert.Contains("\"count\":1", entry.DetailJson);
+        var result = await Svc(repo, new FakeReader(rows), audit).ImportAsync(new MemoryStream(), Actor);
+
+        Assert.Equal((5, 2, 2), (result.TotalRows, result.Inserted, result.Duplicates));
+        var err = Assert.Single(result.Errors);
+        Assert.Equal(4, err.RowNumber);
+        Assert.Contains(audit.Entries, a => a.Action == AuditLogConstants.SlmSampleImport);
+        Assert.Equal(2, repo.Versions.Count(v => v.Action == VersionActions.Import));
     }
 
     [Fact]
-    public async Task ExportAsync_XlsxWorks_EmptyExportIsStillLogged_AndUnknownFormatIsRejected()
-    {
-        var audit = new FakeAuditLogs();
-        var service = Svc(new FakeSlmRepository(), new FakeReader(), audit);
-
-        var file = await service.ExportAsync("xlsx", Actor, null, null);
-        await Assert.ThrowsAsync<ArgumentException>(() => service.ExportAsync("csv", Actor, null, null));
-
-        Assert.NotEmpty(file.Content);
-        Assert.Single(audit.Entries);
-    }
-
-    [Fact]
-    public async Task GetDetailAsync_HasCreatorName()
+    public async Task ExportAsync_ExportsAllNonDeletedSamples_MarksExportedAt_AndFailsWithoutCreatingWhenAuditFails()
     {
         var repo = new FakeSlmRepository();
-        repo.Names[Actor] = "Mod A";
-        var service = Svc(repo, new FakeReader());
-        var created = await service.CreateAsync(QA(), Actor);
-        await service.UpdateAsync(created.Id, QA(submit: true), Actor);
+        var audit = new FakeAuditLogs();
+        var active1 = repo.AddSample("Câu 1");
+        var active2 = repo.AddSample("Câu 2");
+        var deleted = repo.AddSample("Câu đã xóa");
+        deleted.DeletedAt = DateTime.UtcNow;
 
-        var detail = await service.GetDetailAsync(created.Id);
+        var exported = await Svc(repo, audit: audit).ExportAsync("jsonl", Actor, "127.0.0.1", "agent");
 
-        Assert.Equal("Mod A", detail!.Sample.CreatedByName);
+        var lines = Encoding.UTF8.GetString(exported.Content).Trim().Split('\n');
+        Assert.Equal(2, lines.Length);
+        Assert.NotNull(active1.ExportedAt);
+        Assert.NotNull(active2.ExportedAt);
+        Assert.Null(deleted.ExportedAt);
+        Assert.Contains(audit.Entries, a => a.Action == AuditLogConstants.SlmSampleExport);
+
+        // UC-96 E1: if audit log throws, ExportAsync throws and does not mark ExportedAt
+        var active3 = repo.AddSample("Câu 3");
+        var failingAudit = new FakeAuditLogs { ThrowOnAdd = new InvalidOperationException("audit db down") };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Svc(repo, audit: failingAudit).ExportAsync("xlsx", Actor, null, null));
+        Assert.Null(active3.ExportedAt);
     }
 
     [Fact]
-    public void RepositoryQueries_TranslateToSql()
+    public async Task GetSourcesAsync_IncludesSystemAndCustomSources()
     {
-        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<StudyAbroad.Infrastructure.Persistence.AppDbContext>()
+        var repo = new FakeSlmRepository();
+        repo.AddSample("A").Source = "Website ĐSQ";
+        repo.AddSample("B").Source = SlmSampleSources.Excel;
+
+        var sources = await Svc(repo).GetSourcesAsync();
+
+        Assert.Contains(SlmSampleSources.Manual, sources);
+        Assert.Contains(SlmSampleSources.Excel, sources);
+        Assert.Contains("Website ĐSQ", sources);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_CountsActiveAndDeletedSeparately()
+    {
+        var repo = new FakeSlmRepository();
+        repo.AddSample("A");
+        var del = repo.AddSample("B");
+        del.DeletedAt = DateTime.UtcNow;
+
+        var summary = await Svc(repo).GetSummaryAsync();
+
+        Assert.Equal(1, summary.Total);
+        Assert.Equal(1, summary.Deleted);
+        Assert.Equal(1, summary.ByType[SlmSampleTypes.Knowledge]);
+    }
+
+    [Fact]
+    public void RepositoryFilter_TranslatesToSql()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseNpgsql("Host=localhost;Database=usas_schema_check")
             .UseSnakeCaseNamingConvention()
             .Options;
-        using var db = new StudyAbroad.Infrastructure.Persistence.AppDbContext(options);
-        var filter = new SlmSampleFilter(SlmSampleTypes.Knowledge, null, SlmReviewStatuses.Pending, "visa",
-            Actor, new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2026, 11, 8, 0, 0, 0, DateTimeKind.Utc), SlmSampleSources.Excel);
+        using var db = new AppDbContext(options);
+        var filter = new SlmSampleFilter(SlmSampleTypes.Knowledge, SlmSampleSplits.Train, "visa", Guid.NewGuid(), DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, "Website ĐSQ", Deleted: false);
 
-        var page = Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToQueryString(
-            SlmSampleRepository.Filtered(db.SlmTrainingSamples, filter));
-        var same = Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToQueryString(
-            SlmSampleRepository.SameQuestion(db.SlmTrainingSamples, " Visa "));
+        var sql = SlmSampleRepository.Filtered(db.SlmTrainingSamples, filter).ToQueryString();
 
-        var creators = Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToQueryString(
-            SlmSampleRepository.Creators(db.SlmTrainingSamples, db.Users));
-
-        Assert.Contains("ORDER BY", creators);
-        Assert.Contains("created_by_user_id", page);
-        Assert.Contains("created_at", page);
-        Assert.Contains("source", page);
-        Assert.Contains("lower(", same);
+        Assert.Contains("ILIKE", sql);
+        Assert.Contains("sample_type", sql);
     }
-}
 
-internal class FakeReader(params SlmImportRow[] rows) : ISlmWorkbookReader
-{
-    public CancellationToken LastToken { get; private set; }
-
-    public IReadOnlyList<SlmImportRow> Read(Stream workbook, CancellationToken ct = default)
+    private sealed class FakeReader(params SlmImportRow[] rows) : ISlmWorkbookReader
     {
-        LastToken = ct;
-        return rows;
+        public IReadOnlyList<SlmImportRow> Read(Stream workbook, CancellationToken ct = default) => rows;
     }
 }
 
 internal class FakeAuditLogs : IAuditLogRepository
 {
     public List<AuditLog> Entries { get; } = [];
+    public Exception? ThrowOnAdd { get; init; }
 
     public Task AddAsync(AuditLog entry, CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();   // như EF: token đã hủy thì không ghi
+        cancellationToken.ThrowIfCancellationRequested();
+        if (ThrowOnAdd is not null)
+            throw ThrowOnAdd;
         Entries.Add(entry);
         return Task.CompletedTask;
     }
@@ -789,103 +295,114 @@ internal class FakeSlmRepository : ISlmSampleRepository
     private const string ValidIntents = "[{\"type\":\"knowledge\",\"span\":\"OPT là gì\",\"entities\":{}}]";
 
     public List<SlmTrainingSample> Items { get; } = [];
+    public List<SlmSampleVersion> Versions { get; } = [];
     public Dictionary<Guid, string> Names { get; } = [];
-    public int AddRangeCalls { get; private set; }
-    public int AddCalls { get; private set; }
-    public int ExistingKeysCalls { get; private set; }
 
     private IEnumerable<SlmTrainingSample> Live => Items.Where(x => x.DeletedAt == null);
 
-    public SlmTrainingSample AddDraft()
+    public SlmTrainingSample AddSample(string question = "OPT là gì")
     {
-        var sample = new SlmTrainingSample { SampleType = SlmSampleTypes.Knowledge, Question = "OPT là gì", Intents = ValidIntents };
+        var sample = new SlmTrainingSample { SampleType = SlmSampleTypes.Knowledge, Question = question, Intents = ValidIntents, Version = 1 };
         Items.Add(sample);
-        return sample;
-    }
-
-    public SlmTrainingSample AddPending()
-    {
-        var sample = AddDraft();
-        sample.ReviewStatus = SlmReviewStatuses.Pending;
-        return sample;
-    }
-
-    public SlmTrainingSample AddApproved()
-    {
-        var sample = AddDraft();
-        sample.ReviewStatus = SlmReviewStatuses.Approved;
-        sample.ReviewedByUserId = Guid.NewGuid();
-        sample.ReviewedAt = DateTime.UtcNow;
-        sample.ReviewNote = "ok";
+        Versions.Add(new SlmSampleVersion
+        {
+            SampleId = sample.Id,
+            Version = 1,
+            Action = VersionActions.Create,
+            SampleType = sample.SampleType,
+            Question = sample.Question,
+            Profile = sample.Profile,
+            PendingQuestion = sample.PendingQuestion,
+            Intents = sample.Intents,
+            Context = sample.Context,
+            Split = sample.Split,
+            SourceReview = sample.SourceReview,
+            Source = sample.Source,
+        });
         return sample;
     }
 
     public Task<(IReadOnlyList<SlmSampleListRow> Rows, int Total)> PageAsync(
         SlmSampleFilter filter, int skip, int take, CancellationToken ct = default)
     {
-        var all = SlmSampleRepository.Filtered(Live.AsQueryable(), filter).ToList();
+        var source = filter.Deleted ? Items.Where(x => x.DeletedAt != null) : Live;
+        var all = SlmSampleRepository.Filtered(source.AsQueryable(), filter).ToList();
         IReadOnlyList<SlmSampleListRow> rows = all.Skip(skip).Take(take)
             .Select(x => new SlmSampleListRow(x, x.CreatedByUserId is { } id ? Names.GetValueOrDefault(id) : null)).ToList();
         return Task.FromResult((rows, all.Count));
     }
 
-    public Task<SlmTrainingSample?> FindAsync(Guid id, CancellationToken ct = default) =>
-        Task.FromResult(Live.FirstOrDefault(x => x.Id == id));
+    public Task<SlmTrainingSample?> FindAsync(Guid id, bool includeDeleted = false, CancellationToken ct = default) =>
+        Task.FromResult((includeDeleted ? Items : Live).FirstOrDefault(x => x.Id == id));
+
+    public Task<IReadOnlyList<SlmSampleVersionRow>> VersionsAsync(Guid sampleId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<SlmSampleVersionRow>>(
+            Versions.Where(v => v.SampleId == sampleId).OrderByDescending(v => v.Version).Select(v => new SlmSampleVersionRow(v, "Admin")).ToList());
+
+    public Task<SlmSampleVersion?> FindVersionAsync(Guid sampleId, int version, CancellationToken ct = default) =>
+        Task.FromResult(Versions.FirstOrDefault(v => v.SampleId == sampleId && v.Version == version));
 
     public Task<IReadOnlyDictionary<Guid, string>> UserNamesAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyDictionary<Guid, string>>(Names.Where(n => userIds.Contains(n.Key)).ToDictionary());
 
-    public Task AddAsync(SlmTrainingSample sample, CancellationToken ct = default)
+    public Task AddAsync(SlmTrainingSample sample, SlmSampleVersion initialVersion, CancellationToken ct = default)
     {
-        AddCalls++;
         Items.Add(sample);
+        initialVersion.SampleId = sample.Id;
+        Versions.Add(initialVersion);
         return Task.CompletedTask;
     }
 
-    public Task AddRangeAsync(IReadOnlyList<SlmTrainingSample> samples, CancellationToken ct = default)
+    public Task AddRangeAsync(IReadOnlyList<SlmTrainingSample> samples, IReadOnlyList<SlmSampleVersion> initialVersions, CancellationToken ct = default)
     {
-        AddRangeCalls++;
         Items.AddRange(samples);
+        Versions.AddRange(initialVersions);
         return Task.CompletedTask;
     }
 
-    public Task<int> UpdateManyAsync(IReadOnlyList<Guid> ids, Func<SlmTrainingSample, bool> apply, CancellationToken ct = default)
+    public Task<bool> UpdateAsync(
+        Guid id, Func<SlmTrainingSample, (bool Changed, SlmSampleVersion? NewVersion)> apply,
+        bool includeDeleted = false, CancellationToken ct = default)
     {
-        var matched = Live.Where(x => ids.Contains(x.Id)).ToList();
-        foreach (var sample in matched)
+        var sample = (includeDeleted ? Items : Live).FirstOrDefault(x => x.Id == id);
+        if (sample is null)
+            return Task.FromResult(false);
+        var (changed, newVersion) = apply(sample);
+        if (changed && newVersion is not null)
         {
-            apply(sample);
+            newVersion.SampleId = sample.Id;
+            Versions.Add(newVersion);
         }
-        return Task.FromResult(matched.Count);
+        return Task.FromResult(true);
     }
 
     public Task<IReadOnlyList<SlmSampleCountRow>> CountsAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<SlmSampleCountRow>>(Live
-            .GroupBy(x => (x.SampleType, x.ReviewStatus))
-            .Select(g => new SlmSampleCountRow(g.Key.SampleType, g.Key.ReviewStatus, g.Count()))
+        Task.FromResult<IReadOnlyList<SlmSampleCountRow>>(Items
+            .GroupBy(x => (x.SampleType, Deleted: x.DeletedAt != null))
+            .Select(g => new SlmSampleCountRow(g.Key.SampleType, g.Key.Deleted, g.Count()))
             .ToList());
 
-    public Task<IReadOnlyList<SlmSampleKeyRow>> ExistingKeysAsync(CancellationToken ct = default)
-    {
-        ExistingKeysCalls++;
-        return Task.FromResult<IReadOnlyList<SlmSampleKeyRow>>(Items
-            .Select(x => new SlmSampleKeyRow(x.SampleType, x.Question, x.PendingQuestion, x.Profile, x.Context, x.Intents))
+    public Task<IReadOnlyList<SlmSampleKeyRow>> ExistingKeysAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<SlmSampleKeyRow>>(Live
+            .Select(x => new SlmSampleKeyRow(x.Id, x.SampleType, x.Question, x.PendingQuestion, x.Profile, x.Context, x.Intents))
             .ToList());
-    }
 
-    public bool Fail { get; init; }
-
-    public Task<IReadOnlyList<SlmTrainingSample>> SameQuestionAsync(string question, bool includeDeleted, CancellationToken ct = default) =>
-        Fail ? throw new InvalidOperationException("db down") : Task.FromResult<IReadOnlyList<SlmTrainingSample>>(
-            SlmSampleRepository.SameQuestion((includeDeleted ? Items : Live).AsQueryable(), question).ToList());
+    public Task<IReadOnlyList<SlmSampleKeyRow>> LiveKeysByTypeAsync(string sampleType, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<SlmSampleKeyRow>>(Live
+            .Where(x => x.SampleType == sampleType)
+            .Select(x => new SlmSampleKeyRow(x.Id, x.SampleType, x.Question, x.PendingQuestion, x.Profile, x.Context, x.Intents))
+            .ToList());
 
     public Task<IReadOnlyList<SlmSampleCreatorDto>> CreatorsAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<SlmSampleCreatorDto>>(Live
             .Where(x => x.CreatedByUserId is { } id && Names.ContainsKey(id))
             .Select(x => new SlmSampleCreatorDto(x.CreatedByUserId!.Value, Names[x.CreatedByUserId.Value])).Distinct().ToList());
 
-    public Task<IReadOnlyList<SlmTrainingSample>> ApprovedAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<SlmTrainingSample>>(Live.Where(x => x.ReviewStatus == SlmReviewStatuses.Approved).ToList());
+    public Task<IReadOnlyList<string>> SourcesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<string>>(Live.Select(x => x.Source).Distinct().OrderBy(x => x).ToList());
+
+    public Task<IReadOnlyList<SlmTrainingSample>> ExportableAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<SlmTrainingSample>>(Live.ToList());
 
     public Task MarkExportedAsync(IReadOnlyList<Guid> ids, DateTime exportedAt, CancellationToken ct = default)
     {

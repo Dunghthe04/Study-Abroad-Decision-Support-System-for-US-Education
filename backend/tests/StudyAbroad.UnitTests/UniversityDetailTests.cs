@@ -31,6 +31,29 @@ public class UniversityDetailTests
     }
 
     [Fact]
+    public async Task InvalidRatesOutsideZeroToOne_AreSanitizedToNull()
+    {
+        var data = CreateData();
+        data.University.AcceptanceRate = 1.15m;
+        var offering = new UniversityOffering
+        {
+            UniversityId = data.University.Id,
+            StudyLevel = "undergraduate",
+            IntlAcceptanceRate = 1.25m,
+            RetentionRate1Yr = -0.1m,
+            GradRate6Yr = 0.85m,
+        };
+        var result = await new UniversityDetailService(new FakeRepository(data with { Offerings = [offering] })).GetByCodeAsync("TEST");
+
+        Assert.NotNull(result);
+        Assert.Null(result.AcceptanceRate);
+        var o = Assert.Single(result.Offerings);
+        Assert.Null(o.IntlAcceptanceRate);
+        Assert.Null(o.RetentionRate1Yr);
+        Assert.Equal(0.85m, o.GradRate6Yr);
+    }
+
+    [Fact]
     public async Task InactiveSchoolHidesAllDetails()
     {
         var data = CreateData();
@@ -347,6 +370,8 @@ public class UniversityDetailTests
         Assert.Contains("deadlines_json", sql);
         Assert.Contains("housing_types", sql);
         Assert.Contains("activities", sql);
+        // UC-20/UC-26: tổng chi phí năm gồm bảo hiểm y tế
+        Assert.Contains("health_insurance_usd", sql);
     }
 
     private static UniversityDetailData CreateData() => new(

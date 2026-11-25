@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Controllers;
+using StudyAbroad.Application.Admin.Settings;
+using StudyAbroad.Application.Costs;
 using StudyAbroad.Application.Recommendations;
 using Xunit;
 
@@ -66,16 +68,34 @@ public class AlgorithmParametersTests
             value);
     }
 
-    [Fact]
-    public void Controller_ReturnsVersionAndParameters()
+    private sealed class StubCostParametersService(CostParameters current) : ICostParametersSettingService
     {
-        var controller = new MethodologyController { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+        public Task<CostParametersSettingDto> GetAsync(CancellationToken ct = default) =>
+            Task.FromResult(new CostParametersSettingDto(current, null, true, CostParameters.Default));
+        public Task<CostParameters> GetCurrentParametersAsync(CancellationToken ct = default) =>
+            Task.FromResult(current);
+        public Task<CostParametersUpdateResult> UpdateAsync(UpdateCostParametersRequest request, Guid actorUserId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+    }
 
-        var response = controller.GetParameters().Value;
+    [Fact]
+    public async Task Controller_ReturnsVersionAndLiveParameters()
+    {
+        var live = new CostParameters(300m, 0.05m, 0.02m, 5);
+        var controller = new MethodologyController(new StubCostParametersService(live))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
+
+        var response = (await controller.GetParameters()).Value;
 
         Assert.NotNull(response);
         Assert.Equal(AlgorithmParameters.Version, response.AlgorithmVersion);
         Assert.Equal(AlgorithmParameters.All.Count, response.Parameters.Count);
+        Assert.Equal("$300", response.Parameters.Single(p => p.Key == "cost_visa_integrity_fee").Value);
+        Assert.Equal("5%", response.Parameters.Single(p => p.Key == "cost_annual_escalation").Value);
+        Assert.Equal("2%", response.Parameters.Single(p => p.Key == "cost_bank_sell_spread").Value);
+        Assert.Equal("5 năm", response.Parameters.Single(p => p.Key == "cost_undergrad_years").Value);
     }
 
     [Fact]

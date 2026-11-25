@@ -1,7 +1,10 @@
+using System.Reflection;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Controllers;
 using StudyAbroad.Application.TargetSchools;
+using StudyAbroad.Domain.Constants;
 using System.Security.Claims;
 using Xunit;
 
@@ -166,5 +169,18 @@ public class TargetSchoolsControllerTests
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
         var summary = Assert.IsType<TargetSchoolSummaryDto>(okResult.Value);
         Assert.Equal(0, summary.TotalCount);
+    }
+
+    [Fact]
+    public void Controller_RestrictsAllActionsToStudentAndParent()
+    {
+        var type = typeof(TargetSchoolsController);
+        var authorize = type.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(authorize);
+        Assert.Equal($"{UserRoles.Student},{UserRoles.Parent}", authorize!.Roles);
+        Assert.Null(type.GetCustomAttribute<AllowAnonymousAttribute>());
+        Assert.All(
+            type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+            m => Assert.Null(m.GetCustomAttribute<AllowAnonymousAttribute>()));
     }
 }

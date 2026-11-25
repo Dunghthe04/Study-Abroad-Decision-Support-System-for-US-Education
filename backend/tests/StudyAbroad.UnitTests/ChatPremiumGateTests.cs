@@ -28,6 +28,17 @@ public class ChatPremiumGateTests
 
     private static ChatAction? Button(string? type) => type is null ? null : new ChatAction(type, "188429");
 
+    [Fact]
+    public void PremiumWithFreeFallbackAlsoUsedUp_GetsTokensExhaustedMessage_NotTheFreeQuotaOne()
+    {
+        var spent = PremiumSpent with { FreeExhausted = true };
+
+        var turn = ChatPremiumGate.Check(spent, null, State)!;
+
+        Assert.Equal(("Đã hết token, hãy mua thêm gói", ChatLockReasons.PremiumTokensExhausted, (DateTimeOffset?)null),
+            (turn.Reply.Answer, turn.Lock.Reason, turn.Lock.ResetsAt));
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("school_info")]
@@ -83,8 +94,10 @@ public class ChatPremiumGateTests
     [Fact]
     public void G9_PremiumWithEveryPoolUsedUp_PremiumButtonsAreLocked_TypedGoesOnWithTheFreeList()
     {
-        Assert.Equal(ChatLockReasons.PremiumRequired, ChatPremiumGate.Check(PremiumSpent, Button("explain"), State)!.Lock.Reason);
-        Assert.Equal(ChatLockReasons.PremiumRequired, ChatPremiumGate.Check(PremiumSpent, Button("goal_seek"), State)!.Lock.Reason);
+        var explain = ChatPremiumGate.Check(PremiumSpent, Button("explain"), State)!;
+        var goalSeek = ChatPremiumGate.Check(PremiumSpent, Button("goal_seek"), State)!;
+        Assert.Equal((ChatLockReasons.PremiumTokensExhausted, ChatPremiumGate.PremiumTokensExhaustedAnswer), (explain.Lock.Reason, explain.Reply.Answer));
+        Assert.Equal((ChatLockReasons.PremiumTokensExhausted, ChatPremiumGate.PremiumTokensExhaustedAnswer), (goalSeek.Lock.Reason, goalSeek.Reply.Answer));
         Assert.Null(ChatPremiumGate.Check(PremiumSpent, Button("school_info"), State));
         Assert.Null(ChatPremiumGate.Check(PremiumSpent, null, State));
         Assert.Equal(PremiumIntents.FreeAllowed, ChatPremiumGate.AllowedIntentsFor(PremiumSpent));

@@ -35,23 +35,51 @@ public class AdminScholarshipServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_NoSchoolAndNoProvider_ReturnsError()
-    {
-        var repo = new FakeRepository();
-        var result = await new AdminScholarshipService(repo).CreateAsync(Valid() with { UniversityId = null }, Actor);
-
-        Assert.Contains("provider", result.Errors.Keys);
-        Assert.Equal(0, repo.SaveCount);
-    }
-
-    [Fact]
-    public async Task CreateAsync_ProviderOnly_IsAccepted()
+    public async Task CreateAsync_MissingUniversity_ReturnsError()
     {
         var repo = new FakeRepository();
         var result = await new AdminScholarshipService(repo).CreateAsync(
             Valid() with { UniversityId = null, Provider = "Fulbright" }, Actor);
 
+        Assert.Contains("universityId", result.Errors.Keys);
+        Assert.Equal(0, repo.SaveCount);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ExternalKindOrNonUndergrad_ReturnsErrors()
+    {
+        var repo = new FakeRepository();
+        var result = await new AdminScholarshipService(repo).CreateAsync(
+            Valid() with { Kind = "external", StudyLevel = "master" }, Actor);
+
+        Assert.Contains("kind", result.Errors.Keys);
+        Assert.Contains("studyLevel", result.Errors.Keys);
+        Assert.Equal(0, repo.SaveCount);
+    }
+
+    [Theory]
+    [InlineData(9)]
+    [InlineData(161)]
+    public async Task CreateAsync_DuolingoOutOfRange_ReturnsError(decimal badDuolingo)
+    {
+        var repo = new FakeRepository();
+        var result = await new AdminScholarshipService(repo).CreateAsync(
+            Valid() with { MinDuolingo = badDuolingo }, Actor);
+
+        Assert.Contains("minDuolingo", result.Errors.Keys);
+        Assert.Equal(0, repo.SaveCount);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ValidDuolingo_SavesAndReturnsDto()
+    {
+        var repo = new FakeRepository();
+        var result = await new AdminScholarshipService(repo).CreateAsync(
+            Valid() with { MinDuolingo = 120m }, Actor);
+
         Assert.True(result.Success);
+        Assert.Equal(120m, result.Value!.MinDuolingo);
+        Assert.Equal(120m, Assert.Single(repo.Items).MinDuolingo);
     }
 
     [Fact]

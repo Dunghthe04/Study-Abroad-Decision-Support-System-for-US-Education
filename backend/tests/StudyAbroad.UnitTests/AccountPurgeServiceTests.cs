@@ -8,6 +8,17 @@ namespace StudyAbroad.UnitTests;
 /// <summary>[UC-80] Job xóa hẳn tài khoản: thứ tự các bước, bỏ qua tài khoản vừa khôi phục, lỗi một người không chặn người khác.</summary>
 public class AccountPurgeServiceTests
 {
+    [Fact]
+    public void BuyerSnapshotOnlyForOrdersWhereMoneyMoved_PaidOrMismatch()
+    {
+        var moneyMoved = StudyAbroad.Infrastructure.Persistence.Repositories.AccountPurgeRepository.MoneyMoved.Compile();
+
+        Assert.Equal(
+            [true, true, false, false, false],
+            new[] { OrderStatuses.Paid, OrderStatuses.Mismatch, OrderStatuses.Pending, OrderStatuses.Expired, OrderStatuses.Cancelled }
+                .Select(s => moneyMoved(new StudyAbroad.Domain.Entities.PaymentTransaction { Status = s })));
+    }
+
     private sealed class FakePurgeRepository : IAccountPurgeRepository
     {
         public List<Guid> DueIds { get; } = [];

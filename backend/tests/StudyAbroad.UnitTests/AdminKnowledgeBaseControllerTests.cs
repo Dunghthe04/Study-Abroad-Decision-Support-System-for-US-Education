@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -12,11 +13,31 @@ namespace StudyAbroad.UnitTests;
 
 public class AdminKnowledgeBaseControllerTests
 {
-    private static SaveKnowledgeEntryRequest Request() =>
-        new(7, "faq", "LABEL_VISA_F1", "OPT là gì?", "Trả lời", "Nguồn", null, new DateOnly(2026, 11, 1), null, null, null);
+    private static readonly Guid ActorId = Guid.NewGuid();
 
-    private static AdminKnowledgeBaseController Controller(FakeKnowledgeRepository repo) =>
-        new(new KnowledgeBaseService(repo, new FakeKnowledgeReader(), new FakeKnowledgeAdvisor(), NullLogger<KnowledgeBaseService>.Instance), new KnowledgeTemplateWriter());
+    private static SaveKnowledgeEntryRequest Request() =>
+        new(7, "faq", "LABEL_VISA_F1", "OPT là gì?", "Trả lời", "Nguồn", null, new DateOnly(2026, 11, 1), null, null);
+
+    private static AdminKnowledgeBaseController Controller(FakeKnowledgeRepository repo, bool withUser = true)
+    {
+        var controller = new AdminKnowledgeBaseController(
+            new KnowledgeBaseService(repo, new FakeKnowledgeReader(), new FakeKnowledgeAdvisor(), new FakeAuditLogs(), NullLogger<KnowledgeBaseService>.Instance),
+            new KnowledgeTemplateWriter())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = withUser
+                        ? new ClaimsPrincipal(new ClaimsIdentity(
+                            [new Claim(ClaimTypes.NameIdentifier, ActorId.ToString()),
+                             new Claim(ClaimTypes.Role, UserRoles.Admin)], "TestAuth"))
+                        : new ClaimsPrincipal(new ClaimsIdentity())
+                }
+            }
+        };
+        return controller;
+    }
 
     private static IFormFile File(string name, int length) =>
         new FormFile(new MemoryStream(new byte[length]), 0, length, "file", name);
@@ -58,6 +79,36 @@ public class AdminKnowledgeBaseControllerTests
     }
 
     [Fact]
+    public async Task Delete_ThenUpdateReturns409_ThenRestoreReturns200()
+    {
+        var repo = new FakeKnowledgeRepository();
+        var controller = Controller(repo);
+
+        var created = (KnowledgeEntryDto)Assert.IsType<CreatedAtActionResult>((await controller.Create(Request(), CancellationToken.None)).Result).Value!;
+        Assert.IsType<NoContentResult>(await controller.Delete(created.Id, CancellationToken.None));
+
+        Assert.IsType<ConflictObjectResult>((await controller.Update(created.Id, Request() with { Answer = "Sửa" }, CancellationToken.None)).Result);
+
+        var restored = Assert.IsType<OkObjectResult>((await controller.Restore(created.Id, CancellationToken.None)).Result);
+        Assert.Null(Assert.IsType<KnowledgeEntryDto>(restored.Value).DeletedAt);
+    }
+
+    [Fact]
+    public async Task Versions_And_RestoreVersion_WorkEndToEnd()
+    {
+        var controller = Controller(new FakeKnowledgeRepository());
+        var created = (KnowledgeEntryDto)Assert.IsType<CreatedAtActionResult>((await controller.Create(Request(), CancellationToken.None)).Result).Value!;
+        await controller.Update(created.Id, Request() with { Answer = "Trả lời mới" }, CancellationToken.None);
+
+        var versionsRes = Assert.IsType<OkObjectResult>((await controller.GetVersions(created.Id, CancellationToken.None)).Result);
+        Assert.Equal(2, Assert.IsAssignableFrom<IReadOnlyList<KnowledgeEntryVersionDto>>(versionsRes.Value).Count);
+
+        var restored = Assert.IsType<OkObjectResult>((await controller.RestoreVersion(created.Id, 1, CancellationToken.None)).Result);
+        var dto = Assert.IsType<KnowledgeEntryDto>(restored.Value);
+        Assert.Equal((3, "Trả lời"), (dto.Version, dto.Answer));
+    }
+
+    [Fact]
     public async Task Create_InvalidReturns400()
     {
         var bad = await Controller(new FakeKnowledgeRepository()).Create(Request() with { Question = " " }, CancellationToken.None);
@@ -66,14 +117,17 @@ public class AdminKnowledgeBaseControllerTests
     }
 
     [Fact]
-    public async Task UnknownId_Returns404_ForGetUpdateDelete()
+    public async Task UnknownId_Returns404_ForGetUpdateDeleteRestoreVersions()
     {
         var controller = Controller(new FakeKnowledgeRepository());
         var id = Guid.NewGuid();
 
         Assert.IsType<NotFoundResult>((await controller.Get(id, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundResult>((await controller.GetVersions(id, CancellationToken.None)).Result);
         Assert.IsType<NotFoundResult>((await controller.Update(id, Request(), CancellationToken.None)).Result);
         Assert.IsType<NotFoundResult>(await controller.Delete(id, CancellationToken.None));
+        Assert.IsType<NotFoundResult>((await controller.Restore(id, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundResult>((await controller.RestoreVersion(id, 1, CancellationToken.None)).Result);
     }
 
     [Theory]

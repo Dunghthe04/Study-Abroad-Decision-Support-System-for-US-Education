@@ -15,7 +15,7 @@ public class AdminUniversityServiceTests
         var repo = new FakeRepository();
         var service = new AdminUniversityService(repo);
         var result = await service.CreateUniversityAsync(
-            new CreateUniversityRequest(" new-school ", " New School ", State: "ca", LogoUrl: "https://res.cloudinary.com/test/image/upload/logo.png"), Actor);
+            new CreateUniversityRequest(" NEW-SCHOOL ", " New School ", State: "ca", LogoUrl: "https://res.cloudinary.com/test/image/upload/logo.png"), Actor);
 
         Assert.True(result.Success);
         Assert.Equal("NEW-SCHOOL", result.Value!.Code);
@@ -184,17 +184,39 @@ public class AdminUniversityServiceTests
         Assert.True(result.NotFound);
     }
 
-    [Fact]
-    public async Task CreateOfferingAsync_AddsNewLevel_RejectsExistingLevel()
+    [Theory]
+    [InlineData("mit")]
+    [InlineData("MIT_2026")]
+    [InlineData("MIT 2026")]
+    public async Task CreateUniversityAsync_InvalidCodeCharsOrLowercase_ReturnsError(string badCode)
     {
         var repo = new FakeRepository();
         var service = new AdminUniversityService(repo);
 
-        var created = await service.CreateOfferingAsync(repo.University.Id, new CreateOfferingRequest("Master"), Actor);
-        var duplicate = await service.CreateOfferingAsync(repo.University.Id, new CreateOfferingRequest("undergraduate"), Actor);
+        var result = await service.CreateUniversityAsync(new CreateUniversityRequest(badCode, "Some School"), Actor);
 
+        Assert.False(result.Success);
+        Assert.Contains("code", result.Errors.Keys);
+        Assert.Equal(0, repo.SaveCount);
+    }
+
+    [Fact]
+    public async Task CreateOfferingAsync_OnlyAllowsUndergraduate_AndRejectsDuplicate()
+    {
+        var repo = new FakeRepository();
+        repo.Offering.StudyLevel = "other_existing"; // chưa có undergraduate
+        var service = new AdminUniversityService(repo);
+
+        var masterRejected = await service.CreateOfferingAsync(repo.University.Id, new CreateOfferingRequest("master"), Actor);
+        var created = await service.CreateOfferingAsync(repo.University.Id, new CreateOfferingRequest("undergraduate"), Actor);
+
+        var dupRepo = new FakeRepository(); // đã có undergraduate
+        var duplicate = await new AdminUniversityService(dupRepo).CreateOfferingAsync(dupRepo.University.Id, new CreateOfferingRequest("undergraduate"), Actor);
+
+        Assert.False(masterRejected.Success);
+        Assert.Contains("studyLevel", masterRejected.Errors.Keys);
         Assert.True(created.Success);
-        Assert.Equal("master", Assert.Single(repo.AddedOfferings).StudyLevel);
+        Assert.Equal("undergraduate", Assert.Single(repo.AddedOfferings).StudyLevel);
         Assert.Equal("university_offering.create", Assert.Single(repo.Audits).Action);
         Assert.Contains("studyLevel", duplicate.Errors.Keys);
     }
@@ -203,12 +225,60 @@ public class AdminUniversityServiceTests
     public async Task CreateOfferingAsync_ConcurrentDuplicate_ReturnsFieldErrorInsteadOfThrowing()
     {
         var repo = new FakeRepository { UniqueViolationOnSave = true };
+        repo.Offering.StudyLevel = "other_existing";
         var service = new AdminUniversityService(repo);
 
-        var result = await service.CreateOfferingAsync(repo.University.Id, new CreateOfferingRequest("master"), Actor);
+        var result = await service.CreateOfferingAsync(repo.University.Id, new CreateOfferingRequest("undergraduate"), Actor);
 
         Assert.False(result.Success);
         Assert.Contains("studyLevel", result.Errors.Keys);
+    }
+
+    [Fact]
+    public async Task UpdateOfferingAsync_ZeroTuition_ReturnsError()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo);
+
+        var result = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id,
+            OfferingRequest(repo) with { TuitionUsd = 0m }, Actor);
+
+        Assert.False(result.Success);
+        Assert.Contains("tuitionUsd", result.Errors.Keys);
+        Assert.Equal(0, repo.SaveCount);
+    }
+
+    [Fact]
+    public async Task UpdateOfferingAsync_ValidDeadlines_SavesAndAudits()
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo);
+
+        var result = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id,
+            OfferingRequest(repo) with { DeadlinesJson = """{"ED":"2026-11-01","RD":"2027-01-05"}""" }, Actor);
+
+        Assert.True(result.Success);
+        Assert.Contains("2026-11-01", repo.Offering.DeadlinesJson);
+        Assert.Contains("2027-01-05", repo.Offering.DeadlinesJson);
+        Assert.Contains("deadlinesJson", Assert.Single(repo.Audits).DetailJson);
+    }
+
+    [Theory]
+    [InlineData("""{"ED":"2027-02-01","RD":"2027-01-05"}""")]
+    [InlineData("""{"ED":"01/11/2026"}""")]
+    [InlineData("""{"ED":"2026-11-01","ed":"2026-11-15"}""")]
+    [InlineData("""{"UNKNOWN":"2026-11-01"}""")]
+    public async Task UpdateOfferingAsync_InvalidDeadlines_ReturnsError(string badJson)
+    {
+        var repo = new FakeRepository();
+        var service = new AdminUniversityService(repo);
+
+        var result = await service.UpdateOfferingAsync(repo.University.Id, repo.Offering.Id,
+            OfferingRequest(repo) with { DeadlinesJson = badJson }, Actor);
+
+        Assert.False(result.Success);
+        Assert.Contains("deadlinesJson", result.Errors.Keys);
+        Assert.Equal(0, repo.SaveCount);
     }
 
     [Fact]
