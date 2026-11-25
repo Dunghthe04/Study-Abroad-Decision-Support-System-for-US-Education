@@ -54,6 +54,7 @@ from app.services.replies import (
     NOTHING_TO_TRY,
     OUT_OF_SCOPE,
     RECOMMENDING,
+    ROUND_KNOWLEDGE_BUTTON,
     TRIED_SCENARIO,
     TRY_INSTEAD,
     TRY_WHAT,
@@ -63,7 +64,7 @@ from app.services.scenario import FILTER_FACTORS, LABELS, SUPPORTED_TEXT, WhatIf
 from app.services.skill_input import skill_request_of
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
 from app.services.skill_template import TEMPLATE_TASKS, build_skill, tasks_of
-from app.services.skills import skill_ho_so
+from app.services.skills import major_catalog, skill_ho_so, state_catalog
 from app.services.skills.profile_handler import ChatProfileHandler
 from app.services.skills.skill_danh_gia import gpa_table_of
 from app.services.skills.validators import AskAgain
@@ -207,6 +208,9 @@ def group_sentences(what_if: WhatIf) -> list[str]:
 def cannot_try(what_if: WhatIf, profile: dict[str, ProfileField] | None = None) -> SkillOutput:
     sentences = group_sentences(what_if)
     quick_try = try_buttons(profile or {})
+    # Vòng nộp (ED, EA, RD) không có trong công thức: kết quả không đổi, kèm nút hỏi kiến thức về vòng nộp
+    if "application_round" in what_if.no_effect:
+        quick_try = [ROUND_KNOWLEDGE_BUTTON.model_copy(), *quick_try]
     if not sentences:
         return SkillOutput(
             NOTHING_TO_TRY.format(supported=SUPPORTED_TEXT), quick_replies=quick_try or menu_buttons()
@@ -250,7 +254,10 @@ class ScenarioBranch:
                 NEED_RESULTS, quick_replies=[MENU["schools"].model_copy(), MENU["assess"].model_copy()]
             )
         try:
-            what_if = parse_what_if(entities.get("changes", []))
+            # Bang và ngành đổi sang mã và tên chuẩn của hệ thống (đọc DB một lần rồi giữ); lỗi đọc thì hai yếu tố này chưa thử được
+            what_if = parse_what_if(
+                entities.get("changes", []), await state_catalog.states(), await major_catalog.majors()
+            )
         except AskAgain as ask:
             # Thiếu số hoặc số không hợp lệ: hỏi lại, kèm nút thử nhanh để bấm thay vì gõ
             return SkillOutput(ask.question, quick_replies=try_buttons(state.profile))

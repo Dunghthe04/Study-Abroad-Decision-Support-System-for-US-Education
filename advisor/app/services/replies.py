@@ -123,6 +123,10 @@ FILTER_TEXT = (
     "gợi ý trường lại thì danh sách sẽ theo {names} mới. Sau này muốn đổi lại lúc nào cũng được."
 )
 NO_EFFECT_TEXT = "{names} không làm thay đổi danh sách trường gợi ý."
+# Câu giả định theo vòng nộp (UC-155): kết quả không đổi; nút này hỏi kiến thức về vòng nộp, trả lời từ Kho tri thức (UC-36)
+ROUND_KNOWLEDGE_BUTTON = QuickReply(
+    label="Tìm hiểu vòng nộp ED, EA, RD", value="ED, EA và RD khác nhau thế nào?"
+)
 CANNOT_TRY_OTHERS = "Mình chưa thử được: {names}."
 EDIT_SECTION_LABEL = "Sửa {name}"
 EDIT_SECTION_VALUE = "Em muốn sửa {name}"

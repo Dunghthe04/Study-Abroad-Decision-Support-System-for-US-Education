@@ -123,14 +123,14 @@ async def test_what_if_asks_again_instead_of_simulating_a_bad_value():
 async def test_what_if_says_what_it_cannot_try():
     state = ChatState(has_results=True)
 
-    only_major = await run_scenario(state, **what_if({"factor": "major", "value": "CS"}))
+    only_type = await run_scenario(state, **what_if({"factor": "school_type", "value": "public"}))
     mixed = await run_scenario(
-        state, **what_if({"factor": "sat", "value": "1450"}, {"factor": "major", "value": "CS"})
+        state, **what_if({"factor": "sat", "value": "1450"}, {"factor": "school_type", "value": "public"})
     )
 
-    assert only_major.answer.startswith("Ngành là điều kiện lọc trường") and only_major.action is None
-    assert mixed.action == "simulate" and "ngành" in mixed.answer
-    assert mixed.action_data["unsupported"] == ["ngành"]
+    assert only_type.answer.startswith("Loại trường là điều kiện lọc trường") and only_type.action is None
+    assert mixed.action == "simulate" and "loại trường" in mixed.answer
+    assert mixed.action_data["unsupported"] == ["loại trường"]
 
 
 # Mục lọc trường: kèm nút mở luồng sửa đúng nhóm của ô chọn sửa hồ sơ, mỗi nhóm một nút
@@ -138,16 +138,12 @@ async def test_what_if_filter_factors_offer_edit_buttons():
     state = ChatState(has_results=True)
     out = await run_scenario(
         state,
-        **what_if(
-            {"factor": "major", "value": "CS"},
-            {"factor": "school_type", "value": "public"},
-        ),
+        **what_if({"factor": "school_type", "value": "public"}),
     )
 
-    assert out.answer.startswith("Ngành và loại trường là điều kiện lọc trường")
+    assert out.answer.startswith("Loại trường là điều kiện lọc trường")
     assert "gợi ý trường lại" in out.answer
     assert [(r.label, r.value) for r in out.quick_replies] == [
-        ("Sửa Mục tiêu", "Em muốn sửa Mục tiêu"),
         ("Sửa Nguyện vọng", "Em muốn sửa Nguyện vọng"),
     ]
     assert out.action is None
@@ -161,6 +157,31 @@ async def test_what_if_no_effect_factors_say_list_unchanged(factor, name):
     assert out.answer.startswith(f"{name} không làm thay đổi danh sách trường gợi ý.")
     assert "Bạn thử đổi được: GPA" in out.answer
     assert [r.label for r in out.quick_replies] == ["Thử SAT 1400", "Thử IELTS 6.5"] and out.action is None
+
+
+# UC-155: vòng nộp ED, EA, RD không có trong công thức: kết quả không đổi, kèm nút hỏi kiến thức về vòng nộp
+async def test_what_if_about_the_application_round_says_the_list_is_unchanged_and_offers_the_knowledge():
+    out = await run_scenario(
+        ChatState(has_results=True), **what_if({"factor": "application_round", "value": "ED"})
+    )
+
+    assert out.answer.startswith("Vòng nộp (ED, EA, RD) không làm thay đổi danh sách trường gợi ý.")
+    assert out.action is None
+    assert out.quick_replies[0].label == "Tìm hiểu vòng nộp ED, EA, RD"
+    assert out.quick_replies[0].value == "ED, EA và RD khác nhau thế nào?"
+
+
+async def test_what_if_with_a_new_state_and_a_rate_goes_to_simulate_with_both():
+    out = await run_scenario(
+        ChatState(has_results=True),
+        **what_if(
+            {"factor": "state", "value": "tx"}, {"factor": "exchange_rate", "value": "10", "unit": "percent"}
+        ),
+    )
+
+    assert out.action == "simulate"
+    assert out.action_data["changes"] == {"states": ["TX"], "exchangeRatePercent": 10.0}
+    assert "bang TX" in out.answer and "tỉ giá tăng 10%" in out.answer
 
 
 # Mục không thuộc hai nhóm trên (hoạt động, giải thưởng...) vẫn trả câu chung
@@ -1080,7 +1101,9 @@ async def test_confirming_the_profile_without_a_question_waiting_does_not_advise
     assert out.quick_replies == NEXT_AFTER_SAVE_REPLIES
 
 
-CLAUDE_FILTER = {"answer": "Ngành là điều kiện lọc trường. Bạn bấm Sửa Mục tiêu rồi nhờ mình gợi ý lại nhé."}
+CLAUDE_FILTER = {
+    "answer": "Loại trường là điều kiện lọc trường. Bạn bấm Sửa Nguyện vọng rồi nhờ mình gợi ý lại nhé."
+}
 
 
 async def run_with_writer(llm: FakeLLM, *changes: dict):
@@ -1091,10 +1114,10 @@ async def run_with_writer(llm: FakeLLM, *changes: dict):
 # Có writer: lời do Claude viết, nút sửa vẫn do code gắn
 async def test_what_if_writer_writes_cannot_try_answer():
     llm = FakeLLM(CLAUDE_FILTER)
-    out = await run_with_writer(llm, {"factor": "major", "value": "CS"})
+    out = await run_with_writer(llm, {"factor": "school_type", "value": "public"})
 
     assert out.answer == CLAUDE_FILTER["answer"]
-    assert [r.label for r in out.quick_replies] == ["Sửa Mục tiêu"]
+    assert [r.label for r in out.quick_replies] == ["Sửa Nguyện vọng"]
     assert out.action is None and len(llm.calls) == 1
 
 
@@ -1102,10 +1125,10 @@ async def test_what_if_writer_writes_cannot_try_answer():
 async def test_what_if_writer_failure_keeps_fixed_answer():
     bad = {"answer": "Mục này mình không thử tạm được đâu bạn nhé."}
     llm = FakeLLM(bad, bad)
-    out = await run_with_writer(llm, {"factor": "major", "value": "CS"})
+    out = await run_with_writer(llm, {"factor": "school_type", "value": "public"})
 
-    assert out.answer.startswith("Ngành là điều kiện lọc trường")
-    assert [r.label for r in out.quick_replies] == ["Sửa Mục tiêu"]
+    assert out.answer.startswith("Loại trường là điều kiện lọc trường")
+    assert [r.label for r in out.quick_replies] == ["Sửa Nguyện vọng"]
     assert len(llm.calls) == 2
 
 
@@ -1113,7 +1136,9 @@ async def test_what_if_writer_failure_keeps_fixed_answer():
 async def test_what_if_writer_not_called_for_other_factors_or_simulate():
     llm = FakeLLM()
     other = await run_with_writer(llm, {"factor": "activities", "value": "x"})
-    sat = await run_with_writer(llm, {"factor": "sat", "value": "1450"}, {"factor": "major", "value": "CS"})
+    sat = await run_with_writer(
+        llm, {"factor": "sat", "value": "1450"}, {"factor": "school_type", "value": "public"}
+    )
 
     assert other.answer == NOTHING_TO_TRY.format(supported=SUPPORTED_TEXT)
     assert sat.action == "simulate" and sat.action_data["changes"] == {"sat": 1450}

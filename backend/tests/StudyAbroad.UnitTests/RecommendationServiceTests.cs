@@ -636,6 +636,147 @@ public class RecommendationServiceTests
         return (service, advisor, store, profile);
     }
 
+    // ---- UC-77 / UC-155: bang, ngành, tỉ giá giả định (thay điều kiện lọc ở bước 3 của UC-22 và ngân sách USD trên bản sao hồ sơ)
+
+    private sealed class FixedRate(decimal vndPerUsd) : StudyAbroad.Application.Profile.Flow.IExchangeRateProvider
+    {
+        public Task<decimal> GetVndPerUsdAsync(CancellationToken ct = default) => Task.FromResult(vndPerUsd);
+    }
+
+    private static (RecommendationService Service, StudentProfile Profile) SimWithRate(
+        IReadOnlyList<RecommendSchoolInput> schools, decimal? vndPerUsd = 25_000m)
+    {
+        var profile = Profile();
+        profile.OverallGpa = 3.5m;
+        profile.Sat = 1290m;
+        var service = new RecommendationService(
+            new FakeAdvisor(), new FakeRecommendationRepository(schools), new FakeProfileFlow(profile), null,
+            vndPerUsd is { } rate ? new FixedRate(rate) : null);
+        return (service, profile);
+    }
+
+    [Fact]
+    public async Task Simulate_ANewMajor_ReplacesTheMajorFilter_SchoolsOfTheOldMajorLeaveAndThoseOfTheNewComeIn()
+    {
+        var cs = School("CS", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var history = School("HIS", 38_000m, "none", "History", sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, profile) = SimWithRate([cs, history]);
+
+        var result = await service.SimulateAsync(profile.UserId, NoChange with { Major = "History" }, null, default);
+
+        Assert.Contains(new SchoolChange("CS", "CS", "M", "OUT"), result.Changes);
+        Assert.Contains(new SchoolChange("HIS", "HIS", "OUT", "M"), result.Changes);
+    }
+
+    [Fact]
+    public async Task Simulate_NewStates_ReplaceThePreferredStates_AndSchoolsOutsideThemLeave()
+    {
+        var ny = School("NYS", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);   // helper đặt bang NY
+        var (service, profile) = SimWithRate([ny]);
+
+        var texas = await service.SimulateAsync(profile.UserId, NoChange with { States = ["tx"] }, null, default);   // chữ thường vẫn nhận
+        var sameState = await service.SimulateAsync(profile.UserId, NoChange with { States = ["NY"] }, null, default);
+
+        Assert.Equal(new SchoolChange("NYS", "NYS", "M", "OUT"), Assert.Single(texas.Changes));
+        Assert.Empty(sameState.Changes);
+    }
+
+    // Tỉ giá hiện nay 25.000: tăng 25% (hoặc lên 31.250) thì ngân sách 50.000 USD còn 40.000, trần 44.000 nên trường 48.000 USD bị loại
+    [Theory]
+    [InlineData(null, 25.0)]
+    [InlineData(31_250, null)]
+    public async Task Simulate_ARisingExchangeRate_ShrinksTheUsdBudget_SoAnExpensiveSchoolLeaves(int? vnd, double? percent)
+    {
+        var dear = School("DEAR", 48_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, profile) = SimWithRate([dear]);
+        var overrides = NoChange with { ExchangeRateVnd = vnd, ExchangeRatePercent = (decimal?)percent };
+
+        var result = await service.SimulateAsync(profile.UserId, overrides, null, default);
+
+        Assert.Equal(new SchoolChange("DEAR", "DEAR", "M", "OUT"), Assert.Single(result.Changes));
+        using var criteria = JsonDocument.Parse(result.CriteriaJson);
+        Assert.Equal(40_000m, criteria.RootElement.GetProperty("budget").GetDecimal());   // ngân sách trong kịch bản
+    }
+
+    [Fact]
+    public async Task Simulate_TheExchangeRateAppliesToTheSimulatedBudgetWhenBothAreGiven()
+    {
+        var dear = School("DEAR", 48_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, profile) = SimWithRate([dear]);
+
+        var result = await service.SimulateAsync(profile.UserId, NoChange with { BudgetUsd = 100_000m, ExchangeRatePercent = 25m }, null, default);
+
+        using var criteria = JsonDocument.Parse(result.CriteriaJson);
+        Assert.Equal(80_000m, criteria.RootElement.GetProperty("budget").GetDecimal());   // 100.000 x 25.000 / 31.250
+        Assert.Empty(result.Changes);
+    }
+
+    [Theory]
+    [InlineData(25_000, null)]    // bằng tỉ giá hiện nay: không phải mức tăng
+    [InlineData(20_000, null)]    // giảm: không nhận
+    [InlineData(null, 0.0)]
+    [InlineData(null, -5.0)]
+    [InlineData(null, 150.0)]
+    [InlineData(31_250, 25.0)]    // nhập cả hai cách
+    public async Task Simulate_AnExchangeRateThatIsNotARise_IsRefused(int? vnd, double? percent)
+    {
+        var (service, profile) = SimWithRate([School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m)]);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SimulateAsync(
+            profile.UserId, NoChange with { ExchangeRateVnd = vnd, ExchangeRatePercent = (decimal?)percent }, null, default));
+    }
+
+    [Fact]
+    public async Task Simulate_TheRefusalOfAFallingRate_SaysTheCurrentRate()
+    {
+        var (service, profile) = SimWithRate([School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m)]);
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => service.SimulateAsync(profile.UserId, NoChange with { ExchangeRateVnd = 20_000m }, null, default));
+
+        Assert.Contains("chỉ nhận mức tăng", ex.Message);
+        Assert.Contains("25", ex.Message);   // tỉ giá hiện nay
+    }
+
+    [Theory]
+    [InlineData("Texas")]   // phải là mã hai chữ
+    [InlineData("T1")]
+    [InlineData("")]
+    public async Task Simulate_AnInvalidState_IsRefused(string state)
+    {
+        var (service, profile) = SimWithRate([School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m)]);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SimulateAsync(profile.UserId, NoChange with { States = [state] }, null, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SimulateAsync(profile.UserId, NoChange with { States = [] }, null, default));
+    }
+
+    [Fact]
+    public async Task Simulate_ABlankMajor_IsRefused()
+    {
+        var (service, profile) = SimWithRate([School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m)]);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SimulateAsync(profile.UserId, NoChange with { Major = "  " }, null, default));
+    }
+
+    [Fact]
+    public async Task Simulate_WithoutAnExchangeRateProvider_TheRateScenarioCannotRun()
+    {
+        var (service, profile) = SimWithRate([School("S", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m)], vndPerUsd: null);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SimulateAsync(profile.UserId, NoChange with { ExchangeRatePercent = 10m }, null, default));
+    }
+
+    [Fact]
+    public async Task GoalSeek_UsesTheSameSimulatedRate()
+    {
+        var dear = School("DEAR", 48_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, profile) = SimWithRate([dear]);
+
+        var result = await service.GoalSeekAsync(profile.UserId, "DEAR", "safety", default, NoChange with { ExchangeRatePercent = 25m });
+
+        Assert.Equal("simulated", result.Basis);
+        Assert.Equal(40_000m, result.Budget.BudgetUsd);   // goal-seek tính trên ngân sách đã đổi theo tỉ giá giả định
+    }
+
     [Fact]
     public async Task Simulate_ScoresComeFromTheCertificationsTable_NotFromTheProfileColumns()
     {

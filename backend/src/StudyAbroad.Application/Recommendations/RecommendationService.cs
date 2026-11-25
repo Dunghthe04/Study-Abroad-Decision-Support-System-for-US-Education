@@ -58,7 +58,11 @@ public record SchoolExplanation(
 public record SimulationOverrides(
     decimal? Gpa, decimal? Sat, decimal? Act, decimal? Ielts,
     decimal? BudgetUsd, string? ScholarshipNeed, int? EcTier, decimal? Toefl = null, decimal? Duolingo = null,
-    decimal? BudgetTolerance = null);
+    decimal? BudgetTolerance = null,
+    // UC-77/155: bang và ngành thay điều kiện lọc ở bước 3 của UC-22 trên bản sao hồ sơ (mã bang hai chữ, ví dụ "TX").
+    // ExchangeRateVnd (tỉ giá mới, VNĐ mỗi USD) hoặc ExchangeRatePercent (mức tăng, %): chỉ nhận mức tăng so với tỉ giá hiện nay; dùng để đổi
+    // ngân sách sang USD (ngân sách x tỉ giá hiện nay / tỉ giá mới), nên không đứng cùng lúc cả hai. Được đổi thành BudgetUsd trước khi tính.
+    IReadOnlyList<string>? States = null, string? Major = null, decimal? ExchangeRateVnd = null, decimal? ExchangeRatePercent = null);
 
 // Số trường mỗi nhóm của một lượt tính (đếm trên mọi trường còn sau lọc cứng).
 public record GroupSummary(int Kept, int Reach, int Match, int Safety, int AidBlock, int NoData);
@@ -78,7 +82,8 @@ public record SimulationResult(
 
 // [UC-76] parentRefresher (tùy chọn): sau mỗi lượt gợi ý của con, tính lại danh sách theo ưu tiên cha mẹ đã lưu. Null thì bỏ qua.
 public partial class RecommendationService(IAdvisorClient advisor, IRecommendationRepository recommendations, IProfileFlowRepository profiles,
-    StudyAbroad.Application.ParentLinks.IParentPreferenceRefresher? parentRefresher = null)
+    StudyAbroad.Application.ParentLinks.IParentPreferenceRefresher? parentRefresher = null,
+    StudyAbroad.Application.Profile.Flow.IExchangeRateProvider? rates = null)
     : IRecommendationRunner
 
 {
@@ -280,6 +285,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         if (string.IsNullOrWhiteSpace(profile.TargetLevel))
             throw new InvalidOperationException("Hồ sơ chưa có bậc học muốn theo.");
 
+        overrides = await ResolveExchangeAsync(profile, overrides, ct);
         var simulated = Overlay(profile, overrides);
         EnsureRunnable(profile);
         EnsureRunnable(simulated);
@@ -316,14 +322,20 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         if (o.ScholarshipNeed is not null && !ProfileConstants.ScholarshipNeeds.All.Contains(o.ScholarshipNeed))
             throw new ArgumentException("Mức cần học bổng giả định không hợp lệ.");
         if (o.EcTier is < 1 or > 5) throw new ArgumentException("Bậc ngoại khóa giả định phải từ 1 đến 5.");
+        if (o.States is { } states && (states.Count == 0 || states.Count > MaxSimulatedStates || states.Any(s => !StateCode.IsMatch(s ?? ""))))
+            throw new ArgumentException("Bang giả định phải là một đến vài mã bang hai chữ cái, ví dụ TX.");
+        if (o.Major is not null && (string.IsNullOrWhiteSpace(o.Major) || o.Major.Length > MaxMajorLength))
+            throw new ArgumentException("Ngành giả định không hợp lệ.");
+        if (o.ExchangeRateVnd is not null || o.ExchangeRatePercent is not null)
+            throw new InvalidOperationException("Tỉ giá giả định chưa được đổi sang ngân sách.");   // lỗi lập trình: chưa qua ResolveExchangeAsync
 
         return new StudentProfile
         {
             Id = profile.Id,
             UserId = profile.UserId,
             TargetLevel = profile.TargetLevel,
-            IntendedMajor = profile.IntendedMajor,
-            PreferredStates = profile.PreferredStates,
+            IntendedMajor = o.Major?.Trim() ?? profile.IntendedMajor,
+            PreferredStates = o.States is { } picked ? picked.Select(s => s.ToUpperInvariant()).Distinct().ToList() : profile.PreferredStates,
             TargetSchoolType = profile.TargetSchoolType,
             OverallGpa = o.Gpa ?? profile.OverallGpa,
             Sat = o.Sat ?? profile.Sat,
@@ -419,7 +431,41 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     public static bool HasValues(SimulationOverrides? o) =>
         o is not null && (o.Gpa is not null || o.Sat is not null || o.Act is not null || o.Ielts is not null
                           || o.Toefl is not null || o.Duolingo is not null || o.BudgetUsd is not null
-                          || o.ScholarshipNeed is not null || o.EcTier is not null);
+                          || o.ScholarshipNeed is not null || o.EcTier is not null
+                          || o.States is not null || o.Major is not null
+                          || o.ExchangeRateVnd is not null || o.ExchangeRatePercent is not null);
+
+    private const int MaxSimulatedStates = 10;
+    private const int MaxMajorLength = 200;
+    private static readonly System.Text.RegularExpressions.Regex StateCode = new("^[A-Za-z]{2}$");
+
+    /// <summary>
+    /// [UC-77, UC-155] Đổi tỉ giá giả định thành ngân sách USD: ngân sách (giả định nếu có, không thì của hồ sơ) x tỉ giá hiện nay / tỉ giá mới.
+    /// Chỉ nhận mức tăng (tỉ giá mới phải cao hơn tỉ giá hiện nay), vì tỉ giá giảm làm ngân sách USD tăng và không phải điều UC này cho thử.
+    /// Không có tỉ giá giả định thì trả nguyên. Sai thì ném ArgumentException (báo lỗi như giá trị ngoài khoảng).
+    /// </summary>
+    private async Task<SimulationOverrides> ResolveExchangeAsync(StudentProfile profile, SimulationOverrides overrides, CancellationToken ct)
+    {
+        if (overrides.ExchangeRateVnd is null && overrides.ExchangeRatePercent is null)
+            return overrides;
+        if (overrides.ExchangeRateVnd is not null && overrides.ExchangeRatePercent is not null)
+            throw new ArgumentException("Tỉ giá giả định chỉ nhập một cách: số VNĐ mỗi USD hoặc phần trăm tăng.");
+        if (overrides.ExchangeRatePercent is <= 0 or > 100)
+            throw new ArgumentException("Mức tăng tỉ giá giả định phải lớn hơn 0 và không quá 100%.");
+        if (overrides.ExchangeRateVnd is <= 0 or > 1_000_000m)
+            throw new ArgumentException("Tỉ giá giả định không hợp lệ.");
+        var budget = overrides.BudgetUsd ?? profile.BudgetMaxUsd
+            ?? throw new ArgumentException("Hồ sơ chưa có ngân sách để đổi theo tỉ giá giả định.");
+        if (rates is null)
+            throw new InvalidOperationException("Chưa tra được tỉ giá hiện nay.");
+        var current = await rates.GetVndPerUsdAsync(ct);
+        var proposed = overrides.ExchangeRateVnd ?? current * (1 + overrides.ExchangeRatePercent!.Value / 100m);
+        if (proposed <= current)
+            throw new ArgumentException(
+                $"Tỉ giá giả định chỉ nhận mức tăng so với tỉ giá hiện nay ({Math.Round(current, 0, MidpointRounding.AwayFromZero):N0} VNĐ mỗi USD).");
+        var adjusted = Math.Round(budget * current / proposed, 0, MidpointRounding.AwayFromZero);
+        return overrides with { BudgetUsd = adjusted, ExchangeRateVnd = null, ExchangeRatePercent = null };
+    }
 
     // Số đã chấm và mã lý do của một trường, để giải thích. Gốc là hồ sơ thật (lần gợi ý đã lưu) hoặc, khi có giá trị giả định,
     // kết quả mô phỏng với giá trị đó: giải thích luôn khớp với danh sách học sinh đang xem. Dùng chung cho thẻ (không AI) và lời tư vấn (có AI)
@@ -434,6 +480,8 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         int? tier;
         IReadOnlyList<int>? pref;   // nút ưu tiên đã dùng cho lần gợi ý này (null: trọng số mặc định)
         string studyLevel;
+        if (overrides is not null)
+            overrides = await ResolveExchangeAsync(profile, overrides, ct);
         var simulated = HasValues(overrides);
         if (simulated)
         {

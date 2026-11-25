@@ -41,6 +41,57 @@ public class ChatSimulationTests
 
     // ---------------------------------------------------------------- đọc giá trị advisor đã kiểm tra
 
+    // ---- UC-155: bang, ngành, tỉ giá giả định trong chat
+
+    [Fact]
+    public void Parse_ReadsTheStatesTheMajorAndTheRate()
+    {
+        var scenario = ChatSimulation.Parse(Json("""{"changes":{"states":["TX","CA"],"major":"History","exchangeRatePercent":10}}"""))!;
+
+        Assert.Equal(["TX", "CA"], scenario.Overrides.States);
+        Assert.Equal("History", scenario.Overrides.Major);
+        Assert.Equal(10m, scenario.Overrides.ExchangeRatePercent);
+        Assert.Null(scenario.Overrides.ExchangeRateVnd);
+        Assert.True(scenario.HasProfileValues);
+    }
+
+    [Fact]
+    public void Parse_ReadsTheRateInDong()
+    {
+        var o = ChatSimulation.Parse(Json("""{"changes":{"exchangeRateVnd":27000}}"""))!.Overrides;
+
+        Assert.Equal(27_000m, o.ExchangeRateVnd);
+        Assert.Null(o.ExchangeRatePercent);
+    }
+
+    [Theory]
+    [InlineData("""{"changes":{"states":[]}}""")]
+    [InlineData("""{"changes":{"states":["", " "]}}""")]
+    [InlineData("""{"changes":{"major":"  "}}""")]
+    public void Parse_EmptyStatesOrMajor_AreNoChange(string json) => Assert.Null(ChatSimulation.Parse(Json(json)));
+
+    [Fact]
+    public void Describe_NamesTheNewFactorsForTheBasisLine()
+    {
+        var text = ChatSimulation.Describe(new SimulationOverrides(null, 1500m, null, null, null, null, null, States: ["TX"], Major: "History", ExchangeRatePercent: 10m));
+
+        Assert.Equal("SAT 1500, bang TX, ngành History, tỉ giá tăng 10%", text);
+        Assert.Equal("tỉ giá 27.000 VNĐ mỗi USD", ChatSimulation.Describe(new SimulationOverrides(null, null, null, null, null, null, null, ExchangeRateVnd: 27_000m)));
+    }
+
+    [Fact]
+    public void Note_TellsTheAiWhichNewFactorsAreBeingTried()
+    {
+        var scenario = Scenario(new SimulationOverrides(null, null, null, null, null, null, null, States: ["TX"], Major: "History", ExchangeRatePercent: 10m));
+
+        var note = ChatSimulation.Note(Result(), scenario);
+
+        Assert.Equal(["state", "major", "exchange"], note.Factors);
+        Assert.Contains("bang TX", note.Label);
+        Assert.Contains("ngành History", note.Label);
+        Assert.Contains("tỉ giá tăng 10%", note.Label);
+    }
+
     [Fact]
     public void Parse_ReadsTheCheckedValues()
     {

@@ -126,6 +126,8 @@ public partial class RecommendationService
             ?? throw new InvalidOperationException("Chưa có hồ sơ.");
         if (string.IsNullOrWhiteSpace(real.TargetLevel))
             throw new InvalidOperationException("Hồ sơ chưa có bậc học muốn theo.");
+        if (overrides is not null)
+            overrides = await ResolveExchangeAsync(real, overrides, ct);
         var simulated = HasValues(overrides);
         var profile = simulated ? Overlay(real, overrides!) : real;
         EnsureRunnable(profile);
