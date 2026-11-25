@@ -2351,7 +2351,7 @@ public class ChatServiceTests
         var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
 
         var plain = await KnowledgeChat(KnowledgeAction("học phí Harvard bao nhiêu", school: "Harvard"), runner);
-        var withUnstored = await KnowledgeChat(KnowledgeAction("học phí và ký túc xá của Harvard", school: "Harvard"), runner);
+        var withUnstored = await KnowledgeChat(KnowledgeAction("học phí và việc làm của Harvard", school: "Harvard"), runner);
 
         Assert.Equal(plain.Answer, plain.Widget!.Data!.Value.GetProperty("coveredText").GetString());   // thẻ nói đủ: giao diện bỏ chữ
         Assert.False(withUnstored.Widget!.Data!.Value.TryGetProperty("coveredText", out _));            // có lời "chưa lưu": giữ chữ
@@ -2416,21 +2416,31 @@ public class ChatServiceTests
     {
         var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
 
-        var res = await KnowledgeChat(ModelAction("học phí và ký túc xá Harvard", "Harvard", ["cost", "other"]), runner);
+        var res = await KnowledgeChat(ModelAction("học phí và việc làm Harvard", "Harvard", ["cost", "other"]), runner);
 
         Assert.Contains("học phí 59.000 USD", res.Answer);
         Assert.Contains("hệ thống chưa lưu", res.Answer);
     }
 
     [Fact]
-    public async Task SchoolInfo_ModelAsksAboutHousing_AnswersTheKnownFieldAndAdmitsTheSystemHasNoHousingData()
+    public async Task SchoolInfo_ModelAsksAboutHousing_AnswersFromTheCampusDataOrSaysThereIsNone()
     {
-        var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
+        var withHousing = InfoOf() with
+        {
+            Campus = new SchoolCampusInfo(null, ["Coed residence halls"], true, 14_500m, null, 0.97m, null, null, []),
+        };
 
-        var res = await KnowledgeChat(ModelAction("học phí và ký túc xá Harvard", "Harvard", ["cost", "housing"]), runner);
+        var res = await KnowledgeChat(
+            ModelAction("học phí và ký túc xá Harvard", "Harvard", ["cost", "housing"]),
+            new FakeRunner { Match = Found("harvard", "Harvard University"), Info = withHousing });
+        var none = await KnowledgeChat(
+            ModelAction("học phí và ký túc xá Harvard", "Harvard", ["cost", "housing"]),
+            new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() });
 
         Assert.Contains("học phí 59.000 USD", res.Answer);
-        Assert.Contains("hệ thống chưa lưu", res.Answer);
+        Assert.Contains("Coed residence halls", res.Answer);
+        Assert.DoesNotContain("hệ thống chưa lưu", res.Answer);   // nhà ở là mục có số liệu, không phải điều "chưa lưu"
+        Assert.Contains("chưa có số liệu về nhà ở", none.Answer);   // trường thiếu số liệu: nói thẳng, không đoán
     }
 
     // ---- tìm trường theo điều kiện: model trả bo_loc, advisor chuẩn hóa, backend lọc và trả lời bằng số liệu thật (không Gemini)
@@ -3025,8 +3035,8 @@ public class ChatServiceTests
     {
         var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
 
-        var (_, withoutSource, _) = await KnowledgeTurn(KnowledgeAction("ký túc xá của Harvard thế nào", school: "Harvard"), runner);
-        var (_, withSource, _) = await KnowledgeTurn(KnowledgeAction("ký túc xá của Harvard thế nào", school: "Harvard", kbFound: true, kb: "Câu của kho"), runner);
+        var (_, withoutSource, _) = await KnowledgeTurn(KnowledgeAction("việc làm của Harvard thế nào", school: "Harvard"), runner);
+        var (_, withSource, _) = await KnowledgeTurn(KnowledgeAction("việc làm của Harvard thế nào", school: "Harvard", kbFound: true, kb: "Câu của kho"), runner);
 
         Assert.Equal("no_answer", withoutSource);
         Assert.Equal("answered", withSource);
@@ -3078,8 +3088,8 @@ public class ChatServiceTests
     {
         var runner = new FakeRunner { Match = Found("harvard", "Harvard University"), Info = InfoOf() };
 
-        var kept = await KnowledgeChat(KnowledgeAction("ký túc xá của Harvard thế nào", school: "Harvard", kbFound: true, kb: "Câu của kho"), runner);
-        var pointed = await KnowledgeChat(KnowledgeAction("ký túc xá của Harvard thế nào", school: "Harvard", kbFound: false), runner);
+        var kept = await KnowledgeChat(KnowledgeAction("việc làm của Harvard thế nào", school: "Harvard", kbFound: true, kb: "Câu của kho"), runner);
+        var pointed = await KnowledgeChat(KnowledgeAction("việc làm của Harvard thế nào", school: "Harvard", kbFound: false), runner);
 
         Assert.Equal("Câu của kho", kept.Answer);                              // kho có nguồn thật: giữ
         Assert.Contains("chưa có thông tin này của Harvard University", pointed.Answer);   // kho không có: nói chưa có và chỉ website

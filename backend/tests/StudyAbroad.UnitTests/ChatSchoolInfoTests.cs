@@ -69,9 +69,9 @@ public class ChatSchoolInfoTests
     }
 
     [Theory]
-    [InlineData("ký túc xá của BU thế nào", true)]
+    [InlineData("thời tiết ở Boston thế nào", true)]
     [InlineData("sinh viên Harvard ra trường lương bao nhiêu", true)]
-    [InlineData("MIT có câu lạc bộ nào không", true)]
+    [InlineData("MIT có câu lạc bộ nào không", false)]   // UC-156: hoạt động sinh viên đã có số liệu
     [InlineData("xếp hạng của MIT", false)]          // xếp hạng có trong dữ liệu, không phải mục chưa lưu
     [InlineData("học phí Harvard bao nhiêu", false)]
     public void AsksUnstored_DetectsWhatTheTableDoesNotHold(string question, bool expected)
@@ -245,7 +245,7 @@ public class ChatSchoolInfoTests
 
         Assert.True(answer.Complete);
         Assert.Contains("học phí 59.000 USD", answer.Text);
-        Assert.Contains("ký túc xá, đời sống) hệ thống chưa lưu", answer.Text);
+        Assert.Contains("việc làm, thời tiết) hệ thống chưa lưu", answer.Text);
     }
 
     [Fact]
@@ -399,15 +399,115 @@ public class ChatSchoolInfoTests
         Assert.False(ChatSchoolInfo.ModelSaysUnstored(["cost"]));
     }
 
+    // UC-156: bốn mục đời sống khuôn viên đã có số liệu nên không còn là "chưa lưu"
     [Theory]
-    [InlineData("housing")]
-    [InlineData("student_faculty_ratio")]
-    [InlineData("student_activities")]
-    [InlineData("campus_setting")]
-    public void ModelSaysUnstored_AlsoForTheFourNewSchoolFieldsThatHaveNoInfoFieldYet(string code)
+    [InlineData("housing", InfoField.Housing)]
+    [InlineData("student_faculty_ratio", InfoField.StudentFacultyRatio)]
+    [InlineData("student_activities", InfoField.StudentActivities)]
+    [InlineData("campus_setting", InfoField.CampusSetting)]
+    public void TheFourCampusCodes_AreNowSchoolFields_NotUnstored(string code, InfoField expected)
     {
-        Assert.True(ChatSchoolInfo.ModelSaysUnstored(["cost", code]));
-        Assert.Equal([InfoField.Cost], ChatSchoolInfo.FieldsFromModel(["cost", code]));   // vẫn không thành mục số liệu
+        Assert.False(ChatSchoolInfo.ModelSaysUnstored(["cost", code]));
+        Assert.Equal([InfoField.Cost, expected], ChatSchoolInfo.FieldsFromModel(["cost", code]));
+    }
+
+    private static SchoolInfoDto WithCampus(SchoolInfoDto s) =>
+        s with
+        {
+            Campus = new SchoolCampusInfo(
+                "Suburb: Large", ["Coed residence halls", "Apartments for single students"], true, 14_500m, 500m, 0.97m, 0.56m, 8,
+                ["Student government", "Dance", "Radio station"]),
+        };
+
+    [Theory]
+    [InlineData("ký túc xá của BU thế nào", InfoField.Housing)]
+    [InlineData("trường có nhà ở cho du học sinh không", InfoField.Housing)]
+    [InlineData("tỷ lệ sinh viên trên giảng viên của BU", InfoField.StudentFacultyRatio)]
+    [InlineData("sĩ số lớp ở MIT", InfoField.StudentFacultyRatio)]
+    [InlineData("MIT có câu lạc bộ nào không", InfoField.StudentActivities)]
+    [InlineData("khuôn viên của trường ra sao", InfoField.CampusSetting)]
+    public void FieldsOf_RecognizesTheCampusQuestions_AndTheyAreNotUnstoredAnyMore(string question, InfoField expected)
+    {
+        Assert.Contains(expected, ChatSchoolInfo.FieldsOf(question));
+        Assert.False(ChatSchoolInfo.AsksUnstored(question));
+    }
+
+    [Fact]
+    public void Answer_Housing_ListsTheTypesCostAndShareLivingOnCampus()
+    {
+        var answer = ChatSchoolInfo.Answer(WithCampus(Full()), [InfoField.Housing], false);
+
+        Assert.True(answer.Complete);
+        Assert.Contains("Coed residence halls", answer.Text);
+        Assert.Contains("14.500 USD", answer.Text);
+        Assert.Contains("500 USD", answer.Text);
+        Assert.Contains("97%", answer.Text);
+        Assert.Contains("có nhà ở dành cho du học sinh", answer.Text);
+    }
+
+    [Fact]
+    public void Answer_StudentFacultyRatio_ActivitiesAndSetting_UseTheStoredValues()
+    {
+        var text = ChatSchoolInfo.Answer(
+            WithCampus(Full()), [InfoField.StudentFacultyRatio, InfoField.StudentActivities, InfoField.CampusSetting], false).Text;
+
+        Assert.Contains("8:1", text);
+        Assert.Contains("Student government, Dance, Radio station", text);
+        Assert.Contains("vùng ngoại ô của thành phố lớn", text);
+    }
+
+    [Fact]
+    public void Answer_ManyActivities_AreCappedAndTheRestCounted()
+    {
+        var many = Enumerable.Range(1, 20).Select(i => $"Club {i}").ToList();
+        var school = Full() with { Campus = WithCampus(Full()).Campus! with { Activities = many } };
+
+        var text = ChatSchoolInfo.Answer(school, [InfoField.StudentActivities], false).Text;
+
+        Assert.Contains("Club 12", text);
+        Assert.DoesNotContain("Club 13", text);
+        Assert.Contains("và 8 loại khác", text);
+    }
+
+    [Theory]
+    [InlineData(InfoField.Housing, "chưa có số liệu về nhà ở")]
+    [InlineData(InfoField.StudentFacultyRatio, "chưa có số liệu")]
+    [InlineData(InfoField.StudentActivities, "chưa có danh sách hoạt động")]
+    [InlineData(InfoField.CampusSetting, "chưa có số liệu về bối cảnh khuôn viên")]
+    public void Answer_CampusFields_SayThereIsNoDataInsteadOfGuessing(InfoField field, string expected)
+    {
+        Assert.Contains(expected, ChatSchoolInfo.Answer(Empty(), [field], false).Text);
+        Assert.Contains(expected, ChatSchoolInfo.Answer(Empty() with { Campus = new SchoolCampusInfo(null, [], null, null, null, null, null, null, []) }, [field], false).Text);
+    }
+
+    [Fact]
+    public void Answer_UnknownCampusSettingCode_IsShownAsStored_NotGuessed()
+    {
+        var school = Full() with { Campus = WithCampus(Full()).Campus! with { Setting = "Island: Tiny" } };
+
+        Assert.Contains("Island: Tiny", ChatSchoolInfo.Answer(school, [InfoField.CampusSetting], false).Text);
+    }
+
+    [Fact]
+    public void Compare_ShowsTheCampusFields()
+    {
+        var b = WithCampus(Full()) with { Name = "Other University", Campus = WithCampus(Full()).Campus! with { StudentFacultyRatio = 15 } };
+
+        var text = ChatSchoolInfo.Compare([WithCampus(Full()), b], [InfoField.StudentFacultyRatio]);
+
+        Assert.Contains("Sinh viên trên giảng viên", text);
+        Assert.Contains("8:1", text);
+        Assert.Contains("15:1", text);
+    }
+
+    [Fact]
+    public void Widget_CoveredText_OnlyWhenTheCardCanDrawEveryShownField()
+    {
+        var drawable = ChatSchoolInfo.WidgetOf(Full(), [InfoField.Cost], "text");
+        var notDrawable = ChatSchoolInfo.WidgetOf(Full(), [InfoField.Cost, InfoField.Housing], "text");
+
+        Assert.True(drawable.Data!.Value.TryGetProperty("coveredText", out _));
+        Assert.False(notDrawable.Data!.Value.TryGetProperty("coveredText", out _));   // thẻ chưa vẽ nhà ở: chữ là câu trả lời duy nhất
     }
 
     [Fact]
