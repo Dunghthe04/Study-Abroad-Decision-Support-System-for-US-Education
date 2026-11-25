@@ -513,6 +513,10 @@ namespace StudyAbroad.Application.Auth
                     user.LockoutEnd = null;
                     await users.UpdateUserAsync(user, txCt);
 
+                    // [UC-75 quy tắc] Hồ sơ con chưa có tài khoản bị xóa cùng lúc với phụ huynh được khôi phục theo
+                    if (user.Role == UserRoles.Parent && deletedAt is { } parentDeletedAt)
+                        await parentLinkService.RestoreManagedChildrenAsync(user.Id, parentDeletedAt, txCt);
+
                     // [UC-75 4c] Học sinh đủ 16 tự khôi phục: hai nút trong mail người đại diện hết tác dụng
                     if (byParent)
                     {

@@ -446,6 +446,9 @@ internal sealed class FakeParentLinkRepository : IParentLinkRepository
     public Task<List<ParentStudentLink>> GetActiveByParentAsync(Guid parentUserId, CancellationToken ct = default) =>
         Task.FromResult(Links.Where(l => l.ParentUserId == parentUserId && l.Status == ParentLinkStatuses.Active).Select(Clone).ToList());
 
+    public Task<List<ParentStudentLink>> GetRevokedByParentAsync(Guid parentUserId, CancellationToken ct = default) =>
+        Task.FromResult(Links.Where(l => l.ParentUserId == parentUserId && l.Status == ParentLinkStatuses.Revoked && l.RevokedByUserId == parentUserId).Select(Clone).ToList());
+
     public Task<List<ParentStudentLink>> GetActiveWithoutParentAccountAsync(string parentEmail, CancellationToken ct = default) =>
         Task.FromResult(Links.Where(l => l.ParentEmail == parentEmail && l.ParentUserId == null && l.Status == ParentLinkStatuses.Active)
             .Select(Clone).ToList());

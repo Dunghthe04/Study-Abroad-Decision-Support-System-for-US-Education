@@ -38,6 +38,11 @@ public interface IParentLinkService
     Task<List<ParentLinkRevokeNotice>> RevokeAllForAccountDeletionAsync(Guid userId, CancellationToken ct = default, ParentDeletionRequester? requestedBy = null);
 
     /// <summary>
+    /// [UC-75 quy tắc] Phụ huynh khôi phục tài khoản trong 30 ngày: hồ sơ con chưa có tài khoản bị xóa cùng lúc với phụ huynh
+    /// (DeletedAt trùng thời điểm xóa của phụ huynh) được khôi phục theo, liên kết hiệu lực lại. Con phụ huynh tự xóa trước đó giữ nguyên.</summary>
+    Task<int> RestoreManagedChildrenAsync(Guid parentUserId, DateTime parentDeletedAt, CancellationToken ct = default);
+
+    /// <summary>
     /// [UC-75 / UC-115] Phụ huynh vừa xác thực email tài khoản mới: gắn tài khoản vào các liên kết đã đồng ý qua link mail
     /// cùng email, báo học sinh. Bản ghi đồng ý giữ nguyên (bằng chứng là email lúc đồng ý).
     /// </summary>
@@ -495,7 +500,7 @@ public class ParentLinkService(
                     // [UC-75 quy tắc, UC-130] Hồ sơ con chưa có tài khoản do phụ huynh tạo: xóa mềm cùng lúc với phụ huynh,
                     // tác vụ xóa hẳn (UC-80) xóa cùng lượt với phụ huynh. Con không có hộp thư thật nên không gửi mail.
                     student.Status = UserStatuses.Deleted;
-                    student.DeletedAt = now;
+                    student.DeletedAt = user.DeletedAt ?? now;   // trùng mốc xóa của phụ huynh để khôi phục tìm lại được
                     student.UpdatedAt = now;
                     await users.UpdateUserAsync(student, ct);
                     await users.RevokeAllSessionsAsync(student.Id, ct);
@@ -506,6 +511,31 @@ public class ParentLinkService(
         }
 
         return notices;
+    }
+
+    public async Task<int> RestoreManagedChildrenAsync(Guid parentUserId, DateTime parentDeletedAt, CancellationToken ct = default)
+    {
+        var restored = 0;
+        var now = DateTime.UtcNow;
+        foreach (var link in await links.GetRevokedByParentAsync(parentUserId, ct))
+        {
+            var child = await users.GetUserById(link.StudentUserId, ct);
+            if (child is not { Status: UserStatuses.Deleted } || child.DeletedAt != parentDeletedAt
+                || !child.Email.EndsWith("@" + ManagedChildService.EmailDomain, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            child.Status = UserStatuses.Managed;
+            child.DeletedAt = null;
+            child.UpdatedAt = now;
+            await users.UpdateUserAsync(child, ct);
+
+            link.Status = ParentLinkStatuses.Active;
+            link.RevokedAt = null;
+            link.RevokedByUserId = null;
+            await links.UpdateAsync(link, ct);
+            restored++;
+        }
+        return restored;
     }
 
     public async Task<ParentLinkResult<ParentRevokeInfo>> GetRevokeInfoAsync(string token, CancellationToken ct = default)

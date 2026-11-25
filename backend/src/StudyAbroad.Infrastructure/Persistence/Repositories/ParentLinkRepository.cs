@@ -41,6 +41,11 @@ public class ParentLinkRepository(AppDbContext db) : IParentLinkRepository
             .OrderBy(l => l.AcceptedAt)
             .ToListAsync(ct);
 
+    public Task<List<ParentStudentLink>> GetRevokedByParentAsync(Guid parentUserId, CancellationToken ct = default) =>
+        db.ParentStudentLinks.AsNoTracking()
+            .Where(l => l.ParentUserId == parentUserId && l.Status == ParentLinkStatuses.Revoked && l.RevokedByUserId == parentUserId)
+            .ToListAsync(ct);
+
     public Task<List<ParentStudentLink>> GetActiveWithoutParentAccountAsync(string parentEmail, CancellationToken ct = default) =>
         db.ParentStudentLinks.AsNoTracking()
             .Where(l => l.ParentEmail == parentEmail && l.ParentUserId == null && l.Status == ParentLinkStatuses.Active)

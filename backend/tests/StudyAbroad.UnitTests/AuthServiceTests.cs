@@ -718,6 +718,38 @@ public class AuthServiceTests
         Assert.Contains(mails, e => e.To == realKid.Email);
     }
 
+    // [UC-75 quy tắc] Phụ huynh khôi phục trong 30 ngày: con managed bị xóa cùng lúc được khôi phục theo, liên kết hiệu lực lại;
+    // con phụ huynh tự xóa trước đó vẫn ở trạng thái đã xóa
+    [Fact]
+    public async Task RestoreAccount_Parent_RestoresManagedChildrenDeletedTogether()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var parent = _repo.Users[0];
+        parent.Status = UserStatuses.Active;
+        parent.Role = UserRoles.Parent;
+        var minh = new User { Email = "managed-minh@noreply.usas.local", FullName = "Minh", Role = UserRoles.Student, Status = UserStatuses.Managed, PasswordHash = "" };
+        var earlier = DateTime.UtcNow.AddDays(-3);
+        var lan = new User { Email = "managed-lan@noreply.usas.local", FullName = "Lan", Role = UserRoles.Student, Status = UserStatuses.Deleted, DeletedAt = earlier, PasswordHash = "" };
+        _repo.Users.AddRange([minh, lan]);
+        _links.Links.Add(new ParentStudentLink { StudentUserId = minh.Id, ParentUserId = parent.Id, ParentEmail = parent.Email, Status = ParentLinkStatuses.Active });
+        _links.Links.Add(new ParentStudentLink { StudentUserId = lan.Id, ParentUserId = parent.Id, ParentEmail = parent.Email, Status = ParentLinkStatuses.Revoked, RevokedAt = earlier, RevokedByUserId = parent.Id });
+        await service.AnonymizeUserAccountAsync(parent.Id);
+        Assert.Equal(UserStatuses.Deleted, minh.Status);
+
+        var login = await service.LoginAsync(new LoginRequest("a@test.com", "password123"));
+        var result = await service.RestoreAccountAsync(new RestoreAccountRequest("a@test.com", login.PendingDeletion!.RestoreToken));
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(UserStatuses.Managed, minh.Status);
+        Assert.Null(minh.DeletedAt);
+        var minhLink = _links.Links.Single(l => l.StudentUserId == minh.Id);
+        Assert.Equal(ParentLinkStatuses.Active, minhLink.Status);
+        Assert.Null(minhLink.RevokedAt);
+        Assert.Equal(UserStatuses.Deleted, lan.Status);
+        Assert.Equal(ParentLinkStatuses.Revoked, _links.Links.Single(l => l.StudentUserId == lan.Id).Status);
+    }
+
     [Fact]
     public async Task AnonymizeUserAccount_AlreadyDeleted_ReturnsValidationError()
     {
