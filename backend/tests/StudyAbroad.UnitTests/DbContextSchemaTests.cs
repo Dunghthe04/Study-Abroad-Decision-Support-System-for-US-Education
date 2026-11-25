@@ -79,15 +79,16 @@ public class DbContextSchemaTests
         AssertForeignKey<WhatIfSimulation>(db, nameof(WhatIfSimulation.UserId), "users", DeleteBehavior.Cascade);
         AssertForeignKey<WhatIfSimulation>(db, nameof(WhatIfSimulation.StudentProfileId), "student_profiles", DeleteBehavior.Cascade);
         AssertForeignKey<LeadMessage>(db, nameof(LeadMessage.LeadId), "leads", DeleteBehavior.Cascade);
-        AssertForeignKey<LeadMessage>(db, nameof(LeadMessage.SenderUserId), "users", DeleteBehavior.Cascade);
+        AssertForeignKey<LeadMessage>(db, nameof(LeadMessage.SenderUserId), "users", DeleteBehavior.SetNull);   // [UC-75 lớp 1b] giữ tin tới mốc 90 ngày
         AssertForeignKey<LeadMessage>(db, nameof(LeadMessage.RemovedByUserId), "users", DeleteBehavior.SetNull);
         AssertForeignKey<CenterReview>(db, nameof(CenterReview.StudyCenterId), "study_centers", DeleteBehavior.Cascade);
-        AssertForeignKey<CenterReview>(db, nameof(CenterReview.UserId), "users", DeleteBehavior.Cascade);
+        AssertForeignKey<CenterReview>(db, nameof(CenterReview.UserId), "users", DeleteBehavior.SetNull);   // [UC-75 lớp 3] giữ sao và nhận xét
         AssertForeignKey<CenterReview>(db, nameof(CenterReview.LeadId), "leads", DeleteBehavior.SetNull);
         AssertForeignKey<UserSubscription>(db, nameof(UserSubscription.UserId), "users", DeleteBehavior.Cascade);
         AssertForeignKey<UserSubscription>(db, nameof(UserSubscription.SubscriptionPlanId), "subscription_plans", DeleteBehavior.Restrict);   // gói đã có kỳ thì không xóa được
         AssertForeignKey<UserDailyUsage>(db, nameof(UserDailyUsage.UserId), "users", DeleteBehavior.Cascade);
         AssertForeignKey<PaymentTransaction>(db, nameof(PaymentTransaction.UserId), "users", DeleteBehavior.SetNull);   // [UC-80] giữ giao dịch ẩn danh khi xóa hẳn user
+        AssertForeignKey<PaymentTransaction>(db, nameof(PaymentTransaction.RetainedBuyerId), "retained_buyers", DeleteBehavior.Restrict);   // [UC-75 lớp 2]
         AssertForeignKey<PaymentTransaction>(db, nameof(PaymentTransaction.UserSubscriptionId), "user_subscriptions", DeleteBehavior.SetNull);
         AssertForeignKey<FieldEvidence>(db, nameof(FieldEvidence.UniversityId), "universities", DeleteBehavior.Cascade);
         // Nhật ký AI nối với tin trả lời của trợ lý; xóa tin thì giữ dòng nhật ký (token đã tiêu thật), chỉ bỏ liên kết

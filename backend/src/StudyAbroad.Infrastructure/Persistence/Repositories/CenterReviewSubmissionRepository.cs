@@ -52,14 +52,15 @@ public class CenterReviewSubmissionRepository(AppDbContext db) : ICenterReviewSu
         var row = await (
             from r in db.CenterReviews.AsNoTracking()
             where r.Id == reviewId
-            join u in db.Users.AsNoTracking() on r.UserId equals u.Id
-            select new { r.Id, u.FullName, u.Role, r.IsVerified, r.CreatedAt, r.Rating, r.Comment })
+            join u in db.Users.AsNoTracking() on r.UserId equals (Guid?)u.Id into reviewers
+            from u in reviewers.DefaultIfEmpty()
+            select new { r.Id, FullName = u != null ? u.FullName : null, Role = u != null ? u.Role : null, Deleted = r.UserId == null, r.IsVerified, r.CreatedAt, r.Rating, r.Comment })
             .FirstOrDefaultAsync(ct);
         if (row is null) return null;
 
         return new CenterReviewDto(
             row.Id,
-            CenterReviewRepository.MaskName(row.FullName),
+            row.Deleted ? CenterReviewRepository.DeletedReviewerName : CenterReviewRepository.MaskName(row.FullName),
             row.Role == UserRoles.Parent ? UserRoles.Parent : UserRoles.Student,
             row.IsVerified,
             row.CreatedAt,

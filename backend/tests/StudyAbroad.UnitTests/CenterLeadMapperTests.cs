@@ -28,7 +28,7 @@ public class CenterLeadMapperTests
 
     private static CenterReceivedLeadDto Map(params string[] fields) =>
         CenterLeadMapper.ToCenterDto(
-            new Lead { SharedFields = [.. fields], ContactPhone = "0912345678" },
+            new Lead { UserId = Guid.NewGuid(), SharedFields = [.. fields], ContactPhone = "0912345678" },
             "Trung Tâm Test",
             "Nguyen Van A",
             "a@example.com",
@@ -60,6 +60,7 @@ public class CenterLeadMapperTests
         var dto = CenterLeadMapper.ToCenterDto(
             new Lead
             {
+                UserId = Guid.NewGuid(),
                 SharedFields = [LeadSharedFields.Contact, LeadSharedFields.Academic, LeadSharedFields.Goals],
                 SharedProfile = true,
                 ContactPhone = "0912345678",
@@ -127,7 +128,7 @@ public class CenterLeadMapperTests
         ];
 
         var dto = CenterLeadMapper.ToCenterDto(
-            new Lead { SharedFields = [LeadSharedFields.Tests] }, "Trung Tâm Test", "Nguyen Van A", "a@example.com", profile, certs);
+            new Lead { UserId = Guid.NewGuid(), SharedFields = [LeadSharedFields.Tests] }, "Trung Tâm Test", "Nguyen Van A", "a@example.com", profile, certs);
 
         var p = Assert.IsType<SharedProfileSummaryDto>(dto.ProfileSummary);
         Assert.Null(p.EnglishScore);
@@ -145,7 +146,7 @@ public class CenterLeadMapperTests
         IReadOnlyList<ProfileCertification> certs = [new() { TestType = "sat", OverallScore = 1500m, IsTarget = true }];
 
         var dto = CenterLeadMapper.ToCenterDto(
-            new Lead { SharedFields = [LeadSharedFields.Goals] }, "Trung Tâm Test", null, null, Profile, certs);
+            new Lead { UserId = Guid.NewGuid(), SharedFields = [LeadSharedFields.Goals] }, "Trung Tâm Test", null, null, Profile, certs);
 
         Assert.Null(dto.ProfileSummary!.PlannedTests);
         Assert.Null(dto.ProfileSummary.SatScore);
@@ -164,7 +165,7 @@ public class CenterLeadMapperTests
         ];
 
         var dto = CenterLeadMapper.ToCenterDto(
-            new Lead { SharedFields = [LeadSharedFields.Tests] }, "Trung Tâm Test", null, null, Profile, certs);
+            new Lead { UserId = Guid.NewGuid(), SharedFields = [LeadSharedFields.Tests] }, "Trung Tâm Test", null, null, Profile, certs);
 
         var p = Assert.IsType<SharedProfileSummaryDto>(dto.ProfileSummary);
         Assert.Equal("toefl", p.EnglishTestType);
@@ -175,7 +176,7 @@ public class CenterLeadMapperTests
     public void GroupsChosenButNoProfile_ProfileSummaryNull()
     {
         var dto = CenterLeadMapper.ToCenterDto(
-            new Lead { SharedFields = [.. LeadSharedFields.All] }, "Trung Tâm Test", "Nguyen Van A", "a@example.com", null);
+            new Lead { UserId = Guid.NewGuid(), SharedFields = [.. LeadSharedFields.All] }, "Trung Tâm Test", "Nguyen Van A", "a@example.com", null);
 
         Assert.Equal("Nguyen Van A", dto.StudentName);
         Assert.Null(dto.ProfileSummary);
@@ -186,7 +187,7 @@ public class CenterLeadMapperTests
     {
         var lead = new Lead
         {
-            Id = Guid.NewGuid(), StudyCenterId = Guid.NewGuid(), Status = "accepted", ContactPhone = "0912345678",
+            Id = Guid.NewGuid(), UserId = Guid.NewGuid(), StudyCenterId = Guid.NewGuid(), Status = "accepted", ContactPhone = "0912345678",
             Message = "Em hỏi", SharedProfile = true, SharedFields = [LeadSharedFields.Contact],
             CreatedAt = DateTime.UtcNow.AddDays(-(CenterLeadMapper.DataVisibleDays + 1)),
         };
@@ -204,5 +205,18 @@ public class CenterLeadMapperTests
         var visible = CenterLeadMapper.ToCenterDto(lead, "TT", "Nguyễn Văn A", "a@example.com", null);
         Assert.False(visible.DataHidden);
         Assert.Equal("Nguyễn Văn A", visible.StudentName);
+    }
+
+    [Fact]
+    public void ToCenterDto_SenderDeleted_HidesSharedData()
+    {
+        // [UC-75 lớp 1b] Người gửi đã bị xóa hẳn: lead chỉ còn để giữ tin nhắn
+        var dto = CenterLeadMapper.ToCenterDto(
+            new Lead { UserId = null, SharedFields = [.. LeadSharedFields.All], ContactPhone = "0912345678" },
+            "Trung Tâm Test", null, null, Profile, Certifications);
+
+        Assert.Null(dto.StudentName);
+        Assert.Null(dto.ContactPhone);
+        Assert.Null(dto.ProfileSummary);
     }
 }

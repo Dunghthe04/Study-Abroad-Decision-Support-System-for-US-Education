@@ -48,6 +48,18 @@ public sealed class AdminOrderService(
         return new AdminOrderDetailDto(AdminOrderDto.From(row), row.Order.PayloadJson);
     }
 
+    public async Task<RetainedBuyerDto> GetRetainedBuyerAsync(Guid adminUserId, long orderCode, CancellationToken ct = default)
+    {
+        var row = await adminOrders.FindAsync(orderCode, ct) ?? throw NotFound();
+        var buyer = row.Order.RetainedBuyerId is { } code ? await adminOrders.FindRetainedBuyerAsync(code, ct) : null;
+        if (buyer is null)
+            throw Rule("retained_buyer_not_found", 404, "Đơn này không có thông tin người mua được giữ lại.");
+
+        // Ghi nhật ký trước khi trả dữ liệu: không có dòng nhật ký thì không lộ họ tên, email
+        await AuditAsync(adminUserId, AuditLogConstants.RetainedBuyerViewed, row.Order, new { orderCode, buyerCode = buyer.Id }, ct);
+        return new RetainedBuyerDto(buyer.Id, buyer.FullName, buyer.Email, buyer.RetainUntil);
+    }
+
     public async Task<AdminOrderDto> ActivateAsync(Guid adminUserId, long orderCode, string? note, DateTime nowUtc, CancellationToken ct = default)
     {
         note = RequireNote(note);

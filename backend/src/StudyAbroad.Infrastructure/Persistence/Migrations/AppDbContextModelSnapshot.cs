@@ -504,7 +504,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.Property<Guid>("UserId")
+                    b.Property<Guid?>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
@@ -1796,7 +1796,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.Property<Guid>("UserId")
+                    b.Property<Guid?>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
@@ -1891,7 +1891,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("reported_by_user_id");
 
-                    b.Property<Guid>("SenderUserId")
+                    b.Property<Guid?>("SenderUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("sender_user_id");
 
@@ -2376,6 +2376,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("qr_code");
 
+                    b.Property<Guid?>("RetainedBuyerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("retained_buyer_id");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2409,6 +2413,9 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrderCode")
                         .IsUnique()
                         .HasDatabaseName("ix_payment_transactions_order_code");
+
+                    b.HasIndex("RetainedBuyerId")
+                        .HasDatabaseName("ix_payment_transactions_retained_buyer_id");
 
                     b.HasIndex("SubscriptionPlanId")
                         .HasDatabaseName("ix_payment_transactions_subscription_plan_id");
@@ -2948,6 +2955,46 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_recommendation_items_university_id");
 
                     b.ToTable("recommendation_items", "app");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.RetainedBuyer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("email");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("full_name");
+
+                    b.Property<DateTime>("RetainUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retain_until");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_retained_buyers");
+
+                    b.HasIndex("RetainUntil")
+                        .HasDatabaseName("ix_retained_buyers_retain_until");
+
+                    b.ToTable("retained_buyers", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ReviewBatch", b =>
@@ -5553,8 +5600,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
+                        .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_center_reviews_users_user_id");
                 });
 
@@ -5772,8 +5818,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
+                        .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_leads_users_user_id");
                 });
 
@@ -5801,8 +5846,7 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("SenderUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
+                        .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_lead_messages_users_sender_user_id");
                 });
 
@@ -5867,6 +5911,12 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasForeignKey("HandledByUserId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_payment_transactions_users_handled_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.RetainedBuyer", null)
+                        .WithMany()
+                        .HasForeignKey("RetainedBuyerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_payment_transactions_retained_buyers_retained_buyer_id");
 
                     b.HasOne("StudyAbroad.Domain.Entities.SubscriptionPlan", null)
                         .WithMany()

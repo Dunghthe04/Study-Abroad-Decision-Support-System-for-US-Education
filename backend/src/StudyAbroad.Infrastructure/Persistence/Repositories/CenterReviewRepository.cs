@@ -8,6 +8,9 @@ public class CenterReviewRepository(AppDbContext db) : ICenterReviewRepository
 {
     private const string VisibleStatus = "visible";
 
+    /// <summary>[UC-45 / UC-75 lớp 3] Tên người đánh giá đã bị xóa hẳn tài khoản.</summary>
+    public const string DeletedReviewerName = "Người dùng đã xóa tài khoản";
+
     public async Task<CenterReviewsDto> GetVisibleAsync(Guid centerId, int page, int pageSize, CancellationToken ct = default)
     {
         var (safePage, safePageSize) = CenterReviewPaging.Normalize(page, pageSize);
@@ -26,9 +29,11 @@ public class CenterReviewRepository(AppDbContext db) : ICenterReviewRepository
         // Id là tie-breaker để thứ tự ổn định khi nhiều đánh giá cùng thời điểm, tránh lặp hoặc sót khi sang trang.
         var rows = await (
             from r in visible
-            join u in db.Users.AsNoTracking() on r.UserId equals u.Id
+            // [UC-45 / UC-75 lớp 3] Nối trái: đánh giá của người đã bị xóa hẳn (UserId null) vẫn hiện
+            join u in db.Users.AsNoTracking() on r.UserId equals (Guid?)u.Id into reviewers
+            from u in reviewers.DefaultIfEmpty()
             orderby r.CreatedAt descending, r.Id descending
-            select new { r.Id, u.FullName, u.Role, r.IsVerified, r.CreatedAt, r.Rating, r.Comment })
+            select new { r.Id, FullName = u != null ? u.FullName : null, Role = u != null ? u.Role : null, Deleted = r.UserId == null, r.IsVerified, r.CreatedAt, r.Rating, r.Comment })
             .Skip((safePage - 1) * safePageSize)
             .Take(safePageSize)
             .ToListAsync(ct);
@@ -36,8 +41,8 @@ public class CenterReviewRepository(AppDbContext db) : ICenterReviewRepository
         var items = rows
             .Select(x => new CenterReviewDto(
                 x.Id,
-                MaskName(x.FullName),
-                x.Role == UserRoles.Parent ? UserRoles.Parent : UserRoles.Student,
+                x.Deleted ? DeletedReviewerName : MaskName(x.FullName),
+                x.Deleted ? null : x.Role == UserRoles.Parent ? UserRoles.Parent : UserRoles.Student,
                 x.IsVerified,
                 x.CreatedAt,
                 x.Rating,

@@ -13,7 +13,8 @@ public class CenterReviewConfiguration : IEntityTypeConfiguration<CenterReview>
             "rating >= 1 AND rating <= 5"));
         b.HasKey(x => x.Id);
         b.HasOne<StudyCenter>().WithMany().HasForeignKey(x => x.StudyCenterId).OnDelete(DeleteBehavior.Cascade);
-        b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        // [UC-75 lớp 3] Xóa hẳn người đánh giá: giữ sao và nhận xét, tên hiện "Người dùng đã xóa tài khoản"
+        b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull);
         b.HasOne<Lead>().WithMany().HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.SetNull);
         b.Property(x => x.Comment).HasMaxLength(2000);
         b.Property(x => x.Status).HasMaxLength(32).IsRequired().HasDefaultValue("visible");

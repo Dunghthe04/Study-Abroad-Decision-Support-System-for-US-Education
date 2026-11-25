@@ -522,7 +522,7 @@ public class AdminOrderServiceTests
         var detail = await j.Admin.GetAsync(order.OrderCode);
 
         string[] orderDto = ["amountVnd", "checkoutUrl", "createdAt", "cycle", "description", "expiresAt", "orderCode", "paidAt", "planCode", "planKind", "planName", "qrCode", "status"];
-        string[] admin4 = ["adminNote", "buyerEmail", "buyerName", "handledBy"];
+        string[] admin4 = ["adminNote", "buyerCode", "buyerEmail", "buyerName", "handledBy"];   // buyerCode: [UC-75 lớp 2]
 
         Assert.Equal(orderDto.Concat(admin4).Order(), Keys(list.Items[0]));
         Assert.Equal(orderDto.Concat(admin4).Append("payloadJson").Order(), Keys(detail));
@@ -545,7 +545,7 @@ public class AdminOrderServiceTests
     // ---- Quyền
 
     [Fact]
-    public void Controller_IsAdminOnly_AndExposesTheFiveDocumentedRoutes()
+    public void Controller_IsAdminOnly_AndExposesTheSixDocumentedRoutes()
     {
         var type = typeof(AdminOrdersController);
 
@@ -557,7 +557,44 @@ public class AdminOrderServiceTests
             .ToList();
         Assert.All(routes, r => Assert.Null(r.Anon));
         Assert.Equal(
-            ["GET:", "GET:{orderCode:long}", "POST:{orderCode:long}/activate", "POST:{orderCode:long}/recheck", "POST:{orderCode:long}/reject"],
+            ["GET:", "GET:{orderCode:long}", "GET:{orderCode:long}/retained-buyer", "POST:{orderCode:long}/activate", "POST:{orderCode:long}/recheck", "POST:{orderCode:long}/reject"],
             routes.Select(r => $"{r.Verb.HttpMethods.Single()}:{r.Verb.Template}").Order());
+    }
+
+    // ---- [UC-75 lớp 2] Họ tên, email người mua đã xóa tài khoản: chỉ Admin xem, mỗi lần xem ghi nhật ký
+
+    [Fact]
+    public async Task Uc75_RetainedBuyer_ReturnsNameAndEmail_AndAuditsEveryView()
+    {
+        var (j, _, admin, order) = await Mismatched();
+        var buyer = new RetainedBuyer { Id = Guid.NewGuid(), FullName = "Nguyen Van A", Email = "a@e2e.test", RetainUntil = Now.AddYears(10) };
+        j.Store.RetainedBuyers.Add(buyer);
+        j.H.Order(order.OrderCode).RetainedBuyerId = buyer.Id;
+
+        var list = await j.Admin.ListAsync(null, null, 1, 20);
+        Assert.Equal(buyer.Id, list.Items[0].BuyerCode);
+
+        var dto = await j.Admin.GetRetainedBuyerAsync(admin.Id, order.OrderCode);
+        await j.Admin.GetRetainedBuyerAsync(admin.Id, order.OrderCode);
+
+        Assert.Equal(new RetainedBuyerDto(buyer.Id, "Nguyen Van A", "a@e2e.test", buyer.RetainUntil), dto);
+        Assert.Equal(2, j.Audit.Entries.Count);
+        Assert.All(j.Audit.Entries, a =>
+        {
+            Assert.Equal(("order.retained_buyer_viewed", admin.Id), (a.Action, a.ActorUserId));
+            Assert.Contains(buyer.Id.ToString(), a.DetailJson);
+        });
+    }
+
+    [Fact]
+    public async Task Uc75_RetainedBuyer_OrderWithoutRetainedBuyer_Is404_AndNotAudited()
+    {
+        var (j, _, admin, order) = await Mismatched();
+
+        var e = await Fails(j.Admin.GetRetainedBuyerAsync(admin.Id, order.OrderCode));
+
+        Assert.Equal(("retained_buyer_not_found", 404), (e.Code, e.StatusCode));
+        Assert.Empty(j.Audit.Entries);
+        await Assert.ThrowsAnyAsync<Exception>(() => j.Admin.GetRetainedBuyerAsync(admin.Id, 999_999_999));
     }
 }

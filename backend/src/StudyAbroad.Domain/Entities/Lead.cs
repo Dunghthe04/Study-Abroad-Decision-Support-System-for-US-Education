@@ -5,7 +5,8 @@ namespace StudyAbroad.Domain.Entities;
 /// <summary>Yêu cầu liên hệ người dùng gửi cho trung tâm (backlog #24).</summary>
 public class Lead : BaseEntity
 {
-    public Guid UserId { get; set; }
+    /// <summary>[UC-75 lớp 1b] Null khi người gửi đã bị xóa hẳn mà yêu cầu còn giữ tin nhắn tới mốc 90 ngày.</summary>
+    public Guid? UserId { get; set; }
     public Guid StudyCenterId { get; set; }
     public Guid? ConsentId { get; set; }
     public string? StudyLevel { get; set; }

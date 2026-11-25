@@ -220,6 +220,7 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
         AuditLogConstants.LeadMessageReportView => "Đọc tin nhắn bị báo cáo và ngữ cảnh",
         AuditLogConstants.SlmSampleExport => "Xuất dữ liệu mẫu huấn luyện SLM (UC-102)",
         AuditLogConstants.ReviewBatchViewItem => "Xem nội dung tin nhắn chat kiểm thử (đợt duyệt)",
+        AuditLogConstants.RetainedBuyerViewed => "Xem họ tên, email người mua đã xóa tài khoản (UC-75)",
         "parent.acting.start" => "Bắt đầu quyền đại diện con",
         "parent.acting.stop" => "Kết thúc quyền đại diện con",
         "parent.link.create" => "Gửi yêu cầu liên kết phụ huynh",

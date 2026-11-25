@@ -7,7 +7,7 @@ namespace StudyAbroad.Infrastructure.BackgroundJobs;
 
 /// <summary>
 /// [UC-80] Chạy mỗi CheckInterval (mặc định 1 giờ): xóa hẳn tài khoản học sinh, phụ huynh
-/// đã chờ xóa quá RetentionPeriod (mặc định 30 ngày). Lỗi cả lượt thì thử lại sau 5 phút.
+/// đã chờ xóa quá RetentionPeriod (mặc định 30 ngày), rồi dọn dữ liệu giữ lại đã tới hạn (UC-75). Lỗi cả lượt thì thử lại sau 5 phút.
 /// </summary>
 public class AccountPurgeBackgroundService(
     IServiceScopeFactory scopeFactory,
@@ -39,6 +39,12 @@ public class AccountPurgeBackgroundService(
                 if (summary.Purged > 0 || summary.Skipped > 0 || summary.Failures.Count > 0)
                     logger.LogInformation("[Background Job] Xóa hẳn tài khoản: {Purged} đã xóa, {Skipped} bỏ qua, {Failed} lỗi.",
                         summary.Purged, summary.Skipped, summary.Failures.Count);
+
+                // [UC-75] Dữ liệu giữ lại của tài khoản đã xóa hẳn: tin nhắn quá 90 ngày, đơn hàng quá 10 năm
+                var retained = await service.PurgeExpiredRetainedDataAsync(DateTime.UtcNow, stoppingToken);
+                if (retained.Messages + retained.Leads + retained.Orders + retained.Buyers > 0)
+                    logger.LogInformation("[Background Job] Dọn dữ liệu giữ lại: {Messages} tin, {Leads} yêu cầu liên hệ, {Orders} đơn, {Buyers} người mua.",
+                        retained.Messages, retained.Leads, retained.Orders, retained.Buyers);
 
                 // [UC-93] Trung tâm Admin đã duyệt xóa, tới hạn thì xóa hẳn (cùng thời hạn chờ)
                 var centerService = scope.ServiceProvider.GetRequiredService<StudyAbroad.Application.StudyCenters.ICenterDeletionService>();

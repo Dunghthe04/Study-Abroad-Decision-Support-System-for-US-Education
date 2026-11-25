@@ -44,6 +44,11 @@ internal sealed partial class BillingStore : IBillingJobRepository, IAdminOrderR
         Task.FromResult<IReadOnlyDictionary<Guid, long>>(Calls.Where(a => a.UserSubscriptionId is { } id && cycleIds.Contains(id) && a.Kind == BillingRules.MeteredAiKind)
             .GroupBy(a => a.UserSubscriptionId!.Value).ToDictionary(g => g.Key, g => g.Sum(a => (long)(a.TotalTokens ?? 0))));
 
+    public List<RetainedBuyer> RetainedBuyers { get; } = [];
+
+    public Task<RetainedBuyer?> FindRetainedBuyerAsync(Guid buyerCode, CancellationToken ct = default) =>
+        Task.FromResult(RetainedBuyers.FirstOrDefault(b => b.Id == buyerCode));
+
     private AdminOrderRow Row(PaymentTransaction o)
     {
         var buyer = o.UserId is { } b && Accounts.TryGetValue(b, out var u) ? u : null;

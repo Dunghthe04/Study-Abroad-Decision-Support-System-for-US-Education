@@ -18,6 +18,9 @@ public static class AuditLogConstants
     // 4. Xem chi tiết nội dung chat người dùng trong đợt duyệt mẫu
     public const string ReviewBatchViewItem = "review_batch.view_item";
 
+    // 5. Họ tên, email người mua của tài khoản đã xóa hẳn (UC-75 lớp 2, UC-91, UC-124)
+    public const string RetainedBuyerViewed = "order.retained_buyer_viewed";
+
     /// <summary>Danh mục lọc: Tất cả dữ liệu nhạy cảm (mặc định của UC-97).</summary>
     public const string CategoryAllSensitive = "all_sensitive";
 
@@ -46,7 +49,8 @@ public static class AuditLogConstants
         LeadMessageReportQueueView,
         LeadMessageReportView,
         SlmSampleExport,
-        ReviewBatchViewItem
+        ReviewBatchViewItem,
+        RetainedBuyerViewed
     };
 
     public static readonly IReadOnlyList<string> ReportedMessageActions = new[]

@@ -19,7 +19,7 @@ public record CreateLeadRequest(
 
 public record LeadDto(
     Guid Id,
-    Guid UserId,
+    Guid? UserId,
     Guid StudyCenterId,
     string? StudyCenterName,
     Guid? ConsentId,
@@ -139,7 +139,7 @@ public record UpdateLeadStatusRequest(string Status);
 public record LeadMessageDto(
     Guid Id,
     Guid LeadId,
-    Guid SenderUserId,
+    Guid? SenderUserId,
     string SenderName,
     string SenderRole,
     bool IsFromCenter,
@@ -171,7 +171,7 @@ public record AdminLeadMessageReportDto(
     Guid LeadId,
     Guid StudyCenterId,
     string StudyCenterName,
-    Guid SenderUserId,
+    Guid? SenderUserId,
     string SenderName,
     string? SenderEmail,
     string SenderRole,
@@ -190,7 +190,7 @@ public record AdminLeadMessageReportDto(
 /// <summary>[UC-58] Một tin trong phần ngữ cảnh quanh tin bị báo cáo. <paramref name="IsReported"/> đánh dấu chính tin bị báo cáo.</summary>
 public record AdminReportContextMessageDto(
     Guid Id,
-    Guid SenderUserId,
+    Guid? SenderUserId,
     string SenderName,
     bool IsFromCenter,
     string Content,

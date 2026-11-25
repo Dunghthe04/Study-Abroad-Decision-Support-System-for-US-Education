@@ -44,6 +44,39 @@ public class AccountPurgeServiceTests
             return Task.FromResult(new ForumPurgeResult(1, 1));
         }
 
+        public Task<int> RetainBuyerIdentityAsync(Guid userId, DateTime now, CancellationToken ct = default)
+        {
+            Steps.Add($"buyer:{userId}");
+            return Task.FromResult(1);
+        }
+
+        public Task ScrubRetainedLeadsAsync(Guid userId, CancellationToken ct = default)
+        {
+            Steps.Add($"leads:{userId}");
+            return Task.CompletedTask;
+        }
+
+        public Task<int> AnonymizeAiUsageAsync(Guid userId, CancellationToken ct = default)
+        {
+            Steps.Add($"ai:{userId}");
+            return Task.FromResult(1);
+        }
+
+        public DateTime? LastRetainedPurgeAt { get; private set; }
+
+        public Task<RetainedLeadPurgeResult> PurgeExpiredLeadMessagesAsync(DateTime now, CancellationToken ct = default)
+        {
+            LastRetainedPurgeAt = now;
+            Steps.Add("expired-messages");
+            return Task.FromResult(new RetainedLeadPurgeResult(3, 1));
+        }
+
+        public Task<(int Orders, int Buyers)> PurgeExpiredOrdersAsync(DateTime now, CancellationToken ct = default)
+        {
+            Steps.Add("expired-orders");
+            return Task.FromResult((2, 1));
+        }
+
         public Task DeleteUserAsync(Guid userId, CancellationToken ct = default)
         {
             if (FailOnDelete.Contains(userId)) throw new InvalidOperationException("db lỗi");
@@ -131,7 +164,7 @@ public class AccountPurgeServiceTests
         Assert.Empty(summary.Failures);
         Assert.Equal(1, _unitOfWork.Calls);
         // Tệp xóa sau cùng, ngoài transaction
-        Assert.Equal(new[] { $"lock:{id}", $"payments:{id}", $"forum:{id}", $"delete:{id}", $"files:{id}" }, _repo.Steps);
+        Assert.Equal(new[] { $"lock:{id}", $"payments:{id}", $"buyer:{id}", $"leads:{id}", $"ai:{id}", $"forum:{id}", $"delete:{id}", $"files:{id}" }, _repo.Steps);
         Assert.Empty(summary.FileCleanupFailures);
 
         var entry = Assert.Single(_audit.Entries);
@@ -154,7 +187,7 @@ public class AccountPurgeServiceTests
         Assert.Equal(1, _unitOfWork.Calls);
         // Hook ngay trước khi xóa user (cùng transaction); việc sau commit (báo thành viên) chạy sau khi xóa, trước khi dọn tệp
         Assert.Equal(
-            new[] { $"lock:{id}", $"payments:{id}", $"forum:{id}", $"billing:{id}", $"delete:{id}", $"billing-after:{id}", $"files:{id}" },
+            new[] { $"lock:{id}", $"payments:{id}", $"buyer:{id}", $"leads:{id}", $"ai:{id}", $"forum:{id}", $"billing:{id}", $"delete:{id}", $"billing-after:{id}", $"files:{id}" },
             _repo.Steps);
     }
 
@@ -273,5 +306,39 @@ public class AccountPurgeServiceTests
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => CreateService().PurgeDueAccountsAsync(Now, cts.Token));
+    }
+
+    [Fact]
+    public async Task PurgeExpiredRetainedData_RunsMessagesThenOrders_InOneTransaction()
+    {
+        var summary = await CreateService().PurgeExpiredRetainedDataAsync(Now);
+
+        Assert.Equal(new[] { "expired-messages", "expired-orders" }, _repo.Steps);
+        Assert.Equal(Now, _repo.LastRetainedPurgeAt);
+        Assert.Equal(1, _unitOfWork.Calls);
+        Assert.Equal(new RetainedDataPurgeSummary(3, 1, 2, 1), summary);
+    }
+
+    [Theory]
+    // Giao dịch năm 2026 (giờ Việt Nam) giữ tới hết 31/12/2036, tức 0h 1/1/2037 giờ Việt Nam
+    [InlineData("2026-03-15T10:00:00Z", "2036-12-31T17:00:00Z")]
+    // 31/12/2026 20h UTC đã là 1/1/2027 giờ Việt Nam → thuộc năm tài chính 2027
+    [InlineData("2026-12-31T20:00:00Z", "2037-12-31T17:00:00Z")]
+    public void OrderRetainUntil_TenYearsAfterFiscalYearEnd(string transaction, string expected)
+    {
+        var until = RetentionPeriods.OrderRetainUntil(DateTime.Parse(transaction, null, System.Globalization.DateTimeStyles.AdjustToUniversal));
+
+        Assert.Equal(DateTime.Parse(expected, null, System.Globalization.DateTimeStyles.AdjustToUniversal), until);
+    }
+
+    [Fact]
+    public void OrderPurgeCutoff_MatchesRetainUntil()
+    {
+        var tx = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var until = RetentionPeriods.OrderRetainUntil(tx);
+
+        // Ngay trước mốc: đơn chưa hết hạn; đúng mốc: đã hết hạn
+        Assert.False(tx < RetentionPeriods.OrderPurgeCutoff(until.AddSeconds(-1)));
+        Assert.True(tx < RetentionPeriods.OrderPurgeCutoff(until));
     }
 }

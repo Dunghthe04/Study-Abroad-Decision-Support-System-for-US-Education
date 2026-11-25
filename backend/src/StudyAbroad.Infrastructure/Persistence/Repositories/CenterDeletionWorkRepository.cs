@@ -152,7 +152,9 @@ public class CenterDeletionWorkRepository(AppDbContext db, IHostEnvironment? env
         }
         await db.SaveChangesAsync(ct);
 
-        return leads.Select(l => new ClosedLeadRecipients(l.Id, l.UserId, l.SubmittedByUserId)).ToList();
+        // Lead chưa kết thúc luôn còn người gửi (xóa tài khoản đã thu hồi lead), UserId null chỉ có ở lead đã kết thúc
+        return leads.Where(l => l.UserId != null)
+            .Select(l => new ClosedLeadRecipients(l.Id, l.UserId!.Value, l.SubmittedByUserId)).ToList();
     }
 
     public async Task AddNotificationsAsync(IReadOnlyCollection<Notification> notifications, CancellationToken ct = default)

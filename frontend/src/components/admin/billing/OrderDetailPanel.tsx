@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { adminBillingApi, adminBillingErrorMessage, formatVnDateTime } from "@/lib/admin-billing-api";
 import { formatVnd } from "@/lib/billing-api";
-import type { AdminOrderDetailDto } from "@/types/admin-billing";
+import type { AdminOrderDetailDto, RetainedBuyerDto } from "@/types/admin-billing";
 import { DetailPanel } from "../shared/DetailPanel";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 
@@ -77,6 +77,21 @@ export function OrderDetailPanel({ orderCode, onClose, onChanged }: OrderDetailP
   const [action, setAction] = useState<Action | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  // [UC-75 lớp 2] Họ tên, email người mua đã xóa tài khoản: chỉ tải khi Admin bấm xem (mỗi lần xem ghi nhật ký)
+  const [retained, setRetained] = useState<{ orderCode: number; buyer: RetainedBuyerDto } | null>(null);
+  const [retainedLoading, setRetainedLoading] = useState(false);
+  const retainedBuyer = retained?.orderCode === orderCode ? retained.buyer : null;
+
+  const showRetainedBuyer = async () => {
+    setRetainedLoading(true);
+    try {
+      setRetained({ orderCode, buyer: await adminBillingApi.retainedBuyer(orderCode) });
+    } catch (err) {
+      toast.add({ type: "error", title: "Không xem được thông tin người mua", description: adminBillingErrorMessage(err, "Vui lòng thử lại.") });
+    } finally {
+      setRetainedLoading(false);
+    }
+  };
 
   const requestKey = `${orderCode}:${reload}`;
   const isLoading = result === null || result.key !== requestKey;
@@ -146,8 +161,31 @@ export function OrderDetailPanel({ orderCode, onClose, onChanged }: OrderDetailP
             {row("Gói", `${order.planName} (${order.planCode})`)}
             {row("Số tiền", formatVnd(order.amountVnd))}
             {row("Nội dung CK", <span className="font-mono">{order.description}</span>)}
-            {row("Người mua", order.buyerName)}
-            {row("Email", order.buyerEmail)}
+            {order.buyerCode && !order.buyerName ? (
+              <>
+                {row("Người mua", "Đã xóa tài khoản")}
+                {row("Mã người mua", <span className="font-mono text-xs">{order.buyerCode}</span>)}
+                {retainedBuyer ? (
+                  <>
+                    {row("Họ tên", retainedBuyer.fullName)}
+                    {row("Email", retainedBuyer.email)}
+                    {row("Giữ đến", formatVnDateTime(retainedBuyer.retainUntil))}
+                  </>
+                ) : (
+                  row(
+                    "Họ tên, email",
+                    <Button type="button" variant="outline" size="sm" onClick={showRetainedBuyer} loading={retainedLoading} disabled={retainedLoading}>
+                      Xem họ tên, email
+                    </Button>,
+                  )
+                )}
+              </>
+            ) : (
+              <>
+                {row("Người mua", order.buyerName)}
+                {row("Email", order.buyerEmail)}
+              </>
+            )}
             {row("Tạo lúc", formatVnDateTime(order.createdAt))}
             {row("Hết hạn", formatVnDateTime(order.expiresAt))}
             {row("Thanh toán lúc", formatVnDateTime(order.paidAt))}

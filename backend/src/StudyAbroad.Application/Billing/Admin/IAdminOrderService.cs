@@ -13,6 +13,12 @@ public interface IAdminOrderService
 
     Task<AdminOrderDetailDto> GetAsync(long orderCode, CancellationToken ct = default);
 
+    /// <summary>
+    /// [UC-75 lớp 2] Họ tên, email người mua của đơn thuộc tài khoản đã xóa hẳn. Mỗi lần xem ghi nhật ký truy cập (UC-91, UC-124).
+    /// Đơn không có mã người mua hoặc dòng người mua đã hết hạn: retained_buyer_not_found (404).
+    /// </summary>
+    Task<RetainedBuyerDto> GetRetainedBuyerAsync(Guid adminUserId, long orderCode, CancellationToken ct = default);
+
     /// <summary>UC-133 / UC-134: kích hoạt tay một đơn chưa trả (bỏ qua so khớp số tiền), kèm ghi chú bắt buộc.</summary>
     Task<AdminOrderDto> ActivateAsync(Guid adminUserId, long orderCode, string? note, DateTime nowUtc, CancellationToken ct = default);
 

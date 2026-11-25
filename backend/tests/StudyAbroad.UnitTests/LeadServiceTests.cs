@@ -139,7 +139,7 @@ public class LeadServiceTests
             CancellationToken ct = default)
         {
             var q = Leads
-                .Where(l => studentIds.Contains(l.UserId) || (submitterId != null && l.SubmittedByUserId == submitterId))
+                .Where(l => (l.UserId != null && studentIds.Contains(l.UserId.Value)) || (submitterId != null && l.SubmittedByUserId == submitterId))
                 .OrderByDescending(l => l.CreatedAt)
                 .ToList();
 
@@ -150,8 +150,8 @@ public class LeadServiceTests
                     l.Id, l.StudyCenterId, "Test Center",
                     l.Status == LeadStatuses.PendingParent && l.ParentTokenExpiresAt <= DateTime.UtcNow ? LeadStatuses.Expired : l.Status,
                     l.CreatedAt, l.SharedFields,
-                    l.StudyLevel, l.ContactPhone, l.Message, l.UserId,
-                    Users.TryGetValue(l.UserId, out var u) ? u.FullName : "Student",
+                    l.StudyLevel, l.ContactPhone, l.Message, l.UserId!.Value,
+                    l.UserId != null && Users.TryGetValue(l.UserId.Value, out var u) ? u.FullName : "Student",
                     l.SubmittedByUserId != null && l.SubmittedByUserId != l.UserId,
                     Messages.Count(m => m.LeadId == l.Id && m.Status == "visible"
                                      && m.SenderUserId != l.UserId && m.SenderUserId != l.SubmittedByUserId)))
@@ -242,7 +242,7 @@ public class LeadServiceTests
 
         public Task<IReadOnlyList<LeadMessageDto>> GetLeadMessagesAsync(
             Guid leadId,
-            Guid leadOwnerUserId,
+            Guid? leadOwnerUserId,
             bool sharedProfile,
             string centerName,
             CancellationToken ct = default)
@@ -252,7 +252,7 @@ public class LeadServiceTests
                 .OrderBy(m => m.CreatedAt)
                 .Select(m =>
                 {
-                    var (fullName, role) = Users.TryGetValue(m.SenderUserId, out var u)
+                    var (fullName, role) = m.SenderUserId != null && Users.TryGetValue(m.SenderUserId.Value, out var u)
                         ? u
                         : ("Người dùng", UserRoles.Student);
 
@@ -288,7 +288,7 @@ public class LeadServiceTests
             // Trung tâm đọc thì đánh dấu tin của học sinh / phụ huynh, và ngược lại
             var marked = Messages
                 .Where(m => m.LeadId == leadId && m.ReadAt == null && m.Status == "visible"
-                            && (Users.TryGetValue(m.SenderUserId, out var u) && LeadMessageMapper.IsStaffOrCenterRole(u.Item2)) != readerIsCenterSide)
+                            && (m.SenderUserId != null && Users.TryGetValue(m.SenderUserId.Value, out var u) && LeadMessageMapper.IsStaffOrCenterRole(u.Item2)) != readerIsCenterSide)
                 .ToList();
             foreach (var m in marked) m.ReadAt = readAt;
             return Task.FromResult<IReadOnlyList<Guid>>(marked.Select(m => m.Id).ToList());
@@ -760,11 +760,11 @@ public class LeadServiceTests
     public async Task AcceptOrRejectReceivedLead_NotNewOtherCenterOrExpired_IsRejected()
     {
         var (service, repo, _, ownerId, centerId) = DecisionSetup();
-        var accepted = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = "accepted" };
+        var accepted = new Lead { Id = Guid.NewGuid(), UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = "accepted" };
         var other = new Lead { Id = Guid.NewGuid(), StudyCenterId = Guid.NewGuid(), Status = "new" };
-        var old = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = "new", CreatedAt = DateTime.UtcNow.AddDays(-91) };
-        var withdrawn = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.Withdrawn };
-        var pendingParent = new Lead { Id = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.PendingParent };
+        var old = new Lead { Id = Guid.NewGuid(), UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = "new", CreatedAt = DateTime.UtcNow.AddDays(-91) };
+        var withdrawn = new Lead { Id = Guid.NewGuid(), UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.Withdrawn };
+        var pendingParent = new Lead { Id = Guid.NewGuid(), UserId = Guid.NewGuid(), StudyCenterId = centerId, Status = LeadStatuses.PendingParent };
         repo.Leads.AddRange([accepted, other, old, withdrawn, pendingParent]);
 
         var notNew = await Assert.ThrowsAsync<LeadRuleException>(() => service.RejectReceivedLeadAsync(ownerId, null, UserRoles.Center, accepted.Id));
@@ -2004,15 +2004,18 @@ public class LeadServiceTests
     }
 
     [Fact]
-    public async Task GetReceivedLeadMessagesForCenter_WithdrawnLead_ReturnsEmptyThread()
+    public async Task GetReceivedLeadMessagesForCenter_WithdrawnLead_KeepsHistoryButHidesName()
     {
+        // [UC-44 E1] Lead đã thu hồi vẫn xem được lịch sử tin nhắn; [UC-73] tên người gửi bị ẩn
         var (repo, service, ownerId, leadId) = WithdrawnCenterSetup();
         repo.Messages.Add(new LeadMessage { LeadId = leadId, SenderUserId = repo.Leads[0].UserId, Content = "Tin cũ", Status = "visible" });
 
         var thread = await service.GetReceivedLeadMessagesForCenterUserAsync(ownerId, "owner@center.com", UserRoles.Center, leadId);
 
         Assert.Equal(LeadStatuses.Withdrawn, thread.LeadStatus);
-        Assert.Empty(thread.Messages);
+        var message = Assert.Single(thread.Messages);
+        Assert.Equal("Tin cũ", message.Content);
+        Assert.Contains("Ẩn danh", message.SenderName);
     }
 
     [Fact]

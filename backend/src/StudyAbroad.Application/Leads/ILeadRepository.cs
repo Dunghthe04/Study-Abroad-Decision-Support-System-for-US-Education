@@ -57,7 +57,7 @@ public interface ILeadRepository
     // [USAS-2053 / UC-74] Đọc và gửi tin nhắn trao đổi trong yêu cầu liên hệ (bảng app.lead_messages)
     Task<IReadOnlyList<LeadMessageDto>> GetLeadMessagesAsync(
         Guid leadId,
-        Guid leadOwnerUserId,
+        Guid? leadOwnerUserId,
         bool sharedProfile,
         string centerName,
         CancellationToken ct = default);

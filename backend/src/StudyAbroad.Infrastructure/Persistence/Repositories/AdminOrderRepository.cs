@@ -54,4 +54,7 @@ public class AdminOrderRepository(AppDbContext db) : IAdminOrderRepository
 
     public Task<AdminOrderRow?> FindAsync(long orderCode, CancellationToken ct = default) =>
         Project(Joins().Where(x => x.Order.OrderCode == orderCode)).FirstOrDefaultAsync(ct);
+
+    public Task<StudyAbroad.Domain.Entities.RetainedBuyer?> FindRetainedBuyerAsync(Guid buyerCode, CancellationToken ct = default) =>
+        db.RetainedBuyers.AsNoTracking().FirstOrDefaultAsync(b => b.Id == buyerCode, ct);
 }

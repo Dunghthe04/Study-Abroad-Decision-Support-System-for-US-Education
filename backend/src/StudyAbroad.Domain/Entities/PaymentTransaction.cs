@@ -7,6 +7,8 @@ public class PaymentTransaction : BaseEntity
 {
     /// <summary>[UC-80] Null khi tài khoản đã bị xóa hẳn: giao dịch giữ lại ẩn danh theo nghĩa vụ kế toán.</summary>
     public Guid? UserId { get; set; }
+    /// <summary>[UC-75 lớp 2] Mã người mua ngẫu nhiên, gán khi tài khoản bị xóa hẳn; họ tên/email nằm ở bảng retained_buyers.</summary>
+    public Guid? RetainedBuyerId { get; set; }
     /// <summary>Kỳ được kích hoạt bởi đơn này, gán lúc thanh toán.</summary>
     public Guid? UserSubscriptionId { get; set; }
     public decimal AmountVnd { get; set; }

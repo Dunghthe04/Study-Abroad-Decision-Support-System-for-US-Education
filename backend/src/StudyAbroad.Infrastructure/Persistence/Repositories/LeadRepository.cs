@@ -121,15 +121,15 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         var ids = studentIds.ToList();
         var leads = db.Leads.AsNoTracking();
         leads = submitterId is { } sid
-            ? leads.Where(l => ids.Contains(l.UserId) || l.SubmittedByUserId == sid)
-            : leads.Where(l => ids.Contains(l.UserId));
+            ? leads.Where(l => (l.UserId != null && ids.Contains(l.UserId.Value)) || l.SubmittedByUserId == sid)
+            : leads.Where(l => l.UserId != null && ids.Contains(l.UserId.Value));
 
         var total = await leads.CountAsync(ct);
 
         var items = await (
                 from l in leads
                 join c in db.StudyCenters.AsNoTracking() on l.StudyCenterId equals c.Id
-                join u in db.Users.AsNoTracking() on l.UserId equals u.Id
+                join u in db.Users.AsNoTracking() on l.UserId equals (Guid?)u.Id
                 orderby l.CreatedAt descending
                 select new SentLeadDto(
                     l.Id,
@@ -142,7 +142,7 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
                     l.StudyLevel,
                     l.ContactPhone,
                     l.Message,
-                    l.UserId,
+                    u.Id,
                     u.FullName,
                     l.SubmittedByUserId != null && l.SubmittedByUserId != l.UserId,
                     db.LeadMessages.Count(m => m.LeadId == l.Id
@@ -189,8 +189,10 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
 
         var query = from l in filteredLeads
                     join c in db.StudyCenters.AsNoTracking() on l.StudyCenterId equals c.Id
-                    join u in db.Users.AsNoTracking() on l.UserId equals u.Id
-                    join p in db.StudentProfiles.AsNoTracking() on l.UserId equals p.UserId into profiles
+                    // [UC-75 lớp 1b] Nối trái: lead của người gửi đã bị xóa hẳn (UserId null) vẫn hiện để trung tâm xem tin nhắn còn giữ
+                    join u in db.Users.AsNoTracking() on l.UserId equals (Guid?)u.Id into senders
+                    from u in senders.DefaultIfEmpty()
+                    join p in db.StudentProfiles.AsNoTracking() on l.UserId equals (Guid?)p.UserId into profiles
                     from p in profiles.DefaultIfEmpty()
                     select new { Lead = l, CenterName = c.Name, User = u, Profile = p };
 
@@ -204,7 +206,7 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
             query = query.Where(x => x.Lead.CreatedAt >= visibleSince);
             query = query.Where(x => (x.Lead.ContactPhone != null && EF.Functions.ILike(x.Lead.ContactPhone, $"%{term}%"))
                                   || (x.Lead.Message != null && EF.Functions.ILike(x.Lead.Message, $"%{term}%"))
-                                  || (x.Lead.SharedFields.Contains(LeadSharedFields.Contact) && EF.Functions.ILike(x.User.FullName, $"%{term}%")));
+                                  || (x.Lead.SharedFields.Contains(LeadSharedFields.Contact) && x.User != null && EF.Functions.ILike(x.User.FullName, $"%{term}%")));
         }
 
         var filteredTotal = await query.CountAsync(ct);
@@ -216,7 +218,7 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
             .OrderByDescending(x => x.Lead.CreatedAt)
             .Skip((safePage - 1) * safePageSize)
             .Take(safePageSize)
-            .Select(x => new { x.Lead, x.CenterName, x.User.FullName, x.User.Email, x.Profile })
+            .Select(x => new { x.Lead, x.CenterName, FullName = x.User != null ? x.User.FullName : null, Email = x.User != null ? x.User.Email : null, x.Profile })
             .ToListAsync(ct);
 
         var certifications = await CertificationsByProfileAsync(rows.Where(r => r.Profile != null).Select(r => r.Profile!.Id), ct);
@@ -248,8 +250,10 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
                         // [UC-116] Trung tâm chưa nhận lead này: báo không tìm thấy
                         && l.Status != LeadStatuses.PendingParent && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired
                     join c in db.StudyCenters.AsNoTracking() on l.StudyCenterId equals c.Id
-                    join u in db.Users.AsNoTracking() on l.UserId equals u.Id
-                    join p in db.StudentProfiles.AsNoTracking() on l.UserId equals p.UserId into profiles
+                    // [UC-75 lớp 1b] Nối trái: lead của người gửi đã bị xóa hẳn (UserId null) vẫn hiện để trung tâm xem tin nhắn còn giữ
+                    join u in db.Users.AsNoTracking() on l.UserId equals (Guid?)u.Id into senders
+                    from u in senders.DefaultIfEmpty()
+                    join p in db.StudentProfiles.AsNoTracking() on l.UserId equals (Guid?)p.UserId into profiles
                     from p in profiles.DefaultIfEmpty()
                     select new { Lead = l, CenterName = c.Name, User = u, Profile = p };
 
@@ -264,7 +268,7 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         var certifications = lead.Profile is null
             ? null
             : (await CertificationsByProfileAsync([lead.Profile.Id], ct)).GetValueOrDefault(lead.Profile.Id, []);
-        return CenterLeadMapper.ToCenterDto(lead.Lead, lead.CenterName, lead.User.FullName, lead.User.Email, lead.Profile, certifications);
+        return CenterLeadMapper.ToCenterDto(lead.Lead, lead.CenterName, lead.User?.FullName, lead.User?.Email, lead.Profile, certifications);
     }
 
     // Chứng chỉ và dự định thi của các hồ sơ, để trung tâm tách điểm đã thi với điểm mục tiêu
@@ -297,7 +301,7 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
     /// </summary>
     public async Task<IReadOnlyList<LeadMessageDto>> GetLeadMessagesAsync(
         Guid leadId,
-        Guid leadOwnerUserId,
+        Guid? leadOwnerUserId,
         bool sharedProfile,
         string centerName,
         CancellationToken ct = default)
@@ -351,7 +355,7 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         string[] staffRoles = [UserRoles.Center, UserRoles.Moderator, UserRoles.Admin];
 
         var unread = from m in db.LeadMessages
-                     join u in db.Users on m.SenderUserId equals u.Id
+                     join u in db.Users on m.SenderUserId equals (Guid?)u.Id
                      where m.LeadId == leadId && m.ReadAt == null && m.Status == "visible"
                      select new { Message = m, u.Role };
 
@@ -380,7 +384,9 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         var query = from m in db.LeadMessages.AsNoTracking()
                     join l in db.Leads.AsNoTracking() on m.LeadId equals l.Id
                     join c in db.StudyCenters.AsNoTracking() on l.StudyCenterId equals c.Id
-                    join u in db.Users.AsNoTracking() on m.SenderUserId equals u.Id
+                    // [UC-75 lớp 1b] Nối trái: tin của người đã bị xóa hẳn còn giữ khi báo cáo chưa xử lý xong
+                    join u in db.Users.AsNoTracking() on m.SenderUserId equals (Guid?)u.Id into senders
+                    from u in senders.DefaultIfEmpty()
                     where m.ReportedAt != null
                     select new { Message = m, l.StudyCenterId, CenterName = c.Name, Sender = u };
 
@@ -404,11 +410,11 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
             x.StudyCenterId,
             x.CenterName,
             x.Message.SenderUserId,
-            x.Sender.FullName,
-            x.Sender.Email,
-            x.Sender.Role,
-            x.Sender.Status,
-            LeadMessageMapper.IsStaffOrCenterRole(x.Sender.Role),
+            x.Sender?.FullName ?? LeadMessageMapper.DeletedUserName,
+            x.Sender?.Email ?? string.Empty,
+            x.Sender?.Role ?? UserRoles.Student,
+            x.Sender?.Status ?? UserStatuses.Deleted,
+            LeadMessageMapper.IsStaffOrCenterRole(x.Sender?.Role),
             x.Message.Content,
             x.Message.AttachmentUrl,
             x.Message.Status,
@@ -446,7 +452,7 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
             .ToListAsync(ct);
 
         var window = before.OrderBy(m => m.CreatedAt).Append(target).Concat(after).ToList();
-        var senderIds = window.Select(m => m.SenderUserId).Distinct().ToList();
+        var senderIds = window.Where(m => m.SenderUserId != null).Select(m => m.SenderUserId!.Value).Distinct().ToList();
         var senders = await db.Users.AsNoTracking()
             .Where(u => senderIds.Contains(u.Id))
             .Select(u => new { u.Id, u.FullName, u.Role })
@@ -454,11 +460,11 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
 
         return window.Select(m =>
         {
-            senders.TryGetValue(m.SenderUserId, out var sender);
+            var sender = m.SenderUserId is { } senderId ? senders.GetValueOrDefault(senderId) : null;
             return new AdminReportContextMessageDto(
                 m.Id,
                 m.SenderUserId,
-                sender?.FullName ?? "Người dùng",
+                m.SenderUserId is null ? LeadMessageMapper.DeletedUserName : sender?.FullName ?? "Người dùng",
                 LeadMessageMapper.IsStaffOrCenterRole(sender?.Role),
                 m.Content,
                 m.AttachmentUrl,

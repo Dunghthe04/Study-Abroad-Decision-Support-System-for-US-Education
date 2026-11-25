@@ -24,6 +24,16 @@ public class AdminOrdersController(IAdminOrderService orders) : ControllerBase
     [ProducesResponseType(typeof(AdminOrderDetailDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Get(long orderCode, CancellationToken ct) => Ok(await orders.GetAsync(orderCode, ct));
 
+    /// <summary>[UC-75 lớp 2] Họ tên, email người mua của tài khoản đã xóa hẳn. Mỗi lần gọi ghi nhật ký truy cập.</summary>
+    [HttpGet("{orderCode:long}/retained-buyer")]
+    [ProducesResponseType(typeof(RetainedBuyerDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetRetainedBuyer(long orderCode, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } adminId)
+            return Unauthorized();
+        return Ok(await orders.GetRetainedBuyerAsync(adminId, orderCode, ct));
+    }
+
     [HttpPost("{orderCode:long}/activate")]
     [ProducesResponseType(typeof(AdminOrderDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Activate(long orderCode, [FromBody] AdminOrderNoteRequest request, CancellationToken ct)

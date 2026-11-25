@@ -107,8 +107,12 @@ public static class CenterLeadMapper
     /// <summary>[UC-73] Số ngày trung tâm còn xem được dữ liệu đã chia sẻ, tính từ lúc người dùng gửi yêu cầu.</summary>
     public const int DataVisibleDays = 90;
 
-    /// <summary>[UC-73] Đã thu hồi hoặc quá 90 ngày: trung tâm không còn xem được dữ liệu đã chia sẻ.</summary>
+    /// <summary>
+    /// [UC-73] Đã thu hồi hoặc quá 90 ngày: trung tâm không còn xem được dữ liệu đã chia sẻ.
+    /// [UC-75 lớp 1b] Người gửi đã bị xóa hẳn (UserId null): lead chỉ còn để giữ tin nhắn, không còn dữ liệu người gửi.
+    /// </summary>
     public static bool IsDataHidden(Lead lead) =>
-        string.Equals(lead.Status, LeadStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase)
+        lead.UserId is null
+        || string.Equals(lead.Status, LeadStatuses.Withdrawn, StringComparison.OrdinalIgnoreCase)
         || lead.CreatedAt < DateTime.UtcNow.AddDays(-DataVisibleDays);
 }

@@ -6,7 +6,8 @@ namespace StudyAbroad.Domain.Entities;
 public class CenterReview : BaseEntity
 {
     public Guid StudyCenterId { get; set; }
-    public Guid UserId { get; set; }
+    /// <summary>[UC-75 lớp 3] Null khi người đánh giá đã bị xóa hẳn; giữ sao, nhận xét, tên "Người dùng đã xóa tài khoản".</summary>
+    public Guid? UserId { get; set; }
     public Guid? LeadId { get; set; }
     public int Rating { get; set; }
     public string? Comment { get; set; }

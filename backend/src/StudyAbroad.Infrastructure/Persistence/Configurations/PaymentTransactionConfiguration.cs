@@ -12,6 +12,9 @@ public class PaymentTransactionConfiguration : IEntityTypeConfiguration<PaymentT
             "status IN ('pending', 'paid', 'mismatch', 'expired', 'cancelled')"));
         b.HasKey(x => x.Id);
         b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull);   // [UC-80] xóa user thì giữ giao dịch, bỏ liên kết
+        // [UC-75 lớp 2] Restrict: đơn quá hạn 10 năm phải xóa trước, rồi mới xóa dòng người mua
+        b.HasOne<RetainedBuyer>().WithMany().HasForeignKey(x => x.RetainedBuyerId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(x => x.RetainedBuyerId);
         b.HasOne<UserSubscription>().WithMany().HasForeignKey(x => x.UserSubscriptionId).OnDelete(DeleteBehavior.SetNull);
         b.HasOne<SubscriptionPlan>().WithMany().HasForeignKey(x => x.SubscriptionPlanId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<User>().WithMany().HasForeignKey(x => x.HandledByUserId).OnDelete(DeleteBehavior.SetNull);

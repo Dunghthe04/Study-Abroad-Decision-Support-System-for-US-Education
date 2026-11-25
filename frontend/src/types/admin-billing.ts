@@ -28,12 +28,22 @@ export interface SavePlanRequest {
 export interface AdminOrderDto extends OrderDto {
   buyerName: string | null;
   buyerEmail: string | null;
+  /** [UC-75 lớp 2] Mã người mua ngẫu nhiên khi người mua đã xóa tài khoản; họ tên, email xem riêng qua retainedBuyer. */
+  buyerCode: string | null;
   adminNote: string | null;
   handledBy: string | null;
 }
 
 export interface AdminOrderDetailDto extends AdminOrderDto {
   payloadJson: string | null;
+}
+
+/** [UC-75 lớp 2] Họ tên, email người mua đã xóa tài khoản, giữ để đối soát và hoàn tiền. Mỗi lần xem được ghi nhật ký. */
+export interface RetainedBuyerDto {
+  buyerCode: string;
+  fullName: string;
+  email: string;
+  retainUntil: string;
 }
 
 export interface AdminOrderFilters {

@@ -10,4 +10,7 @@ public interface IAdminOrderRepository
     Task<(IReadOnlyList<AdminOrderRow> Items, int TotalCount)> ListAsync(string? status, string? q, int page, int pageSize, CancellationToken ct = default);
 
     Task<AdminOrderRow?> FindAsync(long orderCode, CancellationToken ct = default);
+
+    /// <summary>[UC-75 lớp 2] Họ tên, email người mua đã giữ lại theo mã người mua; null khi đã hết hạn và bị xóa.</summary>
+    Task<StudyAbroad.Domain.Entities.RetainedBuyer?> FindRetainedBuyerAsync(Guid buyerCode, CancellationToken ct = default);
 }

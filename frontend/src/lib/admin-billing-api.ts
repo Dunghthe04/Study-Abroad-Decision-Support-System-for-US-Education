@@ -3,7 +3,14 @@
 import { apiFetch } from "@/lib/api";
 import { getBillingError } from "@/lib/billing-api";
 import type { PagedResult } from "@/types/api";
-import type { AdminOrderDetailDto, AdminOrderDto, AdminOrderFilters, AdminPlanDto, SavePlanRequest } from "@/types/admin-billing";
+import type {
+  AdminOrderDetailDto,
+  AdminOrderDto,
+  AdminOrderFilters,
+  AdminPlanDto,
+  RetainedBuyerDto,
+  SavePlanRequest,
+} from "@/types/admin-billing";
 
 const PLANS = "/api/v1/admin/plans";
 const ORDERS = "/api/v1/admin/orders";
@@ -21,6 +28,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_mismatch: "Chỉ từ chối được đơn sai số tiền.",
   note_required: "Cần nhập ghi chú.",
   gateway_unavailable: "Không kết nối được payOS. Thử lại sau ít phút.",
+  retained_buyer_not_found: "Đơn này không có thông tin người mua được giữ lại.",
 };
 
 /** Câu báo lỗi tiếng Việt: theo code nếu biết, rồi lời server, rồi câu dự phòng. */
@@ -49,6 +57,8 @@ export const adminBillingApi = {
   reject: (orderCode: number, note: string) =>
     apiFetch<AdminOrderDto>(`${ORDERS}/${orderCode}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
   recheck: (orderCode: number) => apiFetch<AdminOrderDto>(`${ORDERS}/${orderCode}/recheck`, { method: "POST" }),
+  /** [UC-75 lớp 2] Mỗi lần gọi được ghi nhật ký kiểm toán. */
+  retainedBuyer: (orderCode: number) => apiFetch<RetainedBuyerDto>(`${ORDERS}/${orderCode}/retained-buyer`),
 };
 
 export const PLAN_KIND_LABELS = { free: "Miễn phí", personal: "Cá nhân", family: "Gia đình" } as const;

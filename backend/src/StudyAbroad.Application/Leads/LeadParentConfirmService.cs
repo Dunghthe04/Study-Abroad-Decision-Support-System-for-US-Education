@@ -60,7 +60,7 @@ public class LeadParentConfirmService(
         var consent = accept
             ? new Consent
             {
-                UserId = lead.UserId,
+                UserId = lead.UserId ?? throw LinkInactive(),
                 Purpose = AgeFeatures.ShareWithCenter,
                 Granted = true,
                 PolicyVersion = "v1.0",
@@ -109,7 +109,7 @@ public class LeadParentConfirmService(
 
     private async Task NotifyStudentAsync(Lead lead, string outcome, CancellationToken ct)
     {
-        var student = await users.GetUserById(lead.UserId, ct);
+        var student = lead.UserId is { } studentId ? await users.GetUserById(studentId, ct) : null;
         if (student is null)
             return;
 
@@ -119,7 +119,7 @@ public class LeadParentConfirmService(
 
     private async Task<LeadParentConfirmInfo> ToInfoAsync(Lead lead, ParentStudentLink link, DateTime now, CancellationToken ct)
     {
-        var student = await users.GetUserById(lead.UserId, ct);
+        var student = lead.UserId is { } studentId ? await users.GetUserById(studentId, ct) : null;
         var center = await studyCenters.GetByIdAsync(lead.StudyCenterId, ct);
         int? age = student?.DateOfBirth is { } dob ? AgePolicy.GetAge(dob, AgePolicy.TodayInVietnam(now)) : null;
 

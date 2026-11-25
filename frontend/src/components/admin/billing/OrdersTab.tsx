@@ -55,8 +55,9 @@ export function OrdersTab() {
       label: "Người mua",
       render: (o) => (
         <>
-          <div className="font-medium">{o.buyerName ?? "—"}</div>
-          <div className="text-xs text-muted-foreground">{o.buyerEmail ?? ""}</div>
+          {/* [UC-75 lớp 2] Người mua đã xóa tài khoản: chỉ hiện mã, họ tên và email xem trong chi tiết đơn */}
+          <div className="font-medium">{o.buyerName ?? (o.buyerCode ? "Đã xóa tài khoản" : "—")}</div>
+          <div className="text-xs text-muted-foreground">{o.buyerEmail ?? (o.buyerCode ? `Mã ${o.buyerCode.slice(0, 8)}` : "")}</div>
         </>
       ),
     },

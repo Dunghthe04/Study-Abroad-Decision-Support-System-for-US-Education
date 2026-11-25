@@ -861,7 +861,8 @@ export interface AdminLeadMessageReportContextDto {
 export interface CenterReviewDto {
   id: string;
   reviewerName: string;
-  reviewerRole: "student" | "parent";
+  /** null: người đánh giá đã xóa tài khoản (UC-75), tên là "Người dùng đã xóa tài khoản" */
+  reviewerRole: "student" | "parent" | null;
   isVerified: boolean;
   createdAt: string;
   rating: number;
