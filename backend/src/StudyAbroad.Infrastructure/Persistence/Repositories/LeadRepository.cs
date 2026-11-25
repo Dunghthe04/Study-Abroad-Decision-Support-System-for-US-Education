@@ -166,7 +166,9 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
     {
         // [UC-116] Lead chờ phụ huynh / bị từ chối / hết hạn: trung tâm chưa nhận nên không hiện, không đếm
         var baseLeads = db.Leads.AsNoTracking()
-            .Where(l => l.Status != LeadStatuses.PendingParent && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired);
+            .Where(l => l.Status != LeadStatuses.PendingParent && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired)
+            // Thu hồi khi còn chờ phụ huynh: trung tâm chưa từng nhận
+            .Where(l => !(l.Status == LeadStatuses.Withdrawn && l.ParentTokenExpiresAt != null && l.ParentDecidedAt == null));
         if (centerId.HasValue && centerId.Value != Guid.Empty)
         {
             baseLeads = baseLeads.Where(l => l.StudyCenterId == centerId.Value);
@@ -204,6 +206,11 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
             // [UC-73] Lead quá 90 ngày cũng không khớp tìm kiếm theo dữ liệu đã chia sẻ
             var visibleSince = DateTime.UtcNow.AddDays(-CenterLeadMapper.DataVisibleDays);
             query = query.Where(x => x.Lead.CreatedAt >= visibleSince);
+            // [UC-111 bước 5] Học sinh dưới 16 đã bị phụ huynh rút đồng ý cũng không khớp tìm kiếm
+            var childBornAfter = AgePolicy.TodayInVietnam(DateTime.UtcNow).AddYears(-AgeGroups.ChildMaxAgeExclusive);
+            query = query.Where(x => x.User == null || x.User.DateOfBirth == null || x.User.DateOfBirth <= childBornAfter
+                                  || !db.Consents.Any(c => c.UserId == x.User.Id && c.Purpose == ConsentPurposes.ChildDataProcessing)
+                                  || db.Consents.Any(c => c.UserId == x.User.Id && c.Purpose == ConsentPurposes.ChildDataProcessing && c.Granted));
             query = query.Where(x => (x.Lead.ContactPhone != null && EF.Functions.ILike(x.Lead.ContactPhone, $"%{term}%"))
                                   || (x.Lead.Message != null && EF.Functions.ILike(x.Lead.Message, $"%{term}%"))
                                   || (x.Lead.SharedFields.Contains(LeadSharedFields.Contact) && x.User != null && EF.Functions.ILike(x.User.FullName, $"%{term}%")));
@@ -218,13 +225,16 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
             .OrderByDescending(x => x.Lead.CreatedAt)
             .Skip((safePage - 1) * safePageSize)
             .Take(safePageSize)
-            .Select(x => new { x.Lead, x.CenterName, FullName = x.User != null ? x.User.FullName : null, Email = x.User != null ? x.User.Email : null, x.Profile })
+            .Select(x => new { x.Lead, x.CenterName, FullName = x.User != null ? x.User.FullName : null, Email = x.User != null ? x.User.Email : null, x.Profile,
+                DateOfBirth = x.User != null ? x.User.DateOfBirth : null })
             .ToListAsync(ct);
+        var revoked = await ConsentRevokedChildrenAsync(rows.Select(r => (r.Lead.UserId, r.DateOfBirth)), ct);
 
         var certifications = await CertificationsByProfileAsync(rows.Where(r => r.Profile != null).Select(r => r.Profile!.Id), ct);
         var items = rows
             .Select(r => CenterLeadMapper.ToCenterDto(r.Lead, r.CenterName, r.FullName, r.Email, r.Profile,
-                r.Profile is null ? null : certifications.GetValueOrDefault(r.Profile.Id, [])))
+                r.Profile is null ? null : certifications.GetValueOrDefault(r.Profile.Id, []),
+                consentRevoked: r.Lead.UserId is { } uid && revoked.Contains(uid)))
             .ToList();
 
         return new CenterLeadsSummaryDto(
@@ -259,7 +269,8 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         var query = from l in db.Leads.AsNoTracking()
                     where l.Id == leadId
                         && (!hidePendingParent
-                            || (l.Status != LeadStatuses.PendingParent && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired))
+                            || (l.Status != LeadStatuses.PendingParent && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired
+                                && !(l.Status == LeadStatuses.Withdrawn && l.ParentTokenExpiresAt != null && l.ParentDecidedAt == null)))
                     join c in db.StudyCenters.AsNoTracking() on l.StudyCenterId equals c.Id
                     // [UC-75 lớp 1b] Nối trái: lead của người gửi đã bị xóa hẳn (UserId null) vẫn hiện để trung tâm xem tin nhắn còn giữ
                     join u in db.Users.AsNoTracking() on l.UserId equals (Guid?)u.Id into senders
@@ -279,7 +290,31 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         var certifications = lead.Profile is null
             ? null
             : (await CertificationsByProfileAsync([lead.Profile.Id], ct)).GetValueOrDefault(lead.Profile.Id, []);
-        return CenterLeadMapper.ToCenterDto(lead.Lead, lead.CenterName, lead.User?.FullName, lead.User?.Email, lead.Profile, certifications);
+        var revoked = await ConsentRevokedChildrenAsync([(lead.Lead.UserId, lead.User?.DateOfBirth)], ct);
+        return CenterLeadMapper.ToCenterDto(lead.Lead, lead.CenterName, lead.User?.FullName, lead.User?.Email, lead.Profile, certifications,
+            consentRevoked: lead.Lead.UserId is { } uid && revoked.Contains(uid));
+    }
+
+    /// <summary>
+    /// [UC-111 bước 5] Học sinh dưới 16 từng có đồng ý xử lý dữ liệu nhưng nay không còn dòng nào hiệu lực (phụ huynh đã rút;
+    /// rút thì consent của liên kết thành Granted = false): trung tâm không còn xem dữ liệu ở mọi yêu cầu. Đồng ý lại thì hiện lại.
+    /// </summary>
+    private async Task<HashSet<Guid>> ConsentRevokedChildrenAsync(IEnumerable<(Guid? UserId, DateOnly? DateOfBirth)> senders, CancellationToken ct)
+    {
+        var today = AgePolicy.TodayInVietnam(DateTime.UtcNow);
+        var children = senders
+            .Where(s => s.UserId is not null && s.DateOfBirth is { } dob && AgePolicy.GetAge(dob, today) < AgeGroups.ChildMaxAgeExclusive)
+            .Select(s => s.UserId!.Value)
+            .ToHashSet();
+        if (children.Count == 0) return children;
+
+        // Chỉ tính là đã rút khi từng có đồng ý và không còn dòng nào đang Granted (chưa từng có dòng nào thì không ẩn)
+        var consents = await db.Consents.AsNoTracking()
+            .Where(c => children.Contains(c.UserId) && c.Purpose == ConsentPurposes.ChildDataProcessing)
+            .GroupBy(c => c.UserId)
+            .Select(g => new { UserId = g.Key, AnyGranted = g.Any(c => c.Granted) })
+            .ToListAsync(ct);
+        return consents.Where(c => !c.AnyGranted).Select(c => c.UserId).ToHashSet();
     }
 
     // Chứng chỉ và dự định thi của các hồ sơ, để trung tâm tách điểm đã thi với điểm mục tiêu

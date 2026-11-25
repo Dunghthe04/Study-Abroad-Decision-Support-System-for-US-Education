@@ -80,6 +80,40 @@ public class CenterLeadMapperTests
         Assert.False(dto.SharedProfile);
     }
 
+    // [UC-111 bước 5] Phụ huynh rút đồng ý của học sinh dưới 16: yêu cầu Đã hoàn tất cũng ẩn; đồng ý lại thì hiện lại
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Closed_ConsentRevoked_HidesData_ReconsentShowsAgain(bool revoked)
+    {
+        var lead = new Lead
+        {
+            UserId = Guid.NewGuid(),
+            SharedFields = [LeadSharedFields.Contact, LeadSharedFields.Academic],
+            ContactPhone = "0912345678",
+            Status = LeadStatuses.Closed,
+        };
+
+        var dto = CenterLeadMapper.ToCenterDto(lead, "Trung Tâm Test", "Nguyen Van A", "a@example.com", Profile, Certifications, consentRevoked: revoked);
+
+        Assert.Equal(revoked, dto.DataHidden);
+        Assert.Equal(LeadStatuses.Closed, dto.Status);
+        Assert.Equal(revoked ? null : "Nguyen Van A", dto.StudentName);
+        Assert.Equal(revoked, dto.ProfileSummary is null);
+    }
+
+    // [UC-75 bước 4, UC-111 bước 5] Thu hồi khi còn chờ phụ huynh: trung tâm chưa từng nhận nên không thấy;
+    // thu hồi sau khi phụ huynh đã đồng ý thì trung tâm vẫn thấy dòng Đã thu hồi
+    [Fact]
+    public void WithdrawnWhilePendingParent_HiddenFromCenter_WithdrawnAfterConsent_Visible()
+    {
+        var expires = DateTime.UtcNow.AddDays(3);
+        Assert.True(LeadParentConfirm.IsHiddenFromCenter(new Lead { Status = LeadStatuses.Withdrawn, ParentTokenExpiresAt = expires }));
+        Assert.False(LeadParentConfirm.IsHiddenFromCenter(new Lead { Status = LeadStatuses.Withdrawn, ParentTokenExpiresAt = expires, ParentDecidedAt = DateTime.UtcNow }));
+        Assert.False(LeadParentConfirm.IsHiddenFromCenter(new Lead { Status = LeadStatuses.Withdrawn }));
+        Assert.True(LeadParentConfirm.IsHiddenFromCenter(new Lead { Status = LeadStatuses.PendingParent }));
+    }
+
     [Fact]
     public void ContactOnly_NoProfileSummary()
     {

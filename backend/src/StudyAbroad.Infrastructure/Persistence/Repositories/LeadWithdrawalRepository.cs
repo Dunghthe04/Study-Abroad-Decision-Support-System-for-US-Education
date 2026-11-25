@@ -16,11 +16,12 @@ public class LeadWithdrawalRepository(AppDbContext db) : ILeadWithdrawalReposito
                 .SetProperty(l => l.Status, LeadStatuses.Withdrawn)
                 .SetProperty(l => l.UpdatedAt, now), ct);
 
-        // [UC-116] Lead còn chờ phụ huynh: trung tâm chưa nhận nên chỉ hủy; xóa hash để link trong mail hết dùng được
+        // [UC-75 bước 4, UC-111 bước 5] Lead còn chờ phụ huynh cũng là yêu cầu chưa kết thúc: Đã thu hồi (không phải "Phụ huynh từ chối").
+        // Trung tâm chưa nhận nên không cần báo; xóa hash để link trong mail hết dùng được
         await db.Leads
             .Where(l => l.UserId == userId && l.Status == LeadStatuses.PendingParent)
             .ExecuteUpdateAsync(s => s
-                .SetProperty(l => l.Status, LeadStatuses.Cancelled)
+                .SetProperty(l => l.Status, LeadStatuses.Withdrawn)
                 .SetProperty(l => l.ParentTokenHash, (string?)null)
                 .SetProperty(l => l.UpdatedAt, now), ct);
 

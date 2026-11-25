@@ -35,6 +35,16 @@ public static class LeadParentConfirm
     public static bool IsPastDeadline(Lead lead, DateTime utcNow) =>
         lead.Status == LeadStatuses.PendingParent && lead.ParentTokenExpiresAt <= utcNow;
 
+    /// <summary>
+    /// Trung tâm chưa từng nhận lead này: còn chờ phụ huynh / bị từ chối / hết hạn, hoặc đã thu hồi khi đang chờ phụ huynh
+    /// (có hạn link nhưng chưa ai bấm đồng ý) [UC-75 bước 4, UC-111 bước 5].
+    /// </summary>
+    public static bool IsHiddenFromCenter(Lead lead) =>
+        LeadStatuses.IsHiddenFromCenter(lead.Status) || WithdrawnBeforeCenter(lead.Status, lead.ParentTokenExpiresAt, lead.ParentDecidedAt);
+
+    public static bool WithdrawnBeforeCenter(string? status, DateTime? parentTokenExpiresAt, DateTime? parentDecidedAt) =>
+        status == LeadStatuses.Withdrawn && parentTokenExpiresAt != null && parentDecidedAt == null;
+
     /// <summary>Tên nhóm dữ liệu chia sẻ để ghi trong mail cho phụ huynh.</summary>
     public static string FieldLabel(string key) => key switch
     {
