@@ -41,6 +41,13 @@ const SECTIONS: { id: string; title: string; description: string; steps: string[
     description: "Cách hệ thống tìm mức điểm tối thiểu bạn cần đạt để một trường lên nhóm cao hơn.",
     steps: ["Cần gì để vào"],
   },
+  {
+    id: "cost",
+    title: "Ước tính chi phí",
+    description:
+      "Các khoản và tỉ giá dùng khi ước tính chi phí học và đối chiếu với ngân sách. Mục ghi “Chưa áp dụng” là khoản hệ thống chưa tính vào ước tính hiện tại.",
+    steps: ["Chi phí"],
+  },
 ];
 
 // Backend trả số thập phân bằng dấu chấm; trang tiếng Việt hiển thị dấu phẩy (0.25 thành 0,25)
@@ -101,7 +108,7 @@ function buildSections(parameters: AlgorithmParameter[]) {
   return sections.filter((section) => section.items.length > 0);
 }
 
-// Danh sách tham số đang chạy của thuật toán (UC-89). Chỉ xem, không có thao tác sửa.
+// Danh sách tham số đang chạy của thuật toán gợi ý và của ước tính chi phí (UC-83). Chỉ xem, không có thao tác sửa.
 export function ParameterList({ data }: { data: MethodologyParameters | null }) {
   if (!data) {
     return <p className="text-sm text-muted-foreground">Chưa tải được bảng tham số. Bạn tải lại trang sau ít phút nhé.</p>;
@@ -118,7 +125,7 @@ export function ParameterList({ data }: { data: MethodologyParameters | null }) 
         </div>
         <p className="text-sm text-muted-foreground">
           Mỗi dòng gồm tên tham số, ý nghĩa bằng lời và giá trị đang dùng. Bạn không cần nhớ các con số này: chúng giúp bạn kiểm tra vì sao một trường nằm ở nhóm đó.
-          Các giá trị do hệ thống đọc trực tiếp từ bản đang chạy; mỗi lần đổi một giá trị, phiên bản thuật toán được tăng và đi qua kiểm thử. Bảng này chỉ để xem.
+          Các giá trị do hệ thống đọc trực tiếp từ bản đang chạy; mỗi lần đổi một giá trị của thuật toán, phiên bản thuật toán được tăng và đi qua kiểm thử. Riêng phần Ước tính chi phí có số liệu hệ thống cập nhật (phí visa, tỉ giá), nên có thể đổi mà không đổi phiên bản thuật toán. Bảng này chỉ để xem.
         </p>
       </div>
 

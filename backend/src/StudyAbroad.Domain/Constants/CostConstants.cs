@@ -11,4 +11,9 @@ public static class CostConstants
 
     /// <summary>Số năm học của chương trình đại học, dùng cho tổng chi phí 4 năm.</summary>
     public const int UndergraduateYears = 4;
+
+    /// <summary>
+    /// Tỉ giá dự phòng (VNĐ cho 1 USD) khi chưa từng lấy được tỉ giá từ nguồn công khai (UC-65 E2). Công bố ở UC-83.
+    /// </summary>
+    public const decimal FallbackVndPerUsd = 25_000m;
 }
