@@ -88,6 +88,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Billing.Jobs.OrderReconciler>();   // áp dụng trạng thái payOS vào đơn (job đối soát, admin kiểm lại)
         services.AddScoped<StudyAbroad.Application.Billing.Jobs.IBillingJobService, StudyAbroad.Application.Billing.Jobs.BillingJobService>();   // các bước của job nền thanh toán
         services.AddScoped<StudyAbroad.Application.Billing.Admin.IAdminOrderService, StudyAbroad.Application.Billing.Admin.AdminOrderService>();   // UC-132..134: admin xử lý đơn
+        services.AddScoped<StudyAbroad.Application.BirthDateChanges.IBirthDateChangeService, StudyAbroad.Application.BirthDateChanges.BirthDateChangeService>();   // [UC-107] gửi, hủy yêu cầu sửa ngày sinh
         return services;
     }
 }

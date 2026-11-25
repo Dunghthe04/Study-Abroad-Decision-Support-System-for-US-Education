@@ -58,6 +58,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Policies.IConsentRepository, ConsentRepository>();   // [UC-104] bằng chứng đồng ý điều khoản
         services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();
         services.AddScoped<StudyAbroad.Application.BirthDateChanges.IBirthDateChangeRepository, BirthDateChangeRepository>();   // [UC-107 / UC-150] yêu cầu sửa ngày sinh
+        services.AddSingleton<StudyAbroad.Application.BirthDateChanges.IBirthDateEvidenceStorage, StudyAbroad.Infrastructure.Services.BirthDateEvidenceStorage>();
         services.AddScoped<StudyAbroad.Application.Community.ICommunityRepository, CommunityRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadWithdrawalRepository, LeadWithdrawalRepository>();   // [UC-80] thu hồi lead khi xóa tài khoản
         services.AddScoped<StudyAbroad.Application.Auth.IAccountPurgeRepository, AccountPurgeRepository>();
@@ -157,6 +158,11 @@ public static class DependencyInjection
         services.Configure<StudyAbroad.Application.Auth.AccountDeletionOptions>(
             configuration.GetSection(StudyAbroad.Application.Auth.AccountDeletionOptions.SectionName));
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<StudyAbroad.Application.Auth.AccountDeletionOptions>>().Value);
+
+        // [UC-107] Dung lượng tối đa và loại giấy tờ minh chứng sửa ngày sinh (appsettings "BirthDateChange")
+        services.Configure<StudyAbroad.Application.BirthDateChanges.BirthDateChangeOptions>(
+            configuration.GetSection(StudyAbroad.Application.BirthDateChanges.BirthDateChangeOptions.SectionName));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<StudyAbroad.Application.BirthDateChanges.BirthDateChangeOptions>>().Value);
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
         // Giá token để tính tiền mỗi lần gọi AI: đọc từ cấu hình (appsettings "AiPricing" hoặc biến môi trường AiPricing__...)
