@@ -55,7 +55,7 @@ namespace StudyAbroad.Application.Auth
         Task SendChildAccountRestoredByParentEmailAsync(string toEmail, string studentName, bool reconsented, CancellationToken ct = default);
 
         /// <summary>[UC-116] Học sinh dưới 16 gửi yêu cầu liên hệ: hỏi phụ huynh đồng ý chia sẻ cho trung tâm. Mỗi phụ huynh một link.</summary>
-        Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<string> sharedFields, string confirmToken, int expiryDays, CancellationToken ct = default);
+        Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<StudyAbroad.Application.Leads.LeadSharedPreviewGroup> preview, string confirmToken, int expiryDays, CancellationToken ct = default);
 
         /// <summary>[UC-116] Báo học sinh kết quả. outcome: "new" phụ huynh đồng ý (đã gửi trung tâm), "cancelled" từ chối, "expired" hết hạn.</summary>
         Task SendLeadParentDecisionEmailAsync(string toEmail, string studentName, string centerName, string outcome, CancellationToken ct = default);

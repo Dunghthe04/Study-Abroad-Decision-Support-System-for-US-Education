@@ -240,15 +240,26 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         };
     }
 
-    public async Task<CenterReceivedLeadDto?> GetReceivedLeadDetailAsync(
+    public Task<CenterReceivedLeadDto?> GetReceivedLeadDetailAsync(
         Guid leadId,
         Guid? restrictToCenterId,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        // [UC-116] Trung tâm chưa nhận lead chờ phụ huynh / bị từ chối / hết hạn: báo không tìm thấy
+        BuildCenterViewAsync(leadId, restrictToCenterId, hidePendingParent: true, ct);
+
+    public Task<CenterReceivedLeadDto?> GetSharedPreviewAsync(Guid leadId, CancellationToken ct = default) =>
+        BuildCenterViewAsync(leadId, null, hidePendingParent: false, ct);
+
+    private async Task<CenterReceivedLeadDto?> BuildCenterViewAsync(
+        Guid leadId,
+        Guid? restrictToCenterId,
+        bool hidePendingParent,
+        CancellationToken ct)
     {
         var query = from l in db.Leads.AsNoTracking()
                     where l.Id == leadId
-                        // [UC-116] Trung tâm chưa nhận lead này: báo không tìm thấy
-                        && l.Status != LeadStatuses.PendingParent && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired
+                        && (!hidePendingParent
+                            || (l.Status != LeadStatuses.PendingParent && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired))
                     join c in db.StudyCenters.AsNoTracking() on l.StudyCenterId equals c.Id
                     // [UC-75 lớp 1b] Nối trái: lead của người gửi đã bị xóa hẳn (UserId null) vẫn hiện để trung tâm xem tin nhắn còn giữ
                     join u in db.Users.AsNoTracking() on l.UserId equals (Guid?)u.Id into senders

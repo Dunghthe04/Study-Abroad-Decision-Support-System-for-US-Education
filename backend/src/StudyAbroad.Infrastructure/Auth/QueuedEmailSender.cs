@@ -77,8 +77,8 @@ namespace StudyAbroad.Infrastructure.Auth
         public Task SendChildAccountRestoredByParentEmailAsync(string toEmail, string studentName, bool reconsented, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendChildAccountRestoredByParentEmailAsync(toEmail, studentName, reconsented, t));
 
-        public Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<string> sharedFields, string confirmToken, int expiryDays, CancellationToken ct = default) =>
-            Enqueue(toEmail, (s, t) => s.SendLeadParentConfirmEmailAsync(toEmail, studentName, centerName, sharedFields, confirmToken, expiryDays, t));
+        public Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<StudyAbroad.Application.Leads.LeadSharedPreviewGroup> preview, string confirmToken, int expiryDays, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendLeadParentConfirmEmailAsync(toEmail, studentName, centerName, preview, confirmToken, expiryDays, t));
 
         public Task SendLeadParentDecisionEmailAsync(string toEmail, string studentName, string centerName, string outcome, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendLeadParentDecisionEmailAsync(toEmail, studentName, centerName, outcome, t));

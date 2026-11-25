@@ -402,22 +402,30 @@ namespace StudyAbroad.Infrastructure.Auth
         }
 
         // [UC-116] Giống thư mời UC-115: hai nút mở trang xác nhận, mở link không đổi trạng thái
-        public async Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<string> sharedFields, string confirmToken, int expiryDays, CancellationToken ct = default)
+        public async Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<StudyAbroad.Application.Leads.LeadSharedPreviewGroup> preview, string confirmToken, int expiryDays, CancellationToken ct = default)
         {
             var link = $"{_options.AppBaseUrl.TrimEnd('/')}/parent-consent/lead?token={Uri.EscapeDataString(confirmToken)}";
             var rejectLink = link + "&choice=reject";
             var student = WebUtility.HtmlEncode(studentName);
             var center = WebUtility.HtmlEncode(centerName);
-            var fields = string.Concat(sharedFields.Select(f =>
-                $"<li>{WebUtility.HtmlEncode(StudyAbroad.Application.Leads.LeadParentConfirm.FieldLabel(f))}</li>"));
+            // [UC-110 bước 1] Tóm tắt hồ sơ: mỗi nhóm con đã chọn kèm giá trị thật, đúng như trung tâm sẽ thấy
+            var fields = string.Concat(preview.Select(g =>
+                $"""<p style="font-size: 14px; color: #0f172a; font-weight: 600; margin: 12px 0 4px;">{WebUtility.HtmlEncode(g.Title)}</p>"""
+                + """<table style="font-size: 14px; color: #475569; line-height: 1.6; border-collapse: collapse; width: 100%;">"""
+                + string.Concat(g.Items.Select(i =>
+                    $"""<tr><td style="padding: 2px 12px 2px 0; width: 40%; vertical-align: top;">{WebUtility.HtmlEncode(i.Label)}</td><td style="padding: 2px 0; color: #0f172a; white-space: pre-line;">{WebUtility.HtmlEncode(i.Value)}</td></tr>"""))
+                + "</table>"));
             var subject = "[USAS] Con muốn gửi yêu cầu liên hệ tới trung tâm tư vấn";
             var body = $"""
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
                     <h2 style="color: #2563eb; margin-bottom: 16px;">Phụ huynh xác nhận gửi yêu cầu liên hệ</h2>
                     <p style="font-size: 14px; color: #475569; line-height: 1.6;">Học sinh <strong>{student}</strong> muốn gửi yêu cầu liên hệ tới trung tâm tư vấn du học <strong>{center}</strong> trên USAS. Vì con dưới 16 tuổi, trung tâm chỉ nhận yêu cầu khi phụ huynh đồng ý.</p>
-                    <p style="font-size: 14px; color: #0f172a; font-weight: 600; margin-bottom: 4px;">Dữ liệu sẽ chia sẻ cho trung tâm</p>
-                    <ul style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 0; padding-left: 20px;">{fields}</ul>
-                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Trung tâm sẽ dùng thông tin này để liên hệ tư vấn cho con. Bạn không cần tài khoản để trả lời.</p>
+                    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin: 16px 0;">
+                        <p style="font-size: 15px; color: #0f172a; font-weight: 700; margin: 0;">Tóm tắt hồ sơ sẽ chia sẻ cho trung tâm</p>
+                        {fields}
+                    </div>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;"><strong>Mục đích chia sẻ:</strong> trung tâm {center} dùng các thông tin trên để liên hệ và tư vấn du học Mỹ cho con. Trung tâm chỉ thấy đúng những mục trong bản tóm tắt này.</p>
+                    <p style="font-size: 14px; color: #475569; line-height: 1.6;">Bạn không cần tài khoản để trả lời.</p>
                     <div style="text-align: center; margin: 24px 0;">
                         <a href="{WebUtility.HtmlEncode(link)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 8px; margin: 4px;">Đồng ý</a>
                         <a href="{WebUtility.HtmlEncode(rejectLink)}" style="display: inline-block; background-color: #ffffff; color: #b91c1c; text-decoration: none; font-weight: 600; padding: 11px 23px; border-radius: 8px; border: 1px solid #fca5a5; margin: 4px;">Từ chối</a>

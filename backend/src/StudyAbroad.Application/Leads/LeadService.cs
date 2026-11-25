@@ -270,9 +270,14 @@ public class LeadService(
 
         var activeLinks = (await parentLinks.GetByStudentAsync(student.Id, ct))
             .Where(l => l.Status == ParentLinkStatuses.Active);
+        // [UC-110 bước 1] Bản xem trước dựng từ đúng dữ liệu trung tâm sẽ thấy khi phụ huynh đồng ý
+        var view = await leads.GetSharedPreviewAsync(lead.Id, ct);
+        var preview = view is null
+            ? lead.SharedFields.Select(f => new LeadSharedPreviewGroup(LeadParentConfirm.FieldLabel(f), [])).ToList()
+            : LeadParentConfirm.BuildPreview(view, lead.SharedFields);
         foreach (var link in activeLinks)
         {
-            await emailSender.SendLeadParentConfirmEmailAsync(link.ParentEmail, student.FullName, centerName, lead.SharedFields,
+            await emailSender.SendLeadParentConfirmEmailAsync(link.ParentEmail, student.FullName, centerName, preview,
                 LeadParentConfirm.ComposeToken(secret, link.Id), LeadParentConfirm.ExpiryDays, ct);
         }
     }

@@ -30,3 +30,8 @@ public record LeadParentConfirmInfo(
     DateTime? ExpiresAt,
     DateTime? DecidedAt,
     bool DecidedByYou);
+
+/// <summary>[UC-110 bước 1] Một nhóm dữ liệu trong bản xem trước Tóm tắt hồ sơ gửi phụ huynh (giá trị đã định dạng sẵn).</summary>
+public record LeadSharedPreviewGroup(string Title, IReadOnlyList<LeadSharedPreviewItem> Items);
+
+public record LeadSharedPreviewItem(string Label, string Value);

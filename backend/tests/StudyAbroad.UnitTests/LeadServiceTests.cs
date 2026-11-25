@@ -204,6 +204,19 @@ public class LeadServiceTests
                 closedC));
         }
 
+        public Dictionary<Guid, StudentProfile> Profiles { get; } = [];
+
+        // [UC-110 bước 1] Như LeadRepository: dựng bằng CenterLeadMapper, không lọc lead chờ phụ huynh
+        public Task<CenterReceivedLeadDto?> GetSharedPreviewAsync(Guid leadId, CancellationToken ct = default)
+        {
+            var lead = Leads.FirstOrDefault(l => l.Id == leadId);
+            if (lead is null) return Task.FromResult<CenterReceivedLeadDto?>(null);
+            var name = lead.UserId is { } uid && Users.TryGetValue(uid, out var u) ? u.FullName : null;
+            var profile = lead.UserId is { } pid ? Profiles.GetValueOrDefault(pid) : null;
+            return Task.FromResult<CenterReceivedLeadDto?>(
+                CenterLeadMapper.ToCenterDto(lead, "Test Center", name, "student@example.com", profile, []));
+        }
+
         public Task<CenterReceivedLeadDto?> GetReceivedLeadDetailAsync(
             Guid leadId,
             Guid? restrictToCenterId,
@@ -2087,6 +2100,12 @@ public class LeadServiceTests
         Assert.Equal(["dad@test.com", "mom@test.com"], mails.Select(m => m.To).Order());
         Assert.NotEqual(mails[0].Code, mails[1].Code);
         Assert.DoesNotContain(mails, m => m.Code.Contains(p.Stored.ParentTokenHash!));
+        // [UC-110 bước 1] Mail có bản xem trước Tóm tắt hồ sơ theo đúng các nhóm con đã chọn
+        Assert.NotNull(p.Emails.LastLeadPreview);
+        Assert.Equal(
+            p.Stored.SharedFields.Count,
+            p.Emails.LastLeadPreview!.Count(g => g.Title != "Lời nhắn gửi trung tâm"));
+        Assert.All(p.Emails.LastLeadPreview!, g => Assert.NotEmpty(g.Items));
     }
 
     [Fact]

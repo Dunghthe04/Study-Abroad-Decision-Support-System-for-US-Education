@@ -243,6 +243,7 @@ internal sealed class FakeAuditLogRepository : IAuditLogRepository
 internal sealed class FakeEmailSender : IEmailSender
 {
     public List<(string To, string Purpose, string Code)> SentEmails { get; } = [];
+    public IReadOnlyList<StudyAbroad.Application.Leads.LeadSharedPreviewGroup>? LastLeadPreview { get; private set; }
 
     public Task SendVerificationEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 5, CancellationToken ct = default)
     {
@@ -304,8 +305,9 @@ internal sealed class FakeEmailSender : IEmailSender
         return Task.CompletedTask;
     }
 
-    public Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<string> sharedFields, string confirmToken, int expiryDays, CancellationToken ct = default)
+    public Task SendLeadParentConfirmEmailAsync(string toEmail, string studentName, string centerName, IReadOnlyList<StudyAbroad.Application.Leads.LeadSharedPreviewGroup> preview, string confirmToken, int expiryDays, CancellationToken ct = default)
     {
+        LastLeadPreview = preview;
         SentEmails.Add((toEmail, "lead_parent_confirm", confirmToken));
         return Task.CompletedTask;
     }
