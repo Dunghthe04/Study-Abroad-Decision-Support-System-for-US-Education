@@ -10,7 +10,7 @@ import type { PendingDeletionProblem } from "@/types/api";
 import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { Spinner } from "@/components/ui/spinner";
@@ -28,6 +28,8 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // [UC-03 AC-1] Lỗi tiếng Việt dưới từng ô bắt buộc thay cho bong bóng mặc định của trình duyệt (AUTH-077–079)
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [lockType, setLockType] = useState<"temp_locked" | "admin_locked" | "unverified" | "pending_deletion" | null>(null);
@@ -54,10 +56,17 @@ export function LoginForm() {
     setLockType(null);
     setRestoreToken(null);
 
-    if (!email.trim() || !password) {
-      setError("Vui lòng nhập đầy đủ email và mật khẩu.");
-      return;
+    const errors: { email?: string; password?: string } = {};
+    if (!email.trim()) {
+      errors.email = "Vui lòng nhập email.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      errors.email = "Email không đúng định dạng.";
     }
+    if (!password) {
+      errors.password = "Vui lòng nhập mật khẩu.";
+    }
+    setFieldErrors(errors);
+    if (errors.email || errors.password) return;
 
     setIsSubmitting(true);
     try {
@@ -195,10 +204,10 @@ export function LoginForm() {
         </Button>
       )}
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         <FieldGroup>
           {/* Email của bạn */}
-          <Field>
+          <Field data-invalid={Boolean(fieldErrors.email)}>
             <FieldLabel htmlFor="email">Email của bạn</FieldLabel>
             <Input
               id="email"
@@ -206,24 +215,36 @@ export function LoginForm() {
               required
               maxLength={100}
               autoComplete="email"
+              aria-invalid={Boolean(fieldErrors.email)}
+              aria-describedby={fieldErrors.email ? "email-error" : undefined}
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setFieldErrors((prev) => ({ ...prev, email: undefined }));
+              }}
               placeholder="example@gmail.com"
             />
+            {fieldErrors.email && <FieldError id="email-error">{fieldErrors.email}</FieldError>}
           </Field>
 
           {/* Mật khẩu */}
-          <Field>
+          <Field data-invalid={Boolean(fieldErrors.password)}>
             <FieldLabel htmlFor="password">Mật khẩu</FieldLabel>
             <PasswordInput
               id="password"
               required
               maxLength={100}
               autoComplete="current-password"
+              aria-invalid={Boolean(fieldErrors.password)}
+              aria-describedby={fieldErrors.password ? "password-error" : undefined}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setFieldErrors((prev) => ({ ...prev, password: undefined }));
+              }}
               placeholder="••••••••"
             />
+            {fieldErrors.password && <FieldError id="password-error">{fieldErrors.password}</FieldError>}
           </Field>
 
           <Button type="submit" size="xl" disabled={isSubmitting} className="w-full" loading={isSubmitting}>
