@@ -27,6 +27,7 @@ from app.services.branches import (
     NOTHING_TO_TRY,
     OUT_OF_SCOPE,
     RECOMMENDING,
+    ROUND_KNOWLEDGE_JOIN,
     KnowledgeBranch,
     NotReadyBranch,
     build_branches,
@@ -169,6 +170,48 @@ async def test_what_if_about_the_application_round_says_the_list_is_unchanged_an
     assert out.action is None
     assert out.quick_replies[0].label == "Tìm hiểu vòng nộp ED, EA, RD"
     assert out.quick_replies[0].value == "ED, EA và RD khác nhau thế nào?"
+
+
+class FakeKnowledge:
+    def __init__(self, answer: str | None = None, error: bool = False) -> None:
+        self.answer, self.error, self.asked = answer, error, []
+
+    async def run(self, state, message):
+        self.asked.append(message)
+        if self.error:
+            raise RuntimeError("kho lỗi")
+        return SkillOutput(self.answer or "")
+
+
+# UC-155: giả định vòng nộp thì trả luôn câu trả lời của Kho tri thức trong cùng lượt, nút vẫn còn
+async def test_what_if_about_the_application_round_includes_the_knowledge_answer():
+    kb = FakeKnowledge("ED có ràng buộc, EA và RD thì không.")
+    branch = build_branches(skills([]) | {"skill_tra_loi": kb})["scenario"]
+
+    out = await branch.run(
+        ChatState(has_results=True),
+        "nếu nộp ED",
+        scenario(**what_if({"factor": "application_round", "value": "ED"})),
+    )
+
+    assert out.answer.startswith("Vòng nộp (ED, EA, RD) không làm thay đổi danh sách trường gợi ý.")
+    assert out.answer.endswith("ED có ràng buộc, EA và RD thì không.")
+    assert kb.asked == ["ED, EA và RD khác nhau thế nào?"]
+    assert out.quick_replies[0].label == "Tìm hiểu vòng nộp ED, EA, RD"
+
+
+@pytest.mark.parametrize("kb", [FakeKnowledge(error=True), FakeKnowledge("")])
+async def test_the_round_answer_stays_the_same_when_the_knowledge_gives_nothing(kb):
+    branch = build_branches(skills([]) | {"skill_tra_loi": kb})["scenario"]
+
+    out = await branch.run(
+        ChatState(has_results=True),
+        "nếu nộp ED",
+        scenario(**what_if({"factor": "application_round", "value": "ED"})),
+    )
+
+    assert out.answer.startswith("Vòng nộp (ED, EA, RD) không làm thay đổi danh sách trường gợi ý.")
+    assert ROUND_KNOWLEDGE_JOIN not in out.answer
 
 
 async def test_what_if_with_a_new_state_and_a_rate_goes_to_simulate_with_both():

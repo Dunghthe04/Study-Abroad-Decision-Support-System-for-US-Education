@@ -20,6 +20,7 @@ from app.services.chat_flow import (
     combine,
     start_intake,
 )
+from app.services.fit_method_writer import FitMethodWriter
 from app.services.goal_target import plain, target_code
 from app.services.priority import from_model as priority_from_model
 from app.services.priority import label as priority_label
@@ -248,8 +249,9 @@ def cannot_try_note(what_if: WhatIf) -> str:
 # goal_seeking thì giao .NET tìm trường và chạy goal-seek (action "goal_seek")
 class ScenarioBranch:
     # writer: Claude viết lời khi không có gì thử được; None thì dùng câu cố định
-    def __init__(self, writer: WhatIfWriter | None = None) -> None:
+    def __init__(self, writer: WhatIfWriter | None = None, knowledge: SkillHandler | None = None) -> None:
         self._writer = writer
+        self._knowledge = knowledge
 
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         # Câu nối tiếp chỉ nói phần đổi: gộp vào kịch bản lượt trước (UC-155 1a)
@@ -304,9 +306,29 @@ class ScenarioBranch:
     ) -> SkillOutput:
         fallback = cannot_try(what_if, profile)
         if self._writer is None or not (what_if.filters or what_if.no_effect):
-            return fallback
-        answer = await self._writer.write(what_if, changes)
-        return SkillOutput(answer, quick_replies=fallback.quick_replies) if answer else fallback
+            out = fallback
+        else:
+            answer = await self._writer.write(what_if, changes)
+            out = SkillOutput(answer, quick_replies=fallback.quick_replies) if answer else fallback
+        return await self._with_round_knowledge(what_if, out)
+
+    # UC-155: hỏi giả định vòng nộp (ED, EA, RD) thì trả luôn kiến thức về vòng nộp từ Kho tri thức (UC-36) trong cùng lượt,
+    # không chỉ đưa nút. Kho không trả lời được thì giữ nguyên câu cũ kèm nút
+    async def _with_round_knowledge(self, what_if: WhatIf, out: SkillOutput) -> SkillOutput:
+        if self._knowledge is None or "application_round" not in what_if.no_effect:
+            return out
+        try:
+            kb = await self._knowledge.run(ChatState(), ROUND_KNOWLEDGE_BUTTON.value)
+        except Exception:  # noqa: BLE001 - lỗi kho không được làm hỏng câu trả lời chính
+            return out
+        if not kb.answer or kb.answer == NOT_READY:
+            return out
+        return SkillOutput(
+            out.answer + ROUND_KNOWLEDGE_JOIN + kb.answer,
+            quick_replies=out.quick_replies,
+            citations=kb.citations,
+            disclaimer=kb.disclaimer,
+        )
 
     # "Cần gì để vào trường X": tên trường còn là chữ, .NET khớp với 249 trường rồi chạy goal-seek.
     # Không cần danh sách gợi ý có sẵn: goal-seek tính từ hồ sơ và dữ liệu trường
@@ -419,6 +441,9 @@ SCHOOL_LIST_WORDS = (
 MAX_SUGGESTED = 6
 
 
+# Chỗ nối câu giả định vòng nộp với câu trả lời của Kho tri thức (UC-155)
+ROUND_KNOWLEDGE_JOIN = "\n\n"
+
 # Yếu tố tìm mức cần đạt mà model được trả (hợp đồng SLM): activities là bậc ngoại khóa
 GOAL_FACTORS = ("gpa", "sat", "act", "english", "activities")
 
@@ -488,9 +513,15 @@ def others_only_output(
 # lộ trình, hoặc cả hai: SLM tách sẵn trong tasks) thì code dựng skill từ khuôn (skill_ho_so_khuon),
 # Claude viết câu trả lời. Claude sai thì báo chưa trả lời được kèm nút hỏi lại, không dùng skill tĩnh
 class GeneratedAdviceBranch:
-    def __init__(self, skills: dict[str, SkillHandler], writer: AdviceWriter) -> None:
+    def __init__(
+        self,
+        skills: dict[str, SkillHandler],
+        writer: AdviceWriter,
+        method_writer: FitMethodWriter | None = None,
+    ) -> None:
         self._skills = skills
         self._writer = writer
+        self._method_writer = method_writer
 
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         y = slm.intents[0]
@@ -528,6 +559,11 @@ class GeneratedAdviceBranch:
                     return asked
             out = others_only_output(y, tasks, asks_for_school_list(question), state)
             if out is not None:
+                # UC-153 1a: Claude viết lời từ tham số công bố; không viết được thì giữ câu cố định FIT_METHOD
+                if out.answer == FIT_METHOD and self._method_writer is not None:
+                    written = await self._method_writer.write()
+                    if written is not None:
+                        return SkillOutput(written, quick_replies=out.quick_replies)
                 return out
         # Gợi ý trường cần ngành để lọc trường; tư vấn hồ sơ chỉ cần các mục cơ bản
         asked = ask_missing_profile(state, y, REQUIRED_B4 if school_list else REQUIRED_B3)
@@ -588,12 +624,15 @@ def build_branches(
     skills: dict[str, SkillHandler],
     writer: AdviceWriter | None = None,
     what_if_writer: WhatIfWriter | None = None,
+    method_writer: FitMethodWriter | None = None,
 ) -> dict[str, Branch]:
-    advice: Branch = GeneratedAdviceBranch(skills, writer) if writer is not None else NotReadyBranch()
+    advice: Branch = (
+        GeneratedAdviceBranch(skills, writer, method_writer) if writer is not None else NotReadyBranch()
+    )
     return {
         "collect_profile": ProfileBranch(ChatProfileHandler(skills), advice),
         "profile_review": advice,
-        "scenario": ScenarioBranch(what_if_writer),
+        "scenario": ScenarioBranch(what_if_writer, skills.get("skill_tra_loi")),
         "knowledge": KnowledgeBranch(skills["skill_tra_loi"])
         if "skill_tra_loi" in skills
         else NotReadyBranch(),
