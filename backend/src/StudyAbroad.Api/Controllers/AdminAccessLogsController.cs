@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 namespace StudyAbroad.Api.Controllers;
 
 /// <summary>
-/// [UC-97] Xem và lọc nhật ký truy cập dữ liệu nhạy cảm (tài liệu xác minh trung tâm, tin nhắn bị báo cáo, xuất mẫu ở UC-102).
+/// [UC-91] Xem và lọc nhật ký truy cập dữ liệu nhạy cảm (tài liệu xác minh trung tâm, tin nhắn bị báo cáo, xuất mẫu ở UC-96) và nhật ký thao tác.
 /// Chỉ dành cho Administrator. Quy tắc: nhật ký bất biến, không sửa và không xóa được.
 /// </summary>
 [ApiController]

@@ -143,6 +143,7 @@ builder.Services.AddAuthorization(options =>
         options.AddPolicy(feature, policy => policy.RequireAuthenticatedUser().AddRequirements(new AgeFeatureRequirement(feature)));
     // Gợi ý trường và mô phỏng là tính năng Premium: Free nhận 403 premium_required (đọc lịch sử, kịch bản đã lưu thì không chặn)
     options.AddPolicy(PremiumPolicies.Recommendations, p => p.RequireAuthenticatedUser().AddRequirements(new PremiumFeatureRequirement("recommendations")));
+    options.AddPolicy(PremiumPolicies.ParentPreferenceCompare, p => p.RequireAuthenticatedUser().AddRequirements(new PremiumFeatureRequirement("parent_preference_compare")));
 });
 builder.Services.AddScoped<IAuthorizationHandler, AgeFeatureHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, PremiumFeatureHandler>();

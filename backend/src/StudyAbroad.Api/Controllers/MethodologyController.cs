@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using StudyAbroad.Application.Admin.Settings;
 using StudyAbroad.Application.Recommendations;
 
 namespace StudyAbroad.Api.Controllers;
@@ -12,18 +13,18 @@ namespace StudyAbroad.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/methodology")]
-public class MethodologyController : ControllerBase
+public class MethodologyController(ICostParametersSettingService costParameters) : ControllerBase
 {
     public record ParametersResponse(string AlgorithmVersion, IReadOnlyList<AlgorithmParameter> Parameters);
 
-    /// <summary>Phiên bản thuật toán và danh mục tham số đang chạy.</summary>
+    /// <summary>Phiên bản thuật toán và danh mục tham số đang chạy (gồm tham số chi phí sống từ app_settings).</summary>
     [HttpGet("parameters")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(ParametersResponse), StatusCodes.Status200OK)]
-    public ActionResult<ParametersResponse> GetParameters()
+    public async Task<ActionResult<ParametersResponse>> GetParameters(CancellationToken ct = default)
     {
-        // Danh mục không đổi trong lúc chạy nên cho trình duyệt giữ ngắn hạn
-        Response.Headers.CacheControl = "public, max-age=300";
-        return new ParametersResponse(AlgorithmParameters.Version, AlgorithmParameters.All);
+        Response.Headers.CacheControl = "no-store";
+        var cost = await costParameters.GetCurrentParametersAsync(ct);
+        return new ParametersResponse(AlgorithmParameters.Version, AlgorithmParameters.Build(cost));
     }
 }
