@@ -46,6 +46,9 @@ class ChatContext(CamelModel):
     sort: str | None = None
     service: str | None = None
     city: str | None = None
+    # Kịch bản vừa thử (UC-155), đúng dạng model trả và nhận: {"mode": "what_if", "changes": [{factor, value, unit}]} hoặc
+    # {"mode": "goal_seeking", "school": ..., "factor": [...], "target_group": ...}. Câu nối tiếp chỉ nói phần đổi, code gộp vào đây
+    scenario: dict[str, Any] | None = None
 
 
 # Một dòng bảng quy đổi grade_scale.10, khớp record GradeScaleRuleDto bên .NET. min_score là mốc điểm, GPA nội suy giữa

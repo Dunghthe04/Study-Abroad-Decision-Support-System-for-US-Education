@@ -41,6 +41,8 @@ def context_for_model(state: ChatState) -> dict[str, Any] | None:
         out["service"] = ctx.service
     if ctx.city:
         out["city"] = ctx.city
+    if ctx.scenario:
+        out["scenario"] = ctx.scenario
     return out or None
 
 

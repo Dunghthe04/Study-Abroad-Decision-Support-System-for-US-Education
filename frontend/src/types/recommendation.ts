@@ -143,6 +143,11 @@ export interface SimulationOverrides {
   scholarshipNeed?: ScholarshipNeed | null;
   ecTier?: number | null;
   pref?: Pref | null;
+  // UC-77: bang (mã hai chữ), ngành (tên tiếng Anh như lưu trong hồ sơ) thay điều kiện lọc; tỉ giá giả định (VNĐ mỗi USD hoặc % tăng, chỉ nhận mức tăng)
+  states?: string[] | null;
+  major?: string | null;
+  exchangeRateVnd?: number | null;
+  exchangeRatePercent?: number | null;
 }
 
 // Giá trị của hồ sơ thật, để thanh kéo hiện "hồ sơ" cạnh "giả định"
@@ -307,6 +312,7 @@ export interface SchoolGoalResult {
   budget: GoalBudget;
   filterReason: "MAJOR" | "STATE" | "CONTROL" | "ENGLISH" | "ENGLISH_NO_CERT" | null; // trường không nằm trong danh sách vì bộ lọc ngoài ngân sách
   english?: GoalEnglish | null; // có khi bị loại vì tiếng Anh
+  englishRequirement?: GoalEnglish | null; // UC-155: mức tối thiểu của trường kể cả khi chưa bị loại vì tiếng Anh; shortfallBand 0 là đạt
   alternatives: GoalAlternative[];
   position?: GoalPosition | null; // bản backend cũ chưa trả
   stats?: GoalSchoolStats | null; // số liệu tuyển sinh và mốc của các luật chặn

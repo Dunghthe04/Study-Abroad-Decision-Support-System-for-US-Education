@@ -18,6 +18,7 @@ from app.services.skills.validators import AskAgain
 # Khóa hồ sơ mô phỏng được. Chứng chỉ tiếng Anh thử được IELTS, TOEFL, Duolingo (unit cho biết bài nào)
 # UC-155: bang, ngành và tỉ giá cũng thử được (bang và ngành thay điều kiện lọc trên bản sao hồ sơ; tỉ giá đổi ngân sách USD, chỉ nhận mức tăng)
 SUPPORTED = (
+    "ec_tier",
     "gpa",
     "sat",
     "act",
@@ -34,6 +35,7 @@ SUPPORTED_TEXT = (
     "và ưu tiên (chi phí thấp, học bổng nhiều, danh tiếng)"
 )
 MAX_RATE_PERCENT = 100
+EC_TIER_MAX = 5  # bậc ngoại khóa 1 đến 5 (3 là trung bình), cùng khoảng với backend
 MIN_VND_PER_USD = 1_000  # dưới mức này không thể là tỉ giá VNĐ mỗi USD (người dùng nhầm đơn vị)
 # Học sinh nói "bỏ" một yếu tố: kịch bản chỉ đổi giá trị, không xóa được điểm
 SKIP_ACTION = "skip"
@@ -63,6 +65,7 @@ LABELS = {
     "visa_refused": "lịch sử visa",
     "exchange_rate": "tỉ giá",
     "application_round": "vòng nộp (ED, EA, RD)",
+    "ec_tier": "bậc ngoại khóa",
 }
 # Mục lọc trường bên .NET (RecommendationService lọc theo ngành, bậc học, bang, loại trường): đổi là đổi hồ sơ thật,
 # không thử tạm được. Mỗi mục kèm nhóm của ô chọn sửa hồ sơ (skill_ho_so.EDIT_SECTIONS) để gắn nút sửa
@@ -114,6 +117,8 @@ class WhatIf:
             parts.append(f"ngân sách khoảng {usd:,.0f} USD mỗi năm".replace(",", "."))
         if (need := self.changes.get("scholarshipNeed")) is not None:
             parts.append(f"mức cần học bổng: {SCHOLARSHIP_TEXT[need]}")
+        if (tier := self.changes.get("ecTier")) is not None:
+            parts.append(f"bậc ngoại khóa {tier}")
         if (states := self.changes.get("states")) is not None:
             parts.append(f"bang {', '.join(states)}")
         if (major := self.changes.get("major")) is not None:
@@ -231,6 +236,11 @@ def _check(
             return _check_major(value, majors or [])
         case "exchange_rate":
             return _check_exchange_rate(value, unit)
+        case "ec_tier":
+            tier = _number(value, "Bạn muốn thử bậc ngoại khóa mấy, từ 1 đến 5?")
+            if tier != int(tier) or not 1 <= tier <= EC_TIER_MAX:
+                raise AskAgain(f"Bậc ngoại khóa là số nguyên từ 1 đến {EC_TIER_MAX}. Bạn muốn thử bậc mấy?")
+            return "ecTier", int(tier)
         case "gpa":
             gpa, scale = validators.check_gpa(
                 _number(value, "Bạn muốn thử GPA bao nhiêu?"), GPA_SCALES.get(unit or "")
@@ -254,6 +264,32 @@ def _check(
 
 
 # Đọc danh sách changes của SLM. Giá trị sai thì ném AskAgain; yếu tố mô phỏng chưa làm được thì ghi vào unsupported
+def merge_follow_up(entities: dict[str, Any], previous: dict[str, Any] | None) -> dict[str, Any]:
+    """Gộp câu nối tiếp (follow_up) vào kịch bản lượt trước (UC-155 1a). Model chỉ nói phần ĐỔI, code gộp theo yếu tố:
+    what_if: giá trị mới thay giá trị cũ của cùng yếu tố, yếu tố mới thì thêm, "bỏ" (action skip) thì xóa yếu tố đó.
+    goal_seeking: trường hoặc nhóm đích còn thiếu thì lấy từ lượt trước. Không có lượt trước cùng loại thì giữ nguyên (mô phỏng mới)."""
+    if entities.get("follow_up") is not True or not previous or previous.get("mode") != entities.get("mode"):
+        return entities
+    if entities.get("mode") == "goal_seeking":
+        merged = dict(entities)
+        for key in ("school", "target_group"):
+            if not merged.get(key) and previous.get(key):
+                merged[key] = previous[key]
+        return merged
+    kept: dict[str, dict[str, Any]] = {
+        c["factor"]: c for c in previous.get("changes") or [] if c.get("factor")
+    }
+    for change in entities.get("changes") or []:
+        factor = change.get("factor")
+        if not factor:
+            continue
+        if change.get("action") == SKIP_ACTION:
+            kept.pop(factor, None)
+        else:
+            kept[factor] = change
+    return {**entities, "changes": list(kept.values())}
+
+
 # states, majors: danh sách bang và ngành của hệ thống (đọc sẵn, ScenarioBranch nạp); thiếu thì bang và ngành chưa thử được
 def parse_what_if(
     changes: list[dict[str, Any]],

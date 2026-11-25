@@ -227,8 +227,27 @@ async def test_goal_seeking_hands_the_school_and_target_to_dotnet():
     )
 
     assert out.action == "goal_seek"
-    assert out.action_data == {"school": "MIT", "target": "match"}
+    assert out.action_data == {"school": "MIT", "target": "match", "factor": ["sat"]}
     assert "MIT" in out.answer
+
+
+# UC-155: yếu tố học sinh hỏi đi sang .NET (để nói riêng tiếng Anh khi chỉ hỏi tiếng Anh); mã lạ bị bỏ
+async def test_goal_seeking_about_english_passes_the_factor_on():
+    out = await run_scenario(ChatState(), mode="goal_seeking", school="MIT", factor=["english"])
+
+    assert out.action_data == {"school": "MIT", "target": None, "factor": ["english"]}
+
+
+async def test_goal_seeking_drops_factors_the_contract_does_not_know():
+    out = await run_scenario(ChatState(), mode="goal_seeking", school="MIT", factor=["luck", "gpa"])
+
+    assert out.action_data["factor"] == ["gpa"]
+    assert (
+        "factor"
+        not in (
+            await run_scenario(ChatState(), mode="goal_seeking", school="MIT", factor=["luck"])
+        ).action_data
+    )
 
 
 async def test_goal_seeking_without_a_target_leaves_it_to_the_system():
@@ -1164,3 +1183,63 @@ async def test_what_if_asking_again_for_a_number_offers_quick_buttons():
 
     assert "SAT bao nhiêu" in out.answer and out.action is None
     assert out.quick_replies and out.quick_replies[0].label == "Thử SAT 1400"
+
+
+# ---- UC-155 1a: câu nối tiếp gộp vào kịch bản lượt trước, ngữ cảnh nhớ kịch bản đã gộp ----
+async def test_a_follow_up_what_if_is_merged_with_the_previous_scenario_and_remembered():
+    state = ChatState(has_results=True)
+    first = await run_scenario(state, **what_if({"factor": "sat", "value": "1400"}))
+    second = await run_scenario(
+        state, **what_if({"factor": "english", "value": "7", "unit": "ielts"}) | {"follow_up": True}
+    )
+
+    assert first.action_data["changes"] == {"sat": 1400}
+    assert second.action_data["changes"] == {"sat": 1400, "ielts": 7.0}  # SAT của lượt trước vẫn còn
+    assert "SAT 1400" in second.answer and "IELTS 7" in second.answer
+    assert state.context.scenario == {
+        "mode": "what_if",
+        "changes": [{"factor": "sat", "value": "1400"}, {"factor": "english", "value": "7", "unit": "ielts"}],
+    }
+
+
+async def test_a_follow_up_that_replaces_a_value_keeps_one_entry_per_factor():
+    state = ChatState(has_results=True)
+    await run_scenario(state, **what_if({"factor": "sat", "value": "1400"}))
+
+    out = await run_scenario(state, **what_if({"factor": "sat", "value": "1450"}) | {"follow_up": True})
+
+    assert out.action_data["changes"] == {"sat": 1450}
+
+
+async def test_dropping_a_factor_in_a_follow_up_removes_it_from_the_simulation():
+    state = ChatState(has_results=True)
+    await run_scenario(state, **what_if({"factor": "sat", "value": "1400"}, {"factor": "act", "value": "30"}))
+
+    out = await run_scenario(state, **what_if({"factor": "sat", "action": "skip"}) | {"follow_up": True})
+
+    assert out.action_data["changes"] == {"act": 30}
+
+
+async def test_a_what_if_without_the_follow_up_flag_starts_over():
+    state = ChatState(has_results=True)
+    await run_scenario(state, **what_if({"factor": "sat", "value": "1400"}))
+
+    out = await run_scenario(
+        state, **what_if({"factor": "act", "value": "30"})
+    )  # không có từ nối tiếp: mô phỏng mới
+
+    assert out.action_data["changes"] == {"act": 30}
+
+
+async def test_a_goal_seeking_remembers_the_school_and_a_follow_up_reuses_it():
+    state = ChatState()
+    await run_scenario(state, mode="goal_seeking", school="Purdue", factor=["gpa"], target_group="safety")
+
+    out = await run_scenario(state, mode="goal_seeking", target_group="target", follow_up=True)
+
+    assert out.action == "goal_seek"
+    assert out.action_data == {
+        "school": "Purdue",
+        "target": "match",
+    }  # "target" của model là nhóm Vừa sức (match)
+    assert state.context.scenario["school"] == "Purdue"

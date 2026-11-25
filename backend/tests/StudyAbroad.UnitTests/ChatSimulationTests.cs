@@ -44,6 +44,19 @@ public class ChatSimulationTests
     // ---- UC-155: bang, ngành, tỉ giá giả định trong chat
 
     [Fact]
+    public void Parse_ReadsTheActivityTier_AndDescribeAndNoteNameIt()
+    {
+        var scenario = ChatSimulation.Parse(Json("""{"changes":{"ecTier":4}}"""))!;
+
+        Assert.Equal(4, scenario.Overrides.EcTier);
+        Assert.True(scenario.HasProfileValues);
+        Assert.Equal("bậc ngoại khóa 4", ChatSimulation.Describe(scenario.Overrides));
+        var note = ChatSimulation.Note(Result(), scenario);
+        Assert.Equal(["ec_tier"], note.Factors);
+        Assert.Equal("bậc ngoại khóa 4 (hiện tại 3)", note.Label);   // bậc của hồ sơ mẫu là 3
+    }
+
+    [Fact]
     public void Parse_ReadsTheStatesTheMajorAndTheRate()
     {
         var scenario = ChatSimulation.Parse(Json("""{"changes":{"states":["TX","CA"],"major":"History","exchangeRatePercent":10}}"""))!;

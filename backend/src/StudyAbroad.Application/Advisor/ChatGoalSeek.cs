@@ -7,7 +7,7 @@ namespace StudyAbroad.Application.Advisor;
 
 /// <summary>Điều học sinh hỏi trong chat: tên trường (chữ thô SLM đã trích) và nhóm đích (reach | match | safety | null).</summary>
 // Code: có khi nút trên giao diện đã biết mã trường (hành động có cấu trúc), khi đó không cần khớp tên
-public record ChatGoalQuery(string School, string? Target, string? Code = null);
+public record ChatGoalQuery(string School, string? Target, string? Code = null, IReadOnlyList<string>? Factors = null);
 
 /// <summary>
 /// "Cần gì để vào trường X" trong chat: advisor trả action "goal_seek" kèm tên trường chữ thô (ActionData.school) và nhóm đích.
@@ -31,12 +31,16 @@ public static class ChatGoalSeek
             return null;
         var target = d.TryGetProperty("target", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
         // Nút trên giao diện gửi thẳng mã trường: không cần khớp tên
+        // Yếu tố học sinh hỏi (mã SLM: gpa, sat, act, english, activities), để nói riêng phần tiếng Anh khi chỉ hỏi tiếng Anh
+        var factors = d.TryGetProperty("factor", out var f) && f.ValueKind == JsonValueKind.Array
+            ? f.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!.Trim().ToLowerInvariant()).Distinct().ToList()
+            : null;
         if (d.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(c.GetString()))
-            return new ChatGoalQuery("", target, c.GetString()!.Trim());
+            return new ChatGoalQuery("", target, c.GetString()!.Trim(), factors);
         if (!d.TryGetProperty("school", out var s) || s.ValueKind != JsonValueKind.String
             || string.IsNullOrWhiteSpace(s.GetString()))
             return null;
-        return new ChatGoalQuery(s.GetString()!.Trim(), target);
+        return new ChatGoalQuery(s.GetString()!.Trim(), target, null, factors);
     }
 
     // ---------------------------------------------------------------- không chắc là trường nào
@@ -166,7 +170,7 @@ public static class ChatGoalSeek
     /// và nên nộp trường này theo vai trò nào. Đây là lời dự phòng khi Claude không viết được, đồng thời là dữ kiện gửi Claude diễn đạt lại.
     /// Câu đầu nói lại tên trường đã hiểu để học sinh sửa nếu nhầm.
     /// </summary>
-    public static string Summarize(SchoolGoalResult r) => string.Join("\n", Body(r));
+    public static string Summarize(SchoolGoalResult r, IReadOnlyList<string>? factors = null) => string.Join("\n", Body(r, factors));
 
     // Vì sao trường chưa nằm trong danh sách gợi ý của học sinh (bộ lọc cứng)
     private static string ExcludeText(string reason) => reason switch
@@ -357,6 +361,56 @@ public static class ChatGoalSeek
         return lines;
     }
 
+    private static bool AsksOnlyEnglish(IReadOnlyList<string>? factors) =>
+        factors is { Count: > 0 } && factors.All(f => f == "english");
+
+    // Các bài thi trường chấp nhận, một bài đạt là đủ; null khi trường không công bố mức nào
+    private static string? EnglishMinimum(GoalEnglishDto? e)
+    {
+        var parts = new List<string>();
+        if (e?.MinIelts is { } ielts) parts.Add($"IELTS {ielts.ToString("0.#", CultureInfo.GetCultureInfo("vi-VN"))}");
+        if (e?.MinToefl is { } toefl) parts.Add($"TOEFL {toefl:0}");
+        if (e?.MinDuolingo is { } duolingo) parts.Add($"Duolingo {duolingo:0}");
+        return parts.Count switch
+        {
+            0 => null,
+            1 => parts[0],
+            _ => $"{string.Join(", ", parts.Take(parts.Count - 1))} hoặc {parts[^1]} (một bài là đủ)",
+        };
+    }
+
+    // Học sinh hỏi riêng về tiếng Anh (UC-155): mức tối thiểu, học sinh đang đạt hay thiếu, và tiếng Anh không làm đổi nhóm (E5)
+    private static List<string> EnglishFocus(SchoolGoalResult r)
+    {
+        var requirement = r.English ?? r.EnglishRequirement;
+        var minimum = EnglishMinimum(requirement);
+        var lines = new List<string>();
+        if (minimum is null)
+        {
+            lines.Add("Tiếng Anh: trường chưa công bố mức tối thiểu nên mình chưa nói được bạn cần đạt bao nhiêu.");
+        }
+        else if (r.FilterReason == "ENGLISH_NO_CERT")
+        {
+            lines.Add($"Tiếng Anh: bạn chưa có chứng chỉ nên cần đạt {minimum}.");
+        }
+        else if (requirement?.ShortfallBand is { } gap && gap > 0)
+        {
+            lines.Add($"Tiếng Anh: điểm của bạn thấp hơn mức tối thiểu khoảng {gap.ToString("0.#", CultureInfo.GetCultureInfo("vi-VN"))} band, cần đạt {minimum}.");
+        }
+        else if (requirement?.ShortfallBand is 0)
+        {
+            lines.Add($"Tiếng Anh: bạn đã đạt mức tối thiểu của trường ({minimum}).");
+        }
+        else
+        {
+            lines.Add($"Tiếng Anh: trường yêu cầu tối thiểu {minimum}; điểm hiện có của bạn chưa so được với mức này.");
+        }
+        // Tiếng Anh chỉ quyết định trường có nằm trong danh sách hay không, không làm trường đổi nhóm
+        if (r.Position?.Group is { } group && r.Outcome != "already_reached")
+            lines.Add($"Tiếng Anh không làm đổi nhóm của trường (hiện là {GroupName(group)}): nhóm do GPA và điểm thi quyết định, tiếng Anh chỉ cần đạt mức tối thiểu để trường nằm trong danh sách.");
+        return lines;
+    }
+
     // Trường chưa nằm trong danh sách vì tiếng Anh: nói rõ cần đạt mức nào (một bài thi là đủ). Cùng nội dung với bảng
     private static string? EnglishLine(SchoolGoalResult r)
     {
@@ -396,9 +450,12 @@ public static class ChatGoalSeek
     }
 
     // Toàn bộ lời giải thích theo thứ tự đã nêu ở Summarize
-    private static List<string> Body(SchoolGoalResult r)
+    private static List<string> Body(SchoolGoalResult r, IReadOnlyList<string>? factors = null)
     {
         var lines = new List<string> { $"**{Headline(r)}**" };
+        // Chỉ hỏi tiếng Anh (UC-155): nói ngay mức tối thiểu và học sinh đang ở đâu, kèm lý do tiếng Anh không đổi nhóm (E5)
+        if (AsksOnlyEnglish(factors))
+            lines.AddRange(EnglishFocus(r));
         lines.AddRange(WhyNot(r));
         lines.AddRange(WhereYouAre(r));
         lines.AddRange(HowToImprove(r));
@@ -410,12 +467,12 @@ public static class ChatGoalSeek
     /// Dữ liệu cho Claude diễn đạt lại: tên trường đã hiểu, nhóm đích, các dữ kiện đã tính (chính là các dòng của lời dự phòng), các trường cùng
     /// nhóm đích, và tên các trường khác để chặn nhắc tên lạ. Dấu in đậm và gạch đầu dòng bị bỏ, vì Claude tự trình bày.
     /// </summary>
-    public static GoalNoteRequestDto Note(SchoolGoalResult r, IEnumerable<string> allSchoolNames)
+    public static GoalNoteRequestDto Note(SchoolGoalResult r, IEnumerable<string> allSchoolNames, IReadOnlyList<string>? factors = null)
     {
         var alternatives = r.Alternatives.Select(a => a.Name).ToList();
         var used = new HashSet<string>(alternatives, StringComparer.OrdinalIgnoreCase) { r.Name };
         var others = allSchoolNames.Where(n => !used.Contains(n)).Distinct().Take(MaxOthers).ToList();
-        var facts = Body(r)
+        var facts = Body(r, factors)
             .Select(line => line.Replace("**", ""))
             .Select(line => line.StartsWith("- ") ? line[2..] : line)
             .ToList();

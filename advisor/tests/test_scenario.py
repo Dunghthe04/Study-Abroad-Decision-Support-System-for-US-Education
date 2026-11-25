@@ -3,7 +3,7 @@
 import pytest
 
 from app.schemas.chat import ProfileField
-from app.services.scenario import FILTER_FACTORS, SKIP_ACTION, parse_what_if, try_buttons
+from app.services.scenario import FILTER_FACTORS, SKIP_ACTION, merge_follow_up, parse_what_if, try_buttons
 from app.services.skills import exchange_rate, skill_ho_so
 from app.services.skills.major_catalog import Major
 from app.services.skills.state_catalog import UsState
@@ -358,3 +358,91 @@ def test_label_restates_the_new_factors():
     )
 
     assert result.label() == "bang TX, ngành History, tỉ giá tăng 10%"
+
+
+# ---- UC-155 1a: câu nối tiếp gộp vào kịch bản lượt trước ----
+PREVIOUS = {
+    "mode": "what_if",
+    "changes": [{"factor": "sat", "value": "1400"}, {"factor": "english", "value": "6.5", "unit": "ielts"}],
+}
+
+
+def follow(*changes: dict, mode: str = "what_if", flag: bool | None = True, **extra) -> dict:
+    return {"mode": mode, "changes": list(changes), "follow_up": flag, **extra}
+
+
+def test_a_follow_up_replaces_the_value_of_the_same_factor_and_keeps_the_rest():
+    merged = merge_follow_up(follow(change("sat", "1450")), PREVIOUS)
+
+    assert merged["changes"] == [change("sat", "1450"), change("english", "6.5", "ielts")]
+
+
+def test_a_follow_up_adds_a_new_factor_after_the_old_ones():
+    merged = merge_follow_up(follow(change("act", "30")), PREVIOUS)
+
+    assert [c["factor"] for c in merged["changes"]] == ["sat", "english", "act"]
+
+
+def test_saying_to_drop_a_factor_removes_it_from_the_merged_scenario():
+    merged = merge_follow_up(follow(change("sat", action=SKIP_ACTION)), PREVIOUS)
+
+    assert [c["factor"] for c in merged["changes"]] == ["english"]
+
+
+def test_dropping_a_factor_that_was_never_there_changes_nothing():
+    merged = merge_follow_up(follow(change("act", action=SKIP_ACTION)), PREVIOUS)
+
+    assert merged["changes"] == PREVIOUS["changes"]
+
+
+def test_a_new_english_certificate_replaces_the_old_one_whatever_the_test():
+    merged = merge_follow_up(follow(change("english", "100", "toefl")), PREVIOUS)
+
+    assert merged["changes"][1] == change("english", "100", "toefl")
+
+
+@pytest.mark.parametrize("flag", [False, None])
+def test_without_a_follow_up_flag_it_is_a_new_simulation(flag):
+    entities = follow(change("act", "30"), flag=flag)
+
+    assert merge_follow_up(entities, PREVIOUS) is entities
+
+
+def test_without_a_previous_scenario_of_the_same_kind_nothing_is_merged():
+    entities = follow(change("act", "30"))
+
+    assert merge_follow_up(entities, None) is entities
+    assert merge_follow_up(entities, {"mode": "goal_seeking", "school": "MIT"}) is entities
+
+
+def test_a_goal_seeking_follow_up_takes_the_missing_school_and_group_from_the_previous_turn():
+    previous = {"mode": "goal_seeking", "school": "Purdue", "factor": ["gpa"], "target_group": "safety"}
+
+    merged = merge_follow_up({"mode": "goal_seeking", "follow_up": True, "target_group": "target"}, previous)
+
+    assert (merged["school"], merged["target_group"]) == (
+        "Purdue",
+        "target",
+    )  # nhóm mới thay, trường lấy từ lượt trước
+    assert merge_follow_up({"mode": "goal_seeking", "follow_up": True}, previous)["target_group"] == "safety"
+
+
+def test_the_merge_does_not_change_the_previous_scenario():
+    before = {"mode": "what_if", "changes": [{"factor": "sat", "value": "1400"}]}
+    snapshot = {"mode": "what_if", "changes": [{"factor": "sat", "value": "1400"}]}
+
+    merge_follow_up(follow(change("sat", "1500")), before)
+
+    assert before == snapshot
+
+
+# ---- bậc ngoại khóa ----
+def test_an_activity_tier_from_one_to_five_is_kept():
+    assert parse(change("ec_tier", "4")).changes == {"ecTier": 4}
+    assert parse(change("ec_tier", "5")).label() == "bậc ngoại khóa 5"
+
+
+@pytest.mark.parametrize("value", ["0", "6", "3.5"])
+def test_an_activity_tier_outside_one_to_five_asks_again(value):
+    with pytest.raises(AskAgain, match="từ 1 đến 5"):
+        parse(change("ec_tier", value))

@@ -81,7 +81,10 @@ public record SchoolGoalResult(
     // Cơ sở của kết quả: real (hồ sơ thật) | simulated (có giá trị giả định đang xem được phủ lên hồ sơ)
     string Basis = "real",
     // Bảng "bạn so với trường" theo từng tiêu chí bộ chấm dùng (điểm thi, GPA, ngoại khóa, tỉ lệ nhận); tài chính và tiếng Anh nằm ở Budget, English
-    IReadOnlyList<GoalCompareRow>? Comparison = null);
+    IReadOnlyList<GoalCompareRow>? Comparison = null,
+    // UC-155: mức tiếng Anh tối thiểu của trường kèm mức thiếu của học sinh, CÓ CẢ KHI trường chưa bị loại vì tiếng Anh (English chỉ có khi bị loại).
+    // ShortfallBand: 0 là đạt, lớn hơn 0 là thiếu bao nhiêu band, null là chưa so được (chưa có chứng chỉ cùng loại). Null khi trường không công bố mức nào.
+    GoalEnglishDto? EnglishRequirement = null);
 
 // ============================== GOAL-SEEKING ==============================
 
@@ -173,7 +176,16 @@ public partial class RecommendationService
             budget, NonBudgetFilter(filter), alternatives, EnglishOf(filter, school),
             PositionOf(filter, current), TargetsAbove(student, academics, current), StatsOf(school),
             simulated ? "simulated" : "real",
-            GoalComparison.Rows(student, academics, grade));
+            GoalComparison.Rows(student, academics, grade),
+            EnglishRequirementOf(filter, school));
+    }
+
+    private static GoalEnglishDto? EnglishRequirementOf(FilterResult filter, RecommendSchoolInput school)
+    {
+        var o = school.Offering;
+        return o.MinIelts is null && o.MinToefl is null && o.MinDuolingo is null
+            ? null
+            : new GoalEnglishDto(o.MinIelts, o.MinToefl, o.MinDuolingo, filter.EnglishShortfall);
     }
 
     private static GoalSchoolStats StatsOf(RecommendSchoolInput school)

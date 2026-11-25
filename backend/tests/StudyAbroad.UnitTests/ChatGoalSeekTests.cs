@@ -21,6 +21,76 @@ public class ChatGoalSeekTests
     private static GoalPlanDto Sat(decimal from, decimal to, string difficulty = "hard") =>
         new([new GoalChangeDto("sat", from, to)], 1.4, difficulty);
 
+    // ---------------------------------------------------------------- UC-155: goal-seeking riêng về tiếng Anh
+
+    [Fact]
+    public void Parse_ReadsTheFactorsTheStudentAskedAbout()
+    {
+        var q = ChatGoalSeek.Parse(Json("""{"school":"MIT","target":null,"factor":["English","gpa","english"]}"""))!;
+
+        Assert.Equal(["english", "gpa"], q.Factors);   // chữ thường, không trùng
+        Assert.Null(ChatGoalSeek.Parse(Json("""{"school":"MIT"}"""))!.Factors);
+        Assert.Equal(["english"], ChatGoalSeek.Parse(Json("""{"code":"mit","factor":["english"]}"""))!.Factors);
+    }
+
+    private static SchoolGoalResult WithEnglish(decimal? shortfall, decimal? ielts = 7m, decimal? toefl = 100m) =>
+        Result(current: "R", outcome: "blocked", best: "R") with
+        {
+            Position = new GoalPosition("in_list", "R", null, false),
+            EnglishRequirement = new GoalEnglishDto(ielts, toefl, null, shortfall),
+        };
+
+    private static readonly string[] OnlyEnglish = ["english"];
+
+    [Fact]
+    public void Summarize_WhenAskingOnlyEnglishAndTheStudentMeetsIt_SaysSoAndThatEnglishDoesNotChangeTheGroup()
+    {
+        var text = ChatGoalSeek.Summarize(WithEnglish(0m), OnlyEnglish);
+
+        Assert.Contains("Tiếng Anh: bạn đã đạt mức tối thiểu của trường (IELTS 7 hoặc TOEFL 100 (một bài là đủ))", text);
+        Assert.Contains("Tiếng Anh không làm đổi nhóm của trường (hiện là Khó vào)", text);
+    }
+
+    [Fact]
+    public void Summarize_WhenAskingOnlyEnglishAndTheStudentIsShort_SaysHowMuch()
+    {
+        var text = ChatGoalSeek.Summarize(WithEnglish(0.5m), OnlyEnglish);
+
+        Assert.Contains("thấp hơn mức tối thiểu khoảng 0,5 band, cần đạt IELTS 7", text);
+    }
+
+    [Fact]
+    public void Summarize_WhenTheSchoolHasNoPublishedMinimum_SaysSoInsteadOfGuessing()
+    {
+        var text = ChatGoalSeek.Summarize(WithEnglish(null, null, null) with { EnglishRequirement = null }, OnlyEnglish);
+
+        Assert.Contains("trường chưa công bố mức tối thiểu", text);
+    }
+
+    [Fact]
+    public void Summarize_WhenTheStudentHasNoCertificate_NamesTheMinimum()
+    {
+        var excluded = Excluded("ENGLISH_NO_CERT", new GoalEnglishDto(6.5m, null, null, null));
+
+        Assert.Contains("Tiếng Anh: bạn chưa có chứng chỉ nên cần đạt IELTS 6,5.", ChatGoalSeek.Summarize(excluded, OnlyEnglish));
+    }
+
+    [Fact]
+    public void Summarize_WithoutTheEnglishFactor_HasNoEnglishFocus()
+    {
+        Assert.DoesNotContain("Tiếng Anh không làm đổi nhóm", ChatGoalSeek.Summarize(WithEnglish(0m)));
+        Assert.DoesNotContain("Tiếng Anh không làm đổi nhóm", ChatGoalSeek.Summarize(WithEnglish(0m), ["gpa"]));
+        Assert.DoesNotContain("Tiếng Anh không làm đổi nhóm", ChatGoalSeek.Summarize(WithEnglish(0m), ["english", "gpa"]));
+    }
+
+    [Fact]
+    public void Note_GivesTheAiTheEnglishLinesAsFacts_WhenOnlyEnglishIsAsked()
+    {
+        var note = ChatGoalSeek.Note(WithEnglish(0m), [], OnlyEnglish);
+
+        Assert.Contains(note.Facts, f => f.StartsWith("Tiếng Anh: bạn đã đạt mức tối thiểu"));
+    }
+
     // ---------------------------------------------------------------- nút bước tiếp theo khi trường bị bộ lọc cứng loại
 
     private static SchoolGoalResult Excluded(string reason, GoalEnglishDto? english = null, GoalBudgetDto? budget = null) =>

@@ -60,7 +60,15 @@ from app.services.replies import (
     TRY_WHAT,
     menu_buttons,
 )
-from app.services.scenario import FILTER_FACTORS, LABELS, SUPPORTED_TEXT, WhatIf, parse_what_if, try_buttons
+from app.services.scenario import (
+    FILTER_FACTORS,
+    LABELS,
+    SUPPORTED_TEXT,
+    WhatIf,
+    merge_follow_up,
+    parse_what_if,
+    try_buttons,
+)
 from app.services.skill_input import skill_request_of
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
 from app.services.skill_template import TEMPLATE_TASKS, build_skill, tasks_of
@@ -244,9 +252,10 @@ class ScenarioBranch:
         self._writer = writer
 
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
-        entities = slm.intents[0].entities
+        # Câu nối tiếp chỉ nói phần đổi: gộp vào kịch bản lượt trước (UC-155 1a)
+        entities = merge_follow_up(slm.intents[0].entities, state.context.scenario)
         if entities.get("mode") == "goal_seeking":
-            return self._goal_seek(entities)
+            return self._goal_seek(state, entities)
         if entities.get("mode") != "what_if":
             return SkillOutput(NOT_READY, quick_replies=menu_buttons())
         if not state.has_results:
@@ -272,6 +281,8 @@ class ScenarioBranch:
         data: dict = {"changes": what_if.changes, "unsupported": what_if.unsupported}
         if priorities:
             data["priorities"] = priorities
+        # Nhớ kịch bản đã gộp, đúng dạng model nhận: lượt sau chỉ nói phần đổi
+        state.context.scenario = {"mode": "what_if", "changes": entities.get("changes", [])}
         return SkillOutput(TRIED_SCENARIO.format(tried=tried, note=note), action="simulate", action_data=data)
 
     # Học sinh muốn thử thay đổi nhưng chưa nói thay đổi gì (nút menu "Thử thay đổi hồ sơ"): hỏi thử gì, kèm nút thử nhanh
@@ -300,16 +311,27 @@ class ScenarioBranch:
     # "Cần gì để vào trường X": tên trường còn là chữ, .NET khớp với 249 trường rồi chạy goal-seek.
     # Không cần danh sách gợi ý có sẵn: goal-seek tính từ hồ sơ và dữ liệu trường
     @staticmethod
-    def _goal_seek(entities: dict) -> SkillOutput:
+    def _goal_seek(state: ChatState, entities: dict) -> SkillOutput:
         school = str(entities.get("school") or "").strip()
         target = target_code(entities.get("target_group"))
         if not school:
             # Chưa nêu trường: hiện ô chọn trường có gợi ý, giữ nhóm đích để câu hỏi gửi lại đúng ý
             return SkillOutput(ASK_SCHOOL, widget=Widget(type="school", data={"target": target}))
+        # Yếu tố học sinh hỏi (UC-155): chỉ để .NET nói rõ phần tiếng Anh khi hỏi riêng tiếng Anh. Tìm mức cần đạt vẫn tính cho mọi yếu tố
+        factors = [f for f in entities.get("factor") or [] if f in GOAL_FACTORS]
+        data: dict = {"school": school, "target": target}
+        if factors:
+            data["factor"] = factors
+        state.context.scenario = {
+            "mode": "goal_seeking",
+            "school": school,
+            "factor": entities.get("factor"),
+            "target_group": entities.get("target_group"),
+        }
         return SkillOutput(
             GOAL_SEEK_WORKING.format(school=school),
             action="goal_seek",
-            action_data={"school": school, "target": target},
+            action_data=data,
         )
 
 
@@ -396,6 +418,9 @@ SCHOOL_LIST_WORDS = (
 # Số trường đầu danh sách gợi ý hiện sẵn trong ô chọn (cùng giá trị với ChatActions.MaxSuggested bên .NET)
 MAX_SUGGESTED = 6
 
+
+# Yếu tố tìm mức cần đạt mà model được trả (hợp đồng SLM): activities là bậc ngoại khóa
+GOAL_FACTORS = ("gpa", "sat", "act", "english", "activities")
 
 # Câu explain_fit hỏi cách tính điểm phù hợp ("fit score tính thế nào"), không hỏi về một trường (UC-153 1a)
 FIT_METHOD_WORDS = (

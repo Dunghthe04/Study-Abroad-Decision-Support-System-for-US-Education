@@ -46,6 +46,7 @@ FACTOR_EFFECT = {
     "duolingo": "Duolingo không làm đổi nhóm, chỉ làm trường vào hoặc ra khỏi danh sách (đủ mức tiếng Anh tối thiểu) và đổi thứ tự trong nhóm",
     "budget": "ngân sách làm trường vào hoặc ra khỏi danh sách, không đổi nhóm của từng trường",
     "scholarship": "mức cần học bổng làm trường vào hoặc ra khỏi danh sách, không đổi nhóm của từng trường",
+    "ec_tier": "bậc ngoại khóa làm đổi nhóm của trường qua hiệu chỉnh nhỏ (tối đa 0,10), nên chỉ trường sát ngưỡng mới đổi nhóm",
     "state": "bang thay điều kiện lọc: trường trong hoặc ngoài các bang này vào hoặc ra khỏi danh sách, không đổi nhóm của từng trường",
     "major": "ngành thay điều kiện lọc: trường có hoặc không có ngành này vào hoặc ra khỏi danh sách, không đổi nhóm của từng trường",
     "exchange": "tỉ giá tăng làm ngân sách tính bằng USD giảm, nên trường vào hoặc ra khỏi danh sách, không đổi nhóm của từng trường",

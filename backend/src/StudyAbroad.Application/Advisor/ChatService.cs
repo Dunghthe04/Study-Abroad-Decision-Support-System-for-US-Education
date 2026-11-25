@@ -872,7 +872,7 @@ namespace StudyAbroad.Application.Advisor
                 // Thẻ kết quả do code dựng: gửi ngay để học sinh thấy đáp án, rồi mới chờ Gemini viết lời (chậm hơn nhiều)
                 if (onEvent is not null)
                     await onEvent(new AdvisorStreamEvent("card", Widget: ChatGoalSeek.WidgetOf(result, ChatSimulation.Describe(overrides))));
-                var answer = await WriteGoalNoteAsync(ChatGoalSeek.Note(result, names), result, ct);
+                var answer = await WriteGoalNoteAsync(ChatGoalSeek.Note(result, names, query.Factors), result, query.Factors, ct);
                 // Trang đang xem giả định: câu đầu nói rõ đã tính theo cơ sở nào (thẻ có nhãn riêng, lời văn không tự nói)
                 if (ChatGoalSeek.BasisLine(result.Basis, ChatSimulation.Describe(viewing)) is { } basisLine)
                     answer = $"{basisLine}\n{answer}";
@@ -913,7 +913,7 @@ namespace StudyAbroad.Application.Advisor
             return ChatRecommendation.Summarize(saved);
         }
 
-        private async Task<string> WriteGoalNoteAsync(GoalNoteRequestDto note, SchoolGoalResult result, CancellationToken ct)
+        private async Task<string> WriteGoalNoteAsync(GoalNoteRequestDto note, SchoolGoalResult result, IReadOnlyList<string>? factors, CancellationToken ct)
         {
             try
             {
@@ -926,7 +926,7 @@ namespace StudyAbroad.Application.Advisor
             {
                 // Gemini không trả lời được: dùng câu ghép, số liệu vẫn đúng
             }
-            return ChatGoalSeek.Summarize(result);
+            return ChatGoalSeek.Summarize(result, factors);
         }
 
         private async Task<string> WriteNoteAsync(ScenarioNoteRequestDto note, CancellationToken ct)

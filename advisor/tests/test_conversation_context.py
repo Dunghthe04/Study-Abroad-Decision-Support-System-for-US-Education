@@ -286,3 +286,14 @@ def test_a_follow_up_search_may_only_change_the_sort_order():
     check_entities("knowledge", {"tasks": ["search"], "sort": "lowest_cost"})
     with pytest.raises(ValueError):
         check_entities("knowledge", {"tasks": ["search"]})  # không điều kiện cũng không cách xếp
+
+
+def test_the_scenario_just_tried_goes_to_the_model_as_context():
+    from app.schemas.chat import ChatState
+    from app.services.conversation_context import context_for_model
+
+    state = ChatState()
+    state.context.scenario = {"mode": "what_if", "changes": [{"factor": "sat", "value": "1400"}]}
+
+    assert context_for_model(state) == {"scenario": state.context.scenario}
+    assert context_for_model(ChatState()) is None
