@@ -23,6 +23,7 @@ from app.services.compare_writer import CompareWriter
 from app.services.ec_reader import EcReader
 from app.services.embedding import OpenAiEmbeddingClient
 from app.services.explainer import Explainer
+from app.services.fit_method_writer import FitMethodWriter
 from app.services.goal_writer import GoalWriter
 from app.services.knowledge import KnowledgeRetriever
 from app.services.knowledge_embedding import KnowledgeEmbedJob
@@ -134,7 +135,9 @@ async def lifespan(app: FastAPI):
         writer = AdviceWriter(claude)
         # Câu "nếu đổi X" mà X không thử được (ngành, bang, kỳ nhập học...): Claude viết lời giải thích
         what_if_writer = WhatIfWriter(claude, settings.anthropic_model)
-        app.state.chat_flow = ChatFlow(slm, build_branches(skills, writer, what_if_writer))
+        # Câu "điểm phù hợp tính thế nào": Claude viết từ tham số backend công bố (UC-153)
+        method_writer = FitMethodWriter(claude, settings.anthropic_model, backend_http)
+        app.state.chat_flow = ChatFlow(slm, build_branches(skills, writer, what_if_writer, method_writer))
         yield
         if app.state.embed_job is not None:
             await app.state.embed_job.stop()

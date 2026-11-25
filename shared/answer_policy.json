@@ -16,11 +16,11 @@
     "profile_review": {
       "branch": "GeneratedAdviceBranch",
       "who": "claude",
-      "skills": ["skill_ho_so_khuon", "viet_tra_loi_ho_so"],
+      "skills": ["skill_ho_so_khuon", "viet_tra_loi_ho_so", "skill_cach_tinh_diem"],
       "writer": "app.services.advice_writer.AdviceWriter",
       "fallback": "Câu cố định CANNOT_ANSWER (replies.py) kèm nút hỏi lại; nếu chỉ thiếu một việc thì dùng phần câu trả lời đã qua kiểm.",
       "may_emit": ["recommend", "explain", "goal_seek", "school_fit_compare"],
-      "why": "Đánh giá hồ sơ và lộ trình: code tính mức và dựng khuôn skill, Claude viết lời. Chỉ xin danh sách trường thì phát action recommend."
+      "why": "Đánh giá hồ sơ và lộ trình: code tính mức và dựng khuôn skill, Claude viết lời. Chỉ xin danh sách trường thì phát action recommend. Câu hỏi cách tính điểm phù hợp (UC-153) do FitMethodWriter viết từ tham số backend công bố, lỗi thì dùng câu cố định FIT_METHOD."
     },
     "scenario": {
       "branch": "ScenarioBranch",
