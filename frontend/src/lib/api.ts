@@ -17,6 +17,9 @@ import type {
   ChangePasswordRequest,
   ForgotPasswordRequest,
   LoginRequest,
+  LoginResponse,
+  TwoFactorLoginRequest,
+  TwoFactorLoginResponse,
   RegisterRequest,
   ResendOtpRequest,
   ResetPasswordRequest,
@@ -165,8 +168,14 @@ export const authApi = {
     }),
 
   // [AC-2] Đăng nhập: Backend thiết lập HttpOnly Cookie "usas_access_token"
+  // [UC-03 3d] Moderator, Administrator nhận phiếu bước 2 thay cho phiên
   login: (data: LoginRequest) =>
-    apiFetch<AuthResponse>("/api/v1/auth/login", {
+    apiFetch<LoginResponse>("/api/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  loginTwoFactor: (data: TwoFactorLoginRequest) =>
+    apiFetch<TwoFactorLoginResponse>("/api/v1/auth/login/2fa", {
       method: "POST",
       body: JSON.stringify(data),
     }),

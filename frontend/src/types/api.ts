@@ -568,6 +568,29 @@ export interface AuthResponse {
   user: UserDto;
 }
 
+/** [UC-03 3d] Moderator, Administrator nhập đúng mật khẩu: chưa có phiên, cần bước 2 với phiếu này (5 phút) */
+export interface TwoFactorChallengeResponse {
+  twoFactorRequired: true;
+  challenge: string;
+  challengeExpiresAt: string;
+  /** Lần đăng nhập đầu: khóa Base32 để nhập tay và chuỗi otpauth:// để vẽ QR; đã thiết lập thì null */
+  setup: { secret: string; otpauthUri: string } | null;
+}
+
+export type LoginResponse = AuthResponse | TwoFactorChallengeResponse;
+
+/** [UC-03 3d] Bước 2: gửi mã TOTP 6 số hoặc một mã khôi phục */
+export interface TwoFactorLoginRequest {
+  challenge: string;
+  code?: string;
+  recoveryCode?: string;
+}
+
+/** [UC-03 3d] Bước 2 thành công; recoveryCodes chỉ có khi vừa thiết lập xong (10 mã, hiện một lần) */
+export interface TwoFactorLoginResponse extends AuthResponse {
+  recoveryCodes?: string[] | null;
+}
+
 // [UC-80] Khôi phục tài khoản đang chờ xóa
 export interface RestoreAccountRequest {
   email: string;
