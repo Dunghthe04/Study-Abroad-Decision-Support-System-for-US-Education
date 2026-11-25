@@ -759,6 +759,8 @@ export interface CenterReceivedLeadDto {
   profileSummary?: SharedProfileSummaryDto | null;
   /** [UC-73] Đã thu hồi hoặc quá 90 ngày: trung tâm không còn xem được dữ liệu đã chia sẻ. */
   dataHidden?: boolean;
+  /** [UC-111 bước 5] Ẩn vì phụ huynh đã rút đồng ý của học sinh dưới 16. */
+  consentRevoked?: boolean;
 }
 
 export interface CenterLeadsSummaryDto {

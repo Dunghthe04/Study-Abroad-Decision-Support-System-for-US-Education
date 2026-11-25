@@ -108,6 +108,9 @@ public record CenterReceivedLeadDto(
 {
     /// <summary>[UC-73] Yêu cầu đã thu hồi hoặc quá 90 ngày: trung tâm không còn xem được dữ liệu người gửi đã chia sẻ.</summary>
     public bool DataHidden { get; init; }
+
+    /// <summary>[UC-111 bước 5] Dữ liệu bị ẩn vì phụ huynh đã rút đồng ý của học sinh dưới 16 (không phải vì quá 90 ngày).</summary>
+    public bool ConsentRevoked { get; init; }
 }
 
 /// <summary>

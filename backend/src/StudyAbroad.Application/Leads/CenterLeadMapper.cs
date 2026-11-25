@@ -29,6 +29,7 @@ public static class CenterLeadMapper
                 null, null, null)
             {
                 DataHidden = true,
+                ConsentRevoked = consentRevoked,
             };
 
         var fields = lead.SharedFields ?? [];

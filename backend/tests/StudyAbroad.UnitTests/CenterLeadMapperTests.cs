@@ -97,6 +97,7 @@ public class CenterLeadMapperTests
         var dto = CenterLeadMapper.ToCenterDto(lead, "Trung Tâm Test", "Nguyen Van A", "a@example.com", Profile, Certifications, consentRevoked: revoked);
 
         Assert.Equal(revoked, dto.DataHidden);
+        Assert.Equal(revoked, dto.ConsentRevoked);
         Assert.Equal(LeadStatuses.Closed, dto.Status);
         Assert.Equal(revoked ? null : "Nguyen Van A", dto.StudentName);
         Assert.Equal(revoked, dto.ProfileSummary is null);
@@ -229,6 +230,7 @@ public class CenterLeadMapperTests
         var dto = CenterLeadMapper.ToCenterDto(lead, "TT", "Nguyễn Văn A", "a@example.com", null);
 
         Assert.True(dto.DataHidden);
+        Assert.False(dto.ConsentRevoked);
         Assert.Null(dto.StudentName);
         Assert.Null(dto.StudentEmail);
         Assert.Null(dto.ContactPhone);
