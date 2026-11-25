@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import Image from "next/image";
 import {
   BuildingIcon,
@@ -9,6 +9,7 @@ import {
   HandCoinsIcon,
   HeartHandshakeIcon,
   HomeIcon,
+  ShieldPlusIcon,
   UsersIcon,
   WalletIcon,
 } from "lucide-react";
@@ -41,7 +42,16 @@ import {
 } from "./UniversityDetailParts";
 import { findFieldSource, SourceTooltip } from "./UniversitySourceTooltip";
 
-export function UniversityCosts({ offering, sources }: { offering: UniversityOffering; sources: UniversitySource[] }) {
+export function UniversityCosts({
+  offering,
+  sources,
+  scholarships,
+}: {
+  offering: UniversityOffering;
+  sources: UniversitySource[];
+  /** Danh sách học bổng còn hạn của trường, hiện cuối mục để chi phí và hỗ trợ nằm cùng một chỗ */
+  scholarships?: ReactNode;
+}) {
   const costSourceByKey: Record<string, UniversitySource | undefined> = {
     tuition: findFieldSource(sources, "tuition_usd"),
     living: findFieldSource(sources, "living_usd"),
@@ -101,7 +111,7 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
   const displayTotal = total ?? (breakdownSum > 0 ? breakdownSum : null);
 
   // [USAS-2067] Phí nộp hồ sơ là khoản một lần, không nằm trong tổng chi phí hằng năm; in-state chỉ để tham khảo
-  const hasExtraFees = offering.applicationFeeUsd != null || offering.tuitionInStateUsd != null;
+  const hasExtraFees = offering.applicationFeeUsd != null || offering.tuitionInStateUsd != null || offering.healthInsuranceUsd != null;
 
   const hasAid = Boolean(
     offering.intlAidPolicy ||
@@ -112,7 +122,7 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
   return (
     <DetailSection
       id="costs"
-      title="Chi phí & hỗ trợ tài chính"
+      title="Chi phí, hỗ trợ & học bổng"
       description={
         offering.academicYear
           ? `Số liệu chi phí trong hệ thống · năm học ${offering.academicYear} · USD/năm`
@@ -205,13 +215,20 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
         )}
 
         {hasExtraFees && (
-          <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+          <div className="rounded-xl border border-line bg-surface px-5 py-3.5 sm:px-6 sm:py-4">
             <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
               {offering.applicationFeeUsd != null && (
                 <GridDataItem
                   icon={FileTextIcon}
                   label="Phí nộp hồ sơ (một lần, chưa tính vào tổng/năm)"
                   value={<SourceTooltip source={findFieldSource(sources, "application_fee_usd")}>{universityMoney(offering.applicationFeeUsd)}</SourceTooltip>}
+                />
+              )}
+              {offering.healthInsuranceUsd != null && (
+                <GridDataItem
+                  icon={ShieldPlusIcon}
+                  label="Bảo hiểm y tế bắt buộc"
+                  value={<SourceTooltip source={findFieldSource(sources, "health_insurance_usd")}>{`${universityMoney(offering.healthInsuranceUsd)} / năm`}</SourceTooltip>}
                 />
               )}
               {offering.tuitionInStateUsd != null && (
@@ -227,7 +244,13 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
 
         {hasAid && (
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-ink">Hỗ trợ cho sinh viên quốc tế</h3>
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-ink">Hỗ trợ cho sinh viên quốc tế</h3>
+              {/* intl_aid_* là số thực chi trường báo cáo (CDS H6), khác mức công bố của từng gói ở mục Học bổng */}
+              <p className="text-xs leading-relaxed text-ink-2">
+                Số liệu trường báo cáo về hỗ trợ đã thực chi cho sinh viên quốc tế, gồm cả hỗ trợ theo hoàn cảnh và học bổng của trường.
+              </p>
+            </div>
             <div className="overflow-hidden rounded-xl border border-line bg-surface">
               <div className="p-5 sm:p-6">
                 <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -241,7 +264,7 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
                   {offering.intlAidAvgUsd != null && (
                     <GridDataItem
                       icon={HandCoinsIcon}
-                      label="Mức hỗ trợ trung bình"
+                      label="Thực nhận trung bình mỗi người"
                       value={<SourceTooltip source={findFieldSource(sources, "intl_aid_avg_usd")}>{universityMoney(offering.intlAidAvgUsd)}</SourceTooltip>}
                     />
                   )}
@@ -273,9 +296,16 @@ export function UniversityCosts({ offering, sources }: { offering: UniversityOff
             </div>
           </div>
         )}
+
+        {scholarships}
       </div>
     </DetailSection>
   );
+}
+
+/** Màu nhãn chính sách nộp SAT/ACT: bắt buộc thì nổi bật, còn lại trung tính */
+function policyBadgeVariant(policy: string): "risk" | "neutral" {
+  return policy === "required" ? "risk" : "neutral";
 }
 
 export function UniversityAdmissions({ offering, sources }: { offering: UniversityOffering; sources: UniversitySource[] }) {
@@ -287,15 +317,15 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
 
   const deadlines = universityDeadlines(offering.deadlinesJson);
 
-  const hasSat = offering.sat25 != null || offering.sat75 != null;
-  const hasAct = offering.act25 != null || offering.act75 != null;
+  const hasSatScores = offering.sat25 != null || offering.sat75 != null;
+  const hasActScores = offering.act25 != null || offering.act75 != null;
+  // SAT và ACT có chính sách nộp riêng: thẻ hiện khi có khoảng điểm hoặc có chính sách của chính kỳ thi đó
+  const hasSat = hasSatScores || Boolean(offering.satPolicy);
+  const hasAct = hasActScores || Boolean(offering.actPolicy);
   const hasGpa4 = offering.avgGpa4 != null || offering.minGpa4 != null;
   const hasGpaWeighted = offering.avgGpaWeighted != null;
   const hasAnyScore = hasSat || hasAct || hasGpa4 || hasGpaWeighted;
 
-  const isSatRequired = offering.satPolicy === "required";
-  // ACT có chính sách riêng; dữ liệu cũ chưa có thì theo chính sách SAT như trước
-  const isActRequired = (offering.actPolicy ?? offering.satPolicy) === "required";
 
   const englishRequirements = [
     {
@@ -339,20 +369,21 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
     },
   ].filter((item): item is typeof item & { value: number } => item.value != null);
 
-  // Chính sách nộp SAT/ACT và mức coi trọng là hai thông tin riêng của dữ liệu trường: hiện cạnh nhau để không trông như mâu thuẫn
-  // ("Không bắt buộc" mà "Rất quan trọng"). Chỉ nêu đúng dữ liệu, không giải thích thêm
-  const policyParts = [
-    offering.satPolicy ? `SAT: ${satPolicyLabel(offering.satPolicy)}` : null,
-    offering.actPolicy ? `ACT: ${actPolicyLabel(offering.actPolicy)}` : null,
-  ].filter(Boolean);
-  const policyNote = policyParts.length > 0 ? `Chính sách nộp: ${policyParts.join(" · ")}` : undefined;
+  // Phân bố GPA (thang 4) của sinh viên năm nhất trúng tuyển, CDS C11; số liệu dạng tỷ lệ 0–1
+  const gpaDistribution = [
+    { label: "4.0", value: offering.gpaPct40 },
+    { label: "3.75 – 3.99", value: offering.gpaPct375To399 },
+    { label: "3.50 – 3.74", value: offering.gpaPct350To374 },
+    { label: "3.25 – 3.49", value: offering.gpaPct325To349 },
+    { label: "3.00 – 3.24", value: offering.gpaPct300To324 },
+    { label: "2.50 – 2.99", value: offering.gpaPct250To299 },
+    { label: "Dưới 2.50", value: offering.gpaPctBelow250 },
+  ].filter((row): row is { label: string; value: number } => row.value != null);
+
+  // Chính sách nộp của SAT và ACT nằm trên thẻ điểm của từng kỳ thi; dòng C7 chỉ là mức coi trọng điểm thi
   const importanceFactors: { label: string; value: string | null; note?: string }[] = [
     { label: "Điểm trung bình (GPA)", value: offering.c7GpaImportance },
-    {
-      label: "Điểm thi chuẩn hóa (SAT/ACT)",
-      value: offering.c7TestImportance,
-      note: policyNote,
-    },
+    { label: "Điểm thi chuẩn hóa (SAT/ACT)", value: offering.c7TestImportance },
     { label: "Hoạt động ngoại khóa", value: offering.c7EcImportance },
   ].filter((item) => item.value != null);
 
@@ -369,54 +400,68 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
               {hasSat && (
                 <div className="rounded-xl border border-line bg-surface p-4 space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-ink-2 truncate">SAT (khoảng 25% – 75%)</span>
-                    {isSatRequired && (
-                      <Badge className="border-transparent bg-risk-wash text-risk text-[11px] font-medium py-0.5 px-2 shrink-0">
-                        Bắt buộc
+                    <span className="text-xs font-semibold text-ink-2">SAT</span>
+                    {offering.satPolicy && (
+                      <Badge variant={policyBadgeVariant(offering.satPolicy)} className="shrink-0 px-2 py-0.5 text-[11px] font-medium">
+                        <SourceTooltip source={findFieldSource(sources, "sat_policy")}>{satPolicyLabel(offering.satPolicy)}</SourceTooltip>
                       </Badge>
                     )}
                   </div>
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-lg font-bold text-ink">
-                      <SourceTooltip source={findFieldSource(sources, "sat25", "sat75")}>
-                        {scoreRange(offering.sat25, offering.sat75)}
-                      </SourceTooltip>
-                    </span>
-                  </div>
-                  <RangeTrack
-                    min={400}
-                    max={1600}
-                    low={offering.sat25}
-                    high={offering.sat75}
-                    ariaLabel={`SAT khoảng 25%–75%: ${scoreRange(offering.sat25, offering.sat75)}`}
-                  />
+                  {hasSatScores ? (
+                    <>
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-lg font-bold text-ink">
+                          <SourceTooltip source={findFieldSource(sources, "sat25", "sat75")}>
+                            {scoreRange(offering.sat25, offering.sat75)}
+                          </SourceTooltip>
+                        </span>
+                        <span className="text-xs text-ink-3">khoảng 25% – 75%</span>
+                      </div>
+                      <RangeTrack
+                        min={400}
+                        max={1600}
+                        low={offering.sat25}
+                        high={offering.sat75}
+                        ariaLabel={`SAT khoảng 25%–75%: ${scoreRange(offering.sat25, offering.sat75)}`}
+                      />
+                    </>
+                  ) : (
+                    <p className="text-sm text-ink-2">Chưa có khoảng điểm trúng tuyển</p>
+                  )}
                 </div>
               )}
 
               {hasAct && (
                 <div className="rounded-xl border border-line bg-surface p-4 space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-ink-2 truncate">ACT (khoảng 25% – 75%)</span>
-                    {isActRequired && (
-                      <Badge className="border-transparent bg-risk-wash text-risk text-[11px] font-medium py-0.5 px-2 shrink-0">
-                        Bắt buộc
+                    <span className="text-xs font-semibold text-ink-2">ACT</span>
+                    {offering.actPolicy && (
+                      <Badge variant={policyBadgeVariant(offering.actPolicy)} className="shrink-0 px-2 py-0.5 text-[11px] font-medium">
+                        <SourceTooltip source={findFieldSource(sources, "act_policy")}>{actPolicyLabel(offering.actPolicy)}</SourceTooltip>
                       </Badge>
                     )}
                   </div>
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-lg font-bold text-ink">
-                      <SourceTooltip source={findFieldSource(sources, "act25", "act75")}>
-                        {scoreRange(offering.act25, offering.act75)}
-                      </SourceTooltip>
-                    </span>
-                  </div>
-                  <RangeTrack
-                    min={1}
-                    max={36}
-                    low={offering.act25}
-                    high={offering.act75}
-                    ariaLabel={`ACT khoảng 25%–75%: ${scoreRange(offering.act25, offering.act75)}`}
-                  />
+                  {hasActScores ? (
+                    <>
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-lg font-bold text-ink">
+                          <SourceTooltip source={findFieldSource(sources, "act25", "act75")}>
+                            {scoreRange(offering.act25, offering.act75)}
+                          </SourceTooltip>
+                        </span>
+                        <span className="text-xs text-ink-3">khoảng 25% – 75%</span>
+                      </div>
+                      <RangeTrack
+                        min={1}
+                        max={36}
+                        low={offering.act25}
+                        high={offering.act75}
+                        ariaLabel={`ACT khoảng 25%–75%: ${scoreRange(offering.act25, offering.act75)}`}
+                      />
+                    </>
+                  ) : (
+                    <p className="text-sm text-ink-2">Chưa có khoảng điểm trúng tuyển</p>
+                  )}
                 </div>
               )}
 
@@ -474,6 +519,30 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
                   />
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {gpaDistribution.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-ink">Phân bố GPA của sinh viên trúng tuyển (thang 4.0)</h3>
+            <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+              <dl className="space-y-2.5">
+                {gpaDistribution.map((row) => {
+                  const pct = Math.round(row.value * 1000) / 10;
+                  return (
+                    <div key={row.label} className="grid grid-cols-[6.5rem_minmax(0,1fr)_3.5rem] items-center gap-3">
+                      <dt className="text-sm text-ink-2 tabular-nums">{row.label}</dt>
+                      <dd className="h-2 overflow-hidden rounded-full bg-line" aria-hidden>
+                        <div className="h-full rounded-full bg-brand" style={{ width: `${Math.min(100, pct)}%` }} />
+                      </dd>
+                      <dd className="text-right text-sm font-semibold text-ink tabular-nums">
+                        <SourceTooltip source={findFieldSource(sources, "gpa_pct_4_0", "gpa_pct_375_399")}>{`${universityNumber(pct)}%`}</SourceTooltip>
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
             </div>
           </div>
         )}

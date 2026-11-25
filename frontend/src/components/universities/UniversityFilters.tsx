@@ -125,7 +125,7 @@ const formatNumber = (n: number) => n.toLocaleString("en-US");
 const toPct = (v: number | undefined) => (v !== undefined ? Math.round(v * 100) : undefined);
 const fromPct = (v: number | undefined) => (v !== undefined ? v / 100 : undefined);
 
-function formatRangeSummary(
+export function formatRangeSummary(
   min: number | undefined,
   max: number | undefined,
   format: (n: number) => string,
@@ -136,12 +136,12 @@ function formatRangeSummary(
   return null;
 }
 
-function findLabel(options: { value: string; label: string }[], value: string | undefined): string | null {
+export function findLabel(options: { value: string; label: string }[], value: string | undefined): string | null {
   if (!value) return null;
   return options.find((o) => o.value === value)?.label ?? value;
 }
 
-function FilterCategory({
+export function FilterCategory({
   children,
   className,
 }: {
@@ -159,7 +159,7 @@ interface CollapsibleFilterProps {
   children: React.ReactNode | ((collapse: () => void) => React.ReactNode);
 }
 
-function CollapsibleFilter({
+export function CollapsibleFilter({
   title,
   activeSummary,
   onClear,
@@ -216,7 +216,7 @@ interface CheckboxChoiceFilterProps {
   onValueChange: (value: string | undefined) => void;
 }
 
-function CheckboxChoiceFilter({ label, options, value, onValueChange }: CheckboxChoiceFilterProps) {
+export function CheckboxChoiceFilter({ label, options, value, onValueChange }: CheckboxChoiceFilterProps) {
   const baseId = useId();
   return (
     <div role="group" aria-label={label} className="flex flex-col gap-2">
@@ -255,7 +255,7 @@ interface RangeFilterProps {
   onCommit: (min: number | undefined, max: number | undefined) => void;
 }
 
-function RangeFilter({
+export function RangeFilter({
   label,
   minBound,
   maxBound,
@@ -403,7 +403,7 @@ function RangeFilter({
   );
 }
 
-function BooleanFilterRow({
+export function BooleanFilterRow({
   label,
   checked,
   onCheckedChange,
