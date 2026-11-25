@@ -62,6 +62,8 @@ const ACCOUNT_STATUS_OPTIONS = [
   { value: "pending", label: "Chờ duyệt" },
   { value: "temp_locked", label: "Tạm khóa" },
   { value: "locked", label: "Đã khóa" },
+  // [UC-56 bước 2, UC-80] Tài khoản đã yêu cầu xóa, đang trong 30 ngày chờ xóa hẳn
+  { value: "deleted", label: "Chờ xóa" },
 ] as const;
 
 /** [UC-61] Khóa tài khoản: chỉ Admin (quyết định D2 bản 14/11), khóa được moderator, center, student, parent. */
@@ -147,7 +149,7 @@ function removeLockReasonCache(userId: string): void {
 
 function statusBadgeVariant(status: string): "ok" | "warn" | "risk" | "neutral" {
   if (status === "active") return "ok";
-  if (status === "unverified" || status === "pending") return "warn";
+  if (status === "unverified" || status === "pending" || status === "deleted") return "warn";
   if (status === "locked" || status === "temp_locked") return "risk";
   return "neutral";
 }
@@ -164,6 +166,8 @@ function formatStatusLabel(status: string): string {
       return "Chưa xác thực";
     case "pending":
       return "Chờ duyệt";
+    case "deleted":
+      return "Chờ xóa";
     default:
       return status;
   }

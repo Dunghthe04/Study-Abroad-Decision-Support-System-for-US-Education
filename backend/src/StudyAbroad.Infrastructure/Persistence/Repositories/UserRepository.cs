@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Common;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
@@ -211,6 +212,9 @@ public class UserRepository(AppDbContext db) : IUserRepository
 
         // [1.5c] Con managed (phụ huynh nhập thay, email giả) không phải tài khoản thật: admin không thấy, kể cả khi lọc
         q = q.Where(u => u.Status != UserStatuses.Managed);
+        // Con managed bị xóa cùng phụ huynh (UC-75 quy tắc) mang trạng thái chờ xóa nhưng vẫn không phải tài khoản thật
+        var managedEmailSuffix = "@" + ManagedChildService.EmailDomain;
+        q = q.Where(u => !u.Email.EndsWith(managedEmailSuffix));
 
         if (!string.IsNullOrEmpty(query.Status))
             q = q.Where(u => u.Status == query.Status);
