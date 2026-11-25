@@ -3,12 +3,13 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboardIcon, MessageSquareIcon, ShieldCheckIcon, Building2Icon } from "lucide-react";
+import { LayoutDashboardIcon, MessageSquareIcon, ShieldCheckIcon, Building2Icon, StarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/center", label: "Tổng quan", icon: LayoutDashboardIcon, exact: true },
   { href: "/center/leads", label: "Yêu cầu liên hệ", icon: MessageSquareIcon },
+  { href: "/center/reviews", label: "Đánh giá", icon: StarIcon },
   { href: "/center/verification", label: "Xác minh pháp lý", icon: ShieldCheckIcon },
   { href: "/center/profile", label: "Hồ sơ công bố", icon: Building2Icon },
 ];

@@ -62,7 +62,8 @@ public interface ICenterProfileChangeReviewService
 
 public class CenterProfileChangeReviewService(
     ICenterProfileChangeRepository changes,
-    IAuditLogRepository auditLogs) : ICenterProfileChangeReviewService
+    IAuditLogRepository auditLogs,
+    IStudyCenterRepository? studyCenters = null) : ICenterProfileChangeReviewService
 {
     public const int MaxReasonLength = 500;
 
@@ -114,6 +115,21 @@ public class CenterProfileChangeReviewService(
 
         Review(change, CenterProfileChangeStatuses.Passed, moderatorUserId, null);
         await changes.UpdateAsync(change, ct);
+
+        // [UC-108 / UC-86] Áp dụng website / fanpage mới lên hồ sơ công khai sau khi Moderator duyệt Đạt
+        if (studyCenters is not null)
+        {
+            var centerEntity = await studyCenters.GetByIdForUpdateAsync(change.StudyCenterId, ct);
+            if (centerEntity is not null)
+            {
+                if (string.Equals(change.Field, CenterProfileChangeFields.Website, StringComparison.OrdinalIgnoreCase))
+                    centerEntity.Website = string.IsNullOrWhiteSpace(change.NewValue) ? null : change.NewValue.Trim();
+                else if (string.Equals(change.Field, CenterProfileChangeFields.Fanpage, StringComparison.OrdinalIgnoreCase))
+                    centerEntity.Fanpage = string.IsNullOrWhiteSpace(change.NewValue) ? null : change.NewValue.Trim();
+                await studyCenters.UpdateAsync(centerEntity, ct);
+            }
+        }
+
         await AuditAsync(change, "center_change.pass", moderatorUserId, null, ct);
 
         var center = (await LoadCentersAsync([change.StudyCenterId], ct)).GetValueOrDefault(change.StudyCenterId);

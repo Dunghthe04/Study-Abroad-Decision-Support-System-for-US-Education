@@ -195,7 +195,7 @@ public class LeadsController(
         [FromBody] ReportLeadMessageRequest? request,
         CancellationToken ct) =>
         ExecuteSentLeadActionAsync(async userId =>
-            Ok(await leadService.ReportSentLeadMessageAsync(userId, id, messageId, request?.Reason, ct)));
+            Ok(await leadService.ReportSentLeadMessageAsync(userId, id, messageId, request?.Reason, ct, request?.Detail)));
 
     private Func<CancellationToken, Task<LeadMessageAttachment>> CreateAttachmentFactory(IFormFile? file)
     {
@@ -501,7 +501,7 @@ public class LeadsController(
         [FromBody] ReportLeadMessageRequest? request,
         CancellationToken ct) =>
         ExecuteCenterLeadActionAsync(async (userId, userEmail, userRole) =>
-            Ok(await leadService.ReportReceivedLeadMessageAsync(userId, userEmail, userRole, id, messageId, request?.Reason, ct)));
+            Ok(await leadService.ReportReceivedLeadMessageAsync(userId, userEmail, userRole, id, messageId, request?.Reason, ct, request?.Detail)));
 }
 
 /// <summary>Form multipart gửi ảnh trong chat (wrapper để Swagger sinh được schema).</summary>

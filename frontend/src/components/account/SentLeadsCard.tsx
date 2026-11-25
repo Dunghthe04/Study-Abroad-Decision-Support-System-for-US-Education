@@ -42,13 +42,14 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
   pending_parent: "text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/40",
   cancelled: "text-muted-foreground border-border bg-muted",
   expired: "text-muted-foreground border-border bg-muted",
+  center_inactive: "text-muted-foreground border-border bg-muted",
 };
 
 // [UC-116] Trung tâm chưa nhận yêu cầu: giải thích thay cho dòng số tin nhắn
 const AWAITING_CENTER_NOTE: Record<string, string> = {
   pending_parent: "Đã gửi email cho phụ huynh. Trung tâm chỉ nhận thông tin sau khi phụ huynh đồng ý.",
   cancelled: "Phụ huynh đã từ chối nên trung tâm không nhận thông tin. Bạn có thể gửi lại sau khi trao đổi với phụ huynh.",
-  expired: "Phụ huynh chưa xác nhận trong hạn nên trung tâm không nhận thông tin. Bạn có thể gửi lại.",
+  expired: "Yêu cầu đã hết hạn (quá thời hạn xác nhận hoặc trung tâm không phản hồi trong 7 ngày). Bạn có thể gửi lại.",
 };
 
 function errorMessage(err: unknown) {

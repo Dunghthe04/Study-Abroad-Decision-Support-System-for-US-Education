@@ -26,6 +26,18 @@ public interface ITargetSchoolService
     Task<UpdateApplicationRoundResult> UpdateApplicationRoundAsync(Guid userId, Guid targetSchoolId, UpdateApplicationRoundRequest request, CancellationToken ct = default);
 
     /// <summary>
+    /// [UC-33] Đổi nhóm phân loại (reach / match / safety) và đánh dấu do người dùng tự chọn.
+    /// </summary>
+    Task<UpdateTargetCategoryResult> UpdateCategoryAsync(Guid userId, Guid targetSchoolId, UpdateTargetCategoryRequest request, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+
+    /// <summary>
+    /// Lấy nhóm gợi ý gần nhất và các vòng nộp hỗ trợ của một trường trước khi thêm vào mục tiêu.
+    /// </summary>
+    Task<TargetSchoolDefaultsDto> GetDefaultsAsync(Guid userId, string? universityCode, Guid? universityId, CancellationToken ct = default) =>
+        Task.FromResult(new TargetSchoolDefaultsDto(null, []));
+
+    /// <summary>
     /// [UC-31] Xóa một trường khỏi danh sách mục tiêu theo TargetSchool ID.
     /// </summary>
     Task<bool> RemoveTargetSchoolAsync(Guid userId, Guid targetSchoolId, CancellationToken ct = default);

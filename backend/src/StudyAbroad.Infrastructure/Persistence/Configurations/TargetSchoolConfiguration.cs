@@ -12,6 +12,7 @@ public class TargetSchoolConfiguration : IEntityTypeConfiguration<TargetSchool>
         b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         b.HasOne<University>().WithMany().HasForeignKey(x => x.UniversityId).OnDelete(DeleteBehavior.Cascade);
         b.Property(x => x.Category).HasMaxLength(16);
+        b.Property(x => x.IsCategoryUserSelected).HasDefaultValue(false);
         b.Property(x => x.Status).HasMaxLength(16).IsRequired();
         b.Property(x => x.Notes).HasMaxLength(1000);
         b.HasIndex(x => new { x.UserId, x.UniversityId }).IsUnique();

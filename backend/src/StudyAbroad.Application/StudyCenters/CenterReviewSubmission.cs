@@ -1,6 +1,7 @@
 using System.Text.Json;
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
@@ -51,12 +52,18 @@ public class CenterReviewService(
     ICenterReviewSubmissionRepository reviews,
     IStudyCenterRepository centers,
     IUserRepository users,
-    IAuditLogRepository auditLogs) : ICenterReviewService
+    IAuditLogRepository auditLogs,
+    IParentLinkRepository? parentLinks = null) : ICenterReviewService
 {
     public const int MinRating = 1;
     public const int MaxRating = 5;
     public const int MaxCommentLength = 2000;
     public const string AlreadyReviewedMessage = "Yêu cầu liên hệ này đã được đánh giá.";
+
+    private static bool IsReviewableLeadStatus(string? status) =>
+        string.Equals(status, LeadStatuses.Accepted, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, LeadStatuses.Contacted, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, LeadStatuses.Closed, StringComparison.OrdinalIgnoreCase);
 
     public async Task<CenterReviewEligibilityDto> GetEligibilityAsync(Guid userId, Guid centerId, CancellationToken ct = default)
     {
@@ -88,7 +95,8 @@ public class CenterReviewService(
             LeadId = lead.Id,
             Rating = request.Rating,
             Comment = comment,
-            IsVerified = true,
+            // [UC-41 / UC-45] Dấu "Đã sử dụng dịch vụ" chỉ gắn khi yêu cầu liên hệ đã hoàn tất (closed)
+            IsVerified = string.Equals(lead.Status, LeadStatuses.Closed, StringComparison.OrdinalIgnoreCase),
             Status = "visible",
         };
         if (!await reviews.TryAddAsync(review, ct))
@@ -119,9 +127,17 @@ public class CenterReviewService(
         if (user.Role is not (UserRoles.Student or UserRoles.Parent))
             return (new CenterReviewEligibilityDto(false, false, "Chỉ học sinh hoặc phụ huynh được đánh giá trung tâm."), null);
 
-        // Mỗi yêu cầu liên hệ một đánh giá: chỉ đánh giá khi yêu cầu liên hệ đã được trung tâm tiếp nhận (SC-41 / UC-45)
+        // [UC-45] Học sinh dưới 16 tuổi chưa được phụ huynh đồng ý không được tự đánh giá trung tâm
+        if (user.Role == UserRoles.Student && parentLinks is not null
+            && await AgeAccess.CheckAsync(AgeFeatures.ShareWithCenter, user, parentLinks, DateTime.UtcNow, ct) is not null)
+        {
+            return (new CenterReviewEligibilityDto(false, false,
+                "Học sinh dưới 16 tuổi cần có sự đồng ý của phụ huynh mới có thể gửi đánh giá trung tâm."), null);
+        }
+
+        // [UC-45] Chỉ yêu cầu liên hệ đã được trung tâm chấp nhận / đang trao đổi / hoàn tất mới được đánh giá
         var lead = await reviews.FindLatestUnreviewedLeadAsync(userId, centerId, ct);
-        if (lead is not null)
+        if (lead is not null && IsReviewableLeadStatus(lead.Status))
             return (new CenterReviewEligibilityDto(true, false, null), lead);
 
         var acceptedLead = await reviews.FindLatestAcceptedLeadAsync(userId, centerId, ct);

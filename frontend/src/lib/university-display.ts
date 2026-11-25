@@ -181,8 +181,10 @@ export function universityDeadlines(value: string | null): { round: string; labe
   if (!value) return [];
   const labels: Record<string, string> = {
     ED: "Early Decision",
+    ED1: "Early Decision",
     ED2: "Early Decision II",
     EA: "Early Action",
+    EA2: "Early Action II",
     REA: "Restrictive Early Action",
     SCEA: "Single-Choice Early Action",
     RD: "Regular Decision",

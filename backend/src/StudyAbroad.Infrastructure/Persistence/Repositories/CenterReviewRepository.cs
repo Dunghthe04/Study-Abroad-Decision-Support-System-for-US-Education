@@ -26,9 +26,24 @@ public class CenterReviewRepository(AppDbContext db) : ICenterReviewRepository
         // Id là tie-breaker để thứ tự ổn định khi nhiều đánh giá cùng thời điểm, tránh lặp hoặc sót khi sang trang.
         var rows = await (
             from r in visible
-            join u in db.Users.AsNoTracking() on r.UserId equals u.Id
+            join u in db.Users.AsNoTracking() on r.UserId equals u.Id into usersJoin
+            from u in usersJoin.DefaultIfEmpty()
             orderby r.CreatedAt descending, r.Id descending
-            select new { r.Id, u.FullName, u.Role, r.IsVerified, r.CreatedAt, r.Rating, r.Comment })
+            select new
+            {
+                r.Id,
+                FullName = u != null ? u.FullName : null,
+                Role = u != null ? u.Role : null,
+                UserStatus = u != null ? u.Status : null,
+                r.IsVerified,
+                r.CreatedAt,
+                r.Rating,
+                r.Comment,
+                r.CenterReplyContent,
+                r.CenterReplyCreatedAt,
+                r.CenterReplyEditedAt,
+                r.CenterReplyStatus,
+            })
             .Skip((safePage - 1) * safePageSize)
             .Take(safePageSize)
             .ToListAsync(ct);
@@ -36,16 +51,32 @@ public class CenterReviewRepository(AppDbContext db) : ICenterReviewRepository
         var items = rows
             .Select(x => new CenterReviewDto(
                 x.Id,
-                MaskName(x.FullName),
+                FormatReviewerName(x.FullName, x.UserStatus),
                 x.Role == UserRoles.Parent ? UserRoles.Parent : UserRoles.Student,
                 x.IsVerified,
                 x.CreatedAt,
                 x.Rating,
-                x.Comment))
+                x.Comment,
+                BuildPublicReply(x.CenterReplyStatus, x.CenterReplyContent, x.CenterReplyCreatedAt, x.CenterReplyEditedAt)))
             .ToList();
 
         return new CenterReviewsDto(stats.Count, CenterRatingMath.Round(stats.Average), items);
     }
+
+    public static CenterReviewReplyDto? BuildPublicReply(string? status, string? content, DateTime? createdAt, DateTime? editedAt) =>
+        string.Equals(status, "visible", StringComparison.OrdinalIgnoreCase)
+        && !string.IsNullOrWhiteSpace(content)
+        && createdAt.HasValue
+            ? new CenterReviewReplyDto(content, createdAt.Value, editedAt)
+            : null;
+
+    public const string DeletedReviewerLabel = "Người dùng đã xóa tài khoản";
+
+    /// <summary>[UC-41] Khi tác giả đã xóa tài khoản (hoặc chờ xóa), giữ đánh giá nhưng hiển thị nhãn ẩn danh chuẩn.</summary>
+    public static string FormatReviewerName(string? fullName, string? userStatus) =>
+        fullName is null || string.Equals(userStatus, UserStatuses.Deleted, StringComparison.OrdinalIgnoreCase)
+            ? DeletedReviewerLabel
+            : MaskName(fullName);
 
     /// <summary>Rút gọn tên để bảo vệ người đánh giá: giữ họ, các từ còn lại chỉ lấy chữ cái đầu.</summary>
     public static string MaskName(string? fullName)

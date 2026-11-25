@@ -62,6 +62,7 @@ const ACCOUNT_STATUS_OPTIONS = [
   { value: "pending", label: "Chờ duyệt" },
   { value: "temp_locked", label: "Tạm khóa" },
   { value: "locked", label: "Đã khóa" },
+  { value: "deleted", label: "Chờ xóa" },
 ] as const;
 
 /** [UC-61] Khóa tài khoản: chỉ Admin (quyết định D2 bản 14/11), khóa được moderator, center, student, parent. */
@@ -164,6 +165,8 @@ function formatStatusLabel(status: string): string {
       return "Chưa xác thực";
     case "pending":
       return "Chờ duyệt";
+    case "deleted":
+      return "Chờ xóa";
     default:
       return status;
   }

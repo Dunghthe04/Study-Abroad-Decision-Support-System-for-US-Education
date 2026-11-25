@@ -82,7 +82,7 @@ public class DbContextSchemaTests
         AssertForeignKey<LeadMessage>(db, nameof(LeadMessage.SenderUserId), "users", DeleteBehavior.Cascade);
         AssertForeignKey<LeadMessage>(db, nameof(LeadMessage.RemovedByUserId), "users", DeleteBehavior.SetNull);
         AssertForeignKey<CenterReview>(db, nameof(CenterReview.StudyCenterId), "study_centers", DeleteBehavior.Cascade);
-        AssertForeignKey<CenterReview>(db, nameof(CenterReview.UserId), "users", DeleteBehavior.Cascade);
+        AssertForeignKey<CenterReview>(db, nameof(CenterReview.UserId), "users", DeleteBehavior.SetNull);   // [UC-41] giữ đánh giá khi người dùng xóa tài khoản
         AssertForeignKey<CenterReview>(db, nameof(CenterReview.LeadId), "leads", DeleteBehavior.SetNull);
         AssertForeignKey<UserSubscription>(db, nameof(UserSubscription.UserId), "users", DeleteBehavior.Cascade);
         AssertForeignKey<UserSubscription>(db, nameof(UserSubscription.SubscriptionPlanId), "subscription_plans", DeleteBehavior.Restrict);   // gói đã có kỳ thì không xóa được

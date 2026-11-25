@@ -119,7 +119,8 @@ public class CenterReviewSubmissionTests
     {
         var s = new Setup();
         var student = s.AddUser();
-        var lead = s.AddLead(student.Id);
+        // [UC-41 / UC-45] Lead đã hoàn tất (closed) mới gắn dấu "Đã sử dụng dịch vụ" (IsVerified = true)
+        var lead = s.AddLead(student.Id, status: LeadStatuses.Closed);
 
         var dto = await s.Service.CreateAsync(student.Id, s.Center.Id, new CreateCenterReviewRequest(5, "  Tư vấn nhiệt tình  "));
 
@@ -132,6 +133,23 @@ public class CenterReviewSubmissionTests
         Assert.Equal(s.Center.Id, saved.StudyCenterId);
         Assert.Equal(saved.Id, dto.Id);
         Assert.Equal("center_review.create", Assert.Single(s.Audit.Logs).Action);
+    }
+
+    [Fact]
+    public async Task Create_WithNewUnacceptedLead_IsRejected_AndAcceptedLeadSetsIsVerifiedFalse()
+    {
+        var s = new Setup();
+        var student = s.AddUser();
+        s.AddLead(student.Id, status: LeadStatuses.New);
+
+        var elig = await s.Service.GetEligibilityAsync(student.Id, s.Center.Id);
+        Assert.False(elig.CanReview);
+        Assert.Contains("tiếp nhận", elig.Reason);
+
+        var accepted = s.AddLead(student.Id, status: LeadStatuses.Accepted);
+        var dto = await s.Service.CreateAsync(student.Id, s.Center.Id, new CreateCenterReviewRequest(4, "Đang trao đổi tốt"));
+        Assert.False(dto.IsVerified);
+        Assert.Equal(accepted.Id, Assert.Single(s.Repo.Reviews).LeadId);
     }
 
     [Fact]

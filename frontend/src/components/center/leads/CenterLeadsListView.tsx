@@ -105,6 +105,7 @@ function LeadStatusBadge({ status }: { status: string }) {
   if (status === "closed") return <Badge variant="ok">Đã hoàn tất</Badge>;
   // [UC-80] Người gửi đã xóa tài khoản
   if (status === "withdrawn") return <Badge variant="neutral">Đã thu hồi</Badge>;
+  if (status === "center_inactive") return <Badge variant="neutral">Trung tâm ngừng hoạt động</Badge>;
   return null;
 }
 
@@ -412,7 +413,16 @@ export function CenterLeadsListView() {
     {
       id: "status",
       label: "Trạng thái",
-      render: (lead) => <LeadStatusBadge status={lead.status} />,
+      render: (lead) => (
+        <div className="flex flex-col items-start gap-1">
+          <LeadStatusBadge status={lead.status} />
+          {lead.status === "new" && lead.daysUntilExpiry != null && (
+            <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400">
+              {lead.daysUntilExpiry > 0 ? `Còn ${lead.daysUntilExpiry} ngày để phản hồi` : "Sắp hết hạn phản hồi"}
+            </span>
+          )}
+        </div>
+      ),
     },
     {
       id: "actions",

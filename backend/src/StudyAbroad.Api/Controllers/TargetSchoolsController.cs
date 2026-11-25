@@ -61,10 +61,49 @@ public class TargetSchoolsController(ITargetSchoolService service) : ControllerB
             return Unauthorized();
 
         var result = await service.UpdateApplicationRoundAsync(userId, id, request, ct);
+        if (result.NotFound)
+            return NotFound(new { message = result.ErrorMessage });
         if (!result.Success || result.TargetSchool is null)
             return ValidationProblem(result.ErrorMessage);
 
         return Ok(result.TargetSchool);
+    }
+
+    /// <summary>
+    /// [UC-33] Đổi nhóm phân loại (reach / match / safety) và đánh dấu do người dùng tự chọn.
+    /// </summary>
+    [HttpPatch("{id:guid}/category")]
+    public async Task<ActionResult<TargetSchoolDto>> UpdateCategory(
+        Guid id,
+        [FromBody] UpdateTargetCategoryRequest request,
+        CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized();
+
+        var result = await service.UpdateCategoryAsync(userId, id, request, ct);
+        if (result.NotFound)
+            return NotFound(new { message = result.ErrorMessage });
+        if (!result.Success || result.TargetSchool is null)
+            return ValidationProblem(result.ErrorMessage);
+
+        return Ok(result.TargetSchool);
+    }
+
+    /// <summary>
+    /// Lấy nhóm mặc định từ gợi ý gần nhất và các vòng nộp trường hỗ trợ (UC-32, UC-33).
+    /// </summary>
+    [HttpGet("defaults")]
+    public async Task<ActionResult<TargetSchoolDefaultsDto>> GetDefaults(
+        [FromQuery] string? universityCode,
+        [FromQuery] Guid? universityId,
+        CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized();
+
+        var defaults = await service.GetDefaultsAsync(userId, universityCode, universityId, ct);
+        return Ok(defaults);
     }
 
     /// <summary>

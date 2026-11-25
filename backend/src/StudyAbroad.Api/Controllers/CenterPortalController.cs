@@ -27,7 +27,8 @@ public class CenterPortalController(
         CenterDocumentTypes.BusinessRegistration,
         CenterDocumentTypes.PowerOfAttorney,
         CenterDocumentTypes.PartnershipContract,
-        CenterDocumentTypes.ConsultingLicense
+        CenterDocumentTypes.ConsultingLicense,
+        CenterDocumentTypes.SampleServiceContract
     };
 
     private const long MaxFileBytes = 10 * 1024 * 1024; // 10MB theo quy tắc UC-71

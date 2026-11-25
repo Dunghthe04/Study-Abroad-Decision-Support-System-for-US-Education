@@ -38,15 +38,23 @@ public class TargetSchoolService(
         if (existing is not null && !TargetSchoolStatuses.IsParentSuggestion(existing.Status))
             return AddTargetSchoolResult.Fail("Trường này đã có trong danh sách mục tiêu của bạn.");
 
-        // 3. Chuẩn hóa Category (reach / match / safety)
-        // [SC-34 / UC-33] Nhóm mặc định lấy từ kết quả gợi ý gần nhất; đánh dấu nhóm do người dùng tự chọn
+        // 3. Chuẩn hóa Category (reach / match / safety); mặc định lấy theo lần gợi ý gần nhất (SC-34 / UC-33)
+        var recommendedCategory = await repository.GetLatestRecommendedCategoryAsync(userId, university.Id, ct);
         string? category = null;
+        bool isCategoryUserSelected = false;
         if (!string.IsNullOrWhiteSpace(request.Category))
         {
             var normalized = request.Category.Trim().ToLowerInvariant();
             if (!ValidCategories.Contains(normalized))
                 return AddTargetSchoolResult.Fail("Phân loại trường mục tiêu phải là: reach (với), match (vừa sức), hoặc safety (an toàn).");
             category = normalized;
+            isCategoryUserSelected = request.IsUserCategory
+                ?? !string.Equals(category, recommendedCategory, StringComparison.OrdinalIgnoreCase);
+        }
+        else if (!string.IsNullOrWhiteSpace(recommendedCategory))
+        {
+            category = recommendedCategory;
+            isCategoryUserSelected = false;
         }
         else if (recommendationHistory is not null)
         {
@@ -103,20 +111,24 @@ public class TargetSchoolService(
             }
         }
 
-        // 4. Xác định ApplicationRound và Deadline
+        // 4. Xác định ApplicationRound và Deadline (kiểm tra trường có hỗ trợ vòng nộp & quy tắc tối đa 1 ED / 1 ED II - UC-32)
         var round = string.IsNullOrWhiteSpace(request.ApplicationRound) ? null : request.ApplicationRound.Trim();
         DateTime? deadline = request.Deadline.HasValue
             ? DateTime.SpecifyKind(request.Deadline.Value, DateTimeKind.Utc)
             : null;
 
-        // Nếu có chọn vòng nộp mà chưa có deadline, thử trích xuất deadline tương ứng từ DeadlinesJson của trường
-        if (deadline == null && !string.IsNullOrEmpty(round))
+        if (!string.IsNullOrEmpty(round))
         {
             var deadlinesJson = await repository.GetUniversityDeadlinesJsonAsync(university.Id, ct);
-            if (!string.IsNullOrEmpty(deadlinesJson))
-            {
+            if (!IsRoundSupported(deadlinesJson, round))
+                return AddTargetSchoolResult.Fail($"Trường không hỗ trợ vòng nộp {round}.");
+
+            var bindingError = await CheckExclusiveBindingRoundAsync(userId, round, existing?.Id, ct);
+            if (bindingError is not null)
+                return AddTargetSchoolResult.Fail(bindingError);
+
+            if (deadline == null && !string.IsNullOrEmpty(deadlinesJson))
                 deadline = TryExtractDeadline(deadlinesJson, round);
-            }
         }
 
         var notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
@@ -128,6 +140,7 @@ public class TargetSchoolService(
         {
             // Nhận gợi ý của phụ huynh: thành trường của con. Không ghi chú mới thì giữ lời nhắn của phụ huynh.
             existing.Category = category;
+            existing.IsCategoryUserSelected = isCategoryUserSelected;
             existing.Status = TargetSchoolStatuses.Considering;
             existing.Notes = notes ?? existing.Notes;
             existing.ApplicationRound = round;
@@ -142,6 +155,7 @@ public class TargetSchoolService(
                 UserId = userId,
                 UniversityId = university.Id,
                 Category = category,
+                IsCategoryUserSelected = isCategoryUserSelected,
                 Status = TargetSchoolStatuses.Considering,
                 Priority = 0,
                 Notes = notes,
@@ -185,12 +199,17 @@ public class TargetSchoolService(
         if (targetSchool == null || targetSchool.UserId != userId)
             return null;
 
-        return await repository.GetDtoByIdAsync(id, ct);
+        var dto = await repository.GetDtoByIdAsync(id, ct);
+        if (dto is null) return null;
+        var recCategories = await repository.GetLatestRecommendedCategoriesAsync(userId, ct);
+        return ApplyRecommendedCategory(dto, recCategories);
     }
 
     public async Task<TargetSchoolSummaryDto> GetTargetSchoolsAsync(Guid userId, string? category = null, string? status = null, CancellationToken ct = default)
     {
-        var rows = await repository.GetListByUserAsync(userId, null, null, ct);
+        var rawRows = await repository.GetListByUserAsync(userId, null, null, ct);
+        var recCategories = await repository.GetLatestRecommendedCategoriesAsync(userId, ct);
+        var rows = rawRows.Select(r => ApplyRecommendedCategory(r, recCategories)).ToList();
 
         // Gợi ý của phụ huynh chưa phải trường của con: không đếm, không vào danh sách chính.
         // Chỉ trả khi hỏi đúng status=parent_suggested (mục "Phụ huynh gợi ý").
@@ -224,6 +243,9 @@ public class TargetSchoolService(
             filteredItems = filteredItems.Where(x => string.Equals(x.Status, st, StringComparison.OrdinalIgnoreCase)).ToList();
         }
 
+        var scholarshipNeed = await repository.GetUserScholarshipNeedAsync(userId, ct);
+        var isScholarshipMandatory = string.Equals(scholarshipNeed, ProfileConstants.ScholarshipNeeds.Mandatory, StringComparison.OrdinalIgnoreCase);
+
         return new TargetSchoolSummaryDto(
             Items: filteredItems,
             TotalCount: allItems.Count,
@@ -231,7 +253,8 @@ public class TargetSchoolService(
             MatchCount: matchCount,
             SafetyCount: safetyCount,
             UndecidedCategoryCount: undecidedCount,
-            NextDeadline: nextDeadline
+            NextDeadline: nextDeadline,
+            IsScholarshipMandatory: isScholarshipMandatory
         );
     }
 
@@ -241,10 +264,10 @@ public class TargetSchoolService(
         UpdateApplicationRoundRequest request,
         CancellationToken ct = default)
     {
-        // 1. Kiểm tra target school có tồn tại và thuộc về user không (Anti-IDOR)
+        // 1. Kiểm tra target school có tồn tại và thuộc về user không (Anti-IDOR, UC-32 trả 404)
         var targetSchool = await repository.GetByIdAsync(targetSchoolId, ct);
         if (targetSchool == null || targetSchool.UserId != userId)
-            return UpdateApplicationRoundResult.Fail("Không tìm thấy trường mục tiêu trong danh sách của bạn.");
+            return UpdateApplicationRoundResult.NotFoundError("Không tìm thấy trường mục tiêu trong danh sách của bạn.");
 
         var round = request.ApplicationRound?.Trim() ?? string.Empty;
         if (string.IsNullOrEmpty(round))
@@ -253,18 +276,22 @@ public class TargetSchoolService(
         if (round.Length > 100)
             return UpdateApplicationRoundResult.Fail("Tên vòng nộp hồ sơ tối đa 100 ký tự.");
 
-        // 2. Xác định deadline (tự động trích xuất từ DeadlinesJson nếu không truyền cụ thể)
+        // 2. Kiểm tra trường có hỗ trợ vòng nộp này không (UC-32), quy tắc tối đa 1 ED / 1 ED II (E1) và tự trích xuất deadline
+        var deadlinesJson = await repository.GetUniversityDeadlinesJsonAsync(targetSchool.UniversityId, ct);
+        if (!IsRoundSupported(deadlinesJson, round))
+            return UpdateApplicationRoundResult.Fail($"Trường không hỗ trợ vòng nộp {round}.");
+
+        var bindingError = await CheckExclusiveBindingRoundAsync(userId, round, targetSchool.Id, ct);
+        if (bindingError is not null)
+            return UpdateApplicationRoundResult.Fail(bindingError);
+
         DateTime? deadline = request.Deadline.HasValue
             ? DateTime.SpecifyKind(request.Deadline.Value, DateTimeKind.Utc)
             : null;
 
-        if (deadline == null && request.AutoResolveDeadline)
+        if (deadline == null && request.AutoResolveDeadline && !string.IsNullOrEmpty(deadlinesJson))
         {
-            var deadlinesJson = await repository.GetUniversityDeadlinesJsonAsync(targetSchool.UniversityId, ct);
-            if (!string.IsNullOrEmpty(deadlinesJson))
-            {
-                deadline = TryExtractDeadline(deadlinesJson, round);
-            }
+            deadline = TryExtractDeadline(deadlinesJson, round);
         }
 
         var previousRound = targetSchool.ApplicationRound;
@@ -297,9 +324,84 @@ public class TargetSchoolService(
         }, ct);
 
         var dto = await repository.GetDtoByIdAsync(targetSchool.Id, ct);
+        if (dto is null)
+            return UpdateApplicationRoundResult.Fail("Không thể tải thông tin sau khi cập nhật.");
+
+        var recCategories = await repository.GetLatestRecommendedCategoriesAsync(userId, ct);
+        return UpdateApplicationRoundResult.Ok(ApplyRecommendedCategory(dto, recCategories));
+    }
+
+    public async Task<UpdateTargetCategoryResult> UpdateCategoryAsync(
+        Guid userId,
+        Guid targetSchoolId,
+        UpdateTargetCategoryRequest request,
+        CancellationToken ct = default)
+    {
+        var targetSchool = await repository.GetByIdAsync(targetSchoolId, ct);
+        if (targetSchool == null || targetSchool.UserId != userId)
+            return UpdateTargetCategoryResult.NotFoundError("Không tìm thấy trường mục tiêu trong danh sách của bạn.");
+
+        var normalized = request.Category?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (!ValidCategories.Contains(normalized))
+            return UpdateTargetCategoryResult.Fail("Phân loại trường mục tiêu phải là: reach (với), match (vừa sức), hoặc safety (an toàn).");
+
+        var previousCategory = targetSchool.Category;
+        targetSchool.Category = normalized;
+        targetSchool.IsCategoryUserSelected = true;
+
+        await repository.UpdateAsync(targetSchool, ct);
+
+        await auditLogs.AddAsync(new AuditLog
+        {
+            ActorUserId = userId,
+            Action = "target_school.update_category",
+            EntityType = "target_school",
+            EntityId = targetSchool.Id.ToString(),
+            DetailJson = JsonSerializer.Serialize(new
+            {
+                userId,
+                targetSchoolId,
+                universityId = targetSchool.UniversityId,
+                previousCategory,
+                newCategory = normalized,
+                isCategoryUserSelected = true,
+            }),
+        }, ct);
+
+        var dto = await repository.GetDtoByIdAsync(targetSchool.Id, ct);
         return dto is not null
-            ? UpdateApplicationRoundResult.Ok(dto)
-            : UpdateApplicationRoundResult.Fail("Không thể tải thông tin sau khi cập nhật.");
+            ? UpdateTargetCategoryResult.Ok(dto)
+            : UpdateTargetCategoryResult.Fail("Không thể tải thông tin sau khi cập nhật.");
+    }
+
+    public async Task<TargetSchoolDefaultsDto> GetDefaultsAsync(
+        Guid userId,
+        string? universityCode,
+        Guid? universityId,
+        CancellationToken ct = default)
+    {
+        University? university = null;
+        if (universityId.HasValue && universityId.Value != Guid.Empty)
+            university = await repository.GetUniversityAsync(universityId.Value, ct);
+        else if (!string.IsNullOrWhiteSpace(universityCode))
+            university = await repository.GetUniversityByCodeAsync(universityCode.Trim(), ct);
+
+        if (university is null)
+            return new TargetSchoolDefaultsDto(null, []);
+
+        var recommendedCategory = await repository.GetLatestRecommendedCategoryAsync(userId, university.Id, ct);
+        var deadlinesJson = await repository.GetUniversityDeadlinesJsonAsync(university.Id, ct);
+        var scholarshipNeed = await repository.GetUserScholarshipNeedAsync(userId, ct);
+        var isScholarshipMandatory = string.Equals(scholarshipNeed, ProfileConstants.ScholarshipNeeds.Mandatory, StringComparison.OrdinalIgnoreCase);
+        var existingEd = await repository.FindSchoolWithRoundAsync(userId, "ED", null, ct);
+        var existingEd2 = await repository.FindSchoolWithRoundAsync(userId, "ED2", null, ct);
+
+        return new TargetSchoolDefaultsDto(
+            recommendedCategory,
+            ExtractAvailableRounds(deadlinesJson),
+            isScholarshipMandatory,
+            existingEd,
+            existingEd2);
     }
 
     public async Task<bool> RemoveTargetSchoolAsync(Guid userId, Guid targetSchoolId, CancellationToken ct = default)
@@ -360,7 +462,11 @@ public class TargetSchoolService(
     {
         // Trường phụ huynh mới gợi ý thì coi như con chưa có: trang trường vẫn hiện nút Thêm (thêm = nhận gợi ý)
         var dto = await FindTargetSchoolAsync(userId, universityCode, universityId, ct);
-        return dto is not null && TargetSchoolStatuses.IsParentSuggestion(dto.Status) ? null : dto;
+        if (dto is null || TargetSchoolStatuses.IsParentSuggestion(dto.Status))
+            return null;
+
+        var recCategories = await repository.GetLatestRecommendedCategoriesAsync(userId, ct);
+        return ApplyRecommendedCategory(dto, recCategories);
     }
 
     private async Task<TargetSchoolDto?> FindTargetSchoolAsync(Guid userId, string? universityCode, Guid? universityId, CancellationToken ct)
@@ -414,24 +520,124 @@ public class TargetSchoolService(
     }
 
     /// <summary>
-    /// Chuẩn hóa tên vòng nộp (ED/EA/RD/Rolling) theo từng từ, tránh khớp nhầm chuỗi con
-    /// (vd. "REGULAR_DEADLINE" chứa "EA").
+    /// Chuẩn hóa tên vòng nộp (ED/ED2/EA/REA/RD/Rolling) theo từng từ, tránh khớp nhầm chuỗi con
+    /// (vd. "REGULAR_DEADLINE" chứa "EA", "Early Decision II" không gộp vào "ED").
     /// </summary>
-    private static string? CanonicalRound(string name)
+    public static string? CanonicalRound(string name)
     {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+
         var tokens = System.Text.RegularExpressions.Regex
             .Split(name.ToUpperInvariant(), "[^A-Z0-9]+")
             .Where(t => t.Length > 0)
             .ToHashSet();
 
-        if (tokens.Contains("ED") || (tokens.Contains("EARLY") && tokens.Contains("DECISION"))) return "ED";
-        if (tokens.Contains("EA") || (tokens.Contains("EARLY") && tokens.Contains("ACTION"))) return "EA";
+        if (tokens.Contains("ED2") || tokens.Contains("EDII") ||
+            (tokens.Contains("EARLY") && tokens.Contains("DECISION") && (tokens.Contains("2") || tokens.Contains("II"))) ||
+            (tokens.Contains("ED") && (tokens.Contains("2") || tokens.Contains("II"))))
+            return "ED2";
+
+        if (tokens.Contains("ED") || tokens.Contains("ED1") || tokens.Contains("EDI") ||
+            (tokens.Contains("EARLY") && tokens.Contains("DECISION")))
+            return "ED";
+
+        if (tokens.Contains("REA") || tokens.Contains("SCEA") ||
+            (tokens.Contains("RESTRICTIVE") && tokens.Contains("EARLY") && tokens.Contains("ACTION")) ||
+            (tokens.Contains("SINGLE") && tokens.Contains("CHOICE") && tokens.Contains("EARLY") && tokens.Contains("ACTION")))
+            return "REA";
+
+        if (tokens.Contains("EA") || tokens.Contains("EA1") || tokens.Contains("EA2") ||
+            (tokens.Contains("EARLY") && tokens.Contains("ACTION")))
+            return "EA";
+
         if (tokens.Contains("RD") || tokens.Contains("REGULAR")) return "RD";
-        if (tokens.Contains("ROLLING")) return "ROLLING";
+        if (tokens.Any(t => t == "ROLLING" || t.StartsWith("ROLLING", StringComparison.Ordinal))) return "ROLLING";
         return null;
     }
 
+    /// <summary>
+    /// Trích xuất danh sách vòng nộp trường hỗ trợ từ deadlines_json (theo thứ tự UC-32: ED, ED II, EA, REA, RD, Rolling).
+    /// </summary>
+    public static IReadOnlyList<string> ExtractAvailableRounds(string? deadlinesJson)
+    {
+        if (string.IsNullOrWhiteSpace(deadlinesJson))
+            return [];
+
+        try
+        {
+            using var doc = JsonDocument.Parse(deadlinesJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return [];
+
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) continue;
+                if (prop.Value.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(prop.Value.GetString())) continue;
+                var canonical = CanonicalRound(prop.Name);
+                if (canonical is not null)
+                    keys.Add(canonical);
+            }
+
+            var ordered = new List<string>(6);
+            if (keys.Contains("ED")) ordered.Add("Early Decision");
+            if (keys.Contains("ED2")) ordered.Add("Early Decision II");
+            if (keys.Contains("EA")) ordered.Add("Early Action");
+            if (keys.Contains("REA")) ordered.Add("Restrictive Early Action");
+            if (keys.Contains("RD")) ordered.Add("Regular Decision");
+            if (keys.Contains("ROLLING")) ordered.Add("Rolling");
+            return ordered;
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static bool IsRoundSupported(string? deadlinesJson, string round)
+    {
+        var roundKey = CanonicalRound(round);
+        if (roundKey is null)
+            return false;
+
+        if (string.IsNullOrWhiteSpace(deadlinesJson))
+            return true;
+
+        var available = ExtractAvailableRounds(deadlinesJson);
+        if (available.Count == 0)
+            return true;
+
+        return available.Any(r => CanonicalRound(r) == roundKey);
+    }
+
+    /// <summary>
+    /// [UC-32 E1] Mỗi học sinh chỉ có tối đa một trường ở Early Decision và một trường ở Early Decision II tại một thời điểm.
+    /// </summary>
+    private async Task<string?> CheckExclusiveBindingRoundAsync(
+        Guid userId,
+        string round,
+        Guid? excludeTargetId,
+        CancellationToken ct)
+    {
+        var canonical = CanonicalRound(round);
+        if (canonical is not ("ED" or "ED2"))
+            return null;
+
+        var conflictSchool = await repository.FindSchoolWithRoundAsync(userId, canonical, excludeTargetId, ct);
+        if (string.IsNullOrWhiteSpace(conflictSchool))
+            return null;
+
+        var roundLabel = canonical == "ED2" ? "Early Decision II" : "Early Decision";
+        return $"Bạn đã chọn vòng {roundLabel} cho {conflictSchool}. Mỗi học sinh chỉ được chọn tối đa một trường ở vòng {roundLabel}.";
+    }
+
+    private static TargetSchoolDto ApplyRecommendedCategory(TargetSchoolDto dto, IReadOnlyDictionary<Guid, string> recCategories) =>
+        !dto.IsCategoryUserSelected && recCategories.TryGetValue(dto.UniversityId, out var recCat)
+            ? dto with { Category = recCat }
+            : dto;
+
     private static TargetSchoolDto ToDto(TargetSchool ts, University u) =>
         new(ts.Id, ts.UserId, ts.UniversityId, u.Code, u.Name, u.City, u.State, u.Website, u.Control, u.AcceptanceRate,
-            ts.Category, ts.Status, ts.Priority, ts.Notes, ts.ApplicationRound, ts.Deadline, ts.CreatedAt, ts.UpdatedAt);
+            ts.Category, ts.Status, ts.Priority, ts.Notes, ts.ApplicationRound, ts.Deadline, ts.CreatedAt, ts.UpdatedAt,
+            IsCategoryUserSelected: ts.IsCategoryUserSelected);
 }

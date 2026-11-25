@@ -59,6 +59,15 @@ public static class CenterLeadMapper
                 tests ? PlannedTests(certifications) : null);
         }
 
+        DateTime? expiresAt = null;
+        int? daysUntilExpiry = null;
+        if (string.Equals(lead.Status, LeadStatuses.New, StringComparison.OrdinalIgnoreCase))
+        {
+            expiresAt = lead.CreatedAt.AddDays(NewLeadExpiryDays);
+            var remaining = (expiresAt.Value - DateTime.UtcNow).TotalDays;
+            daysUntilExpiry = remaining <= 0 ? 0 : (int)Math.Ceiling(remaining);
+        }
+
         return new CenterReceivedLeadDto(
             lead.Id,
             lead.StudyCenterId,
@@ -71,7 +80,11 @@ public static class CenterLeadMapper
             lead.CreatedAt,
             showContact ? studentName : null,
             showContact ? studentEmail : null,
-            summary);
+            summary)
+        {
+            ExpiresAt = expiresAt,
+            DaysUntilExpiry = daysUntilExpiry,
+        };
     }
 
     private static readonly string[] EnglishTypes =
@@ -103,6 +116,9 @@ public static class CenterLeadMapper
             .OrderBy(c => c.SortOrder)
             .Select(c => new SharedPlannedTestDto(c.TestType, c.CustomName, c.Subject, c.OverallScore, c.ScaleText, c.TestDate))
             .ToList();
+
+    /// <summary>[UC-68] Số ngày tối đa để trung tâm phản hồi yêu cầu ở trạng thái Mới trước khi tự hết hạn.</summary>
+    public const int NewLeadExpiryDays = 7;
 
     /// <summary>[UC-73] Số ngày trung tâm còn xem được dữ liệu đã chia sẻ, tính từ lúc người dùng gửi yêu cầu.</summary>
     public const int DataVisibleDays = 90;

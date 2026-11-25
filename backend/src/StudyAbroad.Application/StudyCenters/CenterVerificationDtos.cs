@@ -71,7 +71,8 @@ public record CenterVerificationDto(
     string? CenterCode = null,
     string? CenterEmail = null,
     string? CenterPhone = null,
-    DateTime? EmailVerifiedAt = null);
+    DateTime? EmailVerifiedAt = null,
+    bool IsServiceContractValid = false);
 
 public record ReviewCenterVerificationRequest(
     string Action,
@@ -79,7 +80,8 @@ public record ReviewCenterVerificationRequest(
     bool IsBusinessOperating = false,
     bool IsRepresentativeValid = false,
     string? ReviewNotes = null,
-    string? RejectionReason = null);
+    string? RejectionReason = null,
+    bool IsServiceContractValid = false);
 
 public record UpdateCenterProfileRequest(
     string? Name = null,

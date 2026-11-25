@@ -69,8 +69,8 @@ public interface ILeadService
         Func<CancellationToken, Task<LeadMessageAttachment>>? attachmentFactory = null,
         CancellationToken ct = default);
 
-    // [UC-58] Báo cáo tin nhắn vi phạm (học sinh / phụ huynh hoặc trung tâm) -> Admin nhận thông báo, xem xét và khóa tài khoản
-    Task<LeadMessageDto> ReportSentLeadMessageAsync(Guid userId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default);
+    // [UC-143 / UC-54] Báo cáo tin nhắn vi phạm (học sinh / phụ huynh hoặc trung tâm) -> Admin nhận thông báo, xem xét và xử lý
+    Task<LeadMessageDto> ReportSentLeadMessageAsync(Guid userId, Guid leadId, Guid messageId, string? reason, CancellationToken ct = default, string? detail = null);
 
     Task<LeadMessageDto> ReportReceivedLeadMessageAsync(
         Guid userId,
@@ -79,7 +79,8 @@ public interface ILeadService
         Guid leadId,
         Guid messageId,
         string? reason,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        string? detail = null);
 
     /// <summary><paramref name="viewerAdminId"/> có giá trị thì lần đọc hàng đợi được ghi nhật ký truy cập.</summary>
     Task<PagedResult<AdminLeadMessageReportDto>> GetReportedMessagesAsync(string? filter, int page, int pageSize, CancellationToken ct = default, Guid? viewerAdminId = null);

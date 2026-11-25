@@ -1,5 +1,8 @@
 using System.Reflection;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Controllers;
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Common;
@@ -58,6 +61,19 @@ public class StudyCenterServiceTests
 
         public Task<StudyCenter?> GetByOwnerOrEmailAsync(Guid ownerUserId, string? email, CancellationToken ct = default) =>
             Task.FromResult(Centers.FirstOrDefault(c => c.OwnerUserId == ownerUserId || (email != null && string.Equals(c.Email, email, StringComparison.OrdinalIgnoreCase))));
+
+        public Dictionary<Guid, CenterResponseMetrics> MetricsByCenterId { get; } = [];
+        public CenterGuidanceCardsDto GuidanceCards { get; set; } = new(null, null);
+
+        public Task<Dictionary<Guid, CenterResponseMetrics>> GetResponseMetrics90dAsync(
+            IReadOnlyCollection<Guid> centerIds,
+            CancellationToken ct = default) =>
+            Task.FromResult(centerIds
+                .Where(MetricsByCenterId.ContainsKey)
+                .ToDictionary(id => id, id => MetricsByCenterId[id]));
+
+        public Task<CenterGuidanceCardsDto> GetGuidanceCardsAsync(CancellationToken ct = default) =>
+            Task.FromResult(GuidanceCards);
     }
 
     private readonly FakeAuditLogRepository _auditLogs = new();
@@ -587,5 +603,133 @@ public class StudyCenterServiceTests
         var tooLongRes = await service.VerifyCenterAsync(center.Id, false, actorId, new string('x', 1001));
         Assert.False(tooLongRes.Success);
         Assert.Contains("tối đa", tooLongRes.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task SearchAsync_Attaches90dResponseMetrics_ForCenterComparison()
+    {
+        var c1 = new StudyCenter { Code = "CMP_1", Name = "Trung tâm A", VerificationStatus = CenterReferral.Verified, IsActive = true };
+        var c2 = new StudyCenter { Code = "CMP_2", Name = "Trung tâm B", VerificationStatus = CenterReferral.Verified, IsActive = true };
+        var repo = new FakeRepository(c1, c2);
+        repo.MetricsByCenterId[c1.Id] = new CenterResponseMetrics(MedianResponseHours: 4.5, ResponseRatePercent: 92.0, SampleCount: 12);
+        var service = new StudyCenterService(repo, _auditLogs);
+
+        var result = await service.SearchAsync(new StudyCenterQuery(VerifiedOnly: true));
+
+        Assert.Equal(2, result.Items.Count);
+        var dto1 = Assert.Single(result.Items, x => x.Id == c1.Id);
+        Assert.Equal(4.5, dto1.MedianResponseHours);
+        Assert.Equal(92.0, dto1.ResponseRatePercent);
+        Assert.Equal(12, dto1.ResponseSampleCount);
+
+        var dto2 = Assert.Single(result.Items, x => x.Id == c2.Id);
+        Assert.Null(dto2.MedianResponseHours);
+        Assert.Equal(0, dto2.ResponseSampleCount);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_AndGetGuidanceCardsAsync_ReturnMetricsAndKnowledgeCards()
+    {
+        var center = new StudyCenter { Code = "DTL_1", Name = "Trung tâm Chi Tiết", VerificationStatus = CenterReferral.Verified, IsActive = true };
+        var repo = new FakeRepository(center);
+        repo.MetricsByCenterId[center.Id] = new CenterResponseMetrics(MedianResponseHours: 6.0, ResponseRatePercent: 85.0, SampleCount: 8);
+        repo.GuidanceCards = new CenterGuidanceCardsDto(
+            AskCard: new CenterGuidanceCardDto("CENTER_ASK", "checklist", "Nên hỏi trung tâm", "Hỏi về hợp đồng mẫu"),
+            WarningCard: new CenterGuidanceCardDto("CENTER_WARNING", "warning", "Dấu hiệu cảnh giác", "Tránh cam kết đỗ 100%"));
+        var service = new StudyCenterService(repo, _auditLogs);
+
+        var dto = await service.GetByIdAsync(center.Id);
+        var cards = await service.GetGuidanceCardsAsync();
+
+        Assert.NotNull(dto);
+        Assert.Equal(6.0, dto.MedianResponseHours);
+        Assert.Equal(85.0, dto.ResponseRatePercent);
+        Assert.Equal(8, dto.ResponseSampleCount);
+        Assert.Equal("CENTER_ASK", cards.AskCard?.TopicCode);
+        Assert.Equal("CENTER_WARNING", cards.WarningCard?.TopicCode);
+    }
+
+    [Fact]
+    public async Task Controller_PublicSearchAndGetById_SanitizeDirectContactAndVisaRate()
+    {
+        var center = new StudyCenter
+        {
+            Code = "PUB_1",
+            Name = "Trung tâm Công Khai",
+            VerificationStatus = CenterReferral.Verified,
+            IsActive = true,
+            Phone = "0909123456",
+            Email = "secret@center.vn",
+            VisaSuccessRate = 98.5
+        };
+        var repo = new FakeRepository(center);
+        var service = new StudyCenterService(repo, _auditLogs);
+        var controller = new StudyCentersController(service)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity()) }
+            }
+        };
+
+        var search = await controller.Search(new StudyCenterQuery(VerifiedOnly: false, IncludeInactive: true), CancellationToken.None);
+        Assert.True(repo.LastQuery!.VerifiedOnly);
+        Assert.False(repo.LastQuery.IncludeInactive);
+        var searchedItem = Assert.Single(search.Items);
+        Assert.Null(searchedItem.Phone);
+        Assert.Null(searchedItem.Email);
+        Assert.Null(searchedItem.VisaSuccessRate);
+
+        var detailRes = await controller.GetById(center.Id, CancellationToken.None);
+        var ok = Assert.IsType<OkObjectResult>(detailRes.Result);
+        var detailDto = Assert.IsType<StudyCenterDto>(ok.Value);
+        Assert.Null(detailDto.Phone);
+        Assert.Null(detailDto.Email);
+        Assert.Null(detailDto.VisaSuccessRate);
+    }
+
+    [Fact]
+    public async Task Controller_PublicGetById_UnverifiedOrHiddenCenter_ReturnsNotFound_WhileModeratorCanView()
+    {
+        var hiddenCenter = new StudyCenter
+        {
+            Code = "HID_1",
+            Name = "Trung tâm Ẩn",
+            VerificationStatus = CenterReferral.Verified,
+            IsActive = false,
+            Phone = "0912345678",
+            Email = "modonly@center.vn"
+        };
+        var unverifiedCenter = new StudyCenter
+        {
+            Code = "UNV_1",
+            Name = "Trung tâm Chưa Xác Minh",
+            VerificationStatus = "pending_review",
+            IsActive = true
+        };
+        var service = new StudyCenterService(new FakeRepository(hiddenCenter, unverifiedCenter), _auditLogs);
+
+        var publicController = new StudyCentersController(service)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity()) }
+            }
+        };
+        Assert.IsType<NotFoundResult>((await publicController.GetById(hiddenCenter.Id, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundResult>((await publicController.GetById(unverifiedCenter.Id, CancellationToken.None)).Result);
+
+        var modIdentity = new ClaimsIdentity([new Claim(ClaimTypes.Role, UserRoles.Moderator)], "test");
+        var modController = new StudyCentersController(service)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(modIdentity) }
+            }
+        };
+        var modOk = Assert.IsType<OkObjectResult>((await modController.GetById(hiddenCenter.Id, CancellationToken.None)).Result);
+        var modDto = Assert.IsType<StudyCenterDto>(modOk.Value);
+        Assert.Equal("0912345678", modDto.Phone);
+        Assert.Equal("modonly@center.vn", modDto.Email);
     }
 }

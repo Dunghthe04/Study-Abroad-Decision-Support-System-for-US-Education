@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.StudyCenters;
+using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Infrastructure.Persistence.Repositories;
@@ -135,5 +136,120 @@ public class StudyCenterRepository(AppDbContext db) : IStudyCenterRepository
             }
         }
         return center;
+    }
+
+    public async Task<Dictionary<Guid, CenterResponseMetrics>> GetResponseMetrics90dAsync(
+        IReadOnlyCollection<Guid> centerIds,
+        CancellationToken ct = default)
+    {
+        var result = new Dictionary<Guid, CenterResponseMetrics>();
+        if (centerIds.Count == 0) return result;
+
+        var cutoff = DateTime.UtcNow.AddDays(-90);
+        var ids = centerIds.Distinct().ToList();
+
+        var recentLeads = await db.Leads.AsNoTracking()
+            .Where(l => ids.Contains(l.StudyCenterId)
+                && l.CreatedAt >= cutoff
+                && l.Status != LeadStatuses.PendingParent
+                && l.Status != LeadStatuses.Cancelled)
+            .Select(l => new { l.Id, l.StudyCenterId, l.Status, l.CreatedAt, l.UpdatedAt })
+            .ToListAsync(ct);
+
+        if (recentLeads.Count == 0)
+            return result;
+
+        var leadIds = recentLeads.Select(l => l.Id).ToList();
+        var staffRoles = new[] { UserRoles.Center, UserRoles.Moderator, UserRoles.Admin };
+        var firstCenterMessages = await (
+                from m in db.LeadMessages.AsNoTracking()
+                join u in db.Users.AsNoTracking() on m.SenderUserId equals u.Id
+                where leadIds.Contains(m.LeadId) && staffRoles.Contains(u.Role)
+                group m by m.LeadId into g
+                select new { LeadId = g.Key, FirstAt = g.Min(x => x.CreatedAt) })
+            .ToDictionaryAsync(x => x.LeadId, x => x.FirstAt, ct);
+
+        foreach (var group in recentLeads.GroupBy(l => l.StudyCenterId))
+        {
+            var items = group.ToList();
+            var sampleCount = items.Count;
+            if (sampleCount < 5)
+            {
+                result[group.Key] = new CenterResponseMetrics(null, null, sampleCount);
+                continue;
+            }
+
+            var responseHours = new List<double>();
+            var respondedCount = 0;
+            foreach (var lead in items)
+            {
+                var hasCenterMessage = firstCenterMessages.TryGetValue(lead.Id, out var firstMsgAt);
+                var statusResponded = lead.Status is LeadStatuses.Accepted
+                    or LeadStatuses.Contacted
+                    or LeadStatuses.Rejected
+                    or LeadStatuses.Closed;
+
+                if (!hasCenterMessage && !statusResponded)
+                    continue;
+
+                respondedCount++;
+                DateTime respondedAt;
+                if (hasCenterMessage && statusResponded && lead.UpdatedAt is { } updatedAt && updatedAt > lead.CreatedAt)
+                    respondedAt = firstMsgAt < updatedAt ? firstMsgAt : updatedAt;
+                else if (hasCenterMessage)
+                    respondedAt = firstMsgAt;
+                else
+                    respondedAt = lead.UpdatedAt ?? lead.CreatedAt;
+
+                var hours = Math.Max(0, (respondedAt - lead.CreatedAt).TotalHours);
+                responseHours.Add(hours);
+            }
+
+            double? medianHours = null;
+            if (responseHours.Count > 0)
+            {
+                responseHours.Sort();
+                var mid = responseHours.Count / 2;
+                var rawMedian = responseHours.Count % 2 == 1
+                    ? responseHours[mid]
+                    : (responseHours[mid - 1] + responseHours[mid]) / 2.0;
+                medianHours = Math.Round(rawMedian, 1, MidpointRounding.AwayFromZero);
+            }
+
+            var ratePercent = Math.Round(100.0 * respondedCount / sampleCount, 1, MidpointRounding.AwayFromZero);
+            result[group.Key] = new CenterResponseMetrics(medianHours, ratePercent, sampleCount);
+        }
+
+        return result;
+    }
+
+    public async Task<CenterGuidanceCardsDto> GetGuidanceCardsAsync(CancellationToken ct = default)
+    {
+        var docs = await db.KnowledgeDocuments.AsNoTracking()
+            .Where(d => d.TopicCode != null
+                && (d.TopicCode == "CENTER_ASK" || d.TopicCode == "CENTER_WARNING"))
+            .OrderByDescending(d => d.UpdatedAt)
+            .ToListAsync(ct);
+
+        static CenterGuidanceCardDto? Pick(List<KnowledgeDocument> list, string topicCode, string preferredDocType)
+        {
+            var doc = list.FirstOrDefault(d =>
+                    string.Equals(d.TopicCode, topicCode, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(d.DocType, preferredDocType, StringComparison.OrdinalIgnoreCase))
+                ?? list.FirstOrDefault(d =>
+                    string.Equals(d.TopicCode, topicCode, StringComparison.OrdinalIgnoreCase));
+            if (doc is null || string.IsNullOrWhiteSpace(doc.Answer)) return null;
+            return new CenterGuidanceCardDto(
+                doc.TopicCode ?? topicCode,
+                doc.DocType,
+                doc.Question,
+                doc.Answer,
+                doc.Source,
+                doc.SourceUrl);
+        }
+
+        return new CenterGuidanceCardsDto(
+            Pick(docs, "CENTER_ASK", "proc_checklist"),
+            Pick(docs, "CENTER_WARNING", "proc_mistakes"));
     }
 }
