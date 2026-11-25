@@ -5,7 +5,7 @@ hay sửa chữ nào. (Các nhánh khác chỉ có số liệu thô nên Claude 
 
 Luồng: embedding câu hỏi -> lấy vài dòng gần nghĩa nhất trong kho -> dòng đầu dưới ngưỡng thì từ chối (không gọi Claude)
 -> chỉ dòng đạt ngưỡng (và đúng mã form nếu câu hỏi nêu mã) là ứng viên -> Claude CHỌN một trong tối đa MAX_CANDIDATES ứng viên
-đúng ý hỏi, hoặc nói không ứng viên nào đúng -> trả nguyên văn dòng được chọn kèm nguồn, ảnh và nút gợi ý.
+đúng ý hỏi, hoặc nói không ứng viên nào đúng -> trả nguyên văn dòng được chọn kèm nguồn và nút gợi ý.
 Embedding chỉ tìm ứng viên (gần nghĩa chưa chắc đúng ý: hỏi "trượt visa F-1" có thể ra dòng visa B-2); Claude chọn dòng đúng ý.
 Claude lỗi hay chọn sai khuôn hai lần thì chỉ dùng dòng đầu khi điểm cao (FALLBACK_MIN_SCORE), thấp hơn thì từ chối.
 """
@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from app.schemas.chat import ChatState, Citation, Media, QuickReply
+from app.schemas.chat import ChatState, Citation, QuickReply
 from app.services.chat_flow import SkillOutput
 from app.services.knowledge import KnowledgeHit, KnowledgeRetriever, TopicPart
 from app.services.pii_mask import mask_personal_info
@@ -97,24 +97,6 @@ def check_choice(raw: dict[str, Any], candidates: list[KnowledgeHit]) -> Choice:
     return Choice(None if chosen == 0 else candidates[chosen - 1])
 
 
-# Số ảnh tối đa kèm một câu trả lời
-MAX_MEDIA = 3
-
-
-# Ảnh minh họa của dòng kho được dùng. Link CHỈ lấy từ cột image_url (người thu thập dán, có thể nhiều link cách nhau bằng ";"),
-# không bao giờ từ lời Claude viết; chỉ nhận https, bỏ link trùng và link hỏng
-def media_of(hit: KnowledgeHit) -> list[Media]:
-    media: list[Media] = []
-    for link in (hit.image_url or "").split(";"):
-        try:
-            item = Media(kind="image", url=link.strip(), alt=hit.question)
-        except ValueError:
-            continue
-        if item not in media:
-            media.append(item)
-    return media[:MAX_MEDIA]
-
-
 # Tên nguồn khi mục tri thức không ghi tên nguồn (UC-37)
 DEFAULT_SOURCE_NAME = "Kho kiến thức tư vấn du học"
 
@@ -124,7 +106,12 @@ DEFAULT_SOURCE_NAME = "Kho kiến thức tư vấn du học"
 def citation_of(hit: KnowledgeHit) -> Citation:
     title = (hit.source or "").strip() or DEFAULT_SOURCE_NAME
     return Citation(
-        title=title, url=hit.source_url, snippet=hit.answer[:SNIPPET_CHARS], retrieved_at=hit.retrieved_at
+        title=title,
+        url=hit.source_url,
+        snippet=hit.answer[:SNIPPET_CHARS],
+        retrieved_at=hit.retrieved_at,
+        entry_no=hit.entry_no,
+        version=hit.version,
     )
 
 
@@ -313,6 +300,5 @@ class TraLoiHandler:
             best.answer,
             quick_replies=after_answer(hits, best, message, self._min_score, await self._topic_parts(best)),
             citations=[citation_of(best)],
-            media=media_of(best),
             disclaimer=DISCLAIMER,
         )

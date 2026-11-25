@@ -74,11 +74,11 @@ async def test_knowledge_skill_embeds_with_the_embedder_and_writes_with_the_llm(
                     "I-20 là giấy xác nhận trường nhận bạn để xin visa.",
                     None,
                     None,
-                    None,
                     "faq",
                     "LABEL_X",
                     None,
                     None,
+                    1,
                     0.9,
                 )
             ]
@@ -104,7 +104,7 @@ async def test_a_question_below_the_threshold_is_logged_as_a_knowledge_miss(capl
         async def search(self, vector):
             return [
                 KnowledgeHit(
-                    9, "câu khác", "nội dung khác", None, None, None, "faq", "LABEL_X", None, None, 0.40
+                    9, "câu khác", "nội dung khác", None, None, "faq", "LABEL_X", None, None, 1, 0.40
                 )
             ]
 
