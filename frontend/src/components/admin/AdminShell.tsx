@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { adminNavSectionsForRole } from "@/lib/admin-nav";
 import { usePendingCenterCount } from "@/hooks/use-pending-center-count";
 import { cn } from "@/lib/utils";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { AdminUserMenu } from "./AdminUserMenu";
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -96,14 +97,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
         </nav>
 
-        <div className="hidden px-2 py-2.5 md:block">
-          <AdminUserMenu />
+        <div className="hidden items-center justify-between gap-2 px-2 py-2.5 md:flex">
+          <div className="min-w-0 flex-1">
+            <AdminUserMenu />
+          </div>
+          <NotificationBell />
         </div>
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 sm:px-6 md:py-6">
-        <div className="md:hidden">
-          <AdminUserMenu />
+        <div className="flex items-center justify-between gap-2 md:hidden">
+          <div className="min-w-0 flex-1">
+            <AdminUserMenu />
+          </div>
+          <NotificationBell />
         </div>
         {children}
       </div>
