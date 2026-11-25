@@ -135,8 +135,11 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
                     l.Id,
                     l.StudyCenterId,
                     c.Name,
-                    // [UC-116] Quá hạn mà chưa ai mở link (hết hạn lười) vẫn hiện "Hết hạn"
-                    l.Status == LeadStatuses.PendingParent && l.ParentTokenExpiresAt <= now ? LeadStatuses.Expired : l.Status,
+                    // [UC-116 / UC-68] Quá hạn phụ huynh hoặc quá 7 ngày trung tâm không phản hồi đều hiện "Hết hạn"
+                    (l.Status == LeadStatuses.PendingParent && l.ParentTokenExpiresAt <= now)
+                    || (l.Status == LeadStatuses.New && l.CreatedAt <= now.AddDays(-CenterLeadMapper.NewLeadExpiryDays))
+                        ? LeadStatuses.Expired
+                        : l.Status,
                     l.CreatedAt,
                     l.SharedFields,
                     l.StudyLevel,
@@ -164,6 +167,23 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         int pageSize,
         CancellationToken ct = default)
     {
+        // [UC-68] Tự động chuyển lead ở trạng thái Mới quá 7 ngày trung tâm không phản hồi sang Hết hạn
+        var expireCutoff = DateTime.UtcNow.AddDays(-CenterLeadMapper.NewLeadExpiryDays);
+        var staleNewQuery = db.Leads.Where(l => l.Status == LeadStatuses.New && l.CreatedAt <= expireCutoff);
+        if (centerId.HasValue && centerId.Value != Guid.Empty)
+            staleNewQuery = staleNewQuery.Where(l => l.StudyCenterId == centerId.Value);
+        var staleNew = await staleNewQuery.ToListAsync(ct);
+        if (staleNew.Count > 0)
+        {
+            var now = DateTime.UtcNow;
+            foreach (var l in staleNew)
+            {
+                l.Status = LeadStatuses.Expired;
+                l.UpdatedAt = now;
+            }
+            await db.SaveChangesAsync(ct);
+        }
+
         // [UC-116] Lead chờ phụ huynh / bị từ chối / hết hạn: trung tâm chưa nhận nên không hiện, không đếm
         var baseLeads = db.Leads.AsNoTracking()
             .Where(l => l.Status != LeadStatuses.PendingParent && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired);
@@ -417,7 +437,10 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
             x.Message.ReportReason,
             x.Message.CreatedAt,
             x.Message.ReportResolution,
-            x.Message.ReportResolvedAt)).ToList();
+            x.Message.ReportResolvedAt,
+            x.Message.IsFlagged,
+            x.Message.FlagReason,
+            x.Message.ReportDetail)).ToList();
 
         return new PagedResult<AdminLeadMessageReportDto>(items, safePage, safePageSize, total);
     }
@@ -464,7 +487,9 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
                 m.AttachmentUrl,
                 m.Status,
                 m.CreatedAt,
-                m.Id == target.Id);
+                m.Id == target.Id,
+                m.IsFlagged,
+                m.FlagReason);
         }).ToList();
     }
 
@@ -507,6 +532,68 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
     {
         db.LeadMessages.Update(message);
         await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<int> RejectNewLeadsByCenterAsync(
+        Guid studyCenterId,
+        string centerName,
+        string reason,
+        DateTime now,
+        CancellationToken ct = default)
+    {
+        var newLeads = await db.Leads
+            .Where(l => l.StudyCenterId == studyCenterId && l.Status == LeadStatuses.New)
+            .ToListAsync(ct);
+        if (newLeads.Count == 0) return 0;
+
+        var notifs = new List<Notification>();
+        foreach (var lead in newLeads)
+        {
+            lead.Status = LeadStatuses.Rejected;
+            lead.UpdatedAt = now;
+            foreach (var recipient in new[] { lead.SubmittedByUserId, (Guid?)lead.UserId }.OfType<Guid>().Distinct())
+            {
+                notifs.Add(new Notification
+                {
+                    UserId = recipient,
+                    Type = "lead_rejected",
+                    Title = "Yêu cầu liên hệ bị từ chối tự động",
+                    Body = $"Yêu cầu liên hệ tới {centerName} đã tự động từ chối. Lý do: {reason}.",
+                    LinkUrl = "/account#sent-leads",
+                });
+            }
+        }
+
+        if (notifs.Count > 0)
+            db.Notifications.AddRange(notifs);
+        await db.SaveChangesAsync(ct);
+        return newLeads.Count;
+    }
+
+    public async Task<int> MarkOpenLeadsCenterInactiveAsync(
+        Guid studyCenterId,
+        DateTime now,
+        CancellationToken ct = default)
+    {
+        var openStatuses = new[]
+        {
+            LeadStatuses.New,
+            LeadStatuses.Accepted,
+            LeadStatuses.Contacted,
+            LeadStatuses.PendingParent,
+        };
+        var openLeads = await db.Leads
+            .Where(l => l.StudyCenterId == studyCenterId && openStatuses.Contains(l.Status))
+            .ToListAsync(ct);
+        if (openLeads.Count == 0) return 0;
+
+        foreach (var lead in openLeads)
+        {
+            lead.Status = LeadStatuses.CenterInactive;
+            lead.UpdatedAt = now;
+        }
+        await db.SaveChangesAsync(ct);
+        return openLeads.Count;
     }
 }
 
