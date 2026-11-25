@@ -13,12 +13,12 @@ public class BirthDateChangeServiceTests
     private static readonly byte[] Pdf = [.. "%PDF-1.4 test"u8.ToArray()];
     private static readonly byte[] Png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3];
 
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    internal sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private sealed class FakeStorage : IBirthDateEvidenceStorage
+    internal sealed class FakeStorage : IBirthDateEvidenceStorage
     {
         public Dictionary<string, byte[]> Files { get; } = [];
         public List<string> Deleted { get; } = [];
@@ -40,7 +40,7 @@ public class BirthDateChangeServiceTests
         }
     }
 
-    private sealed class FakeRepo : IBirthDateChangeRepository
+    internal sealed class FakeRepo : IBirthDateChangeRepository
     {
         public List<BirthDateChangeRequest> Items { get; } = [];
         /// <summary>Giả lập request gửi song song đã ghi trước: lần TryAdd kế tiếp đụng chỉ mục duy nhất.</summary>

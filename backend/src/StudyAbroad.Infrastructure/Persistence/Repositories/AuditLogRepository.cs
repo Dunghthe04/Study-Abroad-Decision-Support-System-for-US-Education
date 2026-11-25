@@ -81,6 +81,10 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
         {
             baseQuery = baseQuery.Where(x => x.log.Action.StartsWith("slm_sample.") && x.log.Action != AuditLogConstants.SlmSampleExport);
         }
+        else if (category == AuditLogConstants.CategoryBirthDateEvidence)
+        {
+            baseQuery = baseQuery.Where(x => x.log.Action.StartsWith("birth_date."));
+        }
         else if (category == AuditLogConstants.CategoryParent)
         {
             baseQuery = baseQuery.Where(x => x.log.Action.StartsWith("parent."));
@@ -198,9 +202,10 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
         var slmExports = counts.FirstOrDefault(c => c.Action == AuditLogConstants.SlmSampleExport)?.Count ?? 0;
         var chatViews = counts.FirstOrDefault(c => c.Action == AuditLogConstants.ReviewBatchViewItem)?.Count ?? 0;
         var deletedBuyerViews = counts.FirstOrDefault(c => c.Action == AuditLogConstants.OrderDeletedBuyerViewed)?.Count ?? 0;
+        var birthDateEvidenceViews = counts.FirstOrDefault(c => c.Action == AuditLogConstants.BirthDateEvidenceViewed)?.Count ?? 0;
 
         return new AccessLogSummaryDto(
-            TotalSensitiveCount: centerDocs + reportedQueue + reportedView + slmExports + chatViews + deletedBuyerViews,
+            TotalSensitiveCount: centerDocs + reportedQueue + reportedView + slmExports + chatViews + deletedBuyerViews + birthDateEvidenceViews,
             CenterDocumentViews: centerDocs,
             ReportedMessageViews: reportedQueue + reportedView,
             SlmSampleExports: slmExports,
@@ -218,6 +223,7 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
         AuditLogConstants.SlmSampleExport => AuditLogConstants.CategorySlmExport,
         var a when a.StartsWith("knowledge_base.") => AuditLogConstants.CategoryKnowledgeBase,
         var a when a.StartsWith("slm_sample.") => AuditLogConstants.CategorySlmSample,
+        var a when a.StartsWith("birth_date.") => AuditLogConstants.CategoryBirthDateEvidence,
         var a when a.StartsWith("parent.") => AuditLogConstants.CategoryParent,
         var a when a.StartsWith("user.") || a.StartsWith("auth.") => AuditLogConstants.CategoryAccount,
         _ => "other"
@@ -243,6 +249,9 @@ public class AuditLogRepository(AppDbContext db) : IAuditLogRepository
         AuditLogConstants.KnowledgeBaseImport => "Nhập kho tri thức từ Excel (UC-117)",
         AuditLogConstants.ReviewBatchViewItem => "Xem nội dung tin nhắn chat kiểm thử (đợt duyệt)",
         AuditLogConstants.OrderDeletedBuyerViewed => "Xem thông tin người mua của tài khoản đã xóa (UC-124)",
+        AuditLogConstants.BirthDateEvidenceViewed => "Xem minh chứng ngày sinh (UC-150)",
+        "user.birth_date_approved" => "Duyệt yêu cầu sửa ngày sinh (UC-150)",
+        "user.birth_date_rejected" => "Từ chối yêu cầu sửa ngày sinh (UC-150)",
         "parent.acting.start" => "Bắt đầu quyền đại diện con",
         "parent.acting.stop" => "Kết thúc quyền đại diện con",
         "parent.link.create" => "Gửi yêu cầu liên kết phụ huynh",
