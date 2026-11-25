@@ -510,6 +510,33 @@ export interface BirthDateChangeDto {
   reviewedAt: string | null;
 }
 
+/** [UC-150] Yêu cầu sửa ngày sinh Administrator xem trong danh sách và chi tiết. */
+export interface AdminBirthDateRequestDto {
+  id: string;
+  userId: string;
+  fullName: string;
+  email: string;
+  role: UserRole;
+  currentBirthDate: string | null;
+  requestedBirthDate: string;
+  currentAge: number | null;
+  requestedAge: number;
+  /** Mốc tuổi (16, 18) mà ngày sinh mới làm tuổi đi qua, theo chiều lên hoặc xuống. */
+  crossedThresholds: number[];
+  reason: string;
+  status: BirthDateChangeStatus;
+  evidenceType: BirthDateEvidenceType | null;
+  hasEvidence: boolean;
+  evidenceFileName: string | null;
+  representativeEmail: string | null;
+  rejectReason: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
+/** [UC-150] Bộ lọc danh sách yêu cầu sửa ngày sinh. */
+export type AdminBirthDateRequestFilter = BirthDateChangeStatus | "all";
+
 /** [UC-107] Dữ liệu gửi yêu cầu sửa ngày sinh (gửi dạng multipart). */
 export interface SubmitBirthDateChangeInput {
   birthDate: string;
@@ -536,6 +563,9 @@ export interface UserDto {
   dateOfBirth?: string | null;
   /** [UC-113] Tuổi tròn theo giờ VN, tính từ ngày sinh (có khi xem chi tiết hoặc sau khi Admin sửa ngày sinh) */
   age?: number | null;
+  /** [UC-150] Yêu cầu sửa ngày sinh đang chờ duyệt (chỉ có khi Admin xem chi tiết) */
+  pendingBirthDateRequestId?: string | null;
+  pendingBirthDate?: string | null;
 }
 
 // Token chỉ nằm trong HttpOnly cookie, body không chứa token
@@ -1079,6 +1109,7 @@ export type AccessLogCategory =
   | "slm_export"
   | "knowledge_base"
   | "slm_sample"
+  | "birth_date_evidence"
   | "parent"
   | "account";
 

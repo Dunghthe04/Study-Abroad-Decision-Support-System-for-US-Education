@@ -246,6 +246,32 @@ public class AdminUsersControllerTests
         Assert.Equal("0912345678", user.Phone);
     }
 
+    [Theory]
+    [InlineData(BirthDateChangeStatuses.Pending, true)]
+    [InlineData(BirthDateChangeStatuses.Rejected, false)]
+    public async Task GetUserById_PendingBirthDateRequest_ShownOnlyWhilePending(string status, bool shown)
+    {
+        // [UC-150] Chi tiết tài khoản hiện yêu cầu sửa ngày sinh đang chờ để Admin mở xem
+        var userId = Guid.NewGuid();
+        var fakeAuth = new FakeAuthService
+        {
+            Users = [new UserDto(userId, "student@test.com", "Student User", UserRoles.Student, UserStatuses.Active)]
+        };
+        var requests = new BirthDateChangeServiceTests.FakeRepo();
+        var request = new StudyAbroad.Domain.Entities.BirthDateChangeRequest
+        {
+            UserId = userId, RequestedBirthDate = new DateOnly(2008, 5, 1), Reason = "Sai ngày", Status = status,
+        };
+        requests.Items.Add(request);
+        var controller = new AdminUsersController(fakeAuth, requests);
+
+        var result = await controller.GetUserById(userId, CancellationToken.None);
+
+        var user = Assert.IsType<UserDto>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(shown ? request.Id : null, user.PendingBirthDateRequestId);
+        Assert.Equal(shown ? new DateOnly(2008, 5, 1) : null, user.PendingBirthDate);
+    }
+
     [Fact]
     public async Task GetUserById_WhenNotFound_ReturnsNotFound()
     {

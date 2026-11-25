@@ -45,7 +45,10 @@ namespace StudyAbroad.Application.Auth
         // [UC-111] Ngày sinh chỉ trả cho chính chủ (xem tài khoản của mình); người dùng không tự sửa được, chỉ Admin sửa (UC-113)
         DateOnly? DateOfBirth = null,
         // [UC-113] Tuổi tròn tính từ ngày sinh (giờ VN), trả kèm khi Admin xem / sửa ngày sinh
-        int? Age = null);
+        int? Age = null,
+        // [UC-150] Admin xem chi tiết tài khoản: yêu cầu sửa ngày sinh đang Chờ duyệt (nếu có) và ngày đề nghị
+        Guid? PendingBirthDateRequestId = null,
+        DateOnly? PendingBirthDate = null);
 
     // [USAS-362] Kết quả đăng nhập thành công. AccessToken chỉ dùng để đặt HttpOnly cookie, controller không trả nó trong body
     // RefreshToken và SessionExpiresAt cũng chỉ để controller đặt cookie refresh (HttpOnly, chỉ gửi tới /api/v1/auth)

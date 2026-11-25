@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   BanIcon,
   CakeIcon,
@@ -547,6 +548,36 @@ export function AdminUsersView() {
     []
   );
 
+  // [UC-150] Khung chi tiết tải thêm ngày sinh, tuổi và yêu cầu sửa ngày sinh đang chờ (danh sách không có)
+  const detailTargetId = detailTarget?.id;
+  const detailTargetRole = detailTarget?.role;
+  useEffect(() => {
+    if (!detailTargetId || (detailTargetRole !== "student" && detailTargetRole !== "parent")) return;
+    let cancelled = false;
+    adminUsersApi
+      .getById(detailTargetId)
+      .then((detail) => {
+        if (cancelled) return;
+        setDetailTarget((prev) =>
+          prev?.id === detailTargetId
+            ? {
+                ...prev,
+                dateOfBirth: detail.dateOfBirth,
+                age: detail.age,
+                pendingBirthDateRequestId: detail.pendingBirthDateRequestId ?? null,
+                pendingBirthDate: detail.pendingBirthDate ?? null,
+              }
+            : prev
+        );
+      })
+      .catch(() => {
+        // Khung chi tiết vẫn hiện thông tin từ danh sách
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detailTargetId, detailTargetRole]);
+
   const toggleDetailTarget = useCallback((u: UserDto) => {
     const cached = getLockReasonCache(u.id);
     setDetailTarget((prev) =>
@@ -872,6 +903,20 @@ export function AdminUsersView() {
                     <span className="text-ink text-right">
                       {formatBirthDate(detailTarget.dateOfBirth)}
                       {detailTarget.age != null ? ` (${detailTarget.age} tuổi)` : ""}
+                    </span>
+                  </div>
+                )}
+                {detailTarget.pendingBirthDateRequestId && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-ink-2 shrink-0">Đề nghị sửa ngày sinh</span>
+                    <span className="text-ink text-right">
+                      {formatBirthDate(detailTarget.pendingBirthDate)}{" "}
+                      <Link
+                        href={`/admin/birth-date-requests?id=${detailTarget.pendingBirthDateRequestId}`}
+                        className="text-primary underline underline-offset-2"
+                      >
+                        Xem yêu cầu
+                      </Link>
                     </span>
                   </div>
                 )}
