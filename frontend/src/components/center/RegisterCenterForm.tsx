@@ -12,6 +12,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
+import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/password-rules";
 
 export function RegisterCenterForm() {
   const router = useRouter();
@@ -40,8 +41,10 @@ export function RegisterCenterForm() {
       return;
     }
 
-    if (password.length < 8) {
-      setError("Mật khẩu phải có ít nhất 8 ký tự.");
+    // [UC-01] Cùng luật mật khẩu với đăng ký (khớp backend)
+    const passwordError = passwordRuleError(password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 
@@ -204,7 +207,7 @@ export function RegisterCenterForm() {
                 autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Tối thiểu 8 ký tự"
+                placeholder={PASSWORD_RULE_HINT}
               />
             </Field>
 

@@ -34,6 +34,7 @@ import { DetailPanel } from "@/components/admin/shared/DetailPanel";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
 import { cn } from "@/lib/utils";
+import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/password-rules";
 import {
   Dialog,
   DialogContent,
@@ -499,8 +500,10 @@ export function AdminUsersView() {
       setFormError("Vui lòng nhập email.");
       return;
     }
-    if (password.length < 8) {
-      setFormError("Mật khẩu tối thiểu 8 ký tự.");
+    // [UC-01] Cùng luật mật khẩu với đăng ký (khớp backend)
+    const passwordError = passwordRuleError(password);
+    if (passwordError) {
+      setFormError(passwordError);
       return;
     }
 
@@ -1073,7 +1076,7 @@ export function AdminUsersView() {
                   required
                   minLength={8}
                 />
-                <FieldDescription>Tối thiểu 8 ký tự.</FieldDescription>
+                <FieldDescription>{PASSWORD_RULE_HINT}.</FieldDescription>
               </Field>
 
               <Field>
