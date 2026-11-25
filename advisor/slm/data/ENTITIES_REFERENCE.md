@@ -1,6 +1,6 @@
 # Từ điển dữ liệu SLM: loại ý và khóa entities
 
-Sinh tự động từ `app/schemas/slm.py` (khóa và giá trị hợp lệ) và `du_lieu_slm.jsonl` (20333 tin, 23325 ý: ví dụ và số lần gặp). Sửa schema thì chạy lại `python -m slm.prepare.build_entities_reference`. Luật gán nhãn: `HUONG_DAN_GAN_NHAN.md`.
+Sinh tự động từ `app/schemas/slm.py` (khóa và giá trị hợp lệ) và `du_lieu_slm.jsonl` (26024 tin, 29585 ý: ví dụ và số lần gặp). Sửa schema thì chạy lại `python -m slm.prepare.build_entities_reference`. Luật gán nhãn: `HUONG_DAN_GAN_NHAN.md`.
 
 ## 1. Một ý
 
@@ -16,12 +16,12 @@ Mỗi tin tách thành danh sách ý. Mỗi ý có đúng ba khóa:
 
 | Loại | Khi nào dùng | Số ý trong dữ liệu |
 |---|---|---|
-| `collect_profile` | Học sinh khai hoặc sửa thông tin về mình, hoặc trả lời câu hệ thống đang chờ | 3736 (16%) |
-| `profile_review` | Muốn được tư vấn dựa trên hồ sơ của chính mình (đánh giá hồ sơ, nên chọn trường nào) | 3382 (14%) |
-| `scenario` | Thử "nếu như…" (what_if) hoặc hỏi cần gì để vào một trường (goal_seeking) | 3591 (15%) |
-| `knowledge` | Hỏi kiến thức chung hoặc số liệu trường, không cần hồ sơ của học sinh | 6118 (26%) |
-| `center_referral` | Tìm, so sánh hoặc đặt lịch với trung tâm tư vấn | 3424 (15%) |
-| `out_of_scope` | Ngoài phạm vi: lời chào, cảm ơn, không rõ ý, nội dung nhạy cảm, hỏi về trợ lý | 3074 (13%) |
+| `collect_profile` | Học sinh khai hoặc sửa thông tin về mình, hoặc trả lời câu hệ thống đang chờ | 4930 (17%) |
+| `profile_review` | Muốn được tư vấn dựa trên hồ sơ của chính mình (đánh giá hồ sơ, nên chọn trường nào) | 4637 (16%) |
+| `scenario` | Thử "nếu như…" (what_if) hoặc hỏi cần gì để vào một trường (goal_seeking) | 4677 (16%) |
+| `knowledge` | Hỏi kiến thức chung hoặc số liệu trường, không cần hồ sơ của học sinh | 6332 (21%) |
+| `center_referral` | Tìm, so sánh hoặc đặt lịch với trung tâm tư vấn | 4775 (16%) |
+| `out_of_scope` | Ngoài phạm vi: lời chào, cảm ơn, không rõ ý, nội dung nhạy cảm, hỏi về trợ lý | 4234 (14%) |
 
 ## 3. Khóa entities của từng loại
 
@@ -31,8 +31,8 @@ Cột "Số ý" là số ý có khóa đó. Khóa nào cũng có thể vắng; v
 
 | Khóa | Giá trị hợp lệ | Ý nghĩa | Ví dụ thật | Số ý |
 |---|---|---|---|---|
-| `tasks` | danh sách, mã trong: `edit`, `status`, `restart` | Việc học sinh muốn làm (bảng nhiệm vụ bên dưới). Vắng là việc mặc định của loại | «Start over» → `["restart"]` | 846 |
-| `follow_up` | `true` hoặc `false` | true nếu câu thiếu thông tin và lấy phần thiếu từ context; false hoặc vắng nếu câu tự đứng được | «ý em là 32» → `true` | 293 |
+| `tasks` | danh sách, mã trong: `edit`, `status`, `restart` | Việc học sinh muốn làm (bảng nhiệm vụ bên dưới). Vắng là việc mặc định của loại | «Start over» → `["restart"]` | 1363 |
+| `follow_up` | `true` hoặc `false` | true nếu câu thiếu thông tin và lấy phần thiếu từ context; false hoặc vắng nếu câu tự đứng được | «ý em là 32» → `true` | 345 |
 
 Ngoài ra ý `collect_profile` mang các khóa hồ sơ ở mục 5.
 
@@ -40,48 +40,48 @@ Ngoài ra ý `collect_profile` mang các khóa hồ sơ ở mục 5.
 
 | Khóa | Giá trị hợp lệ | Ý nghĩa | Ví dụ thật | Số ý |
 |---|---|---|---|---|
-| `schools` | danh sách chữ | Tên trường, nguyên văn như học sinh gõ (danh sách) | «thế còn BU» → `["BU"]` | 1533 |
-| `tasks` | danh sách, mã trong: `assessment`, `school_list`, `roadmap`, `compare`, `explain_school`, `explain_fit` | Việc học sinh muốn làm (bảng nhiệm vụ bên dưới). Vắng là việc mặc định của loại | «thế còn BU» → `["explain_school"]` | 3382 |
-| `follow_up` | `true` hoặc `false` | true nếu câu thiếu thông tin và lấy phần thiếu từ context; false hoặc vắng nếu câu tự đứng được | «thế còn BU» → `true` | 541 |
+| `schools` | danh sách chữ | Tên trường, nguyên văn như học sinh gõ (danh sách) | «thế còn BU» → `["BU"]` | 2293 |
+| `tasks` | danh sách, mã trong: `assessment`, `school_list`, `roadmap`, `compare`, `explain_school`, `explain_fit` | Việc học sinh muốn làm (bảng nhiệm vụ bên dưới). Vắng là việc mặc định của loại | «thế còn BU» → `["explain_school"]` | 4637 |
+| `follow_up` | `true` hoặc `false` | true nếu câu thiếu thông tin và lấy phần thiếu từ context; false hoặc vắng nếu câu tự đứng được | «thế còn BU» → `true` | 711 |
 
 ### `scenario`
 
 | Khóa | Giá trị hợp lệ | Ý nghĩa | Ví dụ thật | Số ý |
 |---|---|---|---|---|
-| `changes` | danh sách object | Các thay đổi của what_if: danh sách {factor, value, unit}, hoặc {factor, action: skip} để bỏ một yếu tố | «vậy ACT 29» → `[{"factor": "act", "value": "29"}]` | 2577 |
-| `factor` | danh sách chữ | Yếu tố cần thay đổi của goal_seeking (danh sách, ví dụ sat, gpa, activities) | «thế còn ASU» → `["gpa"]` | 369 |
-| `mode` | một trong: `what_if`, `goal_seeking` | Kiểu kịch bản: thử "nếu như" hay hỏi cần gì để vào trường | «BU thì sao» → `"goal_seeking"` | 3591 |
-| `school` | chữ nguyên văn | Trường mục tiêu của goal_seeking, nguyên văn | «BU thì sao» → `"BU"` | 1085 |
-| `target_group` | một trong: `reach`, `target`, `safety` | Nhóm đích của goal_seeking | «BU thì sao» → `"safety"` | 348 |
-| `follow_up` | `true` hoặc `false` | true nếu câu thiếu thông tin và lấy phần thiếu từ context; false hoặc vắng nếu câu tự đứng được | «BU thì sao» → `true` | 707 |
+| `changes` | danh sách object | Các thay đổi của what_if: danh sách {factor, value, unit}, hoặc {factor, action: skip} để bỏ một yếu tố | «vậy ACT 29» → `[{"factor": "act", "value": "29"}]` | 3237 |
+| `factor` | danh sách chữ | Yếu tố cần thay đổi của goal_seeking (danh sách, ví dụ sat, gpa, activities) | «thế còn ASU» → `["gpa"]` | 713 |
+| `mode` | một trong: `what_if`, `goal_seeking` | Kiểu kịch bản: thử "nếu như" hay hỏi cần gì để vào trường | «BU thì sao» → `"goal_seeking"` | 4677 |
+| `school` | chữ nguyên văn | Trường mục tiêu của goal_seeking, nguyên văn | «BU thì sao» → `"BU"` | 1741 |
+| `target_group` | một trong: `reach`, `target`, `safety` | Nhóm đích của goal_seeking | «BU thì sao» → `"safety"` | 534 |
+| `follow_up` | `true` hoặc `false` | true nếu câu thiếu thông tin và lấy phần thiếu từ context; false hoặc vắng nếu câu tự đứng được | «BU thì sao» → `true` | 807 |
 
 ### `knowledge`
 
 | Khóa | Giá trị hợp lệ | Ý nghĩa | Ví dụ thật | Số ý |
 |---|---|---|---|---|
-| `fields` | danh sách mã (bảng mục thông tin) | Mục thông tin trường học sinh hỏi (danh sách mã). Học sinh không nêu mục thì bỏ khóa | «còn SAT?» → `["test_policy"]` | 3658 |
-| `filters` | object (bảng điều kiện lọc) | Điều kiện tìm trường (object, bảng điều kiện lọc bên dưới) | «top 50 thôi» → `{"max_rank": "top 50"}` | 680 |
-| `group` | một trong: `reach`, `target`, `safety` | Nhóm kết quả của học sinh, thay cho tên trường (đi với compare_facts) | «so sánh các trường nhóm khó vào» → `"reach"` | 35 |
-| `schools` | danh sách chữ | Tên trường, nguyên văn như học sinh gõ (danh sách) | «còn SAT?» → `["Penn State"]` | 3787 |
-| `sort` | một trong: `ranking`, `lowest_cost`, `highest_cost`, `easiest_admission`, `most_selective`, `most_aid` | Cách xếp danh sách học sinh muốn. Không nói thì bỏ khóa | «rẻ nhất lên đầu» → `"lowest_cost"` | 671 |
-| `tasks` | danh sách, mã trong: `school_info`, `compare_facts`, `search` | Việc học sinh muốn làm (bảng nhiệm vụ bên dưới). Vắng là việc mặc định của loại | «còn SAT?» → `["school_info"]` | 4797 |
+| `fields` | danh sách mã (bảng mục thông tin) | Mục thông tin trường học sinh hỏi (danh sách mã). Học sinh không nêu mục thì bỏ khóa | «còn SAT?» → `["test_policy"]` | 3798 |
+| `filters` | object (bảng điều kiện lọc) | Điều kiện tìm trường (object, bảng điều kiện lọc bên dưới) | «top 50 thôi» → `{"max_rank": "top 50"}` | 696 |
+| `group` | một trong: `reach`, `target`, `safety` | Nhóm kết quả của học sinh, thay cho tên trường (đi với compare_facts) | «so sánh các trường nhóm khó vào» → `"reach"` | 45 |
+| `schools` | danh sách chữ | Tên trường, nguyên văn như học sinh gõ (danh sách) | «còn SAT?» → `["Penn State"]` | 3917 |
+| `sort` | một trong: `ranking`, `lowest_cost`, `highest_cost`, `easiest_admission`, `most_selective`, `most_aid` | Cách xếp danh sách học sinh muốn. Không nói thì bỏ khóa | «rẻ nhất lên đầu» → `"lowest_cost"` | 687 |
+| `tasks` | danh sách, mã trong: `school_info`, `compare_facts`, `search` | Việc học sinh muốn làm (bảng nhiệm vụ bên dưới). Vắng là việc mặc định của loại | «còn SAT?» → `["school_info"]` | 4953 |
 | `follow_up` | `true` hoặc `false` | true nếu câu thiếu thông tin và lấy phần thiếu từ context; false hoặc vắng nếu câu tự đứng được | «còn SAT?» → `true` | 565 |
 
 ### `center_referral`
 
 | Khóa | Giá trị hợp lệ | Ý nghĩa | Ví dụ thật | Số ý |
 |---|---|---|---|---|
-| `centers` | danh sách chữ | Tên các trung tâm cần so sánh (từ hai tên), nguyên văn | «IDP có gì khác PEC» → `["IDP", "PEC"]` | 537 |
-| `city` | chữ nguyên văn | Thành phố, nguyên văn như học sinh viết ("Sài Gòn", "ha noi") | «em tìm ở HN» → `"HN"` | 1857 |
-| `service` | một trong: `SCHOOL_SELECTION`, `ESSAY_EDITING`, `APPLICATION_SUBMISSION`, `VISA_INTERVIEW_PREP`, `TEST_PREP`, `SCHOLARSHIP_SEARCH` | Dịch vụ cần tìm (bảng dịch vụ bên dưới) | «em tìm ở HN» → `"APPLICATION_SUBMISSION"` | 2529 |
-| `tasks` | danh sách, mã trong: `booking`, `compare` | Việc học sinh muốn làm (bảng nhiệm vụ bên dưới). Vắng là việc mặc định của loại | «cho em đặt lịch» → `["booking"]` | 799 |
-| `follow_up` | `true` hoặc `false` | true nếu câu thiếu thông tin và lấy phần thiếu từ context; false hoặc vắng nếu câu tự đứng được | «em tìm ở HN» → `true` | 1012 |
+| `centers` | danh sách chữ | Tên các trung tâm cần so sánh (từ hai tên), nguyên văn | «IDP có gì khác PEC» → `["IDP", "PEC"]` | 666 |
+| `city` | chữ nguyên văn | Thành phố, nguyên văn như học sinh viết ("Sài Gòn", "ha noi") | «em tìm ở HN» → `"HN"` | 2806 |
+| `service` | một trong: `SCHOOL_SELECTION`, `ESSAY_EDITING`, `APPLICATION_SUBMISSION`, `VISA_INTERVIEW_PREP`, `TEST_PREP`, `SCHOLARSHIP_SEARCH` | Dịch vụ cần tìm (bảng dịch vụ bên dưới) | «em tìm ở HN» → `"APPLICATION_SUBMISSION"` | 3386 |
+| `tasks` | danh sách, mã trong: `booking`, `compare` | Việc học sinh muốn làm (bảng nhiệm vụ bên dưới). Vắng là việc mặc định của loại | «cho em đặt lịch» → `["booking"]` | 1209 |
+| `follow_up` | `true` hoặc `false` | true nếu câu thiếu thông tin và lấy phần thiếu từ context; false hoặc vắng nếu câu tự đứng được | «em tìm ở HN» → `true` | 1292 |
 
 ### `out_of_scope`
 
 | Khóa | Giá trị hợp lệ | Ý nghĩa | Ví dụ thật | Số ý |
 |---|---|---|---|---|
-| `subtype` | một trong: `exception`, `sensitive`, `greeting`, `farewell`, `ambiguous`, `about_system`, `human_handoff` | Loại ngoài phạm vi (bắt buộc, bảng bên dưới) | «ừ» → `"ambiguous"` | 3074 |
+| `subtype` | một trong: `exception`, `sensitive`, `greeting`, `farewell`, `ambiguous`, `about_system`, `human_handoff` | Loại ngoài phạm vi (bắt buộc, bảng bên dưới) | «ừ» → `"ambiguous"` | 4234 |
 
 ## 4. Giá trị hợp lệ
 
@@ -146,7 +146,7 @@ Giá trị dạng chữ là chữ học sinh gõ ("texas", "30 nghìn đô", "to
 
 | Khóa | Giá trị | Nghĩa | Số lần |
 |---|---|---|---|
-| `state` | chữ học sinh gõ | Bang (một tên hoặc danh sách) | 181 |
+| `state` | chữ học sinh gõ | Bang (một tên hoặc danh sách) | 197 |
 | `city` | chữ học sinh gõ | Thành phố | 53 |
 | `major` | chữ học sinh gõ | Ngành đào tạo | 138 |
 | `max_cost` | chữ học sinh gõ | Tổng chi phí cả năm không vượt mức này | 65 |
@@ -185,8 +185,8 @@ Giá trị dạng chữ là chữ học sinh gõ ("texas", "30 nghìn đô", "to
 
 Trong `changes` (số lần gặp trong dữ liệu):
 
-- `unit`: `(không có)` (1672), `ielts` (296), `USD` (261), `scale_4` (249), `scale_10` (193), `VND` (170), `duolingo` (70), `toefl` (65), `percent` (24)
-- `factor`: `sat` (497), `gpa` (482), `english` (455), `budget` (376), `act` (212), `scholarship` (205), `application_round` (173), `major` (129), `state` (128), `exchange_rate` (104), `priority_aid` (86), `priority_prestige` (79), `priority_cost` (74)
+- `unit`: `(không có)` (2168), `ielts` (350), `USD` (322), `scale_4` (278), `scale_10` (247), `VND` (215), `percent` (83), `duolingo` (77), `toefl` (70)
+- `factor`: `sat` (622), `gpa` (565), `english` (525), `budget` (453), `application_round` (272), `act` (245), `scholarship` (237), `major` (215), `state` (200), `exchange_rate` (192), `priority_aid` (103), `priority_cost` (91), `priority_prestige` (90)
 - `value`: số đã chuẩn hóa (1k5 thành 1500, 40k thành 40000, 800 triệu thành 800000000); riêng `scholarship` là `optional`, `preferred`, `mandatory`; `action: skip` thay `value` để bỏ một yếu tố.
 
 ### Dịch vụ trung tâm (`service`)
@@ -216,26 +216,26 @@ Trong `changes` (số lần gặp trong dữ liệu):
 
 | Khóa | Nghĩa | Câu hệ thống hỏi | Số ý |
 |---|---|---|---|
-| `current_level` | Đang học hay làm gì hiện tại | B1.1 | 27 |
-| `current_grade` | Lớp đang học | B1.1 | 220 |
-| `major` | Ngành định học | B1.3 | 266 |
-| `intake` | Kỳ nhập học dự kiến | B1.4 | 201 |
-| `education_system` | Chương trình học (THPT Việt Nam, IB, A-level, AP) | D1 | 129 |
-| `gpa` | Điểm trung bình | D2 | 772 |
-| `sat` | Điểm SAT đã thi | D3 | 704 |
-| `act` | Điểm ACT đã thi | D3 | 168 |
-| `english` | Chứng chỉ tiếng Anh đã có, điểm và ngày thi | E1 | 636 |
-| `english_plan` | Kế hoạch thi tiếng Anh | E2 | 54 |
-| `standardized_plan` | Kế hoạch thi SAT, ACT | E3 | 96 |
-| `budget` | Ngân sách mỗi năm (học phí và sinh hoạt) | F1 | 551 |
-| `scholarship` | Mức cần học bổng: không cần, nên có, bắt buộc | F2 | 192 |
-| `funding_source` | Ai chi trả chi phí du học | F3 | 91 |
-| `activities` | Hoạt động ngoại khóa | D4 | 133 |
-| `awards` | Giải thưởng | D5 | 108 |
-| `relatives_state` | Người thân ở Mỹ (bang) | N1 | 51 |
-| `preferred_states` | Bang đã tìm hiểu hoặc muốn học | N2 | 148 |
-| `school_type` | Thích trường công hay trường tư | N3 | 48 |
-| `visa_refused` | Từng bị từ chối visa chưa | N4 | 44 |
+| `current_level` | Đang học hay làm gì hiện tại | B1.1 | 39 |
+| `current_grade` | Lớp đang học | B1.1 | 369 |
+| `major` | Ngành định học | B1.3 | 472 |
+| `intake` | Kỳ nhập học dự kiến | B1.4 | 268 |
+| `education_system` | Chương trình học (THPT Việt Nam, IB, A-level, AP) | D1 | 166 |
+| `gpa` | Điểm trung bình | D2 | 1023 |
+| `sat` | Điểm SAT đã thi | D3 | 856 |
+| `act` | Điểm ACT đã thi | D3 | 220 |
+| `english` | Chứng chỉ tiếng Anh đã có, điểm và ngày thi | E1 | 849 |
+| `english_plan` | Kế hoạch thi tiếng Anh | E2 | 61 |
+| `standardized_plan` | Kế hoạch thi SAT, ACT | E3 | 112 |
+| `budget` | Ngân sách mỗi năm (học phí và sinh hoạt) | F1 | 766 |
+| `scholarship` | Mức cần học bổng: không cần, nên có, bắt buộc | F2 | 254 |
+| `funding_source` | Ai chi trả chi phí du học | F3 | 107 |
+| `activities` | Hoạt động ngoại khóa | D4 | 142 |
+| `awards` | Giải thưởng | D5 | 132 |
+| `relatives_state` | Người thân ở Mỹ (bang) | N1 | 74 |
+| `preferred_states` | Bang đã tìm hiểu hoặc muốn học | N2 | 288 |
+| `school_type` | Thích trường công hay trường tư | N3 | 100 |
+| `visa_refused` | Từng bị từ chối visa chưa | N4 | 64 |
 
 Giá trị hồ sơ luôn là chữ nguyên văn trong tin. Ý khác ngoài `collect_profile` không có khóa hồ sơ.
 
