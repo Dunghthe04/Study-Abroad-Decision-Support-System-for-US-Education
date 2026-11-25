@@ -2,10 +2,10 @@ using StudyAbroad.Domain.Common;
 
 namespace StudyAbroad.Domain.Entities;
 
-/// <summary>Một dòng kho tri thức đã kiểm chứng, trùng cột với sheet knowledge_base của file Excel. Chat tìm kiếm ngữ nghĩa trên bảng này.</summary>
+/// <summary>Một dòng kho tri thức đã kiểm chứng, trùng 10 cột với sheet knowledge_base của file Excel (UC-112..117). Chat tìm kiếm ngữ nghĩa trên bảng này (chỉ dùng mục chưa xóa).</summary>
 public class KnowledgeDocument : BaseEntity
 {
-    /// <summary>Cột id của file Excel, khóa để cập nhật khi nhập lại.</summary>
+    /// <summary>Cột id của file Excel, khóa để cập nhật khi nhập lại. Không đổi và không cấp lại khi xóa mềm.</summary>
     public int EntryNo { get; set; }
 
     /// <summary>Một trong KnowledgeDocTypes.All.</summary>
@@ -32,9 +32,15 @@ public class KnowledgeDocument : BaseEntity
     /// <summary>Mã thủ tục (I-20, DS-160...) nối các dòng cùng một thủ tục; bắt buộc với dòng proc_*.</summary>
     public string? TopicCode { get; set; }
 
-    public string? ImageUrl { get; set; }
-
     public string? Note { get; set; }
+
+    /// <summary>Phiên bản hiện tại (bắt đầu từ 1, tăng mỗi khi sửa hoặc khôi phục phiên bản cũ).</summary>
+    public int Version { get; set; } = 1;
+
+    /// <summary>Xóa mềm (UC-116): khác null thì chat không dùng và không hiện ở danh sách Đang dùng.</summary>
+    public DateTime? DeletedAt { get; set; }
+
+    public Guid? DeletedByUserId { get; set; }
 
     /// <summary>Mã băm của Question lúc tạo vector, chỉ tạo lại vector khi câu hỏi đổi.</summary>
     public string? EmbeddingHash { get; set; }
