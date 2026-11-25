@@ -191,15 +191,18 @@ export function ParentRestoreForm() {
                 ) : policy ? (
                   <PolicyContent content={policy.content} />
                 ) : (
-                  <p className="text-ink-2">
-                    Cho phép hệ thống lưu hồ sơ, phân tích năng lực và gợi ý trường phù hợp cho việc du học Mỹ của con. Bạn rút lại được bất
-                    cứ lúc nào bằng link trong email xác nhận gửi sau khi đồng ý.
-                  </p>
+                  <>
+                    <p className="text-ink-2">
+                      Cho phép hệ thống lưu hồ sơ, phân tích năng lực và gợi ý trường phù hợp cho việc du học Mỹ của con. Bạn rút lại được
+                      bất cứ lúc nào bằng link trong email xác nhận gửi sau khi đồng ý.
+                    </p>
+                    {/* Văn bản do admin công bố đã có dòng căn cứ; chỉ ghi khi dùng câu dự phòng để không lặp */}
+                    <p className="text-body-s text-ink-3">
+                      Căn cứ: Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15 (Điều 24) và Nghị định 356/2025/NĐ-CP. Hệ thống lưu thời điểm, email
+                      và địa chỉ IP khi bạn đồng ý.
+                    </p>
+                  </>
                 )}
-                <p className="text-body-s text-ink-3">
-                  Căn cứ: Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15 (Điều 24) và Nghị định 356/2025/NĐ-CP. Hệ thống lưu thời điểm, email và
-                  địa chỉ IP khi bạn đồng ý.
-                </p>
               </div>
               <Separator />
               <div className="flex items-start gap-2">
