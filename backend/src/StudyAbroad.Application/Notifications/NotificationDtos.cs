@@ -28,6 +28,7 @@ public static class NotificationTypes
     // Gói dịch vụ và gói Gia đình (UC-77, UC-78, UC-126..131)
     public const string BillingPaymentPaid = "billing_payment_paid";
     public const string BillingPaymentMismatch = "billing_payment_mismatch";
+    public const string BillingOrderExpired = "billing_order_expired";
     public const string BillingExpiring = "billing_expiring";
     public const string BillingExpired = "billing_expired";
     public const string BillingUsage80 = "billing_usage_80";
@@ -35,6 +36,7 @@ public static class NotificationTypes
     public const string FamilyInvite = "family_invite";
     public const string FamilyInviteAccepted = "family_invite_accepted";
     public const string FamilyInviteDeclined = "family_invite_declined";
+    public const string FamilyInviteCancelled = "family_invite_cancelled";
     public const string FamilyMemberRemoved = "family_member_removed";
     public const string FamilyMemberLeft = "family_member_left";
     public const string FamilyEnded = "family_ended";

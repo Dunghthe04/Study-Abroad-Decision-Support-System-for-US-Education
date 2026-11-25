@@ -1,4 +1,6 @@
+using StudyAbroad.Application.Billing;
 using StudyAbroad.Application.Common;
+using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Application.Admin.AiUsage;
 
@@ -30,7 +32,10 @@ public interface IAiUsageReportService
     Task<AiUsageTurnDetailDto?> GetTurnAsync(Guid messageId, CancellationToken ct = default);
 }
 
-public class AiUsageReportService(IAiUsageReportRepository repository, TimeProvider? clock = null) : IAiUsageReportService
+public class AiUsageReportService(
+    IAiUsageReportRepository repository,
+    TimeProvider? clock = null,
+    IEntitlementService? entitlements = null) : IAiUsageReportService
 {
     public const int DefaultDays = 30;
     public const int MaxDays = 366;
@@ -50,13 +55,20 @@ public class AiUsageReportService(IAiUsageReportRepository repository, TimeProvi
             FromUtc(start), ToUtcExclusive(end), (page - 1) * pageSize, pageSize, ct);
         var users = (await repository.UsersByIdAsync(rows.Select(row => row.UserId).ToList(), ct)).ToDictionary(user => user.Id);
 
-        var items = rows
-            .Select(row => new AiUsageUserRankDto(
+        var nowUtc = (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+        var items = new List<AiUsageUserRankDto>(rows.Count);
+        foreach (var row in rows)
+        {
+            var user = users.GetValueOrDefault(row.UserId);
+            var quota = await QuotaForAsync(user, nowUtc, ct);
+            items.Add(new AiUsageUserRankDto(
                 row.UserId,
-                users.GetValueOrDefault(row.UserId)?.FullName,
-                users.GetValueOrDefault(row.UserId)?.Email,
-                Metrics([Row(row)])))
-            .ToList();
+                user?.FullName,
+                user?.Email,
+                Metrics([Row(row)]),
+                quota?.UsedTokens,
+                quota?.QuotaTokens));
+        }
         return new PagedResult<AiUsageUserRankDto>(items, page, pageSize, total);
     }
 
@@ -67,8 +79,23 @@ public class AiUsageReportService(IAiUsageReportRepository repository, TimeProvi
         var user = (await repository.UsersByIdAsync([userId], ct)).FirstOrDefault();
         if (user is null)
             return null;
-        return new AiUsageUserOverviewDto(user.Id, user.FullName, user.Email, await BuildOverviewAsync(from, to, userId, ct));
+        var nowUtc = (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+        var quota = await QuotaForAsync(user, nowUtc, ct);
+        return new AiUsageUserOverviewDto(
+            user.Id, user.FullName, user.Email, await BuildOverviewAsync(from, to, userId, ct),
+            quota?.UsedTokens, quota?.QuotaTokens);
     }
+
+    private Task<UserQuotaUsageDto?> QuotaForAsync(AiUsageUserInfo? user, DateTime nowUtc, CancellationToken ct)
+    {
+        if (entitlements is null || user is null
+            || user.Role is UserRoles.Admin or UserRoles.Moderator or UserRoles.Center)
+            return Task.FromResult<UserQuotaUsageDto?>(null);
+        return FetchQuotaAsync(user.Id, nowUtc, ct);
+    }
+
+    private async Task<UserQuotaUsageDto?> FetchQuotaAsync(Guid userId, DateTime nowUtc, CancellationToken ct) =>
+        await entitlements!.GetCurrentQuotaUsageAsync(userId, nowUtc, ct);
 
     public async Task<PagedResult<AiUsageTurnRowDto>?> GetUserTurnsAsync(
         Guid userId, DateOnly? from, DateOnly? to, int page, int pageSize, CancellationToken ct = default)

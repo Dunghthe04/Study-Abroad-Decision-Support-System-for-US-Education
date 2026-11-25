@@ -1,4 +1,6 @@
 using System.Globalization;
+using StudyAbroad.Application.Costs;
+using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.Application.Recommendations;
 
@@ -23,8 +25,9 @@ public static class AlgorithmParameters
     private static string Pct(double v) => $"{N(Math.Round(v * 100, 2))}%";
     private static string Join(params string[] parts) => string.Join(" · ", parts);
 
-    private static List<AlgorithmParameter> Build()
+    public static IReadOnlyList<AlgorithmParameter> Build(CostParameters? costParams = null)
     {
+        var cost = costParams ?? CostParameters.Default;
         var g = new GroupingOptions();
         var english = new EnglishOptions();
         var goal = new GoalOptions();
@@ -121,6 +124,16 @@ public static class AlgorithmParameters
             "Mức nên đặt mục tiêu cao hơn ngưỡng nhóm thêm chừng này vì số liệu có sai số.");
         Add("goal_alternatives", "Cần gì để vào", "Số phương án thay thế", RecommendationService.MaxAlternatives.ToString(),
             "Số trường thay thế gợi ý kèm.");
+
+        // Ước tính chi phí (UC-26, UC-83) — đọc sống từ app_settings (cost.parameters), fallback CostConstants
+        Add("cost_visa_integrity_fee", "Ước tính chi phí", "Phí Visa Integrity Fee", $"${N(cost.VisaIntegrityFeeUsd)}",
+            "Khoản phí thu một lần vào năm đầu cùng phí MRV và SEVIS I-901.");
+        Add("cost_annual_escalation", "Ước tính chi phí", "Tỷ lệ tăng chi phí hằng năm", Pct((double)cost.AnnualEscalationRate),
+            $"Mức tăng chi phí mỗi năm khi tính tổng cả khóa {cost.UndergraduateYears} năm theo công thức (1 + r)^(k − 1).");
+        Add("cost_bank_sell_spread", "Ước tính chi phí", "Biên độ giá bán ra ngân hàng", Pct((double)cost.BankSellRateSpread),
+            "Biên độ cộng thêm vào tỷ giá trung bình thị trường khi quy đổi USD sang VND tham khảo ở UC-26.");
+        Add("cost_undergrad_years", "Ước tính chi phí", "Số năm học bậc đại học", $"{cost.UndergraduateYears} năm",
+            "Số năm dùng để tính tổng chi phí cả khóa.");
 
         return list;
     }

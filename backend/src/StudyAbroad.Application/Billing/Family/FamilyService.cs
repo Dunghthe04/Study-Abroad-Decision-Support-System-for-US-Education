@@ -153,7 +153,12 @@ public class FamilyService(
         }, ct);
 
         var owner = await users.GetUserById(ownerId, ct);
-        await TrySendInviteEmailAsync(email, owner?.FullName ?? string.Empty, seatRole, token, ct);
+        var ownerName = owner?.FullName ?? string.Empty;
+        await TrySendInviteEmailAsync(email, ownerName, seatRole, token, ct);
+        // [UC-118 3a] Gửi lại cũng phát thông báo trong ứng dụng kèm liên kết mới (link cũ đã vô hiệu)
+        if (await users.GetUserByEmail(email, ct) is { } invitee)
+            await notifications.NotifyAsync(invitee.Id, NotificationTypes.FamilyInvite, "Lời mời tham gia gói Gia đình",
+                $"{ownerName} đã gửi lại lời mời tham gia gói Gia đình.", $"/family/invite?token={token}", ct);
     }
 
     // Lời mời đã commit trước khi gửi thư: thư lỗi (SMTP sập...) chỉ ghi cảnh báo, không biến lời mời đã lưu thành 500.
@@ -173,18 +178,26 @@ public class FamilyService(
     public async Task CancelInviteAsync(Guid ownerId, Guid inviteId, DateTime nowUtc, CancellationToken ct = default)
     {
         var group = await RequireOwnedGroupAsync(ownerId, nowUtc, ct);
+        var invitedEmail = string.Empty;
         await RunAsync(async txCt =>
         {
             if (!await family.LockActiveGroupAsync(group.Id, txCt))
                 throw FamilyErrors.NoFamily();
             var member = await family.FindMemberAsync(inviteId, txCt);
-            if (member is null || member.FamilyGroupId != group.Id || member.Status != FamilyMemberStatuses.Pending)
+            // [UC-119] Chỉ hủy được lời mời đang chờ còn hiệu lực (≤ 7 ngày)
+            if (member is null || member.FamilyGroupId != group.Id || !IsLivePending(member, nowUtc))
                 throw FamilyErrors.NotPending();
+            invitedEmail = member.InvitedEmail;
             member.Status = FamilyMemberStatuses.Cancelled;
             member.EndedAt = nowUtc;
             member.TokenHash = null;
             await family.SaveAsync(txCt);
         }, ct);
+
+        // [UC-119, UC-128] Thông báo trong ứng dụng cho người được mời khi lời mời bị hủy
+        if (!string.IsNullOrEmpty(invitedEmail) && await users.GetUserByEmail(invitedEmail, ct) is { } invitee)
+            await notifications.NotifyAsync(invitee.Id, NotificationTypes.FamilyInviteCancelled, "Lời mời gói Gia đình đã bị hủy",
+                $"{await NameOfAsync(ownerId, ct)} đã hủy lời mời tham gia gói Gia đình.", AccountLink, ct);
     }
 
     // ---- lời mời (người được mời)
@@ -247,10 +260,25 @@ public class FamilyService(
         var member = await FindInviteAsync(token, ct);
         if (member.Status != FamilyMemberStatuses.Pending)
             throw FamilyErrors.NotPending();
+        // [UC-122 E3] Lời mời quá 7 ngày đã hết hiệu lực
+        if (!IsLivePending(member, nowUtc))
+        {
+            member.Status = FamilyMemberStatuses.Expired;
+            member.TokenHash = null;
+            member.EndedAt = nowUtc;
+            await SaveOrNotPendingAsync(ct);
+            throw FamilyErrors.InviteExpired();
+        }
+
+        // [UC-122] Chu kỳ của chủ gói phải còn hiệu lực (như AcceptAsync)
+        var group = await family.FindGroupAsync(member.FamilyGroupId, ct) ?? throw FamilyErrors.InviteInvalid();
+        await entitlements.GetSummaryAsync(group.OwnerUserId, nowUtc, ct);
+        if (await billing.FindActiveOwnedGroupAsync(group.OwnerUserId, ct) is not { } liveGroup || liveGroup.Id != group.Id)
+            throw FamilyErrors.InviteExpired();
+
         var user = await users.GetUserById(userId, ct);
         if (user is null || !SameEmail(user.Email, member.InvitedEmail))
             throw FamilyErrors.WrongAccount();
-        var group = await family.FindGroupAsync(member.FamilyGroupId, ct) ?? throw FamilyErrors.InviteInvalid();
 
         await RunAsync(async txCt =>
         {

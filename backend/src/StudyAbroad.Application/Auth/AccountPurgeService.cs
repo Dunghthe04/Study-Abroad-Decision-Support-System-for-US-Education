@@ -40,8 +40,21 @@ public class AccountPurgeService(
     IBillingAccountHooks? billingHooks = null) : IAccountPurgeService
 {
     public const string AuditAction = "user.purge_account";
+    public const int AccountingRetentionYears = 10;
 
     private readonly AccountDeletionOptions _options = options ?? new AccountDeletionOptions();
+
+    /// <summary>
+    /// [UC-75] Mốc hết hạn lưu thông tin người mua: 10 năm kể từ khi kết thúc năm tài chính (theo giờ Việt Nam, 31/12) của giao dịch.
+    /// Ví dụ giao dịch trong năm tài chính 2026 (VN) → kết thúc năm tài chính là 01/01/2027 00:00 +07:00 → giữ tới 01/01/2037 00:00 +07:00 (31/12/2036 17:00 UTC).
+    /// </summary>
+    public static DateTime ComputeRetentionExpiryUtc(DateTime orderCreatedAtUtc)
+    {
+        var vnOffset = TimeSpan.FromHours(7);
+        var vnTime = DateTime.SpecifyKind(orderCreatedAtUtc, DateTimeKind.Utc) + vnOffset;
+        var endOfFiscalYearVn = new DateTime(vnTime.Year + 1, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        return endOfFiscalYearVn.AddYears(AccountingRetentionYears) - vnOffset;
+    }
 
     public async Task<AccountPurgeSummary> PurgeDueAccountsAsync(DateTime now, CancellationToken ct = default)
     {
@@ -67,6 +80,8 @@ public class AccountPurgeService(
                     if (!await purge.LockIfStillDueAsync(userId, deletedBefore, roles, txCt))
                         return;
 
+                    // [UC-75, UC-124] Chụp họ tên + email vào bảng lưu kế toán 10 năm trước khi xóa dòng user (UserId sẽ bị SetNull)
+                    await purge.SnapshotBuyerForOrdersAsync(userId, now, txCt);
                     await purge.ClearPaymentPayloadsAsync(userId, txCt);
                     await purge.PurgeForumPostsAsync(userId, now, txCt);
                     // Nhóm Gia đình và kỳ của chủ gói kết thúc trước khi dòng user mất (cascade xóa nốt)
@@ -113,6 +128,9 @@ public class AccountPurgeService(
                 failures.Add(new AccountPurgeFailure(userId, ex));
             }
         }
+
+        // [UC-75] Dọn các bản ghi thông tin người mua đã quá hạn lưu 10 năm
+        await purge.PurgeExpiredBuyerRetentionsAsync(now, ct);
 
         return new AccountPurgeSummary(purged, skipped, failures, fileFailures);
     }

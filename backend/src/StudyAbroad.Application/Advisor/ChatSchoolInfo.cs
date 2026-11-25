@@ -624,7 +624,7 @@ public static class ChatSchoolInfo
         return response with { Action = Action, ActionData = System.Text.Json.JsonSerializer.SerializeToElement(data) };
     }
 
-    private static string Plain(string text)
+    internal static string Plain(string text)
     {
         var d = text.ToLowerInvariant().Replace('đ', 'd').Normalize(NormalizationForm.FormD);
         var sb = new StringBuilder();

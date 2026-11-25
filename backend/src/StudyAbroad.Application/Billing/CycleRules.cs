@@ -77,6 +77,13 @@ public static class CycleRules
 
     public static bool IsLowQuota(int usedPercent) => usedPercent >= BillingRules.LowQuotaUsedPercent;
 
-    public static bool IsExpiringSoon(DateTime? endsAt, DateTime nowUtc) =>
-        endsAt is { } end && end - nowUtc <= TimeSpan.FromDays(BillingRules.ExpiringSoonDays);
+    /// <summary>[UC-128] Số ngày nhắc trước khi hết hạn: gói có thời hạn ≤ 7 ngày nhắc trước 1 ngày; gói dài hơn nhắc trước 7 ngày (hoặc defaultReminderDays).</summary>
+    public static int ReminderLeadDays(int durationDays, int defaultReminderDays = BillingRules.ExpiringSoonDays) =>
+        durationDays <= BillingRules.ShortPlanMaxDurationDays
+            ? Math.Min(BillingRules.ShortPlanReminderDays, defaultReminderDays)
+            : defaultReminderDays;
+
+    public static bool IsExpiringSoon(DateTime? endsAt, DateTime nowUtc, int? durationDays = null) =>
+        endsAt is { } end && end - nowUtc <= TimeSpan.FromDays(
+            durationDays is { } d ? ReminderLeadDays(d) : BillingRules.ExpiringSoonDays);
 }
