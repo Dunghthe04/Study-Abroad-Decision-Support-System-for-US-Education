@@ -29,4 +29,9 @@ public static class CostConstants
 
     /// <summary>Biên ngân sách 10% dùng để gắn nhãn "Trong biên 10%" (UC-26, khớp UC-22).</summary>
     public const decimal BudgetTolerance = 0.10m;
+
+    /// <summary>
+    /// Tỉ giá dự phòng (VNĐ cho 1 USD) khi chưa từng lấy được tỉ giá từ nguồn công khai (UC-65 E2). Công bố ở UC-83.
+    /// </summary>
+    public const decimal FallbackVndPerUsd = 25_000m;
 }

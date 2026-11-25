@@ -120,7 +120,7 @@ def update_context(state: ChatState, output: Any) -> None:
                 ctx.schools = [str(data["school"])]
             if data.get("fields"):
                 ctx.fields = list(data["fields"])
-        case "school_compare":
+        case "school_compare" | "school_fit_compare":
             if data.get("schools"):
                 ctx.schools = list(data["schools"])
             if data.get("fields"):

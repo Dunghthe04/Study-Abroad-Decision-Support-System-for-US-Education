@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from app.schemas.explain import (
+    ExplainFit,
     ExplainRequest,
     ExplainResponse,
     ExplainResult,
@@ -28,6 +29,45 @@ GROUP_LABEL = {
 # Chuyển đổi tiền USD sang định dạng có dấu chấm phân cách hàng nghìn
 def money(value: float | None) -> str:
     return f"{value:,.0f}".replace(",", ".") if value is not None else "?"
+
+
+# Tên thành phần điểm phù hợp bằng lời học sinh hiểu (UC-24)
+FIT_PART_LABEL = {
+    "position": "vừa tầm học thuật",
+    "budget": "ngân sách",
+    "quality": "chất lượng trường",
+    "aid": "học bổng",
+    "english": "tiếng Anh",
+}
+SCORE_SCALE = 100  # điểm hiện theo thang 100 như thẻ giải thích
+
+
+def _points(value: float) -> int:
+    return round(value * SCORE_SCALE)
+
+
+# Điểm phù hợp để gửi Qwen: tổng, từng thành phần (điểm và trọng số) và thành phần thấp nhất do CODE tìm sẵn,
+# để AI không tự so sánh. Thành phần thiếu dữ liệu bị bỏ khỏi tổng nên không tính là thấp nhất.
+def fit_payload(fit: ExplainFit) -> dict[str, Any]:
+    parts = [
+        {
+            "name": FIT_PART_LABEL[p.key],
+            "score": _points(p.score) if p.score is not None else None,
+            "weight": round(p.weight, 2),
+        }
+        for p in fit.parts
+    ]
+    scored = [p for p in parts if p["score"] is not None]
+    payload: dict[str, Any] = {
+        "total": _points(fit.total) if fit.total is not None else None,
+        "parts": parts,
+        "missing": [p["name"] for p in parts if p["score"] is None],
+        "priorityAdjusted": fit.priority_adjusted,
+    }
+    if scored:
+        low = min(p["score"] for p in scored)
+        payload["lowest"] = [p["name"] for p in scored if p["score"] == low]
+    return payload
 
 
 # Qwen dựa vào câu mẫu này để viết lời giải thích cho từng trường, dựa vào số đã lưu trong cơ sở dữ liệu.
@@ -63,6 +103,12 @@ def fact_of(code: str, st: ExplainStudent, sc: ExplainSchool) -> str:
         return "Ngoại khóa của bạn là lợi thế ở trường này"
     if code == "EC_MINUS":
         return "Ngoại khóa của bạn cần bổ sung cho trường này"
+    if code == "LOW_RATE":
+        return "Trường nhận dưới 15% hồ sơ nên luôn xếp Khó vào, điểm cao đến đâu cũng không đổi nhóm"
+    if code == "RATE_CAP":
+        return "Trường nhận dưới 50% hồ sơ nên chỉ tối đa là Vừa sức, chưa tính là An toàn"
+    if code == "WEAK_CAP":
+        return "Có một chỉ số của bạn thấp hơn mốc 25% của trường nên chưa tính là An toàn"
     return ""
 
 
@@ -99,6 +145,8 @@ def build_user(req: ExplainRequest) -> dict[str, Any]:
         "school": {k: v for k, v in school.items() if v is not None},
         "facts": build_facts(req),
     }
+    if sc.fit is not None:
+        user["fit"] = fit_payload(sc.fit)
     if req.basis:
         user["basis"] = req.basis
     return user

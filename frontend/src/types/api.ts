@@ -374,7 +374,7 @@ export interface QuickReply {
 
 // Công cụ nhập ngay trong chat; frontend vẽ theo `type`
 export interface ChatWidget {
-  type: "major" | "review" | "budget" | "scholarship" | "form" | "select" | "recommend" | "simulate" | "goal_seek" | "explain" | "school_info" | "school_compare" | "school_search" | "school" | "centers";
+  type: "major" | "review" | "budget" | "scholarship" | "form" | "select" | "recommend" | "simulate" | "goal_seek" | "explain" | "school_info" | "school_compare" | "school_search" | "fit_compare" | "school" | "centers";
   data?: Record<string, unknown> | null;
 }
 
@@ -383,7 +383,7 @@ export interface ChatWidget {
  * không qua SLM hiểu câu nên nhanh và không nhầm tên trường. target chỉ dùng cho goal_seek (bỏ trống thì hệ thống chọn nhóm cao hơn một bậc).
  */
 export interface AssistantAction {
-  type: "goal_seek" | "explain" | "school_info" | "school_compare" | "school_search";
+  type: "goal_seek" | "explain" | "school_info" | "school_compare" | "school_fit_compare" | "school_search";
   schoolCodes?: string[] | null; // school_compare: mã từ hai đến bốn trường (hoặc tên chưa được chọn)
   fields?: string[] | null; // school_compare: mã mục so sánh, giữ nguyên khi chọn lại trường mơ hồ
   schoolCode?: string | null; // goal_seek không kèm trường: hỏi lại bằng ô chọn trường

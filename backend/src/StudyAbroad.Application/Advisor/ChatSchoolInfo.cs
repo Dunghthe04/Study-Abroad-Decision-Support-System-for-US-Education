@@ -31,6 +31,11 @@ public enum InfoField
     SatSubmitRate,
     IntlAcceptance,
     Scholarships,
+    // UC-156: đời sống khuôn viên (đọc từ SchoolInfoDto.Campus)
+    Housing,
+    StudentFacultyRatio,
+    StudentActivities,
+    CampusSetting,
 }
 
 /// <summary>Câu trả lời về một trường. Complete = false khi hệ thống không có thông tin học sinh hỏi (để nhánh gọi thử kho kiến thức).</summary>
@@ -53,6 +58,8 @@ public static class ChatSchoolInfo
     public const string WidgetType = "school_info";
     public const int MaxMajors = 10;
     public const int MaxRankings = 4;
+    public const int MaxActivities = 12;
+    public const int MaxHousingTypes = 6;
     private const string Verify = "Bạn nên kiểm tra lại trên trang chính thức của trường vì số liệu có thể đã thay đổi.";
 
     private static readonly (InfoField Field, string[] Words)[] Keywords =
@@ -69,13 +76,17 @@ public static class ChatSchoolInfo
         (InfoField.Ranking, ["xep hang", "ranking", "rank", "hang may", "us news", "u.s. news", "top may"]),
         (InfoField.Location, ["o dau", "bang nao", "thanh pho", "o bang", "vi tri"]),
         (InfoField.Website, ["website", "trang web", "link", "dia chi web"]),
+        (InfoField.Housing, ["ky tuc xa", "nha o", "dorm", "noi tru", "housing", "residence hall"]),
+        (InfoField.StudentFacultyRatio, ["sinh vien tren giang vien", "giang vien", "si so", "lop dong", "lop nho", "student-faculty", "student faculty"]),
+        (InfoField.StudentActivities, ["cau lac bo", "clb", "hoat dong sinh vien", "doi song", "club"]),
+        (InfoField.CampusSetting, ["khuon vien", "campus", "ngoai o", "nong thon", "thi tran"]),
     ];
 
-    // Những điều học sinh hay hỏi nhưng bảng dữ liệu trường không có cột
+    // Những điều học sinh hay hỏi nhưng bảng dữ liệu trường không có cột (nhà ở, sĩ số, hoạt động sinh viên, khuôn viên đã có từ UC-156)
     private static readonly string[] Unstored =
     [
-        "ky tuc xa", "nha o", "dorm", "viec lam", "luong", "thoi tiet", "khi hau", "doi song", "cau lac bo", "clb",
-        "the thao", "van hoa", "an ninh", "mon an", "co so vat chat", "giang vien", "si so",
+        "viec lam", "luong", "thoi tiet", "khi hau", "the thao", "van hoa", "an ninh", "mon an", "co so vat chat",
+        "tieu chi xet tuyen", "so sinh vien quoc te", "thu gioi thieu", "phong van",
     ];
 
     /// <summary>
@@ -86,10 +97,9 @@ public static class ChatSchoolInfo
         string Question, string? School, string? Code, string? KbAnswer, bool KbFound,
         IReadOnlyList<string> SlmFields, bool KbSkipped);
 
-    // Mã model trả mà hệ thống chưa lưu: "other" (điều ngoài danh mục) và bốn mục mới của hợp đồng SLM (nhà ở, tỷ lệ sinh viên trên giảng viên,
-    // hoạt động sinh viên, khuôn viên) vì chưa có InfoField tương ứng. Khi có InfoField cho mục nào thì chuyển mã đó sang SlmFieldCodes và bỏ khỏi đây
-    private static readonly HashSet<string> UnstoredCodes =
-        ["other", "housing", "student_faculty_ratio", "student_activities", "campus_setting"];
+    // Mã model trả mà hệ thống chưa lưu: "other" (điều ngoài danh mục). Bốn mục nhà ở, sinh viên trên giảng viên, hoạt động sinh viên, khuôn viên
+    // đã có InfoField (UC-156) nên nằm trong SlmFieldCodes
+    private static readonly HashSet<string> UnstoredCodes = ["other"];
 
     // Mã mục model trả (advisor: INFO_FIELDS, tiếng Anh như dữ liệu huấn luyện) → mục số liệu. Mã không có trong bảng (và không phải mã "chưa lưu") bị bỏ
     private static readonly Dictionary<string, InfoField> SlmFieldCodes = new()
@@ -116,6 +126,10 @@ public static class ChatSchoolInfo
         ["sat_submit_rate"] = InfoField.SatSubmitRate,
         ["international_acceptance_rate"] = InfoField.IntlAcceptance,
         ["scholarships"] = InfoField.Scholarships,
+        ["housing"] = InfoField.Housing,
+        ["student_faculty_ratio"] = InfoField.StudentFacultyRatio,
+        ["student_activities"] = InfoField.StudentActivities,
+        ["campus_setting"] = InfoField.CampusSetting,
     };
 
     /// <summary>Mục model trả, đổi sang mục số liệu, theo thứ tự cố định của danh sách mục. Mã lạ hoặc "other" bị bỏ.</summary>
@@ -125,7 +139,7 @@ public static class ChatSchoolInfo
         return Enum.GetValues<InfoField>().Where(wanted.Contains).ToList();
     }
 
-    /// <summary>Model báo câu có điều hệ thống không lưu (mã "other", hoặc một trong bốn mục mới chưa có số liệu)?</summary>
+    /// <summary>Model báo câu có điều hệ thống không lưu (mã "other")?</summary>
     public static bool ModelSaysUnstored(IEnumerable<string> codes) => codes.Any(UnstoredCodes.Contains);
 
     /// <summary>Dữ liệu so sánh: Question là câu hỏi, Schools là tên các trường như học sinh gõ, Fields là mã mục model trả, KbAnswer là câu tạm của advisor.</summary>
@@ -451,6 +465,14 @@ public static class ChatSchoolInfo
                 return s.Extra?.SatSubmitPct is { } submit ? Pct(submit) : none;
             case InfoField.IntlAcceptance:
                 return s.Admission.IntlAcceptRate is { } intl ? Pct(intl) : none;
+            case InfoField.Housing:
+                return HousingShort(s.Campus) ?? none;
+            case InfoField.StudentFacultyRatio:
+                return s.Campus?.StudentFacultyRatio is { } ratio ? $"{ratio}:1" : none;
+            case InfoField.StudentActivities:
+                return s.Campus is { Activities.Count: > 0 } act ? $"{act.Activities.Count} loại hoạt động" : none;
+            case InfoField.CampusSetting:
+                return s.Campus?.Setting is { } setting ? SettingText(setting) : none;
             default:
                 return none;
         }
@@ -479,6 +501,10 @@ public static class ChatSchoolInfo
         InfoField.SatRange => "SAT 25%–75%",
         InfoField.SatSubmitRate => "Tỷ lệ nộp SAT",
         InfoField.IntlAcceptance => "Tỷ lệ nhận du học sinh",
+        InfoField.Housing => "Nhà ở",
+        InfoField.StudentFacultyRatio => "Sinh viên trên giảng viên",
+        InfoField.StudentActivities => "Hoạt động sinh viên",
+        InfoField.CampusSetting => "Khuôn viên",
         _ => field.ToString(),
     };
 
@@ -862,9 +888,93 @@ public static class ChatSchoolInfo
                 return $"Tỷ lệ nhận riêng của du học sinh khoảng {Pct(intl)}"
                     + (a.AcceptRate is { } overall ? $" (tỷ lệ nhận chung khoảng {Pct(overall)})." : ".");
             }
+            case InfoField.Housing:
+                return HousingLine(s.Campus);
+            case InfoField.StudentFacultyRatio:
+                return s.Campus?.StudentFacultyRatio is { } ratio
+                    ? $"Tỷ lệ sinh viên trên giảng viên khoảng {ratio}:1 (mỗi giảng viên tương ứng khoảng {ratio} sinh viên); tỷ lệ càng thấp thì lớp thường càng nhỏ."
+                    : "Tỷ lệ sinh viên trên giảng viên: hệ thống chưa có số liệu của trường này.";
+            case InfoField.StudentActivities:
+            {
+                if (s.Campus is not { Activities.Count: > 0 } campus)
+                    return "Hoạt động sinh viên: hệ thống chưa có danh sách hoạt động của trường này.";
+                var shown = campus.Activities.Take(MaxActivities).ToList();
+                var more = campus.Activities.Count - shown.Count;
+                return $"Hoạt động sinh viên (theo dữ liệu của trường): {string.Join(", ", shown)}" + (more > 0 ? $" và {more} loại khác." : ".");
+            }
+            case InfoField.CampusSetting:
+                return s.Campus?.Setting is { } setting
+                    ? $"Khuôn viên nằm ở {SettingText(setting)}."
+                    : "Khuôn viên: hệ thống chưa có số liệu về bối cảnh khuôn viên của trường này.";
             default:
                 return null;
         }
+    }
+
+    // Đổi mã bối cảnh khuôn viên của dữ liệu ("City: Large") sang tiếng Việt. Mã lạ thì giữ nguyên chữ gốc, không đoán
+    private static string SettingText(string raw)
+    {
+        var parts = raw.Split(':', 2, StringSplitOptions.TrimEntries);
+        var size = parts.Length > 1 ? parts[1].ToLowerInvariant() : "";
+        return parts[0].ToLowerInvariant() switch
+        {
+            "city" => size switch { "large" => "thành phố lớn", "midsize" => "thành phố cỡ vừa", "small" => "thành phố nhỏ", _ => "thành phố" },
+            "suburb" => size switch
+            {
+                "large" => "vùng ngoại ô của thành phố lớn",
+                "midsize" => "vùng ngoại ô của thành phố cỡ vừa",
+                "small" => "vùng ngoại ô của thành phố nhỏ",
+                _ => "vùng ngoại ô",
+            },
+            "town" => size switch
+            {
+                "fringe" => "thị trấn gần một khu đô thị",
+                "distant" => "thị trấn cách khu đô thị khá xa",
+                "remote" => "thị trấn rất xa khu đô thị",
+                _ => "thị trấn",
+            },
+            "rural" => size switch
+            {
+                "fringe" => "vùng nông thôn gần một khu đô thị",
+                "distant" => "vùng nông thôn cách khu đô thị khá xa",
+                "remote" => "vùng nông thôn rất xa khu đô thị",
+                _ => "vùng nông thôn",
+            },
+            _ => raw,
+        };
+    }
+
+    private static string? HousingShort(SchoolCampusInfo? c)
+    {
+        if (c is null) return null;
+        var parts = new List<string>();
+        if (c.FirstYearOnCampusPct is { } fy) parts.Add($"{Pct(fy)} sinh viên năm nhất ở trong trường");
+        if (c.HousingOnlyUsd is { } cost) parts.Add($"{Money(cost)} USD/năm");
+        if (c.IntlHousing is { } intl) parts.Add(intl ? "có nhà ở cho du học sinh" : "không có nhà ở riêng cho du học sinh");
+        return parts.Count > 0 ? string.Join(", ", parts) : c.HousingTypes.Count > 0 ? $"{c.HousingTypes.Count} loại nhà ở" : null;
+    }
+
+    private static string HousingLine(SchoolCampusInfo? c)
+    {
+        var parts = new List<string>();
+        if (c is not null)
+        {
+            if (c.HousingTypes.Count > 0)
+            {
+                var shown = c.HousingTypes.Take(MaxHousingTypes).ToList();
+                var more = c.HousingTypes.Count - shown.Count;
+                parts.Add($"các loại nhà ở: {string.Join(", ", shown)}" + (more > 0 ? $" và {more} loại khác" : ""));
+            }
+            if (c.IntlHousing is { } intl)
+                parts.Add(intl ? "trường có nhà ở dành cho du học sinh" : "trường không có nhà ở riêng cho du học sinh");
+            if (c.HousingOnlyUsd is { } cost) parts.Add($"tiền nhà ở khoảng {Money(cost)} USD mỗi năm");
+            if (c.HousingDepositUsd is { } deposit) parts.Add($"tiền đặt cọc {Money(deposit)} USD");
+            if (c.FirstYearOnCampusPct is { } fy) parts.Add($"{Pct(fy)} sinh viên năm nhất ở trong trường");
+            if (c.UndergradOnCampusPct is { } ug) parts.Add($"{Pct(ug)} sinh viên đại học nói chung ở trong trường");
+        }
+        return parts.Count == 0
+            ? "Nhà ở: hệ thống chưa có số liệu về nhà ở của trường này."
+            : $"Nhà ở: {string.Join("; ", parts)}.";
     }
 
     private static string SourceLine(SchoolInfoDto s)
@@ -937,7 +1047,7 @@ public static class ChatSchoolInfo
         }
 
         if (unstoredAsked)
-            lines.Add($"Phần còn lại bạn hỏi (như ký túc xá, đời sống) hệ thống chưa lưu.{Pointer(school)}");
+            lines.Add($"Phần còn lại bạn hỏi (như việc làm, thời tiết) hệ thống chưa lưu.{Pointer(school)}");
         if (fields.Contains(InfoField.Deadline) || fields.Contains(InfoField.Cost))
             lines.Add(Verify);
         if (source.Length > 0)
@@ -948,6 +1058,13 @@ public static class ChatSchoolInfo
     // Các mục trong bản tóm tắt khi học sinh không nói rõ mục nào
     public static readonly IReadOnlyList<InfoField> SummaryFields =
         [InfoField.Location, InfoField.Cost, InfoField.Acceptance, InfoField.English, InfoField.Aid];
+
+    // Các mục thẻ "school_info" ở giao diện đã có chỗ vẽ (SchoolInfoCard.tsx)
+    private static readonly HashSet<InfoField> CardFields =
+    [
+        InfoField.Cost, InfoField.Aid, InfoField.English, InfoField.Test, InfoField.Gpa, InfoField.Acceptance,
+        InfoField.Deadline, InfoField.Outcomes, InfoField.Majors, InfoField.Ranking, InfoField.Location, InfoField.Website,
+    ];
 
     private static readonly System.Text.Json.JsonSerializerOptions WebJson = new(System.Text.Json.JsonSerializerDefaults.Web);
 
@@ -966,7 +1083,8 @@ public static class ChatSchoolInfo
             ["fields"] = new System.Text.Json.Nodes.JsonArray(
                 shown.Select(f => (System.Text.Json.Nodes.JsonNode?)System.Text.Json.Nodes.JsonValue.Create(f.ToString().ToLowerInvariant())).ToArray()),
         };
-        if (coveredText is not null)
+        // Chỉ khi thẻ vẽ được mọi mục đang hiện thì mới bảo giao diện bỏ chữ; mục thẻ chưa vẽ (v14, nhà ở, hoạt động sinh viên...) thì chữ là câu trả lời duy nhất
+        if (coveredText is not null && shown.All(CardFields.Contains))
             data["coveredText"] = coveredText;
         return new Widget(WidgetType, System.Text.Json.JsonSerializer.SerializeToElement(data));
     }

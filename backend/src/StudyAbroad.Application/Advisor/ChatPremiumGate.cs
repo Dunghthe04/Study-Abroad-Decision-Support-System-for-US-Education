@@ -121,7 +121,7 @@ public static class ChatPremiumGate
     // Hành động .NET chạy sau advisor mà chỉ gói Premium được dùng (gợi ý trường, giải thích, mô phỏng, goal-seeking)
     private static readonly IReadOnlySet<string> PremiumDispatchActions = new HashSet<string>
     {
-        ChatRecommendation.Action, ChatExplanation.Action, ChatSimulation.Action, ChatGoalSeek.Action,
+        ChatRecommendation.Action, ChatExplanation.Action, ChatSimulation.Action, ChatGoalSeek.Action, ChatFitCompare.Action,
     };
 
     /// <summary>

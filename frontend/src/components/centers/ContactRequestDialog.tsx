@@ -34,6 +34,10 @@ interface ContactRequestDialogProps {
   isVerified: boolean;
   /** Nút nhỏ (viền) dùng dưới thẻ trung tâm trong chat; mặc định là nút lớn ở trang chi tiết trung tâm. */
   compact?: boolean;
+  /** Lời nhắn điền sẵn trong form (chat điền dịch vụ và thành phố khi học sinh muốn đặt lịch). Học sinh vẫn sửa được. */
+  defaultNote?: string;
+  /** Mở form ngay khi hiện, chỉ áp dụng cho học sinh (chat: đã nói muốn đặt lịch và chỉ có một trung tâm). */
+  autoOpen?: boolean;
 }
 
 const SELECT_CLASS =
@@ -58,11 +62,19 @@ function toErrorMessage(error: unknown): string {
   return "Không gửi được yêu cầu. Vui lòng thử lại.";
 }
 
-export function ContactRequestDialog({ centerId, centerName, isVerified, compact = false }: ContactRequestDialogProps) {
+export function ContactRequestDialog({
+  centerId,
+  centerName,
+  isVerified,
+  compact = false,
+  defaultNote = "",
+  autoOpen = false,
+}: ContactRequestDialogProps) {
   const { user, isLoading } = useAuth();
   const ageBlock = useAgeBlock(AGE_FEATURES.shareWithCenter);
 
-  const [open, setOpen] = useState(false);
+  // Tự mở chỉ cho học sinh: phụ huynh còn phải chọn con nên bấm nút như thường
+  const [open, setOpen] = useState(autoOpen && user?.role === "student");
   const [isSubmitted, setIsSubmitted] = useState(false);
   // [UC-116] Học sinh dưới 16 tự gửi: lead chờ phụ huynh xác nhận qua mail
   const [waitingParent, setWaitingParent] = useState(false);
@@ -78,7 +90,7 @@ export function ContactRequestDialog({ centerId, centerName, isVerified, compact
   const [sharedFields, setSharedFields] = useState<LeadSharedField[]>(DEFAULT_SHARED_FIELDS);
   const [phone, setPhone] = useState("");
   const [studyLevel, setStudyLevel] = useState("undergraduate");
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(defaultNote);
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
 
@@ -166,7 +178,7 @@ export function ContactRequestDialog({ centerId, centerName, isVerified, compact
     setError(null);
     setSharedFields(DEFAULT_SHARED_FIELDS);
     setPhone("");
-    setNote("");
+    setNote(defaultNote);
     setConsentAccepted(false);
     setAcknowledged(false);
   };

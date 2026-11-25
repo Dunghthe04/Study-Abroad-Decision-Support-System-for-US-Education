@@ -77,6 +77,7 @@ public static class GroupReasons
     public const string NoAcceptRate = "NO_ACCEPT_RATE";          // thiếu tỉ lệ nhận nên bỏ luật theo tỉ lệ nhận
     public const string NeedTest = "NEED_TEST";                   // trường bắt buộc SAT mà học sinh chưa có điểm thi
     public const string NoAcademicData = "NO_ACADEMIC_DATA";      // thiếu cả GPA lẫn điểm thi để so sánh
+    public const string NoCostData = "NO_COST_DATA";              // thiếu học phí nên không tính được chi phí năm (UC-22 4b)
 }
 // ---- Bước 5: fit score và chọn trường ----
 

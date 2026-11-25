@@ -648,15 +648,49 @@ async def test_without_a_city_the_ai_is_told_there_is_nothing_to_say_about_it():
 
 
 @pytest.mark.parametrize("task", ["booking", "compare"])
-async def test_booking_and_comparing_are_said_not_to_be_ready_but_the_centers_are_still_suggested(task):
+async def test_booking_and_comparing_come_with_a_note_and_the_centers_are_still_suggested(task):
     llm = FakeLLM(reasons("Có luyện phỏng vấn visa."))
 
     out = await handler(llm, FakeFinder([HN])).run(ChatState(), "q", need(tasks=[task]))
 
     assert out.answer.startswith(TASK_NOTES[task] + "\n\n")
     assert "Trung tâm B" in out.answer
-    # Việc chưa làm trong chat: có nút dẫn sang trang Trung tâm (không gửi tin nhắn)
-    assert [(b.label, b.href) for b in out.quick_replies] == [("Trang Trung tâm", "/centers")]
+    assert out.quick_replies == []
+    assert out.widget is not None and out.widget.data["intent"] == task  # UC-39 4a/4b: giao diện xử lý tiếp
+
+
+async def test_booking_widget_carries_the_prefilled_note_with_service_and_city():
+    out = await handler(FakeLLM(reasons("Có luyện phỏng vấn visa.")), FakeFinder([HN])).run(
+        ChatState(), "đặt lịch luôn đi", need(tasks=["booking"])
+    )
+
+    data = out.widget.data
+    assert data["intent"] == "booking"
+    assert data["contactNote"].startswith("Em muốn đặt lịch tư vấn về ")
+    assert "TP.HCM" in data["contactNote"]
+
+
+async def test_compare_widget_has_the_intent_but_no_contact_note():
+    out = await handler(FakeLLM(reasons("Có luyện phỏng vấn visa.")), FakeFinder([HN])).run(
+        ChatState(), "so sánh hai trung tâm đầu", need(tasks=["compare"])
+    )
+
+    assert out.widget.data["intent"] == "compare"
+    assert "contactNote" not in out.widget.data
+
+
+async def test_booking_wins_when_both_are_asked():
+    out = await handler(FakeLLM(reasons("Có luyện phỏng vấn visa.")), FakeFinder([HN])).run(
+        ChatState(), "q", need(tasks=["compare", "booking"])
+    )
+
+    assert out.widget.data["intent"] == "booking"
+
+
+async def test_no_centers_means_no_intent_for_the_widget():
+    widget = centers_widget([], {}, [], "LUYEN_PHONG_VAN", "booking", "Hà Nội")
+
+    assert "intent" not in widget.data
 
 
 async def test_a_plain_search_has_no_page_button_and_the_notes_say_where_to_go():
@@ -665,7 +699,7 @@ async def test_a_plain_search_has_no_page_button_and_the_notes_say_where_to_go()
     )
 
     assert out.quick_replies == []
-    assert "Chi tiết" in TASK_NOTES["compare"] and "Liên hệ" in TASK_NOTES["booking"]
+    assert "bảng so sánh" in TASK_NOTES["compare"] and "Liên hệ" in TASK_NOTES["booking"]
     assert "không chấm hơn thua" in TASK_NOTES["compare"]
 
 

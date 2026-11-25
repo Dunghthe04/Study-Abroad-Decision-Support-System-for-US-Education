@@ -449,6 +449,27 @@ export interface SchoolCompareData {
   coveredText: string | null;
 }
 
+// ---- So sánh theo độ phù hợp với hồ sơ (UC-154; widget "fit_compare", backend: ChatFitCompare.WidgetOf).
+// status: in_list | aid | no_data | excluded. group: R | M | S | NA (null khi bị loại). total và score theo thang 0 đến 1; parts đủ năm thành phần kèm trọng số.
+export interface FitCompareSchool {
+  code: string;
+  name: string;
+  state: string | null;
+  status: "in_list" | "aid" | "no_data" | "excluded";
+  group: string | null;
+  excludeReason: string | null;
+  total: number | null;
+  parts: FitPart[];
+  why: string[];
+}
+
+export interface FitCompareData {
+  schools: FitCompareSchool[];
+  priorityAdjusted: boolean;
+  aiNote?: string | null; // nhận xét do AI viết; vắng khi AI lỗi hoặc không qua kiểm tra
+  coveredText?: string | null; // đoạn chữ thẻ đã nói đủ: giao diện bỏ đoạn đó và chỉ hiện thẻ
+}
+
 // ---- Tìm trường theo điều kiện trong chat (widget "school_search"; backend: ChatSchoolInfo.WidgetOfSearch).
 export interface SchoolSearchItem {
   code: string;

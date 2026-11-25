@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Admin.Scholarships.IAdminScholarshipService, StudyAbroad.Application.Admin.Scholarships.AdminScholarshipService>();
         services.AddScoped<StudyAbroad.Application.Scholarships.IScholarshipSearchService, StudyAbroad.Application.Scholarships.ScholarshipSearchService>();
         services.AddScoped<StudyAbroad.Application.Costs.ICostService, StudyAbroad.Application.Costs.CostService>();
+        services.AddScoped<StudyAbroad.Application.Costs.ICostParameterCatalog, StudyAbroad.Application.Costs.CostParameterCatalog>();
         services.AddScoped<StudyAbroad.Application.Admin.Settings.IGradeScaleSettingService, StudyAbroad.Application.Admin.Settings.GradeScaleSettingService>();
         services.AddScoped<StudyAbroad.Application.Admin.Settings.ICostParametersSettingService, StudyAbroad.Application.Admin.Settings.CostParametersSettingService>();
         services.AddScoped<StudyAbroad.Application.Admin.AiUsage.IAiUsageReportService, StudyAbroad.Application.Admin.AiUsage.AiUsageReportService>();   // token của các lần gọi AI cho admin

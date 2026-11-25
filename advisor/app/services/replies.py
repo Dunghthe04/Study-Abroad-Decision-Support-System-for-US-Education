@@ -85,6 +85,15 @@ RECOMMENDING = "Mình lọc danh sách trường phù hợp với hồ sơ và n
 # Tin "Đúng rồi" khi hồ sơ vừa đủ mà học sinh chưa hỏi câu tư vấn nào: đánh giá hồ sơ như trước đây
 DEFAULT_QUESTION = "Đánh giá hồ sơ của em giúp em."
 ASK_WHICH_SCHOOLS = "Bạn muốn mình giải thích trường nào? Chọn hoặc gõ tên trường ở ô bên dưới nhé."
+# UC-153 1a: hỏi cách tính điểm phù hợp mà không nêu trường. Câu cố định, không số liệu của trường nào và không con số trọng số (để khỏi lệch
+# với bảng công bố); trọng số và ngưỡng cụ thể ở trang Căn cứ tham số (UC-83)
+FIT_METHOD = (
+    "Điểm phù hợp của một trường gồm năm phần: vừa tầm học thuật (hồ sơ của bạn so với sinh viên của trường), ngân sách, "
+    "chất lượng trường (theo xếp hạng), học bổng cho du học sinh và tiếng Anh. Mỗi phần được chấm trên thang 100, nhân với "
+    "trọng số của phần đó rồi cộng lại. Điểm này chỉ dùng để sắp xếp các trường trong cùng một nhóm, không làm trường đổi nhóm. "
+    "Nếu bạn chỉnh các nút ưu tiên (chi phí thấp, học bổng, danh tiếng) thì trọng số đổi theo. "
+    "Trọng số và các ngưỡng cụ thể được công bố ở trang Căn cứ tham số."
+)
 NEXT_AFTER_SAVE = "Bạn muốn mình làm gì tiếp?"
 NEXT_AFTER_SAVE_REPLIES = [
     QuickReply(label="Gợi ý trường", value="Gợi ý trường cho em"),
@@ -173,11 +182,15 @@ CENTER_NONE_IN_CITY = (
 )
 CENTER_ELSEWHERE = "Hiện chưa có trung tâm đã xác minh ở {city}, các trung tâm dưới đây ở nơi khác:"
 CENTER_MORE = "Còn {count} trung tâm khác, bạn bấm Xem thêm để xem hết."
-# Việc model tách ra (tasks) mà hệ thống chưa làm được: nói rõ rồi vẫn gợi ý trung tâm theo dịch vụ
+# Việc model tách ra (tasks): đặt lịch và so sánh. Hệ thống không có lịch hẹn riêng (UC-39 4a): dẫn tới form liên hệ UC-42 với lời nhắn điền sẵn.
+# So sánh (UC-39 4b): chọn sẵn hai trung tâm đầu để mở bảng so sánh như UC-142. Cả hai vẫn kèm danh sách trung tâm theo dịch vụ
 CENTER_TASK_NOTES = {
-    "booking": "Lịch hẹn bạn trao đổi trực tiếp với trung tâm nhé. Bạn bấm Liên hệ trên thẻ trung tâm để gửi yêu cầu tư vấn, trung tâm sẽ phản hồi lại cho bạn. Mình gợi ý sẵn các trung tâm đã xác minh bên dưới.",
-    "compare": "Mỗi trung tâm mạnh một mảng riêng nên mình không chấm hơn thua giữa các nơi. Bạn bấm Chi tiết để xem dịch vụ và địa điểm của từng trung tâm, rồi chọn nơi hợp với mình nhé. Đây là các trung tâm đã xác minh.",
+    "booking": "Hệ thống không có lịch hẹn riêng: bạn gửi yêu cầu liên hệ, trung tâm sẽ phản hồi để hẹn lịch với bạn. Bạn bấm Liên hệ ở trung tâm muốn hẹn, lời nhắn đã điền sẵn dịch vụ và thành phố. Đây là các trung tâm đã xác minh.",
+    "compare": "Mình chọn sẵn hai trung tâm đầu để bạn mở bảng so sánh (dịch vụ, bậc học, địa điểm); bạn có thể tick thêm hoặc bỏ chọn. Bảng chỉ nêu thông tin, mình không chấm hơn thua giữa các nơi. Đây là các trung tâm đã xác minh.",
 }
+# Lời nhắn điền sẵn trong form liên hệ khi học sinh muốn đặt lịch (UC-39 4a)
+CENTER_BOOKING_NOTE = "Em muốn đặt lịch tư vấn về {label}"
+CENTER_BOOKING_NOTE_IN_CITY = "Em muốn đặt lịch tư vấn về {label} ở {city}"
 # Nút kèm câu "so sánh" và "đặt lịch": mở trang Trung tâm (bộ lọc, danh sách đầy đủ). value chỉ dùng khi nút không chuyển trang
 CENTER_PAGE_BUTTON = QuickReply(
     label="Trang Trung tâm", value="Em muốn xem trang trung tâm tư vấn", href="/centers"

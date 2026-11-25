@@ -36,6 +36,7 @@ from app.services.replies import (
     EDIT_SECTION_VALUE,
     EXPLAIN_ASK_SCHOOL,
     FILTER_TEXT,
+    FIT_METHOD,
     GOAL_SEEK_WORKING,
     GREETING_REPLY,
     GROUP_NEED_RESULTS,
@@ -389,6 +390,25 @@ SCHOOL_LIST_WORDS = (
 MAX_SUGGESTED = 6
 
 
+# Câu explain_fit hỏi cách tính điểm phù hợp ("fit score tính thế nào"), không hỏi về một trường (UC-153 1a)
+FIT_METHOD_WORDS = (
+    "tinh the nao",
+    "tinh nhu the nao",
+    "tinh nhu nao",
+    "tinh ra sao",
+    "tinh sao",
+    "tinh kieu gi",
+    "cach tinh",
+    "cong thuc",
+    "duoc tinh",
+)
+
+
+def asks_how_fit_is_computed(text: str) -> bool:
+    folded = plain(text)
+    return any(word in folded for word in FIT_METHOD_WORDS)
+
+
 def asks_for_school_list(text: str) -> bool:
     folded = plain(text)
     return any(word in folded for word in SCHOOL_LIST_WORDS)
@@ -404,16 +424,21 @@ def others_only_output(
 ) -> SkillOutput | None:
     schools = [t.strip() for t in y.entities.get("schools") or []]
     if "compare" in tasks and len(schools) >= 2:
+        # UC-154: câu so sánh theo hồ sơ ("BU hay NYU hợp với em hơn"): .NET tính nhóm và điểm phù hợp từng trường bằng công thức gợi ý.
+        # Câu so sánh số liệu (học phí, hạn nộp) không hỏi độ phù hợp đã được đổi sang câu kiến thức ở with_comparison_intent (UC-156)
         return SkillOutput(
             LOOKING_UP,
-            action="school_compare",
-            action_data={
-                "question": y.span,
-                "schools": schools,
-                "fields": info_fields(y.entities),
-                "kb_answer": LOOKING_UP,
-            },
+            action="school_fit_compare",
+            action_data={"question": y.span, "schools": schools, "kb_answer": LOOKING_UP},
         )
+    # UC-153 1a: hỏi cách tính điểm phù hợp, không nêu trường: giải thích cách tính, dẫn tới trang tham số, không dùng số của trường nào
+    if (
+        "explain_fit" in tasks
+        and not school_list_words
+        and not single_school(y.entities)
+        and asks_how_fit_is_computed(y.span)
+    ):
+        return SkillOutput(FIT_METHOD, quick_replies=[ABOUT_SYSTEM_PAGE_BUTTON.model_copy()])
     if not school_list_words and not single_school(y.entities):
         # Ô chọn trường (chọn xong .NET giải thích trường đó), hiện sẵn vài trường đầu danh sách gợi ý nếu có
         suggested = [s.code for s in (state.schools if state else None) or []][:MAX_SUGGESTED]
@@ -461,6 +486,14 @@ class GeneratedAdviceBranch:
             asks_for_school_list(question) or others_only or "school_list" in (tasks or [])
         )
         if others_only and "school_list" not in tasks:
+            # UC-154: so sánh theo hồ sơ cần hồ sơ đủ như gợi ý trường (UC-22 E1): thiếu thì hỏi tiếp, hồ sơ xong thì trả lời lại đúng câu này
+            if (
+                "compare" in tasks
+                and len([s for s in y.entities.get("schools") or [] if str(s).strip()]) >= 2
+            ):
+                asked = ask_missing_profile(state, y, REQUIRED_B4)
+                if asked is not None:
+                    return asked
             out = others_only_output(y, tasks, asks_for_school_list(question), state)
             if out is not None:
                 return out
