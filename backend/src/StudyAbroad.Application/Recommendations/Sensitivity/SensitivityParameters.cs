@@ -28,7 +28,6 @@ public static class SensitivityParameters
         G("upper_cut", "Ngưỡng Vừa sức / An toàn", t => t.Grouping.UpperCut, (g, v) => g with { UpperCut = v }),
         G("always_reach_rate", "Tỉ lệ nhận luôn Khó vào", t => t.Grouping.AlwaysReachRate, (g, v) => g with { AlwaysReachRate = v }),
         G("safety_min_rate", "Tỉ lệ nhận tối thiểu để An toàn", t => t.Grouping.SafetyMinRate, (g, v) => g with { SafetyMinRate = v }),
-        G("intl_ratio_cut", "Ngưỡng tỉ lệ du học sinh / chung", t => t.Grouping.IntlRatioCut, (g, v) => g with { IntlRatioCut = v }),
         G("low_submit_pct", "Mốc trường ít sinh viên nộp SAT", t => t.Grouping.LowSubmitPct, (g, v) => g with { LowSubmitPct = v }),
         G("low_submit_factor", "Hệ số giảm trọng số SAT khi ít nộp", t => t.Grouping.LowSubmitFactor, (g, v) => g with { LowSubmitFactor = v }),
         G("ec_step", "Hiệu chỉnh mỗi bậc ngoại khóa", t => t.Grouping.EcStep, (g, v) => g with { EcStep = v }),

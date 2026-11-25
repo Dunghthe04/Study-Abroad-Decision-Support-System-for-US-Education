@@ -63,6 +63,8 @@ export interface ScoredSchool {
   r: number | null;
   acceptRate?: number | null; // tỷ lệ nhận chung 0–1; lần gợi ý cũ chưa có
   intlAcceptRate?: number | null; // tỷ lệ nhận du học sinh 0–1
+  effectiveRate?: number | null; // tỷ lệ dùng cho luật chặn (UC-22): du học sinh nếu có, không thì chung; lần gợi ý cũ chưa có
+  rateSource?: "international" | "overall" | null;
   gpaTopShare?: number | null; // tỷ lệ sinh viên trúng tuyển có GPA đúng 4,0 (0–1)
   aidAvg?: number | null; // học bổng trung bình (USD/năm) của người được nhận; không phải mức bạn chắc chắn nhận
   aidPolicy?: string | null; // none | need_only | merit_only | need_and_merit
@@ -274,14 +276,16 @@ export interface GoalPosition {
 }
 
 // Số liệu tuyển sinh dùng trong các luật chặn (tỉ lệ là 0..1) và các mốc của luật, để lời giải thích nói được con số cụ thể.
-// intlRatio = intlAcceptRate / acceptRate; dưới alwaysReachRate luôn Khó vào; dưới safetyMinRate không được An toàn; intlRatio dưới intlRatioCut thì hạ một nhóm.
+// effectiveRate là tỉ lệ dùng cho các luật chặn (UC-22): của du học sinh nếu có, không thì chung; rateSource nói đó là số nào.
+// Dưới alwaysReachRate luôn Khó vào; dưới safetyMinRate không được An toàn. intlRatio = intlAcceptRate / acceptRate chỉ để tham khảo.
 export interface GoalSchoolStats {
   acceptRate: number | null;
   intlAcceptRate: number | null;
   intlRatio: number | null;
   alwaysReachRate: number;
   safetyMinRate: number;
-  intlRatioCut: number;
+  effectiveRate?: number | null;
+  rateSource?: "international" | "overall" | null;
 }
 
 // Kết quả cho MỘT mức đích (nhóm cao hơn nhóm hiện tại): target M | S
@@ -325,7 +329,7 @@ export interface SchoolGoalResult {
 // Một dòng "bạn so với trường", mỗi dòng là một tiêu chí bộ chấm nhóm dùng. factor: sat | act | gpa | ec | accept.
 // status: sat/act/gpa: below | within | above | unknown (trường chưa công bố) | no_profile (hồ sơ chưa có);
 //   ec: below | within | above so với bậc trung bình 3, unknown khi trường không xét ngoại khóa;
-//   accept: always_reach (nhận dưới 15%, luôn Khó vào) | downgrade (nhận du học sinh ít, bị hạ một nhóm) | capped (nhận dưới 50%, tối đa Vừa sức) | ok | unknown.
+//   accept: always_reach (nhận dưới 15%, luôn Khó vào) | capped (nhận dưới 50%, tối đa Vừa sức) | ok | unknown.
 // student: số của học sinh (ec: bậc 1 đến 5). low, high: khoảng của trường (GPA chỉ có trung bình nên low = high);
 //   riêng accept: low = tỉ lệ nhận chung, high = tỉ lệ nhận du học sinh (0..1).
 // gap: âm là thiếu, dương là vượt, 0 là trong khoảng; ec: bậc trừ 3; accept: du học sinh chia chung.

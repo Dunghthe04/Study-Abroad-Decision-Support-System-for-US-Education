@@ -2067,7 +2067,8 @@ public class RecommendationServiceTests
         var stats = (await service.GoalSeekAsync(profile.UserId, "S", null, default)).Stats!;
 
         Assert.Equal(0.60m, stats.AcceptRate);
-        Assert.Equal((0.15, 0.5, 0.5), (stats.AlwaysReachRate, stats.SafetyMinRate, stats.IntlRatioCut));
+        Assert.Equal((0.15, 0.5), (stats.AlwaysReachRate, stats.SafetyMinRate));
+        Assert.Equal((0.60m, "overall"), (stats.EffectiveRate, stats.RateSource));   // trường mẫu chưa có tỉ lệ du học sinh: luật dùng tỉ lệ chung
     }
 
     // Trường bị loại: vẫn có nhóm học thuật ("nếu đủ điều kiện") và các mức đích, kèm lý do bị loại

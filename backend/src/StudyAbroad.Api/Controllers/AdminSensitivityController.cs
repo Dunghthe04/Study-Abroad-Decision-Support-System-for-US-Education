@@ -16,7 +16,7 @@ namespace StudyAbroad.Api.Controllers;
 [Route("api/v1/admin/sensitivity")]
 public class AdminSensitivityController(ISensitivityRunService sensitivity) : ControllerBase
 {
-    /// <summary>Danh mục 14 tham số được phép phân tích, kèm giá trị đang chạy (để giao diện hiện ô chọn).</summary>
+    /// <summary>Danh mục 13 tham số được phép phân tích, kèm giá trị đang chạy (để giao diện hiện ô chọn).</summary>
     [HttpGet("parameters")]
     public ActionResult<IReadOnlyList<SensitivityParameterInfo>> GetParameters() => Ok(sensitivity.Parameters());
 

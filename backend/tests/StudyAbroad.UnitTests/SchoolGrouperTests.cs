@@ -106,43 +106,67 @@ public class SchoolGrouperTests
         Assert.Equal(SchoolGroup.Safety, Classify(0.9, pg: 0.9, ps: null, rate: 0.70).Group);
     }
 
-    // ---------------------------------------------------------------- hạ nhóm du học sinh
+    // ---------------------------------------------------------------- UC-22: luật tỉ lệ nhận dùng tỉ lệ du học sinh nếu có
 
     [Fact]
-    public void IntlAcceptanceFarBelowOverall_DropsMatchToReach()
+    public void IntlRateBelowTheFloor_AlwaysReach_EvenWhenTheOverallRateIsHigh()
     {
-        // r_qt / r = 0,08 / 0,20 = 0,4 < 0,5
-        var d = Classify(0.5, rate: 0.20, intl: 0.08);
+        // tỉ lệ chung 30% (không chạm luật nào) nhưng du học sinh chỉ 10% < 15%
+        var d = Classify(0.9, 0.9, 0.9, rate: 0.30, intl: 0.10);
 
         Assert.Equal(SchoolGroup.Reach, d.Group);
-        Assert.Contains(GroupReasons.IntlDowngrade, d.Reasons);
+        Assert.Contains(GroupReasons.LowAcceptRate, d.Reasons);
     }
 
     [Fact]
-    public void IntlAcceptanceFarBelowOverall_DropsSafetyToMatch()
+    public void IntlRateBelowHalf_BlocksSafety_EvenWhenTheOverallRateIsHigh()
     {
-        Assert.Equal(SchoolGroup.Match, Classify(0.9, 0.9, 0.9, rate: 0.70, intl: 0.20).Group);
+        var d = Classify(0.9, 0.9, 0.9, rate: 0.70, intl: 0.20);
+
+        Assert.Equal(SchoolGroup.Match, d.Group);
+        Assert.Contains(GroupReasons.CappedSelective, d.Reasons);
     }
 
     [Fact]
-    public void IntlRatioExactlyHalf_DoesNotDrop()
+    public void IntlRateAboveTheLimits_FreesASchoolWhoseOverallRateIsLow()
     {
-        Assert.Equal(SchoolGroup.Match, Classify(0.5, rate: 0.20, intl: 0.10).Group);
+        // tỉ lệ chung 20% sẽ chặn An toàn, nhưng du học sinh nhận 60%
+        Assert.Equal(SchoolGroup.Safety, Classify(0.9, 0.9, 0.9, rate: 0.20, intl: 0.60).Group);
     }
 
     [Fact]
-    public void ReachCannotDropFurther()
+    public void WithoutAnIntlRate_TheOverallRateDecides()
     {
-        var d = Classify(0.1, 0.1, 0.1, rate: 0.30, intl: 0.01);
-
-        Assert.Equal(SchoolGroup.Reach, d.Group);
-        Assert.DoesNotContain(GroupReasons.IntlDowngrade, d.Reasons);
+        Assert.Equal(SchoolGroup.Match, Classify(0.9, 0.9, 0.9, rate: 0.20, intl: null).Group);
+        Assert.Equal(SchoolGroup.Safety, Classify(0.9, 0.9, 0.9, rate: 0.70, intl: null).Group);
     }
 
     [Fact]
-    public void WithoutIntlRate_ThereIsNoDowngrade()
+    public void ThereIsNoMoreDowngradeByTheRatioOfTheTwoRates()
     {
-        Assert.Equal(SchoolGroup.Match, Classify(0.5, rate: 0.20, intl: null).Group);
+        // Trước đây tỉ lệ du học sinh / chung = 0,33 < 0,5 hạ Vừa sức xuống Khó vào; nay chỉ xét tỉ lệ du học sinh (20% >= 15%) nên giữ Vừa sức
+        var d = Classify(0.5, rate: 0.60, intl: 0.20);
+
+        Assert.Equal(SchoolGroup.Match, d.Group);
+        Assert.Equal([GroupReasons.InRange], d.Reasons);
+    }
+
+    [Fact]
+    public void EffectiveRate_IsTheIntlRateIfThereIsOne_ElseTheOverall()
+    {
+        Assert.Equal(0.1, SchoolGrouper.EffectiveRate(0.5, 0.1));
+        Assert.Equal(0.5, SchoolGrouper.EffectiveRate(0.5, null));
+        Assert.Equal(0.1, SchoolGrouper.EffectiveRate(null, 0.1));
+        Assert.Null(SchoolGrouper.EffectiveRate(null, null));
+    }
+
+    [Fact]
+    public void NoRateAtAll_IsReportedAndTheRateRulesAreSkipped()
+    {
+        var d = Classify(0.9, 0.9, 0.9, rate: null, intl: null);
+
+        Assert.Contains(GroupReasons.NoAcceptRate, d.Reasons);
+        Assert.Equal(SchoolGroup.Safety, d.Group);
     }
 
     [Fact]
@@ -157,9 +181,9 @@ public class SchoolGrouperTests
 
     [Theory]
     [InlineData("P", 0.70, 0.90, 0.80, 0.60, 0.54, SchoolGroup.Safety)]
-    [InlineData("Q", 0.70, 0.90, 0.80, 0.40, 0.36, SchoolGroup.Match)]     // r < 50%
+    [InlineData("Q", 0.70, 0.90, 0.80, 0.40, 0.36, SchoolGroup.Match)]     // du học sinh nhận 36% < 50%: không được An toàn
     [InlineData("R", 0.20, 0.95, 0.78, 0.70, 0.63, SchoolGroup.Match)]     // GPA yếu bị SAT che
-    [InlineData("S", 0.50, 0.50, 0.50, 0.20, 0.08, SchoolGroup.Reach)]     // r_qt / r = 0,4: hạ nhóm
+    [InlineData("S", 0.50, 0.50, 0.50, 0.20, 0.08, SchoolGroup.Reach)]     // du học sinh nhận 8% < 15%: luôn Khó vào
     [InlineData("T", 0.90, 0.90, 0.90, 0.10, 0.09, SchoolGroup.Reach)]     // r < 15%
     public void WorkedExamples_FromTheDocument(
         string school, double pg, double ps, double pAdj, double rate, double intl, SchoolGroup expected)

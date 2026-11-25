@@ -122,27 +122,35 @@ public class GoalComparisonTests
     // ---------------------------------------------------------------- tỉ lệ nhận
 
     [Fact]
-    public void FewInternationalAdmits_IsMarkedAsDowngradeWhenTheGrouperReallyDowngraded()
+    public void FewInternationalAdmits_IsCappedBecauseTheLawLooksAtTheInternationalRate()
     {
-        // Oklahoma State: nhận chung 73,7%, du học sinh 18,4% (bằng 25%): hạ Vừa sức xuống Khó vào
+        // Oklahoma State: nhận chung 73,7%, du học sinh 18,4%: luật tỉ lệ nhận xét tỉ lệ du học sinh (UC-22), dưới 50% nên không bao giờ là An toàn
         var student = new StudentAcademics(3.7m, 1300, null);
         var school = School(sat25: 1060, sat75: 1250, accept: 0.737m, intl: 0.184m);
 
         var accept = Row(Rows(student, school), "accept");
 
-        Assert.Equal("downgrade", accept.Status);
+        Assert.Equal("capped", accept.Status);
         Assert.Equal((0.737m, 0.184m), (accept.Low, accept.High));
         Assert.Equal(0.25m, Math.Round(accept.Gap!.Value, 2));
     }
 
     [Fact]
-    public void FewInternationalAdmits_IsOkWhenTheStudentIsAlreadyReachAnyway()
+    public void TheAcceptRateRule_IsAPropertyOfTheSchool_SoItIsMarkedEvenForAWeakStudent()
     {
-        // Học sinh đã ở Khó vào theo điểm: luật hạ nhóm không đổi gì nên không ghi là hạ
         var student = new StudentAcademics(2.5m, 900, null);
         var school = School(sat25: 1060, sat75: 1250, accept: 0.737m, intl: 0.184m);
 
-        Assert.Equal("ok", Row(Rows(student, school), "accept").Status);
+        Assert.Equal("capped", Row(Rows(student, school), "accept").Status);
+    }
+
+    [Fact]
+    public void ALowOverallRate_IsNotCappedWhenTheInternationalRateIsHighEnough()
+    {
+        // Chung 20% sẽ chặn An toàn, nhưng du học sinh nhận 60%: luật xét tỉ lệ du học sinh nên không chặn
+        var accept = Row(Rows(new StudentAcademics(3.7m, 1300, null), School(accept: 0.20m, intl: 0.60m)), "accept");
+
+        Assert.Equal("ok", accept.Status);
     }
 
     [Fact]
@@ -169,7 +177,7 @@ public class GoalComparisonTests
     [Fact]
     public void ASchoolAcceptingHalfOrMore_IsNotCapped()
     {
-        var accept = Row(Rows(new StudentAcademics(3.7m, 1300, null), School(accept: 0.5m, intl: 0.45m)), "accept");
+        var accept = Row(Rows(new StudentAcademics(3.7m, 1300, null), School(accept: 0.5m, intl: 0.55m)), "accept");
 
         Assert.Equal("ok", accept.Status);
     }

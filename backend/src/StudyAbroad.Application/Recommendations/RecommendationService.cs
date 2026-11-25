@@ -91,7 +91,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     private static readonly int[] BalancedPref = [2, 2, 2];
     // Mỗi khối giữ tối đa chừng này trường (thầy chốt)
     public const int MaxPerBlock = 4;
-    public const string AlgorithmVersion = "percentile-fit-2";   // 2: UC-22 4a trừ hỗ trợ trung bình, thiếu hỗ trợ thì loại; 4b thiếu học phí thì vào "Chưa xếp được nhóm"
+    public const string AlgorithmVersion = "percentile-fit-3";   // 2: UC-22 4a trừ hỗ trợ trung bình, thiếu hỗ trợ thì loại; 4b thiếu học phí thì vào "Chưa xếp được nhóm". 3: luật tỉ lệ nhận dùng tỉ lệ du học sinh nếu có, bỏ luật hạ một nhóm
     // Bắt đầu bằng "Hồ sơ" để controller trả 400 kèm câu này
     public const string MissingScholarshipMessage = "Hồ sơ chưa chọn mức cần học bổng, cần chọn trước khi gợi ý trường.";
     public const string MissingMajorMessage = "Hồ sơ chưa chọn ngành, cần chọn ngành trước khi gợi ý trường.";
@@ -704,6 +704,9 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             ps = Scale100(grade.Ps),
             adj = grade.P is double p && grade.PAdjusted is double pa ? Math.Round((pa - p) * 100, 1) : (double?)null,
             r = IntlRatio(school),
+            // UC-22: tỉ lệ nhận dùng cho luật chặn (của du học sinh nếu có, không thì chung) và nguồn của nó, để thẻ nói đúng con số
+            effectiveRate = Round(SchoolGrouper.EffectiveRate(ToDouble(AcceptRate(school)), ToDouble(IntlAcceptRate(school)))),
+            rateSource = IntlAcceptRate(school) is not null ? "international" : "overall",
             acceptRate = Round(ToDouble(AcceptRate(school))),
             // Khoảng SAT tổng của sinh viên trúng tuyển (đã loại mốc sai thang) và tỉ lệ nhận du học sinh, để thẻ trường nói bằng số cụ thể
             sat25 = SatScale.Clean(school.Offering.Sat25, school.Offering.Sat75).P25,
@@ -745,7 +748,6 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             why.Add(ps >= 0.75 ? "SAT_ABOVE" : ps >= 0.25 ? "SAT_IN_RANGE" : "SAT_BELOW");
         if (item.Filter.Outcome == FilterOutcome.AidBlock) why.Add("NEED_AID");
         else if (TotalCost(item.School.Offering) is not null) why.Add("BUDGET_OK");
-        if (grade.Reasons.Contains(GroupReasons.IntlDowngrade)) why.Add("INTL_LOW");
         if (grade.P is double p && grade.PAdjusted is double pa)
         {
             if (pa - p > 0.005) why.Add("EC_PLUS");

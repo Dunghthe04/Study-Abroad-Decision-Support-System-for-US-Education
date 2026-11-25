@@ -176,11 +176,11 @@ public class SensitivityApiTests
     // ------------------------------------------------------------ danh mục và JSON
 
     [Fact]
-    public void Parameters_ListAll14_WithTheirRunningValues()
+    public void Parameters_ListAll13_WithTheirRunningValues()
     {
         var (service, _, _) = Setup();
         var list = service.Parameters();
-        Assert.Equal(14, list.Count);
+        Assert.Equal(13, list.Count);   // bỏ ngưỡng intl_ratio_cut cùng luật hạ nhóm (UC-22)
         Assert.Equal(0.75, list.Single(p => p.Key == "upper_cut").Current);
         Assert.Equal(SensitivityKind.FitWeight, list.Single(p => p.Key == "fit_budget").Kind);
     }

@@ -123,18 +123,18 @@ public static class ChatGoalSeek
     private static string Pct(decimal fraction) =>
         (fraction * 100).ToString("0.#", CultureInfo.GetCultureInfo("vi-VN")) + "%";
 
+    // "của du học sinh" khi luật dùng tỉ lệ nhận riêng của du học sinh, "chung" khi trường chưa có số riêng
+    private static string RateWho(GoalSchoolStats? stats) => stats?.RateSource == "international" ? "du học sinh" : "hồ sơ";
+
     private static string Reason(string code, GoalSchoolStats? stats = null) => code switch
     {
-        GroupReasons.LowAcceptRate => stats?.AcceptRate is { } rate
-            ? $"trường chỉ nhận {Pct(rate)} hồ sơ, dưới mốc {Pct((decimal)stats.AlwaysReachRate)}, nên luôn xếp Khó vào, điểm cao đến đâu cũng không đổi nhóm"
+        GroupReasons.LowAcceptRate => (stats?.EffectiveRate ?? stats?.AcceptRate) is { } rate
+            ? $"trường chỉ nhận {Pct(rate)} {RateWho(stats)}, dưới mốc {Pct((decimal)stats!.AlwaysReachRate)}, nên luôn xếp Khó vào, điểm cao đến đâu cũng không đổi nhóm"
             : "trường chỉ nhận dưới 15% hồ sơ nên luôn xếp Khó vào, điểm cao đến đâu cũng không đổi nhóm",
-        GroupReasons.CappedSelective => stats?.AcceptRate is { } rate2
-            ? $"trường nhận {Pct(rate2)} hồ sơ, dưới mốc {Pct((decimal)stats.SafetyMinRate)}, nên chỉ tối đa là Vừa sức"
+        GroupReasons.CappedSelective => (stats?.EffectiveRate ?? stats?.AcceptRate) is { } rate2
+            ? $"trường nhận {Pct(rate2)} {RateWho(stats)}, dưới mốc {Pct((decimal)stats!.SafetyMinRate)}, nên chỉ tối đa là Vừa sức"
             : "trường nhận dưới 50% hồ sơ nên chỉ tối đa là Vừa sức",
         GroupReasons.CappedWeakMetric => "một chỉ số của bạn còn thấp hơn mốc 25% của trường nên chưa tính là An toàn",
-        GroupReasons.IntlDowngrade => stats is { AcceptRate: { } all, IntlAcceptRate: { } intl, IntlRatio: { } ratio }
-            ? $"trường nhận du học sinh {Pct(intl)} trong khi tỷ lệ nhận chung là {Pct(all)}, chỉ bằng {Pct((decimal)ratio)} mức chung và dưới mốc {Pct((decimal)stats.IntlRatioCut)}, nên bị hạ một nhóm"
-            : "trường nhận du học sinh ít hơn hẳn tỷ lệ chung nên bị hạ một nhóm",
         GroupReasons.NeedTest => "trường bắt buộc nộp điểm SAT hoặc ACT mà hồ sơ của bạn chưa có",
         GroupReasons.NoAcademicData => "trường chưa có đủ số liệu học thuật để so sánh",
         _ => "",
@@ -216,7 +216,7 @@ public static class ChatGoalSeek
 
     // Lý do xếp nhóm mà học sinh không thay đổi được (luật của trường áp cho mọi hồ sơ) hay có thể thay đổi
     private static bool IsSchoolRule(string code) =>
-        code is GroupReasons.LowAcceptRate or GroupReasons.CappedSelective or GroupReasons.IntlDowngrade;
+        code is GroupReasons.LowAcceptRate or GroupReasons.CappedSelective;
 
     // "Vì sao không lên được nhóm X": các lý do xếp nhóm của nhóm đích, nói thẳng điều nào là luật của trường (không phải do hồ sơ yếu)
     private static List<string> WhyNot(SchoolGoalResult r)
@@ -272,9 +272,6 @@ public static class ChatGoalSeek
                     break;
                 case "ec" when row.Status == "above":
                     items.Add($"Ngoại khóa bậc {(int)(row.Student ?? 0)}/5: cao hơn mức trung bình (bậc 3), cộng thêm vào điểm vị trí của bạn");
-                    break;
-                case "accept" when row.Status == "downgrade" && row is { Low: { } rate, High: { } intl, Gap: { } ratio }:
-                    items.Add($"Tỷ lệ nhận du học sinh {Pct(intl)} (chung {Pct(rate)}), chỉ bằng {Pct(ratio)} mức chung, dưới một nửa nên hệ thống hạ trường xuống một nhóm. Đây là luật áp cho mọi hồ sơ, bạn không thể thay đổi");
                     break;
             }
         }

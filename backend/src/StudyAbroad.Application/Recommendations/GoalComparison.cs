@@ -5,7 +5,7 @@ namespace StudyAbroad.Application.Recommendations;
 // Status:
 //   sat, act, gpa: below | within | above | unknown (trường chưa công bố) | no_profile (hồ sơ chưa có)
 //   ec: below | within | above so với bậc trung bình (3); unknown khi trường không xét ngoại khóa
-//   accept: always_reach (tỉ lệ nhận dưới mốc luôn Khó vào) | downgrade (nhận du học sinh ít, bị hạ một nhóm) |
+//   accept: always_reach (tỉ lệ nhận dưới mốc luôn Khó vào) |
 //           capped (nhận dưới 50% hồ sơ nên tối đa là Vừa sức, không bao giờ An toàn) | ok | unknown
 // Student: số của học sinh (ec: bậc 1 đến 5). Low, High: khoảng của trường (GPA chỉ có trung bình nên Low = High);
 //   riêng accept: Low = tỉ lệ nhận chung, High = tỉ lệ nhận du học sinh (0..1).
@@ -23,7 +23,7 @@ public static class GoalComparison
     // GPA chỉ có trung bình của trường: lệch trong khoảng này coi là ngang trung bình
     public const decimal GpaTolerance = 0.05m;
 
-    // grade: kết quả chấm hiện tại, để biết luật hạ nhóm theo tỉ lệ nhận có thật sự áp dụng cho học sinh này không
+    // grade: kết quả chấm hiện tại, để biết luật tỉ lệ nhận có thật sự áp dụng cho học sinh này không
     public static IReadOnlyList<GoalCompareRow> Rows(StudentAcademics student, SchoolAcademics school, SchoolGrade grade)
     {
         var rows = new List<GoalCompareRow>();
@@ -81,17 +81,17 @@ public static class GoalComparison
             "ec", status, tier, AcademicBlend.NeutralEcTier, AcademicBlend.NeutralEcTier, tier - AcademicBlend.NeutralEcTier, null, importance);
     }
 
-    // Tỉ lệ nhận: luật "dưới 15% luôn Khó vào" và luật "du học sinh nhận ít hơn một nửa mức chung thì hạ một nhóm"
+    // Tỉ lệ nhận: luật "dưới 15% luôn Khó vào" và luật "dưới 50% không được An toàn", xét tỉ lệ du học sinh nếu có, không thì tỉ lệ chung (UC-22)
     private static GoalCompareRow Acceptance(SchoolAcademics school, SchoolGrade grade)
     {
         var rate = school.AcceptanceRate;
         var intl = school.IntlAcceptanceRate;
         decimal? ratio = rate is > 0 && intl is not null ? Math.Round(intl.Value / rate.Value, 3) : null;
+        var effective = intl ?? rate;
         string status;
         if (grade.Reasons.Contains(GroupReasons.LowAcceptRate)) status = "always_reach";
-        else if (grade.Reasons.Contains(GroupReasons.IntlDowngrade)) status = "downgrade";
-        else if (rate < (decimal)new GroupingOptions().SafetyMinRate) status = "capped";
-        else if (rate is null) status = "unknown";
+        else if (effective is null) status = "unknown";
+        else if (effective < (decimal)new GroupingOptions().SafetyMinRate) status = "capped";
         else status = "ok";
         return new GoalCompareRow("accept", status, null, rate, intl, ratio);
     }

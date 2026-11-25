@@ -269,8 +269,11 @@ const KEY_REASON_ORDER = ["LOW_RATE", "INTL_LOW", "RATE_CAP", "WEAK_CAP", "NEED_
 function keyReasons(why: string[], school: ScoredSchool | undefined): string[] {
     const rate = school?.acceptRate ?? null;
     const intl = school?.intlAcceptRate ?? null;
+    // UC-22: luật dùng tỉ lệ du học sinh nếu có; lần gợi ý cũ chưa có effectiveRate thì dùng tỉ lệ chung
+    const ruleRate = school?.effectiveRate ?? rate;
+    const who = school?.rateSource === "international" ? "du học sinh" : "hồ sơ";
     const text = (code: string): string => {
-        if (code === "LOW_RATE" && rate != null) return `Trường chỉ nhận ${pct(rate)} hồ sơ nên luôn là Khó vào, điểm cao đến đâu cũng vậy`;
+        if (code === "LOW_RATE" && ruleRate != null) return `Trường chỉ nhận ${pct(ruleRate)} ${who} nên luôn là Khó vào, điểm cao đến đâu cũng vậy`;
         if (code === "INTL_LOW" && rate != null && intl != null)
             return `Trường nhận du học sinh ít: ${pct(intl)} so với ${pct(rate)} chung, nên bị hạ một nhóm`;
         if (code === "NEED_AID") return "Vượt ngân sách, chỉ đi được nếu có học bổng lớn";

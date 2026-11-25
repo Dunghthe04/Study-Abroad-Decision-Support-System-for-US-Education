@@ -31,12 +31,12 @@ public record GoalEnglishDto(decimal? MinIelts, decimal? MinToefl, decimal? MinD
 public record GoalPosition(string Status, string Group, string? ExcludeReason, bool NeedAid);
 
 // Số liệu tuyển sinh dùng trong các luật chặn, để lời giải thích nói được con số cụ thể thay vì "ít hơn hẳn".
-// AcceptRate: tỉ lệ nhận chung (0..1). IntlAcceptRate: tỉ lệ nhận du học sinh (0..1). IntlRatio: IntlAcceptRate / AcceptRate.
-// Các mốc lấy từ chính cấu hình xếp nhóm: dưới AlwaysReachRate luôn Khó vào; dưới SafetyMinRate không được An toàn;
-// IntlRatio dưới IntlRatioCut thì hạ một nhóm.
+// AcceptRate: tỉ lệ nhận chung (0..1). IntlAcceptRate: tỉ lệ nhận du học sinh (0..1). IntlRatio: IntlAcceptRate / AcceptRate (chỉ để tham khảo).
+// EffectiveRate: tỉ lệ dùng cho các luật chặn, của du học sinh nếu có, không thì chung; RateSource: "international" | "overall" (UC-22).
+// Các mốc lấy từ chính cấu hình xếp nhóm: EffectiveRate dưới AlwaysReachRate luôn Khó vào; dưới SafetyMinRate không được An toàn.
 public record GoalSchoolStats(
     decimal? AcceptRate, decimal? IntlAcceptRate, double? IntlRatio,
-    double AlwaysReachRate, double SafetyMinRate, double IntlRatioCut);
+    double AlwaysReachRate, double SafetyMinRate, decimal? EffectiveRate = null, string? RateSource = null);
 
 // Kết quả cho MỘT mức đích (nhóm cao hơn nhóm hiện tại). Target: M | S.
 // Outcome: reachable | blocked | no_data (không có already_reached vì mức đích luôn cao hơn nhóm hiện tại).
@@ -191,8 +191,10 @@ public partial class RecommendationService
     private static GoalSchoolStats StatsOf(RecommendSchoolInput school)
     {
         var o = new GroupingOptions();
+        var intl = IntlAcceptRate(school);
         return new GoalSchoolStats(
-            AcceptRate(school), IntlAcceptRate(school), IntlRatio(school), o.AlwaysReachRate, o.SafetyMinRate, o.IntlRatioCut);
+            AcceptRate(school), intl, IntlRatio(school), o.AlwaysReachRate, o.SafetyMinRate,
+            intl ?? AcceptRate(school), intl is not null ? "international" : "overall");
     }
 
     // Vị trí của trường với hồ sơ thật: có trong danh sách hay bị loại (và vì sao), kèm nhóm học thuật

@@ -158,9 +158,9 @@ public class GoalSeekerTests
     }
 
     [Fact]
-    public void TheInternationalDowngrade_IsPartOfWhatTheStudentNeeds()
+    public void TheInternationalRate_DecidesTheSelectivityRules_SoSafetyIsOutOfReach()
     {
-        // Du học sinh khó vào hơn nhiều so với tỉ lệ chung: Vừa sức cần điểm của An toàn rồi bị hạ một bậc
+        // Du học sinh chỉ nhận 20% (dưới 50%) dù tỉ lệ chung 60%: điểm cao đến đâu cũng chỉ tới Vừa sức, không tới An toàn
         var school = School(rate: 0.60m, intl: 0.20m);
         var student = Student();
 
@@ -170,9 +170,8 @@ public class GoalSeekerTests
         Assert.Equal(GoalOutcome.Reachable, toMatch.Outcome);
         var applied = SchoolGrouper.Grade(Apply(student, toMatch.Cheapest!), school);
         Assert.Equal(SchoolGroup.Match, applied.Group);
-        Assert.Contains(GroupReasons.IntlDowngrade, applied.Reasons);
-        Assert.Equal(GoalOutcome.Blocked, toSafety.Outcome);   // điểm cao đến đâu cũng chỉ tới Vừa sức
-        Assert.Contains(GroupReasons.IntlDowngrade, toSafety.Reasons);
+        Assert.Equal(GoalOutcome.Blocked, toSafety.Outcome);
+        Assert.Contains(GroupReasons.CappedSelective, toSafety.Reasons);
     }
 
     // ---------------------------------------------------------------- thiếu dữ liệu

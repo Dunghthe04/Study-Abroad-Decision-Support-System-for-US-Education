@@ -102,14 +102,14 @@ const pct = formatPct;
 
 // Lý do xếp nhóm, nói rõ con số và mốc khi có số liệu tuyển sinh ("nhận 24% hồ sơ, dưới mốc 50%") thay vì "ít hơn hẳn"
 function reasonLine(code: string, stats: GoalSchoolStats | null | undefined): string {
-  const rate = stats?.acceptRate ?? null;
+  // UC-22: luật xét tỉ lệ nhận của du học sinh nếu trường có, không thì tỉ lệ chung; nói rõ đó là số nào
+  const rate = stats?.effectiveRate ?? stats?.acceptRate ?? null;
+  const who = stats?.rateSource === "international" ? "du học sinh" : "hồ sơ";
   if (stats && rate != null) {
     if (code === "LOW_ACCEPT_RATE")
-      return `Trường chỉ nhận ${pct(rate)} hồ sơ, dưới mốc ${pct(stats.alwaysReachRate)}, nên luôn xếp Khó vào, điểm cao đến đâu cũng không đổi nhóm.`;
+      return `Trường chỉ nhận ${pct(rate)} ${who}, dưới mốc ${pct(stats.alwaysReachRate)}, nên luôn xếp Khó vào, điểm cao đến đâu cũng không đổi nhóm.`;
     if (code === "CAPPED_SELECTIVE")
-      return `Trường nhận ${pct(rate)} hồ sơ, dưới mốc ${pct(stats.safetyMinRate)}, nên chỉ tối đa là Vừa sức.`;
-    if (code === "INTL_DOWNGRADE" && stats.intlAcceptRate != null && stats.intlRatio != null)
-      return `Trường nhận du học sinh ${pct(stats.intlAcceptRate)} trong khi tỷ lệ nhận chung là ${pct(rate)}, chỉ bằng ${pct(stats.intlRatio)} mức chung và dưới mốc ${pct(stats.intlRatioCut)}, nên bị hạ một nhóm.`;
+      return `Trường nhận ${pct(rate)} ${who}, dưới mốc ${pct(stats.safetyMinRate)}, nên chỉ tối đa là Vừa sức.`;
   }
   return GOAL_REASON_TEXT[code] ?? code;
 }
