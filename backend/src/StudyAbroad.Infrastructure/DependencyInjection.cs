@@ -38,6 +38,7 @@ public static class DependencyInjection
         services.AddScoped<ICenterReviewRepository, CenterReviewRepository>();
         services.AddScoped<ICenterReviewSubmissionRepository, CenterReviewSubmissionRepository>();
         services.AddScoped<ICenterReviewModerationRepository, CenterReviewModerationRepository>();
+        services.AddScoped<ICenterReviewReportRepository, CenterReviewReportRepository>();   // [UC-151] báo cáo đánh giá trung tâm
         services.AddScoped<StudyAbroad.Application.Admin.Universities.IAdminUniversityRepository, AdminUniversityRepository>();
         services.AddScoped<StudyAbroad.Application.Admin.Scholarships.IAdminScholarshipRepository, AdminScholarshipRepository>();
         services.AddScoped<StudyAbroad.Application.Scholarships.IScholarshipSearchRepository, ScholarshipSearchRepository>();
