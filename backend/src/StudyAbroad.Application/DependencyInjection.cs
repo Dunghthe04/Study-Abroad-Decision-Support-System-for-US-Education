@@ -43,6 +43,8 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Leads.ILeadParentConfirmService, StudyAbroad.Application.Leads.LeadParentConfirmService>();   // [UC-116] phụ huynh xác nhận lead qua mail
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewService, StudyAbroad.Application.StudyCenters.CenterReviewService>();
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewModerationService, StudyAbroad.Application.StudyCenters.CenterReviewModerationService>();
+        services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewReportService, StudyAbroad.Application.StudyCenters.CenterReviewReportService>();   // [UC-151] báo cáo đánh giá trung tâm
+        services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewReplyService, StudyAbroad.Application.StudyCenters.CenterReviewReplyService>();   // [UC-152] trung tâm phản hồi đánh giá
         services.AddScoped<ICenterDeletionService, CenterDeletionService>();   // [UC-93] Admin xử lý yêu cầu xóa trung tâm
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<SessionRefreshService>();   // gia hạn phiên bằng refresh token (đổi token mỗi lần)
