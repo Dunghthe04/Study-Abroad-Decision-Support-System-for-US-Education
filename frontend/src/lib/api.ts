@@ -30,6 +30,8 @@ import type {
   LockUserAccountRequest,
   UnlockUserAccountRequest,
   UpdateUserBirthDateRequest,
+  BirthDateChangeDto,
+  SubmitBirthDateChangeInput,
   VerifyEmailRequest,
   AcademicProfileResponse,
   ParentInviteInfo,
@@ -234,6 +236,37 @@ export const authApi = {
     apiFetch<UserDto>("/api/v1/auth/me", {
       method: "GET",
     }),
+};
+
+// [UC-105 / UC-107] Học sinh, Phụ huynh gửi, xem, hủy yêu cầu sửa ngày sinh của chính mình
+export const birthDateRequestsApi = {
+  /** Yêu cầu gần nhất (null nếu chưa gửi lần nào). */
+  getCurrent: () =>
+    apiFetch<{ message: string; data: BirthDateChangeDto | null }>("/api/v1/account/birth-date-requests/current", {
+      method: "GET",
+    }),
+
+  /** Gửi yêu cầu; minh chứng (ảnh hoặc PDF) chỉ gửi khi vượt mốc 16 / 18. Lỗi 409 kèm yêu cầu đang chờ trong body.data. */
+  submit: (input: SubmitBirthDateChangeInput) => {
+    const form = new FormData();
+    form.append("birthDate", input.birthDate);
+    form.append("reason", input.reason);
+    if (input.evidence) {
+      form.append("evidence", input.evidence);
+      if (input.evidenceType) form.append("evidenceType", input.evidenceType);
+    }
+    if (input.representativeEmail?.trim()) form.append("representativeEmail", input.representativeEmail.trim());
+    return apiFetch<{ message: string; data: BirthDateChangeDto }>("/api/v1/account/birth-date-requests", {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  cancel: (id: string) =>
+    apiFetch<{ message: string; data: BirthDateChangeDto }>(
+      `/api/v1/account/birth-date-requests/${encodeURIComponent(id)}/cancel`,
+      { method: "POST" },
+    ),
 };
 
 // [USAS-363] API Quản lý hồ sơ học thuật & Bảng điểm (Học sinh / Phụ huynh)

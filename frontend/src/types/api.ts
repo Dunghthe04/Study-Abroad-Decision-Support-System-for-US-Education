@@ -489,6 +489,36 @@ export interface UnlockUserAccountRequest {
   reason: string;
 }
 
+/** [UC-105 / UC-107] Trạng thái yêu cầu sửa ngày sinh. */
+export type BirthDateChangeStatus = "pending" | "approved" | "rejected" | "cancelled";
+
+/** [UC-107 3a] Loại giấy tờ minh chứng khi ngày sinh mới vượt mốc 16 / 18 tuổi. */
+export type BirthDateEvidenceType = "birth_certificate" | "citizen_id" | "passport" | "student_card";
+
+/** [UC-105 / UC-107] Yêu cầu sửa ngày sinh của chủ tài khoản. Ngày dạng yyyy-MM-dd. */
+export interface BirthDateChangeDto {
+  id: string;
+  currentBirthDate: string | null;
+  requestedBirthDate: string;
+  reason: string;
+  status: BirthDateChangeStatus;
+  evidenceType: BirthDateEvidenceType | null;
+  hasEvidence: boolean;
+  representativeEmail: string | null;
+  rejectReason: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
+/** [UC-107] Dữ liệu gửi yêu cầu sửa ngày sinh (gửi dạng multipart). */
+export interface SubmitBirthDateChangeInput {
+  birthDate: string;
+  reason: string;
+  evidenceType?: BirthDateEvidenceType | null;
+  evidence?: File | null;
+  representativeEmail?: string | null;
+}
+
 export interface UserDto {
   id: string;
   email: string;
