@@ -16,15 +16,13 @@ import {
   resetSimulation,
   showSimulation,
 } from "@/lib/simulation-link";
-import type { AssistantAction, ChatLock, ChatMedia, ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
+import type { AssistantAction, ChatLock, ChatMessage, ChatWidget, Citation, QuickReply } from "@/types/api";
 import type { SubscriptionSummaryDto } from "@/types/billing";
 import type { ChatHistoryMessage } from "@/types/chat-history";
 import type { SimulationOverrides } from "@/types/recommendation";
 
 export type AssistantTurn = ChatMessage & {
   citations?: Citation[];
-  /** Ảnh minh họa kèm câu trả lời (link https từ kho tri thức) */
-  media?: ChatMedia[];
   disclaimer?: string | null;
   /** Nút trả lời nhanh của lượt trợ lý; chỉ hiện ở lượt cuối */
   quickReplies?: QuickReply[] | null;
@@ -189,7 +187,6 @@ function toTurn(message: ChatHistoryMessage): AssistantTurn {
     role: message.role === "user" ? "user" : "assistant",
     content: message.content,
     citations: message.citations,
-    media: message.media,
   };
 }
 
@@ -397,7 +394,6 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
             role: "assistant",
             content: res.answer,
             citations: res.citations,
-            media: res.media ?? undefined,
             disclaimer: res.disclaimer,
             quickReplies: res.quickReplies,
             widget: res.widget,

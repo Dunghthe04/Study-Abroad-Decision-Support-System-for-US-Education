@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PlusIcon, Trash2Icon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -45,7 +47,18 @@ import type {
 import { BlockBody, EditableTable, TableFrame, type TableEditState, type TableRow } from "./EditableTable";
 import { OptionSelect } from "./OptionSelect";
 
-export type OfferingTable = "cost" | "requirements" | "stats" | "aid" | "campus" | "majors" | "source";
+export type OfferingTable = "cost" | "requirements" | "deadlines" | "stats" | "aid" | "campus" | "majors" | "source";
+
+const DEADLINE_ROUND_OPTIONS = [
+  { value: "ED", label: "Early Decision (ED)" },
+  { value: "ED2", label: "Early Decision II (ED2)" },
+  { value: "EA", label: "Early Action (EA)" },
+  { value: "REA", label: "Restrictive Early Action (REA)" },
+  { value: "SCEA", label: "Single-Choice Early Action (SCEA)" },
+  { value: "RD", label: "Regular Decision (RD)" },
+  { value: "Rolling", label: "Rolling Admission (Rolling)" },
+];
+const EARLY_ROUNDS = new Set(["ED", "ED2", "EA", "REA", "SCEA"]);
 
 interface OfferingSectionProps {
   universityId: string;
@@ -209,6 +222,7 @@ interface FormState {
   retrievedAt: string;
   sourceReliability: string;
   notes: string;
+  deadlines: { round: string; date: string }[];
   /** majorId -> isStem; ngành không có trong map là trường không đào tạo. */
   majors: Record<string, boolean>;
 }
@@ -237,6 +251,7 @@ function toFormState(offering: AdminUniversityOffering): FormState {
     retrievedAt: toInputValue(offering.retrievedAt),
     sourceReliability: toInputValue(offering.sourceReliability),
     notes: toInputValue(offering.notes),
+    deadlines: parseDeadlines(offering.deadlinesJson),
     majors,
   };
 }
@@ -335,6 +350,44 @@ export function OfferingSection({
       return;
     }
 
+    // UC-62 E3: kiểm tra vòng nộp (không trùng loại, đúng định dạng yyyy-MM-dd, Early <= RD)
+    let deadlinesJson: string | null = null;
+    if (form.deadlines.length > 0) {
+      const seen = new Set<string>();
+      const map: Record<string, string> = {};
+      for (const entry of form.deadlines) {
+        const round = entry.round.trim();
+        const date = entry.date.trim();
+        if (!round) {
+          setFieldErrors({ deadlinesJson: "Vui lòng chọn loại vòng nộp." });
+          setError(INVALID_MESSAGE);
+          return;
+        }
+        if (seen.has(round)) {
+          setFieldErrors({ deadlinesJson: `Trùng loại vòng nộp "${round}".` });
+          setError(INVALID_MESSAGE);
+          return;
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          setFieldErrors({ deadlinesJson: `Vòng ${round} sai định dạng ngày (cần yyyy-MM-dd).` });
+          setError(INVALID_MESSAGE);
+          return;
+        }
+        seen.add(round);
+        map[round] = date;
+      }
+      if (map.RD) {
+        for (const [round, date] of Object.entries(map)) {
+          if (EARLY_ROUNDS.has(round) && date > map.RD) {
+            setFieldErrors({ deadlinesJson: `Hạn vòng ${round} không được muộn hơn Regular Decision (RD).` });
+            setError(INVALID_MESSAGE);
+            return;
+          }
+        }
+      }
+      deadlinesJson = JSON.stringify(map);
+    }
+
     const majors = Object.entries(form.majors).map(([majorId, isStem]) => ({ majorId, isStem }));
     const texts = {} as Record<TextField, string | null>;
     for (const field of TEXT_FIELDS) {
@@ -356,6 +409,7 @@ export function OfferingSection({
         notes: textOrNull(form.notes),
         ...texts,
         intlHousing: form.intlHousing === "" ? null : form.intlHousing === "true",
+        deadlinesJson,
         majors,
       });
       toast.add({ type: "success", title: "Đã lưu bậc học", description: studyLevelLabel(saved.studyLevel) });
@@ -733,9 +787,13 @@ export function OfferingSection({
   };
 
   const deadlines = parseDeadlines(offering.deadlinesJson);
+  const isEditingDeadlines = editingTable === "deadlines";
   let deadlineRows: TableRow[] = [{ label: "Chưa có dữ liệu", value: "—" }];
-  if (deadlines.length > 0) {
-    deadlineRows = deadlines.map((deadline) => ({ label: deadline.round, value: deadline.date }));
+  if (!isEditingDeadlines && deadlines.length > 0) {
+    deadlineRows = deadlines.map((deadline) => ({
+      label: DEADLINE_ROUND_OPTIONS.find((o) => o.value === deadline.round)?.label ?? deadline.round,
+      value: formatRetrievedAt(deadline.date),
+    }));
   }
 
   const majorCount = isEditingMajors ? Object.keys(form.majors).length : offering.majors.length;
@@ -749,7 +807,85 @@ export function OfferingSection({
 
       <EditableTable title="Chi phí mỗi năm" rows={costRows()} edit={editStateFor("cost")} />
       <EditableTable title="Điều kiện" rows={requirementRows()} edit={editStateFor("requirements")} />
-      <EditableTable title="Hạn nộp hồ sơ" rows={deadlineRows} />
+      {isEditingDeadlines ? (
+        <TableFrame title="Hạn nộp hồ sơ" edit={editStateFor("deadlines")}>
+          <BlockBody>
+            <div className="space-y-3">
+              {form.deadlines.map((entry, idx) => (
+                <div key={idx} className="flex flex-wrap items-center gap-2">
+                  <div className="min-w-48 flex-1">
+                    <OptionSelect
+                      id={`offering-${offering.id}-dl-round-${idx}`}
+                      value={entry.round}
+                      options={DEADLINE_ROUND_OPTIONS}
+                      onChange={(round) =>
+                        setForm({
+                          ...form,
+                          deadlines: form.deadlines.map((d, i) => (i === idx ? { ...d, round } : d)),
+                        })
+                      }
+                      disabled={isSaving}
+                      size="sm"
+                      aria-label={`Loại vòng nộp ${idx + 1}`}
+                    />
+                  </div>
+                  <Input
+                    id={`offering-${offering.id}-dl-date-${idx}`}
+                    type="date"
+                    value={entry.date}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        deadlines: form.deadlines.map((d, i) => (i === idx ? { ...d, date: e.target.value } : d)),
+                      })
+                    }
+                    disabled={isSaving}
+                    className="w-44"
+                    aria-label={`Ngày hạn nộp ${entry.round}`}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        deadlines: form.deadlines.filter((_, i) => i !== idx),
+                      })
+                    }
+                    disabled={isSaving}
+                    aria-label={`Xóa vòng ${entry.round}`}
+                  >
+                    <Trash2Icon className="size-4" />
+                  </Button>
+                </div>
+              ))}
+              {fieldErrors.deadlinesJson && (
+                <p className="text-xs text-destructive">{fieldErrors.deadlinesJson}</p>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isSaving || form.deadlines.length >= DEADLINE_ROUND_OPTIONS.length}
+                onClick={() => {
+                  const used = new Set(form.deadlines.map((d) => d.round));
+                  const nextRound = DEADLINE_ROUND_OPTIONS.find((o) => !used.has(o.value))?.value ?? "RD";
+                  setForm({
+                    ...form,
+                    deadlines: [...form.deadlines, { round: nextRound, date: "" }],
+                  });
+                }}
+              >
+                <PlusIcon className="size-4" />
+                Thêm vòng nộp
+              </Button>
+            </div>
+          </BlockBody>
+        </TableFrame>
+      ) : (
+        <EditableTable title="Hạn nộp hồ sơ" rows={deadlineRows} edit={editStateFor("deadlines")} />
+      )}
       <EditableTable title="Tuyển sinh & thống kê" rows={statsRows()} edit={editStateFor("stats")} />
       <EditableTable title="Hỗ trợ tài chính cho du học sinh" rows={aidRows()} edit={editStateFor("aid")} />
       <EditableTable title="Khuôn viên & nhà ở" rows={campusRows()} edit={editStateFor("campus")} />

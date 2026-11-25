@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { AdminFormError, createAdminOffering } from "@/lib/admin-university-api";
-import { STUDY_LEVELS, studyLevelLabel } from "@/lib/study-levels";
+import { studyLevelLabel } from "@/lib/study-levels";
 import type { AdminUniversityOffering } from "@/types/admin-university";
 import { OptionSelect } from "./OptionSelect";
 
@@ -22,7 +22,8 @@ export function AddOfferingControl({ universityId, existingLevels, disabled, onC
   const { user } = useAuth();
   const [level, setLevel] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const options = STUDY_LEVELS.filter((l) => !existingLevels.includes(l)).map((l) => ({
+  // UC-61: chỉ hỗ trợ thêm bậc đại học (undergraduate)
+  const options = ["undergraduate"].filter((l) => !existingLevels.includes(l)).map((l) => ({
     value: l,
     label: studyLevelLabel(l),
   }));

@@ -27,7 +27,7 @@ import {
   SOURCE_RELIABILITY_OPTIONS,
   sourceReliabilityLabel,
 } from "@/lib/admin-university-display";
-import { STUDY_LEVELS, studyLevelLabel } from "@/lib/study-levels";
+import { studyLevelLabel } from "@/lib/study-levels";
 import type { AdminScholarship, SaveScholarshipRequest } from "@/types/admin-scholarship";
 import type { AdminFieldErrors } from "@/types/admin-university";
 import { EditableTable, type TableRow } from "../universities/EditableTable";
@@ -35,7 +35,8 @@ import { OptionSelect } from "../universities/OptionSelect";
 import { ScholarshipVisibilityToggle } from "./ScholarshipVisibilityToggle";
 import { UniversityPicker } from "./UniversityPicker";
 
-const LEVEL_OPTIONS = STUDY_LEVELS.map((level) => ({ value: level, label: studyLevelLabel(level) }));
+// UC-103: chỉ hỗ trợ học bổng bậc đại học (undergraduate)
+const LEVEL_OPTIONS = [{ value: "undergraduate", label: studyLevelLabel("undergraduate") }];
 
 // [USAS-2067] Cột bộ dữ liệu học bổng: ô số, ô Có/Không/Chưa rõ, ô chọn, ô chữ
 const DATASET_NUMBER_LABELS = {
@@ -45,6 +46,7 @@ const DATASET_NUMBER_LABELS = {
   minSat: "SAT tối thiểu",
   minAct: "ACT tối thiểu",
   minToefl: "TOEFL iBT tối thiểu",
+  minDuolingo: "Duolingo tối thiểu (10–160)",
 } as const;
 type DatasetNumberKey = keyof typeof DATASET_NUMBER_LABELS;
 const DATASET_NUMBER_KEYS = Object.keys(DATASET_NUMBER_LABELS) as DatasetNumberKey[];
@@ -257,6 +259,7 @@ export function ScholarshipTable({
       { label: "GPA tối thiểu (thang 4)", value: formatNumber(scholarship.minGpa4) },
       { label: "IELTS tối thiểu", value: formatNumber(scholarship.minIelts) },
       { label: "TOEFL iBT tối thiểu", value: formatNumber(scholarship.minToefl) },
+      { label: "Duolingo tối thiểu", value: formatNumber(scholarship.minDuolingo) },
       { label: "SAT tối thiểu", value: formatNumber(scholarship.minSat) },
       { label: "ACT tối thiểu", value: formatNumber(scholarship.minAct) },
       { label: "Mở cho du học sinh", value: triStateLabel(scholarship.intlEligible) },
@@ -371,7 +374,7 @@ export function ScholarshipTable({
       ? []
       : [
           {
-            label: "Trường",
+            label: "Trường *",
             inputId: `${idPrefix}-university`,
             error: fieldErrors.universityId,
             value: (
@@ -387,7 +390,7 @@ export function ScholarshipTable({
           },
         ]),
     {
-      label: lockedUniversityId ? "Đơn vị cấp" : "Đơn vị cấp (nếu không gắn trường) *",
+      label: "Đơn vị cấp",
       inputId: `${idPrefix}-provider`,
       error: fieldErrors.provider,
       value: (
@@ -484,6 +487,7 @@ export function ScholarshipTable({
       ),
     },
     numberRow("minToefl"),
+    numberRow("minDuolingo"),
     numberRow("minSat"),
     numberRow("minAct"),
     triRow("intlEligible"),

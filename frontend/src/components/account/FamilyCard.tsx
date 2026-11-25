@@ -224,12 +224,10 @@ export function FamilyCard({ version, onChanged, familyCycleCount }: { version: 
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-heading text-lg font-semibold text-ink">Thành viên</h2>
-            {owner && (
-              <span className="text-xs text-ink-2 tabular-nums">
-                Học sinh {f.seats.students.used}/{f.seats.students.max} · Phụ huynh{" "}
-                {f.seats.parents.used}/{f.seats.parents.max}
-              </span>
-            )}
+            <span className="text-xs text-ink-2 tabular-nums">
+              Học sinh {f.seats.students.used}/{f.seats.students.max} (còn {Math.max(0, f.seats.students.max - f.seats.students.used)}) · Phụ huynh{" "}
+              {f.seats.parents.used}/{f.seats.parents.max} (còn {Math.max(0, f.seats.parents.max - f.seats.parents.used)})
+            </span>
           </div>
 
           <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">

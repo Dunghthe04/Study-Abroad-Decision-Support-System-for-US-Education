@@ -46,6 +46,7 @@ export function UsersPanel({ range }: { range: DateRange }) {
                 <TableHead className="text-right">Lần gọi</TableHead>
                 <TableHead className="text-right">Token vào</TableHead>
                 <TableHead className="text-right">Token ra</TableHead>
+                <TableHead className="text-right">Token tính hạn mức (chu kỳ hiện tại)</TableHead>
                 <TableHead className="text-right">Chi phí</TableHead>
                 <TableHead className="text-right">Lỗi</TableHead>
                 <TableHead className="text-right">TB / lần</TableHead>
@@ -62,6 +63,18 @@ export function UsersPanel({ range }: { range: DateRange }) {
                   <TableCell className="tabular text-right">{formatInt(user.metrics.calls)}</TableCell>
                   <TableCell className="tabular text-right">{formatCompact(user.metrics.inputTokens)}</TableCell>
                   <TableCell className="tabular text-right">{formatCompact(user.metrics.outputTokens)}</TableCell>
+                  <TableCell className="tabular text-right">
+                    {user.quotaUsedTokens != null ? (
+                      <>
+                        {formatCompact(user.quotaUsedTokens)}
+                        {user.quotaLimitTokens != null ? (
+                          <span className="block text-xs text-ink-3">/ {formatCompact(user.quotaLimitTokens)}</span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span title="Chưa có dữ liệu" aria-label="Chưa có dữ liệu" className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                   <TableCell className="tabular text-right">
                     {formatUsd(user.metrics.costUsd)}
                     {user.metrics.unpricedCalls > 0 ? <span className="block text-xs text-warn">+{user.metrics.unpricedCalls} chưa có giá</span> : null}
@@ -80,12 +93,12 @@ export function UsersPanel({ range }: { range: DateRange }) {
               ))}
               {list && list.items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-ink-2">Chưa có người dùng nào gọi AI trong khoảng này.</TableCell>
+                  <TableCell colSpan={9} className="py-8 text-center text-ink-2">Chưa có người dùng nào gọi AI trong khoảng này.</TableCell>
                 </TableRow>
               ) : null}
               {!list ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-ink-2">{users.loading ? "Đang tải..." : "Không có dữ liệu."}</TableCell>
+                  <TableCell colSpan={9} className="py-8 text-center text-ink-2">{users.loading ? "Đang tải..." : "Không có dữ liệu."}</TableCell>
                 </TableRow>
               ) : null}
             </TableBody>

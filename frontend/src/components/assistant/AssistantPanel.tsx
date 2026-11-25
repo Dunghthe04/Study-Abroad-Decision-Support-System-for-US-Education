@@ -26,7 +26,6 @@ import { cn } from "@/lib/utils";
 import { describeSimulation, resetSimulation, showSimulation } from "@/lib/simulation-link";
 import { sourceDateText } from "@/lib/source-date";
 import { citationLinks } from "@/lib/citation-links";
-import { ChatImages } from "@/components/assistant/ChatImages";
 import { useAuth } from "@/contexts/AuthContext";
 import { AGE_FEATURES, useAgeBlock } from "@/lib/age-features";
 import { isAuthRoute } from "@/lib/layout-routes";
@@ -766,8 +765,11 @@ function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (va
           title={
             turn.locked.reason === "quota_exhausted"
               ? "Bạn đã dùng hết lượt hỏi miễn phí của tháng này"
-              : "Câu hỏi này cần tài khoản USDSS Premium"
+              : turn.locked.reason === "premium_tokens_exhausted"
+                ? "Đã hết token, hãy mua thêm gói"
+                : "Câu hỏi này cần tài khoản USDSS Premium"
           }
+          ctaLabel={turn.locked.reason === "premium_tokens_exhausted" ? "Mua thêm gói" : undefined}
           note={
             turn.locked.reason === "quota_exhausted" && turn.locked.resetsAt
               ? `Lượt hỏi miễn phí được làm mới ngày ${formatVnDate(turn.locked.resetsAt)}.`
@@ -777,7 +779,6 @@ function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (va
       )}
       {turn.widget?.type === "centers" && <CenterCardsWidget data={turn.widget.data} onPick={onReply} />}
       {searchData && <SchoolSearchCard data={searchData} />}
-      <ChatImages media={turn.media} />
       {turn.citations && turn.citations.length > 0 && (
         <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
           {turn.citations.map((c, j) => {

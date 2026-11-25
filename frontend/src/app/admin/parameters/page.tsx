@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { AdminSection } from "@/components/admin/AdminSection";
+import { CostParametersSettings } from "@/components/admin/parameters/CostParametersSettings";
 import { GradeScaleSettings } from "@/components/admin/parameters/GradeScaleSettings";
 import { ParameterList } from "@/components/methodology/ParameterList";
 import { getMethodologyParameters } from "@/lib/methodology-api";
@@ -22,6 +23,7 @@ export default async function AdminParametersPage() {
     <AdminSection href="/admin/parameters">
       <div className="flex flex-col gap-6">
         <GradeScaleSettings />
+        <CostParametersSettings />
         <section className="rounded-xl border border-line bg-surface p-5 sm:p-6">
           <h2 className="font-sans text-lg font-semibold text-foreground">Tham số thuật toán gợi ý trường</h2>
           <p className="mt-1 text-sm text-muted-foreground">

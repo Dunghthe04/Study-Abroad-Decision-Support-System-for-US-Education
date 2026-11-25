@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
+import { CostSectionNav } from "@/components/costs/CostSectionNav";
 import { StateLivingCostCompare } from "@/components/costs/StateLivingCostCompare";
 import { ErrorFallback } from "@/components/ui/error-fallback";
 import { getStateLivingCosts } from "@/lib/cost-api";
@@ -22,7 +23,8 @@ export default async function StateLivingCostsPage() {
     return <ErrorFallback title="Không thể tải dữ liệu các bang" description="Đã xảy ra lỗi khi kết nối với máy chủ API. Vui lòng thử lại sau." />;
   }
   return (
-    <section className="space-y-6 py-6 pb-16">
+    <section className="mx-auto max-w-[1560px] space-y-6 px-4 py-6 pb-16 sm:px-8 lg:px-12">
+      <CostSectionNav />
       <h1 className="text-2xl font-bold">So sánh chi phí sinh hoạt theo bang</h1>
       <StateLivingCostCompare states={states} />
     </section>

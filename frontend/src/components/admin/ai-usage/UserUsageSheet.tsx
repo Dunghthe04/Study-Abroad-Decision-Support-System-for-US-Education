@@ -51,6 +51,8 @@ function Body({ user, range }: { user: AiUsageUserRank; range: DateRange }) {
   const [metric, setMetric] = useState<PurposeMetric>("cost");
   const data = overview.data?.overview ?? null;
   const total = data?.total ?? user.metrics;
+  const quotaUsed = overview.data?.quotaUsedTokens ?? user.quotaUsedTokens ?? null;
+  const quotaLimit = overview.data?.quotaLimitTokens ?? user.quotaLimitTokens ?? null;
   const daily = data ? dailySeries(data) : [];
   const purposes = data ? purposeRows(data.byPurpose) : [];
 
@@ -69,6 +71,12 @@ function Body({ user, range }: { user: AiUsageUserRank; range: DateRange }) {
         <StatTile label="Chi phí" value={formatUsd(total.costUsd)} loading={overview.loading} note={total.unpricedCalls > 0 ? <span className="text-warn">+{total.unpricedCalls} chưa có giá</span> : undefined} />
         <StatTile label="Lần gọi" value={formatInt(total.calls)} loading={overview.loading} note={`${formatInt(total.failedCalls)} lỗi`} />
         <StatTile label="Token vào + ra" value={formatCompact(totalTokens(total))} loading={overview.loading} />
+        <StatTile
+          label="Token tính hạn mức (chu kỳ hiện tại)"
+          value={quotaUsed != null ? formatCompact(quotaUsed) : "—"}
+          loading={overview.loading}
+          note={quotaLimit != null ? `Hạn mức ${formatCompact(quotaLimit)}` : undefined}
+        />
         <StatTile label="Thời gian TB" value={formatMs(total.avgLatencyMs)} loading={overview.loading} />
       </div>
 

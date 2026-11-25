@@ -41,6 +41,12 @@ const SECTIONS: { id: string; title: string; description: string; steps: string[
     description: "Cách hệ thống tìm mức điểm tối thiểu bạn cần đạt để một trường lên nhóm cao hơn.",
     steps: ["Cần gì để vào"],
   },
+  {
+    id: "cost",
+    title: "Ước tính chi phí (UC-26)",
+    description: "Các tham số dùng khi ước tính chi phí năm đầu, tổng cả khóa và quy đổi tỷ giá tham khảo.",
+    steps: ["Ước tính chi phí"],
+  },
 ];
 
 // Backend trả số thập phân bằng dấu chấm; trang tiếng Việt hiển thị dấu phẩy (0.25 thành 0,25)
