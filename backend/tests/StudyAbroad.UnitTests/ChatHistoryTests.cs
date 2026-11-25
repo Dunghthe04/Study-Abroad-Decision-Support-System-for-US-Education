@@ -359,6 +359,26 @@ public class ChatHistoryTests
     }
 
     [Fact]
+    public void ParentActingForChild_ReadsHistoryUnderTheChildIdentity_JustLikeTheChatThatCreatesTheSessions()
+    {
+        // Phụ huynh nhập hộ: chat tạo phiên dưới tên con (Advisor nằm trong ChildControllers), nên danh sách, đổi tên, xóa phải đọc
+        // đúng chủ đó. Thiếu ChatHistory thì phụ huynh đọc phiên của chính mình: không thấy cuộc trò chuyện của con (UC-139).
+        static string Name(Type controller) => controller.Name[..^"Controller".Length];
+
+        Assert.Contains(Name(typeof(AdvisorController)), StudyAbroad.Api.Authorization.ActingScope.ChildControllers);
+        Assert.Contains(Name(typeof(ChatHistoryController)), StudyAbroad.Api.Authorization.ActingScope.ChildControllers);
+
+        var endpoint = new Endpoint(
+            requestDelegate: null,
+            new EndpointMetadataCollection(new Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor
+            {
+                ControllerName = Name(typeof(ChatHistoryController)),
+            }),
+            displayName: null);
+        Assert.True(StudyAbroad.Api.Authorization.ActingScope.UsesChildIdentity(endpoint));
+    }
+
+    [Fact]
     public void Controller_RequiresTheSameAgePolicyAsTheChat()
     {
         var authorize = typeof(ChatHistoryController).GetCustomAttribute<AuthorizeAttribute>();
