@@ -354,11 +354,25 @@ public static class ChatNextSteps
     /// <summary>
     /// Sau khi trả lời một mục của một trường ("học phí Purdue"): cần gì để vào trường này, rồi tối đa 3 mục chưa hỏi.
     /// </summary>
-    public static IReadOnlyList<QuickReply> AfterSchoolInfo(string schoolCode, string schoolName, IReadOnlyList<InfoField> asked) =>
-    [
-        GoalFor(schoolCode, schoolName),
-        .. FollowUpFields.Where(f => !asked.Contains(f.Field)).Take(3).Select(f => new QuickReply(f.Label, f.Ask(schoolName))),
-    ];
+    public static IReadOnlyList<QuickReply> AfterSchoolInfo(string schoolCode, string schoolName, IReadOnlyList<InfoField> asked)
+    {
+        // UC-156: hỏi về học bổng thì thêm nút sang trang Tìm học bổng (lọc theo tên trường), kể cả khi trường chưa có học bổng riêng trong hệ thống.
+        // Có nút này thì chỉ giữ 2 mục hỏi tiếp để tổng số nút không vượt 4.
+        var wantsScholarships = asked.Contains(InfoField.Aid) || asked.Contains(InfoField.Scholarships);
+        return
+        [
+            GoalFor(schoolCode, schoolName),
+            .. wantsScholarships ? [ScholarshipPage(schoolName)] : Array.Empty<QuickReply>(),
+            .. FollowUpFields.Where(f => !asked.Contains(f.Field)).Take(wantsScholarships ? 2 : 3).Select(f => new QuickReply(f.Label, f.Ask(schoolName))),
+        ];
+    }
+
+    public const string ScholarshipPageLabel = "Tìm học bổng";
+
+    /// <summary>Nút mở trang Tìm học bổng (link, không qua chat). Trang đọc tham số search và tìm cả theo tên trường; không có tên thì mở trang chung.</summary>
+    public static QuickReply ScholarshipPage(string? schoolName = null) =>
+        new(ScholarshipPageLabel, ScholarshipPageLabel,
+            Href: string.IsNullOrWhiteSpace(schoolName) ? "/scholarships" : $"/scholarships?search={Uri.EscapeDataString(schoolName)}");
 
     // ----------------------------------------------------------------------------------------------------------------
     // Sau so sánh trường
