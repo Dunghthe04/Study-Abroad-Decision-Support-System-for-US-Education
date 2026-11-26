@@ -263,9 +263,9 @@ export function CenterReviewList({
             </CardContent>
           )}
 
-          {(canRemove || canReport) && (
+          {(canRemove || (canReport && !rev.isOwnReview)) && (
             <CardContent className="flex items-center justify-end gap-2 px-4 sm:px-6 pb-3 pt-0">
-              {canReport &&
+              {canReport && !rev.isOwnReview &&
                 (reportedIds.has(rev.id) ? (
                   <span className="text-[11px] text-ink-3">Đã báo cáo đánh giá này</span>
                 ) : (
