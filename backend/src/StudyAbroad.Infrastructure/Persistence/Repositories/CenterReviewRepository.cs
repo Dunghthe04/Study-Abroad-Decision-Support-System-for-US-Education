@@ -8,7 +8,10 @@ public class CenterReviewRepository(AppDbContext db) : ICenterReviewRepository
 {
     private const string VisibleStatus = "visible";
 
-    public async Task<CenterReviewsDto> GetVisibleAsync(Guid centerId, int page, int pageSize, CancellationToken ct = default)
+    public Task<CenterReviewsDto> GetVisibleAsync(Guid centerId, int page, int pageSize, CancellationToken ct = default) =>
+        GetVisibleAsync(centerId, page, pageSize, currentUserId: null, ct);
+
+    public async Task<CenterReviewsDto> GetVisibleAsync(Guid centerId, int page, int pageSize, Guid? currentUserId, CancellationToken ct = default)
     {
         var (safePage, safePageSize) = CenterReviewPaging.Normalize(page, pageSize);
 
@@ -32,6 +35,7 @@ public class CenterReviewRepository(AppDbContext db) : ICenterReviewRepository
             select new
             {
                 r.Id,
+                r.UserId,
                 FullName = u != null ? u.FullName : null,
                 Role = u != null ? u.Role : null,
                 UserStatus = u != null ? u.Status : null,
@@ -57,7 +61,8 @@ public class CenterReviewRepository(AppDbContext db) : ICenterReviewRepository
                 x.CreatedAt,
                 x.Rating,
                 x.Comment,
-                BuildPublicReply(x.CenterReplyStatus, x.CenterReplyContent, x.CenterReplyCreatedAt, x.CenterReplyEditedAt)))
+                BuildPublicReply(x.CenterReplyStatus, x.CenterReplyContent, x.CenterReplyCreatedAt, x.CenterReplyEditedAt),
+                IsOwnReview: currentUserId.HasValue && x.UserId == currentUserId.Value))
             .ToList();
 
         return new CenterReviewsDto(stats.Count, CenterRatingMath.Round(stats.Average), items);

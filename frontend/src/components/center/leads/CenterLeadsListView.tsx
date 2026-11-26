@@ -956,7 +956,7 @@ export function CenterLeadsListView() {
                         variant="outline"
                         size="sm"
                         disabled={isUpdatingStatus}
-                        onClick={() => handleStatusChange(selectedLead.id, "accepted")}
+                        onClick={() => handleStatusChange(selectedLead.id, "contacted")}
                         className="text-xs gap-1.5 text-warn border-warn/30 bg-warn-wash/60 hover:bg-warn-wash"
                       >
                         <PhoneIcon className="size-3.5" />

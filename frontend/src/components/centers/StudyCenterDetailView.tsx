@@ -128,6 +128,11 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                     <Badge variant="ok" className="gap-1 px-2.5 py-0.5 text-xs">
                       <CheckCircle2Icon className="size-3.5" />
                       Đã xác minh Sở GD&amp;ĐT
+                      {center.verifiedAt && (
+                        <span className="font-normal opacity-90">
+                          · Duyệt ngày {new Date(center.verifiedAt).toLocaleDateString("vi-VN")}
+                        </span>
+                      )}
                     </Badge>
                   ) : (
                     <Badge variant="warn" className="px-2.5 py-0.5 text-xs">
@@ -273,6 +278,25 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
             <CardContent className="space-y-4 text-sm leading-relaxed text-muted-foreground">
               {center.description && <p>{center.description}</p>}
 
+              {/* [UC-40] Mức phí tham khảo do trung tâm công bố */}
+              {(center.feeMin != null || center.feeMax != null || center.feeDescription) && (
+                <div className="pt-2 border-t space-y-1">
+                  <div className="text-xs font-semibold text-foreground">Mức phí tham khảo:</div>
+                  {(center.feeMin != null || center.feeMax != null) && (
+                    <p className="text-sm font-semibold text-brand tabular-nums">
+                      {center.feeMin != null && center.feeMax != null
+                        ? `${center.feeMin.toLocaleString("vi-VN")} – ${center.feeMax.toLocaleString("vi-VN")} VNĐ`
+                        : center.feeMin != null
+                          ? `Từ ${center.feeMin.toLocaleString("vi-VN")} VNĐ`
+                          : `Đến ${center.feeMax!.toLocaleString("vi-VN")} VNĐ`}
+                    </p>
+                  )}
+                  {center.feeDescription && (
+                    <p className="text-xs text-muted-foreground whitespace-pre-line">{center.feeDescription}</p>
+                  )}
+                </div>
+              )}
+
               {/* Chứng nhận quốc tế */}
               {profile.accreditations.length > 0 && (
                 <div className="pt-2 border-t">
@@ -364,7 +388,7 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
                 <div className="text-xs text-muted-foreground flex items-start gap-2 bg-muted/40 p-2.5 rounded-lg">
                   <ShieldCheckIcon className="w-4 h-4 text-brand shrink-0 mt-0.5" />
                   <span>
-                    Toàn bộ quy trình tiếp nhận tư vấn và đăng ký dịch vụ du học được hỗ trợ và bảo trợ tập trung qua hệ thống USDSS để đảm bảo tính xác thực và quyền lợi của người dùng.
+                    Trao đổi qua hệ thống được lưu lại để bảo vệ bạn. Vui lòng gửi yêu cầu liên hệ trực tiếp qua hệ thống USDSS thay vì liên hệ ngoài nền tảng.
                   </span>
                 </div>
               </CardContent>

@@ -16,7 +16,9 @@ public record CenterReviewDto(
     DateTime CreatedAt,
     int Rating,
     string? Comment,
-    CenterReviewReplyDto? CenterReply = null);
+    CenterReviewReplyDto? CenterReply = null,
+    /// <summary>[UC-151 E1] True khi đánh giá do chính người dùng đang đăng nhập viết (để UI ẩn nút Báo cáo).</summary>
+    bool IsOwnReview = false);
 
 /// <summary>
 /// Đánh giá hiển thị của một trung tâm. <see cref="TotalCount"/> và <see cref="AverageRating"/> tính trên toàn bộ
@@ -33,7 +35,10 @@ public interface ICenterReviewRepository
     /// Một trang đánh giá ở trạng thái "visible", mới nhất trước. Số lượng và điểm trung bình tính từ dữ liệu thật
     /// trên toàn bộ đánh giá hiển thị (không phụ thuộc trang).
     /// </summary>
-    Task<CenterReviewsDto> GetVisibleAsync(Guid centerId, int page, int pageSize, CancellationToken ct = default);
+    Task<CenterReviewsDto> GetVisibleAsync(Guid centerId, int page, int pageSize, CancellationToken ct = default) =>
+        GetVisibleAsync(centerId, page, pageSize, currentUserId: null, ct);
+
+    Task<CenterReviewsDto> GetVisibleAsync(Guid centerId, int page, int pageSize, Guid? currentUserId, CancellationToken ct = default);
 }
 
 /// <summary>Quy ước phân trang cho danh sách đánh giá.</summary>
