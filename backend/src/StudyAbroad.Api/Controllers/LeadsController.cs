@@ -29,6 +29,8 @@ public class LeadsController(
 {
     /// <summary>Ảnh trong chat: tối đa 5MB, chỉ JPEG / PNG / WebP (uploader kiểm tra thêm nội dung thật, kích thước điểm ảnh, ảnh động).</summary>
     public const int MaxChatImageBytes = 5 * 1024 * 1024;
+    /// <summary>Giới hạn vận chuyển HTTP để file 5–20MB vào được controller và trả JSON 400 thân thiện thay vì ngắt kết nối TCP.</summary>
+    private const long MaxMultipartTransportBytes = 20 * 1024 * 1024;
 
     /// <summary>
     /// [UC-42] Gửi yêu cầu tư vấn tới trung tâm du học.
@@ -163,8 +165,8 @@ public class LeadsController(
     [HttpPost("sent/{id:guid}/messages/image")]
     [Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(MaxChatImageBytes + 64 * 1024)]
-    [RequestFormLimits(MultipartBodyLengthLimit = MaxChatImageBytes + 64 * 1024, ValueLengthLimit = 16 * 1024, ValueCountLimit = 4)]
+    [RequestSizeLimit(MaxMultipartTransportBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxMultipartTransportBytes, ValueLengthLimit = 16 * 1024, ValueCountLimit = 4)]
     [EnableRateLimiting(MediaUploadRateLimit.PolicyName)]
     [ProducesResponseType(typeof(SendLeadMessageResultDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -207,7 +209,7 @@ public class LeadsController(
         if (file is null || file.Length == 0 || Request.Form.Files.Count != 1)
             throw new ArgumentException("Vui lòng chọn đúng một ảnh để gửi.");
         if (file.Length > MaxChatImageBytes)
-            throw new ArgumentException($"Ảnh tối đa {MaxChatImageBytes / (1024 * 1024)}MB.");
+            throw new LeadRuleException("image_too_large", StatusCodes.Status400BadRequest, $"Ảnh tối đa {MaxChatImageBytes / (1024 * 1024)}MB.");
 
         return async ct =>
         {
@@ -468,8 +470,8 @@ public class LeadsController(
     [HttpPost("received/{id:guid}/messages/image")]
     [Authorize(Roles = UserRoles.Center)]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(MaxChatImageBytes + 64 * 1024)]
-    [RequestFormLimits(MultipartBodyLengthLimit = MaxChatImageBytes + 64 * 1024, ValueLengthLimit = 16 * 1024, ValueCountLimit = 4)]
+    [RequestSizeLimit(MaxMultipartTransportBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxMultipartTransportBytes, ValueLengthLimit = 16 * 1024, ValueCountLimit = 4)]
     [EnableRateLimiting(MediaUploadRateLimit.PolicyName)]
     [ProducesResponseType(typeof(SendLeadMessageResultDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
