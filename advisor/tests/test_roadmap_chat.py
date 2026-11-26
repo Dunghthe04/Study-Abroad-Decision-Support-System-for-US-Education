@@ -1,13 +1,14 @@
 """Lộ trình theo trường mục tiêu trong chat: roadmap .NET gửi chỉ được đổi ra chữ (cùng số với Tổng quan),
-hướng đi xét theo trường đòi hỏi cao nhất, chat nêu việc gấp và chỉ sang /dashboard#lo-trinh."""
+hướng đi xét theo trường đòi hỏi cao nhất, chat nêu việc gấp và chỉ sang Tổng quan bằng nút "Xem lộ trình"."""
 
 from datetime import date
 
 from app.schemas.chat import ChatState, ProfileField
 from app.services.profile_calc import calc_profile, target_schools, urgent_tasks
 from app.services.skill_input import skill_request_of
-from app.services.skill_template import ROADMAP_LINK, build_skill
+from app.services.skill_template import build_skill
 from app.services.skills.skill_lo_trinh import choose_route, template_reasons
+from app.services.skills.skill_tinh import ROADMAP_LINK
 from tests.vef import VEF
 
 TODAY = date(2026, 11, 26)
@@ -162,15 +163,97 @@ def test_skill_has_target_line_urgent_and_link():
     skill = skill_of(rm, ["assessment", "roadmap"])
     assert "- So với trường mục tiêu: Đạt đủ điều kiện 1/2 trường mục tiêu;" in skill
     assert "Việc gấp nhất lúc này (nêu đúng các việc này): Thi IELTS (hạn 03/2027, chưa xong)." in skill
-    assert ROADMAP_LINK in skill
+    assert ROADMAP_LINK not in skill  # đường dẫn nằm ở nút "Xem lộ trình", lời tư vấn không viết
+    assert 'bấm nút "Xem lộ trình"' in skill
     assert "chưa chọn tỉnh / thành" not in skill  # chat hỏi tỉnh sau câu trả lời (skill_tinh)
 
 
 def test_skill_without_roadmap_has_no_roadmap_lines():
     skill = skill_of(None, ["assessment", "roadmap"])
     assert "trường mục tiêu:" not in skill
-    assert ROADMAP_LINK not in skill
+    assert "Xem lộ trình" not in skill
     assert "Việc gấp nhất" not in skill
+
+
+# ---- chat nói khớp Tổng quan: kỳ, mốc, trường mục tiêu, câu mở đầu, mốc tiếng Anh ----
+
+WILLIAMS = [
+    {
+        "name": "Williams College",
+        "criteria": [
+            crit("gpa", 3.67, 3.94, "below"),
+            crit("english", 6.5, 7.5, "below", "ielts"),
+            crit("budget", 50000, 103025, "below"),
+        ],
+    }
+]
+MILESTONES = [
+    {"date": "2026-11-05", "kind": "english_test", "label": "Thi IELTS", "isEstimate": True},
+    {"date": "2027-01-05", "kind": "deadline", "label": "Hạn nộp Williams College", "isEstimate": False},
+]
+
+
+def williams(**extra):
+    return {
+        **roadmap(WILLIAMS),
+        "intake": "Fall 2027",
+        "intakeIsEstimate": True,
+        "milestones": MILESTONES,
+        **extra,
+    }
+
+
+def no_intake() -> dict[str, ProfileField]:
+    values = {k: f.value for k, f in good().items() if k != "intake"}
+    return prof(
+        **values, english_plan={"planned": True, "test_type": "toefl", "target_score": 90, "date": "2027-03"}
+    )
+
+
+def skill_no_intake(rm, tasks):
+    state = ChatState(profile=no_intake(), roadmap=rm)
+    req = skill_request_of(state, "đánh giá và lộ trình", TODAY)
+    return build_skill(req, tasks, state.profile, TODAY, VEF, rm)
+
+
+def test_profile_without_intake_uses_roadmap_intake_and_milestones():
+    skill = skill_no_intake(williams(), ["roadmap"])
+    assert "chưa chọn kỳ nhập học" not in skill
+    assert "- 05/11/2026: Thi IELTS (tham khảo)" in skill
+    assert "- 05/01/2027: Hạn nộp Williams College" in skill
+    assert "Kỳ Fall 2027 là kỳ ước tính" in skill
+
+
+def test_choose_route_takes_roadmap_intake_when_profile_has_none():
+    _, _, intake = choose_route(no_intake(), TODAY, VEF, williams())
+    assert (intake.term, intake.year) == ("Fall", 2027)
+    _, _, none = choose_route(no_intake(), TODAY, VEF, None)
+    assert none is None
+
+
+def test_target_schools_named_instead_of_no_list():
+    skill = skill_no_intake(williams(), ["roadmap"])
+    assert "Hệ thống chưa có danh sách trường" not in skill
+    assert "Trường mục tiêu của bạn: Williams College." in skill
+
+
+def test_english_step_uses_target_mark_not_praise_plan():
+    skill = skill_no_intake(williams(), ["roadmap"])
+    assert "- Tiếng Anh: cần đạt IELTS 7.5 theo mốc trường mục tiêu; đối chiếu lại kế hoạch hiện tại" in skill
+    assert "giữ đúng kế hoạch" not in skill
+    assert "- GPA: chưa đạt mốc 3.94 của trường mục tiêu" in skill
+
+
+def test_opening_line_never_calls_below_side_strong():
+    skill = skill_no_intake(williams(), ["assessment"])
+    line = next(x for x in skill.splitlines() if x.startswith("Câu mở đầu"))
+    assert "phần nổi bật nhất là Tiếng Anh" not in line
+    assert "phần cần cải thiện nhất là GPA, IELTS, Ngân sách (chưa đạt mốc trường mục tiêu)" in line
+
+
+def test_opening_line_without_roadmap_follows_levels():
+    skill = skill_of(None, ["assessment"])
+    assert "Câu mở đầu (viết đúng ý này" in skill
 
 
 # ---- chat_flow: roadmap từ .NET vào state ----

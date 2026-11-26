@@ -14,6 +14,7 @@ from functools import cache
 
 from app.schemas.chat import ProfileField
 from app.schemas.slm import SkillRequest
+from app.services.profile_calc import CRITERION_NAMES, num, test_name
 from app.services.skill_call import SKILLS_DIR, load_skill
 from app.services.skill_input import NONE_TEXT, UNKNOWN_TEXT
 from app.services.skills.buttons import is_middle_school_profile
@@ -44,8 +45,6 @@ NO_MARK = "Chưa có dữ liệu trường để so"
 ONLY_NOTED = "Chỉ ghi nhận, không dùng để chọn trường"
 REFUSED = "đã từng bị từ chối visa"
 PLANNED = "dự định"
-# Lộ trình đầy đủ (mốc, nhiệm vụ, trung tâm gợi ý) vẽ ở Tổng quan; chat chỉ nêu việc gấp nhất rồi chỉ sang đó
-ROADMAP_LINK = "/dashboard#lo-trinh"
 
 # Bảng mục 2: (tên dòng, khóa ho_so, khóa tinh_san hoặc chữ cố định cho cột Mức). Thứ tự giống form
 ROWS = (
@@ -194,7 +193,65 @@ def finance_line(ho_so: dict[str, str], tinh_san: dict[str, str]) -> str | None:
     return "- Tài chính: " + ", ".join(parts) + "." if parts else None
 
 
-def assessment_part(req: SkillRequest, middle_school: bool) -> str:
+# Các mặt chưa đạt mốc của ít nhất một trường mục tiêu: [(khóa, tên)], ví dụ [("english", "IELTS"), ("budget", "Ngân sách")]
+def below_targets(roadmap: dict | None) -> list[tuple[str, str]]:
+    if not roadmap or roadmap.get("mode") != "target":
+        return []
+    found: dict[str, str] = {}
+    for school in roadmap.get("schools", []):
+        for c in school.get("criteria", []):
+            key = c.get("key")
+            if c.get("status") == "below" and key not in found:
+                found[key] = (
+                    test_name(c.get("type"), "Tiếng Anh")
+                    if key == "english"
+                    else CRITERION_NAMES.get(key, str(key))
+                )
+    return list(found.items())
+
+
+# Mốc cao nhất các trường mục tiêu đòi ở một mặt chưa đạt: "IELTS 7.5", "3.94"
+def target_mark(roadmap: dict | None, key: str) -> str | None:
+    marks = [
+        (c["mark"], c.get("type"))
+        for school in (roadmap or {}).get("schools", [])
+        for c in school.get("criteria", [])
+        if c.get("key") == key and c.get("status") == "below" and c.get("mark") is not None
+    ]
+    if not marks:
+        return None
+    mark, type_ = max(marks, key=lambda m: m[0])
+    return f"{test_name(type_, 'Tiếng Anh')} {num(mark)}" if key == "english" else num(mark)
+
+
+# Câu mở đầu do code chọn, để SLM không tự gọi một mặt là "nổi bật" khi mặt đó chưa đạt mốc
+def opening_line(ho_so: dict[str, str], tinh_san: dict[str, str], roadmap: dict | None) -> str:
+    below = below_targets(roadmap)
+    below_keys = {key for key, _ in below}
+    strong = [
+        name
+        for name, key, calc in SCORED
+        if level_word(tinh_san.get(calc)) == "cao" and key not in below_keys
+    ]
+    weak = [name for _, name in below]
+    weak += [
+        name
+        for name, key, calc in SCORED
+        if level_word(tinh_san.get(calc)) == "thấp" and key not in below_keys
+    ]
+    if ho_so.get("visa_refused") == REFUSED:
+        weak.append("Visa")
+    head = f"phần nổi bật nhất là {', '.join(strong)}" if strong else "chưa có mặt nào nổi bật"
+    if below:
+        tail = f"phần cần cải thiện nhất là {', '.join(weak)} (chưa đạt mốc trường mục tiêu)"
+    elif weak:
+        tail = f"phần cần cải thiện nhất là {', '.join(weak)}"
+    else:
+        tail = "chưa có mặt nào ở mức thấp"
+    return f"Câu mở đầu (viết đúng ý này, không gọi mặt nào khác là nổi bật): {head}; {tail}."
+
+
+def assessment_part(req: SkillRequest, middle_school: bool, roadmap: dict | None = None) -> str:
     ho_so, tinh_san = req.ho_so, req.tinh_san
     groups = assessment_groups(ho_so, tinh_san)
     lines = ['### Phần "Đánh giá hồ sơ"', "Các mặt đã nhóm sẵn theo mức (chép đúng, không đổi nhóm):"]
@@ -216,8 +273,9 @@ def assessment_part(req: SkillRequest, middle_school: bool) -> str:
     lines += [line for line in (finance_line(ho_so, tinh_san),) if line]
     if middle_school:
         lines.append("- Bạn đang học THCS: GPA là mục tiêu, nhận xét theo hướng chuẩn bị dài hạn.")
+    lines.append(opening_line(ho_so, tinh_san, roadmap))
     lines.append(
-        "Cách viết: mở bằng một câu nhận xét chung (phần nổi bật nhất và phần cần cải thiện nhất), rồi đi lần lượt "
+        "Cách viết: mở bằng câu mở đầu trên, rồi đi lần lượt "
         "các nhóm trên, mỗi ý nêu đúng số và mức. Nhóm nào không có thì bỏ, không tự thêm."
     )
     return "\n".join(lines)
@@ -232,8 +290,16 @@ def plan_step(ho_so: dict[str, str], key: str, name: str, needed: bool) -> str |
     return None
 
 
+# Tiếng Anh chưa đạt mốc trường mục tiêu: nói mốc cần đạt; kế hoạch thi đã có thì chỉ nhắc đối chiếu, không khen giữ
+def english_target_step(ho_so: dict[str, str], mark: str) -> str:
+    plan = ho_so.get("english_plan", "")
+    if plan.startswith(PLANNED):
+        return f"- Tiếng Anh: cần đạt {mark} theo mốc trường mục tiêu; đối chiếu lại kế hoạch hiện tại ({plan}) với mốc này."
+    return f"- Tiếng Anh: cần đạt {mark} theo mốc trường mục tiêu, đặt lịch thi sớm."
+
+
 # Các bước thêm theo hồ sơ, đứng sau lộ trình code chọn
-def extra_steps(ho_so: dict[str, str], tinh_san: dict[str, str]) -> list[str]:
+def extra_steps(ho_so: dict[str, str], tinh_san: dict[str, str], roadmap: dict | None = None) -> list[str]:
     steps = []
     if not has_value(ho_so, "major"):
         steps.append(
@@ -241,12 +307,23 @@ def extra_steps(ho_so: dict[str, str], tinh_san: dict[str, str]) -> list[str]:
         )
     gpa_word = level_word(tinh_san.get("gpa_level"))
     trend = grade_trend(tinh_san.get("grade_by_year"))
-    if gpa_word == "thấp" or trend == "đang đi xuống":
+    gpa_mark = target_mark(roadmap, "gpa")
+    if gpa_mark:
+        steps.append(
+            f"- GPA: chưa đạt mốc {gpa_mark} của trường mục tiêu, tập trung kéo điểm các học kỳ còn lại."
+        )
+    elif gpa_word == "thấp" or trend == "đang đi xuống":
         steps.append("- GPA: tập trung kéo điểm các học kỳ còn lại, làm đều mỗi học kỳ.")
     elif trend == "đang đi lên":
         steps.append("- GPA: giữ đà điểm đang đi lên ở các học kỳ còn lại.")
-    english_needed = not has_value(ho_so, "english") or level_word(tinh_san.get("english_level")) == "thấp"
-    steps.append(plan_step(ho_so, "english_plan", "Tiếng Anh", english_needed))
+    english_mark = target_mark(roadmap, "english")
+    if english_mark:
+        steps.append(english_target_step(ho_so, english_mark))
+    else:
+        english_needed = (
+            not has_value(ho_so, "english") or level_word(tinh_san.get("english_level")) == "thấp"
+        )
+        steps.append(plan_step(ho_so, "english_plan", "Tiếng Anh", english_needed))
     steps.append(plan_step(ho_so, "standardized_plan", "SAT / ACT", False))
     if has_value(ho_so, "sat") and has_value(ho_so, "act"):
         steps.append("- SAT / ACT: đã có cả hai điểm, chọn một bài để tập trung.")
@@ -275,16 +352,18 @@ def roadmap_part(
     lines = [
         '### Phần "Lộ trình chuẩn bị"',
         "Lộ trình đã chọn (giữ đúng tên lộ trình, lý do và các mốc, không thêm mốc):",
-        render(route, intake, major),
+        render(route, intake, major, roadmap),
         "",
         "Các bước chuẩn bị theo hồ sơ, theo thứ tự:",
-        *extra_steps(req.ho_so, req.tinh_san),
+        *extra_steps(req.ho_so, req.tinh_san, roadmap),
     ]
     if "urgent_tasks" in req.tinh_san:
         lines.append(f"Việc gấp nhất lúc này (nêu đúng các việc này): {req.tinh_san['urgent_tasks']}.")
     if roadmap is not None:
+        # Đường dẫn nằm ở nút "Xem lộ trình" (skill_tinh), lời tư vấn không viết đường dẫn
         lines.append(
-            f"Lộ trình đầy đủ (mốc, nhiệm vụ tự đánh dấu, trung tâm gợi ý) ở trang Tổng quan ({ROADMAP_LINK}), cuối phần mời bạn mở xem."
+            "Lộ trình đầy đủ (mốc, nhiệm vụ tự đánh dấu, trung tâm gợi ý) ở trang Tổng quan, cuối phần mời bạn "
+            'bấm nút "Xem lộ trình" bên dưới để mở. Không viết đường dẫn.'
         )
         # Chưa có tỉnh: chat hỏi tỉnh ngay sau câu trả lời (skill_tinh), lời tư vấn không nhắc nữa
     if middle_school:
@@ -307,7 +386,7 @@ def fill_noi_dung(
     parts = []
     for task in tasks:
         if task == "assessment":
-            parts.append(assessment_part(req, middle_school))
+            parts.append(assessment_part(req, middle_school, roadmap))
         else:
             parts.append(roadmap_part(req, profile, today, gpa_table, middle_school, roadmap))
     return "\n\n".join(parts)

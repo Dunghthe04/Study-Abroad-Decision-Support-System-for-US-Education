@@ -39,6 +39,7 @@ MIN_MONTHS = 1  # còn dưới 1 tháng tới hạn nộp thì dời kỳ
 
 CHECK_DEADLINE = "Bạn nhớ kiểm tra hạn nộp chính xác trên trang của từng trường."
 NO_LIST = "Hệ thống chưa có danh sách trường cho lộ trình này. Khi tự tìm trường, bạn xem các tiêu chí:"
+TARGET_MORE = "Khi tìm thêm trường dự phòng hợp với lộ trình này, bạn xem các tiêu chí:"
 CRITERIA = (
     "- Có ngành bạn muốn học{major}",
     "- Ở bang bạn muốn (nếu có), gần người thân càng tốt",
@@ -141,7 +142,8 @@ def choose_route(
     facts = read_facts(profile, today, gpa_table)
     base = assess_levels(facts)
     levels = target_levels(base, roadmap)
-    intake = Intake.parse(value_of(profile, "intake"))
+    # Hồ sơ chưa chọn kỳ thì dùng kỳ Tổng quan đang vẽ (ước tính), để chat và Tổng quan nói cùng một kỳ
+    intake = Intake.parse(value_of(profile, "intake")) or Intake.parse((roadmap or {}).get("intake"))
     months = intake.deadline - today_index if intake else None
     status = english_status(levels["english"], value_of(profile, "english_plan"), intake, today_index)
 
@@ -205,7 +207,36 @@ def timeline(intake: Intake | None, route: Route) -> list[str]:
     return lines
 
 
-def render(route: Route, intake: Intake | None, major: Any) -> str:
+ESTIMATE_INTAKE = "Kỳ {intake} là kỳ ước tính, bạn chọn kỳ nhập học trong hồ sơ để mốc sát hơn."
+
+
+# "2027-01-05" → "05/01/2027"
+def day_text(raw: Any) -> str | None:
+    try:
+        return date.fromisoformat(str(raw)[:10]).strftime("%d/%m/%Y")
+    except ValueError:
+        return None
+
+
+# Có lộ trình từ .NET thì chép đúng các mốc Tổng quan đang vẽ, không tự tính mốc khác
+def roadmap_timeline(roadmap: dict | None) -> list[str]:
+    lines = []
+    for m in (roadmap or {}).get("milestones", []):
+        day = day_text(m.get("date"))
+        if day and m.get("label"):
+            lines.append(f"- {day}: {m['label']}" + (" (tham khảo)" if m.get("isEstimate") else ""))
+    if lines and (roadmap or {}).get("intakeIsEstimate"):
+        lines.append(ESTIMATE_INTAKE.format(intake=roadmap.get("intake")))
+    return lines
+
+
+def target_names(roadmap: dict | None) -> list[str]:
+    if not roadmap or roadmap.get("mode") != "target":
+        return []
+    return [str(s["name"]) for s in roadmap.get("schools", []) if s.get("name")]
+
+
+def render(route: Route, intake: Intake | None, major: Any, roadmap: dict | None = None) -> str:
     parts = [
         f"Lộ trình phù hợp với bạn: {ROUTE_LABELS[route.route]}.",
         "\n".join(f"- {r}" for r in route.reasons),
@@ -214,10 +245,15 @@ def render(route: Route, intake: Intake | None, major: Any) -> str:
         parts.append(
             "Bạn cũng có thể cân nhắc: " + ", ".join(ROUTE_LABELS[r] for r in route.alt_routes) + "."
         )
-    parts.append("Mốc thời gian dự kiến:\n" + "\n".join(timeline(intake, route)) + f"\n{CHECK_DEADLINE}")
+    lines = (route.route != "postpone" and roadmap_timeline(roadmap)) or timeline(intake, route)
+    parts.append("Mốc thời gian dự kiến:\n" + "\n".join(lines) + f"\n{CHECK_DEADLINE}")
+    major_text = f" ({major})" if isinstance(major, str) and major else ""
+    criteria = "\n".join(CRITERIA).format(major=major_text)
+    names = target_names(roadmap)
     if route.route == "direct":
         parts.append(DIRECT_NEXT)
+    elif names:
+        parts.append(f"Trường mục tiêu của bạn: {', '.join(names)}. {TARGET_MORE}\n{criteria}")
     else:
-        major_text = f" ({major})" if isinstance(major, str) and major else ""
-        parts.append(NO_LIST + "\n" + "\n".join(CRITERIA).format(major=major_text))
+        parts.append(NO_LIST + "\n" + criteria)
     return "\n\n".join(parts)

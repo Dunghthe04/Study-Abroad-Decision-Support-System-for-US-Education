@@ -10,10 +10,11 @@ import re
 
 from app.schemas.chat import ChatState, QuickReply
 from app.services.chat_flow import SkillOutput
-from app.services.skill_template import ROADMAP_LINK
 from app.services.skills import buttons
 
 # Nút mở lộ trình đầy đủ ở Tổng quan (frontend đi theo href)
+# Lộ trình đầy đủ (mốc, nhiệm vụ, trung tâm gợi ý) vẽ ở Tổng quan; chat chỉ dẫn sang bằng nút, không viết đường dẫn
+ROADMAP_LINK = "/dashboard#lo-trinh"
 ROADMAP_BUTTON = QuickReply(label="Xem lộ trình", value="Em muốn xem lộ trình đầy đủ", href=ROADMAP_LINK)
 
 PROVINCE_ID = "LT.TINH"
