@@ -57,8 +57,11 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Policies.IPublishedPolicyReader, PolicyDocumentRepository>();   // [UC-104] các bản đã công bố để xét đồng ý
         services.AddScoped<StudyAbroad.Application.Policies.IConsentRepository, ConsentRepository>();   // [UC-104] bằng chứng đồng ý điều khoản
         services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();
+        services.AddScoped<StudyAbroad.Application.BirthDateChanges.IBirthDateChangeRepository, BirthDateChangeRepository>();   // [UC-107 / UC-150] yêu cầu sửa ngày sinh
+        services.AddSingleton<StudyAbroad.Application.BirthDateChanges.IBirthDateEvidenceStorage, StudyAbroad.Infrastructure.Services.BirthDateEvidenceStorage>();
         services.AddScoped<StudyAbroad.Application.Community.ICommunityRepository, CommunityRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadWithdrawalRepository, LeadWithdrawalRepository>();   // [UC-80] thu hồi lead khi xóa tài khoản
+        services.AddScoped<StudyAbroad.Application.Leads.ILeadHoldRepository, LeadHoldRepository>();   // [UC-110 / UC-150] giữ yêu cầu liên hệ khi học sinh về dưới 16
         services.AddScoped<StudyAbroad.Application.Auth.IAccountPurgeRepository, AccountPurgeRepository>();
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterDeletionWorkRepository, CenterDeletionWorkRepository>();   // [UC-93]   // [UC-80] xóa hẳn tài khoản quá hạn
         services.AddSingleton<StudyAbroad.Application.Admin.SlmSamples.ISlmWorkbookReader, StudyAbroad.Infrastructure.Import.SlmWorkbookReader>();
@@ -67,6 +70,7 @@ public static class DependencyInjection
         services.AddSingleton<StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeWorkbookReader, StudyAbroad.Infrastructure.Import.KnowledgeWorkbookReader>();
         services.AddSingleton<StudyAbroad.Application.Admin.KnowledgeBase.IKnowledgeTemplateWriter, StudyAbroad.Infrastructure.Import.KnowledgeTemplateWriter>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<ITwoFactorRepository, TwoFactorRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<StudyAbroad.Application.Common.IUnitOfWork, EfUnitOfWork>();   // [UC-80] gom nhiều bước ghi vào một transaction
         services.AddScoped<StudyAbroad.Application.ParentLinks.IParentLinkRepository, ParentLinkRepository>();
@@ -133,6 +137,14 @@ public static class DependencyInjection
         });
         services.AddSingleton<ITokenService, TokenService>();
 
+        // [UC-03 3d] TOTP cho Moderator, Administrator (Otp.NET); khóa mã hóa cột users.totp_secret từ TOTP_ENCRYPTION_KEY
+        services.Configure<TotpOptions>(options =>
+        {
+            configuration.GetSection("Totp").Bind(options);
+            options.EncryptionKey = NonEmpty(configuration["TOTP_ENCRYPTION_KEY"]) ?? options.EncryptionKey;
+        });
+        services.AddSingleton<ITotpService, TotpService>();
+
         // [USAS-12 / USAS-362] Đăng ký Smtp Email Service (Nạp từ configuration hoặc biến môi trường SMTP_*)
         services.Configure<SmtpOptions>(options =>
         {
@@ -156,6 +168,11 @@ public static class DependencyInjection
         services.Configure<StudyAbroad.Application.Auth.AccountDeletionOptions>(
             configuration.GetSection(StudyAbroad.Application.Auth.AccountDeletionOptions.SectionName));
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<StudyAbroad.Application.Auth.AccountDeletionOptions>>().Value);
+
+        // [UC-107] Dung lượng tối đa và loại giấy tờ minh chứng sửa ngày sinh (appsettings "BirthDateChange")
+        services.Configure<StudyAbroad.Application.BirthDateChanges.BirthDateChangeOptions>(
+            configuration.GetSection(StudyAbroad.Application.BirthDateChanges.BirthDateChangeOptions.SectionName));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<StudyAbroad.Application.BirthDateChanges.BirthDateChangeOptions>>().Value);
 
         services.Configure<AdvisorOptions>(configuration.GetSection(AdvisorOptions.SectionName));
         // Giá token để tính tiền mỗi lần gọi AI: đọc từ cấu hình (appsettings "AiPricing" hoặc biến môi trường AiPricing__...)
@@ -184,6 +201,7 @@ public static class DependencyInjection
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.AccountPurgeBackgroundService>();   // [UC-80]
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.BillingBackgroundService>();   // đối soát đơn, chuyển kỳ, nhắc hạn, thông báo hạn mức
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.ParentProfileMigrationBackgroundService>();   // [1.5d] chạy 1 lần lúc khởi động
+        services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.ParentHoldReleaseBackgroundService>();   // [UC-110] học sinh đủ 16, yêu cầu đang giữ quá hạn
 
         return services;
     }

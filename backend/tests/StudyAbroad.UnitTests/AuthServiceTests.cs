@@ -2418,116 +2418,6 @@ public class AuthServiceTests
         Assert.Equal("Trung tâm ABC", user.FullName);
     }
 
-    // ---- [UC-113] Admin sửa ngày sinh theo yêu cầu hỗ trợ ----
-
-    private async Task<Guid> RegisterActive(string role, int age, string email = "u@test.com", string? parentEmail = null)
-    {
-        await CreateService().RegisterAsync(Request(email: email, role: role, dateOfBirth: BornYearsAgo(age), parentEmail: parentEmail));
-        var user = _repo.Users.Single(u => u.Email == email);
-        user.Status = UserStatuses.Active;
-        return user.Id;
-    }
-
-    [Fact]
-    public async Task UpdateBirthDate_Student_UpdatesDobRecomputesAgeAndAuditsOldAndNew()
-    {
-        var adminId = Guid.NewGuid();
-        var id = await RegisterActive(UserRoles.Student, 15, parentEmail: "p@test.com");
-        var oldDob = _repo.Users.Single(u => u.Id == id).DateOfBirth;
-        var newDob = BornYearsAgo(19);
-
-        var result = await CreateService().UpdateUserBirthDateAsync(id, new UpdateUserBirthDateRequest(newDob, "  Khai nhầm năm sinh  "), adminId);
-
-        Assert.Equal(AuthError.None, result.Error);
-        Assert.Equal(newDob, _repo.Users.Single(u => u.Id == id).DateOfBirth);
-        Assert.Equal(19, result.User!.Age);
-        Assert.Equal(AgeGroups.Adult, result.User.AgeGroup);
-        Assert.Equal(ParentConsentStatuses.NotRequired, result.User.ParentConsentStatus);
-        var log = Assert.Single(_auditLogs.Entries, e => e.Action == "user.birth_date_update");
-        Assert.Equal(adminId, log.ActorUserId);
-        using var detail = System.Text.Json.JsonDocument.Parse(log.DetailJson!);
-        Assert.Equal(oldDob!.Value.ToString("yyyy-MM-dd"), detail.RootElement.GetProperty("oldBirthDate").GetString());
-        Assert.Equal(newDob.ToString("yyyy-MM-dd"), detail.RootElement.GetProperty("newBirthDate").GetString());
-        Assert.Equal("Khai nhầm năm sinh", detail.RootElement.GetProperty("reason").GetString());
-        Assert.Equal(15, detail.RootElement.GetProperty("oldAge").GetInt32());
-        Assert.Equal(19, detail.RootElement.GetProperty("newAge").GetInt32());
-    }
-
-    [Fact]
-    public async Task UpdateBirthDate_AdultStudentBecomesChild_RequiresParentConsentAgain()
-    {
-        var id = await RegisterActive(UserRoles.Student, 20);
-
-        var result = await CreateService().UpdateUserBirthDateAsync(id, new UpdateUserBirthDateRequest(BornYearsAgo(14), "Khai sai"), Guid.NewGuid());
-
-        Assert.Equal(AuthError.None, result.Error);
-        Assert.Equal(AgeGroups.Child, result.User!.AgeGroup);
-        Assert.Equal(ParentConsentStatuses.None, result.User.ParentConsentStatus);
-        Assert.NotEmpty(result.User.BlockedFeatures!);
-    }
-
-    [Fact]
-    public async Task UpdateBirthDate_ParentMustStayAtLeast18()
-    {
-        var id = await RegisterActive(UserRoles.Parent, 40);
-
-        var tooYoung = await CreateService().UpdateUserBirthDateAsync(id, new UpdateUserBirthDateRequest(BornYearsAgo(17), "x"), Guid.NewGuid());
-        var ok = await CreateService().UpdateUserBirthDateAsync(id, new UpdateUserBirthDateRequest(BornYearsAgo(25), "x"), Guid.NewGuid());
-
-        Assert.Equal(AuthError.Validation, tooYoung.Error);
-        Assert.Equal(AuthError.None, ok.Error);
-        Assert.Equal(BornYearsAgo(25), _repo.Users.Single(u => u.Id == id).DateOfBirth);
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData(null)]
-    public async Task UpdateBirthDate_EmptyReason_IsRejectedAndNothingChanges(string? reason)
-    {
-        var id = await RegisterActive(UserRoles.Student, 20);
-        var before = _repo.Users.Single(u => u.Id == id).DateOfBirth;
-
-        var result = await CreateService().UpdateUserBirthDateAsync(id, new UpdateUserBirthDateRequest(BornYearsAgo(19), reason), Guid.NewGuid());
-
-        Assert.Equal(AuthError.Validation, result.Error);
-        Assert.Equal(before, _repo.Users.Single(u => u.Id == id).DateOfBirth);
-        Assert.DoesNotContain(_auditLogs.Entries, e => e.Action == "user.birth_date_update");
-    }
-
-    [Fact]
-    public async Task UpdateBirthDate_InvalidInputs_AreRejected()
-    {
-        var id = await RegisterActive(UserRoles.Student, 20);
-        var current = _repo.Users.Single(u => u.Id == id).DateOfBirth;
-        var today = AgePolicy.TodayInVietnam(DateTime.UtcNow);
-        var service = CreateService();
-        var admin = Guid.NewGuid();
-        var tooLong = new string('a', AuthService.MaxLockReasonLength + 1);
-
-        Assert.Equal(AuthError.Validation, (await service.UpdateUserBirthDateAsync(id, new(today.AddDays(1), "x"), admin)).Error);
-        Assert.Equal(AuthError.Validation, (await service.UpdateUserBirthDateAsync(id, new(BornYearsAgo(AuthService.MaxAge + 1), "x"), admin)).Error);
-        Assert.Equal(AuthError.Validation, (await service.UpdateUserBirthDateAsync(id, new(null, "x"), admin)).Error);
-        Assert.Equal(AuthError.Validation, (await service.UpdateUserBirthDateAsync(id, new(BornYearsAgo(19), tooLong), admin)).Error);
-        Assert.Equal(AuthError.Validation, (await service.UpdateUserBirthDateAsync(id, new(current, "x"), admin)).Error);
-        Assert.Equal(AuthError.Validation, (await service.UpdateUserBirthDateAsync(Guid.NewGuid(), new(BornYearsAgo(19), "x"), admin)).Error);
-        Assert.Equal(current, _repo.Users.Single(u => u.Id == id).DateOfBirth);
-    }
-
-    [Theory]
-    [InlineData(UserRoles.Center)]
-    [InlineData(UserRoles.Moderator)]
-    [InlineData(UserRoles.Admin)]
-    public async Task UpdateBirthDate_OnlyStudentOrParentAccounts(string role)
-    {
-        var id = await RegisterActive(UserRoles.Parent, 30);
-        _repo.Users.Single(u => u.Id == id).Role = role;
-
-        var result = await CreateService().UpdateUserBirthDateAsync(id, new(BornYearsAgo(31), "x"), Guid.NewGuid());
-
-        Assert.Equal(AuthError.Validation, result.Error);
-    }
-
     // [1.5c] Con managed: phụ huynh nhập thay, không mật khẩu, không tự đăng nhập hay đặt lại mật khẩu
     private User AddManagedChild()
     {
@@ -2631,19 +2521,6 @@ public class AuthServiceTests
         Assert.Equal(AuthError.Validation, result.Error);
         Assert.Equal("Không tìm thấy tài khoản.", result.Message);
         Assert.Equal(UserStatuses.Managed, child.Status);
-        Assert.Empty(_auditLogs.Entries);
-    }
-
-    [Fact]
-    public async Task UpdateUserBirthDate_ManagedChild_NotFound_BirthDateUnchanged()
-    {
-        var child = AddManagedChild();
-
-        var result = await CreateService().UpdateUserBirthDateAsync(child.Id, new UpdateUserBirthDateRequest(BornYearsAgo(14), "Khai sai"), Guid.NewGuid());
-
-        Assert.Equal(AuthError.Validation, result.Error);
-        Assert.Equal("Không tìm thấy tài khoản.", result.Message);
-        Assert.Null(child.DateOfBirth);
         Assert.Empty(_auditLogs.Entries);
     }
 }

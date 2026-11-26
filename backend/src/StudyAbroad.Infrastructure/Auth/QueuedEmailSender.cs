@@ -101,6 +101,12 @@ namespace StudyAbroad.Infrastructure.Auth
         public Task SendFamilyInviteEmailAsync(string toEmail, string ownerName, string seatRole, string inviteToken, int expiryDays, CancellationToken ct = default) =>
             Enqueue(toEmail, (s, t) => s.SendFamilyInviteEmailAsync(toEmail, ownerName, seatRole, inviteToken, expiryDays, t));
 
+        public Task SendRecoveryCodeUsedEmailAsync(string toEmail, string fullName, DateTime usedAtUtc, string? ipAddress, string? userAgent, int remainingCodes, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendRecoveryCodeUsedEmailAsync(toEmail, fullName, usedAtUtc, ipAddress, userAgent, remainingCodes, t));
+
+        public Task SendTwoFactorResetEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default) =>
+            Enqueue(toEmail, (s, t) => s.SendTwoFactorResetEmailAsync(toEmail, fullName, reason, t));
+
         private Task Enqueue(string toEmail, Func<IEmailSender, CancellationToken, Task> send)
         {
             if (!queue.TryEnqueue(send))

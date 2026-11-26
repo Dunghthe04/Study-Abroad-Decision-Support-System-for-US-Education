@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StudyAbroad.Api.Extensions;
 using StudyAbroad.Application.Auth;
+using StudyAbroad.Application.BirthDateChanges;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Domain.Constants;
 
@@ -15,7 +16,10 @@ namespace StudyAbroad.Api.Controllers;
 [ApiController]
 [Authorize(Roles = UserRoles.Admin)]
 [Route("api/v1/admin/users")]
-public class AdminUsersController(IAuthService auth) : ControllerBase
+public class AdminUsersController(
+    IAuthService auth,
+    // [UC-150] Hiện yêu cầu sửa ngày sinh đang chờ ở chi tiết tài khoản; null trong test cũ
+    IBirthDateChangeRepository? birthDateRequests = null) : ControllerBase
 {
     /// <summary>[UC-60] Xem danh sách tài khoản — tìm, lọc, phân trang (chỉ Admin).</summary>
     [HttpGet]
@@ -35,7 +39,11 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
     {
         var user = await auth.GetMeAsync(id, ct);
         // [1.5c] Con managed không phải tài khoản thật: admin xem theo id cũng nhận 404. Chặn ở đây, không sửa GetMeAsync vì /me còn dùng khi phụ huynh làm thay
-        return user is not null && user.Status != UserStatuses.Managed ? Ok(user) : NotFound();
+        if (user is null || user.Status == UserStatuses.Managed)
+            return NotFound();
+        if (birthDateRequests is not null && await birthDateRequests.GetPendingByUserAsync(id, ct) is { } pending)
+            user = user with { PendingBirthDateRequestId = pending.Id, PendingBirthDate = pending.RequestedBirthDate };
+        return Ok(user);
     }
 
     /// <summary>[UC-63] Tạo tài khoản moderator (chỉ Admin mới được tạo).</summary>
@@ -81,18 +89,4 @@ public class AdminUsersController(IAuthService auth) : ControllerBase
         return Ok(result.User);
     }
 
-    /// <summary>[UC-113] Sửa ngày sinh Học sinh / Phụ huynh theo yêu cầu hỗ trợ, bắt buộc lý do, ghi audit giá trị cũ và mới (chỉ Admin).</summary>
-    [HttpPut("{id:guid}/birth-date")]
-    [Authorize(Roles = UserRoles.Admin)]
-    public async Task<ActionResult<UserDto>> UpdateBirthDate(Guid id, UpdateUserBirthDateRequest request, CancellationToken ct)
-    {
-        if (User.GetUserId() is not { } actorId)
-            return Unauthorized();
-
-        var result = await auth.UpdateUserBirthDateAsync(id, request, actorId, ct);
-        if (result.Error != AuthError.None || result.User is null)
-            return ValidationProblem(result.Message);
-
-        return Ok(result.User);
-    }
 }

@@ -42,8 +42,6 @@ namespace StudyAbroad.Application.Auth
         Task<AuthResult> LockUserAccountAsync(Guid targetUserId, LockUserAccountRequest request, Guid actorAdminId, CancellationToken ct = default);
         /// <summary>[UC-62] Admin mở khóa tài khoản (status locked hoặc temp_locked) kèm lý do và audit.</summary>
         Task<AuthResult> UnlockUserAccountAsync(Guid targetUserId, UnlockUserAccountRequest request, Guid actorAdminId, CancellationToken ct = default);
-        /// <summary>[UC-113] Admin sửa ngày sinh Học sinh / Phụ huynh theo yêu cầu hỗ trợ, bắt buộc lý do, ghi audit giá trị cũ và mới.</summary>
-        Task<AuthResult> UpdateUserBirthDateAsync(Guid targetUserId, UpdateUserBirthDateRequest request, Guid actorAdminId, CancellationToken ct = default);
         /// <summary>[UC-80] Yêu cầu xóa tài khoản: xóa mềm, khôi phục được trong thời hạn, hết hạn thì job xóa hẳn.</summary>
         Task<AuthResult> AnonymizeUserAccountAsync(Guid userId, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
         /// <summary>[UC-80] Khôi phục tài khoản đang chờ xóa bằng mã khôi phục, đăng nhập luôn khi thành công.</summary>
@@ -57,6 +55,15 @@ namespace StudyAbroad.Application.Auth
     public interface IParentRequestedDeletion
     {
         Task<AuthResult> DeleteChildAccountByParentAsync(Guid studentUserId, ParentDeletionRequester requester, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
+    }
+
+    /// <summary>
+    /// [UC-03 3d] Bước 2 đăng nhập Moderator, Administrator (mã TOTP hoặc mã khôi phục). Tách khỏi IAuthService để không phải
+    /// sửa lớp giả IAuthService trong test của người khác; AuthService cài đặt.
+    /// </summary>
+    public interface ITwoFactorLogin
+    {
+        Task<AuthResult> VerifyTwoFactorAsync(TwoFactorLoginRequest request, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default);
     }
 
     public class AuthService(
@@ -75,8 +82,9 @@ namespace StudyAbroad.Application.Auth
         // [UC-104] Đồng ý Điều khoản và Chính sách bảo mật lúc đăng ký; null trong test cũ thì bỏ qua
         StudyAbroad.Application.Policies.IRegistrationConsent? registrationConsent = null,
         StudyAbroad.Application.Leads.ILeadRepository? leadRepo = null,
-        // [SC-10 / UC-113] Gửi thông báo khi Admin cập nhật ngày sinh
-        StudyAbroad.Application.Notifications.INotificationService? notifications = null) : IAuthService, IParentRequestedDeletion
+        // [UC-03 3d] Xác thực hai lớp TOTP cho Moderator, Administrator; null trong test cũ thì đăng nhập một bước như trước
+        ITotpService? totp = null,
+        ITwoFactorRepository? twoFactor = null) : IAuthService, IParentRequestedDeletion, ITwoFactorLogin
     {
         private readonly AccountDeletionOptions _accountDeletion = accountDeletion ?? new AccountDeletionOptions();
 
@@ -411,6 +419,10 @@ namespace StudyAbroad.Application.Auth
                 return AuthResult.Fail(AuthError.InvalidCredentials, InvalidCredentialsMessage);
             }
 
+            // [UC-03 3d] Moderator, Administrator: mật khẩu đúng chưa tạo phiên, chuyển sang bước nhập mã TOTP
+            if (RequiresTwoFactor(user))
+                return await BeginTwoFactorAsync(user, ct);
+
             // Đăng nhập thành công -> Reset bộ đếm số lần sai và thời gian khóa
             user.FailedLoginAttempts = 0;
             user.LockoutEnd = null;
@@ -418,6 +430,221 @@ namespace StudyAbroad.Application.Auth
                 return AuthResult.Fail(AuthError.InvalidCredentials, InvalidCredentialsMessage);
 
             return AuthResult.Ok(await CreateSessionAsync(user, ipAddress, userAgent, ct));
+        }
+
+        /// <summary>[UC-03 3d] Hiệu lực phiếu bước 2 (từ lúc nhập đúng mật khẩu tới lúc nhập mã): 5 phút.</summary>
+        public const int TwoFactorChallengeMinutes = 5;
+
+        /// <summary>[UC-03 3d] Số mã khôi phục dùng một lần cấp khi thiết lập xong TOTP.</summary>
+        public const int RecoveryCodeCount = 10;
+
+        public const string TwoFactorChallengeInvalidMessage = "Phiên xác thực hai lớp đã hết hạn. Vui lòng đăng nhập lại.";
+
+        // [UC-03 E4] Thông báo chung cho mọi mã sai: không phân biệt mã TOTP sai, mã khôi phục sai hay đã dùng
+        public const string TwoFactorCodeInvalidMessage = "Mã xác thực không đúng.";
+
+        // Mã khôi phục dạng XXXXX-XXXXX, bỏ các ký tự dễ nhầm 0/O, 1/I
+        private const string RecoveryCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+        private bool RequiresTwoFactor(User user) =>
+            totp != null && (user.Role == UserRoles.Moderator || user.Role == UserRoles.Admin);
+
+        /// <summary>
+        /// [UC-03 3d] Mật khẩu đúng của Moderator, Administrator. Hoàn lại lần tăng bộ đếm sai vừa ghi nhưng KHÔNG xóa bộ đếm:
+        /// sai mật khẩu 4 lần rồi sai mã TOTP vẫn là lần sai thứ 5 (E4). Chưa thiết lập thì sinh khóa mới (lưu đã mã hóa,
+        /// TotpEnabledAt vẫn trống) để giao diện vẽ QR; đăng nhập lại trước khi thiết lập xong thì thay khóa khác.
+        /// </summary>
+        private async Task<AuthResult> BeginTwoFactorAsync(User user, CancellationToken ct)
+        {
+            user.FailedLoginAttempts = Math.Max(0, user.FailedLoginAttempts - 1);
+
+            TwoFactorSetupInfo? setup = null;
+            if (user.TotpEnabledAt == null || string.IsNullOrEmpty(user.TotpSecret))
+            {
+                var secret = totp!.GenerateSecret();
+                user.TotpSecret = totp.Protect(secret);
+                user.TotpEnabledAt = null;
+                setup = new TwoFactorSetupInfo(secret, totp.BuildOtpAuthUri(secret, user.Email));
+            }
+
+            if (!await TryUpdateUserAsync(user, ct))
+                return AuthResult.Fail(AuthError.InvalidCredentials, InvalidCredentialsMessage);
+
+            // Mỗi lần nhập đúng mật khẩu chỉ một phiếu còn hiệu lực
+            await users.InvalidateOtpsAsync(user.Id, OtpPurposes.LoginTwoFactor, ct);
+            var challenge = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+                .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            var expiresAt = DateTime.UtcNow.AddMinutes(TwoFactorChallengeMinutes);
+            await users.SaveOtpAsync(new OtpToken
+            {
+                UserId = user.Id,
+                Purpose = OtpPurposes.LoginTwoFactor,
+                CodeHash = HashOtp(challenge),
+                ExpiresAt = expiresAt,
+                Attempts = 0
+            }, ct);
+
+            return AuthResult.TwoFactorRequired(new TwoFactorChallengeInfo(challenge, expiresAt, setup));
+        }
+
+        /// <summary>
+        /// [UC-03 3d, E4] Bước 2: kiểm phiếu, rồi mã TOTP (hoặc mã khôi phục khi đã thiết lập). Mỗi lần thử tăng bộ đếm sai
+        /// chung với mật khẩu TRƯỚC khi so mã; sai đủ 5 lần thì khóa 15 phút, gửi mail như E2 và vẫn báo lỗi chung.
+        /// Đúng thì xóa bộ đếm, lần thiết lập thì ghi TotpEnabledAt và cấp 10 mã khôi phục (trả về một lần duy nhất).
+        /// </summary>
+        public async Task<AuthResult> VerifyTwoFactorAsync(TwoFactorLoginRequest request, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default)
+        {
+            if (totp == null || string.IsNullOrWhiteSpace(request.Challenge) || request.Challenge.Length > 100 ||
+                (request.Code?.Length ?? 0) > 20 || (request.RecoveryCode?.Length ?? 0) > 30)
+                return AuthResult.Fail(AuthError.TwoFactorChallengeInvalid, TwoFactorChallengeInvalidMessage);
+
+            var now = DateTime.UtcNow;
+            var ticket = await users.FindUnusedOtpByHashAsync(HashOtp(request.Challenge), [OtpPurposes.LoginTwoFactor], ct);
+            if (ticket == null || now > ticket.ExpiresAt || ticket.Attempts >= MaxOtpAttempts)
+                return AuthResult.Fail(AuthError.TwoFactorChallengeInvalid, TwoFactorChallengeInvalidMessage);
+
+            var user = await users.GetUserById(ticket.UserId, ct);
+            if (user == null || !RequiresTwoFactor(user) || string.IsNullOrEmpty(user.TotpSecret))
+                return AuthResult.Fail(AuthError.TwoFactorChallengeInvalid, TwoFactorChallengeInvalidMessage);
+
+            // Tài khoản bị khóa tạm thời trong lúc đang nhập mã (ví dụ có người khác nhập sai mật khẩu): báo khóa
+            if (user.Status == UserStatuses.TempLocked && !await TryReleaseExpiredTempLockAsync(user, ct))
+            {
+                ticket.UsedAt = now;
+                await OtpRules.TryUpdateAsync(users, ticket, ct);
+                return AuthResult.Fail(AuthError.TempLocked, TempLockedMessage(MaxFailedLoginAttempts, "mật khẩu"));
+            }
+            if (user.Status != UserStatuses.Active)
+                return AuthResult.Fail(AuthError.TwoFactorChallengeInvalid, TwoFactorChallengeInvalidMessage);
+
+            // Ghi nhận lần thử trên phiếu và trên bộ đếm sai TRƯỚC khi so mã (chống thử song song như bước mật khẩu)
+            ticket.Attempts++;
+            if (!await OtpRules.TryUpdateAsync(users, ticket, ct))
+                return AuthResult.Fail(AuthError.TwoFactorCodeInvalid, TwoFactorCodeInvalidMessage);
+            user.FailedLoginAttempts++;
+            if (!await TryUpdateUserAsync(user, ct))
+                return AuthResult.Fail(AuthError.TwoFactorCodeInvalid, TwoFactorCodeInvalidMessage);
+
+            var settingUp = user.TotpEnabledAt == null;
+            var usedRecoveryCode = false;
+            bool valid;
+            if (!string.IsNullOrWhiteSpace(request.RecoveryCode))
+            {
+                // Mã khôi phục chỉ có sau khi thiết lập xong
+                valid = !settingUp && await TryConsumeRecoveryCodeAsync(user.Id, request.RecoveryCode, ct);
+                usedRecoveryCode = valid;
+            }
+            else
+            {
+                var secret = totp.Unprotect(user.TotpSecret);
+                valid = secret != null && !string.IsNullOrWhiteSpace(request.Code) && totp.VerifyCode(secret, request.Code, now);
+            }
+
+            if (!valid)
+            {
+                if (user.FailedLoginAttempts >= MaxFailedLoginAttempts)
+                {
+                    user.Status = UserStatuses.TempLocked;
+                    user.LockoutEnd = now.AddMinutes(TempLockoutMinutes);
+                    if (await TryUpdateUserAsync(user, ct))
+                        await emailSender.SendAccountTempLockedNotificationAsync(user.Email, user.FullName, TempLockoutMinutes, ct);
+                    ticket.UsedAt = now;
+                    await OtpRules.TryUpdateAsync(users, ticket, ct);
+                }
+                else if (ticket.Attempts >= MaxOtpAttempts)
+                {
+                    ticket.UsedAt = now;
+                    await OtpRules.TryUpdateAsync(users, ticket, ct);
+                }
+                // [UC-03 E4] Lỗi chung, kể cả lần sai thứ 5 vừa khóa tài khoản
+                return AuthResult.Fail(AuthError.TwoFactorCodeInvalid, TwoFactorCodeInvalidMessage);
+            }
+
+            // Đúng mã: phiếu dùng một lần
+            ticket.UsedAt = now;
+            if (!await OtpRules.TryUpdateAsync(users, ticket, ct))
+                return AuthResult.Fail(AuthError.TwoFactorChallengeInvalid, TwoFactorChallengeInvalidMessage);
+
+            user.FailedLoginAttempts = 0;
+            user.LockoutEnd = null;
+            if (settingUp)
+                user.TotpEnabledAt = now;
+            if (!await TryUpdateUserAsync(user, ct))
+                return AuthResult.Fail(AuthError.TwoFactorChallengeInvalid, TwoFactorChallengeInvalidMessage);
+
+            IReadOnlyList<string>? recoveryCodes = null;
+            if (settingUp)
+            {
+                recoveryCodes = await IssueRecoveryCodesAsync(user.Id, ct);
+                await auditLogs.AddAsync(new AuditLog
+                {
+                    ActorUserId = user.Id,
+                    Action = "user.two_factor_enabled",
+                    EntityType = "user",
+                    EntityId = user.Id.ToString(),
+                    DetailJson = JsonSerializer.Serialize(new { userId = user.Id, enabledAt = now }),
+                    IpAddress = ipAddress,
+                    UserAgent = userAgent
+                }, ct);
+            }
+
+            if (usedRecoveryCode)
+            {
+                var remaining = twoFactor != null ? await twoFactor.CountUnusedRecoveryCodesAsync(user.Id, ct) : 0;
+                await auditLogs.AddAsync(new AuditLog
+                {
+                    ActorUserId = user.Id,
+                    Action = "user.login_recovery_code",
+                    EntityType = "user",
+                    EntityId = user.Id.ToString(),
+                    DetailJson = JsonSerializer.Serialize(new { userId = user.Id, remainingCodes = remaining }),
+                    IpAddress = ipAddress,
+                    UserAgent = userAgent
+                }, ct);
+                // Thêm theo ý nhóm 26/11: báo chủ tài khoản mỗi lần đăng nhập bằng mã khôi phục
+                await emailSender.SendRecoveryCodeUsedEmailAsync(user.Email, user.FullName, now, ipAddress, userAgent, remaining, ct);
+            }
+
+            var response = await CreateSessionAsync(user, ipAddress, userAgent, ct);
+            return AuthResult.Ok(response) with { RecoveryCodes = recoveryCodes };
+        }
+
+        /// <summary>Chuẩn hóa mã khôi phục người dùng gõ: chữ hoa, bỏ dấu gạch và khoảng trắng.</summary>
+        internal static string NormalizeRecoveryCode(string code) =>
+            new string(code.Where(c => c != '-' && !char.IsWhiteSpace(c)).ToArray()).ToUpperInvariant();
+
+        private async Task<bool> TryConsumeRecoveryCodeAsync(Guid userId, string code, CancellationToken ct)
+        {
+            var normalized = NormalizeRecoveryCode(code);
+            if (normalized.Length == 0)
+                return false;
+            var otp = await users.FindUnusedOtpByHashAsync(HashOtp(normalized), [OtpPurposes.RecoveryCode], ct);
+            if (otp == null || otp.UserId != userId)
+                return false;
+            otp.UsedAt = DateTime.UtcNow;
+            // Hai request song song cùng một mã: chỉ một request ghi được
+            return await OtpRules.TryUpdateAsync(users, otp, ct);
+        }
+
+        /// <summary>[UC-03 3d] Bỏ mã khôi phục cũ, sinh 10 mã mới (chỉ lưu hash, không hết hạn), trả mã gốc một lần.</summary>
+        private async Task<IReadOnlyList<string>> IssueRecoveryCodesAsync(Guid userId, CancellationToken ct)
+        {
+            await users.InvalidateOtpsAsync(userId, OtpPurposes.RecoveryCode, ct);
+            var codes = new List<string>(RecoveryCodeCount);
+            for (var i = 0; i < RecoveryCodeCount; i++)
+            {
+                var raw = RandomNumberGenerator.GetString(RecoveryCodeAlphabet, 10);
+                codes.Add($"{raw[..5]}-{raw[5..]}");
+                await users.SaveOtpAsync(new OtpToken
+                {
+                    UserId = userId,
+                    Purpose = OtpPurposes.RecoveryCode,
+                    CodeHash = HashOtp(raw),
+                    ExpiresAt = DateTime.SpecifyKind(new DateTime(9999, 12, 31), DateTimeKind.Utc),
+                    Attempts = 0
+                }, ct);
+            }
+            return codes;
         }
 
         /// <summary>Mở phiên đăng nhập cho một tài khoản đã được xác thực ở nơi khác (ví dụ trung tâm vừa xác thực email, UC-91).</summary>
@@ -1151,92 +1378,6 @@ namespace StudyAbroad.Application.Auth
             _ = emailSender.SendAccountLockedEmailAsync(user.Email, user.FullName, reason, ct);
 
             return AuthResult.Ok(ToDto(user) with { LockReason = reason }, "Đã khóa tài khoản.");
-        }
-
-        /// <summary>
-        /// [UC-113] Admin sửa ngày sinh theo yêu cầu hỗ trợ (ngày sinh bị khóa sau đăng ký, UC-01). Chỉ Học sinh / Phụ huynh.
-        /// Tuổi và các quy tắc mốc 16 / 18 (đồng ý của phụ huynh, chức năng bị chặn theo tuổi) được tính lại từ ngày sinh mới
-        /// mỗi lần gọi (AgeAccess), không có dữ liệu suy ra nào lưu sẵn. Phụ huynh phải còn từ 18 tuổi.
-        /// </summary>
-        public async Task<AuthResult> UpdateUserBirthDateAsync(
-            Guid targetUserId,
-            UpdateUserBirthDateRequest request,
-            Guid actorAdminId,
-            CancellationToken ct = default)
-        {
-            var reason = request.Reason?.Trim() ?? string.Empty;
-            if (reason.Length == 0)
-                return AuthResult.Fail(AuthError.Validation, "Lý do sửa ngày sinh không được để trống.");
-            if (reason.Length > MaxLockReasonLength)
-                return AuthResult.Fail(AuthError.Validation, $"Lý do sửa ngày sinh tối đa {MaxLockReasonLength} ký tự.");
-
-            if (request.BirthDate is not { } newDob)
-                return AuthResult.Fail(AuthError.Validation, "Vui lòng nhập ngày sinh mới.");
-
-            var user = await users.GetUserById(targetUserId, ct);
-            // [1.5c] Con managed không phải tài khoản thật: admin thao tác theo id cũng coi như không tồn tại
-            if (user is null || user.Status == UserStatuses.Managed)
-                return AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản.");
-
-            if (user.Role != UserRoles.Student && user.Role != UserRoles.Parent)
-                return AuthResult.Fail(AuthError.Validation, "Chỉ sửa được ngày sinh của tài khoản Học sinh hoặc Phụ huynh.");
-
-            var today = AgePolicy.TodayInVietnam(DateTime.UtcNow);
-            if (newDob > today)
-                return AuthResult.Fail(AuthError.Validation, "Ngày sinh không được ở tương lai.");
-
-            var newAge = AgePolicy.GetAge(newDob, today);
-            if (newAge > MaxAge)
-                return AuthResult.Fail(AuthError.Validation, "Ngày sinh không hợp lệ.");
-
-            if (user.Role == UserRoles.Parent && newAge < AgeGroups.AdultAge)
-                return AuthResult.Fail(AuthError.Validation, $"Tài khoản phụ huynh phải từ {AgeGroups.AdultAge} tuổi.");
-
-            if (user.DateOfBirth == newDob)
-                return AuthResult.Fail(AuthError.Validation, "Ngày sinh mới trùng với ngày sinh hiện tại.");
-
-            var oldDob = user.DateOfBirth;
-            int? oldAge = oldDob is { } o ? AgePolicy.GetAge(o, today) : null;
-            user.DateOfBirth = newDob;
-            await users.UpdateUserAsync(user, ct);
-
-            await auditLogs.AddAsync(new AuditLog
-            {
-                ActorUserId = actorAdminId,
-                Action = "user.birth_date_update",
-                EntityType = "user",
-                EntityId = user.Id.ToString(),
-                DetailJson = JsonSerializer.Serialize(new
-                {
-                    reason,
-                    targetEmail = user.Email,
-                    oldBirthDate = oldDob?.ToString("yyyy-MM-dd"),
-                    newBirthDate = newDob.ToString("yyyy-MM-dd"),
-                    oldAge,
-                    newAge,
-                }),
-            }, ct);
-
-            // [SC-10 / UC-113] Gửi thông báo trong hệ thống cho người dùng khi Administrator cập nhật ngày sinh
-            if (notifications is not null)
-            {
-                try
-                {
-                    await notifications.NotifyAsync(
-                        user.Id,
-                        "user_birth_date_updated",
-                        "Ngày sinh của bạn đã được cập nhật",
-                        $"Administrator đã cập nhật ngày sinh của bạn thành {newDob:dd/MM/yyyy}. Lý do: {reason}",
-                        "/account",
-                        ct);
-                }
-                catch
-                {
-                    // Nuốt lỗi thông báo để không chặn luồng chính
-                }
-            }
-
-            return AuthResult.Ok(await ToDtoAsync(user, ct), $"Đã sửa ngày sinh. Tuổi hiện tại: {newAge}.");
         }
 
         /// <summary>[UC-62] Mở khóa tài khoản kèm lý do (chỉ tài khoản đang bị locked hoặc temp_locked).</summary>

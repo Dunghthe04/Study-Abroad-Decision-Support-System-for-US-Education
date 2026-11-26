@@ -72,13 +72,20 @@ public class LeadParentConfirmService(
                 GrantedIp = safeIp,
             }
             : null;
-        var status = accept ? LeadStatuses.New : LeadStatuses.Cancelled;
+        // [UC-110] Yêu cầu đang giữ (Admin sửa ngày sinh về dưới 16) trở lại đúng trạng thái trước khi giữ
+        var held = lead.HeldFromStatus is not null;
+        var status = !accept ? LeadStatuses.Cancelled : lead.HeldFromStatus ?? LeadStatuses.New;
+        // Hạn 7 ngày trung tâm phản hồi và mốc 90 ngày tính từ lúc trung tâm nhận (ActiveSince): cộng thời gian chờ phụ huynh
+        long? pausedSeconds = !accept ? null
+            : held ? lead.PausedSeconds + SecondsBetween(lead.HeldAt ?? now, now)
+            : SecondsBetween(lead.CreatedAt, now);
+        var decision = new LeadParentDecision(status, link.ParentEmail, now, safeIp, now, pausedSeconds, ClearHold: accept && held);
 
         // Ghi có điều kiện "còn chờ": phụ huynh khác bấm cùng lúc thì một người thua, báo 409
-        if (!await leads.TryCompleteParentConfirmAsync(lead.Id, new LeadParentDecision(status, link.ParentEmail, now, safeIp, now), consent, ct))
+        if (!await leads.TryCompleteParentConfirmAsync(lead.Id, decision, consent, ct))
             throw Answered();
 
-        await NotifyStudentAsync(lead, status, ct);
+        await NotifyStudentAsync(lead, accept ? LeadStatuses.New : LeadStatuses.Cancelled, ct, held);
 
         var updated = await leads.GetByParentTokenHashAsync(lead.ParentTokenHash!, ct) ?? lead;
         return await ToInfoAsync(updated, link, now, ct);
@@ -97,20 +104,32 @@ public class LeadParentConfirmService(
         return (lead, link);
     }
 
-    /// <summary>Hết hạn lười: lead quá 7 ngày còn chờ thì ghi "expired" và báo học sinh, rồi trả 410.</summary>
+    /// <summary>
+    /// Hết hạn lười: lead quá 7 ngày còn chờ thì ghi "expired" và báo học sinh, rồi trả 410.
+    /// [UC-110] Yêu cầu đang giữ quá hạn thì ghi "withdrawn" (trung tâm đã từng nhận), báo học sinh và trung tâm.
+    /// </summary>
     private async Task EnsureNotExpiredAsync(Lead lead, DateTime now, CancellationToken ct)
     {
-        if (lead.Status == LeadStatuses.Expired)
+        if (lead.Status == LeadStatuses.Expired || LeadParentConfirm.IsHeldWithdrawnUnanswered(lead))
             throw Expired();
         if (!LeadParentConfirm.IsPastDeadline(lead, now))
             return;
 
-        if (await leads.TryCompleteParentConfirmAsync(lead.Id, new LeadParentDecision(LeadStatuses.Expired, null, null, null, now), null, ct))
-            await NotifyStudentAsync(lead, LeadStatuses.Expired, ct);
+        var outcome = lead.HeldFromStatus is null ? LeadStatuses.Expired : LeadStatuses.Withdrawn;
+        if (await leads.TryCompleteParentConfirmAsync(lead.Id, new LeadParentDecision(outcome, null, null, null, now), null, ct))
+        {
+            if (outcome == LeadStatuses.Expired)
+                await NotifyStudentAsync(lead, LeadStatuses.Expired, ct);
+            else if (lead.UserId is { } studentId && await users.GetUserById(studentId, ct) is { } student)
+                await LeadParentHoldService.NotifyHeldWithdrawnAsync(student, lead,
+                    $"Phụ huynh chưa xác nhận trong {LeadParentConfirm.ExpiryDays} ngày", studyCenters, emailSender, notifications, ct);
+        }
         throw Expired();
     }
 
-    private async Task NotifyStudentAsync(Lead lead, string outcome, CancellationToken ct)
+    private static long SecondsBetween(DateTime from, DateTime to) => Math.Max(0L, (long)(to - from).TotalSeconds);
+
+    private async Task NotifyStudentAsync(Lead lead, string outcome, CancellationToken ct, bool held = false)
     {
         var student = lead.UserId is { } studentId ? await users.GetUserById(studentId, ct) : null;
         if (student is null)
@@ -132,10 +151,16 @@ public class LeadParentConfirmService(
         await notifications.NotifyAsync(student.Id, NotificationTypes.LeadStatusChanged, "Kết quả phụ huynh xác nhận yêu cầu liên hệ",
             text, "/account", ct);
 
-        // [UC-110 bước 3] Đồng ý: yêu cầu tới trung tâm như yêu cầu mới gửi (UC-42)
+        // [UC-110 bước 3] Đồng ý: yêu cầu tới trung tâm như yêu cầu mới gửi (UC-42); yêu cầu đang giữ thì trở lại như trước
         if (outcome == LeadStatuses.New && center?.OwnerUserId is { } ownerId)
-            await notifications.NotifyAsync(ownerId, NotificationTypes.LeadNew, "Có yêu cầu liên hệ mới",
-                "Một học sinh / phụ huynh vừa gửi yêu cầu liên hệ tới trung tâm.", "/center/leads", ct);
+        {
+            if (held)
+                await notifications.NotifyAsync(ownerId, NotificationTypes.LeadStatusChanged, "Yêu cầu liên hệ đã được phụ huynh xác nhận",
+                    "Phụ huynh đã xác nhận yêu cầu liên hệ của một học sinh. Yêu cầu hiện lại trong danh sách với trạng thái như trước.", "/center/leads", ct);
+            else
+                await notifications.NotifyAsync(ownerId, NotificationTypes.LeadNew, "Có yêu cầu liên hệ mới",
+                    "Một học sinh / phụ huynh vừa gửi yêu cầu liên hệ tới trung tâm.", "/center/leads", ct);
+        }
     }
 
     private async Task<LeadParentConfirmInfo> ToInfoAsync(Lead lead, ParentStudentLink link, DateTime now, CancellationToken ct)

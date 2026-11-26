@@ -4,12 +4,15 @@ import React, { createContext, useContext, useEffect, useState, type ReactNode }
 import { actingApi } from "@/lib/acting-api";
 import { authApi } from "@/lib/api";
 import { cancelScheduledRefresh, scheduleRefresh, SESSION_EXPIRED_EVENT } from "@/lib/auth-refresh";
-import type { LoginRequest, RegisterRequest, UserDto } from "@/types/api";
+import type { AuthResponse, LoginRequest, RegisterRequest, TwoFactorChallengeResponse, UserDto } from "@/types/api";
 
 interface AuthContextType {
   user: UserDto | null;
   isLoading: boolean;
-  login: (data: LoginRequest) => Promise<UserDto>;
+  /** [UC-03 3d] Moderator, Administrator: trả phiếu bước 2, chưa có phiên */
+  login: (data: LoginRequest) => Promise<UserDto | TwoFactorChallengeResponse>;
+  /** [UC-03 3d] Bước 2 xong (server đã đặt cookie): hẹn làm mới phiên và đặt user */
+  completeLogin: (res: AuthResponse) => UserDto;
   register: (data: RegisterRequest) => Promise<{ message: string }>;
   verifyEmail: (data: { email: string; otpCode: string }) => Promise<UserDto>;
   logout: () => Promise<void>;
@@ -106,8 +109,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [isParent, userId, actingChildId]);
 
   // [AC-2] Đăng nhập: Backend đặt HttpOnly Cookie, Client chỉ lưu User state trong RAM
-  const login = async (data: LoginRequest): Promise<UserDto> => {
+  const login = async (data: LoginRequest): Promise<UserDto | TwoFactorChallengeResponse> => {
     const res = await authApi.login(data);
+    if ("twoFactorRequired" in res) return res;
+    return completeLogin(res);
+  };
+
+  const completeLogin = (res: AuthResponse): UserDto => {
     scheduleRefresh(res.expiresAt);
     setUser(res.user);
     return res.user;
@@ -161,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, verifyEmail, logout, refreshUser, acting, startActing, stopActing }}>
+    <AuthContext.Provider value={{ user, isLoading, login, completeLogin, register, verifyEmail, logout, refreshUser, acting, startActing, stopActing }}>
       {children}
     </AuthContext.Provider>
   );

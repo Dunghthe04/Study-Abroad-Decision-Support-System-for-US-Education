@@ -59,6 +59,7 @@ const CATEGORY_TABS: { id: AccessLogCategory; label: string; icon: React.Element
   { id: "slm_export", label: "Xuất mẫu SLM (UC-96)", icon: DownloadIcon },
   { id: "knowledge_base", label: "Kho tri thức", icon: FileTextIcon },
   { id: "slm_sample", label: "Thao tác mẫu SLM", icon: FileTextIcon },
+  { id: "birth_date_evidence", label: "Minh chứng ngày sinh", icon: CalendarIcon },
   { id: "parent", label: "Đại diện & Phụ huynh", icon: UsersIcon },
   { id: "account", label: "Tài khoản & Phân quyền", icon: UserCheckIcon },
   { id: "all", label: "Nhật ký thao tác (Tất cả)", icon: ShieldCheckIcon },
@@ -73,6 +74,7 @@ const ACTION_FRIENDLY_NAMES: Record<string, string> = {
   "slm_sample.export": "Xuất mẫu huấn luyện SLM (UC-96)",
   "review_batch.view_item": "Xem tin nhắn chat kiểm thử (đợt duyệt)",
   "order.deleted_buyer_viewed": "Xem thông tin người mua của tài khoản đã xóa (UC-124)",
+  "birth_date.evidence_viewed": "Xem minh chứng yêu cầu sửa ngày sinh (UC-150)",
 
   // Kho tri thức (UC-113..117)
   "knowledge_base.create": "Thêm mục kho tri thức (UC-114)",
@@ -101,8 +103,13 @@ const ACTION_FRIENDLY_NAMES: Record<string, string> = {
   // Tài khoản & Người dùng
   "user.lock": "Khóa tài khoản người dùng",
   "user.unlock": "Mở khóa tài khoản người dùng",
+  "user.two_factor_enabled": "Bật xác thực hai lớp",
+  "user.two_factor_reset": "Đặt lại xác thực hai lớp",
+  "user.login_recovery_code": "Đăng nhập bằng mã khôi phục",
   "user.role_change": "Thay đổi phân quyền vai trò",
   "user.birth_date_edit": "Cập nhật ngày sinh và tuổi",
+  "user.birth_date_approved": "Duyệt yêu cầu sửa ngày sinh (UC-150)",
+  "user.birth_date_rejected": "Từ chối yêu cầu sửa ngày sinh (UC-150)",
   "user.anonymized": "Ẩn danh tài khoản",
   "user.deleted": "Xóa vĩnh viễn tài khoản",
 
@@ -141,11 +148,14 @@ const ENTITY_FRIENDLY_NAMES: Record<string, string> = {
   slm_sample: "Mẫu huấn luyện SLM",
   slm_training_sample: "Mẫu huấn luyện SLM",
   knowledge_document: "Kho tri thức",
+  birth_date_change_request: "Yêu cầu sửa ngày sinh",
 };
 
 /** Ánh xạ tên trường trong JSON sang nhãn tiếng Việt */
 const FIELD_FRIENDLY_NAMES: Record<string, string> = {
   managedChildId: "Mã học sinh đại diện",
+  targetUserId: "Mã người dùng",
+  evidenceType: "Loại minh chứng",
   childId: "Mã học sinh",
   parentId: "Mã phụ huynh",
   reason: "Lý do thao tác",

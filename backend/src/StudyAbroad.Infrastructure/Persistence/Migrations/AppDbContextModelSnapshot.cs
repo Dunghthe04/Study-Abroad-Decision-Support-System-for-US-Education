@@ -297,6 +297,107 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_logs", "app");
                 });
 
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.BirthDateChangeRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly?>("CurrentBirthDate")
+                        .HasColumnType("date")
+                        .HasColumnName("current_birth_date");
+
+                    b.Property<string>("EvidenceContentType")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("evidence_content_type");
+
+                    b.Property<string>("EvidenceFileName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("evidence_file_name");
+
+                    b.Property<string>("EvidencePath")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("evidence_path");
+
+                    b.Property<long?>("EvidenceSize")
+                        .HasColumnType("bigint")
+                        .HasColumnName("evidence_size");
+
+                    b.Property<string>("EvidenceType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("evidence_type");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("RejectReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reject_reason");
+
+                    b.Property<string>("RepresentativeEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("representative_email");
+
+                    b.Property<DateOnly>("RequestedBirthDate")
+                        .HasColumnType("date")
+                        .HasColumnName("requested_birth_date");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_birth_date_change_requests");
+
+                    b.HasIndex("ReviewedByUserId")
+                        .HasDatabaseName("ix_birth_date_change_requests_reviewed_by_user_id");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_birth_date_change_requests_status_created_at");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("ix_birth_date_change_requests_user_id_created_at");
+
+                    b.HasIndex(new[] { "UserId" }, "ux_birth_date_change_requests_one_pending_per_user")
+                        .IsUnique()
+                        .HasDatabaseName("ix_birth_date_change_requests_user_id")
+                        .HasFilter("status = 'pending'");
+
+                    b.ToTable("birth_date_change_requests", "app");
+                });
+
             modelBuilder.Entity("StudyAbroad.Domain.Entities.CenterDeletionRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2030,6 +2131,15 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTime?>("HeldAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("held_at");
+
+                    b.Property<string>("HeldFromStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("held_from_status");
+
                     b.Property<string>("Message")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)")
@@ -2057,6 +2167,10 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("parent_token_hash");
+
+                    b.Property<long>("PausedSeconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("paused_seconds");
 
                     b.Property<List<string>>("SharedFields")
                         .IsRequired()
@@ -5593,6 +5707,15 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("status");
 
+                    b.Property<DateTime?>("TotpEnabledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("totp_enabled_at");
+
+                    b.Property<string>("TotpSecret")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("totp_secret");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -5911,6 +6034,22 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_analysis_results_student_profiles_student_profile_id");
+                });
+
+            modelBuilder.Entity("StudyAbroad.Domain.Entities.BirthDateChangeRequest", b =>
+                {
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_birth_date_change_requests_users_reviewed_by_user_id");
+
+                    b.HasOne("StudyAbroad.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_birth_date_change_requests_users_user_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.CenterDeletionRequest", b =>

@@ -144,21 +144,6 @@ public class AdminUsersControllerTests
         public Task<AuthResult> RestoreAccountAsync(RestoreAccountRequest request, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
-        public (Guid TargetId, UpdateUserBirthDateRequest Request, Guid ActorId)? LastBirthDateCall { get; private set; }
-
-        public Task<AuthResult> UpdateUserBirthDateAsync(
-            Guid targetUserId,
-            UpdateUserBirthDateRequest request,
-            Guid actorAdminId,
-            CancellationToken ct = default)
-        {
-            LastBirthDateCall = (targetUserId, request, actorAdminId);
-            var user = Users.FirstOrDefault(u => u.Id == targetUserId);
-            return Task.FromResult(user is null
-                ? AuthResult.Fail(AuthError.Validation, "Không tìm thấy tài khoản.")
-                : AuthResult.Ok(user with { DateOfBirth = request.BirthDate }, "Đã sửa ngày sinh."));
-        }
-
         public Task<AuthResult> AnonymizeUserAccountAsync(Guid userId, string? ipAddress = null, string? userAgent = null, CancellationToken ct = default)
         {
             var user = Users.FirstOrDefault(u => u.Id == userId);
@@ -244,6 +229,32 @@ public class AdminUsersControllerTests
         var user = Assert.IsType<UserDto>(okResult.Value);
         Assert.Equal(userId, user.Id);
         Assert.Equal("0912345678", user.Phone);
+    }
+
+    [Theory]
+    [InlineData(BirthDateChangeStatuses.Pending, true)]
+    [InlineData(BirthDateChangeStatuses.Rejected, false)]
+    public async Task GetUserById_PendingBirthDateRequest_ShownOnlyWhilePending(string status, bool shown)
+    {
+        // [UC-150] Chi tiết tài khoản hiện yêu cầu sửa ngày sinh đang chờ để Admin mở xem
+        var userId = Guid.NewGuid();
+        var fakeAuth = new FakeAuthService
+        {
+            Users = [new UserDto(userId, "student@test.com", "Student User", UserRoles.Student, UserStatuses.Active)]
+        };
+        var requests = new BirthDateChangeServiceTests.FakeRepo();
+        var request = new StudyAbroad.Domain.Entities.BirthDateChangeRequest
+        {
+            UserId = userId, RequestedBirthDate = new DateOnly(2008, 5, 1), Reason = "Sai ngày", Status = status,
+        };
+        requests.Items.Add(request);
+        var controller = new AdminUsersController(fakeAuth, requests);
+
+        var result = await controller.GetUserById(userId, CancellationToken.None);
+
+        var user = Assert.IsType<UserDto>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(shown ? request.Id : null, user.PendingBirthDateRequestId);
+        Assert.Equal(shown ? new DateOnly(2008, 5, 1) : null, user.PendingBirthDate);
     }
 
     [Fact]
@@ -370,40 +381,4 @@ public class AdminUsersControllerTests
             },
         },
     };
-
-    [Fact]
-    public async Task UpdateBirthDate_WhenValid_ReturnsOkAndPassesArguments()
-    {
-        var adminId = Guid.NewGuid();
-        var studentId = Guid.NewGuid();
-        var fakeAuth = new FakeAuthService
-        {
-            Users = [new UserDto(studentId, "student@test.com", "Student", UserRoles.Student, UserStatuses.Active, null)],
-        };
-        var dob = new DateOnly(2008, 5, 20);
-
-        var result = await ControllerAs(fakeAuth, adminId)
-            .UpdateBirthDate(studentId, new UpdateUserBirthDateRequest(dob, "Khai nhầm khi đăng ký"), CancellationToken.None);
-
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        Assert.Equal(dob, Assert.IsType<UserDto>(ok.Value).DateOfBirth);
-        Assert.Equal(studentId, fakeAuth.LastBirthDateCall!.Value.TargetId);
-        Assert.Equal(adminId, fakeAuth.LastBirthDateCall.Value.ActorId);
-    }
-
-    [Fact]
-    public async Task UpdateBirthDate_WhenServiceFails_DoesNotReturnOk()
-    {
-        var result = await ControllerAs(new FakeAuthService(), Guid.NewGuid())
-            .UpdateBirthDate(Guid.NewGuid(), new UpdateUserBirthDateRequest(new DateOnly(2000, 1, 1), "x"), CancellationToken.None);
-
-        Assert.IsNotType<OkObjectResult>(result.Result);
-    }
-
-    [Fact]
-    public void UpdateBirthDate_IsAdminOnly()
-    {
-        var attr = typeof(AdminUsersController).GetMethod(nameof(AdminUsersController.UpdateBirthDate))?.GetCustomAttribute<AuthorizeAttribute>();
-        Assert.Equal(UserRoles.Admin, attr?.Roles);
-    }
 }

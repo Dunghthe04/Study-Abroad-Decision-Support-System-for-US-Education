@@ -378,6 +378,18 @@ internal sealed class FakeEmailSender : IEmailSender
     /// <summary>Đặt thì thư mời gói Gia đình ném lỗi này (SMTP sập).</summary>
     public Exception? FamilyInviteError { get; set; }
 
+    public Task SendRecoveryCodeUsedEmailAsync(string toEmail, string fullName, DateTime usedAtUtc, string? ipAddress, string? userAgent, int remainingCodes, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "recovery_code_used", $"remaining:{remainingCodes};ip:{ipAddress}"));
+        return Task.CompletedTask;
+    }
+
+    public Task SendTwoFactorResetEmailAsync(string toEmail, string fullName, string reason, CancellationToken ct = default)
+    {
+        SentEmails.Add((toEmail, "two_factor_reset", reason));
+        return Task.CompletedTask;
+    }
+
     public Task SendFamilyInviteEmailAsync(string toEmail, string ownerName, string seatRole, string inviteToken, int expiryDays, CancellationToken ct = default)
     {
         if (FamilyInviteError is not null)
@@ -578,4 +590,41 @@ internal sealed class FakeUnitOfWork : IUnitOfWork
         Calls++;
         return work(ct);
     }
+}
+
+/// <summary>[UC-110] Ghi lại các lần giữ, gửi mail xác nhận, thu hồi yêu cầu liên hệ đang giữ.</summary>
+internal sealed class RecordingLeadHolds : StudyAbroad.Application.Leads.ILeadParentHoldService
+{
+    public List<(Guid StudentId, DateTime Now)> Held { get; } = [];
+    public List<Guid> Confirmations { get; } = [];
+    public List<Guid> Withdrawals { get; } = [];
+
+    public Task<int> HoldOpenLeadsAsync(Guid studentId, DateTime now, CancellationToken ct = default)
+    {
+        Held.Add((studentId, now));
+        return Task.FromResult(1);
+    }
+
+    public Task SendHeldLeadConfirmationsAsync(User student, CancellationToken ct = default)
+    {
+        Confirmations.Add(student.Id);
+        return Task.CompletedTask;
+    }
+
+    public Task WithdrawHeldLeadsAsync(User student, CancellationToken ct = default)
+    {
+        Withdrawals.Add(student.Id);
+        return Task.CompletedTask;
+    }
+
+    public List<Guid> Releases { get; } = [];
+
+    public Task<int> ReleaseParentHoldAsync(User student, DateTime now, CancellationToken ct = default)
+    {
+        Releases.Add(student.Id);
+        return Task.FromResult(1);
+    }
+
+    public Task<StudyAbroad.Application.Leads.LeadHoldJobSummary> RunDailyAsync(DateTime now, CancellationToken ct = default) =>
+        Task.FromResult(new StudyAbroad.Application.Leads.LeadHoldJobSummary(0, 0));
 }

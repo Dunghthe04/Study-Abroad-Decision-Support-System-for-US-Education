@@ -41,6 +41,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Leads.ILeadService, StudyAbroad.Application.Leads.LeadService>();
         services.AddScoped<StudyAbroad.Application.Community.ICommunityService, StudyAbroad.Application.Community.CommunityService>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadParentConfirmService, StudyAbroad.Application.Leads.LeadParentConfirmService>();   // [UC-116] phụ huynh xác nhận lead qua mail
+        services.AddScoped<StudyAbroad.Application.Leads.ILeadParentHoldService, StudyAbroad.Application.Leads.LeadParentHoldService>();   // [UC-110] giữ yêu cầu liên hệ khi sửa ngày sinh về dưới 16
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewService, StudyAbroad.Application.StudyCenters.CenterReviewService>();
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewModerationService, StudyAbroad.Application.StudyCenters.CenterReviewModerationService>();
         services.AddScoped<StudyAbroad.Application.StudyCenters.ICenterReviewReportService, StudyAbroad.Application.StudyCenters.CenterReviewReportService>();   // [UC-151] báo cáo đánh giá trung tâm
@@ -49,6 +50,9 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         // [UC-75 1a] Cùng một AuthService trong scope, để dịch vụ liên kết gọi xóa tài khoản của con
         services.AddScoped<IParentRequestedDeletion>(sp => (AuthService)sp.GetRequiredService<IAuthService>());
+        // [UC-03 3d] Bước 2 đăng nhập Moderator, Administrator dùng cùng AuthService trong scope
+        services.AddScoped<ITwoFactorLogin>(sp => (AuthService)sp.GetRequiredService<IAuthService>());
+        services.AddScoped<ITwoFactorResetService, TwoFactorResetService>();   // [UC-58 2a] Admin đặt lại TOTP cho Moderator
         services.AddScoped<SessionRefreshService>();   // gia hạn phiên bằng refresh token (đổi token mỗi lần)
         services.AddScoped<IAccountPurgeService, AccountPurgeService>();   // [UC-80] job xóa hẳn tài khoản gọi qua scope
         // [Q11] Liên kết phụ huynh–học sinh và sự đồng ý xử lý dữ liệu trẻ em
@@ -88,6 +92,8 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Billing.Jobs.OrderReconciler>();   // áp dụng trạng thái payOS vào đơn (job đối soát, admin kiểm lại)
         services.AddScoped<StudyAbroad.Application.Billing.Jobs.IBillingJobService, StudyAbroad.Application.Billing.Jobs.BillingJobService>();   // các bước của job nền thanh toán
         services.AddScoped<StudyAbroad.Application.Billing.Admin.IAdminOrderService, StudyAbroad.Application.Billing.Admin.AdminOrderService>();   // UC-132..134: admin xử lý đơn
+        services.AddScoped<StudyAbroad.Application.BirthDateChanges.IBirthDateChangeService, StudyAbroad.Application.BirthDateChanges.BirthDateChangeService>();   // [UC-107] gửi, hủy yêu cầu sửa ngày sinh
+        services.AddScoped<StudyAbroad.Application.BirthDateChanges.IAdminBirthDateChangeService, StudyAbroad.Application.BirthDateChanges.AdminBirthDateChangeService>();   // [UC-150] Admin duyệt, từ chối yêu cầu sửa ngày sinh
         return services;
     }
 }

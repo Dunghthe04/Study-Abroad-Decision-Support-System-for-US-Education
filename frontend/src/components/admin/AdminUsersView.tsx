@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   BanIcon,
-  CakeIcon,
   EyeIcon,
   FilterIcon,
   KeyRoundIcon,
   RotateCcwIcon,
+  ShieldOffIcon,
   SearchIcon,
   ShieldCheckIcon,
   UserPlusIcon,
@@ -21,7 +22,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -68,21 +68,11 @@ function canAdminLock(target: UserDto, currentUserRole?: string, currentUserId?:
   return currentUserRole === "admin";
 }
 
-/** [UC-113] Sửa ngày sinh: chỉ Admin, chỉ tài khoản Học sinh / Phụ huynh (server kiểm tra lại). */
-function canAdminEditBirthDate(target: UserDto, currentUserRole?: string): boolean {
-  return currentUserRole === "admin" && (target.role === "student" || target.role === "parent");
-}
-
 /** yyyy-MM-dd -> dd/MM/yyyy để hiển thị. */
 function formatBirthDate(value?: string | null): string {
   if (!value) return "Chưa có";
   const [y, m, d] = value.split("-");
   return y && m && d ? `${d}/${m}/${y}` : value;
-}
-
-/** Hôm nay theo giờ Việt Nam (UTC+7), dạng yyyy-MM-dd, làm giới hạn trên cho ô chọn ngày. */
-function todayInVietnam(): string {
-  return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
 /** [UC-62] Mở khóa tài khoản: chỉ Admin (quyết định D2 bản 14/11), mở khóa được moderator, center, student, parent. */
@@ -99,6 +89,11 @@ function canAdminUnlock(target: UserDto, currentUserRole?: string): boolean {
   }
 
   return false;
+}
+
+/** [UC-58 2a] Đặt lại xác thực hai lớp: chỉ Administrator đặt cho Moderator (Administrator dùng scripts/reset-admin-2fa.ps1). */
+function canResetTwoFactor(target: UserDto, currentUserRole?: string): boolean {
+  return currentUserRole === "admin" && target.role === "moderator" && target.status !== "deleted";
 }
 
 const LOCK_REASONS_STORAGE_KEY = "usas_user_lock_reasons";
@@ -200,19 +195,17 @@ export function AdminUsersView() {
   const [lockSubmitting, setLockSubmitting] = useState(false);
   const [lockDialogError, setLockDialogError] = useState<string | null>(null);
 
-  // [UC-113] Dialog sửa ngày sinh: tải chi tiết để có ngày sinh hiện tại
-  const [birthTarget, setBirthTarget] = useState<UserDto | null>(null);
-  const [birthDetailLoading, setBirthDetailLoading] = useState(false);
-  const [birthValue, setBirthValue] = useState("");
-  const [birthReason, setBirthReason] = useState("");
-  const [birthSubmitting, setBirthSubmitting] = useState(false);
-  const [birthDialogError, setBirthDialogError] = useState<string | null>(null);
-
   // Dialog mở khóa tài khoản
   const [unlockTarget, setUnlockTarget] = useState<UserDto | null>(null);
   const [unlockReason, setUnlockReason] = useState("");
   const [unlockSubmitting, setUnlockSubmitting] = useState(false);
   const [unlockDialogError, setUnlockDialogError] = useState<string | null>(null);
+
+  // [UC-58 2a] Dialog đặt lại xác thực hai lớp cho Moderator
+  const [resetTfaTarget, setResetTfaTarget] = useState<UserDto | null>(null);
+  const [resetTfaReason, setResetTfaReason] = useState("");
+  const [resetTfaSubmitting, setResetTfaSubmitting] = useState(false);
+  const [resetTfaError, setResetTfaError] = useState<string | null>(null);
 
   const fetchUserPage = useCallback(async (activePage: number, signal?: { cancelled: boolean }) => {
     setListError(null);
@@ -330,80 +323,6 @@ export function AdminUsersView() {
     }
   };
 
-  const openBirthDialog = useCallback(
-    async (user: UserDto) => {
-      if (!canAdminEditBirthDate(user, currentUser?.role)) return;
-      setBirthTarget(user);
-      setBirthValue(user.dateOfBirth ?? "");
-      setBirthReason("");
-      setBirthDialogError(null);
-      setBirthDetailLoading(true);
-      try {
-        const detail = await adminUsersApi.getById(user.id);
-        setBirthTarget((prev) => (prev?.id === user.id ? { ...prev, ...detail } : prev));
-        setBirthValue(detail.dateOfBirth ?? "");
-      } catch (err) {
-        setBirthDialogError(err instanceof ApiError ? err.message : "Không tải được ngày sinh hiện tại.");
-      } finally {
-        setBirthDetailLoading(false);
-      }
-    },
-    [currentUser?.role]
-  );
-
-  const closeBirthDialog = () => {
-    if (birthSubmitting) return;
-    setBirthTarget(null);
-    setBirthValue("");
-    setBirthReason("");
-    setBirthDialogError(null);
-  };
-
-  const handleConfirmBirthDate = async () => {
-    if (!birthTarget || !canAdminEditBirthDate(birthTarget, currentUser?.role)) return;
-    const reason = birthReason.trim();
-    if (!birthValue) {
-      setBirthDialogError("Vui lòng chọn ngày sinh mới.");
-      return;
-    }
-    if (birthValue > todayInVietnam()) {
-      setBirthDialogError("Ngày sinh không được ở tương lai.");
-      return;
-    }
-    if (birthValue === birthTarget.dateOfBirth) {
-      setBirthDialogError("Ngày sinh mới trùng với ngày sinh hiện tại.");
-      return;
-    }
-    if (!reason) {
-      setBirthDialogError("Vui lòng nhập lý do sửa ngày sinh.");
-      return;
-    }
-    setBirthDialogError(null);
-    setBirthSubmitting(true);
-    try {
-      const updated = await adminUsersApi.updateBirthDate(birthTarget.id, { birthDate: birthValue, reason });
-      toast.add({
-        type: "success",
-        priority: "high",
-        timeout: 6000,
-        title: "Đã sửa ngày sinh",
-        description:
-          updated.age != null ? `${birthTarget.email} · tuổi hiện tại: ${updated.age}` : birthTarget.email,
-      });
-      if (detailTarget?.id === birthTarget.id) {
-        setDetailTarget((prev) => (prev ? { ...prev, ...updated } : null));
-      }
-      setBirthTarget(null);
-      setBirthValue("");
-      setBirthReason("");
-      await loadUsers();
-    } catch (err) {
-      setBirthDialogError(err instanceof ApiError ? err.message : "Không sửa được ngày sinh.");
-    } finally {
-      setBirthSubmitting(false);
-    }
-  };
-
   const openUnlockDialog = useCallback(
     (user: UserDto) => {
       if (!canAdminUnlock(user, currentUser?.role)) return;
@@ -454,6 +373,47 @@ export function AdminUsersView() {
       setUnlockDialogError(err instanceof ApiError ? err.message : "Không mở khóa được tài khoản.");
     } finally {
       setUnlockSubmitting(false);
+    }
+  };
+
+  const openResetTfaDialog = (user: UserDto) => {
+    if (!canResetTwoFactor(user, currentUser?.role)) return;
+    setResetTfaTarget(user);
+    setResetTfaReason("");
+    setResetTfaError(null);
+  };
+
+  const closeResetTfaDialog = () => {
+    if (resetTfaSubmitting) return;
+    setResetTfaTarget(null);
+    setResetTfaReason("");
+    setResetTfaError(null);
+  };
+
+  const handleConfirmResetTfa = async () => {
+    if (!resetTfaTarget || !canResetTwoFactor(resetTfaTarget, currentUser?.role)) return;
+    const reason = resetTfaReason.trim();
+    if (!reason) {
+      setResetTfaError("Vui lòng nhập lý do đặt lại.");
+      return;
+    }
+    setResetTfaError(null);
+    setResetTfaSubmitting(true);
+    try {
+      await adminUsersApi.resetTwoFactor(resetTfaTarget.id, { reason });
+      toast.add({
+        type: "success",
+        priority: "high",
+        timeout: 6000,
+        title: "Đã đặt lại xác thực hai lớp",
+        description: `${resetTfaTarget.email} sẽ thiết lập lại ở lần đăng nhập tới.`,
+      });
+      setResetTfaTarget(null);
+      setResetTfaReason("");
+    } catch (err) {
+      setResetTfaError(err instanceof ApiError ? err.message : "Không đặt lại được xác thực hai lớp.");
+    } finally {
+      setResetTfaSubmitting(false);
     }
   };
 
@@ -546,6 +506,36 @@ export function AdminUsersView() {
       })),
     []
   );
+
+  // [UC-150] Khung chi tiết tải thêm ngày sinh, tuổi và yêu cầu sửa ngày sinh đang chờ (danh sách không có)
+  const detailTargetId = detailTarget?.id;
+  const detailTargetRole = detailTarget?.role;
+  useEffect(() => {
+    if (!detailTargetId || (detailTargetRole !== "student" && detailTargetRole !== "parent")) return;
+    let cancelled = false;
+    adminUsersApi
+      .getById(detailTargetId)
+      .then((detail) => {
+        if (cancelled) return;
+        setDetailTarget((prev) =>
+          prev?.id === detailTargetId
+            ? {
+                ...prev,
+                dateOfBirth: detail.dateOfBirth,
+                age: detail.age,
+                pendingBirthDateRequestId: detail.pendingBirthDateRequestId ?? null,
+                pendingBirthDate: detail.pendingBirthDate ?? null,
+              }
+            : prev
+        );
+      })
+      .catch(() => {
+        // Khung chi tiết vẫn hiện thông tin từ danh sách
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detailTargetId, detailTargetRole]);
 
   const toggleDetailTarget = useCallback((u: UserDto) => {
     const cached = getLockReasonCache(u.id);
@@ -875,6 +865,20 @@ export function AdminUsersView() {
                     </span>
                   </div>
                 )}
+                {detailTarget.pendingBirthDateRequestId && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-ink-2 shrink-0">Đề nghị sửa ngày sinh</span>
+                    <span className="text-ink text-right">
+                      {formatBirthDate(detailTarget.pendingBirthDate)}{" "}
+                      <Link
+                        href={`/admin/birth-date-requests?id=${detailTarget.pendingBirthDateRequestId}`}
+                        className="text-primary underline underline-offset-2"
+                      >
+                        Xem yêu cầu
+                      </Link>
+                    </span>
+                  </div>
+                )}
                 {detailTarget.ageGroup && (
                   <div className="flex items-start justify-between gap-3">
                     <span className="text-ink-2 shrink-0">Nhóm độ tuổi</span>
@@ -926,23 +930,9 @@ export function AdminUsersView() {
                 </div>
               )}
 
-              {canAdminEditBirthDate(detailTarget, currentUser?.role) && (
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void openBirthDialog(detailTarget)}
-                    className="gap-1.5"
-                  >
-                    <CakeIcon className="size-3.5" />
-                    Sửa ngày sinh
-                  </Button>
-                </div>
-              )}
-
               {(canAdminLock(detailTarget, currentUser?.role, currentUser?.id) ||
-                canAdminUnlock(detailTarget, currentUser?.role)) && (
+                canAdminUnlock(detailTarget, currentUser?.role) ||
+                canResetTwoFactor(detailTarget, currentUser?.role)) && (
                 <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line">
                   {canAdminLock(detailTarget, currentUser?.role, currentUser?.id) && (
                     <Button
@@ -966,6 +956,18 @@ export function AdminUsersView() {
                     >
                       <KeyRoundIcon className="size-3.5" />
                       Mở khóa tài khoản
+                    </Button>
+                  )}
+                  {canResetTwoFactor(detailTarget, currentUser?.role) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openResetTfaDialog(detailTarget)}
+                      className="gap-1.5"
+                    >
+                      <ShieldOffIcon className="size-3.5" />
+                      Đặt lại xác thực hai lớp
                     </Button>
                   )}
                 </div>
@@ -1131,86 +1133,6 @@ export function AdminUsersView() {
         </DialogContent>
       </Dialog>
 
-      {/* [UC-113] Sửa ngày sinh theo yêu cầu hỗ trợ */}
-      <Dialog open={birthTarget !== null} onOpenChange={(open) => !open && closeBirthDialog()}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CakeIcon className="size-5" />
-              Sửa ngày sinh
-            </DialogTitle>
-            <DialogDescription>
-              {birthTarget
-                ? `Sửa ngày sinh của ${birthTarget.fullName} (${birthTarget.email}) theo yêu cầu hỗ trợ. Hệ thống tính lại tuổi và áp lại các quy tắc theo mốc 16 và 18 tuổi; thao tác được ghi nhật ký.`
-                : ""}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="rounded-lg border border-line bg-ground p-3 text-sm flex items-center justify-between gap-3">
-            <span className="text-ink-2">Ngày sinh hiện tại</span>
-            <span className="font-medium text-ink">
-              {birthDetailLoading ? (
-                <Spinner className="size-4" />
-              ) : (
-                <>
-                  {formatBirthDate(birthTarget?.dateOfBirth)}
-                  {birthTarget?.age != null ? ` (${birthTarget.age} tuổi)` : ""}
-                </>
-              )}
-            </span>
-          </div>
-
-          <Field>
-            <FieldLabel htmlFor="birth-date">Ngày sinh mới <span className="text-destructive">*</span></FieldLabel>
-            <Input
-              id="birth-date"
-              type="date"
-              value={birthValue}
-              max={todayInVietnam()}
-              onChange={(e) => setBirthValue(e.target.value)}
-              disabled={birthSubmitting || birthDetailLoading}
-            />
-            {birthTarget?.role === "parent" && (
-              <FieldDescription>Tài khoản phụ huynh phải từ 18 tuổi.</FieldDescription>
-            )}
-          </Field>
-
-          <Field>
-            <FieldLabel htmlFor="birth-reason">Lý do sửa <span className="text-destructive">*</span></FieldLabel>
-            <Input
-              id="birth-reason"
-              value={birthReason}
-              onChange={(e) => setBirthReason(e.target.value)}
-              placeholder="Ví dụ: Người dùng gửi yêu cầu hỗ trợ kèm giấy tờ, khai nhầm năm sinh khi đăng ký"
-              maxLength={500}
-              disabled={birthSubmitting}
-            />
-          </Field>
-
-          {birthDialogError && (
-            <Alert variant="destructive">
-              <AlertDescription>{birthDialogError}</AlertDescription>
-            </Alert>
-          )}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeBirthDialog} disabled={birthSubmitting}>
-              Hủy
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void handleConfirmBirthDate()}
-              disabled={birthDetailLoading}
-              loading={birthSubmitting}
-              className="gap-1.5 bg-brand text-white hover:bg-brand/90"
-            >
-              <CakeIcon className="size-4" />
-              Lưu ngày sinh
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* [UC-62] Xác nhận mở khóa tài khoản */}
       <Dialog open={unlockTarget !== null} onOpenChange={(open) => !open && closeUnlockDialog()}>
         <DialogContent>
@@ -1256,6 +1178,57 @@ export function AdminUsersView() {
             >
               <KeyRoundIcon className="size-4" />
               Xác nhận mở khóa
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* [UC-58 2a] Xác nhận đặt lại xác thực hai lớp cho Moderator */}
+      <Dialog open={resetTfaTarget !== null} onOpenChange={(open) => !open && closeResetTfaDialog()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldOffIcon className="size-5" />
+              Đặt lại xác thực hai lớp
+            </DialogTitle>
+            <DialogDescription>
+              {resetTfaTarget
+                ? `Đặt lại cho ${resetTfaTarget.fullName} (${resetTfaTarget.email}). Khóa xác thực và các mã khôi phục cũ hết hiệu lực, mọi phiên đăng nhập bị thu hồi. Lần đăng nhập tới người dùng quét QR mới. Chỉ làm sau khi đã xác minh đúng người.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <Field>
+            <FieldLabel htmlFor="reset-2fa-reason">Lý do đặt lại <span className="text-destructive">*</span></FieldLabel>
+            <Input
+              id="reset-2fa-reason"
+              value={resetTfaReason}
+              onChange={(e) => setResetTfaReason(e.target.value)}
+              placeholder="Ví dụ: Mất điện thoại và mã khôi phục, đã xác minh qua cuộc gọi..."
+              maxLength={500}
+              disabled={resetTfaSubmitting}
+            />
+          </Field>
+
+          {resetTfaError && (
+            <Alert variant="destructive">
+              <AlertDescription>{resetTfaError}</AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeResetTfaDialog} disabled={resetTfaSubmitting}>
+              Hủy
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleConfirmResetTfa()}
+              loading={resetTfaSubmitting}
+              className="gap-1.5"
+            >
+              <ShieldOffIcon className="size-4" />
+              Xác nhận đặt lại
             </Button>
           </DialogFooter>
         </DialogContent>

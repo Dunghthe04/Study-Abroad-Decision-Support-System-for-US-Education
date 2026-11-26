@@ -34,7 +34,6 @@ namespace StudyAbroad.Application.Auth
     public record UnlockUserAccountRequest(string Reason);
 
     /// <summary>[UC-113] Admin sửa ngày sinh theo yêu cầu hỗ trợ. Lý do bắt buộc (tối đa 500 ký tự).</summary>
-    public record UpdateUserBirthDateRequest(DateOnly? BirthDate, string? Reason);
 
     // [USAS-362] Thông tin người dùng trả về cho client (không chứa password_hash)
     // [Q11] AgeGroup (child/minor/adult, null nếu không áp), ParentConsentStatus (granted/pending/none/not_required),
@@ -45,7 +44,10 @@ namespace StudyAbroad.Application.Auth
         // [UC-111] Ngày sinh chỉ trả cho chính chủ (xem tài khoản của mình); người dùng không tự sửa được, chỉ Admin sửa (UC-113)
         DateOnly? DateOfBirth = null,
         // [UC-113] Tuổi tròn tính từ ngày sinh (giờ VN), trả kèm khi Admin xem / sửa ngày sinh
-        int? Age = null);
+        int? Age = null,
+        // [UC-150] Admin xem chi tiết tài khoản: yêu cầu sửa ngày sinh đang Chờ duyệt (nếu có) và ngày đề nghị
+        Guid? PendingBirthDateRequestId = null,
+        DateOnly? PendingBirthDate = null);
 
     // [USAS-362] Kết quả đăng nhập thành công. AccessToken chỉ dùng để đặt HttpOnly cookie, controller không trả nó trong body
     // RefreshToken và SessionExpiresAt cũng chỉ để controller đặt cookie refresh (HttpOnly, chỉ gửi tới /api/v1/auth)
@@ -76,7 +78,18 @@ namespace StudyAbroad.Application.Auth
         OtpInvalid,           // mã OTP sai / hết hạn / đã dùng / đã vô hiệu hóa (gộp một thông báo, chống dò) → 400
         PendingDeletion,      // [UC-80] tài khoản đang chờ xóa, đúng mật khẩu → 403 kèm mã khôi phục
         RoleNotAllowed,       // [UC-80] vai trò không được tự làm thao tác này (trung tâm, admin, mod tự xóa tài khoản) → 403
+        TwoFactorChallengeInvalid, // [UC-03 3d] phiếu bước 2 hết hạn, đã dùng hoặc thử quá 5 lần → 401, giao diện quay lại bước mật khẩu
+        TwoFactorCodeInvalid,      // [UC-03 E4] mã TOTP hoặc mã khôi phục sai (gộp một thông báo chung) → 401
     };
+
+    // [UC-03 3d] Bước 2 đăng nhập Moderator, Administrator: phiếu nhận ở bước 1 kèm mã TOTP 6 số hoặc mã khôi phục
+    public record TwoFactorLoginRequest(string Challenge, string? Code, string? RecoveryCode);
+
+    // [UC-03 3d] Lần đăng nhập đầu: khóa Base32 (nhập tay) và chuỗi otpauth:// để giao diện vẽ QR
+    public record TwoFactorSetupInfo(string Secret, string OtpAuthUri);
+
+    // [UC-03 3d] Mật khẩu đúng nhưng chưa tạo phiên: phiếu bước 2 (5 phút), Setup khác null khi chưa thiết lập TOTP
+    public record TwoFactorChallengeInfo(string Challenge, DateTime ExpiresAt, TwoFactorSetupInfo? Setup);
 
     // [UC-80] Khôi phục tài khoản đang chờ xóa bằng mã khôi phục nhận khi đăng nhập
     public record RestoreAccountRequest(string Email, string RestoreToken);
@@ -90,8 +103,11 @@ namespace StudyAbroad.Application.Auth
 
     // [USAS-362] Hộp trả kết quả từ AuthService
     public record AuthResult(UserDto? User, AuthResponse? Response = null, AuthError Error = AuthError.None, string? Message = null,
-        PendingDeletionInfo? PendingDeletion = null)
+        PendingDeletionInfo? PendingDeletion = null,
+        TwoFactorChallengeInfo? TwoFactor = null,
+        IReadOnlyList<string>? RecoveryCodes = null)
     {
+        public static AuthResult TwoFactorRequired(TwoFactorChallengeInfo info) => new(null, TwoFactor: info);
         public static AuthResult Ok(UserDto user, string? message = null) => new(user, null, AuthError.None, message);
         public static AuthResult Ok(AuthResponse response) => new(response.User, response);
         public static AuthResult Ok(string message) => new(null, null, AuthError.None, message);

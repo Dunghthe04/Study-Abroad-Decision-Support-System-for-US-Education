@@ -52,6 +52,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<EvalRun> EvalRuns => Set<EvalRun>();
     public DbSet<RoadmapStep> RoadmapSteps => Set<RoadmapStep>();
     public DbSet<Lead> Leads => Set<Lead>();
+    public DbSet<BirthDateChangeRequest> BirthDateChangeRequests => Set<BirthDateChangeRequest>();
     public DbSet<ForumPost> ForumPosts => Set<ForumPost>();
     public DbSet<ForumReport> ForumReports => Set<ForumReport>();
     public DbSet<Notification> Notifications => Set<Notification>();

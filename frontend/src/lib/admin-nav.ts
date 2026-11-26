@@ -225,6 +225,17 @@ export const ADMIN_NAV: AdminNavItem[] = [
     useCases: ["UC-60", "UC-61", "UC-62", "UC-63"],
   },
   {
+    href: "/admin/birth-date-requests",
+    label: "Yêu cầu sửa ngày sinh",
+    description: "Học sinh, phụ huynh xin sửa ngày sinh: xem minh chứng (có ghi nhật ký) rồi Duyệt hoặc Từ chối kèm lý do",
+    icon: ClipboardCheckIcon,
+    filledIcon: ClipboardCheckFilledIcon,
+    section: "system",
+    // [UC-150] Chỉ Administrator duyệt ngày sinh
+    roles: ["admin"],
+    useCases: ["UC-150"],
+  },
+  {
     href: "/admin/plans",
     label: "Gói dịch vụ",
     description: "Quản lý gói dịch vụ, giá và hạn mức",

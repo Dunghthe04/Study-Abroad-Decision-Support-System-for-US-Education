@@ -1,16 +1,20 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  CakeIcon,
   CheckIcon,
   HourglassIcon,
   LockIcon,
   MailIcon,
   RotateCcwIcon,
   TriangleAlertIcon,
+  XIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { authApi, ApiError } from "@/lib/api";
+import { authApi, birthDateRequestsApi, ApiError } from "@/lib/api";
+import type { BirthDateChangeDto } from "@/types/api";
+import { BirthDateRequestDialog } from "@/components/account/BirthDateRequestDialog";
 import { formatUserRole } from "@/lib/user-role-labels";
 import { AccountSectionHeader } from "@/components/account/AccountSectionHeader";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -27,9 +31,69 @@ function formatDob(value: string): string {
   return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
 }
 
-// Thông tin cá nhân: sửa được họ tên và số điện thoại. Email, vai trò và ngày sinh chỉ đọc.
+/** [UC-105 / UC-107] Dòng trạng thái yêu cầu sửa ngày sinh gần nhất. */
+function BirthDateRequestStatus({ request }: { request: BirthDateChangeDto }) {
+  const requested = formatDob(request.requestedBirthDate);
+  switch (request.status) {
+    case "pending":
+      return (
+        <span className="flex flex-wrap items-center gap-2">
+          <Badge variant="warn"><HourglassIcon aria-hidden />Chờ duyệt</Badge>
+          <span>Yêu cầu đổi thành {requested}</span>
+        </span>
+      );
+    case "approved":
+      return (
+        <span className="flex flex-wrap items-center gap-2">
+          <Badge variant="ok"><CheckIcon aria-hidden />Đã duyệt</Badge>
+          <span>Đã đổi thành {requested}</span>
+        </span>
+      );
+    case "rejected":
+      return (
+        <span className="flex flex-col gap-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <Badge variant="risk"><XIcon aria-hidden />Từ chối</Badge>
+            <span>Yêu cầu đổi thành {requested}</span>
+          </span>
+          {request.rejectReason && <span>Lý do: {request.rejectReason}</span>}
+        </span>
+      );
+    default:
+      return (
+        <span className="flex flex-wrap items-center gap-2">
+          <Badge variant="neutral">Đã hủy</Badge>
+          <span>Yêu cầu đổi thành {requested}</span>
+        </span>
+      );
+  }
+}
+
+// Thông tin cá nhân: sửa được họ tên và số điện thoại. Email, vai trò chỉ đọc.
+// [UC-105 / UC-107] Ngày sinh: Học sinh, Phụ huynh gửi yêu cầu sửa để Administrator duyệt.
 export function PersonalInfoCard() {
   const { user, refreshUser } = useAuth();
+  const canRequestBirthDate = user?.role === "student" || user?.role === "parent";
+  const [birthRequest, setBirthRequest] = useState<BirthDateChangeDto | null>(null);
+  const [birthDialogOpen, setBirthDialogOpen] = useState(false);
+  const [birthCancelling, setBirthCancelling] = useState(false);
+  const userId = user?.id;
+
+  useEffect(() => {
+    if (!userId || !canRequestBirthDate) return;
+    let ignore = false;
+    birthDateRequestsApi
+      .getCurrent()
+      .then((res) => {
+        if (!ignore) setBirthRequest(res.data);
+      })
+      .catch(() => {
+        // Không tải được trạng thái thì vẫn cho gửi; server chặn nếu đã có yêu cầu chờ
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [userId, canRequestBirthDate]);
   const [fullName, setFullName] = useState(user?.fullName ?? "");
   const [phone, setPhone] = useState(user?.phone ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +140,40 @@ export function PersonalInfoCard() {
       setIsSubmitting(false);
     }
   };
+
+  const handleBirthSubmitted = (request: BirthDateChangeDto, message: string) => {
+    setBirthRequest(request);
+    setError(null);
+    setSuccessMessage(message);
+  };
+
+  const handleCancelBirthRequest = async () => {
+    if (!birthRequest) return;
+    setError(null);
+    setSuccessMessage(null);
+    setBirthCancelling(true);
+    try {
+      const res = await birthDateRequestsApi.cancel(birthRequest.id);
+      setBirthRequest(res.data);
+      setSuccessMessage(res.message || "Đã hủy yêu cầu sửa ngày sinh.");
+    } catch (err) {
+      // Administrator vừa xử lý: tải lại để hiện đúng trạng thái và ngày sinh
+      if (err instanceof ApiError && err.status === 409) {
+        const latest = await birthDateRequestsApi.getCurrent().catch(() => null);
+        if (latest) setBirthRequest(latest.data);
+        await refreshUser();
+      }
+      setError(
+        err instanceof ApiError
+          ? err.message || "Không hủy được yêu cầu."
+          : "Có lỗi kết nối máy chủ. Vui lòng thử lại sau.",
+      );
+    } finally {
+      setBirthCancelling(false);
+    }
+  };
+
+  const birthPending = birthRequest?.status === "pending";
 
   const statusBadge =
     user.status === "pending" ? (
@@ -131,14 +229,43 @@ export function PersonalInfoCard() {
             </div>
           </div>
 
-          {user.dateOfBirth && (
-            <div className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:px-6">
+          {(user.dateOfBirth || canRequestBirthDate) && (
+            <div className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8 sm:px-6">
               <div className="space-y-0.5 sm:w-56 sm:shrink-0">
                 <div className="text-sm font-medium text-ink">Ngày sinh</div>
-                <p className="text-xs text-ink-3">Vui lòng liên hệ để được thay đổi.</p>
+                {canRequestBirthDate && (
+                  <p className="text-xs text-ink-3">Đổi ngày sinh cần Administrator duyệt.</p>
+                )}
               </div>
-              <div className="flex-1 text-sm font-medium text-ink tabular-nums">
-                {formatDob(user.dateOfBirth)}
+              <div className="min-w-0 flex-1 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-ink tabular-nums">
+                    {user.dateOfBirth ? formatDob(user.dateOfBirth) : "Chưa có"}
+                  </span>
+                  {canRequestBirthDate &&
+                    (birthPending ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        loading={birthCancelling}
+                        onClick={() => void handleCancelBirthRequest()}
+                      >
+                        <XIcon data-icon="inline-start" aria-hidden />
+                        Hủy yêu cầu
+                      </Button>
+                    ) : (
+                      <Button type="button" variant="outline" size="sm" onClick={() => setBirthDialogOpen(true)}>
+                        <CakeIcon data-icon="inline-start" aria-hidden />
+                        Yêu cầu sửa ngày sinh
+                      </Button>
+                    ))}
+                </div>
+                {canRequestBirthDate && birthRequest && (
+                  <div className="text-xs text-ink-2">
+                    <BirthDateRequestStatus request={birthRequest} />
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -233,6 +360,15 @@ export function PersonalInfoCard() {
           </div>
         </form>
       </div>
+
+      {canRequestBirthDate && (
+        <BirthDateRequestDialog
+          open={birthDialogOpen}
+          onOpenChange={setBirthDialogOpen}
+          user={user}
+          onSubmitted={handleBirthSubmitted}
+        />
+      )}
     </div>
   );
 }

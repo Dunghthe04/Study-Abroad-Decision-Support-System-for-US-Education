@@ -19,5 +19,11 @@ namespace StudyAbroad.Domain.Constants
 
         /// <summary>[UC-75 4b] Nút "Chỉ hủy xóa" trong mail gửi người đại diện. Hết hạn khi tài khoản bị xóa hẳn.</summary>
         public const string ParentRestoreOnly = "parent_restore_only";
+
+        /// <summary>[UC-03 3d] Mã khôi phục xác thực hai lớp, mỗi mã một dòng, dùng một lần. Không hết hạn (ExpiresAt đặt rất xa để job dọn không xóa).</summary>
+        public const string RecoveryCode = "recovery_code";
+
+        /// <summary>[UC-03 3d] Phiếu bước 2 khi Moderator, Administrator đã nhập đúng mật khẩu, hết hạn sau 5 phút.</summary>
+        public const string LoginTwoFactor = "login_2fa";
     }
 }

@@ -2,8 +2,13 @@ namespace StudyAbroad.Application.Leads;
 
 // [UC-116] Phụ huynh xác nhận yêu cầu liên hệ của con dưới 16 qua link mail
 
-/// <summary>Kết quả ghi vào lead khi phụ huynh trả lời hoặc khi hết hạn.</summary>
-public record LeadParentDecision(string Status, string? ParentEmail, DateTime? DecidedAt, string? DecisionIp, DateTime UpdatedAt);
+/// <summary>
+/// Kết quả ghi vào lead khi phụ huynh trả lời hoặc khi hết hạn.
+/// <paramref name="PausedSeconds"/>: thời gian chờ phụ huynh ghi vào lead (null giữ nguyên).
+/// <paramref name="ClearHold"/>: yêu cầu đang giữ đã trở lại trạng thái cũ, xóa <c>HeldFromStatus</c>, <c>HeldAt</c> [UC-110].
+/// </summary>
+public record LeadParentDecision(string Status, string? ParentEmail, DateTime? DecidedAt, string? DecisionIp, DateTime UpdatedAt,
+    long? PausedSeconds = null, bool ClearHold = false);
 
 public record LeadParentTokenRequest(string Token);
 

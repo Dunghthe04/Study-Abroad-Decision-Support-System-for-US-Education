@@ -17,6 +17,9 @@ import type {
   ChangePasswordRequest,
   ForgotPasswordRequest,
   LoginRequest,
+  LoginResponse,
+  TwoFactorLoginRequest,
+  TwoFactorLoginResponse,
   RegisterRequest,
   ResendOtpRequest,
   ResetPasswordRequest,
@@ -29,7 +32,10 @@ import type {
   CreateCenterAccountRequest,
   LockUserAccountRequest,
   UnlockUserAccountRequest,
-  UpdateUserBirthDateRequest,
+  BirthDateChangeDto,
+  SubmitBirthDateChangeInput,
+  AdminBirthDateRequestDto,
+  AdminBirthDateRequestFilter,
   VerifyEmailRequest,
   AcademicProfileResponse,
   ParentInviteInfo,
@@ -162,8 +168,14 @@ export const authApi = {
     }),
 
   // [AC-2] Đăng nhập: Backend thiết lập HttpOnly Cookie "usas_access_token"
+  // [UC-03 3d] Moderator, Administrator nhận phiếu bước 2 thay cho phiên
   login: (data: LoginRequest) =>
-    apiFetch<AuthResponse>("/api/v1/auth/login", {
+    apiFetch<LoginResponse>("/api/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  loginTwoFactor: (data: TwoFactorLoginRequest) =>
+    apiFetch<TwoFactorLoginResponse>("/api/v1/auth/login/2fa", {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -233,6 +245,80 @@ export const authApi = {
   getMe: () =>
     apiFetch<UserDto>("/api/v1/auth/me", {
       method: "GET",
+    }),
+};
+
+// [UC-105 / UC-107] Học sinh, Phụ huynh gửi, xem, hủy yêu cầu sửa ngày sinh của chính mình
+export const birthDateRequestsApi = {
+  /** Yêu cầu gần nhất (null nếu chưa gửi lần nào). */
+  getCurrent: () =>
+    apiFetch<{ message: string; data: BirthDateChangeDto | null }>("/api/v1/account/birth-date-requests/current", {
+      method: "GET",
+    }),
+
+  /** Gửi yêu cầu; minh chứng (ảnh hoặc PDF) chỉ gửi khi vượt mốc 16 / 18. Lỗi 409 kèm yêu cầu đang chờ trong body.data. */
+  submit: (input: SubmitBirthDateChangeInput) => {
+    const form = new FormData();
+    form.append("birthDate", input.birthDate);
+    form.append("reason", input.reason);
+    if (input.evidence) {
+      form.append("evidence", input.evidence);
+      if (input.evidenceType) form.append("evidenceType", input.evidenceType);
+    }
+    if (input.representativeEmail?.trim()) form.append("representativeEmail", input.representativeEmail.trim());
+    return apiFetch<{ message: string; data: BirthDateChangeDto }>("/api/v1/account/birth-date-requests", {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  cancel: (id: string) =>
+    apiFetch<{ message: string; data: BirthDateChangeDto }>(
+      `/api/v1/account/birth-date-requests/${encodeURIComponent(id)}/cancel`,
+      { method: "POST" },
+    ),
+};
+
+// [UC-150] Administrator xem, duyệt, từ chối yêu cầu sửa ngày sinh
+const adminBirthDateBase = "/api/v1/admin/birth-date-requests";
+
+export const adminBirthDateRequestsApi = {
+  /** Mặc định Chờ duyệt, cũ nhất trước. */
+  list: (params: { status?: AdminBirthDateRequestFilter; page?: number; pageSize?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.pageSize) qs.set("pageSize", String(params.pageSize));
+    const text = qs.toString();
+    return apiFetch<PagedResult<AdminBirthDateRequestDto>>(`${adminBirthDateBase}${text ? `?${text}` : ""}`);
+  },
+
+  get: (id: string) =>
+    apiFetch<{ message: string; data: AdminBirthDateRequestDto }>(`${adminBirthDateBase}/${encodeURIComponent(id)}`),
+
+  /** Mở minh chứng: máy chủ ghi nhật ký truy cập (UC-91) trước khi trả tệp; ghi lỗi thì không trả tệp. */
+  openEvidence: async (id: string): Promise<Blob> => {
+    const res = await authFetch(`${baseUrl}${adminBirthDateBase}/${encodeURIComponent(id)}/evidence`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new ApiError(res.status, body?.detail ?? body?.title ?? "Không mở được minh chứng.", body);
+    }
+    return res.blob();
+  },
+
+  approve: (id: string) =>
+    apiFetch<{ message: string; data: AdminBirthDateRequestDto }>(`${adminBirthDateBase}/${encodeURIComponent(id)}/approve`, {
+      method: "POST",
+    }),
+
+  /** Lý do bắt buộc, tối đa 500 ký tự. */
+  reject: (id: string, reason: string) =>
+    apiFetch<{ message: string; data: AdminBirthDateRequestDto }>(`${adminBirthDateBase}/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
     }),
 };
 
@@ -400,10 +486,10 @@ export const adminUsersApi = {
       body: JSON.stringify(data),
     }),
 
-  /** [UC-113] Sửa ngày sinh Học sinh / Phụ huynh theo yêu cầu hỗ trợ (admin, bắt buộc lý do). */
-  updateBirthDate: (id: string, data: UpdateUserBirthDateRequest) =>
-    apiFetch<UserDto>(`/api/v1/admin/users/${encodeURIComponent(id)}/birth-date`, {
-      method: "PUT",
+  /** [UC-58 2a, UC-03 3d] Administrator đặt lại xác thực hai lớp cho Moderator (lý do bắt buộc, tối đa 500 ký tự). */
+  resetTwoFactor: (id: string, data: { reason: string }) =>
+    apiFetch<void>(`/api/v1/admin/users/${encodeURIComponent(id)}/reset-2fa`, {
+      method: "POST",
       body: JSON.stringify(data),
     }),
 };

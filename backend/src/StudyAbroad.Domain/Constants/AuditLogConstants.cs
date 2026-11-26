@@ -37,6 +37,9 @@ public static class AuditLogConstants
     public const string SlmSampleRestoreVersion = "slm_sample.restore_version";
     public const string SlmSampleImport = "slm_sample.import";
 
+    // 8. Xem minh chứng ngày sinh khi duyệt yêu cầu sửa ngày sinh (UC-150)
+    public const string BirthDateEvidenceViewed = "birth_date.evidence_viewed";
+
     /// <summary>Danh mục lọc: Tất cả dữ liệu nhạy cảm (mặc định của UC-91).</summary>
     public const string CategoryAllSensitive = "all_sensitive";
 
@@ -55,6 +58,9 @@ public static class AuditLogConstants
     /// <summary>Danh mục lọc: Thao tác Mẫu huấn luyện SLM (UC-90, UC-92..95).</summary>
     public const string CategorySlmSample = "slm_sample";
 
+    /// <summary>Danh mục lọc: Minh chứng ngày sinh (UC-150).</summary>
+    public const string CategoryBirthDateEvidence = "birth_date_evidence";
+
     /// <summary>Danh mục lọc: Tất cả thao tác hệ thống (Nhật ký thao tác - UC-91 2a).</summary>
     public const string CategoryAll = "all";
 
@@ -72,7 +78,8 @@ public static class AuditLogConstants
         LeadMessageReportView,
         SlmSampleExport,
         ReviewBatchViewItem,
-        OrderDeletedBuyerViewed
+        OrderDeletedBuyerViewed,
+        BirthDateEvidenceViewed
     };
 
     public static readonly IReadOnlyList<string> ReportedMessageActions = new[]

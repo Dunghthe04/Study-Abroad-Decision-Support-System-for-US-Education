@@ -1165,4 +1165,46 @@ public class ParentLinkServiceTests
         Assert.Equal(ParentLinkError.None, result.Error);
         Assert.Equal(ParentLinkStatuses.Rejected, Stored(link.Id).Status);
     }
+
+    // ===== [UC-110] Yêu cầu liên hệ đang giữ theo quyết định của phụ huynh về tài khoản =====
+
+    [Fact]
+    public async Task Accept_ConsentRequired_SendsHeldLeadConfirmations()
+    {
+        var holds = new RecordingLeadHolds();
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        var (_, token) = AddPendingLink(student);
+
+        await new ParentLinkService(_links, _users, _emails, _audit, leadHolds: holds).AcceptAsync(token, isGuardian: true, null);
+
+        Assert.Equal(student.Id, Assert.Single(holds.Confirmations));
+        Assert.Empty(holds.Withdrawals);
+    }
+
+    [Fact]
+    public async Task Reject_NoOtherConsent_WithdrawsHeldLeads()
+    {
+        var holds = new RecordingLeadHolds();
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        var (_, token) = AddPendingLink(student);
+
+        await new ParentLinkService(_links, _users, _emails, _audit, leadHolds: holds).RejectAsync(token, null);
+
+        Assert.Equal(student.Id, Assert.Single(holds.Withdrawals));
+    }
+
+    [Fact]
+    public async Task Reject_OtherParentStillConsents_KeepsHeldLeads()
+    {
+        var holds = new RecordingLeadHolds();
+        var student = AddUser("kid@test.com", UserRoles.Student, 14);
+        var consent = new Consent { UserId = student.Id, Purpose = "process_student_data", Granted = true, PolicyVersion = "v1" };
+        _links.Consents.Add(consent);
+        _links.Links.Add(new ParentStudentLink { StudentUserId = student.Id, ParentEmail = "mom@test.com", Status = ParentLinkStatuses.Active, ConsentId = consent.Id });
+        var (_, token) = AddPendingLink(student, "dad@test.com");
+
+        await new ParentLinkService(_links, _users, _emails, _audit, leadHolds: holds).RejectAsync(token, null);
+
+        Assert.Empty(holds.Withdrawals);
+    }
 }

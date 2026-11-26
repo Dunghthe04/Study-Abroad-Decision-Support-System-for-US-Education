@@ -6,13 +6,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRightIcon, RotateCcwIcon, ShieldAlertIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError, authApi } from "@/lib/api";
-import type { PendingDeletionProblem } from "@/types/api";
+import type { PendingDeletionProblem, TwoFactorChallengeResponse, TwoFactorLoginResponse } from "@/types/api";
 import { setPendingEmail } from "@/lib/pending-email";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
+import { TwoFactorStep } from "@/components/auth/TwoFactorStep";
 import { Spinner } from "@/components/ui/spinner";
 import { NETWORK_ERROR, emailError } from "@/lib/auth-validation";
 
@@ -25,7 +26,7 @@ export function LoginForm() {
   const redirect =
     redirectParam && /^\/(?![\/\\])/.test(redirectParam) ? redirectParam : "/";
 
-  const { login, user, isLoading, refreshUser } = useAuth();
+  const { login, completeLogin, user, isLoading, refreshUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +38,8 @@ export function LoginForm() {
   // [UC-80] Mã khôi phục server trả kèm khi đăng nhập vào tài khoản đang chờ xóa
   const [restoreToken, setRestoreToken] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
+  // [UC-03 3d] Moderator, Administrator đúng mật khẩu: phiếu bước 2 (mã TOTP hoặc mã khôi phục)
+  const [twoFactor, setTwoFactor] = useState<TwoFactorChallengeResponse | null>(null);
 
   // Nếu người dùng đã đăng nhập sẵn mà truy cập /login:
   // Tài khoản admin/moderator tự động chuyển thẳng vào /admin
@@ -50,6 +53,28 @@ export function LoginForm() {
       }
     }
   }, [isLoading, user, redirect, redirectParam, router]);
+
+  const goAfterLogin = (loggedUser: { role: string }) => {
+    if (loggedUser.role === "admin" || loggedUser.role === "moderator") {
+      const target = redirectParam && redirectParam !== "/" ? redirect : "/admin";
+      router.push(target);
+    } else {
+      router.push(redirect);
+    }
+  };
+
+  // [UC-03 3d] Bước 2 xong: đặt phiên rồi chuyển trang
+  const handleTwoFactorDone = (res: TwoFactorLoginResponse) => {
+    goAfterLogin(completeLogin(res));
+  };
+
+  // [UC-03 3d] Phiếu hết hạn hoặc tài khoản vừa bị khóa: quay về ô mật khẩu, xóa mật khẩu đã nhập
+  const handleTwoFactorRestart = (message: string, locked?: boolean) => {
+    setTwoFactor(null);
+    setPassword("");
+    setError(message || null);
+    setLockType(locked ? "temp_locked" : null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,13 +94,12 @@ export function LoginForm() {
     setIsSubmitting(true);
     try {
       // [AC-2] Đăng nhập: Gọi API xác thực
-      const loggedUser = await login({ email: email.trim(), password });
-      if (loggedUser.role === "admin" || loggedUser.role === "moderator") {
-        const target = redirectParam && redirectParam !== "/" ? redirect : "/admin";
-        router.push(target);
-      } else {
-        router.push(redirect);
+      const result = await login({ email: email.trim(), password });
+      if ("twoFactorRequired" in result) {
+        setTwoFactor(result);
+        return;
       }
+      goAfterLogin(result);
     } catch (err) {
       if (err instanceof ApiError) {
         const pending = getPendingDeletion(err);
@@ -136,6 +160,10 @@ export function LoginForm() {
         Đang tải...
       </div>
     );
+  }
+
+  if (twoFactor) {
+    return <TwoFactorStep challenge={twoFactor} onDone={handleTwoFactorDone} onRestart={handleTwoFactorRestart} />;
   }
 
   return (
