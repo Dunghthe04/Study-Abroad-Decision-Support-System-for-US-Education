@@ -14,6 +14,7 @@ public static class MigrationExtensions
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.Database.MigrateAsync();
         await DbSeeder.SeedSubscriptionPlansAsync(db);   // gói dịch vụ cần ở mọi môi trường, chỉ thêm gói còn thiếu
+        await DbSeeder.SeedCenterGuidanceCardsAsync(db); // [UC-40] 2 thẻ Nên hỏi trung tâm & Dấu hiệu cảnh giác mặc định
 
         if (app.Environment.IsDevelopment())
             await DbSeeder.SeedAsync(db, app.Configuration["SEED_ADMIN_PASSWORD"]);

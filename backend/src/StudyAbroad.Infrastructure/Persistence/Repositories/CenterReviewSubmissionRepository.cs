@@ -8,7 +8,8 @@ namespace StudyAbroad.Infrastructure.Persistence.Repositories;
 /// <summary>[UC-45] Lưu đánh giá do học sinh / phụ huynh gửi vào app.center_reviews.</summary>
 public class CenterReviewSubmissionRepository(AppDbContext db) : ICenterReviewSubmissionRepository
 {
-    private static readonly string[] AcceptedStatuses = [LeadStatuses.Accepted, LeadStatuses.Contacted, LeadStatuses.Closed];
+    /// <summary>[UC-45] Chỉ cho đánh giá với yêu cầu Đang trao đổi (contacted) hoặc Đã hoàn tất (closed).</summary>
+    private static readonly string[] AcceptedStatuses = [LeadStatuses.Contacted, LeadStatuses.Closed];
 
     public Task<Lead?> FindLatestLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default) =>
         db.Leads.AsNoTracking()
@@ -80,6 +81,7 @@ public class CenterReviewSubmissionRepository(AppDbContext db) : ICenterReviewSu
             row.CreatedAt,
             row.Rating,
             row.Comment,
-            CenterReviewRepository.BuildPublicReply(row.CenterReplyStatus, row.CenterReplyContent, row.CenterReplyCreatedAt, row.CenterReplyEditedAt));
+            CenterReviewRepository.BuildPublicReply(row.CenterReplyStatus, row.CenterReplyContent, row.CenterReplyCreatedAt, row.CenterReplyEditedAt),
+            IsOwnReview: true);
     }
 }

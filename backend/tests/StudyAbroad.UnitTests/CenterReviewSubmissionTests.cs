@@ -20,7 +20,7 @@ public class CenterReviewSubmissionTests
         public List<Lead> Leads { get; } = [];
         public List<CenterReview> Reviews { get; } = [];
 
-        private static readonly string[] AcceptedStatuses = [LeadStatuses.Accepted, LeadStatuses.Contacted, LeadStatuses.Closed];
+        private static readonly string[] AcceptedStatuses = [LeadStatuses.Contacted, LeadStatuses.Closed];
 
         public Task<Lead?> FindLatestLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default) =>
             Task.FromResult(Leads
@@ -106,7 +106,7 @@ public class CenterReviewSubmissionTests
             return user;
         }
 
-        public Lead AddLead(Guid studentId, Guid? submitterId = null, string status = LeadStatuses.Accepted)
+        public Lead AddLead(Guid studentId, Guid? submitterId = null, string status = LeadStatuses.Contacted)
         {
             var lead = new Lead { UserId = studentId, SubmittedByUserId = submitterId ?? studentId, StudyCenterId = Center.Id, Status = status };
             Repo.Leads.Add(lead);
@@ -141,15 +141,16 @@ public class CenterReviewSubmissionTests
         var s = new Setup();
         var student = s.AddUser();
         s.AddLead(student.Id, status: LeadStatuses.New);
+        s.AddLead(student.Id, status: LeadStatuses.Accepted);
 
         var elig = await s.Service.GetEligibilityAsync(student.Id, s.Center.Id);
         Assert.False(elig.CanReview);
-        Assert.Contains("tiếp nhận", elig.Reason);
+        Assert.Contains("Đang trao đổi", elig.Reason);
 
-        var accepted = s.AddLead(student.Id, status: LeadStatuses.Accepted);
+        var contacted = s.AddLead(student.Id, status: LeadStatuses.Contacted);
         var dto = await s.Service.CreateAsync(student.Id, s.Center.Id, new CreateCenterReviewRequest(4, "Đang trao đổi tốt"));
         Assert.False(dto.IsVerified);
-        Assert.Equal(accepted.Id, Assert.Single(s.Repo.Reviews).LeadId);
+        Assert.Equal(contacted.Id, Assert.Single(s.Repo.Reviews).LeadId);
     }
 
     [Fact]
@@ -288,10 +289,10 @@ public class CenterReviewSubmissionTests
         var eligibility = await s.Service.GetEligibilityAsync(student.Id, s.Center.Id);
         Assert.False(eligibility.CanReview);
         Assert.False(eligibility.HasReviewed);
-        Assert.Contains("tiếp nhận", eligibility.Reason);
+        Assert.Contains("Đang trao đổi", eligibility.Reason);
 
         var ex = await Assert.ThrowsAsync<ArgumentException>(() => s.Service.CreateAsync(student.Id, s.Center.Id, new CreateCenterReviewRequest(5)));
-        Assert.Contains("tiếp nhận", ex.Message);
+        Assert.Contains("Đang trao đổi", ex.Message);
     }
 
     [Fact]

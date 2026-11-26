@@ -983,6 +983,8 @@ export interface CenterReviewDto {
   comment?: string | null;
   /** [UC-152] Phản hồi công khai của trung tâm (nếu có và đang hiển thị). */
   centerReply?: CenterReviewReplyDto | null;
+  /** [UC-151 E1] True khi đánh giá do chính người dùng đang đăng nhập viết. */
+  isOwnReview?: boolean;
 }
 
 /** [UC-151] Lý do báo cáo đánh giá trung tâm. */
