@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Profile.Academic;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -92,6 +92,63 @@ public static class DbSeeder
             return;
         db.SubscriptionPlans.AddRange(missing);
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// [UC-40 / UC-44] Seed 2 mục tri thức chuẩn CENTER_ASK ("Nên hỏi trung tâm") và CENTER_WARNING ("Dấu hiệu cảnh giác")
+    /// khi chưa từng tồn tại trong kho tri thức (kiểm tra cả mục đã xóa mềm để không tự khôi phục nếu Moderator cố ý xóa).
+    /// </summary>
+    public static async Task SeedCenterGuidanceCardsAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        var existingTopics = await db.KnowledgeDocuments.AsNoTracking()
+            .Where(d => d.TopicCode == "CENTER_ASK" || d.TopicCode == "CENTER_WARNING")
+            .Select(d => d.TopicCode)
+            .ToListAsync(ct);
+
+        var maxEntryNo = await db.KnowledgeDocuments.AsNoTracking()
+            .Select(d => (int?)d.EntryNo)
+            .MaxAsync(ct) ?? 0;
+
+        var toAdd = new List<KnowledgeDocument>();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        if (!existingTopics.Contains("CENTER_ASK"))
+        {
+            toAdd.Add(new KnowledgeDocument
+            {
+                EntryNo = ++maxEntryNo,
+                DocType = "proc_checklist",
+                Label = "LABEL_CENTER_GUIDANCE",
+                Question = "Nên hỏi trung tâm tư vấn du học những gì trước khi ký hợp đồng?",
+                Answer = "• Phí trọn gói gồm những gì, có phát sinh thêm khoản nào không?\n• Chính sách hoàn phí khi không đạt mục tiêu hoặc dừng dịch vụ như thế nào?\n• Hợp đồng có nêu rõ lộ trình, cam kết phạm vi công việc và thời hạn không?\n• Ai là người trực tiếp phụ trách hồ sơ của học sinh trong suốt quá trình?",
+                Source = "Hướng dẫn chuẩn USDSS (UC-40)",
+                RetrievedAt = today,
+                TopicCode = "CENTER_ASK",
+                Version = 1,
+            });
+        }
+
+        if (!existingTopics.Contains("CENTER_WARNING"))
+        {
+            toAdd.Add(new KnowledgeDocument
+            {
+                EntryNo = ++maxEntryNo,
+                DocType = "proc_mistakes",
+                Label = "LABEL_CENTER_GUIDANCE",
+                Question = "Dấu hiệu cảnh giác khi làm việc với trung tâm tư vấn du học",
+                Answer = "• Cam kết 100% đỗ visa hoặc 100% đỗ trường mục tiêu.\n• Yêu cầu thu phí giữ chỗ hoặc đặt cọc trước khi ký hợp đồng chính thức.\n• Đề nghị chuyển khoản học phí hoặc phí dịch vụ vào tài khoản cá nhân thay vì tài khoản công ty.\n• Đề nghị làm hộ, chỉnh sửa hoặc làm giả giấy tờ, bảng điểm, hồ sơ tài chính.",
+                Source = "Hướng dẫn chuẩn USDSS (UC-40)",
+                RetrievedAt = today,
+                TopicCode = "CENTER_WARNING",
+                Version = 1,
+            });
+        }
+
+        if (toAdd.Count > 0)
+        {
+            db.KnowledgeDocuments.AddRange(toAdd);
+            await db.SaveChangesAsync(ct);
+        }
     }
 
     private static string GetDefaultProfileMetadataJson()
