@@ -22,6 +22,7 @@ ENV ASPNETCORE_URLS=http://+:8080 \
     ASPNETCORE_ENVIRONMENT=Production
 COPY --from=build /app/publish .
 EXPOSE 8080
-# The aspnet image ships a non-root "app" user (UID 1654).
+# The aspnet image ships a non-root "app" user (UID 1654). It cannot create /app/uploads itself.
+RUN mkdir -p /app/uploads && chown -R app:app /app/uploads
 USER app
 ENTRYPOINT ["dotnet", "StudyAbroad.Api.dll"]
