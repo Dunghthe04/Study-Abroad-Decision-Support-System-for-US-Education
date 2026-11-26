@@ -74,7 +74,7 @@ public class StudyCentersController(IStudyCenterService service) : ControllerBas
         if (!isModerator && (center.VerificationStatus != CenterReferral.Verified || !center.IsActive))
             return NotFound();
 
-        return Ok(await reviews.GetVisibleAsync(id, page, pageSize, ct));
+        return Ok(await reviews.GetVisibleAsync(id, page, pageSize, User.GetUserId(), ct));
     }
 
     // Trung tâm tự đăng ký (/register/center) và chờ moderator duyệt hồ sơ (UC-59);
