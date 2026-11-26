@@ -42,6 +42,8 @@ export interface AddTargetSchoolButtonProps {
   className?: string;
   variant?: "default" | "outline" | "secondary" | "ghost";
   size?: "default" | "sm" | "lg" | "icon";
+  /** Chỉ hiện biểu tượng (thẻ trường trong danh sách): đã lưu thì biểu tượng đặc */
+  iconOnly?: boolean;
   onSuccess?: (targetSchool: TargetSchoolDto) => void;
   onRemove?: (targetSchoolId: string) => void;
 }
@@ -171,6 +173,7 @@ function StudentTargetSchoolButton({
   className,
   variant = "outline",
   size = "default",
+  iconOnly = false,
   onSuccess,
   onRemove,
 }: AddTargetSchoolButtonProps) {
@@ -464,6 +467,22 @@ function StudentTargetSchoolButton({
 
   return (
     <>
+      {iconOnly ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => { if (!isChecking) handleClickButton(); }}
+          aria-label={isSaved ? `${universityName}: đã trong mục tiêu, bấm để xem hoặc bỏ` : `Lưu ${universityName} vào mục tiêu`}
+          aria-pressed={isSaved}
+          title={isSaved ? "Đã trong mục tiêu" : "Lưu mục tiêu"}
+          className={cn(
+            "size-9 rounded-full border-0 bg-transparent text-white shadow-none drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] hover:bg-black/25 hover:text-white focus-visible:ring-white/70",
+            className,
+          )}
+        >
+          <BookmarkIcon className={cn("size-[22px]", isSaved && "fill-current")} aria-hidden />
+        </Button>
+      ) : (
       <Button
         variant={isSaved ? "secondary" : variant}
         size={size}
@@ -492,6 +511,7 @@ function StudentTargetSchoolButton({
           </>
         )}
       </Button>
+      )}
 
       {/* Modal [UC-30] Thêm trường mục tiêu */}
       <Dialog open={isOpenAdd} onOpenChange={setIsOpenAdd}>

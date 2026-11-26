@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Costs;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.TargetSchools;
@@ -197,6 +198,7 @@ public class TargetSchoolRepository(AppDbContext db) : ITargetSchoolRepository
                 o.LivingUsd,
                 o.FeesUsd,
                 o.OtherExpensesUsd,
+                o.HealthInsuranceUsd,
                 o.DeadlinesJson,
             })
             .ToListAsync(ct);
@@ -205,9 +207,7 @@ public class TargetSchoolRepository(AppDbContext db) : ITargetSchoolRepository
         foreach (var g in offerings.GroupBy(o => o.UniversityId))
         {
             var o = g.First();
-            decimal? totalCost = o.TuitionUsd is decimal tuition
-                ? tuition + (o.LivingUsd ?? 0m) + (o.FeesUsd ?? 0m) + (o.OtherExpensesUsd ?? 0m)
-                : null;
+            var totalCost = AnnualCost.Of(o.TuitionUsd, o.LivingUsd, o.FeesUsd, o.OtherExpensesUsd, o.HealthInsuranceUsd);
             var rounds = TargetSchoolService.ExtractAvailableRounds(o.DeadlinesJson);
             result[g.Key] = new OfferingMeta(totalCost, rounds);
         }

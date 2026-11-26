@@ -134,11 +134,40 @@ def keep_verbatim(raw: dict[str, Any], message: str, context_names: set[str] | N
             }
             if not kept["filters"]:
                 del kept["filters"]
+        relaxed = relax_compare(item.get("type"), kept)
+        if relaxed is None:
+            continue
+        kept = relaxed
         span = item.get("span")
         if not isinstance(span, str) or not span.strip() or words(span) - spoken:
             span = message
         cleaned.append({**item, "span": span, "entities": kept})
     return {**raw, "intents": cleaned}
+
+
+# Model gắn "so sánh" cho câu chưa nêu đủ hai trường ("so sánh giúp mình 3 trường ở bang Texas"). Luật compare cần từ hai tên trường nên
+# cả tin bị loại và học sinh nhận "chưa hiểu". Hạ ý xuống việc gần nhất mà dữ liệu hỗ trợ, thay vì bỏ cả tin:
+#   knowledge compare_facts: có điều kiện lọc hoặc cách xếp thì thành search; đúng một trường thì thành school_info; còn lại bỏ ý này (None)
+#   profile_review compare: bỏ nhiệm vụ compare; hết nhiệm vụ thì bỏ luôn tên trường rác ("3 trường ở bang Texas"), chat hỏi lại bằng nút
+def relax_compare(intent: Any, entities: dict[str, Any]) -> dict[str, Any] | None:
+    tasks = entities.get("tasks") or []
+    schools = entities.get("schools")
+    if (isinstance(schools, list) and len(schools) >= 2) or entities.get("group") is not None:
+        return entities
+    if intent == "knowledge" and "compare_facts" in tasks:
+        if entities.get("filters") or entities.get("sort") is not None:
+            return {**{k: v for k, v in entities.items() if k != "schools"}, "tasks": ["search"]}
+        if isinstance(schools, list) and len(schools) == 1:
+            return {**entities, "tasks": ["school_info"]}
+        return None
+    if intent == "profile_review" and "compare" in tasks:
+        rest = [t for t in tasks if t != "compare"]
+        out = {k: v for k, v in entities.items() if k != "tasks"}
+        if rest:
+            return {**out, "tasks": rest}
+        out.pop("schools", None)
+        return out
+    return entities
 
 
 def has_digit(text: str) -> bool:

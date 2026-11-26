@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using StudyAbroad.Application.Common;
+using StudyAbroad.Application.Costs;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.Universities;
@@ -32,7 +33,7 @@ public class UniversityDetailService(IUniversityDetailRepository repository) : I
             o.AvgGpaWeighted, o.GpaScaleType, ValidRate(o.FyOnCampusPct), ValidRate(o.UgOnCampusPct), o.HousingTypes,
             o.IntlHousing, o.HousingOnlyUsd, o.HousingDepositUsd, o.StudentFacultyRatio,
             o.Activities, o.CampusSetting, o.ActPolicy, ValidRate(o.ActSubmitPct), o.ApplicationFeeUsd, o.TuitionInStateUsd,
-            o.HealthInsuranceUsd)).ToList();
+            o.HealthInsuranceUsd, AnnualCost.Of(o))).ToList();
         var sources = data.Evidence.OrderByDescending(e => e.CreatedAt).ThenBy(e => e.FieldName).ThenBy(e => e.Id)
             .Select(MapSource).Where(s => s.SourceUrl is not null)
             .DistinctBy(s => new { s.FieldName, s.SourceUrl, s.FieldValue, s.Status, s.DataYear, s.AppliedToSnapshot, s.Normalization })

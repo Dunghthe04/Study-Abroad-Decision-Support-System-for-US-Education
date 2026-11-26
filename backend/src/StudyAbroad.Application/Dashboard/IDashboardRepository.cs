@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Costs;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -7,20 +8,19 @@ namespace StudyAbroad.Application.Dashboard;
 
 /// <summary>
 /// Dòng chi phí của một trường đại học theo năm học (USD).
-/// TotalCostUsd: tính theo công thức TotalCost chuẩn (Học phí + Ăn ở + Phí + Chi phí khác).
+/// TotalCostUsd: chi phí một năm theo AnnualCost (học phí + ăn ở + phí + chi khác + bảo hiểm y tế).
 /// </summary>
 public record UniversityCostRow(
     Guid UniversityId,
     decimal? TuitionUsd,
     decimal? LivingUsd,
     decimal? FeesUsd,
-    decimal? OtherExpensesUsd
+    decimal? OtherExpensesUsd,
+    decimal? HealthInsuranceUsd = null
 )
 {
     public decimal? TotalCostUsd =>
-        TuitionUsd.HasValue
-            ? TuitionUsd.Value + (LivingUsd ?? 0) + (FeesUsd ?? 0) + (OtherExpensesUsd ?? 0)
-            : null;
+        AnnualCost.Of(TuitionUsd, LivingUsd, FeesUsd, OtherExpensesUsd, HealthInsuranceUsd);
 }
 
 /// <summary>

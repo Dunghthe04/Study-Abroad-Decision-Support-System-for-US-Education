@@ -48,8 +48,8 @@ slm/
 | 3. Kiểm dữ liệu | `python -m slm.prepare.check_slm_data` (phải 0 lỗi) | Báo cáo kiểm |
 | 4. Xuất hội thoại | `python -m slm.prepare.export_slm_chat` | `data/finetune/train.jsonl`, `val.jsonl` |
 | 5. Fine-tune | Chạy `train/train_slm.ipynb` trên Colab | `.gguf`, `training_log.csv` |
-| 6. Nạp model | `ollama create usas-slm-v5 -f Modelfile` | Model trong Ollama |
-| 7. Đo | `python -m slm.eval.eval_slm --model usas-slm-v5 --prompt slm_intents --split test` | `results/ket_qua/*.jsonl` |
+| 6. Nạp model | `ollama create usas-slm-v6 -f Modelfile` | Model trong Ollama |
+| 7. Đo | `python -m slm.eval.eval_slm --model usas-slm-v6 --prompt slm_intents --split test` | `results/ket_qua/*.jsonl` |
 | 8. Báo cáo | `python -m slm.eval.slm_report --run "Tên=file" --out results/bao_cao/<ngày>_<tên>` | Thư mục báo cáo |
 
 Chi tiết từng lệnh và tham số: `train/HUONG_DAN_FINETUNE.md`. Mốc tham chiếu: `python -m slm.eval.baseline_tfidf --split test`, rồi thêm `--baseline "Tên=file"` vào lệnh `slm_report`. Từ điển khóa entities: `python -m slm.prepare.build_entities_reference`.

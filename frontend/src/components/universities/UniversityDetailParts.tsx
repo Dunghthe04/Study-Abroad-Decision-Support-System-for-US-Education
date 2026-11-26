@@ -153,7 +153,7 @@ export function Gauge({
       role="img"
       aria-label={`${label}: ${formattedPct}`}
       viewBox="0 0 104 58"
-      className={cn("h-auto w-24 shrink-0 overflow-visible sm:w-28", className)}
+      className={cn("h-auto w-24 shrink-0 overflow-visible @2xl:w-28", className)}
     >
       <path
         d="M 10 50 A 42 42 0 0 1 94 50"

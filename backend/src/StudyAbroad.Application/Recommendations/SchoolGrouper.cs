@@ -86,7 +86,7 @@ public record FitStudent(decimal? BudgetUsd);
 // Hạng của trường trong một bảng xếp hạng: hạng Rank trong tổng số Total trường của bảng.
 public record RankPosition(int Rank, int Total);
 
-// Thông tin của trường dùng cho fit score. TotalCostUsd = học phí + ăn ở + phí + chi khác (một năm).
+// Thông tin của trường dùng cho fit score. TotalCostUsd = AnnualCost (học phí + ăn ở + phí + chi khác + bảo hiểm y tế, một năm).
 // EnglishShortfall: mức thiếu tiếng Anh của học sinh so với trường, tính theo band (0 là đạt), do HardFilter tính từ IELTS, TOEFL, Duolingo;
 // null nếu không so được (thành phần E bị bỏ khỏi tổng).
 // Quality: chất lượng của trường, từ 0 đến 1 (tính từ xếp hạng bằng SchoolRanker.QualityFromRanks, hoặc số thay thế).

@@ -1,4 +1,3 @@
-import type { UniversityOffering } from "@/types/university";
 
 export const MISSING_UNIVERSITY_DATA = "—";
 const numbers = new Intl.NumberFormat("vi-VN");
@@ -168,13 +167,6 @@ export function scoreRange(low: number | null, high: number | null): string {
   if (low != null) return `Mốc 25%: ${universityNumber(low)}`;
   if (high != null) return `Mốc 75%: ${universityNumber(high)}`;
   return MISSING_UNIVERSITY_DATA;
-}
-
-export function annualPublishedCost(offering: UniversityOffering): number | null {
-  const base = [offering.tuitionUsd, offering.livingUsd, offering.feesUsd, offering.otherExpensesUsd];
-  if (base.some((value) => value == null || !Number.isFinite(value))) return null;
-  const insurance = offering.healthInsuranceUsd != null && Number.isFinite(offering.healthInsuranceUsd) ? offering.healthInsuranceUsd : 0;
-  return base.reduce<number>((total, value) => total + (value ?? 0), 0) + insurance;
 }
 
 export function universityDeadlines(value: string | null): { round: string; label: string; date: string; rawDate: string }[] {

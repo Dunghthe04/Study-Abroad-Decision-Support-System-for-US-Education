@@ -187,7 +187,7 @@ export function UniversityDetailView({
   const acceptanceDisplayNumber = acceptancePct != null ? universityNumber(Number(acceptancePct.toFixed(1))) : null;
 
   return (
-    <article className="space-y-6 pb-12">
+    <article className="@container space-y-6 pb-12">
       {/* Ảnh bìa lớn tràn mép, nằm dưới thanh đầu trong suốt giống trang chủ */}
       <header>
         <div className="relative -mt-(--header-h) h-[min(60svh,520px)] min-h-72 overflow-hidden bg-brand-ink">
@@ -198,11 +198,11 @@ export function UniversityDetailView({
 
         {/* Dưới ảnh: logo đè nhẹ lên mép ảnh, tên và vị trí bên trái, các nút bên phải canh giữa theo khối tên */}
         <div className="border-b border-line bg-surface">
-          <div className="mx-auto flex w-full max-w-[1560px] flex-wrap items-center justify-between gap-5 px-4 pb-6 sm:px-8 lg:px-12">
+          <div className="mx-auto flex w-full max-w-[1560px] flex-wrap items-center justify-between gap-5 px-4 pb-6 @2xl:px-8 @5xl:px-12">
             <div className="flex min-w-0 items-end gap-4">
-              <SchoolImage url={university.logoUrl} alt={`Logo ${university.name}`} className="-mt-8 size-20 shrink-0 rounded-xl border border-line bg-white sm:-mt-10 sm:size-24" contain />
+              <SchoolImage url={university.logoUrl} alt={`Logo ${university.name}`} className="-mt-8 size-20 shrink-0 rounded-xl border border-line bg-white @2xl:-mt-10 @2xl:size-24" contain />
               <div className="min-w-0 pt-4">
-                <h1 className="text-2xl leading-tight font-semibold tracking-tight text-balance text-ink sm:text-3xl">{university.name}</h1>
+                <h1 className="text-2xl leading-tight font-semibold tracking-tight text-balance text-ink @2xl:text-3xl">{university.name}</h1>
                 {/* Vị trí · loại trường, ngăn cách bằng dấu chấm giữa */}
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-2">
                   {[location, university.control && schoolControlLabel(university.control)].filter(Boolean).join(" · ")}
@@ -246,10 +246,10 @@ export function UniversityDetailView({
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1560px] px-4 sm:px-8 lg:px-12 space-y-6">
+      <div className="mx-auto max-w-[1560px] px-4 @2xl:px-8 @5xl:px-12 space-y-6">
         {/* Nền đặc và tràn ra cả phần lề hai bên, để viền thẻ bên dưới không lộ ra khi cuộn.
             Cuộn ngang bằng overflow gốc, ẩn thanh cuộn (ScrollArea luôn vẽ thêm thanh dọc) */}
-        <nav aria-label="Các mục thông tin trường" className="sticky top-(--header-h) z-20 -mx-4 sm:-mx-8 lg:-mx-12 bg-background px-4 sm:px-8 lg:px-12">
+        <nav aria-label="Các mục thông tin trường" className="sticky top-(--header-h) z-20 -mx-4 @2xl:-mx-8 @5xl:-mx-12 bg-background px-4 @2xl:px-8 @5xl:px-12">
           <div className="overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex w-max gap-1">
               {navigation.map((item) => {
@@ -289,18 +289,18 @@ export function UniversityDetailView({
         </Card>
       )}
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid items-start gap-6 @5xl:grid-cols-[minmax(0,1fr)_280px] @7xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-12">
           <DetailSection id="overview" title="Tổng quan">
             <div className="overflow-hidden rounded-xl border border-line bg-surface">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 p-5 sm:p-6">
+              <div className="flex flex-col @2xl:flex-row @2xl:items-center @2xl:justify-between gap-6 p-5 @2xl:p-6">
                 <div className="space-y-1">
                   <p className="text-base font-medium text-ink">Tỷ lệ nhận chung</p>
                   <p className="text-sm text-ink-2">Tỷ lệ trúng tuyển toàn trường</p>
                   <div className="pt-2 flex items-baseline gap-1">
                     {validAcceptanceRate != null ? (
                       <>
-                        <span className={cn("text-5xl sm:text-6xl font-semibold tracking-tight tabular-nums", acceptanceToneClass)}>
+                        <span className={cn("text-5xl @2xl:text-6xl font-semibold tracking-tight tabular-nums", acceptanceToneClass)}>
                           <SourceTooltip source={findFieldSource(university.sources, "acceptance_rate")}>
                             {acceptanceDisplayNumber}
                           </SourceTooltip>
@@ -313,12 +313,12 @@ export function UniversityDetailView({
                   </div>
                 </div>
                 {validAcceptanceRate != null && (
-                  <div className="shrink-0 self-center sm:self-auto">
+                  <div className="shrink-0 self-center @2xl:self-auto">
                     <Gauge
                       value={validAcceptanceRate}
                       label="Tỷ lệ nhận chung"
                       tone={acceptanceTone}
-                      className="w-48 sm:w-56 md:w-60"
+                      className="w-48 @2xl:w-56 @3xl:w-60"
                     />
                   </div>
                 )}
@@ -327,7 +327,7 @@ export function UniversityDetailView({
               {overviewRows.length > 0 && (
                 <div className="divide-y divide-line border-t border-line">
                   {overviewRows.map((row) => (
-                    <div key={row.label} className="flex items-center justify-between px-5 py-3.5 sm:px-6">
+                    <div key={row.label} className="flex items-center justify-between px-5 py-3.5 @2xl:px-6">
                       <span className="text-sm text-ink-2">{row.label}</span>
                       <span className="inline-flex items-center gap-2 text-sm font-semibold text-ink tabular-nums">
                         {row.icon && <row.icon className="size-4 text-ink-2" aria-hidden="true" />}
@@ -361,7 +361,7 @@ export function UniversityDetailView({
           ) : (
             <>
               <DetailSection title="Thông tin tuyển sinh & chi phí">
-                <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+                <div className="rounded-xl border border-line bg-surface p-5 @2xl:p-6">
                   <p className="text-sm leading-relaxed text-ink-2">
                     Trường chưa có dữ liệu bậc học trong hệ thống. Bạn có thể tham khảo website chính thức của trường.
                   </p>
@@ -377,7 +377,7 @@ export function UniversityDetailView({
 
           {university.galleryUrls.length > 0 && (
             <DetailSection title="Hình ảnh trường">
-              <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+              <div className="rounded-xl border border-line bg-surface p-5 @2xl:p-6">
                 <div className="grid grid-cols-2 gap-3">
                   {university.galleryUrls.map((url, index) => (
                     <a key={`${url}-${index}`} href={universityUrl(url) ?? undefined} target="_blank" rel="noopener noreferrer" aria-label={`Mở ảnh ${index + 1} của ${university.name}`}>
@@ -414,7 +414,7 @@ export function UniversityDetailView({
           )}
         </div>
 
-        <aside aria-label="Thông tin bổ sung" className="space-y-5 lg:sticky lg:top-[calc(var(--header-h)+4.5rem)]">
+        <aside aria-label="Thông tin bổ sung" className="space-y-5 @5xl:sticky @5xl:top-[calc(var(--header-h)+4.5rem)]">
           {university.rankings.length > 0 && (
             <DetailSection title="Xếp hạng đã ghi nhận">
               <div className="overflow-hidden rounded-xl border border-line bg-surface">
@@ -423,14 +423,14 @@ export function UniversityDetailView({
                     const safeSourceUrl = universityUrl(ranking.sourceUrl);
                     const numStr = cleanRankNumber(ranking.rankDisplay, ranking.rank);
                     return (
-                      <li key={`${ranking.publisher}-${ranking.name}-${ranking.edition}`} className="group flex items-center gap-4 pl-4 sm:pl-5">
+                      <li key={`${ranking.publisher}-${ranking.name}-${ranking.edition}`} className="group flex items-center gap-4 pl-4 @2xl:pl-5">
                         <div className="flex shrink-0 items-baseline gap-0.5 font-heading font-semibold tabular-nums">
                           <span className="text-sm font-normal opacity-70">#</span>
                           <span className={cn("leading-none", rankTone(ranking.rank), rankTextSize(numStr))}>
                             {numStr}
                           </span>
                         </div>
-                        <div className="min-w-0 flex-1 py-3.5 pr-4 sm:pr-5 border-b border-line/70 group-last:border-b-0 space-y-0.5">
+                        <div className="min-w-0 flex-1 py-3.5 pr-4 @2xl:pr-5 border-b border-line/70 group-last:border-b-0 space-y-0.5">
                           {safeSourceUrl ? (
                             <a
                               href={safeSourceUrl}

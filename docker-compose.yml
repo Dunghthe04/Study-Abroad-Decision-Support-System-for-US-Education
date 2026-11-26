@@ -63,7 +63,7 @@ services:
       # SLM + OCR chạy trên server riêng (Ollama sau Caddy, Bearer token). Để trống = dùng ollama trong compose
       SLM_BASE_URL: ${SLM_BASE_URL:-}
       SLM_API_KEY: ${SLM_API_KEY:-}
-      SLM_MODEL: ${SLM_MODEL:-usas-slm-v5}
+      SLM_MODEL: ${SLM_MODEL:-usas-slm-v6}
       VISION_BASE_URL: ${VISION_BASE_URL:-}
       VISION_API_KEY: ${VISION_API_KEY:-}
       TRANSCRIPT_PARSE_MODEL: ${TRANSCRIPT_PARSE_MODEL:-}  # only without a Claude key; empty = reuse LLM_MODEL

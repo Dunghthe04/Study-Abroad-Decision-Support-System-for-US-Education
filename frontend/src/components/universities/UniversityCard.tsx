@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Building2Icon } from "lucide-react";
+import { AddTargetSchoolButton } from "@/components/target-schools/AddTargetSchoolButton";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -12,6 +13,7 @@ import {
   universityPercent,
   universityUrl,
 } from "@/lib/university-display";
+import { useAuth } from "@/contexts/AuthContext";
 import type { UniversityListItem } from "@/types/university";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +57,9 @@ function StatItem({ label, value, emphasize = false }: { label: string; value: s
 }
 
 export function UniversityCard({ university, sortBy }: UniversityCardProps) {
+  const { user } = useAuth();
+  // Học sinh lưu trường vào mục tiêu; phụ huynh gợi ý cho con. Khách, trung tâm và quản trị không có nút này
+  const canSave = user?.role === "student" || user?.role === "parent";
   const logoUrl = universityUrl(university.logoUrl);
   const coverUrl = universityUrl(university.coverUrl);
   const detailHref = `/university/${encodeURIComponent(university.code)}?from=universities`;
@@ -74,6 +79,20 @@ export function UniversityCard({ university, sortBy }: UniversityCardProps) {
   const hasBadges = university.bestRank != null || university.isIvy;
 
   return (
+    <div className="relative h-full">
+    {/* Nút lưu nằm ngoài <Link> để không lồng điều khiển trong liên kết */}
+    {canSave && (
+      <div className="absolute top-3 right-3 z-10">
+        <AddTargetSchoolButton
+          iconOnly
+          universityId={university.id}
+          universityCode={university.code}
+          universityName={university.name}
+          universityCity={university.city}
+          universityState={university.stateName ?? university.state}
+        />
+      </div>
+    )}
     <Link
       href={detailHref}
       className="group block h-full rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -142,5 +161,6 @@ export function UniversityCard({ university, sortBy }: UniversityCardProps) {
         </CardContent>
       </Card>
     </Link>
+    </div>
   );
 }
