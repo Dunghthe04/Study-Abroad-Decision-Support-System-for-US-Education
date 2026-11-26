@@ -5,6 +5,10 @@ namespace StudyAbroad.Application.Dashboard.Roadmap;
 /// </summary>
 public interface IRoadmapService
 {
+    /// <summary>lộ trình của học sinh; null khi chưa có hồ sơ</summary>
+    Task<RoadmapDto?> GetRoadmapAsync(Guid studentId, CancellationToken ct = default);
+
+
     /// <summary>lưu tỉnh học sinh đang sống; null = xóa. Trả kết quả để controller chọn mã lỗi</summary>
     Task<SetProvinceResult> SetProvinceAsync(Guid studentId, string? province, CancellationToken ct = default);
 }
