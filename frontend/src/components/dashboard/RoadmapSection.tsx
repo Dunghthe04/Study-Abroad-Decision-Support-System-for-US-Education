@@ -210,10 +210,13 @@ function TaskItem({ task, provinceKnown }: { task: RoadmapTask; provinceKnown: b
   );
 }
 
-/** Ô hỏi tỉnh/thành để gợi ý trung tâm gần. Không bắt buộc nên có Bỏ qua (chỉ ẩn trong lần xem này). */
-function ProvincePrompt({ onSaved, onSkip }: { onSaved: () => void; onSkip: () => void }) {
+/**
+ * Ô chọn tỉnh/thành để gợi ý trung tâm gần. Chưa có tỉnh: hỏi, có Bỏ qua (chỉ ẩn trong lần xem này).
+ * Đã có tỉnh: mở từ nút Đổi, chọn sẵn tỉnh cũ, nút Hủy quay lại dòng hiện tỉnh.
+ */
+function ProvincePrompt({ current, onSaved, onSkip }: { current?: string | null; onSaved: () => void; onSkip: () => void }) {
   const [provinces, setProvinces] = useState<string[]>([]);
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(current ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -240,15 +243,17 @@ function ProvincePrompt({ onSaved, onSkip }: { onSaved: () => void; onSkip: () =
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-line bg-ground p-3 text-sm">
       <MapPinIcon className="size-4 text-brand" aria-hidden />
-      <label htmlFor="roadmap-province" className="text-foreground">Bạn ở tỉnh nào? Để gợi ý trung tâm gần bạn.</label>
+      <label htmlFor="roadmap-province" className="text-foreground">
+        {current ? "Đổi tỉnh/thành để gợi ý trung tâm gần bạn." : "Bạn ở tỉnh nào? Để gợi ý trung tâm gần bạn."}
+      </label>
       <NativeSelect id="roadmap-province" size="sm" value={value} onChange={(e) => setValue(e.target.value)} disabled={saving}>
         <NativeSelectOption value="">Chọn tỉnh/thành</NativeSelectOption>
         {provinces.map((p) => <NativeSelectOption key={p} value={p}>{p}</NativeSelectOption>)}
       </NativeSelect>
-      <Button type="button" size="sm" disabled={!value || saving} onClick={() => void save()}>
+      <Button type="button" size="sm" disabled={!value || value === current || saving} onClick={() => void save()}>
         {saving && <Spinner className="size-4" />} Lưu
       </Button>
-      <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={onSkip}>Bỏ qua</Button>
+      <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={onSkip}>{current ? "Hủy" : "Bỏ qua"}</Button>
       {error && <p className="w-full text-xs text-risk">{error}</p>}
     </div>
   );
@@ -268,6 +273,7 @@ export function RoadmapSection({ studentId, targetSchoolsHref = "/target-schools
   const [state, setState] = useState<{ key: string; data?: Roadmap | null; error?: string } | null>(null);
   const [reload, setReload] = useState(0);
   const [skipProvince, setSkipProvince] = useState(false);
+  const [editProvince, setEditProvince] = useState(false);
   const ref = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -332,6 +338,19 @@ export function RoadmapSection({ studentId, targetSchoolsHref = "/target-schools
       {!readOnly && data.provinceMissing && !skipProvince && (
         <ProvincePrompt onSaved={() => setReload((k) => k + 1)} onSkip={() => setSkipProvince(true)} />
       )}
+      {!readOnly && !data.provinceMissing && (editProvince ? (
+        <ProvincePrompt
+          current={data.province}
+          onSaved={() => { setEditProvince(false); setReload((k) => k + 1); }}
+          onSkip={() => setEditProvince(false)}
+        />
+      ) : (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <MapPinIcon className="size-4 text-brand" aria-hidden />
+          Gợi ý trung tâm theo tỉnh/thành: <span className="font-semibold text-foreground">{data.province}</span>
+          <Button type="button" size="sm" variant="link" className="h-auto p-0" onClick={() => setEditProvince(true)}>Đổi</Button>
+        </p>
+      ))}
 
       <Card>
         <CardHeader className="border-b">

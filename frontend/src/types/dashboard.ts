@@ -166,4 +166,6 @@ export interface Roadmap {
   tasks: RoadmapTask[];
   progress: { done: number; total: number };
   provinceMissing: boolean;
+  /** Tỉnh/thành đã lưu, null khi chưa chọn */
+  province?: string | null;
 }
