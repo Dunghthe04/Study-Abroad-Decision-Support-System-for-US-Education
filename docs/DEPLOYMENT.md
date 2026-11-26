@@ -89,11 +89,11 @@ gunzip -c backups/<file>.sql.gz | docker compose -f docker-compose.prod.yml exec
 
 ## 9. Server SLM + OCR (VPS CPU riêng)
 
-SLM phân loại (`usas-slm-v5`) và OCR bảng điểm (`glm-ocr`) cùng chạy trên một VPS CPU (4 vCPU / 8 GB): Ollama nghe `127.0.0.1:11434`, Caddy ở trước giữ HTTPS và chỉ cho request có `Authorization: Bearer <token>` (token nằm ở `/root/.usas-slm-api-key` trên VPS).
+SLM phân loại (`usas-slm-v6`) và OCR bảng điểm (`glm-ocr`) cùng chạy trên một VPS CPU (4 vCPU / 8 GB): Ollama nghe `127.0.0.1:11434`, Caddy ở trước giữ HTTPS và chỉ cho request có `Authorization: Bearer <token>` (token nằm ở `/root/.usas-slm-api-key` trên VPS).
 
 Cấu hình Ollama (`/etc/systemd/system/ollama.service.d/override.conf`): `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_KEEP_ALIVE=30m`. RAM chỉ đủ một model một lúc nên OCR xong (`VISION_KEEP_ALIVE=0`) là nhả `glm-ocr` để SLM nạp lại.
 
-Thêm hoặc cập nhật model trên VPS: `ollama pull glm-ocr` hoặc `ollama create usas-slm-v5 -f /opt/usas-models/Modelfile`; kiểm tra bằng `ollama list`, `ollama ps`.
+Thêm hoặc cập nhật model trên VPS: `ollama pull glm-ocr` hoặc `ollama create usas-slm-v6 -f /opt/usas-models/Modelfile`; kiểm tra bằng `ollama list`, `ollama ps`.
 
 Phía advisor (`.env` gốc cho Docker, `advisor/.env` khi chạy ngoài Docker), dùng chung URL và token cho cả hai:
 
@@ -104,6 +104,6 @@ VISION_BASE_URL=https://slm.usdss.site
 VISION_API_KEY=<token>
 ```
 
-Kiểm tra nhanh: `curl -H "Authorization: Bearer <token>" https://slm.usdss.site/api/tags` phải thấy cả `usas-slm-v5` và `glm-ocr`.
+Kiểm tra nhanh: `curl -H "Authorization: Bearer <token>" https://slm.usdss.site/api/tags` phải thấy cả `usas-slm-v6` và `glm-ocr`.
 
 Trên CPU, đọc một trang bảng điểm mất khoảng 40 giây (gồm nạp model). Nginx và backend chờ OCR tối đa 600 giây, đủ cho khoảng 10 trang một lần tải lên.

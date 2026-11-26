@@ -11,7 +11,7 @@ from app.services.slm_classifier import OllamaSlm
 
 def test_default_slm_model_is_v5(monkeypatch):
     monkeypatch.delenv("SLM_MODEL", raising=False)
-    assert Settings(_env_file=None).slm_model == "usas-slm-v5"
+    assert Settings(_env_file=None).slm_model == "usas-slm-v6"
 
 
 def test_startup_creates_llm_client():

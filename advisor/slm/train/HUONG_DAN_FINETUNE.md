@@ -144,19 +144,19 @@ Cố định trong Bước 9: `warmup_ratio=0.05`, `lr_scheduler_type="linear"`,
 
 | Lệnh | Làm gì |
 |---|---|
-| `ollama create usas-slm-v5 -f Modelfile` | Tạo model tên `usas-slm-v5` từ `Modelfile` |
+| `ollama create usas-slm-v6 -f Modelfile` | Tạo model tên `usas-slm-v6` từ `Modelfile` |
 | `ollama list` | Liệt kê model đã có (kiểm tra vừa tạo) |
-| `ollama run usas-slm-v5` | Chạy thử tương tác. Chỉ để nhìn; đo thật dùng `eval_slm` |
+| `ollama run usas-slm-v6` | Chạy thử tương tác. Chỉ để nhìn; đo thật dùng `eval_slm` |
 
 `Modelfile` có hai phần: `FROM` là đường dẫn **tương đối** tới file `.gguf` (nên `.gguf` phải cùng thư mục), `TEMPLATE` là khuôn chat của Qwen viết dạng Go template, ghép system, user, assistant bằng `<|im_start|>` giống lúc train.
 
-3. Cho hệ thống dùng: trong `advisor/.env` đặt `SLM_MODEL=usas-slm-v5` và `SLM_PROMPT=slm_intents`, rồi chạy lại advisor (`.env` chỉ được đọc lúc khởi động). Model cũ (v3) trả khóa tiếng Việt nên **không dùng được** với code hiện tại.
+3. Cho hệ thống dùng: trong `advisor/.env` đặt `SLM_MODEL=usas-slm-v6` và `SLM_PROMPT=slm_intents`, rồi chạy lại advisor (`.env` chỉ được đọc lúc khởi động). Model cũ (v3) trả khóa tiếng Việt nên **không dùng được** với code hiện tại.
 
 ### 3.4 Đo model (tập test chỉ đo một lần)
 
 | Lệnh | Làm gì |
 |---|---|
-| `python -m slm.eval.eval_slm --model usas-slm-v5 --prompt slm_intents --split test` | Chạy model trên từng tin của tập test, ghi dự đoán |
+| `python -m slm.eval.eval_slm --model usas-slm-v6 --prompt slm_intents --split test` | Chạy model trên từng tin của tập test, ghi dự đoán |
 | `python -m slm.eval.eval_slm --model qwen3:4b-instruct --prompt slm_intents --shots 8 --split test` | Đo model gốc (chưa fine-tune) với 8 ví dụ trong prompt |
 | `python -m slm.eval.baseline_tfidf --split test` | Tạo hai mốc tham chiếu đơn giản (không cần GPU) |
 | `python -m slm.eval.slm_report --run "Tên=file" --out slm/results/bao_cao/<ngày>_<tên>` | Dựng báo cáo, bảng, biểu đồ từ các file dự đoán |

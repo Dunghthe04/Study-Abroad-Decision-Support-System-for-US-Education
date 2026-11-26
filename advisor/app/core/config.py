@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     embedding_api_key: str = ""
     # Chỉ dùng khi không có ANTHROPIC_API_KEY (bước B đọc bảng điểm chạy trên Ollama). Có khóa Claude thì để trống
     llm_model: str = ""
-    slm_model: str = "usas-slm-v5"
+    slm_model: str = "usas-slm-v6"
     slm_format: str = "json"
     # Prompt tách ý (tên file trong app/skills, không có .md). Model fine-tune phải dùng đúng prompt lúc huấn luyện
     # (xem slm/prepare/export_slm_chat.py): usas-slm-v4 dùng slm_intents
