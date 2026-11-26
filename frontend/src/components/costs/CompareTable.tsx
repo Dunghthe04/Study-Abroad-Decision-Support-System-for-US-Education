@@ -5,12 +5,12 @@ import { cn } from "@/lib/utils";
  * Bảng so sánh dùng chung cho chi phí trường và chi phí bang: lưới viền mảnh, góc vuông, chữ căn trái.
  * Cột đầu là nhãn dòng (tên đậm, dòng phụ nhạt); ô tốt nhất trong hàng đậm và đổ xám, không dùng màu xanh đỏ.
  */
-const LINE = "border border-ink/70";
+const LINE = "border-r border-b border-ink/70";
 
 export function CompareTable({ children, minWidth = 560 }: { children: React.ReactNode; minWidth?: number }) {
   return (
     <div className="overflow-x-auto">
-      <table className={cn("w-full border-collapse bg-surface text-sm", LINE)} style={{ minWidth }}>
+      <table className={"w-full border-separate border-spacing-0 border-t border-l border-ink/70 bg-surface text-sm"} style={{ minWidth }}>
         {children}
       </table>
     </div>
@@ -20,6 +20,15 @@ export function CompareTable({ children, minWidth = 560 }: { children: React.Rea
 export function HeadCell({ children, className }: { children?: React.ReactNode; className?: string }) {
   return (
     <th scope="col" className={cn(LINE, "px-4 py-3.5 text-left align-top font-semibold text-ink", className)}>
+      {children}
+    </th>
+  );
+}
+
+/** Ô góc trên-trái: cố định cùng cột nhãn dòng để không trôi khi cuộn ngang. */
+export function CornerCell({ children }: { children?: React.ReactNode }) {
+  return (
+    <th scope="col" className={cn(LINE, "sticky left-0 z-10 w-[26%] min-w-[9rem] bg-surface px-4 py-3.5 text-left align-top text-sm font-normal text-ink-2")}>
       {children}
     </th>
   );
