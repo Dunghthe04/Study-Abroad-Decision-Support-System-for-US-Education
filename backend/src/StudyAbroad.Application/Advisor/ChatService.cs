@@ -39,7 +39,8 @@ namespace StudyAbroad.Application.Advisor
         IChatMessageRepository? messages = null, ILogger<ChatService>? logger = null,
         IAiCallRepository? aiCalls = null, IAiUsageCollector? usageCollector = null, AiPricing? pricing = null,
         StudyAbroad.Application.Billing.IEntitlementService? entitlements = null,
-        IScholarshipSearchRepository? scholarshipSearch = null) : History.IChatPendingQuestion
+        IScholarshipSearchRepository? scholarshipSearch = null,
+        StudyAbroad.Application.Dashboard.Roadmap.IRoadmapService? roadmap = null) : History.IChatPendingQuestion
     {
         //Dữ liệu FE gửi lên
         // onEvent: chỉ truyền khi trả lời theo từng ý (stream); mỗi tin tiến độ / câu một ý của advisor gọi hàm này ngay.
@@ -305,6 +306,9 @@ namespace StudyAbroad.Application.Advisor
                 HasCommittedProfile = flow.HasCommittedProfile,
                 // Ý định gói cho phép: luôn ghi đè bằng giá trị server, kể cả null (Premium còn token, nhân viên); không bao giờ chuyển giá trị trình duyệt gửi
                 AllowedIntents = ChatPremiumGate.AllowedIntentsFor(charge),
+                // Lộ trình theo trường mục tiêu (cùng số liệu với Tổng quan), luôn lấy từ server; không có service (test cũ) thì null
+                Roadmap = roadmap is null ? null
+                    : StudyAbroad.Application.Dashboard.Roadmap.RoadmapForAdvisor.Slim(await roadmap.GetRoadmapAsync(userId, ct)),
             };
         }
 
