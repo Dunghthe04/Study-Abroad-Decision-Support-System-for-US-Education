@@ -821,7 +821,9 @@ namespace StudyAbroad.Application.Advisor
         {
             var answer = query.KbAnswer is { Length: > 0 } kb && response.Answer.Contains(kb, StringComparison.Ordinal)
                 ? response.Answer.Replace(kb, text, StringComparison.Ordinal)
-                : string.IsNullOrWhiteSpace(response.Answer) ? text : $"{response.Answer}\n\n{text}";
+                : string.IsNullOrWhiteSpace(response.Answer) ? text
+                : response.Answer.Contains(text, StringComparison.Ordinal) ? response.Answer // nhiều ý cùng hỏi lại một tên trường mơ hồ: chỉ nói một lần
+                : $"{response.Answer}\n\n{text}";
             return response with
             {
                 Answer = answer,
