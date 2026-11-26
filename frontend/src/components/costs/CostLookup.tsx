@@ -60,10 +60,10 @@ function ModeMenu({ mode }: { mode: CostMode }) {
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`Đang tra cứu theo ${current.label}. Đổi cách tra cứu`}
-        className="group inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-transparent bg-transparent px-3 font-heading text-xl font-semibold tracking-tight text-brand outline-none transition-[background-color] hover:bg-brand-wash/60 focus-visible:ring-3 focus-visible:ring-brand/25 data-popup-open:bg-brand-wash/60 sm:h-11 sm:text-2xl"
+        className="group inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl border border-transparent bg-transparent px-3 font-heading text-3xl font-semibold tracking-tight text-brand outline-none transition-[background-color] hover:bg-brand-wash/60 focus-visible:ring-3 focus-visible:ring-brand/25 data-popup-open:bg-brand-wash/60 sm:h-12 sm:text-4xl"
       >
         {current.label}
-        <ChevronsUpDownIcon aria-hidden className="size-4 shrink-0 text-brand/70 transition-transform group-data-popup-open:scale-110" />
+        <ChevronsUpDownIcon aria-hidden className="size-5 shrink-0 text-brand/70 transition-transform group-data-popup-open:scale-110" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="center" sideOffset={8} className="w-72 p-1.5">
         {MODES.map((m) => {

@@ -3,9 +3,9 @@
 import { CheckIcon, Search, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useId, useMemo, useState } from "react";
-import { Cell, CompareTable, HeadCell, RowHead } from "@/components/costs/CompareTable";
+import { Cell, CompareTable, CornerCell, HeadCell, RowHead } from "@/components/costs/CompareTable";
 import { MissingValue } from "@/components/shared/missing-value";
-import { rankCells } from "@/lib/cost-format";
+import { REGIONS, rankCells, versusUs } from "@/lib/cost-format";
 import { httpLink } from "@/lib/university-display";
 import { cn } from "@/lib/utils";
 import type { StateLivingCost } from "@/types/cost";
@@ -17,19 +17,6 @@ const UsStateMap = dynamic(() => import("@/components/costs/UsStateMap").then((m
   ssr: false,
   loading: () => <div className="aspect-[975/610] w-full animate-pulse bg-muted" aria-hidden />,
 });
-
-const REGIONS: Record<string, string> = {
-  northeast: "Đông Bắc",
-  midwest: "Trung Tây",
-  south: "Miền Nam",
-  west: "Miền Tây",
-};
-
-/** "Cao hơn trung bình Mỹ 12%" cho chỉ số (Mỹ = 100). */
-function versusUs(index: number): string {
-  const diff = Math.round(index - 100);
-  return diff === 0 ? "Bằng trung bình Mỹ" : diff > 0 ? `Cao hơn trung bình Mỹ ${diff}%` : `Thấp hơn trung bình Mỹ ${-diff}%`;
-}
 
 /**
  * UC-28: chọn các bang trên bản đồ (hoặc tìm theo tên) và đặt cạnh nhau. Giá trị là chỉ số giá vùng (Mỹ = 100), không phải số USD,
@@ -89,7 +76,7 @@ export function StateLivingCostCompare({ states }: { states: StateLivingCost[] }
           <CompareTable minWidth={320 + chosen.length * 150}>
             <thead>
               <tr>
-                <HeadCell className="text-sm font-normal text-ink-2">Chỉ số giá vùng</HeadCell>
+                <CornerCell>Chỉ số giá vùng</CornerCell>
                 {chosen.map((s) => (
                   <HeadCell key={s.code}>
                     {s.name}

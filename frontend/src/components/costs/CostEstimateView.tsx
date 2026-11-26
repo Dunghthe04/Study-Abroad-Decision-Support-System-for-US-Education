@@ -4,7 +4,7 @@ import { SlidersHorizontalIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CostBar } from "@/components/costs/CostBar";
-import { Cell, CompareTable, HeadCell, RowHead } from "@/components/costs/CompareTable";
+import { Cell, CompareTable, CornerCell, HeadCell, RowHead } from "@/components/costs/CompareTable";
 import { MissingValue } from "@/components/shared/missing-value";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -202,7 +202,7 @@ export function CostEstimateView({
         <CompareTable minWidth={compare ? 640 : 420}>
           <thead>
             <tr>
-              <HeadCell className="text-sm font-normal text-ink-2">USD mỗi năm</HeadCell>
+              <CornerCell>USD mỗi năm</CornerCell>
               {schools.map((s) => (
                 <HeadCell key={s.code}>
                   <Link href={`/university/${s.code}`} className="hover:text-brand hover:underline">{s.name}</Link>

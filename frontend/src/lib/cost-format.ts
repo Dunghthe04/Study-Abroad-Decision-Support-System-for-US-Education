@@ -95,3 +95,16 @@ export function chartData(lines: CostLine[]): { segments: ChartSegment[]; missin
 
   return { segments, missingLabels };
 }
+
+export const REGIONS: Record<string, string> = {
+  northeast: "Đông Bắc",
+  midwest: "Trung Tây",
+  south: "Miền Nam",
+  west: "Miền Tây",
+};
+
+/** "Cao hơn trung bình Mỹ 12%" cho chỉ số (Mỹ = 100). */
+export function versusUs(index: number): string {
+  const diff = Math.round(index - 100);
+  return diff === 0 ? "Bằng trung bình Mỹ" : diff > 0 ? `Cao hơn trung bình Mỹ ${diff}%` : `Thấp hơn trung bình Mỹ ${-diff}%`;
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { REGIONS, versusUs } from "@/lib/cost-format";
 import { US_MAP_VIEWBOX, US_STATE_PATHS } from "@/lib/us-state-paths";
 import { cn } from "@/lib/utils";
 import type { StateLivingCost } from "@/types/cost";
@@ -95,11 +96,27 @@ export function UsStateMap({
         {hover && (
           <div
             role="presentation"
-            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+0.75rem)] rounded-lg bg-ink px-3 py-1.5 text-xs whitespace-nowrap text-surface shadow-lg"
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+0.75rem)] rounded-lg bg-ink px-3.5 py-2.5 text-xs whitespace-nowrap text-surface shadow-lg"
             style={{ left: hover.x, top: hover.y }}
           >
-            <span className="font-semibold">{hover.state.name}</span>
-            {hover.state.index !== null && <span className="ml-2 tabular-nums opacity-80">{hover.state.index}</span>}
+            <p className="text-sm font-semibold">
+              {hover.state.name} <span className="font-normal opacity-70">{REGIONS[hover.state.region] ?? hover.state.region}</span>
+            </p>
+            {hover.state.index === null ? (
+              <p className="mt-1 opacity-80">Chưa có dữ liệu</p>
+            ) : (
+              <dl className="mt-1.5 space-y-0.5 tabular-nums">
+                <div className="flex justify-between gap-6">
+                  <dt className="opacity-70">Giá sinh hoạt (Mỹ = 100)</dt>
+                  <dd className="font-semibold">{hover.state.index}</dd>
+                </div>
+                <div className="flex justify-between gap-6">
+                  <dt className="opacity-70">Tiền thuê nhà (Mỹ = 100)</dt>
+                  <dd className="font-semibold">{hover.state.housingRentsIndex ?? "—"}</dd>
+                </div>
+                <p className="pt-0.5 opacity-80">{versusUs(hover.state.index)}</p>
+              </dl>
+            )}
           </div>
         )}
       </div>
