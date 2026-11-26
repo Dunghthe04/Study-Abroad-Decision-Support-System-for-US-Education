@@ -50,6 +50,10 @@ public class BirthDateChangeRepository(AppDbContext db) : IBirthDateChangeReposi
                 .SetProperty(x => x.ReviewedAt, reviewedAt)
                 .SetProperty(x => x.RejectReason, rejectReason)
                 .SetProperty(x => x.EvidencePath, (string?)null)
+                // Đặc tả UC-107/150: đóng yêu cầu thì chỉ còn loại giấy tờ, không giữ tên, kiểu, dung lượng tệp
+                .SetProperty(x => x.EvidenceFileName, (string?)null)
+                .SetProperty(x => x.EvidenceContentType, (string?)null)
+                .SetProperty(x => x.EvidenceSize, (long?)null)
                 .SetProperty(x => x.UpdatedAt, at), ct);
         return rows == 1;
     }

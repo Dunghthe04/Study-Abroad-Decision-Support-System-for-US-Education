@@ -165,6 +165,9 @@ public class BirthDateChangeService(
         evidenceStorage.Delete(entity.EvidencePath);
         entity.Status = BirthDateChangeStatuses.Cancelled;
         entity.EvidencePath = null;
+        entity.EvidenceFileName = null;
+        entity.EvidenceContentType = null;
+        entity.EvidenceSize = null;
         entity.UpdatedAt = now;
         return BirthDateChangeResult<BirthDateChangeDto>.Ok(ToDto(entity), "Đã hủy yêu cầu sửa ngày sinh.");
     }

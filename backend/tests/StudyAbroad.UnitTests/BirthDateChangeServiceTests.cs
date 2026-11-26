@@ -88,6 +88,9 @@ public class BirthDateChangeServiceTests
             r.ReviewedAt = reviewedByUserId is null ? null : at;
             r.RejectReason = rejectReason;
             r.EvidencePath = null;
+            r.EvidenceFileName = null;
+            r.EvidenceContentType = null;
+            r.EvidenceSize = null;
             r.UpdatedAt = at;
             return Task.FromResult(true);
         }
@@ -355,6 +358,8 @@ public class BirthDateChangeServiceTests
         Assert.False(cancelled.Value.HasEvidence);
         Assert.Empty(_storage.Files);
         Assert.Null(_repo.Items.Single().ReviewedAt);
+        Assert.Null(_repo.Items.Single().EvidenceFileName);   // chỉ còn loại giấy tờ
+        Assert.Equal(BirthDateEvidenceTypes.CitizenId, _repo.Items.Single().EvidenceType);
 
         // Hủy rồi thì gửi được yêu cầu mới
         Assert.True((await svc.SubmitAsync(student.Id, Req(new DateOnly(2009, 6, 1)))).Success);

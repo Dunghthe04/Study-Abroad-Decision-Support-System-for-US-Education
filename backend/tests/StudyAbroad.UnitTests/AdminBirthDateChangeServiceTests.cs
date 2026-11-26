@@ -102,6 +102,9 @@ public class AdminBirthDateChangeServiceTests
         Assert.Equal(BirthDateChangeStatuses.Approved, stored.Status);
         Assert.Equal(AdminId, stored.ReviewedByUserId);
         Assert.Null(stored.EvidencePath);
+        Assert.Null(stored.EvidenceFileName);   // chỉ còn loại giấy tờ
+        Assert.Null(stored.EvidenceContentType);
+        Assert.Null(stored.EvidenceSize);
         Assert.Equal(BirthDateEvidenceTypes.CitizenId, stored.EvidenceType);
         Assert.Contains(evidencePath, _storage.Deleted);
 
@@ -202,6 +205,9 @@ public class AdminBirthDateChangeServiceTests
         Assert.Equal(BirthDateChangeStatuses.Rejected, stored.Status);
         Assert.Equal("Ảnh căn cước bị mờ", stored.RejectReason);
         Assert.Null(stored.EvidencePath);
+        Assert.Null(stored.EvidenceFileName);   // chỉ còn loại giấy tờ
+        Assert.Null(stored.EvidenceContentType);
+        Assert.Null(stored.EvidenceSize);
         Assert.Contains(evidencePath, _storage.Deleted);
         Assert.Equal("Ảnh căn cước bị mờ", result.Value!.RejectReason);
 

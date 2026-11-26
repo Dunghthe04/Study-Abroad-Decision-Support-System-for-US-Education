@@ -9,24 +9,29 @@ namespace StudyAbroad.Api.Controllers;
 /// <summary>[UC-150] Administrator xem, duyệt hoặc từ chối yêu cầu sửa ngày sinh.</summary>
 [ApiController]
 [Route("api/v1/admin/birth-date-requests")]
-[Authorize(Roles = UserRoles.Admin)]
+[Authorize]
 public class AdminBirthDateRequestsController(IAdminBirthDateChangeService birthDateChanges) : ControllerBase
 {
     /// <summary>Mặc định Chờ duyệt, cũ nhất trước. status=all lấy mọi trạng thái.</summary>
     [HttpGet]
+    [Authorize(Roles = UserRoles.Admin)]
     public async Task<IActionResult> List([FromQuery] string? status, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>
         Ok(await birthDateChanges.ListAsync(status, page, pageSize, ct));
 
     [HttpGet("{id:guid}")]
+    [Authorize(Roles = UserRoles.Admin)]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct) =>
         ToResult(await birthDateChanges.GetAsync(id, ct));
 
-    /// <summary>Mở minh chứng; mỗi lần mở ghi một dòng nhật ký truy cập (UC-91).</summary>
+    /// <summary>Mở minh chứng; mỗi lần mở ghi một dòng nhật ký truy cập (UC-91). Chỉ Administrator; vai trò khác nhận 404.</summary>
     [HttpGet("{id:guid}/evidence")]
     public async Task<IActionResult> GetEvidence(Guid id, CancellationToken ct)
     {
         if (User.GetUserId() is not { } adminId)
             return Unauthorized();
+        // AUTH-270: không phải Administrator thì báo như yêu cầu không tồn tại, không lộ là có minh chứng
+        if (!User.IsInRole(UserRoles.Admin))
+            return Problem("Không tìm thấy yêu cầu sửa ngày sinh.", statusCode: StatusCodes.Status404NotFound);
         var result = await birthDateChanges.OpenEvidenceAsync(id, adminId, RequestInfo(), ct);
         if (!result.Success || result.Value is not { } file)
             return ToProblem(result.Error, result.Message);
@@ -35,6 +40,7 @@ public class AdminBirthDateRequestsController(IAdminBirthDateChangeService birth
     }
 
     [HttpPost("{id:guid}/approve")]
+    [Authorize(Roles = UserRoles.Admin)]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {
         if (User.GetUserId() is not { } adminId)
@@ -43,6 +49,7 @@ public class AdminBirthDateRequestsController(IAdminBirthDateChangeService birth
     }
 
     [HttpPost("{id:guid}/reject")]
+    [Authorize(Roles = UserRoles.Admin)]
     public async Task<IActionResult> Reject(Guid id, [FromBody] RejectBirthDateRequestBody? body, CancellationToken ct)
     {
         if (User.GetUserId() is not { } adminId)

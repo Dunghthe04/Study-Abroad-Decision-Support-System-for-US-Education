@@ -229,6 +229,9 @@ public class AdminBirthDateChangeService(
         evidenceStorage.Delete(entity.EvidencePath);
         entity.Status = BirthDateChangeStatuses.Approved;
         entity.EvidencePath = null;
+        entity.EvidenceFileName = null;
+        entity.EvidenceContentType = null;
+        entity.EvidenceSize = null;
         entity.ReviewedByUserId = adminId;
         entity.ReviewedAt = now;
 
@@ -288,6 +291,9 @@ public class AdminBirthDateChangeService(
         evidenceStorage.Delete(entity.EvidencePath);
         entity.Status = BirthDateChangeStatuses.Rejected;
         entity.EvidencePath = null;
+        entity.EvidenceFileName = null;
+        entity.EvidenceContentType = null;
+        entity.EvidenceSize = null;
         entity.ReviewedByUserId = adminId;
         entity.ReviewedAt = now;
         entity.RejectReason = reason;
