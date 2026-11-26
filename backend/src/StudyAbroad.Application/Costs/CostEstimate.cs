@@ -156,7 +156,7 @@ public static class CostCalculator
         decimal? annual = null, firstYear = null, total = null, annualAfter = null, totalAfter = null;
         if (row.TuitionUsd is not null)
         {
-            var annualSum = lines.Where(l => !l.IsOneTime).Sum(l => l.AmountUsd ?? 0m);
+            var annualSum = AnnualCost.Of(row.TuitionUsd, row.LivingUsd, row.FeesUsd, row.OtherUsd, row.HealthInsuranceUsd)!.Value;
             var oneTime = lines.Where(l => l.IsOneTime).Sum(l => l.AmountUsd ?? 0m);
             annual = annualSum;
             firstYear = annualSum + oneTime;

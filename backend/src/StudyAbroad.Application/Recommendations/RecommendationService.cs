@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Costs;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
@@ -830,15 +831,7 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
     private static decimal? Rate(int? admitted, int? applicants) =>
         admitted is int a && applicants is int n && n > 0 ? (decimal)a / n : null;
 
-    // Học phí null thì tổng null. Phần còn lại thiếu thì cộng 0.
-    private static decimal? TotalCost(UniversityOffering offering)
-    {
-        if (offering.TuitionUsd is not decimal tuition) return null;
-        return tuition
-            + (offering.LivingUsd ?? 0)
-            + (offering.FeesUsd ?? 0)
-            + (offering.OtherExpensesUsd ?? 0);
-    }
+    private static decimal? TotalCost(UniversityOffering offering) => AnnualCost.Of(offering);
     // "none" là không có. Chưa khai thì null để lọc cứng gắn cờ, không loại.
     private static bool? HasIntlAid(string? policy) => policy switch
     {

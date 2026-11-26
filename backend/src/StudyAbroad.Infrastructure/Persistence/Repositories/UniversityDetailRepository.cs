@@ -1,3 +1,4 @@
+using StudyAbroad.Application.Costs;
 using Microsoft.EntityFrameworkCore;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Universities;
@@ -154,12 +155,11 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
 
         if (query.MinTotalCostUsd.HasValue || query.MaxTotalCostUsd.HasValue)
         {
-            q = q.Where(u => db.UniversityOfferings.Any(o =>
-                o.UniversityId == u.Id &&
-                (studyLevel == null || o.StudyLevel == studyLevel) &&
-                o.TuitionUsd != null &&
-                (!query.MinTotalCostUsd.HasValue || (o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0) + (o.HealthInsuranceUsd ?? 0)) >= query.MinTotalCostUsd.Value) &&
-                (!query.MaxTotalCostUsd.HasValue || (o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0) + (o.HealthInsuranceUsd ?? 0)) <= query.MaxTotalCostUsd.Value)));
+            q = q.Where(u => db.UniversityOfferings
+                .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel) && o.TuitionUsd != null)
+                .Select(AnnualCost.Sql)
+                .Any(total => (!query.MinTotalCostUsd.HasValue || total >= query.MinTotalCostUsd.Value) &&
+                              (!query.MaxTotalCostUsd.HasValue || total <= query.MaxTotalCostUsd.Value)));
         }
 
         if (query.MaxMinIelts.HasValue)
@@ -501,18 +501,18 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
             "total_cost_asc" => q
                 .OrderBy(u => db.UniversityOfferings
                     .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
-                    .Min(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0) + (o.HealthInsuranceUsd ?? 0)) == null)
+                    .Select(AnnualCost.Sql).Min() == null)
                 .ThenBy(u => db.UniversityOfferings
                     .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
-                    .Min(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0) + (o.HealthInsuranceUsd ?? 0)))
+                    .Select(AnnualCost.Sql).Min())
                 .ThenBy(u => u.Name),
             "total_cost_desc" => q
                 .OrderBy(u => db.UniversityOfferings
                     .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
-                    .Max(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0) + (o.HealthInsuranceUsd ?? 0)) == null)
+                    .Select(AnnualCost.Sql).Max() == null)
                 .ThenByDescending(u => db.UniversityOfferings
                     .Where(o => o.UniversityId == u.Id && (studyLevel == null || o.StudyLevel == studyLevel))
-                    .Max(o => o.TuitionUsd == null ? (decimal?)null : o.TuitionUsd + (o.LivingUsd ?? 0) + (o.FeesUsd ?? 0) + (o.OtherExpensesUsd ?? 0) + (o.HealthInsuranceUsd ?? 0)))
+                    .Select(AnnualCost.Sql).Max())
                 .ThenBy(u => u.Name),
             "acceptance_asc" => q
                 .OrderBy(u => u.AcceptanceRate == null || u.AcceptanceRate > 1)
@@ -610,12 +610,7 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                 stateNames.TryGetValue(u.State, out stateName);
             }
 
-            decimal? totalCost = null;
-            if (offering?.TuitionUsd != null)
-            {
-                // Công thức UC-26: học phí + ăn ở + phí + chi khác + bảo hiểm y tế
-                totalCost = offering.TuitionUsd.Value + (offering.LivingUsd ?? 0) + (offering.FeesUsd ?? 0) + (offering.OtherExpensesUsd ?? 0) + (offering.HealthInsuranceUsd ?? 0);
-            }
+            var totalCost = offering is null ? null : AnnualCost.Of(offering);
 
             return new UniversityListItemDto(
                 u.Id,
@@ -699,10 +694,10 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
         var minTuition = withTuition.Count > 0 ? withTuition.Min(c => c.TuitionUsd!.Value) : 0m;
         var maxTuition = withTuition.Count > 0 ? withTuition.Max(c => c.TuitionUsd!.Value) : 100000m;
         var minTotal = withTuition.Count > 0
-            ? withTuition.Min(c => c.TuitionUsd!.Value + (c.LivingUsd ?? 0) + (c.FeesUsd ?? 0) + (c.OtherExpensesUsd ?? 0) + (c.HealthInsuranceUsd ?? 0))
+            ? withTuition.Min(c => AnnualCost.Of(c.TuitionUsd, c.LivingUsd, c.FeesUsd, c.OtherExpensesUsd, c.HealthInsuranceUsd)!.Value)
             : 0m;
         var maxTotal = withTuition.Count > 0
-            ? withTuition.Max(c => c.TuitionUsd!.Value + (c.LivingUsd ?? 0) + (c.FeesUsd ?? 0) + (c.OtherExpensesUsd ?? 0) + (c.HealthInsuranceUsd ?? 0))
+            ? withTuition.Max(c => AnnualCost.Of(c.TuitionUsd, c.LivingUsd, c.FeesUsd, c.OtherExpensesUsd, c.HealthInsuranceUsd)!.Value)
             : 120000m;
 
         var livingVals = offeringStats.Where(o => o.LivingUsd != null).Select(o => o.LivingUsd!.Value).ToList();

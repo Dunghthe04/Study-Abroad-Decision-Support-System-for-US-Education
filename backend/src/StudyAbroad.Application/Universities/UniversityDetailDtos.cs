@@ -42,7 +42,9 @@ public record UniversityOfferingDto(
     decimal? ActSubmitPct = null,
     decimal? ApplicationFeeUsd = null,
     decimal? TuitionInStateUsd = null,
-    decimal? HealthInsuranceUsd = null);
+    decimal? HealthInsuranceUsd = null,
+    // Chi phí một năm theo AnnualCost; null khi chưa có học phí (giao diện ghi chưa đủ dữ liệu, không tự cộng)
+    decimal? AnnualCostUsd = null);
 
 public record UniversityRankingDto(
     string Publisher, string Name, int Rank, bool IsTie, string RankDisplay,

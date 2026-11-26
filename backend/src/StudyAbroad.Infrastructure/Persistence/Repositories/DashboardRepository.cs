@@ -32,7 +32,8 @@ public class DashboardRepository(AppDbContext db) : IDashboardRepository
                 o.TuitionUsd,
                 o.LivingUsd,
                 o.FeesUsd,
-                o.OtherExpensesUsd
+                o.OtherExpensesUsd,
+                o.HealthInsuranceUsd
             })
             .ToListAsync(ct);
 
@@ -51,7 +52,8 @@ public class DashboardRepository(AppDbContext db) : IDashboardRepository
                     matched.TuitionUsd,
                     matched.LivingUsd,
                     matched.FeesUsd,
-                    matched.OtherExpensesUsd
+                    matched.OtherExpensesUsd,
+                    matched.HealthInsuranceUsd
                 );
             }
         }

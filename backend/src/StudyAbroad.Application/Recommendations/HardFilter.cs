@@ -32,7 +32,7 @@ namespace StudyAbroad.Application.Recommendations
         decimal? Toefl = null,
         decimal? Duolingo = null);
 
-    // Trường đưa vào lọc. TotalCostUsd = học phí + ăn ở + phí + chi khác.
+    // Trường đưa vào lọc. TotalCostUsd = AnnualCost (học phí + ăn ở + phí + chi khác + bảo hiểm y tế).
     // HasIntlAid: có chính sách học bổng du học sinh thì true, chính sách "none" thì false, chưa có số thì null.
     // TuitionUsd, IntlAidAvgUsd: để trừ hỗ trợ tài chính trung bình khi chi phí vượt ngưỡng (UC-22 4a).
     public record FilterSchool(
