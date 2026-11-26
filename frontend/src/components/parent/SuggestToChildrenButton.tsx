@@ -39,6 +39,7 @@ export function SuggestToChildrenButton({
   universityName,
   variant = "outline",
   size = "default",
+  iconOnly = false,
   className,
 }: {
   universityId?: string;
@@ -46,9 +47,12 @@ export function SuggestToChildrenButton({
   universityName: string;
   variant?: "default" | "outline" | "secondary" | "ghost";
   size?: "default" | "sm" | "lg" | "icon";
+  /** Chỉ hiện biểu tượng (thẻ trường trong danh sách): đã gợi ý trong phiên này thì biểu tượng đặc */
+  iconOnly?: boolean;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [suggested, setSuggested] = useState(false);
   const [children, setChildren] = useState<ChildOption[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
@@ -122,6 +126,7 @@ export function SuggestToChildrenButton({
     }
     setSending(false);
     if (done.length > 0) {
+      setSuggested(true);
       toast.add({
         type: "success",
         title: `Đã gợi ý cho ${done.join(", ")}`,
@@ -138,6 +143,21 @@ export function SuggestToChildrenButton({
 
   return (
     <>
+      {iconOnly ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={openDialog}
+          aria-label={`Gợi ý ${universityName} cho con`}
+          title="Gợi ý trường cho con"
+          className={cn(
+            "size-9 rounded-full border-0 bg-transparent text-white shadow-none drop-shadow-[0_1px_3px_rgba(0,0,0,0.6)] hover:bg-black/25 hover:text-white focus-visible:ring-white/70",
+            className,
+          )}
+        >
+          <SendIcon className={cn("size-5", suggested && "fill-current")} aria-hidden />
+        </Button>
+      ) : (
       <Button
         variant={variant}
         size={size}
@@ -147,6 +167,7 @@ export function SuggestToChildrenButton({
         <SendIcon className="size-4 text-brand" />
         <span>Gợi ý cho con</span>
       </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
