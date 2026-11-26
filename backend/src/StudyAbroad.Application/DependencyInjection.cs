@@ -83,6 +83,7 @@ public static class DependencyInjection
         services.AddScoped<ActingSessionGuard>();      // 1.5b: kiểm tra phiên làm thay con managed ở mỗi request
         services.AddScoped<ActingService>();           // 1.5b: vào / thoát làm thay
         services.AddScoped<StudyAbroad.Application.Dashboard.IDashboardService, StudyAbroad.Application.Dashboard.DashboardService>(); // [UC-94] Dashboard KPI
+        services.AddScoped<StudyAbroad.Application.Dashboard.Roadmap.IRoadmapService, StudyAbroad.Application.Dashboard.Roadmap.RoadmapService>(); // lộ trình theo trường mục tiêu
         services.AddScoped<StudyAbroad.Application.Audit.IAccessLogService, StudyAbroad.Application.Audit.AccessLogService>();   // [UC-91] nhật ký truy cập dữ liệu nhạy cảm
         services.AddScoped<StudyAbroad.Application.Billing.IEntitlementService, StudyAbroad.Application.Billing.EntitlementService>();   // gói dịch vụ: tier, pool trả cho lượt chat
         services.AddScoped<StudyAbroad.Application.Billing.Admin.IPlanAdminService, StudyAbroad.Application.Billing.Admin.PlanAdminService>();   // UC-79: admin quản lý gói

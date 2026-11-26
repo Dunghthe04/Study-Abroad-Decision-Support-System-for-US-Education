@@ -4471,6 +4471,11 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("preferred_states");
 
+                    b.Property<string>("Province")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("province");
+
                     b.Property<string>("ScholarshipNeed")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
