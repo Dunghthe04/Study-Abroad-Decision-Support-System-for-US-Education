@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from app.schemas.chat import ChatState, ProfileField
-from app.schemas.slm import INTENTS, SLM_TIN_SCHEMA
+from app.schemas.slm import INTENTS, SLM_TIN_SCHEMA, SlmTinResult
 from app.services.ollama import OllamaClient, OllamaError
 from app.services.slm_classifier import OllamaSlm, keep_verbatim, label_confidence, output_format, words
 
@@ -381,3 +381,39 @@ def test_keep_verbatim_drops_every_invented_numeric_filter_and_keeps_the_others(
         {"tasks": ["search"], "filters": {key: "100", "state": ["texas"]}}, "trường nào ở Texas"
     )
     assert cleaned["filters"] == {"state": ["texas"]}
+
+
+TEXAS = "Hãy so sánh giúp mình 3 trường ở bang Texas phù hợp với tiêu chí này"
+
+
+def read_texas(*items):
+    cleaned = keep_verbatim({"intents": list(items)}, TEXAS)
+    return SlmTinResult.from_raw(cleaned).intents
+
+
+def test_compare_facts_with_filters_but_no_school_names_becomes_a_search():
+    intents = read_texas(
+        y("knowledge", TEXAS, tasks=["compare_facts"], filters={"state": "Texas"}, fields=["cost"])
+    )
+    assert intents[0].entities["tasks"] == ["search"]
+    assert intents[0].entities["filters"] == {"state": "Texas"}
+
+
+def test_compare_facts_with_one_school_becomes_school_info():
+    message = "so sánh học phí Purdue"
+    cleaned = keep_verbatim(
+        {"intents": [y("knowledge", message, tasks=["compare_facts"], schools=["Purdue"], fields=["cost"])]},
+        message,
+    )
+    assert SlmTinResult.from_raw(cleaned).intents[0].entities["tasks"] == ["school_info"]
+
+
+def test_profile_review_compare_without_two_schools_drops_the_task_and_the_junk_school_name():
+    intents = read_texas(y("profile_review", TEXAS, tasks=["compare"], schools=["3 trường ở bang Texas"]))
+    assert "tasks" not in intents[0].entities and "schools" not in intents[0].entities
+
+
+def test_compare_with_two_schools_is_left_alone():
+    message = "Purdue hay University of Washington hợp hơn"
+    item = y("profile_review", message, tasks=["compare"], schools=["Purdue", "University of Washington"])
+    assert keep_verbatim({"intents": [item]}, message)["intents"][0]["entities"]["tasks"] == ["compare"]
