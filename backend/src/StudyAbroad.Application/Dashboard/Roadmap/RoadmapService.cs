@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using StudyAbroad.Application.Advisor;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Application.TargetSchools;
@@ -13,8 +14,18 @@ public class RoadmapService(
     IDashboardRepository dashboardRepository,
     IRoadmapRepository roadmapRepository,
     IChatBenchmarkRepository benchmarkRepository,
-    IStudyCenterRepository studyCenterRepository) : IRoadmapService
+    IStudyCenterRepository studyCenterRepository,
+    IParentLinkRepository linkRepository) : IRoadmapService
 {
+    public async Task<(bool Linked, RoadmapDto? Roadmap)> GetChildRoadmapAsync(Guid parentId, Guid studentId, CancellationToken ct = default)
+    {
+        // cùng cách kiểm tra quyền với Tổng quan của con: phải có liên kết đang hiệu lực
+        var links = await linkRepository.GetActiveByParentAsync(parentId, ct);
+        if (!links.Any(l => l.StudentUserId == studentId && l.Status == ParentLinkStatuses.Active))
+            return (false, null);
+        return (true, await GetRoadmapAsync(studentId, ct));
+    }
+
     public async Task<RoadmapDto?> GetRoadmapAsync(Guid studentId, CancellationToken ct = default)
     {
         var profile = await profileFlowRepository.GetProfileByUserIdAsync(studentId, ct);

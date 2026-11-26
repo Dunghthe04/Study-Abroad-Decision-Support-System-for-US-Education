@@ -18,6 +18,34 @@ namespace StudyAbroad.Api.Controllers;
 public class RoadmapController(IRoadmapService roadmapService) : ControllerBase
 {
     /// <summary>
+    /// Lộ trình của học sinh (hoặc con managed khi phụ huynh đang thao tác thay). Chưa có hồ sơ -> 204.
+    /// </summary>
+    [HttpGet("roadmap")]
+    [Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]
+    public async Task<ActionResult<RoadmapDto>> GetRoadmap(CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } userId)
+            return Unauthorized();
+
+        var roadmap = await roadmapService.GetRoadmapAsync(userId, ct);
+        return roadmap is null ? NoContent() : Ok(roadmap);
+    }
+
+    /// <summary>Phụ huynh chỉ xem lộ trình của con đã liên kết. Không có liên kết -> 404, con chưa có hồ sơ -> 204.</summary>
+    [HttpGet("children/{studentId:guid}/roadmap")]
+    [Authorize(Roles = UserRoles.Parent)]
+    public async Task<ActionResult<RoadmapDto>> GetChildRoadmap(Guid studentId, CancellationToken ct)
+    {
+        if (User.GetUserId() is not { } parentId)
+            return Unauthorized();
+
+        var (linked, roadmap) = await roadmapService.GetChildRoadmapAsync(parentId, studentId, ct);
+        if (!linked)
+            return NotFound(new { message = "Không tìm thấy thông tin của con hoặc liên kết chưa hiệu lực." });
+        return roadmap is null ? NoContent() : Ok(roadmap);
+    }
+
+    /// <summary>
     /// Lưu tỉnh/thành học sinh đang sống (ô chọn ở Tổng quan hoặc câu hỏi trong chat); province rỗng = xóa.
     /// Dùng để gợi ý trung tâm gần trong lộ trình. Phụ huynh đang thao tác thay con managed cũng gọi được.
     /// </summary>

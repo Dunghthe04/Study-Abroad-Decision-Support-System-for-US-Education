@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using StudyAbroad.Application.Dashboard.Roadmap;
+using StudyAbroad.Application.ParentLinks;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
@@ -52,7 +53,7 @@ public class RoadmapServiceTests
     public async Task SetProvince_SavesCanonicalName()
     {
         var repo = new FakeProfiles(new StudentProfile { UserId = _studentId });
-        var service = new RoadmapService(repo, null!, null!, null!, null!, null!);
+        var service = new RoadmapService(repo, null!, null!, null!, null!, null!, null!);
 
         var result = await service.SetProvinceAsync(_studentId, "tp.hcm");
 
@@ -65,7 +66,7 @@ public class RoadmapServiceTests
     public async Task SetProvince_EmptyClearsValue()
     {
         var repo = new FakeProfiles(new StudentProfile { UserId = _studentId, Province = "Hà Nội" });
-        var service = new RoadmapService(repo, null!, null!, null!, null!, null!);
+        var service = new RoadmapService(repo, null!, null!, null!, null!, null!, null!);
 
         var result = await service.SetProvinceAsync(_studentId, "  ");
 
@@ -77,7 +78,7 @@ public class RoadmapServiceTests
     public async Task SetProvince_RejectsUnknownProvince()
     {
         var repo = new FakeProfiles(new StudentProfile { UserId = _studentId });
-        var service = new RoadmapService(repo, null!, null!, null!, null!, null!);
+        var service = new RoadmapService(repo, null!, null!, null!, null!, null!, null!);
 
         var result = await service.SetProvinceAsync(_studentId, "Paris");
 
@@ -89,12 +90,64 @@ public class RoadmapServiceTests
     public async Task SetProvince_NoProfile_DoesNotCreateOne()
     {
         var repo = new FakeProfiles(null);
-        var service = new RoadmapService(repo, null!, null!, null!, null!, null!);
+        var service = new RoadmapService(repo, null!, null!, null!, null!, null!, null!);
 
         var result = await service.SetProvinceAsync(_studentId, "Hà Nội");
 
         Assert.Equal(SetProvinceResult.NoProfile, result);
         Assert.Equal(0, repo.Updates);
+    }
+
+    [Fact]
+    public async Task GetRoadmap_NoProfile_ReturnsNull()
+    {
+        var service = new RoadmapService(new FakeProfiles(null), null!, null!, null!, null!, null!, null!);
+
+        Assert.Null(await service.GetRoadmapAsync(_studentId));
+    }
+
+    [Fact]
+    public async Task GetChildRoadmap_WithoutActiveLink_IsNotLinked()
+    {
+        var parentId = Guid.NewGuid();
+        var links = LinksStub.Create(new ParentStudentLink { ParentUserId = parentId, StudentUserId = _studentId, Status = ParentLinkStatuses.Pending });
+        var service = new RoadmapService(new FakeProfiles(null), null!, null!, null!, null!, null!, links);
+
+        var (linked, roadmap) = await service.GetChildRoadmapAsync(parentId, _studentId);
+
+        Assert.False(linked);
+        Assert.Null(roadmap);
+    }
+
+    [Fact]
+    public async Task GetChildRoadmap_ActiveLink_ReturnsChildRoadmap()
+    {
+        var parentId = Guid.NewGuid();
+        var links = LinksStub.Create(new ParentStudentLink { ParentUserId = parentId, StudentUserId = _studentId, Status = ParentLinkStatuses.Active });
+        var service = new RoadmapService(new FakeProfiles(null), null!, null!, null!, null!, null!, links);
+
+        var (linked, roadmap) = await service.GetChildRoadmapAsync(parentId, _studentId);
+
+        Assert.True(linked);
+        Assert.Null(roadmap); // con chưa có hồ sơ
+    }
+
+    // chỉ GetActiveByParentAsync được gọi; gọi hàm khác là lỗi test
+    public class LinksStub : System.Reflection.DispatchProxy
+    {
+        private List<ParentStudentLink> _links = [];
+
+        public static IParentLinkRepository Create(params ParentStudentLink[] links)
+        {
+            var proxy = Create<IParentLinkRepository, LinksStub>();
+            ((LinksStub)(object)proxy)._links = [.. links];
+            return proxy;
+        }
+
+        protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? args) =>
+            method?.Name == nameof(IParentLinkRepository.GetActiveByParentAsync)
+                ? Task.FromResult(_links.FindAll(l => l.ParentUserId == (Guid)args![0]!))
+                : throw new NotSupportedException(method?.Name);
     }
 
     private sealed class FakeProfiles(StudentProfile? profile) : IProfileFlowRepository
