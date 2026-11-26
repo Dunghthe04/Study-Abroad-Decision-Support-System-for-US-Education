@@ -1042,8 +1042,7 @@ public static class ChatSchoolInfo
                     : "";
                 lines.Add($"  • {s.Name}: {amount}{deadlinePart}.");
             }
-            // Trang /scholarships đọc tham số search và tìm cả theo tên trường
-            lines.Add($"- Xem tất cả học bổng của trường tại /scholarships?search={Uri.EscapeDataString(school.Name)}");
+            // Link sang trang /scholarships là nút "Tìm học bổng" (ChatNextSteps), không chèn đường dẫn thô vào câu trả lời
         }
         else if (wantsList)
         {

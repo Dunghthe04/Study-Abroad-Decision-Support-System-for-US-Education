@@ -661,9 +661,8 @@ public class ChatSchoolInfoTests
         Assert.Contains("Trustee Scholarship", text);
         Assert.Contains("Presidential Award", text);
         Assert.DoesNotContain("Fourth Award", text);   // tối đa 3
-        // trang /scholarships đọc tham số search (tìm cả theo tên trường), không đọc tham số school
-        Assert.Contains("/scholarships?search=Boston%20University", text);
-        Assert.DoesNotContain("?school=", text);
+        // đường dẫn thô không nằm trong câu trả lời; link sang trang Tìm học bổng là nút ở ChatNextSteps
+        Assert.DoesNotContain("/scholarships", text);
     }
 
     [Fact]

@@ -235,6 +235,10 @@ export function ProfileSimulator({ sim, basePref, onRerun }: ProfileSimulatorPro
   );
 }
 
+// UC-155 (tỉ giá giả định): ô nhập tạm ẩn khỏi giao diện vì thanh Ngân sách (USD) đã cho kết quả tương đương.
+// Phần tính toán ở backend và câu hỏi trong chat ("nếu tỷ giá tăng 8% thì sao") vẫn hoạt động.
+const SHOW_RATE_INPUT = false;
+
 const SELECT_CLASS =
   "h-9 w-full cursor-pointer rounded-md border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -318,6 +322,7 @@ function FiltersAndRate({ sim }: { sim: ProfileSimulation }) {
         </select>
       </div>
 
+      {SHOW_RATE_INPUT && (
       <div className="space-y-2">
         <p className="text-xs font-semibold text-foreground">Tỉ giá USD sang VNĐ tăng</p>
         <p className="text-xs text-muted-foreground">
@@ -348,6 +353,7 @@ function FiltersAndRate({ sim }: { sim: ProfileSimulation }) {
           </select>
         </div>
       </div>
+      )}
     </Section>
   );
 }

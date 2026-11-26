@@ -110,8 +110,18 @@ export function SchoolCard({ picked, school, change, simulated, onExplain, onGoa
                         </ul>
                     )}
 
-                    {school && school.flags.length > 0 && (
-                        <p className="text-xs text-ink-3">{school.flags.map(flagText).join(" · ")}</p>
+                    {/* Thiếu tiếng Anh dưới 1 band: trường vẫn nằm trong nhóm theo học lực, nhưng phải thấy rõ để thi lại trước hạn nộp */}
+                    {school?.flags.includes("ENGLISH_NEAR") && (
+                        <p className="flex items-start gap-2 text-xs font-medium text-destructive">
+                            <Badge variant="destructive" className="shrink-0">Chưa đạt điểm tiếng Anh tối thiểu</Badge>
+                            <span>{flagText("ENGLISH_NEAR")}</span>
+                        </p>
+                    )}
+
+                    {school && school.flags.some((f) => f !== "ENGLISH_NEAR") && (
+                        <p className="text-xs text-ink-3">
+                            {school.flags.filter((f) => f !== "ENGLISH_NEAR").map(flagText).join(" · ")}
+                        </p>
                     )}
                 </div>
 
