@@ -310,5 +310,7 @@ public class RoadmapBuilderTests
     {
         Assert.True(Build(new StudentProfile(), [], []).ProvinceMissing);
         Assert.False(Build(new StudentProfile { Province = "Hà Nội" }, [], []).ProvinceMissing);
+        Assert.Equal("Hà Nội", Build(new StudentProfile { Province = "Hà Nội" }, [], []).Province);
+        Assert.Null(Build(new StudentProfile(), [], []).Province);
     }
 }

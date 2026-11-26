@@ -186,7 +186,8 @@ public static partial class RoadmapBuilder
             milestones.OrderBy(m => m.Date).ToList(),
             tasks.OrderBy(t => t.Due ?? DateOnly.MaxValue).ToList(),
             new RoadmapProgressDto(checkable.Count(t => t.Status == "done"), checkable.Count),
-            string.IsNullOrWhiteSpace(profile.Province));
+            string.IsNullOrWhiteSpace(profile.Province),
+            string.IsNullOrWhiteSpace(profile.Province) ? null : profile.Province.Trim());
     }
 
     // ---------- Mức sẵn sàng ----------

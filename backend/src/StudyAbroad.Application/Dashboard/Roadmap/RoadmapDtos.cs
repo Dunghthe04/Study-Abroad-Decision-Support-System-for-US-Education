@@ -4,6 +4,7 @@ namespace StudyAbroad.Application.Dashboard.Roadmap;
 /// Lộ trình theo trường mục tiêu (docs/KE_HOACH_LO_TRINH_THEO_TRUONG_MUC_TIEU.md mục 5).
 /// Mode = "target" khi có trường mục tiêu, "average" khi chưa có (so với TB các trường, mốc ước chừng).
 /// Hai thước đo tách riêng: mức sẵn sàng (Schools/Summary) và tiến độ nhiệm vụ (Progress).
+/// Province: tỉnh/thành đã lưu (StudentProfile.Province) để Tổng quan hiện và cho đổi; null khi chưa chọn.
 /// </summary>
 public record RoadmapDto(
     string Mode,
@@ -14,7 +15,8 @@ public record RoadmapDto(
     IReadOnlyList<RoadmapMilestoneDto> Milestones,
     IReadOnlyList<RoadmapTaskDto> Tasks,
     RoadmapProgressDto Progress,
-    bool ProvinceMissing);
+    bool ProvinceMissing,
+    string? Province = null);
 
 /// <summary>Mức sẵn sàng với một trường; UniversityId null là dòng "TB các trường" ở chế độ average.</summary>
 public record RoadmapSchoolDto(
