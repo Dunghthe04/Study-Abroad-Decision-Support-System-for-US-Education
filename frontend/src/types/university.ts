@@ -62,6 +62,8 @@ export interface UniversityOffering {
   tuitionInStateUsd: number | null;
   /** Bảo hiểm y tế bắt buộc / năm; có trường dữ liệu cũ chưa trả về */
   healthInsuranceUsd?: number | null;
+  /** Chi phí một năm do backend tính (AnnualCost, cùng con số với /costs). null = chưa có học phí, chưa đủ dữ liệu */
+  annualCostUsd?: number | null;
   majors: UniversityMajor[];
   sourceUrl: string | null;
   retrievedAt: string | null;

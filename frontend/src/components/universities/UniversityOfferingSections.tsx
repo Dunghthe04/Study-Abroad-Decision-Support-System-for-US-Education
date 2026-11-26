@@ -19,7 +19,6 @@ import { cn } from "@/lib/utils";
 import type { UniversityOffering, UniversitySource } from "@/types/university";
 import {
   activityLabel,
-  annualPublishedCost,
   deadlineRemainingText,
   gpaScaleTypeLabel,
   housingTypeLabel,
@@ -94,7 +93,6 @@ export function UniversityCosts({
     other: findFieldSource(sources, "other_expenses_usd"),
     insurance: findFieldSource(sources, "health_insurance_usd"),
   };
-  const total = annualPublishedCost(offering);
   const tuition = offering.tuitionUsd;
   const living = offering.livingUsd;
   const fees = offering.feesUsd;
@@ -154,7 +152,7 @@ export function UniversityCosts({
   ].filter((item): item is typeof item & { amount: number } => item.amount != null && item.amount > 0);
 
   const breakdownSum = costBreakdown.reduce((sum, item) => sum + item.amount, 0);
-  const displayTotal = total ?? (breakdownSum > 0 ? breakdownSum : null);
+  const displayTotal = offering.annualCostUsd ?? null;
 
   // [USAS-2067] Phí nộp hồ sơ là khoản một lần, không nằm trong tổng chi phí hằng năm; in-state chỉ để tham khảo
   const hasExtraFees = offering.applicationFeeUsd != null || offering.tuitionInStateUsd != null;
@@ -177,14 +175,14 @@ export function UniversityCosts({
     >
       <div className="space-y-6">
         {displayTotal !== null ? (
-          <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2 border-b border-line pb-4">
+          <div className="rounded-xl border border-line bg-surface p-5 @2xl:p-6">
+            <div className="flex flex-col @2xl:flex-row @2xl:items-baseline @2xl:justify-between gap-2 border-b border-line pb-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-ink-3">
                   Tổng chi phí công bố ước tính (COA)
                 </p>
                 <div className="mt-1.5 flex items-baseline gap-2">
-                  <span className="text-3xl sm:text-4xl font-extrabold tracking-tight text-brand">
+                  <span className="text-3xl @2xl:text-4xl font-extrabold tracking-tight text-brand">
                     <SourceTooltip source={findFieldSource(sources, "coa_total_usd", "tuition_usd")}>
                       {universityMoney(displayTotal)}
                     </SourceTooltip>
@@ -250,8 +248,8 @@ export function UniversityCosts({
             )}
           </div>
         ) : (
-          <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
-            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-line bg-surface p-5 @2xl:p-6">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-5 @2xl:grid-cols-2 @5xl:grid-cols-4">
               <GridDataItem icon={GraduationCapIcon} label="Học phí" value={offering.tuitionUsd != null ? <SourceTooltip source={costSourceByKey.tuition}>{universityMoney(offering.tuitionUsd)}</SourceTooltip> : <MissingValue />} />
               <GridDataItem icon={HomeIcon} label="Sinh hoạt phí" value={offering.livingUsd != null ? <SourceTooltip source={costSourceByKey.living}>{universityMoney(offering.livingUsd)}</SourceTooltip> : <MissingValue />} />
               <GridDataItem icon={FileTextIcon} label="Phí bắt buộc" value={offering.feesUsd != null ? <SourceTooltip source={costSourceByKey.fees}>{universityMoney(offering.feesUsd)}</SourceTooltip> : <MissingValue />} />
@@ -262,8 +260,8 @@ export function UniversityCosts({
         )}
 
         {hasExtraFees && (
-          <div className="rounded-xl border border-line bg-surface px-5 py-3.5 sm:px-6 sm:py-4">
-            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
+          <div className="rounded-xl border border-line bg-surface px-5 py-3.5 @2xl:px-6 @2xl:py-4">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-5 @2xl:grid-cols-2">
               {offering.applicationFeeUsd != null && (
                 <GridDataItem
                   icon={FileTextIcon}
@@ -292,8 +290,8 @@ export function UniversityCosts({
               </p>
             </div>
             <div className="overflow-hidden rounded-xl border border-line bg-surface">
-              <div className="p-5 sm:p-6">
-                <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="p-5 @2xl:p-6">
+                <div className="grid grid-cols-1 gap-x-8 gap-y-5 @2xl:grid-cols-2 @5xl:grid-cols-3">
                   {offering.intlAidPolicy && (
                     <GridDataItem
                       icon={HeartHandshakeIcon}
@@ -318,7 +316,7 @@ export function UniversityCosts({
                 </div>
               </div>
               {displayTotal != null && offering.intlAidAvgUsd != null && (
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-brand px-5 py-4 sm:px-6 text-white">
+                <div className="flex flex-col @2xl:flex-row @2xl:items-center @2xl:justify-between gap-3 bg-brand px-5 py-4 @2xl:px-6 text-white">
                   <div>
                     <p className="text-base font-semibold leading-tight text-white">
                       Chi phí ước tính sau hỗ trợ
@@ -326,7 +324,7 @@ export function UniversityCosts({
                     <p className="mt-1 text-sm text-white/75">Chưa gồm học bổng bên ngoài</p>
                   </div>
                   <div className="flex items-baseline gap-1.5 shrink-0">
-                    <span className="text-2xl sm:text-3xl font-semibold tracking-tight tabular-nums text-white">
+                    <span className="text-2xl @2xl:text-3xl font-semibold tracking-tight tabular-nums text-white">
                       {universityMoney(Math.max(0, displayTotal - offering.intlAidAvgUsd))}
                     </span>
                     <span className="text-sm font-normal text-white/80">/ năm</span>
@@ -443,7 +441,7 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
         {hasAnyScore && (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">Khoảng điểm & học lực trúng tuyển</h3>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2">
               {hasSat && (
                 <div className="rounded-xl border border-line bg-surface p-4 space-y-2">
                   <div className="flex items-center justify-between gap-2">
@@ -573,7 +571,7 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
         {gpaDistribution.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">Phân bố GPA của sinh viên trúng tuyển (thang 4.0)</h3>
-            <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+            <div className="rounded-xl border border-line bg-surface p-5 @2xl:p-6">
               <dl className="space-y-2.5">
                 {gpaDistribution.map((row) => {
                   const pct = Math.round(row.value * 1000) / 10;
@@ -597,14 +595,15 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
         {englishRequirements.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">Yêu cầu chứng chỉ tiếng Anh tối thiểu</h3>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-3">
               {englishRequirements.map((item) => (
                 <div
                   key={item.id}
                   className="flex flex-col justify-between rounded-xl border border-line bg-surface p-4"
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
+                  {/* Thẻ hẹp thì logo xuống dòng dưới chữ, không đè lên nhãn */}
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                    <div className="min-w-24">
                       <p className="text-xs text-ink-3">{item.label}</p>
                       <p className="mt-1 text-2xl font-bold tracking-tight text-ink">
                         <SourceTooltip source={findFieldSource(sources, item.sourceField)}>
@@ -612,13 +611,13 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
                         </SourceTooltip>
                       </p>
                     </div>
-                    <div className="flex h-10 w-28 shrink-0 items-center justify-end">
+                    <div className="flex h-10 w-28 max-w-full shrink-0 items-center">
                       <Image
                         src={item.logo}
                         alt={item.name}
                         width={item.logoWidth}
                         height={item.logoHeight}
-                        className="h-8 sm:h-9 w-auto max-w-full object-contain"
+                        className="h-8 @2xl:h-9 w-auto max-w-full object-contain"
                       />
                     </div>
                   </div>
@@ -641,7 +640,7 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
         {importanceFactors.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">Mức độ coi trọng các yếu tố tuyển sinh (CDS C7)</h3>
-            <div className="divide-y divide-line/70 rounded-xl border border-line bg-surface px-5 sm:px-6">
+            <div className="divide-y divide-line/70 rounded-xl border border-line bg-surface px-5 @2xl:px-6">
               {importanceFactors.map((item) => (
                 <div key={item.label} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
@@ -667,9 +666,9 @@ export function UniversityAdmissions({ offering, sources }: { offering: Universi
 
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-ink">Các đợt nộp hồ sơ</h3>
-          <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+          <div className="rounded-xl border border-line bg-surface p-5 @2xl:p-6">
             {deadlines.length ? (
-              <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 md:grid-cols-3">
+              <div className="grid gap-x-8 gap-y-5 @2xl:grid-cols-2 @3xl:grid-cols-3">
                 {deadlines.map((deadline) => {
                   const remaining = clientMounted ? deadlineRemainingText(deadline.rawDate) : null;
                   const isPassed = remaining?.isPassed ?? false;
@@ -741,8 +740,8 @@ export function UniversityCampusLife({ offering, sources }: { offering: Universi
         )}
 
         {hasOnCampus && (
-          <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
-            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
+          <div className="rounded-xl border border-line bg-surface p-5 @2xl:p-6">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-5 @2xl:grid-cols-2">
               {offering.fyOnCampusPct != null && (
                 <GaugeDataItem
                   label="SV năm nhất ở KTX"
@@ -766,8 +765,8 @@ export function UniversityCampusLife({ offering, sources }: { offering: Universi
         {hasHousingCost && (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">Chi phí nhà ở</h3>
-            <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
-              <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
+            <div className="rounded-xl border border-line bg-surface p-5 @2xl:p-6">
+              <div className="grid grid-cols-1 gap-x-8 gap-y-5 @2xl:grid-cols-2">
                 {offering.housingOnlyUsd != null && (
                   <GridDataItem
                     icon={HomeIcon}
@@ -790,7 +789,7 @@ export function UniversityCampusLife({ offering, sources }: { offering: Universi
         {housingList.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">Các loại hình nhà ở có sẵn ({housingList.length})</h3>
-            <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+            <div className="rounded-xl border border-line bg-surface p-5 @2xl:p-6">
               <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-8 gap-y-3">
                 {housingList.map((item) => (
                   <li key={item} className="text-sm text-ink">
@@ -805,7 +804,7 @@ export function UniversityCampusLife({ offering, sources }: { offering: Universi
         {activitiesList.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">Câu lạc bộ & hoạt động sinh viên ({activitiesList.length})</h3>
-            <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+            <div className="rounded-xl border border-line bg-surface p-5 @2xl:p-6">
               <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-8 gap-y-3">
                 {activitiesList.map((item) => (
                   <li key={item} className="text-sm text-ink">
@@ -898,8 +897,8 @@ export function UniversityStatistics({
     >
       <div className="space-y-6">
         {percentageStats.length > 0 && (
-          <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
-            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="rounded-xl border border-line bg-surface p-5 @2xl:p-6">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-5 @2xl:grid-cols-2 @5xl:grid-cols-3">
               {percentageStats.map((item) => (
                 <GaugeDataItem
                   key={item.key}
@@ -916,7 +915,7 @@ export function UniversityStatistics({
         {countRows.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">Số lượng hồ sơ & tuyển sinh</h3>
-            <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+            <div className="rounded-xl border border-line bg-surface p-5 @2xl:p-6">
               <DetailRows rows={countRows.map((row) => ({ label: row.label, value: row.sourceField ? <SourceTooltip source={findFieldSource(sources, row.sourceField)}>{row.value}</SourceTooltip> : row.value }))} />
             </div>
           </div>
@@ -955,9 +954,9 @@ export function UniversityMajors({ offering, sources }: { offering: UniversityOf
       description={`Nhóm ngành có trong dữ liệu hiện tại của bậc học đang chọn (${offering.majors.length} nhóm ngành).`}
     >
       <div className="space-y-4">
-        <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+        <div className="rounded-xl border border-line bg-surface p-5 @2xl:p-6">
           {offering.majors.length ? (
-            <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
               {offering.majors.map((major) => (
                 <div
                   key={`${major.cipCode}-${major.name}`}

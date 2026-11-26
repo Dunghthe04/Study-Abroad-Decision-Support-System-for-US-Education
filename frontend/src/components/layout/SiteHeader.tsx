@@ -12,7 +12,6 @@ import {
   CalculatorIcon,
   ChevronDownIcon,
   MapPinIcon,
-  ScaleIcon,
   CreditCardIcon,
   CrownIcon,
   GaugeIcon,
@@ -127,10 +126,7 @@ export function SiteHeader() {
     ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ", icon: InboxIcon }] : []),
   ];
 
-  const isCostActive =
-    pathname.startsWith("/costs") ||
-    pathname.startsWith("/universities/compare") ||
-    pathname.startsWith("/universities/living-costs");
+  const isCostActive = pathname.startsWith("/costs");
 
   const isLinkActive = (href: string) => {
     if (href === "/") return pathname === href;
@@ -173,7 +169,7 @@ export function SiteHeader() {
         clear ? "border-white/15 bg-brand-ink/55" : "border-brand-ink bg-brand",
       )}
     >
-      <div className="mx-auto max-w-[1560px] px-4 sm:px-8 lg:px-12">
+      <div className="@container mx-auto max-w-[1560px] px-4 @2xl:px-8 @5xl:px-12">
         {/* Hàng trên */}
         <div className="flex h-13 items-center gap-3">
           <Link
@@ -193,7 +189,7 @@ export function SiteHeader() {
             </span>
           </Link>
 
-          <form role="search" onSubmit={submitSearch} className="relative hidden max-w-2xl flex-1 md:block">
+          <form role="search" onSubmit={submitSearch} className="relative hidden min-w-0 max-w-2xl flex-1 @xl:block">
             <label htmlFor="site-search" className="sr-only">
               Tìm trường
             </label>
@@ -217,7 +213,14 @@ export function SiteHeader() {
             </Button>
           </form>
 
-          <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+          <Link
+            href="/universities"
+            aria-label="Tìm trường"
+            className={buttonVariants({ variant: "ghost", size: "icon", className: "ml-auto @xl:hidden !text-white hover:!bg-white/10" })}
+          >
+            <SearchIcon className="size-5" aria-hidden />
+          </Link>
+          <div className="flex shrink-0 items-center gap-2 @xl:ml-auto @2xl:gap-3">
             {isLoading ? (
               <Skeleton className="h-9 w-24" />
             ) : user ? (
@@ -225,6 +228,7 @@ export function SiteHeader() {
                 {isStudentOrParent && sub.data?.tier === "free" && (
                   <Link
                     href="/plans"
+                    aria-label="Nâng cấp gói"
                     className={buttonVariants({
                       variant: "ghost",
                       size: "sm",
@@ -232,7 +236,7 @@ export function SiteHeader() {
                     })}
                   >
                     <CrownIcon className="size-3.5" aria-hidden />
-                    Nâng cấp
+                    <span className="hidden @xl:inline">Nâng cấp</span>
                   </Link>
                 )}
                 {/* [UC-110] Chuông thông báo */}
@@ -242,7 +246,8 @@ export function SiteHeader() {
                   aria-label={`Tài khoản của ${user.fullName}`}
                   className="group flex h-9 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-white outline-none transition-colors hover:bg-white/10 focus-visible:ring-3 focus-visible:ring-white/50 data-popup-open:bg-white/10"
                 >
-                  <span className="max-w-36 truncate text-sm font-medium">{user.fullName}</span>
+                  <UserRoleIcon role={user.role} className="size-5 shrink-0 @xl:hidden" />
+                  <span className="hidden max-w-36 truncate text-sm font-medium @xl:inline">{user.fullName}</span>
                   <ChevronDownIcon aria-hidden="true" className="size-3.5 shrink-0 transition-transform group-data-popup-open:rotate-180" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" sideOffset={8} className="w-[22rem] p-0">
@@ -408,7 +413,7 @@ export function SiteHeader() {
               </>
             ) : (
               <>
-                <p className="hidden text-sm text-white/85 lg:block">
+                <p className="hidden text-sm text-white/85 @5xl:block">
                   Đã có tài khoản?{" "}
                   <Link href="/login" className="font-semibold text-white underline-offset-4 hover:underline">
                     Đăng nhập
@@ -416,7 +421,7 @@ export function SiteHeader() {
                 </p>
                 <Link
                   href="/login"
-                  className={buttonVariants({ variant: "ghost", className: "lg:hidden !text-white hover:!bg-white/10" })}
+                  className={buttonVariants({ variant: "ghost", className: "@5xl:hidden !text-white hover:!bg-white/10" })}
                 >
                   Đăng nhập
                 </Link>
@@ -436,7 +441,7 @@ export function SiteHeader() {
         </div>
 
         {/* Hàng dưới */}
-        <nav aria-label="Điều hướng chính" className="flex h-11 items-center justify-between gap-4 overflow-x-auto [scrollbar-width:none]">
+        <nav aria-label="Điều hướng chính" className="flex h-11 items-center justify-between gap-2 overflow-x-auto [scrollbar-width:none] @2xl:gap-4">
           <ul className="-ml-3 flex shrink-0 items-center">
             {leftLinks.map((l) => {
               const active = isLinkActive(l.href);
@@ -445,6 +450,8 @@ export function SiteHeader() {
                 <li key={l.href}>
                   <Link
                     href={l.href}
+                    aria-label={l.label}
+                    title={l.label}
                     aria-current={active ? "page" : undefined}
                     className={cn(
                       "relative inline-flex h-11 items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium transition-colors",
@@ -454,7 +461,7 @@ export function SiteHeader() {
                     )}
                   >
                     <Icon className="size-4 shrink-0" aria-hidden />
-                    {l.label}
+                    <span className={cn(!active && "hidden @6xl:inline")}>{l.label}</span>
                   </Link>
                 </li>
               );
@@ -471,27 +478,23 @@ export function SiteHeader() {
                   )}
                 >
                   <CalculatorIcon className="size-4 shrink-0" aria-hidden />
-                  Chi phí
+                  <span className={cn(!isCostActive && "hidden @6xl:inline")}>Chi phí</span>
                   <ChevronDownIcon className="size-3.5 shrink-0 opacity-80" aria-hidden />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" sideOffset={4} className="w-60 p-1.5">
                   <DropdownMenuItem className={MENU_ITEM} render={<Link href="/costs" />}>
                     <CalculatorIcon />
-                    Ước tính chi phí trường
+                    Tra cứu chi phí theo trường
                   </DropdownMenuItem>
-                  <DropdownMenuItem className={MENU_ITEM} render={<Link href="/universities/compare" />}>
-                    <ScaleIcon />
-                    So sánh chi phí trường
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className={MENU_ITEM} render={<Link href="/universities/living-costs" />}>
+                  <DropdownMenuItem className={MENU_ITEM} render={<Link href="/costs?mode=state" />}>
                     <MapPinIcon />
-                    Chi phí sinh hoạt theo bang
+                    Tra cứu chi phí theo bang
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </li>
           </ul>
-          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <div className="flex shrink-0 items-center gap-1 @2xl:gap-2">
             {rightLinks.map((l) => {
               const active = isLinkActive(l.href);
               const Icon = l.icon;
@@ -499,6 +502,8 @@ export function SiteHeader() {
                 <Link
                   key={l.href}
                   href={l.href}
+                  aria-label={l.label}
+                  title={l.label}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "relative inline-flex h-11 items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium transition-colors",
@@ -508,7 +513,7 @@ export function SiteHeader() {
                   )}
                 >
                   <Icon className="size-4 shrink-0" aria-hidden />
-                  {l.label}
+                  <span className={cn(!active && "hidden @6xl:inline")}>{l.label}</span>
                 </Link>
               );
             })}
@@ -523,7 +528,7 @@ export function SiteHeader() {
                 })}
               >
                 <PlusIcon className="size-3.5" aria-hidden />
-                Thêm con
+                <span className="hidden @3xl:inline">Thêm con</span>
               </Link>
             )}
             {/* Trung tâm và quản trị không có hồ sơ để phân tích */}
@@ -536,7 +541,8 @@ export function SiteHeader() {
                   className: "ml-1 h-8 shrink-0 px-3 text-xs font-semibold !bg-white !text-brand-ink hover:!bg-white/90",
                 })}
               >
-                Phân tích hồ sơ của tôi
+                <span className="@7xl:hidden">Phân tích</span>
+                <span className="hidden @7xl:inline">Phân tích hồ sơ của tôi</span>
               </Link>
             )}
           </div>
