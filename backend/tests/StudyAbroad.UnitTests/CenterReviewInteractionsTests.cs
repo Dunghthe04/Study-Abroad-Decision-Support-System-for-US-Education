@@ -141,13 +141,16 @@ public class CenterReviewInteractionsTests
 
         public Task SaveAsync(CenterReview review, CancellationToken ct = default) => Task.CompletedTask;
 
-        public Task<CenterReviewsDto> GetVisibleAsync(Guid centerId, int page, int pageSize, CancellationToken ct = default)
+        public Task<CenterReviewsDto> GetVisibleAsync(Guid centerId, int page, int pageSize, CancellationToken ct = default) =>
+            GetVisibleAsync(centerId, page, pageSize, currentUserId: null, ct);
+
+        public Task<CenterReviewsDto> GetVisibleAsync(Guid centerId, int page, int pageSize, Guid? currentUserId, CancellationToken ct = default)
         {
             var visible = Reviews.Where(r => r.StudyCenterId == centerId && r.Status == "visible").ToList();
             return Task.FromResult(new CenterReviewsDto(
                 visible.Count,
                 visible.Count > 0 ? Math.Round(visible.Average(r => r.Rating), 2) : null,
-                visible.Select(ToDto).ToList()));
+                visible.Select(r => ToDto(r, currentUserId)).ToList()));
         }
 
         public Task<CenterReviewDto?> GetPublicDtoAsync(Guid reviewId, CancellationToken ct = default)
@@ -161,11 +164,12 @@ public class CenterReviewInteractionsTests
         public Task<Lead?> FindLatestUnreviewedLeadAsync(Guid userId, Guid centerId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<bool> TryAddAsync(CenterReview review, CancellationToken ct = default) => throw new NotImplementedException();
 
-        private static CenterReviewDto ToDto(CenterReview r) =>
+        private static CenterReviewDto ToDto(CenterReview r, Guid? currentUserId = null) =>
             new(r.Id, "Nguyễn Văn A.", "student", r.IsVerified, r.CreatedAt, r.Rating, r.Comment,
                 r.CenterReplyStatus == "visible" && r.CenterReplyContent is not null && r.CenterReplyCreatedAt.HasValue
                     ? new CenterReviewReplyDto(r.CenterReplyContent, r.CenterReplyCreatedAt.Value, r.CenterReplyEditedAt)
-                    : null);
+                    : null,
+                IsOwnReview: currentUserId.HasValue && r.UserId == currentUserId.Value);
     }
 
     private sealed class FakeNotifications : INotificationService
