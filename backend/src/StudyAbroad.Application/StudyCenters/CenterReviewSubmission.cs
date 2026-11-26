@@ -60,9 +60,9 @@ public class CenterReviewService(
     public const int MaxCommentLength = 2000;
     public const string AlreadyReviewedMessage = "Yêu cầu liên hệ này đã được đánh giá.";
 
+    /// <summary>[UC-45] Chỉ yêu cầu ở trạng thái Đang trao đổi (contacted) hoặc Đã hoàn tất (closed) mới được đánh giá.</summary>
     private static bool IsReviewableLeadStatus(string? status) =>
-        string.Equals(status, LeadStatuses.Accepted, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(status, LeadStatuses.Contacted, StringComparison.OrdinalIgnoreCase)
+        string.Equals(status, LeadStatuses.Contacted, StringComparison.OrdinalIgnoreCase)
         || string.Equals(status, LeadStatuses.Closed, StringComparison.OrdinalIgnoreCase);
 
     public async Task<CenterReviewEligibilityDto> GetEligibilityAsync(Guid userId, Guid centerId, CancellationToken ct = default)
@@ -135,7 +135,7 @@ public class CenterReviewService(
                 "Học sinh dưới 16 tuổi cần có sự đồng ý của phụ huynh mới có thể gửi đánh giá trung tâm."), null);
         }
 
-        // [UC-45] Chỉ yêu cầu liên hệ đã được trung tâm chấp nhận / đang trao đổi / hoàn tất mới được đánh giá
+        // [UC-45] Chỉ yêu cầu liên hệ ở trạng thái Đang trao đổi (contacted) hoặc Đã hoàn tất (closed) mới được đánh giá
         var lead = await reviews.FindLatestUnreviewedLeadAsync(userId, centerId, ct);
         if (lead is not null && IsReviewableLeadStatus(lead.Status))
             return (new CenterReviewEligibilityDto(true, false, null), lead);
@@ -146,7 +146,7 @@ public class CenterReviewService(
 
         var anyLead = await reviews.FindLatestLeadAsync(userId, centerId, ct);
         if (anyLead is not null)
-            return (new CenterReviewEligibilityDto(false, false, "Yêu cầu tư vấn của bạn cần được trung tâm tiếp nhận trước khi đánh giá."), null);
+            return (new CenterReviewEligibilityDto(false, false, "Chỉ có thể đánh giá sau khi yêu cầu ở trạng thái Đang trao đổi hoặc Đã hoàn tất."), null);
 
         return (new CenterReviewEligibilityDto(false, false, "Bạn cần gửi yêu cầu liên hệ tới trung tâm trước khi đánh giá."), null);
     }
