@@ -11,6 +11,7 @@
       "branch": "ProfileBranch",
       "who": "code",
       "reads": ["skill_bac_hoc", "skill_ho_so"],
+      "may_emit": ["set_province"],
       "why": "Hỏi tiếp hồ sơ theo khung câu hỏi cố định, AI không tự nghĩ câu hỏi. Claude chỉ đọc câu trả lời của học sinh ra giá trị (skill đọc hiểu), chữ hiện ra là của code."
     },
     "profile_review": {
@@ -106,6 +107,10 @@
     "premium_required": {
       "who": "code",
       "why": "Tài khoản Free hỏi ý định chỉ dành cho Premium: trả câu cố định PREMIUM_REQUIRED (replies.py) kèm thẻ khóa, không gọi Claude."
+    },
+    "set_province": {
+      "who": "code",
+      "why": "Lưu tỉnh / thành học sinh trả lời trong chat qua IRoadmapService.SetProvinceAsync, câu trả lời cố định theo kết quả lưu (ChatProvince), không gọi Claude."
     }
   }
 }

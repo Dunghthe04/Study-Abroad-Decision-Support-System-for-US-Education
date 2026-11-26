@@ -167,6 +167,10 @@ namespace StudyAbroad.Application.Advisor
 
             await SaveAnalysesAsync(userId, response, ct);
 
+            // Học sinh trả lời câu hỏi tỉnh / thành của chat: lưu như chọn ở trang Tổng quan rồi báo kết quả thật
+            if (response.Action == ChatProvince.Action && roadmap is not null)
+                response = await ChatProvince.SaveAsync(roadmap, userId, response, ct);
+
             // Lộ trình đại học thẳng: chạy gợi ý trường có sẵn rồi đưa danh sách vào câu trả lời.
             // Chạy sau khi lưu analysis để bản lưu lộ trình không lẫn danh sách trường
             if (response.Action == ChatRecommendation.Action && recommender is not null)
