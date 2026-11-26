@@ -12,7 +12,15 @@ import type {
   SendLeadMessageRequest,
   SendLeadMessageResultDto,
 } from "@/types/api";
-import type { CreateLeadRequest, LeadDto, LeadParentConfirmInfo, LeadRuleCode, LeadRuleError, SentLeadDto } from "@/types/lead";
+import type {
+  CreateLeadRequest,
+  LeadDto,
+  LeadInboxDto,
+  LeadParentConfirmInfo,
+  LeadRuleCode,
+  LeadRuleError,
+  SentLeadDto,
+} from "@/types/lead";
 
 export const leadApi = {
   create: (request: CreateLeadRequest) =>
@@ -71,6 +79,15 @@ export const leadApi = {
         body: JSON.stringify({ reason: reason.trim(), detail: detail?.trim() || null }),
       }
     ),
+};
+
+/**
+ * [Hộp thư tin nhắn] Danh sách cuộc trò chuyện kiểu Messenger, mới nhất trước, kèm tổng tin chưa đọc.
+ * sent: học sinh / phụ huynh (yêu cầu đã gửi); received: trung tâm (yêu cầu đã nhận).
+ */
+export const leadInboxApi = {
+  sent: () => apiFetch<LeadInboxDto>("/api/v1/leads/sent/conversations"),
+  received: () => apiFetch<LeadInboxDto>("/api/v1/leads/received/conversations"),
 };
 
 // [UC-116] Không cần đăng nhập: token một lần trong mail là xác thực, gửi trong body để không lộ ở log URL.
