@@ -40,6 +40,18 @@ public class HardFilterTests
     }
 
     [Fact]
+    public void SeveralMajorsJoinedBySeparator_KeepASchoolThatOffersAnyOfThem()
+    {
+        var wanted = An() with { Major = $"Biology{HardFilter.MajorSeparator}Computer and information sciences" };
+
+        var cs = HardFilter.Check(wanted, School("CS", 30_000m, false), Tolerance);
+        var history = HardFilter.Check(wanted, School("HIS", 30_000m, false, major: "History"), Tolerance);
+
+        Assert.Equal(FilterOutcome.Keep, cs.Outcome);
+        Assert.Equal((FilterOutcome.Excluded, "MAJOR"), (history.Outcome, history.ExcludeReason));
+    }
+
+    [Fact]
     public void An_WithoutAidNeed_DropsSchoolsOverTheCeiling()
     {
         var result = HardFilter.Check(An(AidNeed.None), School("Colgate", 95_610m, true, tuition: 60_000m, aidAvg: 60_000m), Tolerance);

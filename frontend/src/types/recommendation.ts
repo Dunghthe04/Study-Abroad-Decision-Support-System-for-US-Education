@@ -147,7 +147,8 @@ export interface SimulationOverrides {
   pref?: Pref | null;
   // UC-77: bang (mã hai chữ), ngành (tên tiếng Anh như lưu trong hồ sơ) thay điều kiện lọc; tỉ giá giả định (VNĐ mỗi USD hoặc % tăng, chỉ nhận mức tăng)
   states?: string[] | null;
-  major?: string | null;
+  major?: string | null; // một ngành (kịch bản đã lưu, chat); trình mô phỏng dùng `majors`
+  majors?: string[] | null; // nhiều ngành cùng lúc (tối đa 5): trường có ít nhất một ngành đó thì được giữ
   exchangeRateVnd?: number | null;
   exchangeRatePercent?: number | null;
 }

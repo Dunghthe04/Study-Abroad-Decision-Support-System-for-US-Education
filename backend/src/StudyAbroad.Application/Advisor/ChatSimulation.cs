@@ -268,6 +268,7 @@ public static class ChatSimulation
         if (o.EcTier is { } tier) parts.Add($"bậc ngoại khóa {tier}");
         if (o.States is { Count: > 0 } states) parts.Add($"bang {string.Join(", ", states)}");
         if (o.Major is { } major) parts.Add($"ngành {major}");
+        if (o.Majors is { Count: > 0 } majors) parts.Add($"ngành {string.Join(", ", majors)}");
         if (o.ExchangeRateVnd is { } rate) parts.Add($"tỉ giá {Money(rate)} VNĐ mỗi USD");
         if (o.ExchangeRatePercent is { } percent) parts.Add($"tỉ giá tăng {Dec(percent)}%");
         return parts.Count == 0 ? null : string.Join(", ", parts);
@@ -290,6 +291,7 @@ public static class ChatSimulation
         if (o.EcTier is { } tier) parts.Add($"bậc ngoại khóa {tier}{Now(p.EcTier.ToString(CultureInfo.InvariantCulture))}");
         if (o.States is { Count: > 0 } states) parts.Add($"bang {string.Join(", ", states)}");
         if (o.Major is { } major) parts.Add($"ngành {major}");
+        if (o.Majors is { Count: > 0 } majors) parts.Add($"ngành {string.Join(", ", majors)}");
         if (o.ExchangeRateVnd is { } rate) parts.Add($"tỉ giá {Money(rate)} VNĐ mỗi USD");
         if (o.ExchangeRatePercent is { } percent) parts.Add($"tỉ giá tăng {Dec(percent)}%");
         return string.Join(", ", parts);
@@ -309,7 +311,7 @@ public static class ChatSimulation
         if (o.ScholarshipNeed is not null) factors.Add("scholarship");
         if (o.EcTier is not null) factors.Add("ec_tier");
         if (o.States is not null) factors.Add("state");
-        if (o.Major is not null) factors.Add("major");
+        if (o.Major is not null || o.Majors is not null) factors.Add("major");
         if (o.ExchangeRateVnd is not null || o.ExchangeRatePercent is not null) factors.Add("exchange");
         return factors;
     }
@@ -403,6 +405,7 @@ public static class ChatSimulation
         if (o.EcTier is { } tier) values["ecTier"] = tier;
         if (o.States is { Count: > 0 } states) values["states"] = new JsonArray(states.Select(s => (JsonNode?)JsonValue.Create(s)).ToArray());
         if (o.Major is { } major) values["major"] = major;
+        if (o.Majors is { Count: > 0 } majors) values["majors"] = new JsonArray(majors.Select(m => (JsonNode?)JsonValue.Create(m)).ToArray());
         if (o.ExchangeRateVnd is { } rateVnd) values["exchangeRateVnd"] = rateVnd;
         if (o.ExchangeRatePercent is { } ratePercent) values["exchangeRatePercent"] = ratePercent;
         if (pref is { Count: 3 }) values["pref"] = new JsonArray(pref[0], pref[1], pref[2]);   // thanh ưu tiên trên trang nhúc nhích theo

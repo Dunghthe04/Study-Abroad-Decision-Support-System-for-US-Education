@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { ChevronDownIcon, RefreshCwIcon } from "lucide-react";
 import { PremiumLockedCard } from "@/components/billing/PremiumLockedCard";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Spinner } from "@/components/ui/spinner";
@@ -239,6 +240,73 @@ export function ProfileSimulator({ sim, basePref, onRerun }: ProfileSimulatorPro
 // Phần tính toán ở backend và câu hỏi trong chat ("nếu tỷ giá tăng 8% thì sao") vẫn hoạt động.
 const SHOW_RATE_INPUT = false;
 
+// Chọn nhiều mục bằng ô tick, hiện sẵn trong khung cuộn có ô tìm. Bấm từng mục để chọn hoặc bỏ. Có `max` thì chỉ chọn được tối đa chừng đó mục.
+const MAX_SIM_MAJORS = 5;
+
+interface CheckOption {
+  value: string;
+  label: string;
+}
+
+function CheckboxList({
+  label,
+  options,
+  picked,
+  onChange,
+  max,
+  emptyText,
+}: {
+  label: string;
+  options: CheckOption[];
+  picked: string[];
+  onChange: (next: string[]) => void;
+  max?: number; // bỏ trống = không giới hạn
+  emptyText: string;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const shown = q ? options.filter((x) => x.label.toLowerCase().includes(q)) : options;
+  const full = max !== undefined && picked.length >= max;
+  const toggle = (value: string, on: boolean) => onChange(on ? [...new Set([...picked, value])] : picked.filter((v) => v !== value));
+
+  return (
+    <div className="space-y-1.5">
+      <Input placeholder={`Tìm ${label}...`} aria-label={`Tìm ${label}`} value={query} disabled={options.length === 0} onChange={(e) => setQuery(e.target.value)} />
+      <div role="group" aria-label={label} className="max-h-44 overflow-y-auto rounded-md border border-input p-1">
+        {options.length === 0 && <p className="px-2 py-2 text-xs text-muted-foreground">{emptyText}</p>}
+        {options.length > 0 && shown.length === 0 && <p className="px-2 py-2 text-xs text-muted-foreground">Không thấy mục nào khớp.</p>}
+        {shown.map((opt) => {
+          const on = picked.includes(opt.value);
+          const blocked = !on && full;
+          return (
+            <label
+              key={opt.value}
+              className={cn(
+                "flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted",
+                blocked && "cursor-not-allowed opacity-50 hover:bg-transparent"
+              )}
+            >
+              <Checkbox checked={on} disabled={blocked} onCheckedChange={(v) => toggle(opt.value, v === true)} />
+              <span>{opt.label}</span>
+            </label>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>
+          Đã chọn {picked.length}{max !== undefined ? `/${max}` : ""}
+          {full ? " (đã đủ)" : ""}
+        </span>
+        {picked.length > 0 && (
+          <button type="button" onClick={() => onChange([])} className="cursor-pointer font-medium text-brand hover:underline">
+            Bỏ chọn hết
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const SELECT_CLASS =
   "h-9 w-full cursor-pointer rounded-md border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -249,10 +317,13 @@ function FiltersAndRate({ sim }: { sim: ProfileSimulation }) {
   const o = sim.overrides;
   const [rateUnit, setRateUnit] = useState<"percent" | "vnd">(o.exchangeRateVnd != null ? "vnd" : "percent");
   const picked = o.states ?? [];
+  // Ngành: giá trị `major` (một ngành, từ kịch bản đã lưu hoặc từ chat) được hiểu như một lựa chọn trong danh sách nhiều ngành
+  const pickedMajors = o.majors ?? (o.major != null ? [o.major] : []);
   const rate = o.exchangeRateVnd ?? o.exchangeRatePercent ?? null;
   const nameOf = (code: string) => states.find((s) => s.code.toUpperCase() === code)?.name ?? code;
 
   const setStates = (next: string[]) => sim.set({ states: next.length > 0 ? next : null });
+  const setMajors = (next: string[]) => sim.set({ majors: next.length > 0 ? next : null, major: null });
   const setRate = (text: string, unit: "percent" | "vnd") => {
     const value = Number(text);
     const empty = text.trim() === "" || !Number.isFinite(value) || value <= 0;
@@ -264,13 +335,13 @@ function FiltersAndRate({ sim }: { sim: ProfileSimulation }) {
 
   return (
     <Section
-      title="Điều kiện lọc và tỉ giá"
-      onReset={() => sim.reset(["states", "major", "exchangeRateVnd", "exchangeRatePercent"])}
-      changed={picked.length > 0 || o.major != null || rate != null}
+      title={SHOW_RATE_INPUT ? "Điều kiện lọc và tỉ giá" : "Điều kiện lọc"}
+      onReset={() => sim.reset(["states", "major", "majors", "exchangeRateVnd", "exchangeRatePercent"])}
+      changed={picked.length > 0 || pickedMajors.length > 0 || rate != null}
     >
       <div className="space-y-2">
         <p className="text-xs font-semibold text-foreground">Bang muốn học</p>
-        <p className="text-xs text-muted-foreground">Thay các bang đã chọn trong hồ sơ. Không chọn bang nào: giữ như hồ sơ.</p>
+        <p className="text-xs text-muted-foreground">Thay các bang đã chọn trong hồ sơ (chọn được nhiều bang). Không chọn bang nào: giữ như hồ sơ.</p>
         {picked.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {picked.map((code) => (
@@ -286,40 +357,26 @@ function FiltersAndRate({ sim }: { sim: ProfileSimulation }) {
             ))}
           </div>
         )}
-        <select
-          aria-label="Thêm bang"
-          value=""
-          disabled={states.length === 0}
-          onChange={(e) => e.target.value && setStates([...new Set([...picked, e.target.value.toUpperCase()])])}
-          className={SELECT_CLASS}
-        >
-          <option value="">{states.length === 0 ? "Chưa tải được danh sách bang" : "Thêm bang..."}</option>
-          {states
-            .filter((s) => !picked.includes(s.code.toUpperCase()))
-            .map((s) => (
-              <option key={s.code} value={s.code}>
-                {s.name}
-              </option>
-            ))}
-        </select>
+        <CheckboxList
+          label="bang"
+          options={states.map((st) => ({ value: st.code.toUpperCase(), label: st.name }))}
+          picked={picked}
+          onChange={setStates}
+          emptyText="Chưa tải được danh sách bang"
+        />
       </div>
 
       <div className="space-y-2">
         <p className="text-xs font-semibold text-foreground">Ngành</p>
-        <select
-          aria-label="Ngành giả định"
-          value={o.major ?? ""}
-          disabled={majors.length === 0}
-          onChange={(e) => sim.set({ major: e.target.value || null })}
-          className={SELECT_CLASS}
-        >
-          <option value="">{majors.length === 0 ? "Chưa tải được danh sách ngành" : "Giữ như hồ sơ"}</option>
-          {majors.map((m) => (
-            <option key={m.value} value={m.value}>
-              {m.label}
-            </option>
-          ))}
-        </select>
+        <p className="text-xs text-muted-foreground">Chọn một hoặc nhiều ngành (tối đa 5): trường có ít nhất một ngành đó thì được giữ. Không chọn: giữ như hồ sơ.</p>
+        <CheckboxList
+          label="ngành"
+          options={majors.map((m) => ({ value: m.value, label: m.label }))}
+          picked={pickedMajors}
+          onChange={setMajors}
+          max={MAX_SIM_MAJORS}
+          emptyText="Chưa tải được danh sách ngành"
+        />
       </div>
 
       {SHOW_RATE_INPUT && (

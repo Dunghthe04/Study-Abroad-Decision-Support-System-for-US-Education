@@ -63,7 +63,9 @@ public record SimulationOverrides(
     // UC-77/155: bang và ngành thay điều kiện lọc ở bước 3 của UC-22 trên bản sao hồ sơ (mã bang hai chữ, ví dụ "TX").
     // ExchangeRateVnd (tỉ giá mới, VNĐ mỗi USD) hoặc ExchangeRatePercent (mức tăng, %): chỉ nhận mức tăng so với tỉ giá hiện nay; dùng để đổi
     // ngân sách sang USD (ngân sách x tỉ giá hiện nay / tỉ giá mới), nên không đứng cùng lúc cả hai. Được đổi thành BudgetUsd trước khi tính.
-    IReadOnlyList<string>? States = null, string? Major = null, decimal? ExchangeRateVnd = null, decimal? ExchangeRatePercent = null);
+    IReadOnlyList<string>? States = null, string? Major = null, decimal? ExchangeRateVnd = null, decimal? ExchangeRatePercent = null,
+    // Nhiều ngành cùng lúc (trình mô phỏng chọn nhiều): trường qua khi có ít nhất một ngành. Không đứng cùng lúc với Major
+    IReadOnlyList<string>? Majors = null);
 
 // Số trường mỗi nhóm của một lượt tính (đếm trên mọi trường còn sau lọc cứng).
 public record GroupSummary(int Kept, int Reach, int Match, int Safety, int AidBlock, int NoData);
@@ -325,8 +327,14 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         if (o.EcTier is < 1 or > 5) throw new ArgumentException("Bậc ngoại khóa giả định phải từ 1 đến 5.");
         if (o.States is { } states && (states.Count == 0 || states.Count > MaxSimulatedStates || states.Any(s => !StateCode.IsMatch(s ?? ""))))
             throw new ArgumentException("Bang giả định phải là một đến vài mã bang hai chữ cái, ví dụ TX.");
-        if (o.Major is not null && (string.IsNullOrWhiteSpace(o.Major) || o.Major.Length > MaxMajorLength))
+        if (o.Major is not null && (string.IsNullOrWhiteSpace(o.Major) || o.Major.Length > MaxMajorLength || o.Major.Contains(HardFilter.MajorSeparator)))
             throw new ArgumentException("Ngành giả định không hợp lệ.");
+        if (o.Majors is not null && o.Major is not null)
+            throw new ArgumentException("Chỉ nhập một ngành hoặc nhiều ngành, không nhập cả hai.");
+        if (o.Majors is { } majors
+            && (majors.Count == 0 || majors.Count > MaxSimulatedMajors
+                || majors.Any(m => string.IsNullOrWhiteSpace(m) || m.Length > MaxMajorLength || m.Contains(HardFilter.MajorSeparator))))
+            throw new ArgumentException($"Ngành giả định phải là từ một đến {MaxSimulatedMajors} ngành hợp lệ.");
         if (o.ExchangeRateVnd is not null || o.ExchangeRatePercent is not null)
             throw new InvalidOperationException("Tỉ giá giả định chưa được đổi sang ngân sách.");   // lỗi lập trình: chưa qua ResolveExchangeAsync
 
@@ -335,7 +343,10 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
             Id = profile.Id,
             UserId = profile.UserId,
             TargetLevel = profile.TargetLevel,
-            IntendedMajor = o.Major?.Trim() ?? profile.IntendedMajor,
+            // Nhiều ngành được nối bằng HardFilter.MajorSeparator trên bản sao này (không bao giờ lưu); HardFilter tách lại
+            IntendedMajor = o.Majors is { } pickedMajors
+                ? string.Join(HardFilter.MajorSeparator, pickedMajors.Select(m => m.Trim()).Distinct(StringComparer.OrdinalIgnoreCase))
+                : o.Major?.Trim() ?? profile.IntendedMajor,
             PreferredStates = o.States is { } picked ? picked.Select(s => s.ToUpperInvariant()).Distinct().ToList() : profile.PreferredStates,
             TargetSchoolType = profile.TargetSchoolType,
             OverallGpa = o.Gpa ?? profile.OverallGpa,
@@ -433,11 +444,13 @@ public partial class RecommendationService(IAdvisorClient advisor, IRecommendati
         o is not null && (o.Gpa is not null || o.Sat is not null || o.Act is not null || o.Ielts is not null
                           || o.Toefl is not null || o.Duolingo is not null || o.BudgetUsd is not null
                           || o.ScholarshipNeed is not null || o.EcTier is not null
-                          || o.States is not null || o.Major is not null
+                          || o.States is not null || o.Major is not null || o.Majors is not null
                           || o.ExchangeRateVnd is not null || o.ExchangeRatePercent is not null);
 
-    private const int MaxSimulatedStates = 10;
+    // Trần an toàn cho dữ liệu gửi lên, không phải giới hạn sản phẩm: nước Mỹ chỉ có khoảng 51 mã bang nên học sinh chọn bao nhiêu cũng được
+    private const int MaxSimulatedStates = 100;
     private const int MaxMajorLength = 200;
+    private const int MaxSimulatedMajors = 5;
     private static readonly System.Text.RegularExpressions.Regex StateCode = new("^[A-Za-z]{2}$");
 
     /// <summary>

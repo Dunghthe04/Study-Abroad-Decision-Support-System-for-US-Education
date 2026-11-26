@@ -25,12 +25,13 @@ function inRange(key: NumberKey, value: number): boolean {
 }
 
 const EC_TIER_RANGE = [1, 5] as const;
-const MAX_STATES = 10;
+const MAX_STATES = 100;   // trần an toàn, không phải giới hạn sản phẩm (backend cũng 100)
 const MAX_MAJOR_LENGTH = 200;
+const MAX_MAJORS = 5;
 const MAX_RATE_PERCENT = 100;
 const MAX_RATE_VND = 1_000_000;
 
-// Bang: mã hai chữ cái (chữ thường vẫn nhận, đổi thành hoa), không trùng, tối đa MAX_STATES. Sai thì bỏ cả bộ
+// Bang: mã hai chữ cái (chữ thường vẫn nhận, đổi thành hoa), không trùng, tối đa MAX_STATES (trần an toàn). Sai thì bỏ cả bộ
 function toStates(value: unknown): string[] | null {
   const list = typeof value === "string" ? value.split(",") : value;
   if (!Array.isArray(list) || list.length === 0) return null;
@@ -43,6 +44,15 @@ function toMajor(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" && value.length <= MAX_MAJOR_LENGTH ? value.trim() : null;
 }
 
+// Nhiều ngành: danh sách chữ hoặc chuỗi ngăn bằng "|" (tên ngành có thể chứa dấu phẩy nên không dùng dấu phẩy). Sai thì bỏ cả bộ
+function toMajors(value: unknown): string[] | null {
+  const list = typeof value === "string" ? value.split("|") : value;
+  if (!Array.isArray(list) || list.length === 0 || list.length > MAX_MAJORS) return null;
+  const names = list.map((v) => (typeof v === "string" ? v.trim() : ""));
+  if (!names.every((n) => n !== "" && n.length <= MAX_MAJOR_LENGTH && !n.includes("|"))) return null;
+  return [...new Set(names)];
+}
+
 // Tỉ giá giả định: số VNĐ mỗi USD hoặc phần trăm tăng. Chỉ kiểm khoảng, "chỉ nhận mức tăng so với hiện nay" do backend kiểm vì cần tỉ giá hiện nay
 function addExtras(overrides: SimulationOverrides, get: (key: string) => unknown): void {
   const tier = Number(get("ecTier"));
@@ -50,8 +60,10 @@ function addExtras(overrides: SimulationOverrides, get: (key: string) => unknown
     overrides.ecTier = tier;
   const states = toStates(get("states"));
   if (states) overrides.states = states;
+  const majors = toMajors(get("majors"));
   const major = toMajor(get("major"));
-  if (major) overrides.major = major;
+  if (majors) overrides.majors = majors;
+  else if (major) overrides.major = major;
   const vnd = Number(get("exchangeRateVnd"));
   const percent = Number(get("exchangeRatePercent"));
   // Nhập cả hai thì lấy số VNĐ (backend cũng từ chối nhập cả hai)
@@ -88,7 +100,9 @@ export function overridesFromValues(values: Record<string, unknown> | null | und
 // Địa chỉ trang Gợi ý trường kèm giá trị giả định của chat. ts đổi mỗi lần bấm để trang dựng lại và đọc lại giá trị.
 export function simulationHref(values: Record<string, unknown> | null | undefined): string {
   const query = new URLSearchParams({ ts: String(Date.now()) });
-  for (const [key, value] of Object.entries(overridesFromValues(values))) query.set(key, String(value));   // pref là mảng nên thành "2,4,2"
+  // pref là mảng nên thành "2,4,2"; nhiều ngành nối bằng "|" vì tên ngành có thể chứa dấu phẩy
+  for (const [key, value] of Object.entries(overridesFromValues(values)))
+    query.set(key, key === "majors" && Array.isArray(value) ? value.join("|") : String(value));
   return `/recommendations?${query.toString()}`;
 }
 
@@ -143,6 +157,7 @@ export function describeSimulation(o: SimulationOverrides | null | undefined): s
   if (o.ecTier != null) parts.push(`bậc ngoại khóa ${o.ecTier}`);
   if (o.states != null && o.states.length > 0) parts.push(`bang ${o.states.join(", ")}`);
   if (o.major != null) parts.push(`ngành ${o.major}`);
+  if (o.majors != null && o.majors.length > 0) parts.push(`ngành ${o.majors.join(", ")}`);
   if (o.exchangeRateVnd != null) parts.push(`tỉ giá ${NUMBER.format(o.exchangeRateVnd)} VNĐ/USD`);
   if (o.exchangeRatePercent != null) parts.push(`tỉ giá tăng ${NUMBER.format(o.exchangeRatePercent)}%`);
   if (o.pref != null) parts.push(`ưu tiên: chi phí ${o.pref[0]}, học bổng ${o.pref[1]}, danh tiếng ${o.pref[2]}`);

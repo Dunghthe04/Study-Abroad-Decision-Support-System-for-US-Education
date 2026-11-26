@@ -87,6 +87,13 @@ namespace StudyAbroad.Application.Recommendations
             FilterCriteria criteria, IEnumerable<FilterSchool> schools, decimal budgetTolerance, EnglishOptions? english = null) =>
             schools.Select(s => Check(criteria, s, budgetTolerance, english)).ToList();
 
+        // Ngành học sinh chọn. Thường là một ngành; trình mô phỏng có thể chọn nhiều ngành, nối bằng MajorSeparator
+        // (chỉ gặp trên bản sao hồ sơ của mô phỏng). Trường qua khi có ít nhất một trong các ngành đó.
+        public const char MajorSeparator = '|';
+
+        public static IReadOnlyList<string> WantedMajors(string? major) =>
+            (major ?? "").Split(MajorSeparator, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
         public static FilterResult Check(FilterCriteria c, FilterSchool school, decimal budgetTolerance, EnglishOptions? english = null)
         {
             var flags = new List<string>();
@@ -96,7 +103,8 @@ namespace StudyAbroad.Application.Recommendations
                 //Sinh viên chọn ngành - mà trường ko có ngành nào
                 if (school.Majors.Count == 0) flags.Add(FilterFlags.MajorUnknown);
                 //Nếu trường ko có ngành trùng -> loại
-                else if (!school.Majors.Contains(c.Major, StringComparer.OrdinalIgnoreCase))
+                else if (WantedMajors(c.Major) is { Count: > 0 } wanted
+                         && !wanted.Any(m => school.Majors.Contains(m, StringComparer.OrdinalIgnoreCase)))
                     return Exclude(school, "MAJOR");
             }
 

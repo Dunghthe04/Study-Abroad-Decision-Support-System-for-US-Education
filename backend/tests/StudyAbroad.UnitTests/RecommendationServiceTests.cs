@@ -669,6 +669,41 @@ public class RecommendationServiceTests
     }
 
     [Fact]
+    public async Task Simulate_SeveralMajors_KeepsASchoolThatOffersAnyOfThem_AndDropsTheRest()
+    {
+        var cs = School("CS", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var history = School("HIS", 38_000m, "none", "History", sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var biology = School("BIO", 38_000m, "none", "Biology", sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);
+        var (service, profile) = SimWithRate([cs, history, biology]);
+
+        var result = await service.SimulateAsync(profile.UserId, NoChange with { Majors = [Major, "History"] }, null, default);
+
+        // CS vẫn trong danh sách (ngành gốc nằm trong các ngành chọn), HIS vào, BIO không thuộc ngành nào được chọn nên không đổi
+        Assert.Equal([new SchoolChange("HIS", "HIS", "OUT", "M")], result.Changes);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    public async Task Simulate_MajorsOutsideOneToFive_AreRejected(int count)
+    {
+        var (service, profile) = SimWithRate([School("CS", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m)]);
+        var majors = Enumerable.Range(1, count).Select(i => $"Major {i}").ToList();
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => service.SimulateAsync(profile.UserId, NoChange with { Majors = majors }, null, default));
+    }
+
+    [Fact]
+    public async Task Simulate_MajorAndMajorsTogether_AreRejected()
+    {
+        var (service, profile) = SimWithRate([School("CS", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m)]);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => service.SimulateAsync(profile.UserId, NoChange with { Major = "History", Majors = ["Biology"] }, null, default));
+    }
+
+    [Fact]
     public async Task Simulate_NewStates_ReplaceThePreferredStates_AndSchoolsOutsideThemLeave()
     {
         var ny = School("NYS", 38_000m, "none", Major, sat: (1200, 1380), accept: 0.60m, avgGpa: 3.5m);   // helper đặt bang NY

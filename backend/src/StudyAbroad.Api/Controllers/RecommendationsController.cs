@@ -33,7 +33,8 @@ public class RecommendationsController(RecommendationService recommendations) : 
         decimal? BudgetUsd, string? ScholarshipNeed, int? EcTier, IReadOnlyList<int>? Pref,
         decimal? Toefl = null, decimal? Duolingo = null,
         // UC-77: bang (mã hai chữ), ngành, tỉ giá giả định (VNĐ mỗi USD hoặc % tăng, chỉ nhận mức tăng)
-        IReadOnlyList<string>? States = null, string? Major = null, decimal? ExchangeRateVnd = null, decimal? ExchangeRatePercent = null);
+        IReadOnlyList<string>? States = null, string? Major = null, decimal? ExchangeRateVnd = null, decimal? ExchangeRatePercent = null,
+        IReadOnlyList<string>? Majors = null);
 
     public record SimulationResponse(
         SimulationProfile Profile, GroupSummary Baseline, GroupSummary Simulated, IReadOnlyList<SchoolChange> Changes,
@@ -147,7 +148,7 @@ public class RecommendationsController(RecommendationService recommendations) : 
         {
             var overrides = new SimulationOverrides(
                 request.Gpa, request.Sat, request.Act, request.Ielts, request.BudgetUsd, request.ScholarshipNeed, request.EcTier,
-                request.Toefl, request.Duolingo, null, request.States, request.Major, request.ExchangeRateVnd, request.ExchangeRatePercent);
+                request.Toefl, request.Duolingo, null, request.States, request.Major, request.ExchangeRateVnd, request.ExchangeRatePercent, request.Majors);
             var result = await recommendations.SimulateAsync(userId.Value, overrides, request.Pref, ct);
             using var criteria = JsonDocument.Parse(result.CriteriaJson);
             using var items = JsonDocument.Parse(result.ItemsJson);
