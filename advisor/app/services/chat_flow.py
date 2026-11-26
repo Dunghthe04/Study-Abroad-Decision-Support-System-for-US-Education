@@ -254,6 +254,9 @@ def apply_turn_inputs(state: ChatState, req: TurnInputs) -> None:
     # Mốc trường đổi theo bậc học; không gửi thì giữ mốc đã nhớ
     if req.benchmarks is not None:
         state.benchmarks = req.benchmarks
+    # Lộ trình theo trường mục tiêu (Tổng quan); không gửi thì giữ lộ trình đã nhớ
+    if req.roadmap is not None:
+        state.roadmap = req.roadmap
     # Bảng quy đổi điểm do moderator sửa; không gửi thì giữ bảng đã nhớ (chưa từng gửi thì dùng bảng WES)
     if req.grade_scale:
         state.grade_scale = req.grade_scale

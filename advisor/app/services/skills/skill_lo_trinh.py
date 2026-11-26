@@ -84,6 +84,7 @@ class Route:
     months_to_deadline: int | None
     reasons: list[str] = field(default_factory=list)
     ai_used: bool = False
+    target: bool = False  # đã xét theo trường mục tiêu (roadmap), lý do nói "trường mục tiêu" thay cho "đa số trường"
 
 
 def english_status(english: str, plan: Any, intake: Intake | None, today_index: int) -> str:
@@ -100,16 +101,44 @@ def english_status(english: str, plan: Any, intake: Intake | None, today_index: 
     return "none_with_time"
 
 
+# Có trường mục tiêu (roadmap mode "target"): xét theo trường đòi hỏi cao nhất thay cho ngưỡng chung.
+# Tiếng Anh / GPA chưa đạt mốc ở bất kỳ trường mục tiêu nào thì coi là thấp / yếu; đạt hoặc gần đạt hết thì không.
+# Mặt nào không trường nào so được (thiếu dữ liệu) thì giữ mức theo ngưỡng chung. Tài chính vẫn theo mức ngân sách
+TARGET_LEVEL = {"english": ("low", "good"), "academic": ("weak", "medium")}
+TARGET_KEY = {"english": "english", "academic": "gpa"}
+
+
+def target_levels(levels: dict[str, Any], roadmap: dict | None) -> dict[str, Any]:
+    if not roadmap or roadmap.get("mode") != "target":
+        return levels
+    result = dict(levels)
+    for side, key in TARGET_KEY.items():
+        if levels[side] == "none":
+            continue  # chưa có điểm (ví dụ chưa thi tiếng Anh): giữ cách xét "kịp thi hay không"
+        statuses = [
+            c.get("status")
+            for school in roadmap.get("schools", [])
+            for c in school.get("criteria", [])
+            if c.get("key") == key and c.get("status") in ("met", "near", "below")
+        ]
+        if statuses:
+            low, ok = TARGET_LEVEL[side]
+            result[side] = low if "below" in statuses else ok
+    return result
+
+
 # F3. Chọn lộ trình bằng code
 def choose_route(
     profile: dict[str, ProfileField],
     today: date | None = None,
     gpa_table: list[tuple[float, float]] | None = None,
+    roadmap: dict | None = None,
 ) -> tuple[Route, Facts, Intake | None]:
     today = today or date.today()
     today_index = month_index(today.year, today.month)
     facts = read_facts(profile, today, gpa_table)
-    levels = assess_levels(facts)
+    base = assess_levels(facts)
+    levels = target_levels(base, roadmap)
     intake = Intake.parse(value_of(profile, "intake"))
     months = intake.deadline - today_index if intake else None
     status = english_status(levels["english"], value_of(profile, "english_plan"), intake, today_index)
@@ -131,6 +160,7 @@ def choose_route(
         codes=[code for _, code in hits],
         english_status=status,
         months_to_deadline=months,
+        target=levels is not base,
     )
     return route, facts, intake
 
@@ -144,8 +174,16 @@ REASON_TEXT = {
 DIRECT_TEXT = "Hồ sơ của bạn đủ điều kiện nộp thẳng vào đại học."
 
 
+# Xét theo trường mục tiêu thì tiếng Anh / học lực so với mốc của trường mục tiêu, không phải đa số trường
+TARGET_REASON_TEXT = {
+    "ENGLISH_LOW": "Tiếng Anh chưa đạt mốc của trường mục tiêu; năm dự bị cho bạn vừa học tiếng vừa học môn đại cương.",
+    "ACADEMIC_WEAK": "GPA chưa đạt mốc của trường mục tiêu; cao đẳng cộng đồng giúp bạn có bảng điểm mới trước khi chuyển tiếp.",
+}
+
+
 def template_reasons(route: Route) -> list[str]:
-    return [REASON_TEXT[code] for code in route.codes] or [DIRECT_TEXT]
+    texts = {**REASON_TEXT, **TARGET_REASON_TEXT} if route.target else REASON_TEXT
+    return [texts[code] for code in route.codes] or [DIRECT_TEXT]
 
 
 # Mốc thời gian theo kỳ nhập học (code viết, không qua Qwen)

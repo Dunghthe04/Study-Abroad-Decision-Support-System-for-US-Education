@@ -72,12 +72,15 @@ from app.services.scenario import (
 )
 from app.services.skill_input import skill_request_of
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
-from app.services.skill_template import TEMPLATE_TASKS, build_skill, tasks_of
+from app.services.skill_template import ROADMAP_LINK, TEMPLATE_TASKS, build_skill, tasks_of
 from app.services.skills import major_catalog, skill_ho_so, state_catalog
 from app.services.skills.profile_handler import ChatProfileHandler
 from app.services.skills.skill_danh_gia import gpa_table_of
 from app.services.skills.validators import AskAgain
 from app.services.what_if_writer import WhatIfWriter
+
+# Nút mở lộ trình đầy đủ ở Tổng quan (frontend đi theo href)
+ROADMAP_BUTTON = QuickReply(label="Xem lộ trình", value="Em muốn xem lộ trình đầy đủ", href=ROADMAP_LINK)
 
 
 # Trung tâm: dùng dịch vụ, thành phố, việc (tasks) model đã tách trong ý center_referral; skill chỉ đổi mã dịch vụ sang mã DB,
@@ -580,7 +583,7 @@ class GeneratedAdviceBranch:
         # Code dựng skill từ khuôn (không gọi SLM, không hỏng); writer chỉ nhận việc của khuôn
         today = datetime.date.today()
         req = skill_request_of(state, question, today)
-        skill = build_skill(req, tasks, state.profile, today, gpa_table_of(state.grade_scale))
+        skill = build_skill(req, tasks, state.profile, today, gpa_table_of(state.grade_scale), state.roadmap)
         answer = await self._writer.write(skill, req, state.schools, tasks_of(tasks))
         if answer is None:
             return SkillOutput(
@@ -588,7 +591,9 @@ class GeneratedAdviceBranch:
                 quick_replies=[QuickReply(label=ASK_AGAIN_LABEL, value=question)],
                 action=recommend,
             )
-        return SkillOutput(answer, action=recommend)
+        # Có lộ trình .NET và học sinh hỏi lộ trình: thêm nút mở lộ trình đầy đủ ở Tổng quan
+        roadmap_link = state.roadmap is not None and "roadmap" in tasks_of(tasks)
+        return SkillOutput(answer, quick_replies=[ROADMAP_BUTTON.model_copy()] if roadmap_link else [], action=recommend)
 
 
 # Hồ sơ vừa lưu mà không có câu tư vấn bị hoãn: hỏi học sinh muốn làm gì tiếp. Nút gửi câu như học sinh tự gõ,

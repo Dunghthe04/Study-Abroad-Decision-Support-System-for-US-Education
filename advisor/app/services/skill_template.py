@@ -44,6 +44,8 @@ NO_MARK = "Chưa có dữ liệu trường để so"
 ONLY_NOTED = "Chỉ ghi nhận, không dùng để chọn trường"
 REFUSED = "đã từng bị từ chối visa"
 PLANNED = "dự định"
+# Lộ trình đầy đủ (mốc, nhiệm vụ, trung tâm gợi ý) vẽ ở Tổng quan; chat chỉ nêu việc gấp nhất rồi chỉ sang đó
+ROADMAP_LINK = "/dashboard#lo-trinh"
 
 # Bảng mục 2: (tên dòng, khóa ho_so, khóa tinh_san hoặc chữ cố định cho cột Mức). Thứ tự giống form
 ROWS = (
@@ -196,6 +198,8 @@ def assessment_part(req: SkillRequest, middle_school: bool) -> str:
     ho_so, tinh_san = req.ho_so, req.tinh_san
     groups = assessment_groups(ho_so, tinh_san)
     lines = ['### Phần "Đánh giá hồ sơ"', "Các mặt đã nhóm sẵn theo mức (chép đúng, không đổi nhóm):"]
+    if "target_schools" in tinh_san:
+        lines.insert(1, f"- So với trường mục tiêu: {tinh_san['target_schools']}. Nói kết quả này trước, lần lượt từng trường.")
     lines += [f"- {title}: {'; '.join(groups[key])}." for key, title in GROUP_TITLES if groups[key]]
     trend = grade_trend(tinh_san.get("grade_by_year"))
     if trend:
@@ -260,8 +264,9 @@ def roadmap_part(
     today: date | None,
     gpa_table: list[tuple[float, float]] | None,
     middle_school: bool,
+    roadmap: dict | None = None,
 ) -> str:
-    route, _, intake = choose_route(profile, today, gpa_table)
+    route, _, intake = choose_route(profile, today, gpa_table, roadmap)
     route.reasons = template_reasons(route)
     major = req.ho_so.get("major") if has_value(req.ho_so, "major") else None
     lines = [
@@ -272,6 +277,12 @@ def roadmap_part(
         "Các bước chuẩn bị theo hồ sơ, theo thứ tự:",
         *extra_steps(req.ho_so, req.tinh_san),
     ]
+    if "urgent_tasks" in req.tinh_san:
+        lines.append(f"Việc gấp nhất lúc này (nêu đúng các việc này): {req.tinh_san['urgent_tasks']}.")
+    if roadmap is not None:
+        lines.append(f"Lộ trình đầy đủ (mốc, nhiệm vụ tự đánh dấu, trung tâm gợi ý) ở trang Tổng quan ({ROADMAP_LINK}), cuối phần mời bạn mở xem.")
+        if roadmap.get("provinceMissing"):
+            lines.append("Bạn chưa chọn tỉnh / thành: nhắc chọn ở Tổng quan để được gợi ý trung tâm gần nhà.")
     if middle_school:
         lines.append("Bạn đang học THCS: lộ trình trên là định hướng dài hạn, ưu tiên học tốt và tiếng Anh.")
     lines.append(
@@ -286,6 +297,7 @@ def fill_noi_dung(
     profile: dict[str, ProfileField],
     today: date | None = None,
     gpa_table: list[tuple[float, float]] | None = None,
+    roadmap: dict | None = None,
 ) -> str:
     middle_school = is_middle_school_profile(profile)
     parts = []
@@ -293,7 +305,7 @@ def fill_noi_dung(
         if task == "assessment":
             parts.append(assessment_part(req, middle_school))
         else:
-            parts.append(roadmap_part(req, profile, today, gpa_table, middle_school))
+            parts.append(roadmap_part(req, profile, today, gpa_table, middle_school, roadmap))
     return "\n\n".join(parts)
 
 
@@ -304,11 +316,12 @@ def build_skill(
     profile: dict[str, ProfileField],
     today: date | None = None,
     gpa_table: list[tuple[float, float]] | None = None,
+    roadmap: dict | None = None,
 ) -> str:
     chosen = tasks_of(tasks)
     return (
         template()
         .replace("{nhiem_vu}", fill_nhiem_vu(chosen))
         .replace("{du_lieu}", fill_du_lieu(req))
-        .replace("{noi_dung}", fill_noi_dung(req, chosen, profile, today, gpa_table))
+        .replace("{noi_dung}", fill_noi_dung(req, chosen, profile, today, gpa_table, roadmap))
     )

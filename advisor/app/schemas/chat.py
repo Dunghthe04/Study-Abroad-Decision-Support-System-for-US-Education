@@ -95,6 +95,9 @@ class ChatState(CamelModel):
     benchmarks: dict[str, Any] | None = None
     # Bảng quy đổi điểm thang 10 sang GPA 4 (grade_scale.10 moderator sửa), .NET gửi mỗi lượt; None = không quy đổi GPA
     grade_scale: list[GradeScaleRule] | None = None
+    # Lộ trình theo trường mục tiêu (.NET RoadmapForAdvisor, cùng số liệu với Tổng quan): mode target/average, mức sẵn sàng
+    # từng trường, nhiệm vụ. Code advisor chỉ đọc, không tính lại. None = chưa có hồ sơ thì đánh giá theo TB như cũ
+    roadmap: dict[str, Any] | None = None
     study_level: StudyLevel | None = None  # bậc học học sinh quan tâm (từ .NET), dùng để lọc kiến thức
     # Câu tư vấn bị hoãn vì thiếu hồ sơ (giữ nguyên ý SLM đã tách: loại, đoạn chữ, thực thể).
     # Học sinh xác nhận hồ sơ ở X1 thì nhánh hồ sơ lấy ra trả lời rồi xóa. Chỉ giữ câu đầu tiên
@@ -146,6 +149,8 @@ class TurnInputs(CamelModel):
     has_committed_profile: bool | None = None
     # Phụ huynh đang nhập hộ con managed (.NET đọc từ token mỗi lượt, không tin trình duyệt); None = không gửi (giữ giá trị cũ)
     exact_budget: bool | None = None
+    # Lộ trình theo trường mục tiêu do .NET gửi mỗi lượt chat; None = không gửi (giữ lộ trình cũ trong state)
+    roadmap: dict[str, Any] | None = None
 
 
 class ChatRequest(TurnInputs):
