@@ -520,6 +520,99 @@ public class LeadService(
         await chat.MessagesReadAsync(leadId, LeadChatSides.Opposite(access.Side), ids, readAt, ct);
     }
 
+    // ===== [Hộp thư tin nhắn] =====
+
+    /// <summary>Số cuộc trò chuyện tối đa trong danh sách (tổng tin chưa đọc vẫn tính mọi cuộc).</summary>
+    public const int InboxLimit = 30;
+
+    /// <summary>
+    /// [Hộp thư tin nhắn] Danh sách cuộc trò chuyện của học sinh / phụ huynh, cùng phạm vi với GetSentLeadsAsync:
+    /// học sinh là lead của mình (dưới 16 chưa có đồng ý thì 403), phụ huynh là lead mình gửi và lead của con dưới 18 đang liên kết.
+    /// </summary>
+    public async Task<LeadInboxDto> GetSentInboxAsync(Guid userId, CancellationToken ct = default)
+    {
+        var user = await users.GetUserById(userId, ct)
+            ?? throw new KeyNotFoundException("Không tìm thấy tài khoản.");
+
+        (IReadOnlyList<LeadConversationRow> Rows, int TotalUnread) result;
+        if (user.Role == UserRoles.Student)
+        {
+            await EnsureStudentCanViewSentLeadsAsync(user, ct);
+            result = await leads.GetSentConversationsAsync([user.Id], submitterId: null, InboxLimit, ct);
+        }
+        else if (user.Role == UserRoles.Parent)
+        {
+            var minorChildIds = await GetLinkedMinorChildIdsAsync(user.Id, ct);
+            result = await leads.GetSentConversationsAsync(minorChildIds, submitterId: user.Id, InboxLimit, ct);
+        }
+        else
+        {
+            throw SentLeadsRoleNotAllowed();
+        }
+
+        return new LeadInboxDto(result.Rows.Select(r => ToConversation(r, readerIsCenterSide: false)).ToList(), result.TotalUnread);
+    }
+
+    /// <summary>
+    /// [Hộp thư tin nhắn] Danh sách cuộc trò chuyện của trung tâm. Chỉ tài khoản trung tâm (cùng luật vào phòng chat);
+    /// kiểm duyệt / quản trị không có hộp thư.
+    /// </summary>
+    public async Task<LeadInboxDto> GetCenterInboxAsync(
+        Guid userId,
+        string? userEmail,
+        string userRole,
+        CancellationToken ct = default)
+    {
+        if (userRole != UserRoles.Center)
+            throw new LeadRuleException("role_not_allowed", 403, "Chỉ tài khoản trung tâm có hộp thư tin nhắn của trung tâm.");
+
+        var (centerId, _) = await ResolveCenterScopeAsync(userId, userEmail, userRole, null, ct);
+        var result = await leads.GetCenterConversationsAsync(centerId!.Value, InboxLimit, ct);
+        return new LeadInboxDto(result.Rows.Select(r => ToConversation(r, readerIsCenterSide: true)).ToList(), result.TotalUnread);
+    }
+
+    /// <summary>Dựng một dòng hộp thư: tên hiển thị theo phía người xem, tin cuối đã gỡ thì che, rút gọn tin dài.</summary>
+    internal static LeadConversationDto ToConversation(LeadConversationRow row, bool readerIsCenterSide)
+    {
+        var title = readerIsCenterSide
+            ? (string.IsNullOrWhiteSpace(row.StudentName) ? LeadMessageMapper.AnonymousStudentName : row.StudentName.Trim())
+            : row.CenterName;
+        var removed = string.Equals(row.LastStatus, "removed", StringComparison.OrdinalIgnoreCase);
+        var content = row.LastContent?.Trim();
+        var preview = row.LastAt is null
+            ? null
+            : removed
+                ? LeadMessageMapper.RemovedContentPlaceholder
+                : string.IsNullOrEmpty(content)
+                    ? null
+                    : content.Length > NotificationPreviewLength ? content[..NotificationPreviewLength] + "…" : content;
+
+        return new LeadConversationDto(
+            row.Lead.Id,
+            title,
+            readerIsCenterSide ? null : row.StudentName,
+            row.Lead.Status,
+            preview,
+            !removed && !string.IsNullOrEmpty(row.LastAttachmentUrl),
+            row.LastAt,
+            row.LastAt is not null && row.LastFromCenter == readerIsCenterSide,
+            row.UnreadCount,
+            CanMessage(row.Lead));
+    }
+
+    private static bool CanMessage(Lead lead)
+    {
+        try
+        {
+            EnsureCanMessage(lead);
+            return true;
+        }
+        catch (LeadRuleException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// [Chat realtime] Đẩy tin mới tới hai phía, rồi báo người nhận (chuông thông báo + toast) trừ khi họ đang mở đúng
     /// cuộc trò chuyện này. Lỗi ở đây không được làm hỏng việc gửi tin: tin đã lưu, bên kia vẫn lấy được bằng REST.

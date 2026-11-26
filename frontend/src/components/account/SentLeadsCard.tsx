@@ -15,7 +15,8 @@ import { studyLevelLabel } from "@/lib/study-levels";
 import { cn } from "@/lib/utils";
 import { isLeadAwaitingCenter, LEAD_SHARED_FIELD_INFO, leadStatusLabel, type SentLeadDto } from "@/types/lead";
 import { AccountSectionHeader } from "@/components/account/AccountSectionHeader";
-import { SentLeadMessagesDialog, type SentLeadThreadChange } from "@/components/account/SentLeadMessagesDialog";
+import type { SentLeadThreadChange } from "@/components/account/SentLeadMessagesDialog";
+import { SENT_THREAD_CHANGED_EVENT, useChatDock, type SentThreadChangedDetail } from "@/components/messages/ChatDock";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -117,6 +118,16 @@ export function SentLeadsCard() {
     );
   }, []);
 
+  // Khung chat nổi (hộp thư tin nhắn) báo trạng thái và số tin trung tâm mới nhất
+  useEffect(() => {
+    const onChange = (e: Event) => {
+      const { leadId, ...change } = (e as CustomEvent<SentThreadChangedDetail>).detail;
+      updateLead(leadId, change);
+    };
+    window.addEventListener(SENT_THREAD_CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(SENT_THREAD_CHANGED_EVENT, onChange);
+  }, [updateLead]);
+
   if (!user || (user.role !== "student" && user.role !== "parent")) return null;
 
   return (
@@ -195,7 +206,7 @@ export function SentLeadsCard() {
                 <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
                   {leads.map((lead) => (
                     <li key={lead.id}>
-                      <SentLeadItem lead={lead} isParent={isParent} onThreadChange={updateLead} />
+                      <SentLeadItem lead={lead} isParent={isParent} />
                     </li>
                   ))}
                 </ul>
@@ -226,17 +237,20 @@ export function SentLeadsCard() {
 function SentLeadItem({
   lead,
   isParent,
-  onThreadChange,
 }: {
   lead: SentLeadDto;
   isParent: boolean;
-  onThreadChange: (leadId: string, change: SentLeadThreadChange) => void;
 }) {
-  const [messagesOpen, setMessagesOpen] = useState(false);
-  const handleThreadChange = useCallback(
-    (change: SentLeadThreadChange) => onThreadChange(lead.id, change),
-    [lead.id, onThreadChange],
-  );
+  const { openChat } = useChatDock();
+  // [Hộp thư tin nhắn] Mở khung chat nổi ở góc dưới thay cho hộp thoại
+  const openMessages = () =>
+    openChat({
+      leadId: lead.id,
+      title: lead.studyCenterName,
+      subtitle: isParent ? `Học sinh: ${lead.studentName}` : null,
+      side: "sent",
+      leadStatus: lead.status,
+    });
   const statusClass = STATUS_BADGE_CLASS[lead.status];
   const awaitingCenter = isLeadAwaitingCenter(lead.status);
   const sentBy = isParent
@@ -313,20 +327,11 @@ function SentLeadItem({
               ? `Trung tâm đã nhắn ${lead.centerMessageCount} tin`
               : "Trung tâm chưa nhắn tin"}
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => setMessagesOpen(true)}>
+          <Button type="button" variant="outline" size="sm" onClick={openMessages}>
             <MessageSquareIcon data-icon="inline-start" aria-hidden />
             Tin nhắn
           </Button>
         </div>
-      )}
-
-      {!awaitingCenter && (
-        <SentLeadMessagesDialog
-          lead={lead}
-          open={messagesOpen}
-          onOpenChange={setMessagesOpen}
-          onThreadChange={handleThreadChange}
-        />
       )}
     </div>
   );

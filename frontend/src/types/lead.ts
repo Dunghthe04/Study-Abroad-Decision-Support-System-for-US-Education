@@ -152,6 +152,29 @@ export interface SentLeadDto {
   centerMessageCount: number;
 }
 
+/** [Hộp thư tin nhắn] Một cuộc trò chuyện — khớp LeadConversationDto ở backend. */
+export interface LeadConversationDto {
+  leadId: string;
+  /** Phía học sinh / phụ huynh: tên trung tâm. Phía trung tâm: tên học sinh (hoặc tên ẩn danh). */
+  title: string;
+  /** Tên học sinh của yêu cầu, chỉ có ở phía học sinh / phụ huynh. */
+  studentName: string | null;
+  leadStatus: LeadStatus | string;
+  lastMessage: string | null;
+  lastMessageHasImage: boolean;
+  lastMessageAt: string | null;
+  lastMessageFromMe: boolean;
+  unreadCount: number;
+  canMessage: boolean;
+}
+
+/** [Hộp thư tin nhắn] GET /api/v1/leads/sent/conversations và /received/conversations. */
+export interface LeadInboxDto {
+  items: LeadConversationDto[];
+  /** Tổng tin chưa đọc của mọi cuộc, kể cả cuộc không nằm trong danh sách. */
+  totalUnread: number;
+}
+
 /** Mã lỗi quy tắc backend trả trong body { code, message, retryAt? }. */
 export type LeadRuleCode =
   | "center_not_verified"

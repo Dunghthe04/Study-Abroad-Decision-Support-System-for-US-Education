@@ -5,6 +5,8 @@
 - Mức SAT / tài chính, bậc ngoại khóa, cơ hội học bổng: vẫn lấy từ assess_levels (skill_danh_gia).
 - Điểm TB từng năm từ học bạ theo năm (state.transcript): chỉ ghi điểm, SLM tự nhận xét tăng / giảm.
 - Mốc thời gian: chỉ tháng bắt đầu của kỳ là quy ước; hạn nộp lấy từ dữ liệu trường (DeadlinesJson), không có thì không ghi.
+- Trường mục tiêu, việc gấp: đọc từ roadmap .NET gửi (cùng số với Tổng quan), chỉ đổi ra chữ; không có trường mục tiêu thì
+  giữ cách so với TB các trường ở trên.
 Thiếu dữ liệu thì bỏ khóa, không đoán.
 """
 
@@ -135,6 +137,58 @@ def timeline(profile: dict[str, ProfileField], today: date, deadlines: list[dict
     return "; ".join(parts)
 
 
+# Lộ trình theo trường mục tiêu (.NET RoadmapBuilder tính, cùng số với Tổng quan): ở đây chỉ đổi ra chữ, không tính lại mức
+STATUS_WORDS = {"met": "đạt", "near": "gần đạt", "below": "chưa đạt"}
+CRITERION_NAMES = {"gpa": "GPA", "sat": "SAT", "budget": "Ngân sách"}
+TASK_STATUS_WORDS = {"overdue": "quá hạn", "todo": "chưa xong"}
+URGENT_TASKS = 2  # chat chỉ nêu 1–2 việc gấp nhất, đủ cả ở Tổng quan
+
+
+def usd(x: float) -> str:
+    return f"{x:,.0f}".replace(",", ".") + " USD"
+
+
+def criterion_text(c: dict) -> str:
+    key = c.get("key")
+    name = test_name(c.get("type"), "Tiếng Anh") if key == "english" else CRITERION_NAMES.get(key, str(key))
+    mine, mark, status = c.get("mine"), c.get("mark"), c.get("status")
+    if status not in STATUS_WORDS or mine is None or mark is None:
+        return f"{name} chưa đủ dữ liệu để so"
+    if key == "budget":
+        return f"Ngân sách {usd(mine)}/năm so với chi phí {usd(mark)}/năm, {STATUS_WORDS[status]}"
+    return f"{name} {num(mine)} so với mốc trường {num(mark)}, {STATUS_WORDS[status]}"
+
+
+# "Đạt đủ điều kiện 1/2 trường mục tiêu; Trường A: GPA 3.6 so với mốc trường 3.8, gần đạt, ...". Chỉ khi có trường mục tiêu
+def target_schools(roadmap: dict | None) -> str | None:
+    if not roadmap or roadmap.get("mode") != "target" or not roadmap.get("schools"):
+        return None
+    lines = [str(roadmap.get("summary") or "").strip()]
+    for school in roadmap["schools"]:
+        criteria = ", ".join(criterion_text(c) for c in school.get("criteria", []))
+        lines.append(f"{school.get('name')}: {criteria or 'chưa đủ dữ liệu để so'}")
+    return "; ".join(line for line in lines if line)
+
+
+def due_text(due: Any) -> str | None:
+    month = parse_year_month(due[:7]) if isinstance(due, str) else None
+    return month_text(month) if month is not None else None
+
+
+# Việc chưa xong gấp nhất: quá hạn trước, rồi theo hạn gần nhất (Tổng quan đã xếp theo hạn)
+def urgent_tasks(roadmap: dict | None) -> str | None:
+    tasks = [t for t in (roadmap or {}).get("tasks", []) if t.get("status") in TASK_STATUS_WORDS]
+    tasks.sort(
+        key=lambda t: t.get("status") != "overdue"
+    )  # sort ổn định: giữ thứ tự theo hạn trong từng nhóm
+    parts = []
+    for task in tasks[:URGENT_TASKS]:
+        due = due_text(task.get("due"))
+        when = f"hạn {due}, " if due else ""
+        parts.append(f"{task.get('label')} ({when}{TASK_STATUS_WORDS[task['status']]})")
+    return "; ".join(parts) or None
+
+
 def calc_profile(
     profile: dict[str, ProfileField],
     transcript: dict | None,
@@ -142,6 +196,7 @@ def calc_profile(
     deadlines: list[dict] | None = None,
     benchmarks: dict | None = None,
     gpa_table: list[tuple[float, float]] | None = None,
+    roadmap: dict | None = None,
 ) -> dict[str, str]:
     facts = read_facts(profile, today, gpa_table)
     levels = assess_levels(facts)
@@ -158,5 +213,7 @@ def calc_profile(
         "ec_level": f"bậc {facts.ec_tier}/5" if facts.ec_tier is not None else None,
         "scholarship_chance": SCHOLARSHIP_WORDS[levels["scholarship"]] if facts.gpa4 is not None else None,
         "timeline": timeline(profile, today, deadlines),
+        "target_schools": target_schools(roadmap),
+        "urgent_tasks": urgent_tasks(roadmap),
     }
     return {key: text for key, text in result.items() if text}

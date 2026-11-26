@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { MessagesInbox } from "@/components/messages/MessagesInbox";
 import { cn } from "@/lib/utils";
 
 /**
@@ -239,6 +240,8 @@ export function SiteHeader() {
                     <span className="hidden @xl:inline">Nâng cấp</span>
                   </Link>
                 )}
+                {/* [Hộp thư tin nhắn] Tin nhắn với trung tâm / học sinh, kèm số chưa đọc */}
+                {(isStudentOrParent || user.role === "center") && <MessagesInbox />}
                 {/* [UC-110] Chuông thông báo */}
                 <NotificationBell />
                 <DropdownMenu onOpenChange={(open) => open && setMenuOpens((n) => n + 1)}>

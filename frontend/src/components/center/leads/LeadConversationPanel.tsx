@@ -28,6 +28,8 @@ interface LeadConversationPanelProps {
   /** [UC-74] Ngày gửi yêu cầu, để chặn nhắn khi quá 90 ngày. */
   leadCreatedAt?: string | null;
   onLeadStatusChange?: (newStatus: string) => void;
+  /** [Hộp thư tin nhắn] Khung chat nổi: lấp đầy chiều cao khung, bỏ tiêu đề, cảnh báo ngắn gọn. */
+  compact?: boolean;
 }
 
 function getLoadThreadErrorMessage(err: unknown): string {
@@ -45,6 +47,7 @@ export function LeadConversationPanel({
   leadStatus,
   leadCreatedAt,
   onLeadStatusChange,
+  compact = false,
 }: LeadConversationPanelProps) {
   // [UC-74] Chỉ nhắn khi yêu cầu Đã chấp nhận; server chặn thêm thì giữ lý do server trả về
   const [serverBlockReason, setServerBlockReason] = useState<string | null>(null);
@@ -221,14 +224,14 @@ export function LeadConversationPanel({
   };
 
   return (
-    <div className="space-y-3 pt-3 border-t">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
+    <div className={cn(compact ? "flex h-full min-h-0 flex-col gap-2" : "space-y-3 pt-3 border-t")}>
+      <div className={cn("flex flex-wrap items-center gap-2", compact ? "justify-end" : "justify-between")}>
+        {!compact && <div className="flex flex-wrap items-center gap-2">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
             <MessageSquareIcon className="size-4 text-brand" />
             Trao đổi & Trả lời tin nhắn ({messages.length})
           </h4>
-        </div>
+        </div>}
 
         <div className="flex items-center gap-2">
           <PeerPresenceBadge connected={chat.connected} online={chat.peerOnline} peerLabel="Học sinh / phụ huynh" />
@@ -259,12 +262,15 @@ export function LeadConversationPanel({
       <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
         <AlertTriangleIcon className="size-4 text-amber-600 shrink-0 mt-0.5" />
         <span>
-          <strong>Lưu ý bảo mật:</strong> USDSS không thu phí dịch vụ qua tin nhắn. Tuyệt đối không yêu cầu hoặc thực hiện chuyển khoản tiền cọc qua tài khoản cá nhân.
+          <strong>Lưu ý bảo mật:</strong>{" "}
+          {compact
+            ? "Không yêu cầu chuyển tiền cọc qua tài khoản cá nhân."
+            : "USDSS không thu phí dịch vụ qua tin nhắn. Tuyệt đối không yêu cầu hoặc thực hiện chuyển khoản tiền cọc qua tài khoản cá nhân."}
         </span>
       </div>
 
       {/* Message List */}
-      <div className="rounded-lg border bg-muted/20 p-3 max-h-72 overflow-y-auto space-y-2.5">
+      <div className={cn("rounded-lg border bg-muted/20 p-3 overflow-y-auto space-y-2.5", compact ? "min-h-0 flex-1" : "max-h-72")}>
         {isLoading ? (
           <div className="py-8 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
             <Spinner className="size-5 text-brand" />
@@ -364,7 +370,7 @@ export function LeadConversationPanel({
             }}
             onKeyDown={handleKeyDown}
             maxLength={MAX_LEAD_MESSAGE_LENGTH}
-            rows={3}
+            rows={compact ? 2 : 3}
             disabled={isSending}
             placeholder="Nhập nội dung phản hồi tới học sinh / phụ huynh (Ctrl+Enter để gửi)..."
             aria-label="Nội dung tin nhắn phản hồi"

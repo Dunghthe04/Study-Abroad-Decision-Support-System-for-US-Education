@@ -37,6 +37,25 @@ public interface ILeadRepository
         int pageSize,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// [Hộp thư tin nhắn] Cuộc trò chuyện của học sinh / phụ huynh, cùng phạm vi lead với <see cref="GetSentLeadsAsync"/>:
+    /// lead đã có tin nhắn hoặc đang Đã chấp nhận, tin mới nhất trước, tối đa <paramref name="limit"/> cuộc.
+    /// TotalUnread đếm trên mọi lead trong phạm vi.
+    /// </summary>
+    Task<(IReadOnlyList<LeadConversationRow> Rows, int TotalUnread)> GetSentConversationsAsync(
+        IReadOnlyCollection<Guid> studentIds,
+        Guid? submitterId,
+        int limit,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// [Hộp thư tin nhắn] Cuộc trò chuyện của trung tâm, cùng phạm vi lead trung tâm được thấy ở <see cref="GetReceivedLeadsAsync"/>.
+    /// </summary>
+    Task<(IReadOnlyList<LeadConversationRow> Rows, int TotalUnread)> GetCenterConversationsAsync(
+        Guid centerId,
+        int limit,
+        CancellationToken ct = default);
+
     // [UC-73] Quản lý và xem yêu cầu liên hệ nhận được của trung tâm
     Task<CenterLeadsSummaryDto> GetReceivedLeadsAsync(
         Guid? centerId,

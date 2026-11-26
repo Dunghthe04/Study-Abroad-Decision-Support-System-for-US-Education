@@ -175,6 +175,7 @@ def skill_request_of(state: ChatState, cau_hoi: str, today: datetime.date | None
         today or datetime.date.today(),
         benchmarks=state.benchmarks,
         gpa_table=gpa_table_of(state.grade_scale),
+        roadmap=state.roadmap,
     )
     return SkillRequest(
         loai="ho_so", cau_hoi=cau_hoi, ho_so=profile_to_skill_input(state.profile), tinh_san=tinh_san

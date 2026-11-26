@@ -169,6 +169,41 @@ public class LeadServiceTests
             return Task.FromResult(new PagedResult<SentLeadDto>(items, page, pageSize, q.Count));
         }
 
+        // [Hộp thư tin nhắn] Như LeadRepository nhưng trong bộ nhớ: tin của phía trung tâm là tin không do học sinh / người gửi lead viết
+        public Task<(IReadOnlyList<LeadConversationRow> Rows, int TotalUnread)> GetSentConversationsAsync(
+            IReadOnlyCollection<Guid> studentIds, Guid? submitterId, int limit, CancellationToken ct = default) =>
+            Task.FromResult(Conversations(
+                Leads.Where(l => (l.UserId != null && studentIds.Contains(l.UserId.Value)) || (submitterId != null && l.SubmittedByUserId == submitterId)),
+                readerIsCenterSide: false, limit));
+
+        public Task<(IReadOnlyList<LeadConversationRow> Rows, int TotalUnread)> GetCenterConversationsAsync(
+            Guid centerId, int limit, CancellationToken ct = default) =>
+            Task.FromResult(Conversations(
+                Leads.Where(l => l.StudyCenterId == centerId && !LeadStatuses.IsHiddenFromCenter(l.Status)),
+                readerIsCenterSide: true, limit));
+
+        private (IReadOnlyList<LeadConversationRow> Rows, int TotalUnread) Conversations(
+            IEnumerable<Lead> leads, bool readerIsCenterSide, int limit)
+        {
+            bool FromCenter(Lead l, LeadMessage m) => m.SenderUserId != l.UserId && m.SenderUserId != l.SubmittedByUserId;
+            int Unread(Lead l) => Messages.Count(m => m.LeadId == l.Id && m.Status == "visible" && m.ReadAt == null
+                                                     && m.SenderUserId != null && FromCenter(l, m) != readerIsCenterSide);
+
+            var scoped = leads.ToList();
+            var rows = scoped
+                .Select(l => (Lead: l, Last: Messages.Where(m => m.LeadId == l.Id).OrderByDescending(m => m.CreatedAt).FirstOrDefault()))
+                .Where(x => x.Last != null || LeadStatuses.IsAccepted(x.Lead.Status))
+                .OrderByDescending(x => x.Last?.CreatedAt ?? x.Lead.UpdatedAt ?? x.Lead.CreatedAt)
+                .Take(limit)
+                .Select(x => new LeadConversationRow(
+                    x.Lead, "Test Center",
+                    x.Lead.UserId is { } uid && Users.TryGetValue(uid, out var u) ? u.FullName : null,
+                    x.Last?.Content, x.Last?.AttachmentUrl, x.Last?.Status, x.Last?.CreatedAt,
+                    x.Last != null && FromCenter(x.Lead, x.Last), Unread(x.Lead)))
+                .ToList();
+            return (rows, scoped.Sum(Unread));
+        }
+
         public Task<CenterLeadsSummaryDto> GetReceivedLeadsAsync(
             Guid? centerId,
             string? status,
@@ -1677,6 +1712,174 @@ public class LeadServiceTests
         s.UserRepo.Users.Add(centerUser);
 
         await AssertRule(() => s.Service.GetSentLeadsAsync(centerUser.Id, 1, 10), "role_not_allowed", 403);
+    }
+
+    // ===== Hộp thư tin nhắn kiểu Messenger: danh sách cuộc trò chuyện và số tin chưa đọc =====
+
+    private static LeadMessage AddMsg(CreateLeadSetup s, Lead lead, Guid? sender, string content, int minutesAgo,
+        string status = "visible", bool read = false)
+    {
+        var m = new LeadMessage
+        {
+            LeadId = lead.Id, SenderUserId = sender, Content = content, Status = status,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-minutesAgo), ReadAt = read ? DateTime.UtcNow : null,
+        };
+        s.LeadRepo.Messages.Add(m);
+        return m;
+    }
+
+    [Fact]
+    public async Task SentInbox_Student15_AgeRestricted()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(15);
+
+        await AssertRule(() => s.Service.GetSentInboxAsync(student.Id), "age_restricted", 403);
+    }
+
+    [Fact]
+    public async Task SentInbox_CenterRole_NotAllowed()
+    {
+        var s = new CreateLeadSetup();
+        var centerUser = AddCenterUser(s);
+
+        await AssertRule(() => s.Service.GetSentInboxAsync(centerUser.Id), "role_not_allowed", 403);
+    }
+
+    [Fact]
+    public async Task SentInbox_Student_CountsOnlyUnreadVisibleCenterMessages()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = LeadStatuses.Accepted;
+        var center = Guid.NewGuid();
+        AddMsg(s, lead, center, "Chào em", 10, read: true);        // đã đọc
+        AddMsg(s, lead, center, "Em rảnh lúc nào?", 8);            // chưa đọc -> tính
+        AddMsg(s, lead, center, "Tin vi phạm", 6, status: "removed"); // đã gỡ -> không tính
+        AddMsg(s, lead, null, "Người gửi đã xóa", 5);              // người gửi đã xóa tài khoản -> không tính
+        AddMsg(s, lead, student.Id, "Tối nay ạ", 1);                // tin của mình -> không tính
+
+        var inbox = await s.Service.GetSentInboxAsync(student.Id);
+
+        Assert.Equal(1, inbox.TotalUnread);
+        var c = Assert.Single(inbox.Items);
+        Assert.Equal(lead.Id, c.LeadId);
+        Assert.Equal("Test Center", c.Title);
+        Assert.Equal(1, c.UnreadCount);
+        Assert.Equal("Tối nay ạ", c.LastMessage);
+        Assert.True(c.LastMessageFromMe);
+        Assert.True(c.CanMessage);
+    }
+
+    [Fact]
+    public async Task SentInbox_ListsAcceptedOrMessagedLeads_NewestFirst_HidesRemovedText()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(18);
+        var newLead = AddLead(s, student.Id, student.Id, daysAgo: 0);       // Mới, chưa có tin -> không hiện
+        var accepted = AddLead(s, student.Id, student.Id, daysAgo: 3);
+        accepted.Status = LeadStatuses.Accepted;
+        var closed = AddLead(s, student.Id, student.Id, daysAgo: 5);
+        closed.Status = LeadStatuses.Closed;
+        AddMsg(s, closed, Guid.NewGuid(), "Nội dung vi phạm", 1, status: "removed");
+
+        var inbox = await s.Service.GetSentInboxAsync(student.Id);
+
+        Assert.DoesNotContain(inbox.Items, i => i.LeadId == newLead.Id);
+        Assert.Equal([closed.Id, accepted.Id], inbox.Items.Select(i => i.LeadId));
+        var closedRow = inbox.Items[0];
+        Assert.Equal(LeadMessageMapper.RemovedContentPlaceholder, closedRow.LastMessage);
+        Assert.False(closedRow.LastMessageFromMe);
+        Assert.False(closedRow.CanMessage); // đã đóng thì không nhắn được
+        Assert.Equal(0, closedRow.UnreadCount);
+        Assert.Null(inbox.Items[1].LastMessage);
+        Assert.True(inbox.Items[1].CanMessage);
+    }
+
+    [Fact]
+    public async Task SentInbox_LongMessage_IsTruncated()
+    {
+        var s = new CreateLeadSetup();
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = LeadStatuses.Accepted;
+        AddMsg(s, lead, Guid.NewGuid(), new string('a', 200), 1);
+
+        var c = Assert.Single((await s.Service.GetSentInboxAsync(student.Id)).Items);
+
+        Assert.Equal(new string('a', 120) + "…", c.LastMessage);
+    }
+
+    [Fact]
+    public async Task SentInbox_Parent_SeesLeadsOfLinkedChildAndOwn()
+    {
+        var s = new CreateLeadSetup();
+        var child = s.AddStudent(14);
+        var parent = s.AddParent(child);
+        var stranger = s.AddStudent(18);
+        var forChild = AddLead(s, child.Id, parent.Id);
+        forChild.Status = LeadStatuses.Accepted;
+        var strangerLead = AddLead(s, stranger.Id, stranger.Id);
+        strangerLead.Status = LeadStatuses.Accepted;
+        AddMsg(s, forChild, Guid.NewGuid(), "Chào phụ huynh", 1);
+        AddMsg(s, strangerLead, Guid.NewGuid(), "Không phải của bạn", 1);
+
+        var inbox = await s.Service.GetSentInboxAsync(parent.Id);
+
+        Assert.Equal(forChild.Id, Assert.Single(inbox.Items).LeadId);
+        Assert.Equal(1, inbox.TotalUnread);
+    }
+
+    [Fact]
+    public async Task CenterInbox_NonCenterRole_NotAllowed()
+    {
+        var s = new CreateLeadSetup();
+
+        await AssertRule(() => s.Service.GetCenterInboxAsync(Guid.NewGuid(), null, UserRoles.Moderator), "role_not_allowed", 403);
+    }
+
+    [Fact]
+    public async Task CenterInbox_CountsStudentMessages_AnonymousTitleWithoutName()
+    {
+        var s = new CreateLeadSetup();
+        var centerUser = AddCenterUser(s);
+        s.CenterRepo.Centers[0].OwnerUserId = centerUser.Id;
+        var student = s.AddStudent(18);
+        var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = LeadStatuses.Accepted;
+        var otherCenterLead = new Lead { UserId = student.Id, SubmittedByUserId = student.Id, StudyCenterId = Guid.NewGuid(), Status = LeadStatuses.Accepted };
+        s.LeadRepo.Leads.Add(otherCenterLead);
+        AddMsg(s, lead, student.Id, "Em hỏi học phí", 5);
+        AddMsg(s, lead, student.Id, "Cảm ơn ạ", 4);
+        AddMsg(s, lead, centerUser.Id, "Học phí 10 triệu", 1);
+        AddMsg(s, otherCenterLead, student.Id, "Trung tâm khác", 1);
+
+        var inbox = await s.Service.GetCenterInboxAsync(centerUser.Id, null, UserRoles.Center);
+
+        Assert.Equal(2, inbox.TotalUnread);
+        var c = Assert.Single(inbox.Items);
+        Assert.Equal(LeadMessageMapper.AnonymousStudentName, c.Title);
+        Assert.Null(c.StudentName);
+        Assert.Equal(2, c.UnreadCount);
+        Assert.True(c.LastMessageFromMe);
+    }
+
+    [Fact]
+    public async Task CenterInbox_ShowsStudentNameWhenShared()
+    {
+        var s = new CreateLeadSetup();
+        var centerUser = AddCenterUser(s);
+        s.CenterRepo.Centers[0].OwnerUserId = centerUser.Id;
+        var student = s.AddStudent(18);
+        s.LeadRepo.Users[student.Id] = ("  Nguyễn Văn An ", UserRoles.Student);
+        var lead = AddLead(s, student.Id, student.Id);
+        lead.Status = LeadStatuses.Accepted;
+
+        var c = Assert.Single((await s.Service.GetCenterInboxAsync(centerUser.Id, null, UserRoles.Center)).Items);
+
+        Assert.Equal("Nguyễn Văn An", c.Title);
+        Assert.Null(c.StudentName); // chỉ trả tên riêng cho phía học sinh
     }
 
     // ===== Nhắn tin phía người gửi: học sinh / phụ huynh đọc và gửi tin trong yêu cầu của mình =====

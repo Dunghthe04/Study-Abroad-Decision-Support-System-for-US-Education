@@ -67,6 +67,9 @@ public class StudentProfile : BaseEntity
     public string? DraftFlowStateJson { get; set; }
     /// <summary>[USAS-640] thời điểm học sinh gửi hồ sơ ở bước 6; null nếu chưa gửi lần nào</summary>
     public DateTimeOffset? FlowSubmittedAt { get; set; }
+    /// <summary>tỉnh/thành học sinh đang sống (VietnamProvinces, 34 tỉnh sau sáp nhập 2025); null nếu chưa trả lời.
+    /// Thêm cột vì trước đây không chỗ nào lưu vị trí học sinh; lộ trình dùng để gợi ý trung tâm gần</summary>
+    public string? Province { get; set; }
 
     /// <summary>bản sao nông (không được EF theo dõi) để tính toán trên hồ sơ với vài giá trị thay thế mà không sửa bản gốc</summary>
     public StudentProfile ShallowCopy() => (StudentProfile)MemberwiseClone();

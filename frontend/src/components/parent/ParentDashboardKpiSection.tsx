@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { PencilIcon, WalletIcon } from "lucide-react";
+import { RoadmapSection } from "@/components/dashboard/RoadmapSection";
 import { StudentDashboardView } from "@/components/dashboard/StudentDashboardView";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -271,6 +272,8 @@ export function ParentDashboardKpiSection({ studentId, childName }: { studentId:
         <h2 className="text-h3 text-foreground">Tiến độ của {childName}</h2>
         <StudentDashboardView dashboard={data.studentKpis} links={childLinks(studentId)} />
       </section>
+      {/* Phụ huynh chỉ xem lộ trình của con, không chọn tỉnh thay con */}
+      <RoadmapSection studentId={studentId} targetSchoolsHref={childLinks(studentId).targetSchools} />
     </div>
   );
 }

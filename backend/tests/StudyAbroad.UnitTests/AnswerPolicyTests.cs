@@ -55,7 +55,7 @@ public class AnswerPolicyTests
     {
         // Chốt cứng để phát hiện test phản xạ trượt (đổi tên hậu tố) mà không ai hay
         Assert.Equal(
-            ["explain", "goal_seek", "premium_required", "recommend", "school_compare", "school_fit_compare", "school_info", "school_search", "simulate"],
+            ["explain", "goal_seek", "premium_required", "recommend", "school_compare", "school_fit_compare", "school_info", "school_search", "set_province", "simulate"],
             ActionsInCode().OrderBy(a => a, StringComparer.Ordinal));
     }
 

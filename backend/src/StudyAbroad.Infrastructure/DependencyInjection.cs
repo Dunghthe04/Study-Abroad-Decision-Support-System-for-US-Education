@@ -99,6 +99,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Billing.Admin.IPlanAdminRepository, PlanAdminRepository>();   // UC-79: admin quản lý gói
         services.AddScoped<StudyAbroad.Application.Billing.Family.IFamilyRepository, FamilyRepository>();   // gói Gia đình: lời mời, thành viên, khóa nhóm
         services.AddScoped<IChatBenchmarkRepository, ChatBenchmarkRepository>();
+        services.AddScoped<StudyAbroad.Application.Dashboard.Roadmap.IRoadmapRepository, RoadmapRepository>(); // lộ trình theo trường mục tiêu
         services.AddScoped<StudyAbroad.Application.Billing.Orders.IOrderRepository, OrderRepository>();   // đơn hàng thanh toán
         services.AddScoped<StudyAbroad.Application.Billing.IBillingAccountRepository, BillingAccountRepository>();   // UC-80: gói dịch vụ khi xóa tài khoản
         services.AddScoped<StudyAbroad.Application.Billing.Jobs.IBillingJobRepository, BillingJobRepository>();   // job nền thanh toán: đơn chờ, làn tới hạn, nhắc hạn

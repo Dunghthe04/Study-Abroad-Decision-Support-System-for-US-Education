@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { RoadmapSection } from "@/components/dashboard/RoadmapSection";
 import { StudentDashboardView } from "@/components/dashboard/StudentDashboardView";
 import { ErrorFallback } from "@/components/ui/error-fallback";
 import { Spinner } from "@/components/ui/spinner";
@@ -73,7 +74,10 @@ function DashboardContent() {
       ) : error || !data ? (
         <ErrorFallback description={error ?? "Chưa tải được tổng quan."} action={{ label: "Thử lại", onClick: retry }} />
       ) : (
-        <StudentDashboardView dashboard={data} />
+        <>
+          <StudentDashboardView dashboard={data} />
+          <RoadmapSection />
+        </>
       )}
     </Page>
   );
