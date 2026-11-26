@@ -21,7 +21,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const visible = useAssistantVisible();
   const adminRoute = isAdminRoute(pathname);
   const authRoute = isAuthRoute(pathname);
-  const lockedViewport = pathname === "/universities" || pathname === "/scholarships";
+  // /analysis: biểu mẫu tự cuộn bên trong, trang không được cao hơn màn hình (tránh thanh cuộn thừa ở đáy)
+  const lockedViewport = pathname === "/universities" || pathname === "/scholarships" || pathname.startsWith("/analysis");
   const showAssistant = !adminRoute && !authRoute;
   const docked = panelMode === "compact" || panelMode === "half";
   const pushed = showAssistant && open && visible && docked;

@@ -48,11 +48,10 @@ export function NeedsIntro({ mode, initialGoals, draftStep, hasCommittedProfile,
   }, [mode, onCancel]);
 
   return (
-    <div
-      data-flow-motion
-      className="flex min-h-[calc(100dvh-var(--header-h))] items-center justify-center bg-(--surface-2) px-4 py-12"
-    >
-      <div className="w-full max-w-[720px] space-y-8">
+    // Màn rộng: cùng khung xanh đậm bo góc như biểu mẫu để khung chat nổi lên nền quen thuộc
+    <div data-flow-motion className="bg-(--surface-2) lg:flex lg:min-h-0 lg:flex-1 lg:bg-brand lg:p-3">
+      <div className="flex min-h-[calc(100dvh-var(--header-h))] w-full px-4 py-12 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:rounded-2xl lg:bg-(--surface-2)">
+      <div className="m-auto w-full max-w-[720px] space-y-8">
         <div className="space-y-3">
           <h1 id={labelId} className="font-heading text-4xl leading-tight text-foreground sm:text-5xl">
             Nhu cầu của bạn là
@@ -98,6 +97,7 @@ export function NeedsIntro({ mode, initialGoals, draftStep, hasCommittedProfile,
             {cta}
           </Button>
         </div>
+      </div>
       </div>
     </div>
   );
