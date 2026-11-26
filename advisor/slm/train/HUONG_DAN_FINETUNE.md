@@ -111,16 +111,16 @@ Chạy lần lượt từng ô từ trên xuống. Không cần tạo gì trên 
 | `VERSION` | `v7` | Tên lần train, đặt tên thư mục lưu | **Đổi mỗi lần train bằng dữ liệu mới** (v8, v9...). Giữ nguyên khi chạy tiếp một lần bị ngắt |
 | `MODEL_NAME` | `unsloth/Qwen3-4B-Instruct-2507` | Model gốc | Khi thử model khác (phải train lại) |
 | `MAX_SEQ` | 2048 | Độ dài tối đa (token). Hạ xuống chỉ tiết kiệm bộ nhớ, ít làm nhanh hơn | Ô kiểm tra độ dài báo có hội thoại vượt (dữ liệu mới dài hơn thì tăng lên 2560, 3072) |
-| `EPOCHS` | 1 | Số lượt tối đa (có dừng sớm) | Thêm lượt dễ học thuộc và tốn giờ GPU |
+| `EPOCHS` | 2 | Số lượt tối đa (có dừng sớm). 2 để có đường cong val loss đủ dài chứng minh model đã hội tụ | Gấp thì đặt 1 (tiết kiệm khoảng một nửa giờ GPU, dừng sớm gần như không kích hoạt); thêm lượt dễ học thuộc |
 | `LR` | 2e-4 | Learning rate | Mức quen dùng cho LoRA |
 | `LORA_R` | 16 | Độ rộng LoRA | Tăng nếu học chưa đủ |
-| `BATCH`, `GRAD_ACCUM` | 2, 8 | Batch hiệu dụng 2 × 8 = 16 | Hết bộ nhớ GPU: đổi thành 1 và 16 (giữ 16) |
+| `BATCH`, `GRAD_ACCUM` | 4, 4 | Batch hiệu dụng 4 × 4 = 16 | Báo CUDA out of memory: đổi thành 2 và 8 (giữ 16) |
 | `EVAL_EVERY` | 250 | Cứ 250 bước kiểm val loss và lưu checkpoint (mỗi lần kiểm 300 mẫu val khoảng 4 phút, lưu lên Drive cũng chậm) | Đặt nhỏ hơn thì an toàn hơn khi hay bị ngắt nhưng chậm hơn |
 | `VAL_MAX` | 300 | Số mẫu val dùng khi kiểm giữa chừng | Val đầy đủ dùng khi đo |
 | `PATIENCE` | 2 | Dừng sau 2 lần kiểm không tốt hơn (= 500 bước với `EVAL_EVERY` 250) | Đổi cùng lúc với `EVAL_EVERY`: số bước chờ = `PATIENCE` × `EVAL_EVERY` |
 | `BENCH_STEPS` | 0 | **Chạy thử:** đặt 40 để chỉ chạy 40 bước, in giây mỗi bước, bộ nhớ GPU đỉnh và ước lượng tổng giờ. Không kiểm val, không lưu gì | Trước mỗi lần train dài, hoặc khi muốn thử `BATCH` 4 và `GRAD_ACCUM` 4. Xong **đặt lại 0** |
-| `SEED` | 3407 | Hạt ngẫu nhiên | |
-| `RUN_NAME` | `usas-slm-<VERSION>` | Tên model xuất ra và nạp vào Ollama | |
+| `SEED` | 3407, rồi 42 | Hạt ngẫu nhiên. **Train 2 lần**: lần 1 để 3407, lần 2 đổi thành 42 (giữ nguyên mọi thông số khác), chạy lại từ Bước 1. Kết quả lưu ở `usas_slm/<VERSION>/` (seed 3407) và `usas_slm/<VERSION>_seed42/` | Hai seed cho biết kết quả có ổn định không; seed cũng đổi tập 300 mẫu val dùng khi kiểm giữa chừng |
+| `RUN_NAME` | `usas-slm-<VERSION>` (seed 42: thêm `_seed42`) | Tên model xuất ra và nạp vào Ollama | |
 
 Cố định trong Bước 9: `warmup_ratio=0.05`, `lr_scheduler_type="linear"`, `optim="adamw_8bit"`, `weight_decay=0.01`, `group_by_length=True` (gom hội thoại gần độ dài nhau vào chung batch cho bớt phần đệm thừa), `save_total_limit=2`, `load_best_model_at_end=True` (theo `eval_loss`).
 
