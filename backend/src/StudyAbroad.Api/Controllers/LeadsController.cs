@@ -124,6 +124,18 @@ public class LeadsController(
     }
 
     /// <summary>
+    /// [Hộp thư tin nhắn] Cuộc trò chuyện với các trung tâm (mới nhất trước) và số tin chưa đọc, cho icon tin nhắn trên header.
+    /// Quyền xem giống UC-44; học sinh dưới 16 chưa có đồng ý trả 403 <c>age_restricted</c>.
+    /// </summary>
+    [HttpGet("sent/conversations")]
+    [Authorize(Roles = $"{UserRoles.Student},{UserRoles.Parent}")]
+    [ProducesResponseType(typeof(LeadInboxDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public Task<IActionResult> GetSentInbox(CancellationToken ct) =>
+        ExecuteSentLeadActionAsync(async userId => Ok(await leadService.GetSentInboxAsync(userId, ct)));
+
+    /// <summary>
     /// [Nhắn tin phía người gửi] Đọc tin nhắn trong một yêu cầu liên hệ đã gửi.
     /// Quyền xem giống UC-44. Lead không có quyền trả 404 (chống IDOR). Học sinh dưới 16 tuổi trả 403 <c>age_restricted</c>.
     /// </summary>
@@ -338,6 +350,17 @@ public class LeadsController(
 
             return Ok(result);
         });
+
+    /// <summary>[Hộp thư tin nhắn] Cuộc trò chuyện của trung tâm (mới nhất trước) và số tin chưa đọc, cho icon tin nhắn trên header.</summary>
+    [HttpGet("received/conversations")]
+    [Authorize(Roles = UserRoles.Center)]
+    [ProducesResponseType(typeof(LeadInboxDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<IActionResult> GetCenterInbox(CancellationToken ct) =>
+        ExecuteCenterLeadActionAsync(async (userId, userEmail, userRole) =>
+            Ok(await leadService.GetCenterInboxAsync(userId, userEmail, userRole, ct)));
 
     /// <summary>
     /// [UC-73] Xem chi tiết một yêu cầu liên hệ nhận được.

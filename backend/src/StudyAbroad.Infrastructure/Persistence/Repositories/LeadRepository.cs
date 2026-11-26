@@ -168,6 +168,116 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         return new PagedResult<SentLeadDto>(items, safePage, safePageSize, total);
     }
 
+    public Task<(IReadOnlyList<LeadConversationRow> Rows, int TotalUnread)> GetSentConversationsAsync(
+        IReadOnlyCollection<Guid> studentIds,
+        Guid? submitterId,
+        int limit,
+        CancellationToken ct = default)
+    {
+        var ids = studentIds.ToList();
+        var leads = db.Leads.AsNoTracking();
+        leads = submitterId is { } sid
+            ? leads.Where(l => (l.UserId != null && ids.Contains(l.UserId.Value)) || l.SubmittedByUserId == sid)
+            : leads.Where(l => l.UserId != null && ids.Contains(l.UserId.Value));
+        return ConversationsAsync(leads, readerIsCenterSide: false, limit, ct);
+    }
+
+    public Task<(IReadOnlyList<LeadConversationRow> Rows, int TotalUnread)> GetCenterConversationsAsync(
+        Guid centerId,
+        int limit,
+        CancellationToken ct = default) =>
+        ConversationsAsync(CenterVisibleLeads().Where(l => l.StudyCenterId == centerId), readerIsCenterSide: true, limit, ct);
+
+    /// <summary>
+    /// [Hộp thư tin nhắn] Lead đã có tin nhắn hoặc đang Đã chấp nhận, tin mới nhất trước.
+    /// Tin chưa đọc dùng đúng luật của <see cref="MarkMessagesReadAsync"/>: tin còn hiện của phía đối diện, ReadAt chưa có,
+    /// người gửi còn tài khoản; phía trung tâm là vai trò trung tâm / kiểm duyệt / quản trị.
+    /// </summary>
+    private async Task<(IReadOnlyList<LeadConversationRow> Rows, int TotalUnread)> ConversationsAsync(
+        IQueryable<Lead> leads,
+        bool readerIsCenterSide,
+        int limit,
+        CancellationToken ct)
+    {
+        string[] staffRoles = [UserRoles.Center, UserRoles.Moderator, UserRoles.Admin];
+
+        var messages = from m in db.LeadMessages.AsNoTracking()
+                       join u in db.Users.AsNoTracking() on m.SenderUserId equals (Guid?)u.Id into senders
+                       from u in senders.DefaultIfEmpty()
+                       select new
+                       {
+                           m.LeadId,
+                           m.Content,
+                           m.AttachmentUrl,
+                           m.Status,
+                           m.CreatedAt,
+                           m.ReadAt,
+                           HasSender = u != null,
+                           FromCenter = u != null && staffRoles.Contains(u.Role),
+                       };
+        var unread = messages.Where(m => m.Status == "visible" && m.ReadAt == null && m.HasSender
+                                         && m.FromCenter == !readerIsCenterSide);
+
+        var leadIds = leads.Select(l => l.Id);
+        var totalUnread = await unread.CountAsync(m => leadIds.Contains(m.LeadId), ct);
+
+        var rows = await (
+                from l in leads
+                join c in db.StudyCenters.AsNoTracking() on l.StudyCenterId equals c.Id
+                join u in db.Users.AsNoTracking() on l.UserId equals (Guid?)u.Id into students
+                from u in students.DefaultIfEmpty()
+                let lastAt = messages.Where(m => m.LeadId == l.Id).Max(m => (DateTime?)m.CreatedAt)
+                where lastAt != null || l.Status == LeadStatuses.Accepted || l.Status == LeadStatuses.Contacted
+                orderby (lastAt ?? l.UpdatedAt ?? l.CreatedAt) descending
+                select new
+                {
+                    Lead = l,
+                    CenterName = c.Name,
+                    StudentName = u != null ? u.FullName : null,
+                    StudentDob = u != null ? u.DateOfBirth : null,
+                    Last = messages.Where(m => m.LeadId == l.Id)
+                        .OrderByDescending(m => m.CreatedAt)
+                        .Select(m => new { m.Content, m.AttachmentUrl, m.Status, m.CreatedAt, m.FromCenter })
+                        .FirstOrDefault(),
+                    Unread = unread.Count(m => m.LeadId == l.Id),
+                })
+            .Take(limit)
+            .ToListAsync(ct);
+
+        // Phía trung tâm chỉ thấy tên học sinh khi được chia sẻ liên hệ và dữ liệu chưa bị ẩn (UC-42 / UC-73 / UC-111)
+        var revoked = readerIsCenterSide
+            ? await ConsentRevokedChildrenAsync(rows.Select(r => (r.Lead.UserId, r.StudentDob)), ct)
+            : [];
+        string? NameFor(Lead lead, string? fullName) =>
+            !readerIsCenterSide
+                ? fullName
+                : lead.SharedFields.Contains(LeadSharedFields.Contact)
+                  && !CenterLeadMapper.IsDataHidden(lead, lead.UserId is { } uid && revoked.Contains(uid))
+                    ? fullName
+                    : null;
+
+        return (rows.Select(r => new LeadConversationRow(
+                r.Lead,
+                r.CenterName,
+                NameFor(r.Lead, r.StudentName),
+                r.Last?.Content,
+                r.Last?.AttachmentUrl,
+                r.Last?.Status,
+                r.Last?.CreatedAt,
+                r.Last?.FromCenter ?? false,
+                r.Unread))
+            .ToList(), totalUnread);
+    }
+
+    /// <summary>
+    /// [UC-116 / UC-110] Lead trung tâm được thấy: bỏ lead chờ phụ huynh / bị hủy / hết hạn, và lead thu hồi khi còn chờ phụ huynh
+    /// (trung tâm chưa từng nhận; yêu cầu đang giữ thì trung tâm đã nhận nên vẫn hiện).
+    /// </summary>
+    private IQueryable<Lead> CenterVisibleLeads() =>
+        db.Leads.AsNoTracking()
+            .Where(l => l.Status != LeadStatuses.PendingParent && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired)
+            .Where(l => !(l.Status == LeadStatuses.Withdrawn && l.ParentTokenExpiresAt != null && l.ParentDecidedAt == null && l.HeldFromStatus == null));
+
     public async Task<CenterLeadsSummaryDto> GetReceivedLeadsAsync(
         Guid? centerId,
         string? status,
@@ -195,10 +305,8 @@ public class LeadRepository(AppDbContext db) : ILeadRepository
         }
 
         // [UC-116] Lead chờ phụ huynh / bị từ chối / hết hạn: trung tâm chưa nhận nên không hiện, không đếm
-        var baseLeads = db.Leads.AsNoTracking()
-            .Where(l => l.Status != LeadStatuses.PendingParent && l.Status != LeadStatuses.Cancelled && l.Status != LeadStatuses.Expired)
-            // Thu hồi khi còn chờ phụ huynh: trung tâm chưa từng nhận (yêu cầu đang giữ thì trung tâm đã nhận, vẫn hiện) [UC-110]
-            .Where(l => !(l.Status == LeadStatuses.Withdrawn && l.ParentTokenExpiresAt != null && l.ParentDecidedAt == null && l.HeldFromStatus == null));
+        // Thu hồi khi còn chờ phụ huynh: trung tâm chưa từng nhận (yêu cầu đang giữ thì trung tâm đã nhận, vẫn hiện) [UC-110]
+        var baseLeads = CenterVisibleLeads();
         if (centerId.HasValue && centerId.Value != Guid.Empty)
         {
             baseLeads = baseLeads.Where(l => l.StudyCenterId == centerId.Value);

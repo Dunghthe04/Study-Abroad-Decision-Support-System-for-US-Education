@@ -110,4 +110,11 @@ public interface ILeadService
 
     /// <summary>Đánh dấu đã xem các tin của phía đối diện và báo cho họ biết.</summary>
     Task MarkThreadReadAsync(Guid userId, string? userEmail, string userRole, Guid leadId, CancellationToken ct = default);
+
+    // [Hộp thư tin nhắn] Danh sách cuộc trò chuyện kiểu Messenger và số tin chưa đọc
+    /// <summary>Học sinh / phụ huynh: cùng quyền xem với UC-44 (học sinh dưới 16 chưa có đồng ý trả 403 age_restricted).</summary>
+    Task<LeadInboxDto> GetSentInboxAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>Trung tâm: cuộc trò chuyện của trung tâm mình.</summary>
+    Task<LeadInboxDto> GetCenterInboxAsync(Guid userId, string? userEmail, string userRole, CancellationToken ct = default);
 }
