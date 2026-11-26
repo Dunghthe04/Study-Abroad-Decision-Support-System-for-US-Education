@@ -199,7 +199,10 @@ def assessment_part(req: SkillRequest, middle_school: bool) -> str:
     groups = assessment_groups(ho_so, tinh_san)
     lines = ['### Phần "Đánh giá hồ sơ"', "Các mặt đã nhóm sẵn theo mức (chép đúng, không đổi nhóm):"]
     if "target_schools" in tinh_san:
-        lines.insert(1, f"- So với trường mục tiêu: {tinh_san['target_schools']}. Nói kết quả này trước, lần lượt từng trường.")
+        lines.insert(
+            1,
+            f"- So với trường mục tiêu: {tinh_san['target_schools']}. Nói kết quả này trước, lần lượt từng trường.",
+        )
     lines += [f"- {title}: {'; '.join(groups[key])}." for key, title in GROUP_TITLES if groups[key]]
     trend = grade_trend(tinh_san.get("grade_by_year"))
     if trend:
@@ -280,9 +283,10 @@ def roadmap_part(
     if "urgent_tasks" in req.tinh_san:
         lines.append(f"Việc gấp nhất lúc này (nêu đúng các việc này): {req.tinh_san['urgent_tasks']}.")
     if roadmap is not None:
-        lines.append(f"Lộ trình đầy đủ (mốc, nhiệm vụ tự đánh dấu, trung tâm gợi ý) ở trang Tổng quan ({ROADMAP_LINK}), cuối phần mời bạn mở xem.")
-        if roadmap.get("provinceMissing"):
-            lines.append("Bạn chưa chọn tỉnh / thành: nhắc chọn ở Tổng quan để được gợi ý trung tâm gần nhà.")
+        lines.append(
+            f"Lộ trình đầy đủ (mốc, nhiệm vụ tự đánh dấu, trung tâm gợi ý) ở trang Tổng quan ({ROADMAP_LINK}), cuối phần mời bạn mở xem."
+        )
+        # Chưa có tỉnh: chat hỏi tỉnh ngay sau câu trả lời (skill_tinh), lời tư vấn không nhắc nữa
     if middle_school:
         lines.append("Bạn đang học THCS: lộ trình trên là định hướng dài hạn, ưu tiên học tốt và tiếng Anh.")
     lines.append(

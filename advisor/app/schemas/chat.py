@@ -252,6 +252,7 @@ class ChatResponse(CamelModel):
     # "school_fit_compare" = so sánh 2 đến 4 trường theo độ phù hợp với hồ sơ (UC-154): nhóm và điểm năm thành phần; action_data như school_compare,
     # "school_search" = tìm trường theo điều kiện (action_data["filters"]: bộ lọc đã chuẩn hóa camelCase, ["sort"]: cách xếp, ["unresolved"]: điều chưa đọc được),
     # "premium_required" = mọi ý của tin đều cần gói Premium (allowed_intents), không chạy nhánh nào,
+    # "set_province" = học sinh trả lời tỉnh / thành trong chat: .NET kiểm tra và lưu (action_data["province"]),
     # None = không có
     action: (
         Literal[
@@ -264,6 +265,7 @@ class ChatResponse(CamelModel):
             "school_fit_compare",
             "school_search",
             "premium_required",
+            "set_province",
         ]
         | None
     ) = None

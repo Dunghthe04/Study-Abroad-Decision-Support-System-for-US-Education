@@ -72,15 +72,13 @@ from app.services.scenario import (
 )
 from app.services.skill_input import skill_request_of
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
-from app.services.skill_template import ROADMAP_LINK, TEMPLATE_TASKS, build_skill, tasks_of
+from app.services.skill_template import TEMPLATE_TASKS, build_skill, tasks_of
 from app.services.skills import major_catalog, skill_ho_so, state_catalog
 from app.services.skills.profile_handler import ChatProfileHandler
 from app.services.skills.skill_danh_gia import gpa_table_of
+from app.services.skills.skill_tinh import ROADMAP_BUTTON, with_province_question
 from app.services.skills.validators import AskAgain
 from app.services.what_if_writer import WhatIfWriter
-
-# Nút mở lộ trình đầy đủ ở Tổng quan (frontend đi theo href)
-ROADMAP_BUTTON = QuickReply(label="Xem lộ trình", value="Em muốn xem lộ trình đầy đủ", href=ROADMAP_LINK)
 
 
 # Trung tâm: dùng dịch vụ, thành phố, việc (tasks) model đã tách trong ý center_referral; skill chỉ đổi mã dịch vụ sang mã DB,
@@ -591,9 +589,13 @@ class GeneratedAdviceBranch:
                 quick_replies=[QuickReply(label=ASK_AGAIN_LABEL, value=question)],
                 action=recommend,
             )
-        # Có lộ trình .NET và học sinh hỏi lộ trình: thêm nút mở lộ trình đầy đủ ở Tổng quan
-        roadmap_link = state.roadmap is not None and "roadmap" in tasks_of(tasks)
-        return SkillOutput(answer, quick_replies=[ROADMAP_BUTTON.model_copy()] if roadmap_link else [], action=recommend)
+        # Có lộ trình .NET và học sinh hỏi lộ trình: thêm nút mở lộ trình đầy đủ ở Tổng quan,
+        # chưa có tỉnh thì hỏi luôn tỉnh (một lần mỗi phiên, lượt sau .NET lưu)
+        if state.roadmap is None or "roadmap" not in tasks_of(tasks):
+            return SkillOutput(answer, action=recommend)
+        return with_province_question(
+            state, SkillOutput(answer, quick_replies=[ROADMAP_BUTTON.model_copy()], action=recommend)
+        )
 
 
 # Hồ sơ vừa lưu mà không có câu tư vấn bị hoãn: hỏi học sinh muốn làm gì tiếp. Nút gửi câu như học sinh tự gõ,

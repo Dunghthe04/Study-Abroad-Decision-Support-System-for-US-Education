@@ -178,7 +178,9 @@ def due_text(due: Any) -> str | None:
 # Việc chưa xong gấp nhất: quá hạn trước, rồi theo hạn gần nhất (Tổng quan đã xếp theo hạn)
 def urgent_tasks(roadmap: dict | None) -> str | None:
     tasks = [t for t in (roadmap or {}).get("tasks", []) if t.get("status") in TASK_STATUS_WORDS]
-    tasks.sort(key=lambda t: t.get("status") != "overdue")  # sort ổn định: giữ thứ tự theo hạn trong từng nhóm
+    tasks.sort(
+        key=lambda t: t.get("status") != "overdue"
+    )  # sort ổn định: giữ thứ tự theo hạn trong từng nhóm
     parts = []
     for task in tasks[:URGENT_TASKS]:
         due = due_text(task.get("due"))

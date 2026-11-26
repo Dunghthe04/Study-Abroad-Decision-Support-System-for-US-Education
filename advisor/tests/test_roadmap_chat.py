@@ -42,8 +42,14 @@ def roadmap(schools=None, tasks=None, mode="target", province_missing=False):
 
 
 SCHOOLS = [
-    {"name": "Trường A", "criteria": [crit("gpa", 3.6, 3.8, "near"), crit("english", 7, 6.5, "met", "ielts")]},
-    {"name": "Trường B", "criteria": [crit("budget", 60000, 55000, "met"), crit("sat", None, 1400, "unknown")]},
+    {
+        "name": "Trường A",
+        "criteria": [crit("gpa", 3.6, 3.8, "near"), crit("english", 7, 6.5, "met", "ielts")],
+    },
+    {
+        "name": "Trường B",
+        "criteria": [crit("budget", 60000, 55000, "met"), crit("sat", None, 1400, "unknown")],
+    },
 ]
 
 
@@ -54,7 +60,10 @@ def test_target_schools_text_per_school():
     text = target_schools(roadmap(SCHOOLS))
     assert text.startswith("Đạt đủ điều kiện 1/2 trường mục tiêu; ")
     assert "Trường A: GPA 3.6 so với mốc trường 3.8, gần đạt, IELTS 7 so với mốc trường 6.5, đạt" in text
-    assert "Trường B: Ngân sách 60.000 USD/năm so với chi phí 55.000 USD/năm, đạt, SAT chưa đủ dữ liệu để so" in text
+    assert (
+        "Trường B: Ngân sách 60.000 USD/năm so với chi phí 55.000 USD/năm, đạt, SAT chưa đủ dữ liệu để so"
+        in text
+    )
 
 
 def test_target_schools_only_in_target_mode():
@@ -70,7 +79,10 @@ def test_urgent_tasks_overdue_first_then_by_due_max_two():
         {"label": "Xin visa", "due": "2027-05-01", "status": "todo"},
         {"label": "Có điểm SAT", "due": None, "status": "done"},
     ]
-    assert urgent_tasks(roadmap(tasks=tasks)) == "Viết luận (hạn 01/2027, quá hạn); Thi IELTS (hạn 03/2027, chưa xong)"
+    assert (
+        urgent_tasks(roadmap(tasks=tasks))
+        == "Viết luận (hạn 01/2027, quá hạn); Thi IELTS (hạn 03/2027, chưa xong)"
+    )
 
 
 def test_urgent_tasks_none_when_all_done():
@@ -79,7 +91,9 @@ def test_urgent_tasks_none_when_all_done():
 
 
 def test_calc_profile_carries_roadmap_keys():
-    out = calc_profile({}, None, TODAY, roadmap=roadmap(SCHOOLS, [{"label": "Thi IELTS", "due": None, "status": "todo"}]))
+    out = calc_profile(
+        {}, None, TODAY, roadmap=roadmap(SCHOOLS, [{"label": "Thi IELTS", "due": None, "status": "todo"}])
+    )
     assert set(out) == {"target_schools", "urgent_tasks"}
     assert out["urgent_tasks"] == "Thi IELTS (chưa xong)"
 
@@ -106,7 +120,9 @@ def test_choose_route_gpa_below_target_gives_cc():
 
 
 def test_choose_route_met_or_near_keeps_direct():
-    rm = roadmap([{"name": "A", "criteria": [crit("gpa", 3.6, 3.7, "near"), crit("english", 7, 6.5, "met", "ielts")]}])
+    rm = roadmap(
+        [{"name": "A", "criteria": [crit("gpa", 3.6, 3.7, "near"), crit("english", 7, 6.5, "met", "ielts")]}]
+    )
     route = route_with(rm)
     assert route.route == "direct"
 
@@ -119,7 +135,12 @@ def test_choose_route_average_mode_ignores_roadmap():
 
 
 def test_choose_route_weak_english_becomes_good_when_targets_met():
-    weak = prof(**{**{k: f.value for k, f in good().items()}, "english": {"type": "ielts", "value": 5.0, "date": None}})
+    weak = prof(
+        **{
+            **{k: f.value for k, f in good().items()},
+            "english": {"type": "ielts", "value": 5.0, "date": None},
+        }
+    )
     assert choose_route(weak, TODAY, VEF)[0].route == "pathway"
     rm = roadmap([{"name": "CC", "criteria": [crit("english", 5, 5, "met", "ielts")]}])
     assert choose_route(weak, TODAY, VEF, rm)[0].route == "direct"
@@ -135,12 +156,14 @@ def skill_of(rm, tasks):
 
 
 def test_skill_has_target_line_urgent_and_link():
-    rm = roadmap(SCHOOLS, [{"label": "Thi IELTS", "due": "2027-03-01", "status": "todo"}], province_missing=True)
+    rm = roadmap(
+        SCHOOLS, [{"label": "Thi IELTS", "due": "2027-03-01", "status": "todo"}], province_missing=True
+    )
     skill = skill_of(rm, ["assessment", "roadmap"])
     assert "- So với trường mục tiêu: Đạt đủ điều kiện 1/2 trường mục tiêu;" in skill
     assert "Việc gấp nhất lúc này (nêu đúng các việc này): Thi IELTS (hạn 03/2027, chưa xong)." in skill
     assert ROADMAP_LINK in skill
-    assert "chưa chọn tỉnh / thành" in skill
+    assert "chưa chọn tỉnh / thành" not in skill  # chat hỏi tỉnh sau câu trả lời (skill_tinh)
 
 
 def test_skill_without_roadmap_has_no_roadmap_lines():

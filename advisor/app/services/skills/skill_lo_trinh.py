@@ -84,7 +84,9 @@ class Route:
     months_to_deadline: int | None
     reasons: list[str] = field(default_factory=list)
     ai_used: bool = False
-    target: bool = False  # đã xét theo trường mục tiêu (roadmap), lý do nói "trường mục tiêu" thay cho "đa số trường"
+    target: bool = (
+        False  # đã xét theo trường mục tiêu (roadmap), lý do nói "trường mục tiêu" thay cho "đa số trường"
+    )
 
 
 def english_status(english: str, plan: Any, intake: Intake | None, today_index: int) -> str:
