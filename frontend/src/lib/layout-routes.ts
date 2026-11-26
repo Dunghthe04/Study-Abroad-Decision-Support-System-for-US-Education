@@ -7,7 +7,7 @@ export function isWideRoute(pathname: string) {
 }
 
 // Trang tự quản lý lề và độ rộng (ví dụ full bleed banner hoặc thanh dính mép)
-const FULL_PREFIXES = ["/analysis", "/recommendations", "/universities", "/scholarships","/university/", "/methodology"];
+const FULL_PREFIXES = ["/analysis", "/recommendations", "/universities", "/scholarships","/university/", "/methodology", "/costs"];
 
 export function isFullRoute(pathname: string) {
   if (pathname === "/") return true; // trang chủ: ảnh đầu trang tràn mép

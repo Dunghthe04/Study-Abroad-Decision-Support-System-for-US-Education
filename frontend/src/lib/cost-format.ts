@@ -37,6 +37,25 @@ export function gapText(gap: number | null): string | null {
   return gap > 0 ? `Thiếu ${usd(gap)}` : gap < 0 ? `Dư ${usd(-gap)}` : "Vừa đủ ngân sách";
 }
 
+export type CellRank = "best" | "worst" | null;
+
+/**
+ * Ô thấp nhất (tốt nhất) và cao nhất của một hàng so sánh; số nhỏ hơn là tốt hơn.
+ * null = không đem ra xếp (thiếu số liệu, chưa đủ khoản). Cần ít nhất 2 số khác nhau mới tô màu.
+ */
+export function rankCells(values: (number | null)[]): CellRank[] {
+  const nums = values.filter((v): v is number => v !== null);
+  if (nums.length < 2) return values.map(() => null);
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
+  if (min === max) return values.map(() => null);
+  return values.map((v) => (v === null ? null : v === min ? "best" : v === max ? "worst" : null));
+}
+
+/** Màu nền ô theo hạng; đi kèm chữ ẩn cho trình đọc màn hình vì màu không tự nói được. */
+export const RANK_TINT: Record<"best" | "worst", string> = { best: "bg-ok-wash", worst: "bg-risk-wash" };
+export const RANK_LABEL: Record<"best" | "worst", string> = { best: "thấp nhất", worst: "cao nhất" };
+
 export interface ChartSegment {
   key: string;
   label: string;
