@@ -226,7 +226,8 @@ public class StudyCenterRepository(AppDbContext db) : IStudyCenterRepository
     public async Task<CenterGuidanceCardsDto> GetGuidanceCardsAsync(CancellationToken ct = default)
     {
         var docs = await db.KnowledgeDocuments.AsNoTracking()
-            .Where(d => d.TopicCode != null
+            .Where(d => d.DeletedAt == null
+                && d.TopicCode != null
                 && (d.TopicCode == "CENTER_ASK" || d.TopicCode == "CENTER_WARNING"))
             .OrderByDescending(d => d.UpdatedAt)
             .ToListAsync(ct);
