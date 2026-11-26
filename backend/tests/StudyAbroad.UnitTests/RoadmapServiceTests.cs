@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -52,7 +52,7 @@ public class RoadmapServiceTests
     public async Task SetProvince_SavesCanonicalName()
     {
         var repo = new FakeProfiles(new StudentProfile { UserId = _studentId });
-        var service = new RoadmapService(repo, null!, null!, null!, null!);
+        var service = new RoadmapService(repo, null!, null!, null!, null!, null!);
 
         var result = await service.SetProvinceAsync(_studentId, "tp.hcm");
 
@@ -65,7 +65,7 @@ public class RoadmapServiceTests
     public async Task SetProvince_EmptyClearsValue()
     {
         var repo = new FakeProfiles(new StudentProfile { UserId = _studentId, Province = "Hà Nội" });
-        var service = new RoadmapService(repo, null!, null!, null!, null!);
+        var service = new RoadmapService(repo, null!, null!, null!, null!, null!);
 
         var result = await service.SetProvinceAsync(_studentId, "  ");
 
@@ -77,7 +77,7 @@ public class RoadmapServiceTests
     public async Task SetProvince_RejectsUnknownProvince()
     {
         var repo = new FakeProfiles(new StudentProfile { UserId = _studentId });
-        var service = new RoadmapService(repo, null!, null!, null!, null!);
+        var service = new RoadmapService(repo, null!, null!, null!, null!, null!);
 
         var result = await service.SetProvinceAsync(_studentId, "Paris");
 
@@ -89,7 +89,7 @@ public class RoadmapServiceTests
     public async Task SetProvince_NoProfile_DoesNotCreateOne()
     {
         var repo = new FakeProfiles(null);
-        var service = new RoadmapService(repo, null!, null!, null!, null!);
+        var service = new RoadmapService(repo, null!, null!, null!, null!, null!);
 
         var result = await service.SetProvinceAsync(_studentId, "Hà Nội");
 

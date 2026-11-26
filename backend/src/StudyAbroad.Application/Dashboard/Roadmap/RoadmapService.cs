@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.Profile.Flow;
+using StudyAbroad.Application.StudyCenters;
 using StudyAbroad.Application.TargetSchools;
 using StudyAbroad.Domain.Constants;
 
@@ -11,7 +12,8 @@ public class RoadmapService(
     ITargetSchoolService targetSchoolService,
     IDashboardRepository dashboardRepository,
     IRoadmapRepository roadmapRepository,
-    IChatBenchmarkRepository benchmarkRepository) : IRoadmapService
+    IChatBenchmarkRepository benchmarkRepository,
+    IStudyCenterRepository studyCenterRepository) : IRoadmapService
 {
     public async Task<RoadmapDto?> GetRoadmapAsync(Guid studentId, CancellationToken ct = default)
     {
@@ -40,8 +42,13 @@ public class RoadmapService(
         if (targets.Count == 0)
             average = ToAverage(ChatBenchmarks.From(await benchmarkRepository.ListAsync(level, ct)));
 
+        var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
         var input = new RoadmapInputs(profile, certifications.ToList(), targets, offerings, costs, scholarships, average);
-        return RoadmapBuilder.Build(input, DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7)));
+        var roadmap = RoadmapBuilder.Build(input, today);
+
+        // chỉ đọc danh sách trung tâm của Đức, lọc và xếp trong bộ nhớ
+        var centers = await studyCenterRepository.ListReferableAsync(ct);
+        return RoadmapCenters.Attach(roadmap, centers, profile.Province, level, studentId, today);
     }
 
     public async Task<SetProvinceResult> SetProvinceAsync(Guid studentId, string? province, CancellationToken ct = default)
