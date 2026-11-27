@@ -80,7 +80,9 @@ def test_direct_route_text_has_timeline_and_deadline_note():
     text = render(route, intake, "Computer Science")
 
     assert "Lộ trình phù hợp với bạn: Đại học thẳng." in text
-    assert "Hồ sơ của bạn đủ điều kiện nộp thẳng vào đại học." in text
+    assert "chưa cần đi qua năm dự bị hay cao đẳng cộng đồng" in text
+    assert "chưa phải đánh giá khả năng trúng tuyển" in text
+    assert "đủ điều kiện" not in text and "sẽ gợi ý danh sách" not in text
     assert "Nộp sớm (EA/ED): khoảng tháng 11/2026" in text
     assert "Nộp thường lệ (RD): khoảng tháng 1/2027" in text
     assert "Xin visa: khoảng tháng 5/2027" in text

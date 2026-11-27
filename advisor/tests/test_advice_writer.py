@@ -298,3 +298,41 @@ async def test_the_advice_writer_gives_up_when_the_budget_is_spent(monkeypatch):
             return {"tra_loi": "quá muộn"}
 
     assert await AdviceWriter(Hang()).write(SKILL, REQ, []) is None
+
+
+# ---- hỏi một điểm thì trả lời ngắn ----
+LONG_ANSWER = "Chưa muộn. " + "mốc thời gian và các bước chuẩn bị " * 40
+
+
+def narrow(text: str) -> dict:
+    return {"pham_vi": "mot_diem", "tra_loi": text}
+
+
+async def test_a_long_answer_to_a_one_point_question_is_rewritten_shorter():
+    writer = AdviceWriter(FakeLLM(narrow(LONG_ANSWER), narrow("Chưa muộn đâu.")))
+
+    assert await writer.write(SKILL, REQ, [], ["roadmap"]) == "Chưa muộn đâu."
+    assert writer.last_errors == ["qua_dai"]
+    note = writer._llm.calls[1]["messages"][-1]["content"]
+    assert "chỉ hỏi một điểm" in note and "170 từ" in note
+
+
+async def test_a_short_one_point_answer_does_not_have_to_name_the_roadmap():
+    writer = AdviceWriter(FakeLLM(narrow("Chưa muộn đâu.")))
+
+    assert await writer.write(SKILL, REQ, [], ["roadmap"]) == "Chưa muộn đâu."
+    assert writer.last_errors == []
+
+
+async def test_if_the_rewrite_is_still_long_the_student_still_gets_an_answer():
+    writer = AdviceWriter(FakeLLM(narrow(LONG_ANSWER), narrow(LONG_ANSWER)))
+
+    assert await writer.write(SKILL, REQ, [], ["roadmap"]) == LONG_ANSWER.strip()
+
+
+async def test_a_general_request_may_be_long():
+    text = LONG_ANSWER + " Lộ trình của bạn."
+    writer = AdviceWriter(FakeLLM({"pham_vi": "chung", "tra_loi": text}))
+
+    assert await writer.write(SKILL, REQ, [], ["roadmap"]) == text.strip()
+    assert writer.last_attempts == 1

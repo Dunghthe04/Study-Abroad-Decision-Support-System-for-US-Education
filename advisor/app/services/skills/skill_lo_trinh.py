@@ -46,9 +46,6 @@ CRITERIA = (
     "- Tổng chi phí mỗi năm vừa ngân sách gia đình",
     "- Yêu cầu đầu vào (GPA, tiếng Anh) vừa sức với hồ sơ hiện tại",
 )
-# Lộ trình đại học thẳng: nhờ .NET chạy gợi ý trường (lọc, chấm, chọn) rồi đưa danh sách vào chat
-DIRECT_NEXT = "Bước tiếp theo: hệ thống sẽ gợi ý danh sách trường theo hồ sơ và ngành của bạn."
-
 
 def month_name(index: int) -> str:
     year, month = divmod(index - 1, 12)
@@ -175,7 +172,11 @@ REASON_TEXT = {
     "FINANCE_SHORT": "Ngân sách còn hẹp; 2 năm đầu ở cao đẳng cộng đồng rẻ hơn nhiều, sau đó chuyển tiếp lên đại học.",
     "ACADEMIC_WEAK": "Điểm học còn thấp so với đa số trường; cao đẳng cộng đồng giúp bạn có bảng điểm mới trước khi chuyển tiếp.",
 }
-DIRECT_TEXT = "Hồ sơ của bạn đủ điều kiện nộp thẳng vào đại học."
+# Nói đúng điều code đã xét (không vướng lý do nào để đi đường khác), không để hiểu thành chắc đỗ
+DIRECT_TEXT = (
+    "Theo hồ sơ hiện tại, bạn chưa cần đi qua năm dự bị hay cao đẳng cộng đồng. "
+    "Đây chưa phải đánh giá khả năng trúng tuyển vào một trường cụ thể."
+)
 
 
 # Xét theo trường mục tiêu thì tiếng Anh / học lực so với mốc của trường mục tiêu, không phải đa số trường
@@ -250,10 +251,11 @@ def render(route: Route, intake: Intake | None, major: Any, roadmap: dict | None
     major_text = f" ({major})" if isinstance(major, str) and major else ""
     criteria = "\n".join(CRITERIA).format(major=major_text)
     names = target_names(roadmap)
-    if route.route == "direct":
-        parts.append(DIRECT_NEXT)
-    elif names:
-        parts.append(f"Trường mục tiêu của bạn: {', '.join(names)}. {TARGET_MORE}\n{criteria}")
-    else:
-        parts.append(NO_LIST + "\n" + criteria)
+    # Đại học thẳng không có đoạn chọn trường: không hứa "hệ thống sẽ gợi ý danh sách" vì chỉ hỏi lộ trình thì không chạy
+    # gợi ý trường, học sinh chờ mãi không thấy danh sách
+    if route.route != "direct":
+        if names:
+            parts.append(f"Trường mục tiêu của bạn: {', '.join(names)}. {TARGET_MORE}\n{criteria}")
+        else:
+            parts.append(NO_LIST + "\n" + criteria)
     return "\n\n".join(parts)
