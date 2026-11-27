@@ -704,8 +704,8 @@ public class CenterDeletionService(
         {
             UserId = id,
             Type = NotificationType,
-            Title = "Yêu cầu liên hệ đã đóng",
-            Body = $"{centerName} đã ngừng hoạt động trên USAS nên yêu cầu liên hệ của bạn với trung tâm này đã được đóng.",
+            Title = "Trung tâm đã ngừng hoạt động",
+            Body = $"{centerName} đã ngừng hoạt động trên USAS nên yêu cầu liên hệ của bạn với trung tâm này đã chuyển sang trạng thái Trung tâm ngừng hoạt động.",
             LinkUrl = "/account",
         }).ToList();
     }
