@@ -218,6 +218,7 @@ export interface SchoolOption {
   code: string;
   name: string;
   state: string | null;
+  aliases?: string[] | null;
 }
 
 // ---- "Cần gì để vào trường này": kết quả goal-seeking (backend gửi trong widget của chat) ----

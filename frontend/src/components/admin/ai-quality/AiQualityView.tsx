@@ -88,11 +88,11 @@ export function AiQualityView() {
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex flex-col gap-1 text-xs text-ink-2">
               Từ ngày
-              <Input type="date" value={draft.from} max={draft.to || undefined} onChange={(event) => setDraft({ ...draft, from: event.target.value })} className="h-8 w-40" />
+              <Input type="date" value={draft.from} max={draft.to || undefined} onChange={(event) => setDraft({ ...draft, from: event.target.value })} className="h-8 w-40 bg-card shadow-xs" />
             </label>
             <label className="flex flex-col gap-1 text-xs text-ink-2">
               Đến ngày
-              <Input type="date" value={draft.to} min={draft.from || undefined} onChange={(event) => setDraft({ ...draft, to: event.target.value })} className="h-8 w-40" />
+              <Input type="date" value={draft.to} min={draft.from || undefined} onChange={(event) => setDraft({ ...draft, to: event.target.value })} className="h-8 w-40 bg-card shadow-xs" />
             </label>
             <Button type="button" size="sm" onClick={applyDraft}>Áp dụng</Button>
           </div>

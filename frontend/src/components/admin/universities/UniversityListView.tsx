@@ -20,6 +20,7 @@ import {
 } from "@/lib/admin-university-display";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import type { UsStateOption } from "@/types/profile-flow";
+import { RightPanelSlot } from "@/components/admin/shared/DetailPanel";
 import { CreateUniversityPanel } from "./CreateUniversityPanel";
 import { universityColumns } from "./university-columns";
 import { OfferingsPanel } from "./OfferingsPanel";
@@ -224,7 +225,11 @@ export function UniversityListView() {
             <Button
               variant="outline"
               size="sm"
-              className="border-border bg-muted/60 text-foreground hover:bg-muted"
+              className={
+                activeFilterCount > 0
+                  ? "border-brand/40 bg-card font-medium text-brand shadow-xs hover:bg-muted dark:bg-input/30 dark:hover:bg-input/50"
+                  : "border-border bg-card text-foreground shadow-xs hover:bg-muted dark:bg-input/30 dark:hover:bg-input/50"
+              }
             />
           }
         >
@@ -294,10 +299,10 @@ export function UniversityListView() {
         {(draft.search || activeFilterCount > 0) && (
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={handleReset}
-            className="border-border bg-muted/60 text-foreground hover:bg-muted"
+            className="border-transparent bg-transparent text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
           >
             <RotateCcwIcon />
             Xóa lọc
@@ -337,18 +342,22 @@ export function UniversityListView() {
           }
         />
       </div>
-      {isCreating ? (
-        <CreateUniversityPanel
-          onClose={() => setIsCreating(false)}
-          onCreated={handleUniversityCreated}
-        />
-      ) : (
-        <OfferingsPanel
-          university={selected}
-          onClose={() => setSelected(null)}
-          onUniversityChanged={handleUniversityChanged}
-        />
-      )}
+      <RightPanelSlot item={isCreating ? ("create" as const) : selected}>
+        {(active) =>
+          active === "create" ? (
+            <CreateUniversityPanel
+              onClose={() => setIsCreating(false)}
+              onCreated={handleUniversityCreated}
+            />
+          ) : (
+            <OfferingsPanel
+              university={active}
+              onClose={() => setSelected(null)}
+              onUniversityChanged={handleUniversityChanged}
+            />
+          )
+        }
+      </RightPanelSlot>
     </div>
   );
 }

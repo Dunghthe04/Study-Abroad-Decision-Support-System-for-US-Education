@@ -42,6 +42,15 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
       title={center.name}
       description={`Mã cơ sở: ${center.code}`}
       onClose={onClose}
+      footer={(
+        <Link
+          href={`/admin/centers/${center.id}`}
+          className={cn(buttonVariants({ variant: "default", size: "sm" }), "gap-1 text-xs")}
+        >
+          Xem chi tiết
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+        </Link>
+      )}
     >
       <div className="space-y-5">
         {/* Banner & Logo Preview */}
@@ -75,7 +84,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
           </div>
         </div>
 
-        {/* Verification Status & Quick Actions */}
+        {/* Verification Status */}
         <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg border border-line bg-ground">
           <div className="space-y-0.5">
             <div className="text-xs text-ink-3 font-medium">Trạng thái xác thực</div>
@@ -89,16 +98,6 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
                 Chờ kiểm duyệt hồ sơ
               </Badge>
             )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/admin/centers/${center.id}`}
-              className={cn(buttonVariants({ variant: "default", size: "sm" }), "gap-1 text-xs")}
-            >
-              Xem chi tiết
-              <ChevronRightIcon className="w-3.5 h-3.5" />
-            </Link>
           </div>
         </div>
 

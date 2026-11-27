@@ -88,8 +88,8 @@ public record SchoolGoalResult(
 
 // ============================== GOAL-SEEKING ==============================
 
-// Một trường trong ô chọn trường của chat: mã, tên, bang
-public record SchoolOption(string Code, string Name, string? State);
+// Một trường trong ô chọn trường của chat: mã, tên, bang, tên viết tắt (để gõ "MIT" cũng ra trường)
+public record SchoolOption(string Code, string Name, string? State, IReadOnlyList<string>? Aliases = null);
 
 public partial class RecommendationService
 {
@@ -105,7 +105,7 @@ public partial class RecommendationService
         var level = string.IsNullOrWhiteSpace(profile?.TargetLevel) ? "undergraduate" : profile!.TargetLevel!;
         var schools = await recommendations.ListSchoolsAsync(level, ct);
         return schools
-            .Select(s => new SchoolOption(s.University.Code, s.University.Name, s.University.State))
+            .Select(s => new SchoolOption(s.University.Code, s.University.Name, s.University.State, s.University.Aliases))
             .OrderBy(o => o.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }

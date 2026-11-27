@@ -11,6 +11,8 @@ export interface AdminUniversityListItem {
   latestRetrievedAt: string | null;
   logoUrl?: string | null;
   scholarshipCount?: number;
+  /** Tên viết tắt: MIT, UCLA, ASU */
+  aliases?: string[] | null;
 }
 
 export interface AdminUniversityOffering {
@@ -112,6 +114,7 @@ export interface AdminUniversityDetail {
   logoUrl?: string | null;
   coverUrl?: string | null;
   galleryUrls?: string[] | null;
+  aliases?: string[] | null;
 }
 
 export interface CreateUniversityRequest {
@@ -127,6 +130,7 @@ export interface CreateUniversityRequest {
   logoUrl?: string | null;
   coverUrl?: string | null;
   confirmDuplicateName?: boolean;
+  aliases?: string[];
 }
 
 export interface UpdateUniversityRequest {
@@ -141,6 +145,7 @@ export interface UpdateUniversityRequest {
   logoUrl?: string | null;
   coverUrl?: string | null;
   confirmDuplicateName?: boolean;
+  aliases?: string[];
 }
 
 export interface UpdateOfferingRequest {

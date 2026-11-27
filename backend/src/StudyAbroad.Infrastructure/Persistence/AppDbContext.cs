@@ -53,6 +53,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ForumPost> ForumPosts => Set<ForumPost>();
     public DbSet<ForumReport> ForumReports => Set<ForumReport>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<EmailOutbox> EmailOutbox => Set<EmailOutbox>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
     public DbSet<Media> Media => Set<Media>();
 

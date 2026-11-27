@@ -78,10 +78,7 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
 
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
-            var pattern = $"%{query.Search.Trim()}%";
-            q = q.Where(u => EF.Functions.ILike(u.Name, pattern) ||
-                             EF.Functions.ILike(u.Code, pattern) ||
-                             (u.City != null && EF.Functions.ILike(u.City, pattern)));
+            q = q.Where(UniversitySearch.Matches(query.Search, includeCity: true));
         }
 
         if (!string.IsNullOrWhiteSpace(query.State))
@@ -522,7 +519,9 @@ public class UniversityDetailRepository(AppDbContext db) : IUniversityDetailRepo
                 .OrderBy(u => u.AcceptanceRate == null || u.AcceptanceRate > 1)
                 .ThenByDescending(u => u.AcceptanceRate)
                 .ThenBy(u => u.Name),
-            _ => q.OrderBy(u => u.Name),
+            _ => string.IsNullOrWhiteSpace(query.Search)
+                ? q.OrderBy(u => u.Name)
+                : q.OrderByDescending(UniversitySearch.ExactHit(query.Search)).ThenBy(u => u.Name),
         };
 
         var page = query.Page < 1 ? 1 : query.Page;

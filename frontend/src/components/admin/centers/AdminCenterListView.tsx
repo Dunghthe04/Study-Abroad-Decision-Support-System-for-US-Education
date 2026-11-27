@@ -31,6 +31,7 @@ import { OptionSelect } from "@/components/admin/universities/OptionSelect";
 import { normalizeComplianceMode } from "@/lib/center-legal";
 import { AdminVerificationQueueModal } from "@/components/admin/centers/AdminVerificationQueueModal";
 import { AdminCenterDetailPanel } from "@/components/admin/centers/AdminCenterDetailPanel";
+import { RightPanelSlot } from "@/components/admin/shared/DetailPanel";
 import {
   CenterActionConfirmDialog,
   type CenterConfirmAction,
@@ -409,7 +410,10 @@ export function AdminCenterListView() {
               type="button"
               variant="outline"
               size="sm"
-              className="border-border bg-muted/60 text-foreground hover:bg-muted"
+              className={cn(
+                "bg-card shadow-xs hover:bg-muted",
+                activeFilterCount > 0 ? "border-brand/40 font-medium text-brand" : "border-border text-foreground",
+              )}
             />
           }
         >
@@ -492,17 +496,23 @@ export function AdminCenterListView() {
     actions: (
       <>
         {hasActiveSearchOrFilter && (
-          <Button type="button" variant="outline" size="sm" onClick={handleResetFilters}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleResetFilters}
+            className="border-transparent bg-transparent text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
+          >
             Xóa lọc
           </Button>
         )}
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
           onClick={() => void fetchCenters(page)}
           disabled={isLoading}
-          className="gap-1.5"
+          className="gap-1.5 border-transparent bg-transparent text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
         >
           <RotateCcwIcon className={cn("size-3.5", isLoading && "animate-spin")} />
           Làm mới
@@ -512,7 +522,7 @@ export function AdminCenterListView() {
           variant="outline"
           size="sm"
           onClick={() => setQueueOpen(true)}
-          className="gap-1.5"
+          className="gap-1.5 border-border bg-card text-foreground shadow-xs hover:bg-muted"
         >
           <ShieldCheckIcon className="size-4" />
           Hồ sơ xác minh
@@ -554,12 +564,14 @@ export function AdminCenterListView() {
           />
         </div>
 
-        {selectedCenter && (
-          <AdminCenterDetailPanel
-            center={selectedCenter}
-            onClose={() => setSelectedCenter(null)}
-          />
-        )}
+        <RightPanelSlot item={selectedCenter}>
+          {(center) => (
+            <AdminCenterDetailPanel
+              center={center}
+              onClose={() => setSelectedCenter(null)}
+            />
+          )}
+        </RightPanelSlot>
       </div>
 
       <CenterActionConfirmDialog

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ApiError } from "@/lib/api";
 import { formatInt } from "@/lib/ai-usage-format";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,11 +28,9 @@ interface Props {
 export function CreateBatchSheet({ open, onClose, onCreated }: Props) {
   return (
     <Sheet open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
-      <SheetContent side="right" className="w-full gap-0 overflow-y-auto sm:max-w-lg">
-        <div className="flex flex-col gap-4 p-4">
-          {/* key theo open để mỗi lần mở là một biểu mẫu mới, không giữ chữ của lần trước */}
-          {open ? <Form onClose={onClose} onCreated={onCreated} /> : null}
-        </div>
+      <SheetContent side="right" className="w-full gap-0 overflow-hidden sm:max-w-lg">
+        {/* key theo open để mỗi lần mở là một biểu mẫu mới, không giữ chữ của lần trước */}
+        {open ? <Form onClose={onClose} onCreated={onCreated} /> : null}
       </SheetContent>
     </Sheet>
   );
@@ -90,7 +88,8 @@ function Form({ onClose, onCreated }: Omit<Props, "open">) {
   if (created) return <Done created={created} onClose={onClose} />;
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
       <SheetHeader className="p-0">
         <SheetTitle>Tạo đợt duyệt mẫu</SheetTitle>
         <SheetDescription>
@@ -172,36 +171,41 @@ function Form({ onClose, onCreated }: Omit<Props, "open">) {
 
       {problem && (name !== "" || size !== String(DEFAULT_SIZE)) ? <p className="text-xs text-risk">{problem}</p> : null}
       {error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}
+      </div>
 
-      <div className="flex gap-2">
+      <SheetFooter className="shrink-0 flex-row justify-end gap-2 border-t border-border bg-card px-4 py-3">
+        <Button type="button" variant="outline" disabled={pending} onClick={onClose}>Hủy</Button>
         <Button type="button" disabled={pending || problem !== null} onClick={() => void submit()}>
           {pending ? "Đang bốc mẫu..." : "Tạo đợt"}
         </Button>
-        <Button type="button" variant="outline" disabled={pending} onClick={onClose}>Hủy</Button>
-      </div>
-    </>
+      </SheetFooter>
+    </div>
   );
 }
 
 function Done({ created, onClose }: { created: ReviewBatchCreated; onClose: () => void }) {
   return (
-    <>
-      <SheetHeader className="p-0">
-        <SheetTitle>Đã tạo đợt</SheetTitle>
-        <SheetDescription>
-          {created.name}: {formatInt(created.totalItems)} câu. Seed <code className="rounded bg-ground px-1 text-[13px]">{created.seed}</code> đã được lưu.
-        </SheetDescription>
-      </SheetHeader>
-      <ul className="flex flex-col gap-1 rounded-md bg-ground p-3 text-sm">
-        {created.strata.map((stratum) => (
-          <li key={stratum.stratum} className="flex justify-between gap-2">
-            <span className="text-ink">{stratumLabel(stratum.stratum)}</span>
-            <span className="tabular text-ink-2">{formatInt(stratum.picked)} / {formatInt(stratum.population)}</span>
-          </li>
-        ))}
-      </ul>
-      <p className="text-xs text-ink-3">Mỗi dòng: số câu được chọn / số câu có trong nhóm lúc bốc.</p>
-      <Button type="button" onClick={onClose}>Đóng</Button>
-    </>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+        <SheetHeader className="p-0">
+          <SheetTitle>Đã tạo đợt</SheetTitle>
+          <SheetDescription>
+            {created.name}: {formatInt(created.totalItems)} câu. Seed <code className="rounded bg-ground px-1 text-[13px]">{created.seed}</code> đã được lưu.
+          </SheetDescription>
+        </SheetHeader>
+        <ul className="flex flex-col gap-1 rounded-md bg-ground p-3 text-sm">
+          {created.strata.map((stratum) => (
+            <li key={stratum.stratum} className="flex justify-between gap-2">
+              <span className="text-ink">{stratumLabel(stratum.stratum)}</span>
+              <span className="tabular text-ink-2">{formatInt(stratum.picked)} / {formatInt(stratum.population)}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-ink-3">Mỗi dòng: số câu được chọn / số câu có trong nhóm lúc bốc.</p>
+      </div>
+      <SheetFooter className="shrink-0 flex-row justify-end gap-2 border-t border-border bg-card px-4 py-3">
+        <Button type="button" onClick={onClose}>Đóng</Button>
+      </SheetFooter>
+    </div>
   );
 }

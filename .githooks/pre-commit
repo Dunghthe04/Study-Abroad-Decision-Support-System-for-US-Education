@@ -1,0 +1,8 @@
+#!/bin/sh
+# Blocks commits that contain secrets. Enable once per clone: git config core.hooksPath .githooks
+# Needs gitleaks: https://github.com/gitleaks/gitleaks#installing (winget install gitleaks / brew install gitleaks)
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks not installed, secret scan SKIPPED (CI will still scan)." >&2
+  exit 0
+fi
+gitleaks git --pre-commit --staged --redact --verbose

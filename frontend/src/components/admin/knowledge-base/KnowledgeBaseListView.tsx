@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/compone
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { DataTable, type DataTableToolbarSlots } from "@/components/admin/shared/DataTable";
+import { RightPanelSlot } from "@/components/admin/shared/DetailPanel";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
 import { KnowledgeEntryFormPanel } from "@/components/admin/knowledge-base/KnowledgeEntryFormPanel";
@@ -170,7 +171,19 @@ export function KnowledgeBaseListView() {
   const toolbar: DataTableToolbarSlots = {
     filters: (
       <Popover open={isFilterOpen} onOpenChange={(open) => { if (open) setDraft({ ...applied, search: draft.search }); setIsFilterOpen(open); }}>
-        <PopoverTrigger render={<Button variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} />}>
+        <PopoverTrigger
+          render={
+            <Button
+              variant="outline"
+              size="sm"
+              className={
+                activeFilterCount > 0
+                  ? `${TOOLBAR_BUTTON_BG} border-brand/40 font-medium text-brand`
+                  : TOOLBAR_BUTTON_BG
+              }
+            />
+          }
+        >
           <FilterIcon />
           Bộ lọc{activeFilterCount > 0 && ` (${activeFilterCount})`}
         </PopoverTrigger>
@@ -206,7 +219,13 @@ export function KnowledgeBaseListView() {
     actions: (
       <div className="flex flex-wrap items-center gap-2">
         {(applied.search || activeFilterCount > 0) && (
-          <Button type="button" variant="outline" size="sm" onClick={handleReset} className={TOOLBAR_BUTTON_BG}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleReset}
+            className="border-transparent bg-transparent text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
+          >
             <RotateCcwIcon /> Xóa lọc
           </Button>
         )}
@@ -263,20 +282,22 @@ export function KnowledgeBaseListView() {
         />
       </div>
 
-      {formState && (
-        <KnowledgeEntryFormPanel
-          entry={formState.entry}
-          reloadKey={reloadCounter}
-          onClose={() => setFormState(null)}
-          onChanged={(entry, isNew) => {
-            setFormState(isNew ? null : { entry });
-            reload();
-          }}
-          onDelete={setDeleting}
-          onRestore={(entry) => void handleRestore(entry)}
-          onOpen={(id) => void openById(id)}
-        />
-      )}
+      <RightPanelSlot item={formState}>
+        {(active) => (
+          <KnowledgeEntryFormPanel
+            entry={active.entry}
+            reloadKey={reloadCounter}
+            onClose={() => setFormState(null)}
+            onChanged={(entry, isNew) => {
+              setFormState(isNew ? null : { entry });
+              reload();
+            }}
+            onDelete={setDeleting}
+            onRestore={(entry) => void handleRestore(entry)}
+            onOpen={(id) => void openById(id)}
+          />
+        )}
+      </RightPanelSlot>
 
       <KnowledgeImportDialog
         key={importSession}

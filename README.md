@@ -205,6 +205,22 @@ cp .env.example .env
 
 File `.env` mặc định đã chạy được ở local, không cần sửa gì.
 
+**Bí mật (SMTP, Cloudinary) – tuyệt đối không commit.** Chạy backend ngoài Docker thì làm một lần:
+
+```powershell
+git config core.hooksPath .githooks     # bật hook quét bí mật (cần cài gitleaks: winget install gitleaks)
+cp backend/src/StudyAbroad.Api/appsettings.Development.example.json backend/src/StudyAbroad.Api/appsettings.Development.json
+cd backend/src/StudyAbroad.Api
+dotnet user-secrets set "Smtp:User" "<gmail>"
+dotnet user-secrets set "Smtp:Password" "<app-password>"
+dotnet user-secrets set "Smtp:FromEmail" "<gmail>"
+dotnet user-secrets set "Cloudinary:CloudName" "<cloud-name>"
+dotnet user-secrets set "Cloudinary:ApiKey" "<api-key>"
+dotnet user-secrets set "Cloudinary:ApiSecret" "<api-secret>"
+```
+
+`appsettings.Development.json` đã nằm trong `.gitignore`; CI có job `secrets` (gitleaks) chặn PR chứa bí mật.
+
 ### Cách A – Chạy toàn bộ bằng Docker (để xem thử, không cần cài .NET/Node/Python)
 
 ```powershell

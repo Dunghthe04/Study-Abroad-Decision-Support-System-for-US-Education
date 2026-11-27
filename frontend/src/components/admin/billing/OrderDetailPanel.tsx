@@ -161,7 +161,34 @@ export function OrderDetailPanel({ orderCode, onClose, onChanged }: OrderDetailP
   );
 
   return (
-    <DetailPanel title={`Đơn ${orderCode}`} description={order?.planName} onClose={onClose} closeDisabled={busy || rechecking}>
+    <DetailPanel
+      title={`Đơn ${orderCode}`}
+      description={order?.planName}
+      onClose={onClose}
+      closeDisabled={busy || rechecking}
+      footer={order && unpaid ? (
+        <>
+          <Button type="button" variant="outline" size="sm" onClick={() => void runRecheck()} disabled={rechecking || busy}>
+            {rechecking && <Spinner className="size-3.5" />}
+            Kiểm tra với payOS
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => openAction("activate")}
+            disabled={!canActivate || busy}
+            title={!canActivate ? "Cần kiểm tra với payOS và payOS xác nhận PAID trước khi kích hoạt" : undefined}
+          >
+            Kích hoạt thủ công
+          </Button>
+          {isMismatch && (
+            <Button type="button" variant="destructive" size="sm" onClick={() => openAction("reject")} disabled={busy}>
+              Hủy đơn
+            </Button>
+          )}
+        </>
+      ) : undefined}
+    >
       {isLoading && <Skeleton className="h-64 w-full" />}
       {!isLoading && result.error && (
         <Alert variant="destructive">
@@ -207,7 +234,7 @@ export function OrderDetailPanel({ orderCode, onClose, onChanged }: OrderDetailP
                         <div><span className="text-muted-foreground">Họ tên:</span> <span className="font-medium">{revealedBuyer.fullName}</span></div>
                         <div><span className="text-muted-foreground">Email:</span> <span className="font-medium">{revealedBuyer.email}</span></div>
                         <div className="text-[11px] text-muted-foreground">
-                          Lưu kế toán tới {formatVnDateTime(revealedBuyer.retainUntilUtc)} · Đã ghi nhật ký truy cập (UC-91)
+                          Lưu kế toán tới {formatVnDateTime(revealedBuyer.retainUntilUtc)} · Đã ghi nhật ký truy cập
                         </div>
                       </div>
                     )}
@@ -247,34 +274,10 @@ export function OrderDetailPanel({ orderCode, onClose, onChanged }: OrderDetailP
             </Alert>
           )}
 
-          {unpaid && (
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => void runRecheck()} disabled={rechecking || busy}>
-                  {rechecking && <Spinner className="size-3.5" />}
-                  Kiểm tra với payOS
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => openAction("activate")}
-                  disabled={!canActivate || busy}
-                  title={!canActivate ? "Cần kiểm tra với payOS và payOS xác nhận PAID trước khi kích hoạt" : undefined}
-                >
-                  Kích hoạt thủ công
-                </Button>
-                {isMismatch && (
-                  <Button type="button" variant="destructive" size="sm" onClick={() => openAction("reject")} disabled={busy}>
-                    Hủy đơn
-                  </Button>
-                )}
-              </div>
-              {!isMismatch && !recheck && (
-                <p className="text-xs text-muted-foreground">
-                  Bấm &ldquo;Kiểm tra với payOS&rdquo; trước; chỉ kích hoạt được khi payOS xác nhận PAID.
-                </p>
-              )}
-            </div>
+          {unpaid && !isMismatch && !recheck && (
+            <p className="text-xs text-muted-foreground">
+              Bấm &ldquo;Kiểm tra với payOS&rdquo; trước; chỉ kích hoạt được khi payOS xác nhận PAID.
+            </p>
           )}
 
           <div className="space-y-1.5">

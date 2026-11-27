@@ -78,7 +78,7 @@ export function AdminVerificationQueueModal({
             <ShieldCheckIcon className="h-5 w-5 text-brand" />
             <div>
               <h2 className="text-lg font-bold text-ink">
-                Hàng đợi kiểm duyệt xác minh trung tâm (UC-59)
+                Hàng đợi kiểm duyệt xác minh trung tâm
               </h2>
               <p className="text-xs text-ink-3">
                 Đối chiếu hồ sơ tự đăng ký của các trung tâm tư vấn với Cổng ĐKDN Quốc gia.
@@ -228,7 +228,7 @@ export function AdminVerificationQueueModal({
                         onClick={() => setSelectedRequestId(req.id)}
                         className="text-xs"
                       >
-                        {isPending ? "Đối chiếu & Duyệt (UC-59)" : "Xem chi tiết"}
+                        {isPending ? "Đối chiếu & Duyệt" : "Xem chi tiết"}
                       </Button>
                     </div>
                   </div>

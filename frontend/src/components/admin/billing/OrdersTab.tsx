@@ -11,6 +11,7 @@ import type { PagedResult } from "@/types/api";
 import type { AdminOrderDto, AdminOrderFilters } from "@/types/admin-billing";
 import type { OrderStatus } from "@/types/billing";
 import { DataTable, type DataTableColumn } from "../shared/DataTable";
+import { RightPanelSlot } from "../shared/DetailPanel";
 import { TablePagination } from "../shared/TablePagination";
 import { OrderDetailPanel } from "./OrderDetailPanel";
 import { ORDER_STATUS_LABELS, OrderStatusBadge } from "./OrderStatusBadge";
@@ -108,6 +109,7 @@ export function OrdersTab() {
                   aria-label="Lọc theo trạng thái"
                   value={applied.status}
                   onChange={(e) => setApplied({ ...applied, status: e.target.value as OrderStatus | "", page: 1 })}
+                  className="[&_select]:bg-card [&_select]:shadow-xs"
                 >
                   <NativeSelectOption value="">Mọi trạng thái</NativeSelectOption>
                   {Object.entries(ORDER_STATUS_LABELS).map(([value, label]) => (
@@ -120,7 +122,7 @@ export function OrdersTab() {
                   title="Từ ngày"
                   value={applied.from}
                   onChange={(e) => setApplied({ ...applied, from: e.target.value, page: 1 })}
-                  className="w-auto"
+                  className="w-auto bg-card shadow-xs"
                 />
                 <Input
                   type="date"
@@ -128,7 +130,7 @@ export function OrdersTab() {
                   title="Đến ngày"
                   value={applied.to}
                   onChange={(e) => setApplied({ ...applied, to: e.target.value, page: 1 })}
-                  className="w-auto"
+                  className="w-auto bg-card shadow-xs"
                 />
                 {(applied.from || applied.to) && (
                   <Button
@@ -156,7 +158,7 @@ export function OrdersTab() {
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Tìm theo mã đơn, mã GD payOS, tên hoặc email"
                   aria-label="Tìm đơn hàng"
-                  className="pr-10"
+                  className="bg-card pr-10 shadow-xs"
                 />
                 <Button type="submit" variant="ghost" size="icon-sm" aria-label="Tìm" className="absolute top-1/2 right-1 -translate-y-1/2">
                   <SearchIcon />
@@ -176,14 +178,16 @@ export function OrdersTab() {
           }
         />
       </div>
-      {selected !== null && (
-        <OrderDetailPanel
-          key={selected}
-          orderCode={selected}
-          onClose={() => setSelected(null)}
-          onChanged={() => setReload((n) => n + 1)}
-        />
-      )}
+      <RightPanelSlot item={selected}>
+        {(code) => (
+          <OrderDetailPanel
+            key={code}
+            orderCode={code}
+            onClose={() => setSelected(null)}
+            onChanged={() => setReload((n) => n + 1)}
+          />
+        )}
+      </RightPanelSlot>
     </div>
   );
 }

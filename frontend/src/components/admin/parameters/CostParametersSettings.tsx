@@ -112,7 +112,7 @@ export function CostParametersSettings() {
           priority: "high",
           timeout: 5000,
           title: "Đã lưu tham số ước tính chi phí",
-          description: "Ước tính chi phí (UC-26) và trang Căn cứ tham số (UC-83) sẽ dùng giá trị mới ngay.",
+          description: "Ước tính chi phí và trang Căn cứ tham số sẽ dùng giá trị mới ngay.",
         });
       } else if (result.status === "conflict") {
         setErrors(result.errors);
@@ -147,10 +147,10 @@ export function CostParametersSettings() {
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2 className="text-h3">Tham số ước tính chi phí (UC-26)</h2>
+          <h2 className="text-h3">Tham số ước tính chi phí</h2>
         </CardTitle>
         <CardDescription>
-          Các tham số dùng khi ước tính chi phí trường (UC-26) và hiển thị công khai ở trang Căn cứ tham số (UC-83).
+          Các tham số dùng khi ước tính chi phí trường và hiển thị công khai ở trang Căn cứ tham số.
           Khi chưa lưu trong hệ thống, hệ thống dùng giá trị mặc định.
         </CardDescription>
       </CardHeader>

@@ -19,6 +19,11 @@ function loadSchools(): Promise<SchoolOption[]> {
   return cache;
 }
 
+// Tên viết tắt bắt đầu bằng chữ đang gõ ("ut" khớp "UT Austin", "mit" khớp "MIT")
+function aliasHit(school: SchoolOption, typed: string): boolean {
+  return typed.length > 0 && (school.aliases ?? []).some((a) => normalizeSearch(a).startsWith(typed));
+}
+
 const TARGET_TEXT: Record<string, string> = { reach: "Khó vào", match: "Vừa sức", safety: "An toàn hơn" };
 
 // Câu hỏi gửi lại khi chọn một trường. Cùng khuôn với nút chọn trường của backend (ChatGoalSeek.Question),
@@ -63,7 +68,8 @@ export function SchoolWidget({
   }
 
   // Tìm không dấu, không phân biệt hoa thường, theo từng từ gõ vào ("bos uni" khớp "Boston University")
-  const words = normalizeSearch(query).split(" ").filter(Boolean);
+  const typed = normalizeSearch(query);
+  const words = typed.split(" ").filter(Boolean);
   // data.codes: chỉ cho chọn trong các trường này (vd các trường vừa đổi nhóm sau what-if)
   const only = Array.isArray(data?.codes) ? new Set(data.codes.map(String)) : null;
   const suggested = Array.isArray(data?.suggested) ? data.suggested.map(String) : [];
@@ -74,10 +80,12 @@ export function SchoolWidget({
   const showSuggested = words.length === 0 && suggestedSchools.length > 0 && !narrowed;
   const matches = showSuggested
     ? suggestedSchools
-    : pool.filter((s) => {
-        const name = normalizeSearch(s.name);
-        return words.every((w) => name.includes(w));
-      });
+    : pool
+        .map((s) => ({ s, alias: aliasHit(s, typed) }))
+        .filter(({ s, alias }) => alias || words.every((w) => normalizeSearch(s.name).includes(w)))
+        // Trường khớp tên viết tắt lên đầu: gõ "mit" thì MIT đứng trước "Smith College"
+        .sort((a, b) => Number(b.alias) - Number(a.alias))
+        .map(({ s }) => s);
 
   return (
     <div className="mt-3 overflow-hidden rounded-xl border border-[var(--control-border)]/60 bg-[var(--surface-2)]">

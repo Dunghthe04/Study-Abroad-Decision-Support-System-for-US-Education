@@ -16,10 +16,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { Segmented } from "@/components/admin/ai-usage/parts";
+import { DataTable, type DataTableColumn } from "@/components/admin/shared/DataTable";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { ApiError, centerDeletionRequestsApi } from "@/lib/api";
 import { formatDateTime } from "@/lib/ai-usage-format";
@@ -28,6 +28,9 @@ import type { AdminCenterDeletionRequestDto, CenterDeletionRequestStatus } from 
 
 const PAGE_SIZE = 20;
 const MAX_NOTE = 1000;
+
+const TAB_TRIGGER_CLASS =
+  "flex-none rounded-none border-0 border-b-2 border-transparent px-3 data-active:border-b-brand data-active:bg-transparent data-active:text-foreground data-active:shadow-none dark:data-active:border-transparent dark:data-active:border-b-brand dark:data-active:bg-transparent after:hidden";
 
 type Filter = CenterDeletionRequestStatus | "all";
 
@@ -81,7 +84,7 @@ const DECISION_TEXT: Record<Decision, { title: string; description: string; plac
   },
 };
 
-/** [UC-93] Danh sách yêu cầu xóa trung tâm; Admin kiểm tra danh tính rồi duyệt hoặc từ chối. */
+/** Danh sách yêu cầu xóa trung tâm; Admin kiểm tra danh tính rồi duyệt hoặc từ chối. */
 export function CenterDeletionRequestsView() {
   const [filter, setFilter] = useState<Filter>("pending");
   const [page, setPage] = useState(1);
@@ -139,180 +142,207 @@ export function CenterDeletionRequestsView() {
     }
   };
 
+  const columns: DataTableColumn<AdminCenterDeletionRequestDto>[] = [
+    {
+      id: "createdAt",
+      label: "Gửi lúc",
+      cellClassName: "tabular whitespace-nowrap",
+      render: (item) => formatDateTime(item.createdAt),
+    },
+    {
+      id: "center",
+      label: "Trung tâm",
+      required: true,
+      render: (item) => (
+        <>
+          <div className="font-medium">
+            {item.status === "completed" ? (
+              item.centerName
+            ) : (
+              <Link href={`/admin/centers/${item.studyCenterId}`} className="hover:underline">
+                {item.centerName}
+              </Link>
+            )}
+          </div>
+          <div className="text-xs text-ink-2">{[item.centerEmail, item.centerPhone].filter(Boolean).join(" · ") || "—"}</div>
+          {item.isLegalHold ? (
+            <div className="mt-1 flex flex-col gap-0.5">
+              <Badge variant="risk" className="w-fit gap-1">
+                <ScaleIcon className="size-3" />
+                Đang giữ pháp lý
+              </Badge>
+              {item.legalHoldReason ? (
+                <span className="whitespace-pre-wrap break-words text-xs text-ink-2">{item.legalHoldReason}</span>
+              ) : null}
+            </div>
+          ) : null}
+          {item.openReportCount > 0 && item.status !== "completed" ? (
+            <Badge variant="warn" className="mt-1">
+              {item.openReportCount} tin nhắn bị báo cáo chưa xử lý
+            </Badge>
+          ) : null}
+        </>
+      ),
+    },
+    {
+      id: "requester",
+      label: "Người gửi",
+      render: (item) => (
+        <>
+          <div>{item.requesterName ?? "Tài khoản đã xóa"}</div>
+          <div className="text-xs text-ink-2">{item.requesterEmail ?? "—"}</div>
+          {item.requesterIsOwner ? (
+            <Badge variant="neutral" className="mt-1">Chủ trung tâm</Badge>
+          ) : (
+            <Badge variant="warn" className="mt-1">Không phải chủ trung tâm</Badge>
+          )}
+        </>
+      ),
+    },
+    {
+      id: "reason",
+      label: "Lý do",
+      headerClassName: "min-w-56",
+      cellClassName: "whitespace-pre-wrap break-words text-sm",
+      render: (item) => (
+        <>
+          {item.reason}
+          {item.decisionNote ? (
+            <div className="mt-1 text-xs text-ink-2">
+              {item.status === "rejected" ? "Lý do từ chối" : "Ghi chú kiểm tra"}: {item.decisionNote}
+            </div>
+          ) : null}
+        </>
+      ),
+    },
+    {
+      id: "status",
+      label: "Trạng thái",
+      required: true,
+      render: (item) => {
+        const badge = STATUS_BADGE[item.status] ?? STATUS_BADGE.pending;
+        return (
+          <>
+            <Badge variant={badge.variant}>{badge.label}</Badge>
+            {item.status === "approved" && item.scheduledPurgeAt ? (
+              <div className="mt-1 text-xs text-ink-2">
+                {item.isLegalHold ? "Tạm dừng xóa (đang giữ). Hạn cũ: " : "Xóa hẳn: "}
+                {formatDateTime(item.scheduledPurgeAt)}
+              </div>
+            ) : null}
+            {(item.status === "pending" || item.status === "approved") && item.dueAt ? (
+              <div className="mt-1 text-xs text-ink-2">
+                Hạn xử lý: {formatDateTime(item.dueAt)}
+                {(() => {
+                  const left = daysUntil(item.dueAt, now);
+                  // Đang giữ pháp lý thì tạm dừng đếm hạn, không báo "quá hạn" gây hiểu nhầm
+                  if (item.isLegalHold) return <span className="ml-1">tạm dừng (đang giữ pháp lý)</span>;
+                  if (left < 0) return <span className="ml-1 font-medium text-risk">quá hạn {-left} ngày</span>;
+                  return <span className="ml-1">còn {left} ngày</span>;
+                })()}
+                {item.extendedAt ? (
+                  <div title={item.extensionNote ?? undefined}>Đã gia hạn một lần{item.extensionNote ? `: ${item.extensionNote}` : ""}</div>
+                ) : null}
+              </div>
+            ) : null}
+            {item.status === "completed" && item.completedAt ? (
+              <div className="mt-1 text-xs text-ink-2">Đã xóa: {formatDateTime(item.completedAt)}</div>
+            ) : null}
+          </>
+        );
+      },
+    },
+    {
+      id: "actions",
+      label: "Thao tác",
+      required: true,
+      headerClassName: "w-52",
+      render: (item) => (
+        <div className="flex flex-wrap gap-2">
+          {item.status === "pending" ? (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                className="gap-1.5"
+                disabled={item.isLegalHold}
+                title={item.isLegalHold ? "Đang giữ pháp lý: chỉ có thể từ chối hoặc gỡ giữ trước" : undefined}
+                onClick={() => open("approve", item)}
+              >
+                <CheckIcon className="size-3.5" />
+                Duyệt
+              </Button>
+              <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={() => open("reject", item)}>
+                <XIcon className="size-3.5" />
+                Từ chối
+              </Button>
+            </>
+          ) : null}
+          {(item.status === "pending" || item.status === "approved") && !item.extendedAt ? (
+            <Button type="button" size="sm" variant="ghost" className="gap-1.5" onClick={() => open("extend", item)}>
+              <ClockIcon className="size-3.5" />
+              Gia hạn
+            </Button>
+          ) : null}
+          {item.status === "pending" || item.status === "approved" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="gap-1.5"
+              onClick={() =>
+                setHoldTarget({
+                  action: item.isLegalHold ? "release" : "set",
+                  centerId: item.studyCenterId,
+                  centerName: item.centerName,
+                })
+              }
+            >
+              <ScaleIcon className="size-3.5" />
+              {item.isLegalHold ? "Gỡ giữ pháp lý" : "Giữ pháp lý"}
+            </Button>
+          ) : null}
+        </div>
+      ),
+    },
+  ];
+
   const decisionText = target ? DECISION_TEXT[target.decision] : null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <Segmented label="Lọc yêu cầu" value={filter} options={FILTER_OPTIONS} onChange={changeFilter} />
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <Tabs value={filter} onValueChange={(value) => changeFilter(value as Filter)}>
+        <TabsList variant="line" className="h-auto w-full justify-start gap-0 border-b border-border p-0">
+          {FILTER_OPTIONS.map((opt) => (
+            <TabsTrigger key={opt.id} value={opt.id} className={TAB_TRIGGER_CLASS}>
+              {opt.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
-      {query.error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{query.error}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      <div data-loading={query.loading ? "true" : "false"} className="overflow-x-auto rounded-md border border-line data-[loading=true]:opacity-60">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Gửi lúc</TableHead>
-              <TableHead>Trung tâm</TableHead>
-              <TableHead>Người gửi</TableHead>
-              <TableHead className="min-w-56">Lý do</TableHead>
-              <TableHead>Trạng thái</TableHead>
-              <TableHead className="w-52"><span className="sr-only">Thao tác</span></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {list?.items.map((item) => {
-              const badge = STATUS_BADGE[item.status] ?? STATUS_BADGE.pending;
-              return (
-                <TableRow key={item.id}>
-                  <TableCell className="tabular whitespace-nowrap">{formatDateTime(item.createdAt)}</TableCell>
-                  <TableCell>
-                    <div className="font-medium">
-                      {item.status === "completed" ? (
-                        item.centerName
-                      ) : (
-                        <Link href={`/admin/centers/${item.studyCenterId}`} className="hover:underline">
-                          {item.centerName}
-                        </Link>
-                      )}
-                    </div>
-                    <div className="text-xs text-ink-2">{[item.centerEmail, item.centerPhone].filter(Boolean).join(" · ") || "—"}</div>
-                    {item.isLegalHold ? (
-                      <div className="mt-1 flex flex-col gap-0.5">
-                        <Badge variant="risk" className="w-fit gap-1">
-                          <ScaleIcon className="size-3" />
-                          Đang giữ pháp lý
-                        </Badge>
-                        {item.legalHoldReason ? (
-                          <span className="whitespace-pre-wrap break-words text-xs text-ink-2">{item.legalHoldReason}</span>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {item.openReportCount > 0 && item.status !== "completed" ? (
-                      <Badge variant="warn" className="mt-1">
-                        {item.openReportCount} tin nhắn bị báo cáo chưa xử lý
-                      </Badge>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>
-                    <div>{item.requesterName ?? "Tài khoản đã xóa"}</div>
-                    <div className="text-xs text-ink-2">{item.requesterEmail ?? "—"}</div>
-                    {item.requesterIsOwner ? (
-                      <Badge variant="neutral" className="mt-1">Chủ trung tâm</Badge>
-                    ) : (
-                      <Badge variant="warn" className="mt-1">Không phải chủ trung tâm</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="whitespace-pre-wrap break-words text-sm">
-                    {item.reason}
-                    {item.decisionNote ? (
-                      <div className="mt-1 text-xs text-ink-2">
-                        {item.status === "rejected" ? "Lý do từ chối" : "Ghi chú kiểm tra"}: {item.decisionNote}
-                      </div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={badge.variant}>{badge.label}</Badge>
-                    {item.status === "approved" && item.scheduledPurgeAt ? (
-                      <div className="mt-1 text-xs text-ink-2">
-                        {item.isLegalHold ? "Tạm dừng xóa (đang giữ). Hạn cũ: " : "Xóa hẳn: "}
-                        {formatDateTime(item.scheduledPurgeAt)}
-                      </div>
-                    ) : null}
-                    {(item.status === "pending" || item.status === "approved") && item.dueAt ? (
-                      <div className="mt-1 text-xs text-ink-2">
-                        Hạn xử lý: {formatDateTime(item.dueAt)}
-                        {(() => {
-                          const left = daysUntil(item.dueAt, now);
-                          // Đang giữ pháp lý thì tạm dừng đếm hạn, không báo "quá hạn" gây hiểu nhầm
-                          if (item.isLegalHold) return <span className="ml-1">tạm dừng (đang giữ pháp lý)</span>;
-                          if (left < 0) return <span className="ml-1 font-medium text-risk">quá hạn {-left} ngày</span>;
-                          return <span className="ml-1">còn {left} ngày</span>;
-                        })()}
-                        {item.extendedAt ? (
-                          <div title={item.extensionNote ?? undefined}>Đã gia hạn một lần{item.extensionNote ? `: ${item.extensionNote}` : ""}</div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {item.status === "completed" && item.completedAt ? (
-                      <div className="mt-1 text-xs text-ink-2">Đã xóa: {formatDateTime(item.completedAt)}</div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-2">
-                      {item.status === "pending" ? (
-                        <>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="destructive"
-                            className="gap-1.5"
-                            disabled={item.isLegalHold}
-                            title={item.isLegalHold ? "Đang giữ pháp lý: chỉ có thể từ chối hoặc gỡ giữ trước" : undefined}
-                            onClick={() => open("approve", item)}
-                          >
-                            <CheckIcon className="size-3.5" />
-                            Duyệt
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={() => open("reject", item)}>
-                            <XIcon className="size-3.5" />
-                            Từ chối
-                          </Button>
-                        </>
-                      ) : null}
-                      {(item.status === "pending" || item.status === "approved") && !item.extendedAt ? (
-                        <Button type="button" size="sm" variant="ghost" className="gap-1.5" onClick={() => open("extend", item)}>
-                          <ClockIcon className="size-3.5" />
-                          Gia hạn
-                        </Button>
-                      ) : null}
-                      {item.status === "pending" || item.status === "approved" ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="gap-1.5"
-                          onClick={() =>
-                            setHoldTarget({
-                              action: item.isLegalHold ? "release" : "set",
-                              centerId: item.studyCenterId,
-                              centerName: item.centerName,
-                            })
-                          }
-                        >
-                          <ScaleIcon className="size-3.5" />
-                          {item.isLegalHold ? "Gỡ giữ pháp lý" : "Giữ pháp lý"}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-            {list && list.items.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-sm text-ink-2">
-                  Không có yêu cầu nào.
-                </TableCell>
-              </TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
-      </div>
-
-      {list ? (
-        <TablePagination
-          page={list.page}
-          totalPages={list.totalPages}
-          totalCount={list.totalCount}
-          itemLabel="yêu cầu"
-          disabled={query.loading}
-          onPageChange={setPage}
-        />
-      ) : null}
+      <DataTable
+        columns={columns}
+        items={list?.items ?? []}
+        getRowId={(item) => item.id}
+        isLoading={query.loading && !list}
+        error={query.error}
+        emptyMessage="Không có yêu cầu nào."
+        label="Danh sách yêu cầu xóa trung tâm"
+        footer={
+          list ? (
+            <TablePagination
+              page={list.page}
+              totalPages={list.totalPages}
+              totalCount={list.totalCount}
+              itemLabel="yêu cầu"
+              disabled={query.loading}
+              onPageChange={setPage}
+            />
+          ) : null
+        }
+      />
 
       <AlertDialog open={target !== null} onOpenChange={(isOpen) => !isOpen && close()}>
         <AlertDialogContent>
