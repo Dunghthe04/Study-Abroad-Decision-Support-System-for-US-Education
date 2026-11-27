@@ -5084,6 +5084,14 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(5,4)")
                         .HasColumnName("acceptance_rate");
 
+                    b.Property<List<string>>("Aliases")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("aliases")
+                        .HasDefaultValueSql("'{}'")
+                        .HasComment("Tên viết tắt học sinh hay gõ (MIT, UT Austin, ASU). Một tên có thể nằm ở nhiều trường: chat hỏi lại để học sinh chọn.");
+
                     b.Property<string>("City")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")

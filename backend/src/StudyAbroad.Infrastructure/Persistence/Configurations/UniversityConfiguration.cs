@@ -16,6 +16,9 @@ public class UniversityConfiguration : IEntityTypeConfiguration<University>
         b.Property(x => x.Website).HasMaxLength(512);
         b.Property(x => x.Control).HasMaxLength(16);
         b.Property(x => x.AcceptanceRate).HasPrecision(5, 4);
+        // Không đặt ràng buộc duy nhất: một tên viết tắt dùng chung cho nhiều trường ("ASU", "OSU") là cố ý, hệ thống hỏi học sinh chọn
+        b.Property(x => x.Aliases).HasColumnType("text[]").HasDefaultValueSql("'{}'")
+            .HasComment("Tên viết tắt học sinh hay gõ (MIT, UT Austin, ASU). Một tên có thể nằm ở nhiều trường: chat hỏi lại để học sinh chọn.");
         b.HasIndex(x => x.Code).IsUnique();
         b.HasOne<User>().WithMany().HasForeignKey(x => x.LastEditedByUserId).OnDelete(DeleteBehavior.SetNull);
         b.HasIndex(x => x.State);

@@ -94,7 +94,7 @@ public partial class RecommendationService
         var profile = await profiles.GetProfileByUserIdAsync(userId, ct);
         var level = string.IsNullOrWhiteSpace(profile?.TargetLevel) ? "undergraduate" : profile!.TargetLevel!;
         var schools = await recommendations.ListSchoolsAsync(level, ct);
-        return SchoolNameMatcher.FindMentioned(text, schools.Select(s => new SchoolRef(s.University.Code, s.University.Name)).ToList());
+        return SchoolNameMatcher.FindMentioned(text, schools.Select(s => new SchoolRef(s.University.Code, s.University.Name, s.University.Aliases)).ToList());
     }
 
     private static SchoolInfoDto ToSchoolInfo(RecommendSchoolInput input, IReadOnlyList<SchoolRanking> rankings)

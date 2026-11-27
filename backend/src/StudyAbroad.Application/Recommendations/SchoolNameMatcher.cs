@@ -5,14 +5,16 @@ namespace StudyAbroad.Application.Recommendations;
 
 // Khớp tên trường học sinh nói ("MIT", "boston uni", "Penn State") với danh sách trường trong hệ thống.
 // SLM chỉ trích đoạn chữ; việc chọn đúng trường cần chắc chắn nên làm bằng code, dùng chung cho mọi câu hỏi về một trường.
-// Found chỉ khi chắc chắn: trùng tên hoặc mã, chữ cái đầu duy nhất, tên bắt đầu bằng nguyên các từ đã gõ, hoặc gõ sai nhẹ.
+// Found chỉ khi chắc chắn: trùng tên hoặc mã, tên viết tắt đã duyệt dành riêng cho một trường, tên bắt đầu bằng nguyên các từ đã gõ, hoặc gõ sai nhẹ.
 // Ambiguous là cần học sinh chọn hoặc xác nhận: nhiều ứng viên, hoặc chỉ một ứng viên nhưng chữ đã gõ chỉ khớp dở từ hoặc ở giữa tên
 // (gõ "Penn" thì hỏi "Pennsylvania State hay University of Pennsylvania?"; gõ "Washington University" mà chỉ có "George Washington University" thì hỏi lại).
-// Cách gọi thân thuộc không suy ra được từ tên (BU, Penn, Cal) do SLM chuẩn hóa thành tên đầy đủ khi đã được huấn luyện, chưa thì hệ thống hỏi lại.
+// Tên viết tắt (MIT, UT Austin, ASU) lấy từ cột universities.aliases do nhóm duyệt: một tên dùng chung cho nhiều trường ("ASU", "OSU") thì hỏi lại.
+// Chữ cái đầu suy từ tên chính thức chỉ là đoán nên chỉ dùng để hỏi xác nhận, không tự chọn.
 // NotFound khi không thấy.
 // Không bao giờ đoán bừa một trường.
 
-public record SchoolRef(string Code, string Name);
+// Aliases: tên viết tắt của trường (cột universities.aliases), có thể rỗng
+public record SchoolRef(string Code, string Name, IReadOnlyList<string>? Aliases = null);
 
 public enum NameMatchKind
 {
@@ -38,33 +40,42 @@ public static class SchoolNameMatcher
     private static readonly HashSet<string> Filler = ["truong", "dai", "hoc"];
 
     // allowFuzzy = false: không chấp nhận gõ sai (dùng khi quét cả câu, tránh khớp nhầm một từ thường với tên trường)
-    public static NameMatch Match(string? query, IReadOnlyList<SchoolRef> schools, bool allowFuzzy = true)
+    // allowAlias = false: không tra tên viết tắt (khi quét cả câu mà chữ có dấu: "mít" không được thành MIT)
+    public static NameMatch Match(string? query, IReadOnlyList<SchoolRef> schools, bool allowFuzzy = true, bool allowAlias = true)
     {
-        var q = StripThe(Normalize(query));
-        foreach (var word in Filler)
-            q = string.Join(' ', q.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(t => t != word));
+        var q = Key(query);
         if (q.Length < 2)
             return NotFound;
 
-        var index = schools.Select(s => new Indexed(s, StripThe(Normalize(s.Name)), Normalize(s.Code))).ToList();
+        var index = schools.Select(s => new Indexed(s, StripThe(Normalize(s.Name)), Normalize(s.Code), AliasKeys(s))).ToList();
 
         // 1. Trùng hẳn tên hoặc mã
         var exact = index.Where(i => i.Name == q || i.Code == q).ToList();
         if (exact.Count > 0)
             return Pick(exact);
 
-        // 2. Chữ cái đầu ("MIT", "UCLA", "NYU"): chỉ nhận khi duy nhất
-        if (!q.Contains(' ') && q.Length >= 2)
+        // 2. Tên viết tắt đã duyệt: một trường thì chọn; nhiều trường dùng chung tên ("ASU", "OSU", "Penn") thì hỏi học sinh chọn
+        if (allowAlias)
+        {
+            var byAlias = index.Where(i => i.Aliases.Contains(q)).ToList();
+            if (byAlias.Count > 0)
+                return Pick(byAlias);
+        }
+
+        // 3. Chữ cái đầu suy từ tên chính thức: chỉ là đoán nên luôn hỏi xác nhận, kể cả khi chỉ một trường.
+        // Đoán kiểu này sai cả hai chiều: "asu" ra Appalachian State (Arizona State có tên "...Campus Immersion"),
+        // "học lực" bỏ "học" còn "luc" ra Loyola University Chicago (lỗi thật 27/11/2026)
+        if (!q.Contains(' '))
         {
             var byAcronym = index.Where(i => Acronym(i.Name) == q).ToList();
             if (byAcronym.Count > 0)
-                return Pick(byAcronym);
+                return Confirm(byAcronym);
         }
 
         if (q.Length < 3)
-            return NotFound;   // hai ký tự chỉ có nghĩa khi là tên gọi thân thuộc hoặc chữ cái đầu ở trên
+            return NotFound;   // hai ký tự chỉ có nghĩa khi là tên viết tắt hoặc chữ cái đầu ở trên
 
-        // 3. Trùng chữ theo thứ tự: bắt đầu bằng cụm, rồi chứa cụm, rồi chứa đủ các từ (cho phép gõ tắt đầu từ: "univ")
+        // 4. Trùng chữ theo thứ tự: bắt đầu bằng cụm, rồi chứa cụm, rồi chứa đủ các từ (cho phép gõ tắt đầu từ: "univ")
         var tiers = new Func<Indexed, bool>[]
         {
             i => (i.Name + " ").StartsWith(q + " "),         // nguyên từ ở đầu tên: "boston" → Boston University
@@ -93,7 +104,7 @@ public static class SchoolNameMatcher
                 : new NameMatch(NameMatchKind.Ambiguous, candidates.Take(MaxCandidates).ToList());
         }
 
-        // 4. Gõ sai nhẹ ("harvad", "standford"): chọn trường gần nhất nếu duy nhất
+        // 5. Gõ sai nhẹ ("harvad", "standford"): chọn trường gần nhất nếu duy nhất
         return allowFuzzy ? Fuzzy(index, q) : NotFound;
     }
 
@@ -104,7 +115,8 @@ public static class SchoolNameMatcher
 
     /// <summary>
     /// Tìm trường được nhắc TRONG một câu ("học phí Harvard bao nhiêu", "NYU có học bổng không"), khác Match là khớp một đoạn chữ đã tách sẵn.
-    /// Chỉ nhận khi chắc chắn: tên đầy đủ hoặc nguyên từ đầu tên duy nhất (cụm dài trước), hoặc viết tắt VIẾT HOA (MIT, UCLA, NYU).
+    /// Chỉ nhận khi chắc chắn: tên đầy đủ hoặc nguyên từ đầu tên duy nhất (cụm dài trước), hoặc tên viết tắt đã duyệt của đúng một trường,
+    /// gõ VIẾT HOA (MIT, NYU) hoặc chữ thường không dấu từ 4 chữ trở lên (ucla, pitt).
     /// Không nhận gõ sai, không nhận tên mơ hồ (một từ chung như "Boston"). Trả mỗi trường một lần, theo thứ tự xuất hiện.
     /// Chỉ nên dùng khi câu đã có dấu hiệu hỏi về trường (nhắc mục như học phí, học bổng), vì quét cả câu dễ trùng từ thường.
     /// </summary>
@@ -126,6 +138,7 @@ public static class SchoolNameMatcher
                 var candidate = string.Join(' ', window);
                 if (length == 1)
                 {
+                    // Một từ chữ thường cần từ 4 chữ trở lên: từ ngắn gõ không dấu dễ trùng chữ tiếng Việt ("iu", "neu", "mit")
                     var token = window[0];
                     var acronym = token.Length >= 2 && token.All(char.IsUpper);
                     if (acronym ? NotAcronyms.Contains(token) : token.Length < 4)
@@ -135,7 +148,8 @@ public static class SchoolNameMatcher
                 {
                     continue;
                 }
-                var match = Match(candidate, schools, allowFuzzy: false);
+                // Chữ có dấu không tra tên viết tắt: bỏ dấu đi "mít" thành "mit"
+                var match = Match(candidate, schools, allowFuzzy: false, allowAlias: window.All(IsAscii));
                 if (match.Kind != NameMatchKind.Found)
                     continue;
                 for (var i = start; i < start + length; i++)
@@ -148,18 +162,35 @@ public static class SchoolNameMatcher
 
     private static readonly NameMatch NotFound = new(NameMatchKind.NotFound, []);
 
-    private record Indexed(SchoolRef School, string Name, string Code);
+    private record Indexed(SchoolRef School, string Name, string Code, HashSet<string> Aliases);
 
-    // Một trường thì Found, nhiều thì Ambiguous. Ứng viên xếp theo tên ngắn trước (gần với điều học sinh gõ nhất)
-    private static NameMatch Pick(List<Indexed> hits)
-    {
-        if (hits.Count > TooManyHits)
-            return NotFound;
-        var ordered = hits.OrderBy(h => h.Name.Length).ThenBy(h => h.Name, StringComparer.Ordinal).Select(h => h.School).ToList();
-        return ordered.Count == 1
-            ? new NameMatch(NameMatchKind.Found, ordered)
-            : new NameMatch(NameMatchKind.Ambiguous, ordered.Take(MaxCandidates).ToList());
-    }
+    // Chuỗi dùng để so: chuẩn hóa, bỏ "the" ở đầu và các từ thừa ("đại học", "trường")
+    private static string Key(string? text) =>
+        string.Join(' ', StripThe(Normalize(text)).Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => !Filler.Contains(w)));
+
+    private static HashSet<string> AliasKeys(SchoolRef school) =>
+        (school.Aliases ?? []).Select(Key).Where(k => k.Length >= 2).ToHashSet();
+
+    private static bool IsAscii(string text) => text.All(c => c < 128);
+
+    // Ứng viên xếp theo tên ngắn trước (gần với điều học sinh gõ nhất); quá nhiều thì coi như chưa nêu được trường nào
+    private static List<SchoolRef>? Ordered(List<Indexed> hits) =>
+        hits.Count > TooManyHits
+            ? null
+            : hits.OrderBy(h => h.Name.Length).ThenBy(h => h.Name, StringComparer.Ordinal).Select(h => h.School).ToList();
+
+    // Một trường thì Found, nhiều thì Ambiguous
+    private static NameMatch Pick(List<Indexed> hits) =>
+        Ordered(hits) switch
+        {
+            null => NotFound,
+            [var one] => new NameMatch(NameMatchKind.Found, [one]),
+            var many => new NameMatch(NameMatchKind.Ambiguous, many.Take(MaxCandidates).ToList()),
+        };
+
+    // Kết quả đoán: luôn hỏi lại, kể cả khi chỉ một trường
+    private static NameMatch Confirm(List<Indexed> hits) =>
+        Ordered(hits) is { } ordered ? new NameMatch(NameMatchKind.Ambiguous, ordered.Take(MaxCandidates).ToList()) : NotFound;
 
     private static bool ContainsAllWords(Indexed school, string q)
     {
