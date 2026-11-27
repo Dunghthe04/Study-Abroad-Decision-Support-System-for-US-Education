@@ -295,6 +295,9 @@ class BudgetRead(BaseModel):
     amount: float | None = None
     currency: str | None = None
     tier: str | None = None
+    at_least: bool | None = (
+        None  # học sinh nói số tiền là mức tối thiểu ("trên 70 nghìn"), không phải mức tối đa
+    )
 
 
 # Một hoạt động như Bước 5 của form. Thiếu ý nào thì để null, validators sẽ hỏi lại đúng ý đó
@@ -380,7 +383,7 @@ def check_value(name: str, value: Any) -> Any:
     if name == "budget":
         # Có số tiền thì tự quy ra mức, không tin mức Qwen đoán
         if value.amount is not None:
-            return check_budget(value.amount, value.currency)
+            return check_budget(value.amount, value.currency, bool(value.at_least))
         if value.tier is not None:
             return check_budget_tier(value.tier)
         raise AskAgain("Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm? Bạn cho mình một con số nhé.")
