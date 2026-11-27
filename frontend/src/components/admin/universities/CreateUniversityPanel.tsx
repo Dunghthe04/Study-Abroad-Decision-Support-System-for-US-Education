@@ -11,7 +11,7 @@ import type { AdminFieldErrors, AdminUniversityDetail } from "@/types/admin-univ
 import { DetailPanel } from "../shared/DetailPanel";
 import { RowsTable, TableFrame } from "../shared/EditableTable";
 import { UniversityMediaPreview } from "./UniversityMediaPreview";
-import { buildUniversityEditRows, EMPTY_UNIVERSITY_FORM, type UniversityFormState } from "./UniversityFormFields";
+import { buildUniversityEditRows, EMPTY_UNIVERSITY_FORM, parseAliases, type UniversityFormState } from "./UniversityFormFields";
 
 interface CreateUniversityPanelProps {
   onClose: () => void;
@@ -60,6 +60,7 @@ export function CreateUniversityPanel({ onClose, onCreated }: CreateUniversityPa
       const created = await createAdminUniversity({
         code: (form.code ?? "").trim().toUpperCase(),
         name: form.name.trim(),
+        aliases: parseAliases(form.aliases),
         city: textOrNull(form.city),
         state: textOrNull(form.state),
         website: textOrNull(form.website),

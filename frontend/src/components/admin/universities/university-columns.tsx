@@ -57,6 +57,13 @@ export function universityColumns(
       ),
     },
     {
+      id: "aliases",
+      label: "Viết tắt",
+      render: (university) => university.aliases?.length
+        ? <span className="text-sm">{university.aliases.join(", ")}</span>
+        : <span className="text-muted-foreground">—</span>,
+    },
+    {
       id: "state",
       label: "Bang",
       render: (university) => {

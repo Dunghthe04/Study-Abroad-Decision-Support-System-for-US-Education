@@ -12,6 +12,8 @@ import { ImageUploadField } from "../shared/ImageUploadField";
 export interface UniversityFormState {
   code?: string;
   name: string;
+  /** Tên viết tắt, cách nhau bởi dấu phẩy: "MIT, Caltech" */
+  aliases: string;
   city: string;
   state: string;
   website: string;
@@ -26,6 +28,7 @@ export interface UniversityFormState {
 export const EMPTY_UNIVERSITY_FORM: UniversityFormState = {
   code: "",
   name: "",
+  aliases: "",
   city: "",
   state: "",
   website: "",
@@ -44,6 +47,7 @@ export function universityToFormState(university: AdminUniversityDetail): Univer
   }
   return {
     name: university.name,
+    aliases: (university.aliases ?? []).join(", "),
     city: toInputValue(university.city),
     state: toInputValue(university.state),
     website: toInputValue(university.website),
@@ -54,6 +58,11 @@ export function universityToFormState(university: AdminUniversityDetail): Univer
     logoUrl: toInputValue(university.logoUrl),
     coverUrl: toInputValue(university.coverUrl),
   };
+}
+
+/** "MIT, Caltech" → ["MIT", "Caltech"]; backend lo phần lọc trùng và độ dài */
+export function parseAliases(text: string): string[] {
+  return text.split(",").map((a) => a.trim()).filter(Boolean);
 }
 
 export function buildUniversityEditRows({
@@ -110,6 +119,21 @@ export function buildUniversityEditRows({
           disabled={isSaving}
           required
           autoFocus={!includeCode}
+        />
+      ),
+    },
+    {
+      label: "Tên viết tắt",
+      inputId: "uni-aliases",
+      error: fieldErrors.aliases,
+      value: (
+        <Input
+          id="uni-aliases"
+          value={form.aliases}
+          onChange={(e) => setField("aliases", e.target.value)}
+          aria-invalid={Boolean(fieldErrors.aliases) || undefined}
+          placeholder="Ví dụ: MIT, Caltech (cách nhau bởi dấu phẩy)"
+          disabled={isSaving}
         />
       ),
     },
