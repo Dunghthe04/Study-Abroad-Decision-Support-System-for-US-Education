@@ -48,8 +48,10 @@ from app.services.skills.validators import (
     check_scholarship,
     check_standardized_plan,
     check_states,
+    money_currency,
     parse_month_year_text,
     read_money,
+    to_usd,
 )
 
 SKILL_PATH = SKILLS_DIR / "skill_ho_so.md"
@@ -356,6 +358,15 @@ class HoSoRead:
     pending_cert: dict | None = None
     # Học sinh không nói thang GPA: thang trong values là đoán. Ở B2 thì hỏi lại thang thay vì ghi
     gpa_guessed: bool = False
+    # Số tiền mỗi năm (USD) học sinh nói là mức tối đa; None khi chỉ chọn mức hoặc nói mức tối thiểu
+    budget_usd: float | None = None
+
+
+# Số tiền (USD) học sinh nói là mức tối đa. Chỉ chọn mức (không có số) hoặc nói mức tối thiểu thì None
+def stated_budget_usd(value: BudgetRead) -> float | None:
+    if value.amount is None or value.at_least:
+        return None
+    return to_usd(value.amount, money_currency(value.amount, value.currency))
 
 
 # Kiểm tra một thông tin bằng validators, trả về giá trị chuẩn để ghi vào hồ sơ. Sai thì ném AskAgain
@@ -493,6 +504,8 @@ def check_values(read: HoSoRaw, question_id: str | None, message: str = "") -> H
             else:
                 result.values[name] = check_value(name, getattr(read.values, name))
                 result.gpa_guessed = result.gpa_guessed or (name == "gpa" and read.values.gpa.scale is None)
+                if name == "budget":
+                    result.budget_usd = stated_budget_usd(read.values.budget)
         except AskAgain as err:
             result.ask_again = result.ask_again or err.question
     # Một thông tin vừa có giá trị vừa "không có" thì tin giá trị
@@ -566,6 +579,8 @@ def save_read(
     # Sau khi bỏ ngân sách bị khóa: mục đó không tính là đã nhận, để luồng sửa vẫn báo học sinh là không sửa được.
     # Xét trước khi ghi, lúc hồ sơ còn giá trị cũ
     state.read_now.update(name for name, value, _ in fields if really_read(state, name, value, message))
+    if "budget" in state.read_now and read.budget_usd is not None:
+        state.budget_said = read.budget_usd
     written = []
     for name, value, field_status in fields:
         if keep_existing and name in state.profile:
@@ -913,6 +928,7 @@ def save_budget(state: ChatState, amount: float, currency: str | None) -> SkillO
         tier = check_budget(amount, currency)
     except AskAgain as err:
         return ask_question(state, "F1", err.question)
+    state.budget_said = to_usd(amount, money_currency(amount, currency))
     state.profile["budget"] = ProfileField(value=tier, status="confirmed")
     return ask_next(state)
 
