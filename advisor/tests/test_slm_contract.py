@@ -55,7 +55,6 @@ def test_a_typical_intent_is_read_with_defaults_for_the_rest():
         {"type": "knowledge", "span": "x", "entities": {"service": "ESSAY_EDITING"}},  # khóa của loại khác
         {"type": "center_referral", "span": "x", "entities": {"service": "LAM_VISA_HO"}},  # mã dịch vụ lạ
         {"type": "center_referral", "span": "x", "entities": {"service": "SUA_BAI_LUAN"}},  # mã dịch vụ cũ
-        {"type": "scenario", "span": "x", "entities": {"mode": "what_if"}},  # what-if mà không nói đổi gì
         {"type": "scenario", "span": "x"},  # thiếu mode
         {
             "type": "scenario",

@@ -175,13 +175,31 @@ def level_word(text: str | None) -> str | None:
     return match[1] if match else None
 
 
-# Nhóm các mặt theo mức code tính. Không tự xếp mặt nào không có mức
-def assessment_groups(ho_so: dict[str, str], tinh_san: dict[str, str]) -> dict[str, list[str]]:
+# Mức cao / trung bình / thấp và mức ngân sách là so với mức chung; mốc của trường mục tiêu là thước đo riêng.
+# Mặt chưa đạt mốc trường mục tiêu phải vào nhóm cần lưu ý và ghi rõ đang so với gì, đúng như câu mở đầu: để ở nhóm
+# giữa hay ghi "mức đủ" thì dữ liệu tự mâu thuẫn và người viết phải tự chế nhóm
+BELOW_TARGET = "chưa đạt mốc trường mục tiêu"
+BUDGET_BELOW_TARGET = "chưa đủ chi phí trường mục tiêu"
+
+
+def budget_below_text(budget_level: str | None) -> str:
+    amount, separator, level = (budget_level or "").rpartition(", mức ")
+    if not separator:
+        return f"Ngân sách: {BUDGET_BELOW_TARGET}"
+    return f"Ngân sách {amount}: {BUDGET_BELOW_TARGET} (so với mức chung thì {level})"
+
+
+# Nhóm các mặt theo mức code tính. Không tự xếp mặt nào không có mức. below: khóa các mặt chưa đạt mốc trường mục tiêu
+def assessment_groups(
+    ho_so: dict[str, str], tinh_san: dict[str, str], below: frozenset[str] = frozenset()
+) -> dict[str, list[str]]:
     groups: dict[str, list[str]] = {key: [] for key, _ in GROUP_TITLES}
     for name, key, calc in SCORED:
         text = tinh_san.get(calc)
         word = level_word(text)
-        if word:
+        if text and key in below:
+            groups["attention"].append(f"{name} {text} (so với mức chung): {BELOW_TARGET}")
+        elif word:
             groups[LEVEL_GROUP[word]].append(f"{name} {text}")
         elif text:
             groups["no_mark"].append(f"{name} {text}")
@@ -189,14 +207,17 @@ def assessment_groups(ho_so: dict[str, str], tinh_san: dict[str, str]) -> dict[s
             groups["missing"].append(name)
     if has_value(ho_so, "act"):
         groups["no_mark"].append(f"ACT {ho_so['act']}")
+    if "budget" in below:
+        groups["attention"].append(budget_below_text(tinh_san.get("budget_level")))
     if ho_so.get("visa_refused") == REFUSED:
         groups["attention"].append(f"Visa: {REFUSED}")
     return groups
 
 
-def finance_line(ho_so: dict[str, str], tinh_san: dict[str, str]) -> str | None:
+# budget_told: ngân sách đã nói ở nhóm cần lưu ý thì dòng tài chính không nhắc lại (và không ghi "mức đủ")
+def finance_line(ho_so: dict[str, str], tinh_san: dict[str, str], budget_told: bool = False) -> str | None:
     parts = []
-    if "budget_level" in tinh_san:
+    if "budget_level" in tinh_san and not budget_told:
         parts.append(f"ngân sách {tinh_san['budget_level']}")
     if has_value(ho_so, "funding_source"):
         parts.append(f"nguồn {ho_so['funding_source']}")
@@ -267,7 +288,8 @@ def opening_line(ho_so: dict[str, str], tinh_san: dict[str, str], roadmap: dict 
 
 def assessment_part(req: SkillRequest, middle_school: bool, roadmap: dict | None = None) -> str:
     ho_so, tinh_san = req.ho_so, req.tinh_san
-    groups = assessment_groups(ho_so, tinh_san)
+    below = frozenset(key for key, _ in below_targets(roadmap))
+    groups = assessment_groups(ho_so, tinh_san, below)
     lines = ['### Phần "Đánh giá hồ sơ"', "Các mặt đã nhóm sẵn theo mức (chép đúng, không đổi nhóm):"]
     if "target_schools" in tinh_san:
         lines.insert(
@@ -284,7 +306,7 @@ def assessment_part(req: SkillRequest, middle_school: bool, roadmap: dict | None
         if ec
         else "- Hoạt động: chưa có, nói đây là phần nên bắt đầu."
     )
-    lines += [line for line in (finance_line(ho_so, tinh_san),) if line]
+    lines += [line for line in (finance_line(ho_so, tinh_san, "budget" in below),) if line]
     if middle_school:
         lines.append("- Bạn đang học THCS: GPA là mục tiêu, nhận xét theo hướng chuẩn bị dài hạn.")
     lines.append(opening_line(ho_so, tinh_san, roadmap))

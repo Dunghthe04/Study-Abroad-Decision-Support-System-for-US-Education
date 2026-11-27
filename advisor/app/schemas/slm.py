@@ -250,13 +250,12 @@ def _check_tasks(intent: str, entities: dict[str, Any]) -> list[str]:
     return tasks
 
 
-# Kịch bản: mode bắt buộc, what_if cần changes, mỗi change cần factor và value hoặc action
+# Kịch bản: mode bắt buộc, mỗi change cần factor và value hoặc action. what_if không có change nào là học sinh muốn thử
+# mà chưa nói đổi gì: nhận, nhánh kịch bản sẽ hỏi muốn đổi gì
 def _check_scenario(entities: dict[str, Any]) -> None:
     if entities.get("mode") not in SCENARIO_MODES:
         raise ValueError(f"mode phải là một trong {SCENARIO_MODES}")
     changes = entities.get("changes", [])
-    if entities["mode"] == "what_if" and not changes:
-        raise ValueError("what_if cần changes")
     for change in changes:
         if "factor" not in change or not ({"value", "action"} & set(change)):
             raise ValueError("mỗi change cần factor và value hoặc action")

@@ -256,8 +256,12 @@ class ScenarioBranch:
         self._knowledge = knowledge
 
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
+        said = slm.intents[0].entities
+        # Muốn thử mà chưa nói đổi gì: hỏi, kể cả khi model gắn follow_up. Gộp trước thì sẽ chạy lại y nguyên kịch bản cũ
+        if said.get("mode") == "what_if" and not said.get("changes"):
+            return self.ask_what(state)
         # Câu nối tiếp chỉ nói phần đổi: gộp vào kịch bản lượt trước (UC-155 1a)
-        entities = merge_follow_up(slm.intents[0].entities, state.context.scenario)
+        entities = merge_follow_up(said, state.context.scenario)
         if entities.get("mode") == "goal_seeking":
             return self._goal_seek(state, entities)
         if entities.get("mode") != "what_if":

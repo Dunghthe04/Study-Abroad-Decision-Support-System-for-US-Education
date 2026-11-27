@@ -271,13 +271,10 @@ def test_a_profile_answer_without_a_pending_question_must_carry_a_value():
         check("collect_profile", row(question="cập nhật SAT giúp em", intents=ys(only)))
 
 
-def test_a_scenario_needs_a_mode_and_a_change():
-    with pytest.raises(ValueError, match="cần changes"):
-        only = {
-            "type": "scenario",
-            "span": "tìm trung tâm sửa bài luận ở Sài Gòn",
-            "entities": {"mode": "what_if"},
-        }
+def test_a_scenario_needs_a_mode():
+    # what_if không có changes được nhận (muốn thử mà chưa nói đổi gì), còn thiếu mode thì vẫn là dòng sai
+    with pytest.raises(ValueError, match="mode phải là"):
+        only = {"type": "scenario", "span": "tìm trung tâm sửa bài luận ở Sài Gòn", "entities": {}}
         check("scenario", row(intents=ys(only)))
 
 
