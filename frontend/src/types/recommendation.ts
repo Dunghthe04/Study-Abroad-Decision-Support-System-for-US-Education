@@ -428,6 +428,8 @@ export interface SchoolInfoData {
   rankings: SchoolRankingData[];
   sourceUrl: string | null;
   retrievedAt: string | null;
+  /** Số liệu bổ sung (SchoolExtraInfo). cost.total có cộng cả bảo hiểm y tế */
+  extra?: { healthInsuranceUsd: number | null } | null;
 }
 
 export type SchoolInfoField =

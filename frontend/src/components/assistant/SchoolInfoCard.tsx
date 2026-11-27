@@ -84,10 +84,12 @@ function FieldRow({
   switch (field) {
     case "cost": {
       const c = info.cost;
+      const insurance = info.extra?.healthInsuranceUsd;
       const parts = [
         c.tuition != null ? `Học phí ${formatUsd(c.tuition)}` : null,
         c.living != null ? `Sinh hoạt ${formatUsd(c.living)}` : null,
         c.fees != null && c.fees > 0 ? `Phí ${formatUsd(c.fees)}` : null, // 0 không rõ là không có phí hay đã gồm trong học phí
+        insurance != null && insurance > 0 ? `Bảo hiểm y tế ${formatUsd(insurance)}` : null, // total đã cộng khoản này
         c.other != null ? `Khác ${formatUsd(c.other)}` : null,
       ].filter(Boolean);
       return (
