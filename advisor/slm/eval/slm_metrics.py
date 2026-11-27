@@ -465,6 +465,35 @@ def calibration(rows: list[dict[str, Any]], bins: int = 10) -> dict[str, Any] | 
     return {"so_tin": len(pts), "ece": ece, "khoang": out}
 
 
+def roc(rows: list[dict[str, Any]], valid_only: bool = False) -> dict[str, Any] | None:
+    """Đường ROC của confidence khi dùng nó để phân biệt tin đoán ĐÚNG loại ý (dương) với tin đoán SAI (âm), và diện tích AUC.
+    AUC = xác suất một tin đúng lấy ngẫu nhiên có confidence cao hơn một tin sai lấy ngẫu nhiên (0,5 = không phân biệt được).
+    Các tin cùng confidence được gộp thành một điểm nên kết quả không phụ thuộc thứ tự dòng.
+    valid_only=True bỏ tin lùi về mơ hồ: confidence 0 của chúng do hệ thống gán, tính vào thì AUC cao lên một cách dễ dãi.
+    Trả None khi không có đủ cả tin đúng lẫn tin sai."""
+    pts = [
+        (r["confidence"], bool(judge(r)["dung_tap_loai"]))
+        for r in rows
+        if "confidence" in r and not (valid_only and is_fallback(r))
+    ]
+    positive = sum(ok for _, ok in pts)
+    negative = len(pts) - positive
+    if not positive or not negative:
+        return None
+    groups: dict[float, list[int]] = {}
+    for confidence, ok in pts:
+        groups.setdefault(confidence, [0, 0])[0 if ok else 1] += 1
+    fpr, tpr, tp, fp, area = [0.0], [0.0], 0, 0, 0.0
+    for confidence in sorted(groups, reverse=True):
+        tp += groups[confidence][0]
+        fp += groups[confidence][1]
+        x, y = fp / negative, tp / positive
+        area += (x - fpr[-1]) * (y + tpr[-1]) / 2
+        fpr.append(x)
+        tpr.append(y)
+    return {"auc": area, "fpr": fpr, "tpr": tpr, "so_tin_dung": positive, "so_tin_sai": negative}
+
+
 def rate(flags: list[bool]) -> float | None:
     return sum(flags) / len(flags) if flags else None
 
@@ -512,6 +541,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "ly_do_loi": dict(reasons) if any("loi_ly_do" in r for r in rows if is_fallback(r)) else None,
         "khoang_tin_cay_f1": {k: list(v) for k, v in f1_ci(rows).items()} if rows else None,
         "hieu_chuan": calibration(rows),
+        "roc": {"tat_ca": roc(rows), "hop_le": roc(rows, valid_only=True)},
         "muc_dung": levels,
         "khoang_tin_cay_95": {k: list(v) for k, v in ci.items()},
         "loi": {name: errors.get(name, 0) for name in ERRORS},

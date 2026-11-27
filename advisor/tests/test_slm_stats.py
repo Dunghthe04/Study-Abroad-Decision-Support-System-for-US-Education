@@ -22,6 +22,7 @@ from slm.eval.slm_metrics import (
     paired_compare,
     per_label,
     predicted_intents,
+    roc,
     summarize,
     valid_rows,
     wilson,
@@ -209,6 +210,34 @@ def test_calibration_compares_confidence_with_the_category_accuracy_and_skips_fa
     assert cal["khoang"][0]["so_tin"] == 10 and cal["khoang"][0]["accuracy"] == pytest.approx(0.9)
     assert cal["ece"] == pytest.approx(abs(0.9 - 0.95))
     assert calibration([fallback("f", [y("knowledge")])]) is None
+
+
+def test_roc_auc_is_the_chance_that_a_correct_message_scores_above_a_wrong_one():
+    right = [row(f"r{i}", [y("knowledge")], [y("knowledge")], confidence=c) for i, c in enumerate((0.99, 0.8))]
+    wrong = [row(f"w{i}", [y("knowledge")], [y("center_referral")], confidence=c) for i, c in enumerate((0.9, 0.4))]
+
+    curve = roc(right + wrong)
+
+    # 4 cặp (đúng, sai): 0.99 hơn cả hai, 0.8 chỉ hơn 0.4 → 3/4
+    assert curve["auc"] == pytest.approx(0.75)
+    assert (curve["so_tin_dung"], curve["so_tin_sai"]) == (2, 2)
+    assert (curve["fpr"][0], curve["tpr"][0], curve["fpr"][-1], curve["tpr"][-1]) == (0.0, 0.0, 1.0, 1.0)
+
+
+def test_roc_ties_count_half_and_do_not_depend_on_row_order():
+    rows = [
+        row("r", [y("knowledge")], [y("knowledge")], confidence=0.9),
+        row("w", [y("knowledge")], [y("center_referral")], confidence=0.9),
+    ]
+
+    assert roc(rows)["auc"] == pytest.approx(0.5) and roc(rows[::-1])["auc"] == pytest.approx(0.5)
+
+
+def test_roc_can_leave_out_fallbacks_and_needs_both_outcomes():
+    rows = [row("r", [y("knowledge")], [y("knowledge")], confidence=0.9), fallback("f", [y("knowledge")])]
+
+    assert roc(rows)["auc"] == pytest.approx(1.0)  # tính cả tin lùi về mơ hồ (confidence 0)
+    assert roc(rows, valid_only=True) is None  # bỏ đi thì không còn tin sai nào để so
 
 
 # ---------------------------------------------------------------- kiểm tra dữ liệu và ví dụ lỗi

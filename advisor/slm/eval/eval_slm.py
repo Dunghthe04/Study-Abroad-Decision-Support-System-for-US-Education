@@ -193,7 +193,8 @@ async def run(model: str, split: str, limit: int | None, prompt: str, shots: int
         base_url=slm_url, timeout=settings.llm_timeout_seconds, headers=headers
     ) as http:
         client = OllamaClient(
-            http, model, num_ctx=settings.llm_num_ctx, num_gpu=settings.llm_num_gpu, seed=settings.llm_seed
+            http, model, num_ctx=settings.llm_num_ctx, num_gpu=settings.llm_num_gpu, seed=settings.llm_seed,
+            num_predict=settings.slm_num_predict,
         )
         # Điều kiện chạy ghi kèm từng dòng để báo cáo tự mô tả thí nghiệm (temperature, thinking và định dạng cố định trong OllamaClient)
         run_settings = {
@@ -204,6 +205,7 @@ async def run(model: str, split: str, limit: int | None, prompt: str, shots: int
             "num_ctx": settings.llm_num_ctx,
             "num_gpu": settings.llm_num_gpu,
             "seed": settings.llm_seed,
+            "num_predict": settings.slm_num_predict,
             "shots": len(few),
             "prompt_version": prompt_version,
         }

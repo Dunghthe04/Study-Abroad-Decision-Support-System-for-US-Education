@@ -64,6 +64,27 @@ def color(i: int) -> str:
     return PALETTE[i % len(PALETTE)]
 
 
+def spread(xs: list[float], gap: float, lo: float, hi: float) -> list[float]:
+    """Dàn vị trí chữ chú thích theo chiều ngang để không đè nhau: giữ gần chỗ gốc nhất, cách nhau ít nhất gap, nằm trong [lo, hi].
+    xs phải tăng dần."""
+    out: list[float] = []
+    for x in xs:
+        out.append(max(x, out[-1] + gap if out else lo))
+    for i in range(len(out) - 1, -1, -1):
+        out[i] = min(out[i], hi - (len(out) - 1 - i) * gap)
+    return out
+
+
+def leader_labels(ax: Any, items: list[tuple[float, str]], y_from: float, y_text: float, gap: float, lo: float, hi: float) -> None:
+    """Số của các đoạn quá hẹp: ghi phía trên thanh, có đường kẻ trỏ xuống đúng đoạn đó. items: (vị trí giữa đoạn, chữ)."""
+    items = sorted(items)
+    for (x, text), x_text in zip(items, spread([x for x, _ in items], gap, lo, hi), strict=True):
+        ax.annotate(
+            text, xy=(x, y_from), xytext=(x_text, y_text), ha="center", va="bottom", fontsize=7.5, annotation_clip=False,
+            arrowprops={"arrowstyle": "-", "lw": 0.6, "color": "#555555", "shrinkA": 0, "shrinkB": 0},
+        )  # fmt: skip
+
+
 def grouped_bars(
     ax: Any,
     groups: list[str],
@@ -207,8 +228,8 @@ def chart_f1_per_label(summaries: dict[str, dict[str, Any]], path: Path) -> Path
     labels = sorted((k for k, n in support.items() if n > 0), key=lambda k: (-support[k], k))
     names = list(summaries)
     matrix = [[s["theo_nhan"].get(k, {}).get("f1", 0.0) for s in summaries.values()] for k in labels]
-    fig, ax = plt.subplots(figsize=(2.6 + 1.7 * len(names), 1.6 + 0.3 * len(labels)))
-    ax.imshow(matrix, cmap="Blues", vmin=0, vmax=1, aspect="auto")
+    fig, ax = plt.subplots(figsize=(3.8 + 1.7 * len(names), 1.6 + 0.3 * len(labels)))
+    im = ax.imshow(matrix, cmap="Blues", vmin=0, vmax=1, aspect="auto")
     for i, row in enumerate(matrix):
         best = max(row)
         for j, v in enumerate(row):
@@ -233,12 +254,15 @@ def chart_f1_per_label(summaries: dict[str, dict[str, Any]], path: Path) -> Path
             tick.set_color("#999999")
     ax.grid(False)
     ax.tick_params(length=0)
-    fig.suptitle(
-        "F1 per category/task label (n = intents in ground truth; black box = best model"
+    bar = fig.colorbar(im, ax=ax, fraction=0.05, pad=0.03, aspect=40)
+    bar.set_label("F1 score (darker = higher, 1.00 = perfect)", fontsize=8.5)
+    bar.ax.tick_params(labelsize=8)
+    # Tiêu đề gắn vào trục (không dùng suptitle) để nằm sát bảng, không chừa khoảng trắng lớn
+    ax.set_title(
+        "F1 per category/task label\n(n = intents in ground truth; black box = best model"
         + ("; grey = fewer than 10 intents, unreliable)" if any(n < 10 for n in support.values()) else ")"),
-        fontweight="bold",
         fontsize=10,
-        y=0.995,
+        pad=14,
     )
     return save(fig, path)
 
@@ -279,20 +303,23 @@ def chart_confusion(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
     style()
     n = len(summaries)
     fig, axes = plt.subplots(1, n, figsize=(6.2 * n, 5.6), squeeze=False, gridspec_kw={"wspace": 0.8})
-    for ax, (name, s) in zip(axes[0], summaries.items(), strict=True):
-        heatmap(ax, s["nham_lan"], name)
+    images = [heatmap(ax, s["nham_lan"], name) for ax, (name, s) in zip(axes[0], summaries.items(), strict=True)]
+    bar = fig.colorbar(images[-1], ax=axes[0].tolist(), fraction=0.025, pad=0.03, shrink=0.8)
+    bar.set_label("Share of the true-label row (darker = higher)", fontsize=9)
+    bar.ax.tick_params(labelsize=8)
     fig.suptitle(
         f"Confusion matrix of intent categories (cell = intents, shade = share of the row)\n"
         f"{NONE}: missing intent (column) or extra intent (row); {INVALID}: no usable response",
         fontweight="bold",
         fontsize=11,
+        y=0.93,  # sát hình: hai ma trận vuông nên không cao hết khung
     )
     return save(fig, path)
 
 
 def chart_errors(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
-    """Thanh chồng 100% theo từng model. Mọi đoạn đều có số: đoạn từ 4% ghi trong đoạn, từ 1% đến dưới 4% ghi phía trên thanh
-    (so le hai tầng để không chồng chữ), còn lại (kể cả đoạn dưới 1%) ghi cả phần trăm lẫn số tin trong chú thích."""
+    """Thanh chồng 100% theo từng model. Mọi đoạn khác 0 đều có số: đoạn từ 4% ghi trong đoạn, hẹp hơn thì ghi phía trên thanh và kẻ
+    đường trỏ vào đúng đoạn (dưới 1% ghi thêm số tin)."""
     style()
     fig, ax = plt.subplots(figsize=(10, 1.8 + 0.9 * len(summaries)))
     names = list(summaries)
@@ -322,21 +349,14 @@ def chart_errors(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
                     fontsize=8,
                     color="white" if k in (0, 1, 7) else "#222222",
                 )
-            elif v >= 0.01:
-                callouts[i].append((lft + v / 2, f"{v:.1%}"))
+            elif v > 0:
+                # Đoạn hẹp (kể cả dưới 1%): ghi phía trên thanh và kẻ đường trỏ vào. Đoạn dưới 1% ghi thêm số tin
+                count = list(summaries.values())[i]["loi"][key]
+                callouts[i].append((lft + v / 2, f"{v:.1%}" if v >= 0.01 else f"{v:.1%}\n({count})"))
         left = [a + b for a, b in zip(left, shares, strict=True)]
     for i, items in enumerate(callouts):
-        for n, (x, text) in enumerate(items):
-            y_text = i - bar_h / 2 - 0.1 - 0.22 * (n % 2)  # so le hai tầng; trục y đảo nên trừ là lên trên
-            ax.annotate(
-                text,
-                xy=(x, i - bar_h / 2),
-                xytext=(x, y_text),
-                ha="center",
-                va="bottom",
-                fontsize=7.5,
-                arrowprops={"arrowstyle": "-", "lw": 0.6, "color": "#555555"},
-            )
+        if items:
+            leader_labels(ax, items, i - bar_h / 2, i - bar_h / 2 - 0.2, gap=0.055, lo=0.03, hi=1.0)
     ax.set_xlim(0, 1)
     ax.set_ylim(len(names) - 0.5, -1.0)  # chừa chỗ phía trên thanh cho số của đoạn nhỏ (trục y đảo)
     ax.set_xticks([0, 0.25, 0.5, 0.75, 1], ["0%", "25%", "50%", "75%", "100%"])
@@ -484,6 +504,36 @@ def chart_confidence(summaries: dict[str, dict[str, Any]], path: Path) -> Path |
     return save(fig, path)
 
 
+def chart_roc(summaries: dict[str, dict[str, Any]], path: Path) -> Path | None:
+    """Đường ROC và AUC của độ tin cậy: confidence có phân biệt được tin đoán đúng loại ý với tin đoán sai không.
+    Hai khung: mọi tin (tin lùi về mơ hồ có confidence 0 do hệ thống gán) và chỉ tin hợp lệ (công bằng hơn khi nói về độ tin cậy
+    của chính model). Mỗi model một đường, AUC ghi trong chú thích."""
+    panels = [("tat_ca", "All messages (invalid ones have confidence 0)"), ("hop_le", "Valid responses only")]
+    if not any((s.get("roc") or {}).get(k) for s in summaries.values() for k, _ in panels):
+        return None
+    style()
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5.4))
+    for ax, (key, title) in zip(axes, panels, strict=True):
+        ax.plot([0, 1], [0, 1], ls="--", color="#888888", lw=1, label="Random guess (AUC = 0.50)")
+        for i, (name, s) in enumerate(summaries.items()):
+            curve = (s.get("roc") or {}).get(key)
+            if not curve:
+                continue
+            ax.plot(
+                curve["fpr"], curve["tpr"], color=color(i), lw=2,
+                label=f"{name}: AUC = {curve['auc']:.3f}\n({curve['so_tin_dung']} correct, {curve['so_tin_sai']} wrong)",
+            )  # fmt: skip
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1.02)
+        ax.set_aspect("equal")
+        ax.set_title(title, fontsize=10)
+        ax.set_xlabel("False positive rate\n(share of wrong messages that pass the threshold)", fontsize=9)
+        ax.set_ylabel("True positive rate\n(share of correct messages that pass the threshold)", fontsize=9)
+        ax.legend(loc="lower right", fontsize=8, frameon=True)
+    fig.suptitle("ROC curve: can the confidence score separate correct from wrong categories?", fontweight="bold")
+    return save(fig, path)
+
+
 def chart_dataset(records: list[dict[str, Any]], path: Path) -> Path:
     """Số dòng dữ liệu theo loại và theo tập train, val, test."""
     style()
@@ -506,17 +556,20 @@ def chart_dataset(records: list[dict[str, Any]], path: Path) -> Path:
                     color="#222222" if split == "val" else "white",
                 )  # fmt: skip
             else:
-                ax.text(
-                    i + 0.43, base + count / 2, f"{split} {count}", ha="left", va="center", fontsize=7.5,
-                    color="#222222",
+                ax.annotate(
+                    f"{split} {count}", xy=(i + 0.4, base + count / 2), xytext=(i + 0.52, base + count / 2),
+                    ha="left", va="center", fontsize=7.5, color="#222222",
+                    arrowprops={"arrowstyle": "-", "lw": 0.6, "color": "#555555", "shrinkA": 0, "shrinkB": 0},
                 )  # fmt: skip
         bottom = [a + b for a, b in zip(bottom, counts, strict=True)]
     for i, total in enumerate(bottom):
         ax.text(i, total + max(bottom) * 0.01, str(total), ha="center", fontsize=8, fontweight="bold")
     ax.set_xlim(-0.6, len(kinds) - 0.4 + 0.5)  # chừa chỗ bên phải cho số của các đoạn thấp ở cột cuối
     ax.set_ylabel("Rows")
-    ax.set_title(f"Messages by primary category and split (total {len(records)})")
-    ax.legend()
+    ax.set_title(f"Messages by primary category and split (total {len(records)})", pad=10)
+    # Chú thích nằm ở góc trên bên phải, trên một hàng; trục y nới thêm để không đè lên cột nào
+    ax.set_ylim(0, max(bottom) * 1.2)
+    ax.legend(loc="upper right", ncol=len(splits), frameon=False, fontsize=9)
     return save(fig, path)
 
 
@@ -594,7 +647,9 @@ def chart_training(
                 "left" if idx == 0 else "right" if idx == len(val_y) - 1 else "center"
             )  # nhãn ở mép thì đẩy vào trong, khỏi bị cắt
             ax_zoom.annotate(
-                f"{value:.4f}", (step, value), xytext=(8 if edge == "left" else -8 if edge == "right" else 0, 14), textcoords="offset points",
+                f"{value:.4f}", (step, value), textcoords="offset points",
+                # Điểm cuối: nhãn nằm dưới chấm, để không bị đọc nhầm thành số của chấm đứng trước
+                xytext=(8 if edge == "left" else 0, -18 if edge == "right" else 14),
                 ha=edge, fontsize=9, color="#D55E00", fontweight="bold",
                 bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none", "pad": 0.6},
             )  # fmt: skip
@@ -689,14 +744,23 @@ def chart_invalid_causes(summaries: dict[str, dict[str, Any]], path: Path) -> Pa
     fig, ax = plt.subplots(figsize=(9, 1.6 + 0.8 * len(have)))
     names = list(have)
     left = [0] * len(names)
+    widest = max(sum(d.values()) for d in have.values()) or 1
+    small: list[list[tuple[float, str]]] = [[] for _ in names]
     for k, reason in enumerate(reasons):
         counts = [have[n].get(reason, 0) for n in names]
         ax.barh(names, counts, left=left, color=color(k), label=reason.replace("_", " "), height=0.55)
         for i, (c, lft) in enumerate(zip(counts, left, strict=True)):
-            if c:
+            if c >= 0.06 * widest:  # đoạn đủ rộng thì ghi trong đoạn
                 ax.text(lft + c / 2, i, str(c), ha="center", va="center", fontsize=8, color="white")
+            elif c:
+                small[i].append((lft + c / 2, str(c)))
         left = [a + b for a, b in zip(left, counts, strict=True)]
-    ax.invert_yaxis()
+    # Trục y đảo: giá trị nhỏ hơn nằm cao hơn, nên chữ đặt ở i - 0.45 là phía trên thanh
+    for i, items in enumerate(small):
+        if items:
+            leader_labels(ax, items, i - 0.275, i - 0.45, gap=0.055 * widest, lo=0.02 * widest, hi=1.02 * widest)
+    ax.set_xlim(0, widest * 1.06)
+    ax.set_ylim(len(names) - 0.5, -0.85)
     ax.set_xlabel("Messages with no usable response")
     ax.set_title("Why responses were invalid (messages)")
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.25), ncol=min(len(reasons), 4), frameon=False)
