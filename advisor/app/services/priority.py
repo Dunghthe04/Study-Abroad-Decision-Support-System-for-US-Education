@@ -12,7 +12,7 @@ KEYS = ("cost", "aid", "prestige")
 TEXT = {"cost": "chi phí thấp", "aid": "học bổng nhiều", "prestige": "danh tiếng"}
 
 LEVEL_MAX = 4
-# Khóa giữ chỗ trong changes khi tin chỉ nói về ưu tiên (ý scenario cần changes không rỗng)
+# Khóa giữ chỗ trong changes khi tin chỉ nói về ưu tiên, để không bị hiểu là muốn thử mà chưa nói đổi gì
 PRIORITY_KEY = "priority"
 
 

@@ -177,7 +177,7 @@ Giá trị dạng chữ là chữ học sinh gõ ("texas", "30 nghìn đô", "to
 
 | Khóa hoặc giá trị | Nghĩa |
 |---|---|
-| `mode = what_if` | Thử "nếu như…" (kèm changes) |
+| `mode = what_if` | Thử "nếu như…" (kèm changes; chưa nói đổi gì thì không có changes) |
 | `mode = goal_seeking` | Cần gì để vào một trường (kèm school) |
 | `target_group = reach` | Nhóm Khó vào |
 | `target_group = target` | Nhóm Vừa sức |
@@ -245,5 +245,5 @@ Giá trị hồ sơ luôn là chữ nguyên văn trong tin. Ý khác ngoài `col
 - `tasks` là danh sách không lặp. Chỉ `profile_review` được nhiều nhiệm vụ; các loại khác một nhiệm vụ mỗi ý.
 - `status` và `restart` không kèm giá trị hồ sơ. `compare` (profile_review) và `compare_facts` cần `schools` từ hai tên; `group` đi với `compare_facts` và không kèm `schools`.
 - `search` cần `filters` hoặc `sort`; `filters` và `sort` chỉ đi với `search`.
-- `what_if` cần `changes`, mỗi change có `factor` và `value` hoặc `action`. `centers` từ hai tên và chỉ đi với `tasks = compare`.
+- Mỗi change trong `changes` có `factor` và `value` hoặc `action`. `what_if` không có `changes` nghĩa là muốn thử mà chưa nói đổi gì. `centers` từ hai tên và chỉ đi với `tasks = compare`.
 - `out_of_scope` bắt buộc có `subtype` và đứng một mình (cả tin không có ý nào khác).

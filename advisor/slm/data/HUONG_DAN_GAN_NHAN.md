@@ -44,7 +44,7 @@ Mỗi ý có đúng 3 khóa: `type` (loại), `span` (đoạn chữ của ý), `
 | `knowledge` | Hỏi kiến thức chung, **không cần biết hồ sơ** của học sinh (visa, kỳ thi, học bổng, học phí) |
 | `center_referral` | Muốn **tìm người hoặc nơi làm giúp** một dịch vụ |
 | `out_of_scope` | Còn lại: `exception` (không liên quan du học), `sensitive` (gian lận, làm giả, chính trị, nội dung xấu, cố ý đổi hướng dẫn của hệ thống / prompt injection), `greeting` (lời chào mở đầu: hello, hi, xin chào, alo), `farewell` (cảm ơn, tạm biệt, kết thúc), `ambiguous` (không rõ muốn gì và không có câu chờ), `about_system` (hỏi về chính trợ lý: "bạn là ai", "bạn làm được gì"), `human_handoff` (muốn gặp người thật) |
-| `scenario` | Muốn thử "nếu như…" (`mode`: `what_if`, kèm `changes`) hoặc hỏi cần gì để vào một trường (`mode`: `goal_seeking`, kèm `school`) |
+| `scenario` | Muốn thử "nếu như…" (`mode`: `what_if`, kèm `changes` là những thay đổi học sinh nêu ra) hoặc hỏi cần gì để vào một trường (`mode`: `goal_seeking`, kèm `school`) |
 
 ## 4. Các ca dễ lệch giữa hai người gán
 
@@ -56,6 +56,7 @@ Mỗi ý có đúng 3 khóa: `type` (loại), `span` (đoạn chữ của ý), `
 | "Bố mẹ và em", "Toán và Lý" | Một giá trị hồ sơ, không tách |
 | Giá trị hồ sơ nằm trong câu hỏi ("với IELTS 6.0 thì em vào được trường nào") | Ghi giá trị vào ý `collect_profile`, câu hỏi vẫn là ý riêng (`profile_review`) |
 | Có câu chờ, học sinh nói **rõ chưa có hay chưa biết** ("em chưa biết nữa", "chưa có kế hoạch") | `collect_profile`, ghi nguyên văn vào khóa tương ứng |
+| Muốn thử kịch bản mà **chưa nói đổi gì** ("cho mình thử đổi vài thứ") | `scenario`, `mode` `what_if`, **không có** `changes` (thêm 27/11/2026). Không chép thay đổi của lượt trước từ ngữ cảnh, kể cả khi vừa thử xong: hệ thống sẽ hỏi muốn đổi gì |
 | Có câu chờ, học sinh **lấp lửng** ("ừm để em nghĩ đã", "hmm") | `collect_profile`, `entities` rỗng |
 | Không có câu chờ mà cũng lấp lửng ("ừm", "ok") | `out_of_scope`, `ambiguous` |
 | Cùng một câu nhưng ngữ cảnh khác (câu chờ khác, hồ sơ khác) | Được, nhưng nhãn có thể khác. Mỗi câu chỉ có một nhãn trong cùng ngữ cảnh |
