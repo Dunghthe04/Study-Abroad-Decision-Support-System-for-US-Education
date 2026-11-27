@@ -9,7 +9,6 @@ Các nhánh nằm ở branches.py (main.py tạo rồi truyền vào ChatFlow).
 import asyncio
 import json
 import logging
-import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -34,7 +33,6 @@ from app.services import usage_meter
 from app.services.conversation_context import contextualize, update_context
 from app.services.intake import INTAKE_ID, form_goals, intake_ask, intake_choice
 from app.services.pii_mask import mask_personal_info
-from app.services.priority import unaccent
 from app.services.profile_sync import DRAFT_KEYS, changed_keys, merge_profile
 from app.services.replies import (
     BACK_TO_QUESTION,
@@ -49,7 +47,7 @@ from app.services.replies import (
     NOT_READY,
     PREMIUM_REQUIRED,
 )
-from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
+from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields, unanswered_fields
 from app.services.slm_contract import SlmClassifier
 
 # Tạo 1 logger
@@ -143,10 +141,12 @@ class Branch(Protocol):
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput: ...
 
 
-# Ghép câu trả lời của 2 phần chạy liền nhau: nối chữ, lấy nút / công cụ / action của phần sau nếu có
+# Ghép câu trả lời của 2 phần chạy liền nhau: nối chữ, lấy nút / công cụ / action của phần sau nếu có.
+# Cả hai phần cùng hiện đúng một bảng công cụ kèm đúng một câu (vd cùng đòi xác nhận ở bảng rà soát) thì câu đó chỉ nói một lần
 def combine(first: SkillOutput, second: SkillOutput) -> SkillOutput:
+    same_tool = first.widget is not None and first.widget == second.widget and first.answer == second.answer
     return SkillOutput(
-        answer="\n\n".join(a for a in (first.answer, second.answer) if a),
+        answer="\n\n".join(a for a in (first.answer, "" if same_tool else second.answer) if a),
         quick_replies=second.quick_replies or first.quick_replies,
         widget=second.widget or first.widget,
         citations=first.citations + [c for c in second.citations if c not in first.citations],
@@ -162,54 +162,6 @@ def intents_to_run(slm: SlmTinResult) -> list[SlmY]:
     if slm.touches_profile() and "collect_profile" not in slm.types():
         return [PROFILE_ONLY, *slm.intents]
     return list(slm.intents)
-
-
-# Mục số liệu trường học sinh hay hỏi (khớp bộ từ khóa của .NET ChatSchoolInfo) và dấu hiệu của câu thật sự nhạy cảm (làm giả, khai gian)
-_INFO_WORDS = re.compile(
-    r"\b(gpa|hoc phi|chi phi|hoc bong|ielts|toefl|duolingo|sat|act|ty le nhan|han nop|xep hang|ranking|ty le tot nghiep|nganh)\b"
-)
-_SENSITIVE = re.compile(
-    r"lam gia|gia mao|gian lan|\bbia\b|khai gian|khai khong|sua (gpa|diem|bang)|nang (gpa|diem)|\bfake\b|khong that|mua (bang|diem)|thue (viet|lam)|cheat|hack"
-)
-
-
-# SLM thật xếp nhầm "GPA của The University of Texas at Austin là bao nhiêu" vào ngoại phạm vi nhạy cảm ("hồ sơ cần trung thực").
-# Câu nhắc một mục số liệu trường mà không có dấu hiệu làm giả hay khai gian thì đổi thành câu kiến thức, để nhánh số liệu trường trả lời.
-# Câu nhạy cảm thật (sửa GPA, làm giả bảng điểm) vẫn bị chặn như cũ.
-# Không áp dụng khi SLM trả sai khuôn (fallback): khi đó không biết học sinh muốn gì, đoán thành câu kiến thức thì trả lời lệch.
-# Đo trên tập test usas-slm-v6 (27/11/2026): 20 trong 38 câu sai khuôn bị luật này đổi thành câu kiến thức, chỉ 1 câu đúng là câu
-# kiến thức, 19 câu là giả định, khai hồ sơ hoặc nhiều ý. Sai khuôn thì giữ "chưa hiểu, nói cụ thể hơn" để học sinh hỏi lại
-def with_info_intent(message: str, slm: SlmTinResult) -> SlmTinResult:
-    if slm.fallback or len(slm.intents) != 1:
-        return slm
-    y = slm.intents[0]
-    if y.type != "out_of_scope" or y.entities.get("subtype") not in ("sensitive", "ambiguous"):
-        return slm
-    plain = unaccent(message)
-    if not _INFO_WORDS.search(plain) or _SENSITIVE.search(plain):
-        return slm
-    return slm.model_copy(update={"intents": [SlmY(type="knowledge", span=message)]})
-
-
-# SLM thật xếp "So sánh 2 trường A và B" vào nhánh hồ sơ (so sánh theo hồ sơ), nhánh này sinh skill rất lâu rồi báo chưa so sánh được.
-# Câu so sánh từ hai trường trở lên mà không nhắc gì đến hồ sơ của học sinh là so sánh số liệu trường (dữ liệu huấn luyện cũng gán như vậy):
-# đổi sang câu kiến thức compare_facts để chạy bảng số liệu. Có từ hỏi theo hồ sơ ("hợp với em", "hồ sơ của em") thì giữ nhánh hồ sơ
-_PERSONAL_COMPARE = re.compile(
-    r"\b(ho so|hop voi|phu hop|hop ho so|nen chon|nen nop|truong nao hop|cai nao hop|voi em|cua em|voi minh|cua minh|kha nang)\b"
-)
-
-
-def with_comparison_intent(message: str, slm: SlmTinResult) -> SlmTinResult:
-    if len(slm.intents) != 1:
-        return slm
-    y = slm.intents[0]
-    if y.type != "profile_review" or y.entities.get("tasks") != ["compare"]:
-        return slm
-    schools = y.entities.get("schools") or []
-    if len(schools) < 2 or _PERSONAL_COMPARE.search(unaccent(message)):
-        return slm
-    compare = SlmY(type="knowledge", span=y.span, entities={"tasks": ["compare_facts"], "schools": schools})
-    return slm.model_copy(update={"intents": [compare]})
 
 
 # Phần kết quả SLM giao cho nhánh của một ý: nhánh hồ sơ cần cả tin, nhánh khác chỉ cần ý của nó
@@ -410,11 +362,10 @@ class ChatFlow:
             slm = SlmTinResult(intents=[SlmY(type="collect_profile", span=message)])
         else:
             slm = await self._slm.classify(state, message)
-            # Chụp trước khi các luật code bên dưới đổi ý: đây là nhãn model gán. Model hỏng thì không có đầu ra thật để lưu
+            # Đây là nhãn model gán, chụp trước khi điền ngữ cảnh. Model hỏng thì không có đầu ra thật để lưu
             fell_back = slm.fallback
             model_intents = [] if fell_back else list(slm.intents)
-            slm = with_info_intent(message, slm)
-            slm = with_comparison_intent(message, slm)
+            # Code không đổi nhãn của SLM: nhãn sai thì sửa bằng dữ liệu huấn luyện, không vá bằng từ khóa
             slm = contextualize(state, message, slm)
 
         # Gói của học sinh không cho loại ý nào thì bỏ ý đó; không còn ý nào thì trả câu cần Premium, không chạy nhánh nào
@@ -656,9 +607,24 @@ def limit_to_required(state: ChatState, required: list[str]) -> None:
         state.required_only = list(required)
 
 
+# Hồ sơ đã lưu, học sinh vừa báo giá trị mới và không còn mục nào chưa nói: hiện bảng rà soát để xác nhận.
+# Mời điền hồ sơ lúc này là sai vì không còn gì để hỏi. Không rơi vào trường hợp này thì None
+def awaiting_confirmation(state: ChatState, required: list[str]) -> SkillOutput | None:
+    if not has_saved_profile(state) or unanswered_fields(state.profile, required):
+        return None
+    if not missing_fields(state.profile, required):
+        return None
+    # Nhập muộn vì skill_ho_so nhập chat_flow
+    from app.services.skills import skill_ho_so
+
+    return skill_ho_so.review(state)
+
+
 # Bắt đầu hỏi hồ sơ khi một skill bị chặn vì thiếu hồ sơ
 def start_intake(state: ChatState, required: list[str] = REQUIRED_B3) -> SkillOutput:
     limit_to_required(state, required)
+    if (review := awaiting_confirmation(state, required)) is not None:
+        return review
     # Đang trả lời trong chat thì hỏi tiếp phần còn thiếu
     if state.intake_mode == "chat":
         return ask_next_missing(state, INTAKE_MORE)

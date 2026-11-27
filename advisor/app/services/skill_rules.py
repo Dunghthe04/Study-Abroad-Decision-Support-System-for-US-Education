@@ -38,6 +38,16 @@ def missing_fields(profile: dict[str, ProfileField], required: list[str] = REQUI
     ]
 
 
+# Mục học sinh CHƯA NÓI. Khác với missing_fields: giá trị đã tự kể mà chưa xác nhận (said_in_B0) không tính là thiếu,
+# vì không có gì để hỏi thêm, chỉ cần học sinh xác nhận
+def unanswered_fields(profile: dict[str, ProfileField], required: list[str] = REQUIRED_B4) -> list[str]:
+    told = {
+        name: field.model_copy(update={"status": "confirmed"}) if field.status == "said_in_B0" else field
+        for name, field in profile.items()
+    }
+    return missing_fields(told, required)
+
+
 # Câu SAT/ACT đã trả lời: có SAT, ACT (kể cả bấm "Em chưa thi") hoặc chứng chỉ không phải tiếng Anh (AP, IB, GRE...)
 def standardized_answered(profile: dict[str, ProfileField]) -> bool:
     if is_answered("sat", profile.get("sat")) or is_answered("act", profile.get("act")):

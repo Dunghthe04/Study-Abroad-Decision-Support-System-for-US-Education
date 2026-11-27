@@ -7,7 +7,7 @@ from app.schemas.chat import ProfileField
 from app.schemas.slm import SlmY
 from app.services.profile_sync import DRAFT_KEYS
 from app.services.replies import INTAKE_ASK, INTAKE_ASK_MISSING
-from app.services.skill_rules import REQUIRED_B3, missing_fields
+from app.services.skill_rules import REQUIRED_B3, missing_fields, unanswered_fields
 
 # question_id đặt trong state khi đang chờ học sinh chọn chat hay form
 INTAKE_ID = "INTAKE"
@@ -32,13 +32,8 @@ def has_profile(profile: dict[str, ProfileField]) -> bool:
 
 # Câu mời chọn cách điền; đã có một phần hồ sơ thì nói còn thiếu mấy mục bắt buộc
 def intake_ask(profile: dict[str, ProfileField], required: list[str]) -> str:
-    # Giá trị học sinh vừa tự kể (said_in_B0) còn chờ xác nhận nhưng sẽ không bị hỏi lại, nên không đếm là còn thiếu:
-    # nói "còn thiếu 5 mục" ngay sau khi học sinh vừa cho GPA và IELTS là sai với số câu sẽ hỏi
-    told = {
-        name: field.model_copy(update={"status": "confirmed"}) if field.status == "said_in_B0" else field
-        for name, field in profile.items()
-    }
-    missing = len(missing_fields(told, required))
+    # Chỉ đếm mục chưa nói: nói "còn thiếu 5 mục" ngay sau khi học sinh vừa cho GPA và IELTS là sai với số câu sẽ hỏi
+    missing = len(unanswered_fields(profile, required))
     if not has_profile(profile) or missing == 0:
         return INTAKE_ASK
     return INTAKE_ASK_MISSING.format(missing=missing)

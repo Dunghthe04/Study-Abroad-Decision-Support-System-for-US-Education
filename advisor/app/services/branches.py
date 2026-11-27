@@ -17,6 +17,7 @@ from app.services.chat_flow import (
     SkillHandler,
     SkillOutput,
     ask_major,
+    awaiting_confirmation,
     combine,
     start_intake,
 )
@@ -410,6 +411,8 @@ def ask_missing_profile(state: ChatState, y: SlmY, required: list[str]) -> Skill
     # Đang chờ ở bảng rà soát X1 mà hồ sơ thiếu (hồ sơ bị xóa sau khi rà soát) thì không nhắc lại bảng trống, hỏi lại từ đầu
     if state.question_id and state.question_id not in OPENING_QUESTIONS and state.question_id != "X1":
         return SkillOutput(NEED_PROFILE)
+    if missing and (review := awaiting_confirmation(state, required)) is not None:
+        return review
     if not missing:
         return skill_ho_so.ask_overdue_first(state)
     return ask_major(state) if missing[0] == "major" else start_intake(state, required)
