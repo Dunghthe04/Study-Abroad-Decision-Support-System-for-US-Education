@@ -7,6 +7,7 @@ import httpx
 
 from app.services import usage_meter
 from app.services.ollama import OllamaError
+from app.services.pii_mask import mask_outgoing
 
 ANTHROPIC_VERSION = "2023-06-01"
 TOOL_NAME = "tra_loi"
@@ -42,8 +43,10 @@ class ClaudeClient:
         self, messages: list[dict[str, str]], schema: dict[str, Any], temperature: float = 0.0
     ) -> dict[str, Any]:
         # temperature chỉ để giữ chữ ký chung với OllamaClient: Claude Haiku 5.5 từ chối tham số này ("deprecated for this model")
-        system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
-        user = "\n\n".join(m["content"] for m in messages if m["role"] == "user")
+        # Claude là dịch vụ bên ngoài: che thông tin cá nhân ở đây, cửa duy nhất mọi lượt gọi đi qua. Cả phần system vì
+        # skill bài tư vấn do code dựng có chứa chữ trong hồ sơ
+        system = mask_outgoing("\n\n".join(m["content"] for m in messages if m["role"] == "system"))
+        user = mask_outgoing("\n\n".join(m["content"] for m in messages if m["role"] == "user"))
         try:
             data = await self._post_with_retry(self._body(self._model, system, user, schema))
         except ClaudeUnavailable:
