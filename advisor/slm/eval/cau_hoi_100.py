@@ -1,0 +1,161 @@
+"""100 câu và 4 hội thoại do người dùng gửi ngày 27/11. Nhãn do Claude ghi TRƯỚC khi chạy model, chưa có người thứ hai duyệt.
+
+Nhiều câu ranh giới chưa rõ trong hướng dẫn gán nhãn nên cho phép vài đáp án. KHÔNG chép các câu này vào dữ liệu train.
+"""
+
+K = ["knowledge"]
+# Câu hỏi chung nhưng có nhắc hoàn cảnh của mình: trả lời chung hay xét hồ sơ đều chấp nhận được
+K_OR_ME = ["knowledge", "profile_review:assessment", "collect_profile | knowledge", "collect_profile | profile_review:assessment"]
+SEARCH = ["knowledge:search"]
+SEARCH_ME = ["knowledge:search", "profile_review:school_list", "collect_profile | knowledge:search", "collect_profile | profile_review:school_list"]
+CP = ["collect_profile"]
+WHAT_IF = ["scenario:what_if"]
+CENTER = ["center_referral"]
+
+# (số, nhóm, câu, đáp án chấp nhận được)
+CAU_100: list[tuple[int, str, str, list[str]]] = [
+    (1, "bắt đầu", "Em muốn đi du học Mỹ thì cần chuẩn bị những gì ạ?", ["knowledge", "profile_review:roadmap"]),
+    (2, "bắt đầu", "Em đang học lớp 11, bây giờ chuẩn bị có sớm quá không?", ["collect_profile | knowledge", "collect_profile | profile_review:roadmap", "collect_profile | profile_review:assessment"]),
+    (3, "bắt đầu", "Du học Mỹ có khó không anh/chị?", K),
+    (4, "bắt đầu", "Nếu gia đình em không quá khá giả thì có đi du học Mỹ được không?", K_OR_ME),
+    (5, "bắt đầu", "Em muốn đi Mỹ sau khi tốt nghiệp cấp 3.", CP),
+    (6, "bắt đầu", "Nên đi du học Mỹ hay Canada thì tốt hơn ạ?", ["out_of_scope:exception", "knowledge"]),
+    (7, "bắt đầu", "Em chưa biết mình thích ngành gì thì có nên đi du học không?", [*K_OR_ME]),
+    (8, "bắt đầu", "Thường thì học sinh Việt Nam đi du học Mỹ vào thời điểm nào?", K),
+    (9, "bắt đầu", "Em muốn nhập học vào năm 2027 thì bây giờ có kịp không?", ["collect_profile | knowledge", "collect_profile | profile_review:roadmap", "knowledge", "profile_review:roadmap"]),
+    (10, "bắt đầu", "Em muốn tìm hiểu toàn bộ quy trình du học Mỹ.", ["knowledge", "profile_review:roadmap"]),
+
+    (11, "hồ sơ", "Em hiện tại đang học lớp 12.", CP),
+    (12, "hồ sơ", "GPA của em khoảng 3.2/4.0.", CP),
+    (13, "hồ sơ", "Điểm IELTS của em là 6.5.", CP),
+    (14, "hồ sơ", "Em chưa có chứng chỉ tiếng Anh nào cả.", CP),
+    (15, "hồ sơ", "Em có SAT 1350, như vậy có ổn không?", ["collect_profile | profile_review:assessment", "collect_profile | knowledge"]),
+    (16, "hồ sơ", "Gia đình em có thể chi trả khoảng 25.000 USD mỗi năm.", CP),
+    (17, "hồ sơ", "Bố mẹ em làm kinh doanh tự do thì có chứng minh tài chính được không?", ["knowledge", "collect_profile | knowledge"]),
+    (18, "hồ sơ", "Em từng tham gia hoạt động tình nguyện ở trường.", CP),
+    (19, "hồ sơ", "Em chưa có thành tích ngoại khóa nào đáng kể.", CP),
+    (20, "hồ sơ", "Em muốn cập nhật điểm IELTS của mình thành 7.0.", ["collect_profile:edit"]),
+
+    (21, "trường, ngành", "Em thích ngành Công nghệ thông tin, nên học trường nào ở Mỹ?", SEARCH_ME),
+    (22, "trường, ngành", "Có trường đại học nào ở Mỹ đào tạo ngành Trí tuệ nhân tạo không?", SEARCH),
+    (23, "trường, ngành", "Em muốn học ngành Business nhưng chưa biết trường nào tốt.", SEARCH_ME),
+    (24, "trường, ngành", "Em thích bang California, có trường nào phù hợp không?", SEARCH_ME),
+    (25, "trường, ngành", "Cho em xin danh sách những trường đại học có học phí rẻ.", SEARCH),
+    (26, "trường, ngành", "Đại học Harvard có những ngành nào?", ["knowledge:school_info"]),
+    (27, "trường, ngành", "MIT có phải trường chuyên về công nghệ không?", ["knowledge:school_info", "knowledge"]),
+    (28, "trường, ngành", "Em muốn học trường có cộng đồng người Việt đông một chút.", ["knowledge:search", "knowledge", "profile_review:school_list"]),
+    (29, "trường, ngành", "Có trường nào ở Mỹ nằm gần New York không?", SEARCH),
+    (30, "trường, ngành", "Em muốn tìm trường có chương trình Co-op hoặc thực tập hưởng lương.", ["knowledge:search", "knowledge"]),
+
+    (31, "tài chính", "Du học Mỹ trung bình tốn bao nhiêu tiền một năm?", K),
+    (32, "tài chính", "500 triệu đồng một năm có đủ để du học Mỹ không?", K_OR_ME),
+    (33, "tài chính", "Có thể đi du học Mỹ mà không cần chứng minh tài chính không?", K),
+    (34, "tài chính", "Học bổng toàn phần ở Mỹ có khó xin không?", K),
+    (35, "tài chính", "GPA 3.0 có xin được học bổng không?", K_OR_ME),
+    (36, "tài chính", "Em muốn tìm trường có học bổng từ 50% trở lên.", SEARCH),
+    (37, "tài chính", "Nếu được học bổng 70% thì mỗi năm em còn phải đóng bao nhiêu?", ["knowledge", "scenario:what_if", "scenario:goal_seeking"]),
+    (38, "tài chính", "Có những loại học bổng nào dành cho sinh viên quốc tế?", K),
+    (39, "tài chính", "Em có thể vừa học vừa làm thêm để trang trải chi phí không?", K),
+    (40, "tài chính", "Học phí giữa trường công lập và tư thục khác nhau thế nào?", K),
+
+    (41, "tuyển sinh", "GPA 3.2 có cơ hội vào đại học Mỹ không?", K_OR_ME),
+    (42, "tuyển sinh", "Em có IELTS 6.5 và SAT 1350 thì nên đăng ký trường nào?", ["collect_profile | profile_review:school_list"]),
+    (43, "tuyển sinh", "Không có SAT thì có nộp hồ sơ được không?", K),
+    (44, "tuyển sinh", "Em học trường THPT bình thường, không chuyên, có bất lợi không?", K_OR_ME),
+    (45, "tuyển sinh", "Hồ sơ du học Mỹ cần những giấy tờ gì?", K),
+    (46, "tuyển sinh", "Bài luận cá nhân có quan trọng không?", K),
+    (47, "tuyển sinh", "Em có cần thư giới thiệu của giáo viên không?", K),
+    (48, "tuyển sinh", "Điểm học bạ lớp 10 có ảnh hưởng đến việc xét tuyển không?", K),
+    (49, "tuyển sinh", "Em bị điểm thấp môn Toán thì có ảnh hưởng khi đăng ký ngành IT không?", K_OR_ME),
+    (50, "tuyển sinh", "Nếu em chưa có hoạt động ngoại khóa thì có nên nộp hồ sơ ngay không?", K_OR_ME),
+
+    (51, "tư vấn cá nhân", "Với GPA 3.5, IELTS 7.0 thì em có cơ hội vào trường top 50 không?", ["collect_profile | profile_review:assessment", "collect_profile | profile_review:school_list"]),
+    (52, "tư vấn cá nhân", "Anh/chị xem giúp hồ sơ của em đang yếu ở đâu.", ["profile_review:assessment"]),
+    (53, "tư vấn cá nhân", "Em có khả năng nhận được học bổng không?", ["profile_review:assessment", "knowledge"]),
+    (54, "tư vấn cá nhân", "Trong danh sách trường vừa đề xuất, trường nào phù hợp nhất với em?", ["profile_review:school_list", "profile_review:compare", "profile_review:explain_school"]),
+    (55, "tư vấn cá nhân", "Em nên chọn trường có thứ hạng cao hay trường có học phí thấp?", ["knowledge", "profile_review:school_list", "profile_review:assessment"]),
+    (56, "tư vấn cá nhân", "Nếu là hồ sơ của em thì anh/chị sẽ chọn trường nào?", ["profile_review:school_list"]),
+    (57, "tư vấn cá nhân", "Em muốn biết khả năng đỗ vào University of California, Berkeley.", ["profile_review:explain_school", "scenario:goal_seeking"]),
+    (58, "tư vấn cá nhân", "Có trường nào phù hợp với cả năng lực học tập và điều kiện tài chính của gia đình em không?", ["profile_review:school_list"]),
+    (59, "tư vấn cá nhân", "Em có nên đăng ký thêm trường an toàn để phòng trường hợp trượt không?", ["profile_review:school_list", "profile_review:assessment", "knowledge"]),
+    (60, "tư vấn cá nhân", "Tại sao hồ sơ của em lại được đánh giá là chưa đủ mạnh?", ["profile_review:assessment", "profile_review:explain_fit"]),
+
+    (61, "giả định", "Nếu GPA của em lên 3.8 thì cơ hội vào trường tốt có tăng không?", WHAT_IF),
+    (62, "giả định", "Giả sử em đạt IELTS 7.5 vào tháng tới thì sao?", WHAT_IF),
+    (63, "giả định", "Nếu gia đình em tăng ngân sách lên 40.000 USD mỗi năm thì có thêm lựa chọn nào?", WHAT_IF),
+    (64, "giả định", "Nếu em không thi SAT thì có trường nào nhận không?", ["scenario:what_if", "knowledge:search", "knowledge"]),
+    (65, "giả định", "Em muốn thử đổi ngành từ IT sang Business xem danh sách trường có thay đổi không.", WHAT_IF),
+    (66, "giả định", "Nếu em muốn vào Harvard thì cần cải thiện những gì?", ["scenario:goal_seeking"]),
+    (67, "giả định", "Em cần GPA bao nhiêu để có thể ứng tuyển vào NYU?", ["scenario:goal_seeking"]),
+    (68, "giả định", "Muốn nhận học bổng toàn phần thì em cần đạt những tiêu chí nào?", ["knowledge", "scenario:goal_seeking"]),
+    (69, "giả định", "Nếu em chỉ có 20.000 USD mỗi năm thì có thể học trường nào?", ["scenario:what_if", "knowledge:search", "collect_profile | profile_review:school_list"]),
+    (70, "giả định", "Nếu em tăng IELTS nhưng giữ nguyên GPA thì kết quả tư vấn có thay đổi không?", WHAT_IF),
+
+    (71, "visa", "Visa F-1 là gì vậy ạ?", K),
+    (72, "visa", "Em cần chuẩn bị gì khi phỏng vấn xin visa Mỹ?", K),
+    (73, "visa", "Nếu bị trượt visa thì có được nộp lại không?", K),
+    (74, "visa", "Form I-20 là gì và lấy ở đâu?", ["knowledge", "knowledge | knowledge"]),
+    (75, "visa", "Sau khi nhận được thư mời nhập học thì em cần làm gì?", ["knowledge", "profile_review:roadmap"]),
+    (76, "visa", "Em có cần chứng minh tài chính khi phỏng vấn visa không?", K),
+    (77, "visa", "Thời gian xin visa du học Mỹ thường mất bao lâu?", K),
+    (78, "visa", "Nếu bố mẹ em là người bảo lãnh tài chính thì cần giấy tờ gì?", K),
+    (79, "visa", "Du học sinh có được làm thêm ở Mỹ không?", K),
+    (80, "visa", "Sau khi tốt nghiệp đại học ở Mỹ có được ở lại làm việc không?", K),
+
+    (81, "trung tâm", "Em muốn tìm một trung tâm tư vấn du học Mỹ uy tín.", CENTER),
+    (82, "trung tâm", "Trung tâm nào hỗ trợ xin học bổng tốt?", CENTER),
+    (83, "trung tâm", "Có trung tâm tư vấn du học nào ở Bắc Ninh không?", CENTER),
+    (84, "trung tâm", "Em muốn biết chi phí dịch vụ tư vấn du học thường là bao nhiêu.", ["knowledge", "center_referral", "center_referral:compare"]),
+    (85, "trung tâm", "Có nên thuê trung tâm làm hồ sơ du học không?", K),
+    (86, "trung tâm", "Em muốn đặt lịch tư vấn trực tiếp với chuyên viên.", ["center_referral:booking"]),
+    (87, "trung tâm", "Trung tâm này có đáng tin cậy không?", ["center_referral", "knowledge", "out_of_scope:ambiguous"]),
+    (88, "trung tâm", "Em muốn chuyển sang một trung tâm tư vấn khác.", CENTER),
+
+    (89, "bất ngờ", "À mà cho em hỏi thêm một chút.", ["out_of_scope:ambiguous", "out_of_scope:greeting"]),
+    (90, "bất ngờ", "Cái này em chưa hiểu lắm, giải thích dễ hiểu hơn được không?", ["out_of_scope:ambiguous", "knowledge", "profile_review"]),
+    (91, "bất ngờ", "Sao lại như vậy ạ?", ["out_of_scope:ambiguous", "profile_review:explain_fit"]),
+    (92, "bất ngờ", "Thế còn trường hợp của em thì sao?", ["out_of_scope:ambiguous", "profile_review", "profile_review:assessment"]),
+    (93, "bất ngờ", "Nếu em không làm được điều đó thì có cách nào khác không?", ["out_of_scope:ambiguous", "knowledge", "profile_review"]),
+    (94, "bất ngờ", "Bạn có chắc thông tin này chính xác không?", ["out_of_scope:about_system"]),
+    (95, "bất ngờ", "Bạn có thể tư vấn như một chuyên viên du học thực sự được không?", ["out_of_scope:about_system", "out_of_scope:human_handoff"]),
+    (96, "bất ngờ", "Em muốn gặp người thật để trao đổi kỹ hơn.", ["out_of_scope:human_handoff"]),
+    (97, "bất ngờ", "Hôm nay Hà Nội có mưa không?", ["out_of_scope:exception"]),
+    (98, "bất ngờ", "Giúp em viết một đoạn giới thiệu bản thân bằng tiếng Anh.", ["out_of_scope:exception", "knowledge", "center_referral"]),
+    (99, "bất ngờ", "Cảm ơn anh/chị, em sẽ suy nghĩ thêm.", ["out_of_scope:farewell"]),
+    (100, "bất ngờ", "Thôi em hiểu rồi, tạm biệt nhé!", ["out_of_scope:farewell"]),
+]
+
+# Hội thoại liên tục: danh sách (câu, đáp án chấp nhận được)
+HOI_THOAI: dict[str, list[tuple[str, list[str]]]] = {
+    "Hội thoại 1": [
+        ("Em muốn đi du học Mỹ.", ["profile_review:roadmap", "profile_review", "knowledge", "collect_profile", "out_of_scope:ambiguous"]),
+        ("Em đang học lớp 12.", CP),
+        ("GPA của em là 3.4.", CP),
+        ("Em có IELTS 6.5.", CP),
+        ("Với điểm như vậy thì em nên học trường nào?", ["profile_review:school_list"]),
+        ("Trường đầu tiên có học phí bao nhiêu?", ["knowledge:school_info"]),
+        ("Nếu GPA em tăng lên 3.8 thì sao?", WHAT_IF),
+    ],
+    "Hội thoại 2": [
+        ("Em muốn học ngành Computer Science.", CP),
+        ("Có trường nào ở California không?", ["knowledge:search", "profile_review:school_list"]),
+        ("Trường nào có học phí rẻ nhất?", SEARCH),
+        ("Nếu em muốn học ở trường top 50 thì sao?", ["knowledge:search", "scenario:what_if"]),
+        ("Em cần cải thiện điểm nào để có cơ hội vào đó?", ["scenario:goal_seeking", "profile_review:assessment"]),
+    ],
+    "Hội thoại 3": [
+        ("Em muốn xin học bổng du học Mỹ.", ["knowledge", "profile_review", "collect_profile"]),
+        ("GPA em là 3.2.", CP),
+        ("IELTS 7.0.", CP),
+        ("Gia đình em có ngân sách 20.000 USD/năm.", CP),
+        ("Em có thể xin học bổng toàn phần không?", ["knowledge", "profile_review:assessment"]),
+        ("Nếu GPA tăng lên 3.7 thì khả năng có cao hơn không?", WHAT_IF),
+    ],
+    "Hội thoại 4": [
+        ("Em muốn tìm hiểu về du học Mỹ.", ["knowledge", "profile_review:roadmap", "profile_review"]),
+        ("Visa F-1 là gì?", K),
+        ("Còn I-20 thì sao?", K),
+        ("Sau khi có I-20 thì em làm gì?", ["knowledge", "profile_review:roadmap"]),
+        ("Em muốn gặp chuyên viên tư vấn để hỏi thêm.", ["out_of_scope:human_handoff", "center_referral", "center_referral:booking"]),
+    ],
+}
