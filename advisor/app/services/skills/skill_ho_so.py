@@ -694,14 +694,17 @@ def reviewed(state: ChatState) -> bool:
     return state.asked.get("X1", 0) > 0 or state.edit_queue is not None
 
 
-# Bảng rà soát X1: widget review hiện toàn bộ hồ sơ (trừ mục dở *_pending), kèm hai nút Đúng / Cần sửa
-def review(state: ChatState) -> SkillOutput:
+# Bảng rà soát X1: widget review hiện toàn bộ hồ sơ (trừ mục dở *_pending), kèm hai nút Đúng / Cần sửa.
+# text: câu đi kèm bảng thay cho câu rà soát chuẩn (vd khi học sinh hỏi hệ thống đang lưu gì). Truyền vào đây chứ không
+# ghi đè answer của kết quả, vì answer còn mang lời nhắc kỳ nhập học
+def review(state: ChatState, text: str | None = None) -> SkillOutput:
     profile = {name: f for name, f in state.profile.items() if name not in PENDING_KEYS}
     data = {
         "profile": {name: {"value": f.value, "status": f.status} for name, f in profile.items()},
         "missing": missing_fields(state.profile, REQUIRED_B3),
     }
     question = ask(state, "X1")
+    question = text or question
     note = buttons.early_intake_note(state.profile)
     return SkillOutput(
         f"{note}\n\n{question}" if note else question,

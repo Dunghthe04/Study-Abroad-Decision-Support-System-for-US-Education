@@ -6,7 +6,9 @@ from datetime import date
 
 import pytest
 
-from app.schemas.chat import ChatState, ProfileField
+from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField
+from app.services.replies import PROFILE_STATUS
+from app.services.skills import build_handlers
 from app.services.skills.buttons import early_intake_note
 from app.services.skills.skill_ho_so import review
 from app.services.skills.skill_lo_trinh import (
@@ -18,6 +20,7 @@ from app.services.skills.skill_lo_trinh import (
     roadmap_timeline,
     timeline,
 )
+from tests.fakes import FakeLLM, flow_with, tin
 
 TODAY = date(2026, 11, 27)
 ROADMAP = {
@@ -94,6 +97,27 @@ def test_intake_before_graduation_is_noted(values, year):
 )
 def test_no_note_when_intake_fits_or_unknown(values):
     assert early_intake_note(prof(**values), TODAY) is None
+
+
+async def test_asking_what_is_saved_keeps_the_note():
+    # Lỗi thật 27/11/2026: xem hồ sơ đang lưu thì câu "Đây là hồ sơ mình đang lưu" ghi đè luôn lời nhắc nhập học
+    flow = flow_with(build_handlers(FakeLLM(), "m"), tin(("collect_profile", {"tasks": ["status"]})))
+    state = ChatState(
+        profile=prof(current_level="high_school", current_grade="Lớp 11", intake="Spring 2020"),
+        has_committed_profile=True,
+    )
+
+    res = await flow.reply(
+        ChatRequest(
+            messages=[ChatMessage(role="user", content="hồ sơ của mình đang lưu gì")],
+            state=state,
+            has_committed_profile=True,
+        )
+    )
+
+    assert res.answer.startswith("Lưu ý:") and "Spring 2020" in res.answer
+    assert res.answer.endswith(PROFILE_STATUS)
+    assert res.widget is not None and res.widget.type == "review"
 
 
 def test_review_board_carries_the_note():
