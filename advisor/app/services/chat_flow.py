@@ -212,6 +212,26 @@ def with_comparison_intent(message: str, slm: SlmTinResult) -> SlmTinResult:
     return slm.model_copy(update={"intents": [compare]})
 
 
+# SLM thật xếp "Thường thì du học Mỹ cần chuẩn bị những gì vậy?" vào lộ trình theo hồ sơ (profile_review roadmap, tính năng Premium),
+# nên gói Miễn phí (và Premium đã hết token) bị khóa câu hỏi kiến thức chung. Dữ liệu huấn luyện lệch: 59 câu "em cần chuẩn bị gì" gán roadmap,
+# chỉ 5 câu "du học Mỹ cần chuẩn bị gì" gán knowledge. Câu "chuẩn bị" không nói về chính học sinh (không có em, mình, tôi...) và không xin
+# lộ trình thì là câu kiến thức chung, như nhãn của dữ liệu. Có "còn" cũng giữ nguyên (không tách được "còn" với "con"): chỉ chịu lệch về phía cũ
+_GENERAL_PREP = re.compile(r"\bchuan bi\b")
+_PERSONAL_PREP = re.compile(r"\b(em|minh|toi|tui|con|chau|lo trinh|timeline|roadmap|ke hoach)\b")
+
+
+def with_general_prep_intent(message: str, slm: SlmTinResult) -> SlmTinResult:
+    if len(slm.intents) != 1:
+        return slm
+    y = slm.intents[0]
+    if y.type != "profile_review" or y.entities.get("tasks") != ["roadmap"]:
+        return slm
+    plain = unaccent(message)
+    if not _GENERAL_PREP.search(plain) or _PERSONAL_PREP.search(plain):
+        return slm
+    return slm.model_copy(update={"intents": [SlmY(type="knowledge", span=y.span)]})
+
+
 # Phần kết quả SLM giao cho nhánh của một ý: nhánh hồ sơ cần cả tin, nhánh khác chỉ cần ý của nó
 def view_of(slm: SlmTinResult, y: SlmY) -> SlmTinResult:
     return slm if y.type == "collect_profile" else slm.model_copy(update={"intents": [y]})
@@ -415,6 +435,7 @@ class ChatFlow:
             model_intents = [] if fell_back else list(slm.intents)
             slm = with_info_intent(message, slm)
             slm = with_comparison_intent(message, slm)
+            slm = with_general_prep_intent(message, slm)
             slm = contextualize(state, message, slm)
 
         # Gói của học sinh không cho loại ý nào thì bỏ ý đó; không còn ý nào thì trả câu cần Premium, không chạy nhánh nào
