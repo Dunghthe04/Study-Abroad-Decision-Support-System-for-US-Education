@@ -224,6 +224,7 @@ CENTER_NOT_PROVIDED = (
 )
 CENTER_DISCLAIMER = (
     "Danh sách chỉ gồm trung tâm đã được xác minh, xếp theo tên trung tâm, không phải xếp hạng chất lượng. "
+    "Visa do viên chức lãnh sự quyết định, việc trúng tuyển do trường quyết định, nên không trung tâm nào bảo đảm được. "
     "Bạn nên tự tìm hiểu kỹ trước khi liên hệ."
 )
 CENTER_CITY_ASK = (

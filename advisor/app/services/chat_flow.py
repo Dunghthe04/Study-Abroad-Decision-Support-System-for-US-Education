@@ -141,6 +141,12 @@ class Branch(Protocol):
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput: ...
 
 
+# Mỗi lời lưu ý nói về phần trả lời của nó nên giữ đủ, mỗi câu một dòng, câu trùng chỉ nói một lần
+def join_notes(*notes: str | None) -> str | None:
+    lines = dict.fromkeys(line for note in notes if note for line in note.split("\n"))
+    return "\n".join(lines) or None
+
+
 # Ghép câu trả lời của 2 phần chạy liền nhau: nối chữ, lấy nút / công cụ / action của phần sau nếu có.
 # Cả hai phần cùng hiện đúng một bảng công cụ kèm đúng một câu (vd cùng đòi xác nhận ở bảng rà soát) thì câu đó chỉ nói một lần
 def combine(first: SkillOutput, second: SkillOutput) -> SkillOutput:
@@ -150,7 +156,7 @@ def combine(first: SkillOutput, second: SkillOutput) -> SkillOutput:
         quick_replies=second.quick_replies or first.quick_replies,
         widget=second.widget or first.widget,
         citations=first.citations + [c for c in second.citations if c not in first.citations],
-        disclaimer=second.disclaimer or first.disclaimer,
+        disclaimer=join_notes(first.disclaimer, second.disclaimer),
         action=second.action or first.action,
         action_data=second.action_data if second.action else first.action_data,
     )
