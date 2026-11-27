@@ -435,27 +435,6 @@ def confirm_first(state: ChatState, y: SlmY) -> SkillOutput | None:
     return skill_ho_so.review(state, UNSAVED_REVIEW)
 
 
-# Câu xin danh sách trường (đã bỏ dấu). SLM xếp các câu này vào profile_review; code giao .NET chạy gợi ý trường
-# (pipeline có sẵn), không sinh skill
-SCHOOL_LIST_WORDS = (
-    "truong nao",
-    "chon truong",
-    "nhung truong",
-    "danh sach truong",
-    "goi y truong",
-    "de xuat truong",
-    "nop truong",
-    "apply truong",
-    "which universit",
-    "which school",
-    "which college",
-    "universities should",
-    "schools should",
-    "colleges should",
-    "recommend universit",
-    "recommend school",
-    "recommend college",
-)
 # Hồ sơ vừa đủ mà học sinh chưa hỏi câu tư vấn nào (tin là "Đúng rồi"): đánh giá hồ sơ như trước đây
 # Câu chỉ hỏi giải thích trường mà chưa nêu trường nào
 # Số trường đầu danh sách gợi ý hiện sẵn trong ô chọn (cùng giá trị với ChatActions.MaxSuggested bên .NET)
@@ -487,19 +466,11 @@ def asks_how_fit_is_computed(text: str) -> bool:
     return any(word in folded for word in FIT_METHOD_WORDS)
 
 
-def asks_for_school_list(text: str) -> bool:
-    folded = plain(text)
-    return any(word in folded for word in SCHOOL_LIST_WORDS)
-
-
 # Câu profile_review chỉ có so sánh hoặc giải thích trường (không có việc của khuôn, không chọn trường):
-# - compare (schema bắt có từ hai trường): giao .NET so số liệu như câu so sánh kiến thức, kể cả khi câu có
-#   chữ "trường nào" ("Iowa và Purdue trường nào hợp với em hơn")
-# - explain_school chưa nêu trường và không xin danh sách trường: nhờ nêu tên trường
-# - còn lại (có tên trường mà chưa có kết quả gợi ý, hoặc xin danh sách): trả None để chạy gợi ý trường
-def others_only_output(
-    y: SlmY, tasks: list[str], school_list_words: bool, state: ChatState | None = None
-) -> SkillOutput | None:
+# - compare (schema bắt có từ hai trường): giao .NET so số liệu như câu so sánh kiến thức
+# - giải thích mà chưa nêu trường: nhờ nêu tên trường
+# - còn lại (có tên trường mà chưa có kết quả gợi ý): trả None để chạy gợi ý trường
+def others_only_output(y: SlmY, tasks: list[str], state: ChatState | None = None) -> SkillOutput | None:
     schools = [t.strip() for t in y.entities.get("schools") or []]
     if "compare" in tasks and len(schools) >= 2:
         # UC-154: câu so sánh theo hồ sơ ("BU hay NYU hợp với em hơn"): .NET tính nhóm và điểm phù hợp từng trường bằng công thức gợi ý.
@@ -510,14 +481,9 @@ def others_only_output(
             action_data={"question": y.span, "schools": schools, "kb_answer": LOOKING_UP},
         )
     # UC-153 1a: hỏi cách tính điểm phù hợp, không nêu trường: giải thích cách tính, dẫn tới trang tham số, không dùng số của trường nào
-    if (
-        "explain_fit" in tasks
-        and not school_list_words
-        and not single_school(y.entities)
-        and asks_how_fit_is_computed(y.span)
-    ):
+    if "explain_fit" in tasks and not single_school(y.entities) and asks_how_fit_is_computed(y.span):
         return SkillOutput(FIT_METHOD, quick_replies=[ABOUT_SYSTEM_PAGE_BUTTON.model_copy()])
-    if not school_list_words and not single_school(y.entities):
+    if not single_school(y.entities):
         # Ô chọn trường (chọn xong .NET giải thích trường đó), hiện sẵn vài trường đầu danh sách gợi ý nếu có
         suggested = [s.code for s in (state.schools if state else None) or []][:MAX_SUGGESTED]
         return SkillOutput(
@@ -567,10 +533,9 @@ class GeneratedAdviceBranch:
         # phần của Dũng. Câu chỉ có việc của Dũng thì giao code có sẵn (xem others_only_output)
         tasks = (y.entities.get("tasks") or None) if y.type == "profile_review" else None
         others_only = tasks is not None and not any(t in TEMPLATE_TASKS for t in tasks)
-        # Xin trường: câu có chữ xin trường, hoặc SLM tách ra việc chọn trường (câu gõ sai, nói kiểu khác vẫn nhận)
-        school_list = y.type == "profile_review" and (
-            asks_for_school_list(question) or others_only or "school_list" in (tasks or [])
-        )
+        # Chạy gợi ý trường: SLM tách ra việc chọn trường, hoặc câu chỉ hỏi về một trường mà chưa có danh sách (gợi ý
+        # trước rồi mới giải thích được). Không đoán lại bằng chữ trong câu: nhãn sai thì sửa bằng dữ liệu train
+        school_list = y.type == "profile_review" and (others_only or "school_list" in (tasks or []))
         if others_only and "school_list" not in tasks:
             # UC-154: so sánh theo hồ sơ cần hồ sơ đủ như gợi ý trường (UC-22 E1): thiếu thì hỏi tiếp, hồ sơ xong thì trả lời lại đúng câu này
             if (
@@ -580,7 +545,7 @@ class GeneratedAdviceBranch:
                 asked = ask_missing_profile(state, y, REQUIRED_B4)
                 if asked is not None:
                     return asked
-            out = others_only_output(y, tasks, asks_for_school_list(question), state)
+            out = others_only_output(y, tasks, state)
             if out is not None:
                 # UC-153 1a: Claude viết lời từ tham số công bố; không viết được thì giữ câu cố định FIT_METHOD
                 if out.answer == FIT_METHOD and self._method_writer is not None:
