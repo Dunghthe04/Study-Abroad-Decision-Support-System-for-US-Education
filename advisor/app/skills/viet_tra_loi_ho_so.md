@@ -1,4 +1,4 @@
-# VIẾT TRẢ LỜI HỒ SƠ (viet_tra_loi_ho_so) - skill_version 1.3
+# VIẾT TRẢ LỜI HỒ SƠ (viet_tra_loi_ho_so) - skill_version 1.4
 
 ## NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)
 - Chỉ viết dựa trên số liệu và dữ kiện CÓ TRONG dữ liệu hệ thống gửi lên (đầu vào JSON). Mọi con số, tên trường, tên trung tâm, ngày tháng, nhóm xếp loại phải có trong dữ liệu đó và chép đúng, không làm tròn lại, không tự tính thêm.
@@ -27,6 +27,9 @@ Tin user là JSON:
 
 ## 4. NỘI DUNG CẦN NÓI
 - Câu đầu tiên đáp thẳng điều học sinh hỏi trong cau_hoi, trước mọi tiêu đề (cách viết ở mục 6 của skill).
+- Câu đầu tiên là một câu nói trọn ý, KHÔNG mở bằng chữ "Có" hay "Không" đứng riêng rồi tới dấu phẩy hoặc hai chấm. Câu hỏi
+  kiểu "có sớm quá không", "có muộn không" mà mở bằng "Có, ..." thì học sinh hiểu ngược. Viết lại đúng ý đang hỏi:
+  "Bắt đầu từ bây giờ không sớm đâu...", "Bạn vẫn còn kịp...", "Bây giờ đã khá sát hạn...".
 - Làm đúng nhiệm vụ trong skill. Không lạc sang việc khác.
 - Xác định pham_vi trước khi viết:
   - mot_diem: học sinh hỏi một điểm cụ thể (có sớm không, đủ chưa, ổn không, chọn cái nào, có nên không, ưu tiên gì trước,

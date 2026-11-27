@@ -56,7 +56,7 @@ GREETING_REPLY = (
 )
 OUT_OF_SCOPE = {
     # Ngoài chủ đề, kể cả muốn học thạc sĩ hoặc tiến sĩ: hệ thống chỉ hỗ trợ du học Mỹ bậc đại học (UC-157, UC-08)
-    "exception": "Mình chỉ hỗ trợ tư vấn du học Mỹ bậc đại học (chưa hỗ trợ thạc sĩ hay tiến sĩ). Bạn chọn một việc dưới đây nhé.",
+    "exception": "Hiện mình chỉ hỗ trợ tư vấn du học Mỹ bậc đại học, chưa hỗ trợ nước khác, thạc sĩ hay tiến sĩ. Bạn chọn một việc dưới đây nhé.",
     "sensitive": "Mình không hỗ trợ việc này. Hồ sơ du học cần trung thực, mình giúp bạn chuẩn bị đúng cách nhé.",
     # farewell gồm cảm ơn và tạm biệt nên dùng một câu hợp với cả hai
     "farewell": "Rất vui được hỗ trợ bạn! Khi cần bạn cứ quay lại hỏi mình nhé.",
@@ -145,7 +145,22 @@ CONTINUE_CHAT = "Tiếp tục bằng chat"
 FORM_DONE = "Hồ sơ của bạn đã đủ thông tin. Bạn muốn mình tư vấn gì tiếp?"
 CHAT_BUTTON = QuickReply(label="Trả lời trong chat", value="Trả lời trong chat")
 FORM_BUTTON = QuickReply(label="Điền bằng form", value="Điền bằng form")
-PROFILE_DONE = "Hồ sơ của bạn đã đầy đủ rồi. Bạn cần mình tư vấn thêm gì không?"
+# Tin khai hồ sơ nhưng không có gì mới để lưu (SLM cũng gắn loại này cho vài câu chỉ nói ý định): không khẳng định gì thêm,
+# mời học sinh nói rõ nếu đang hỏi điều khác
+PROFILE_DONE = (
+    "Mình chưa thấy thông tin nào mới cần cập nhật vào hồ sơ của bạn. "
+    "Nếu bạn đang muốn hỏi một điều khác, bạn nói rõ hơn giúp mình nhé."
+)
+# Kỳ nhập học đang chọn sớm hơn lúc tốt nghiệp THPT theo lớp đang học. Chỉ nhắc để kiểm tra, không chặn vì có em tốt nghiệp sớm
+INTAKE_BEFORE_GRADUATION = (
+    "Lưu ý: bạn dự kiến tốt nghiệp THPT năm {year}, nhưng kỳ nhập học đang chọn là {intake}, tức là trước khi tốt nghiệp. "
+    "Thường học sinh nhập học sớm nhất vào Fall {year}, bạn kiểm tra lại giúp mình nhé."
+)
+# Học sinh hỏi hệ thống đang lưu gì (collect_profile, tasks status): đi kèm bảng hồ sơ
+PROFILE_STATUS = 'Đây là hồ sơ mình đang lưu. Đúng thì bạn bấm "Đúng rồi", muốn đổi thì bấm "Cần sửa".'
+PROFILE_NONE_YET = "Hiện mình chưa lưu thông tin hồ sơ nào của bạn."
+# Học sinh muốn làm lại hồ sơ (tasks restart): hỏi lại từng mục, giá trị cũ chỉ đổi khi học sinh trả lời giá trị mới
+PROFILE_RESTART_INTRO = 'Mình hỏi lại từng mục từ đầu. Mục nào không đổi, bạn bấm "Giữ như cũ".'
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Giải thích một trường (skills/skill_explain.py)
@@ -186,6 +201,11 @@ CENTER_ELSEWHERE = "Hiện chưa có trung tâm đã xác minh ở {city}, các 
 CENTER_MORE = "Còn {count} trung tâm khác, bạn bấm Xem thêm để xem hết."
 # Việc model tách ra (tasks): đặt lịch và so sánh. Hệ thống không có lịch hẹn riêng (UC-39 4a): dẫn tới form liên hệ UC-42 với lời nhắn điền sẵn.
 # So sánh (UC-39 4b): chọn sẵn hai trung tâm đầu để mở bảng so sánh như UC-142. Cả hai vẫn kèm danh sách trung tâm theo dịch vụ
+# Học sinh muốn đặt lịch mà chưa có danh sách trung tâm để bấm (chưa rõ dịch vụ, hoặc không có trung tâm): chỉ nói cách hẹn,
+# không nhắc nút Liên hệ hay "đây là các trung tâm" vì chưa có gì hiện ra
+CENTER_BOOKING_NOTE_NO_LIST = (
+    "Hệ thống không có lịch hẹn riêng: bạn gửi yêu cầu liên hệ, trung tâm sẽ phản hồi để hẹn lịch với bạn."
+)
 CENTER_TASK_NOTES = {
     "booking": "Hệ thống không có lịch hẹn riêng: bạn gửi yêu cầu liên hệ, trung tâm sẽ phản hồi để hẹn lịch với bạn. Bạn bấm Liên hệ ở trung tâm muốn hẹn, lời nhắn đã điền sẵn dịch vụ và thành phố. Đây là các trung tâm đã xác minh.",
     "compare": "Mình chọn sẵn hai trung tâm đầu để bạn mở bảng so sánh (dịch vụ, bậc học, địa điểm); bạn có thể tick thêm hoặc bỏ chọn. Bảng chỉ nêu thông tin, mình không chấm hơn thua giữa các nơi. Đây là các trung tâm đã xác minh.",

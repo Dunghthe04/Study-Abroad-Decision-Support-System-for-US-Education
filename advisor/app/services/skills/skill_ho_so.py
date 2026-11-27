@@ -243,6 +243,8 @@ CERT_TEXT = re.compile(
 )
 # Câu có ô nhập chứng chỉ → nhóm chứng chỉ của câu, giống hai mục của bước 3 form
 CERT_QUESTIONS = {"E1": ("english",), "D3": ("standardized", "graduate")}
+# Nút ở câu hỏi ngày thi của chứng chỉ vừa nói
+SKIP_CERT_DATE = QuickReply(label="Không nhớ ngày thi", value="Không nhớ")
 CERT_MORE = "Mình đã ghi {name}. Bạn còn chứng chỉ nào nữa không? Có thì nhập tiếp nhé."
 NO_MORE_CERT = "Không còn chứng chỉ"
 MAX_CERTS = 10
@@ -699,8 +701,12 @@ def review(state: ChatState) -> SkillOutput:
         "profile": {name: {"value": f.value, "status": f.status} for name, f in profile.items()},
         "missing": missing_fields(state.profile, REQUIRED_B3),
     }
+    question = ask(state, "X1")
+    note = buttons.early_intake_note(state.profile)
     return SkillOutput(
-        ask(state, "X1"), quick_replies=[CONFIRM_REPLY, FIX_REPLY], widget=Widget(type="review", data=data)
+        f"{note}\n\n{question}" if note else question,
+        quick_replies=[CONFIRM_REPLY, FIX_REPLY],
+        widget=Widget(type="review", data=data),
     )
 
 
@@ -844,7 +850,7 @@ def ask_cert_date(state: ChatState, pending: dict, question_text: str | None = N
     )
     return SkillOutput(
         text,
-        quick_replies=[QuickReply(label="Không nhớ ngày thi", value="Không nhớ")],
+        quick_replies=[SKIP_CERT_DATE.model_copy()],
         widget=Widget(type="select", data=buttons.cert_date_widget()),
     )
 
@@ -1331,6 +1337,7 @@ def is_form_text(question_id: str | None, message: str) -> bool:
         or buttons.same_text(message, KEEP_REPLY.value)
         or (question_id in NO_MORE and buttons.same_text(message, NO_MORE[question_id]))
         or (question_id in CERT_QUESTIONS and buttons.same_text(message, NO_MORE_CERT))
+        or (question_id in CERT_QUESTIONS and buttons.same_text(message, SKIP_CERT_DATE.value))
         or (question_id in PLAN_QUESTIONS and buttons.same_text(message, NO_MORE_PLAN))
         or (question_id in PLAN_QUESTIONS and any(buttons.same_text(message, r) for r in OVERDUE_REPLIES))
         or read_plan_text(question_id, message) is not None

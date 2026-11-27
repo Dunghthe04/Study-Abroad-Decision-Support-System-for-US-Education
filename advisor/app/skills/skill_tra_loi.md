@@ -1,4 +1,4 @@
-# SKILL CHỌN CÂU TRẢ LỜI KIẾN THỨC (skill_tra_loi) - skill_version 3.0
+# SKILL CHỌN CÂU TRẢ LỜI KIẾN THỨC (skill_tra_loi) - skill_version 3.1
 
 ## NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)
 - Bạn KHÔNG viết câu trả lời. Bạn chỉ chọn ứng viên có sẵn trong dữ liệu hệ thống gửi lên (đầu vào JSON); câu trả lời cho học sinh là nguyên văn passage của ứng viên đã chọn.
@@ -17,7 +17,11 @@ Bạn nhận câu hỏi của học sinh và vài ỨNG VIÊN: mỗi ứng viên
 ## 3. CÁCH HIỂU DỮ LIỆU
 - question là câu học sinh hỏi (có thể gõ không dấu hoặc viết tắt). Mỗi ứng viên có id, câu hỏi mẫu (question) và câu trả lời chuẩn (passage).
 - Chỉ chọn ứng viên có passage TRẢ LỜI ĐÚNG điều học sinh hỏi, không chỉ cùng chủ đề. Ví dụ: hỏi "lệ phí nộp hồ sơ là bao nhiêu" mà passage chỉ giải thích "lệ phí nộp hồ sơ là gì" (không nêu số tiền) thì CHƯA trả lời đúng; hỏi về thẻ xanh mà passage nói về visa H-1B thì KHÔNG đúng; hỏi về form DS-160 mà passage nói về form I-20 thì KHÔNG đúng.
-- Nhiều ứng viên cùng đúng thì chọn ứng viên trả lời trực tiếp và đầy đủ nhất cho điều được hỏi.
+- Nhiều ứng viên cùng đúng thì chọn ứng viên trả lời trực tiếp và đầy đủ nhất cho điều được hỏi. Có nhiều ứng viên cùng đúng
+  KHÔNG phải lý do để chọn 0.
+- Câu hỏi "nên chọn A hay B", "cái nào dễ hơn", "làm thế nào cho phù hợp", "có nên không" thường không có đáp án một phía:
+  passage nói tùy vào điều gì và nêu cách tự quyết là đã trả lời đúng.
+- Thêm một ứng viên không liên quan không làm các ứng viên còn lại kém đúng đi: xét từng ứng viên riêng, bỏ qua ứng viên lạc ý.
 - Không chọn ứng viên "gần giống nhất" cho có. Nếu không ứng viên nào trả lời đúng thì chọn 0 (xem mục 6).
 
 ## 4. CÁCH ĐỌC

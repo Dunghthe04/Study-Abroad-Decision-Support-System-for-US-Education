@@ -12,7 +12,12 @@ from app.services.chat_flow import (
     start_intake,
 )
 from app.services.intake import EDIT_ONLY_GOAL, form_goals
-from app.services.replies import PROFILE_DONE
+from app.services.replies import (
+    PROFILE_DONE,
+    PROFILE_NONE_YET,
+    PROFILE_RESTART_INTRO,
+    PROFILE_STATUS,
+)
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.skills import buttons, edit_prefill, skill_bac_hoc, skill_ho_so
 
@@ -44,6 +49,12 @@ class ChatProfileHandler:
         said = set(slm.profile_values())
         # Tin còn ý khác (câu hỏi): giá trị hồ sơ chỉ là bối cảnh của câu hỏi, không phải phản hồi cho bảng rà soát
         aside = any(y.type != "collect_profile" for y in slm.intents)
+        # Xem hồ sơ đang lưu, làm lại từ đầu: không phải khai giá trị. Đang hỏi dở một câu hồ sơ thì giữ luồng hỏi như cũ
+        task = None if aside else profile_task(slm)
+        if task in ("status", "restart") and (
+            self.pending_question(state) is None or state.question_id == "X1" or skill_ho_so.reviewed(state)
+        ):
+            return self._show_saved(state) if task == "status" else self._restart(state)
         # Muốn sửa khi không có câu chờ, hoặc khi đã hiện bảng rà soát (đang ở bảng, hay đang hỏi dở mục sửa trước)
         if wants_edit(slm) and (self.pending_question(state) is None or skill_ho_so.reviewed(state)):
             return await self._edit(state, message, said)
@@ -68,6 +79,28 @@ class ChatProfileHandler:
         # Không có giá trị nào mới cần xác nhận thì im lặng, câu trả lời của ý kia đứng một mình (bảng rà soát đang chờ vẫn
         # chờ như cũ). Có giá trị mới chưa xác nhận thì vẫn hiện bảng rà soát để học sinh xác nhận
         return skill_ho_so.review(state) if has_unconfirmed_news(state, before) else SkillOutput("")
+
+    # Hiện bảng hồ sơ đang lưu (không đổi gì); chưa có gì thì nói chưa có và mời điền
+    def _show_saved(self, state: ChatState) -> SkillOutput:
+        if not state.profile:
+            return self._offer_intake(state)
+        output = skill_ho_so.review(state)
+        output.answer = PROFILE_STATUS
+        return output
+
+    # Làm lại từ đầu như nút "Điền lại từ đầu" ở bảng rà soát: hỏi lại từng mục, giá trị cũ chỉ đổi khi trả lời giá trị mới
+    def _restart(self, state: ChatState) -> SkillOutput:
+        if not state.profile:
+            return self._offer_intake(state)
+        state.edit_queue = list(skill_ho_so.EDIT_ORDER)
+        output = next_edit_question(state)
+        output.answer = f"{PROFILE_RESTART_INTRO}\n\n{output.answer}"
+        return output
+
+    def _offer_intake(self, state: ChatState) -> SkillOutput:
+        output = start_intake(state)
+        output.answer = f"{PROFILE_NONE_YET} {output.answer}"
+        return output
 
     # Ở bảng rà soát: nút Cần sửa, ô chọn nhóm, Sửa trên form, Điền lại từ đầu thì xử lý luôn, không gọi skill.
     # Không có câu đang hỏi (vd nút sửa của câu trả lời kịch bản) thì chỉ nhận câu ô chọn nhóm.
@@ -165,6 +198,11 @@ class ChatProfileHandler:
         if missing_fields(state.profile, required) or self.pending_question(state) is not None:
             return False
         return all(field.status != "said_in_B0" for field in state.profile.values())
+
+
+# Nhiệm vụ của ý hồ sơ (edit, status, restart); None là khai giá trị hoặc trả lời câu đang chờ
+def profile_task(slm: SlmTinResult) -> str | None:
+    return next((task_of(y.entities) for y in slm.intents if y.type == "collect_profile"), None)
 
 
 # So với trước lượt này có giá trị nào mới mà học sinh chưa xác nhận không

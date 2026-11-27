@@ -6,6 +6,7 @@ import pytest
 
 from app.schemas.chat import ChatContext, ChatState
 from app.services.centers import SERVICES, CenterHit, CityCount
+from app.services.replies import CENTER_BOOKING_NOTE_NO_LIST
 from app.services.skills.skill_chuyen_trung_tam import (
     ASK_SERVICE,
     DISCLAIMER,
@@ -649,9 +650,9 @@ async def test_without_a_city_the_ai_is_told_there_is_nothing_to_say_about_it():
 
 @pytest.mark.parametrize("task", ["booking", "compare"])
 async def test_booking_and_comparing_come_with_a_note_and_the_centers_are_still_suggested(task):
-    llm = FakeLLM(reasons("Có luyện phỏng vấn visa."))
+    llm = FakeLLM(reasons("Có luyện phỏng vấn visa.", "Có luyện phỏng vấn visa."))
 
-    out = await handler(llm, FakeFinder([HN])).run(ChatState(), "q", need(tasks=[task]))
+    out = await handler(llm, FakeFinder([HN, HCM])).run(ChatState(), "q", need(tasks=[task]))
 
     assert out.answer.startswith(TASK_NOTES[task] + "\n\n")
     assert "Trung tâm B" in out.answer
@@ -671,7 +672,8 @@ async def test_booking_widget_carries_the_prefilled_note_with_service_and_city()
 
 
 async def test_compare_widget_has_the_intent_but_no_contact_note():
-    out = await handler(FakeLLM(reasons("Có luyện phỏng vấn visa.")), FakeFinder([HN])).run(
+    llm = FakeLLM(reasons("Có luyện phỏng vấn visa.", "Có luyện phỏng vấn visa."))
+    out = await handler(llm, FakeFinder([HN, HCM])).run(
         ChatState(), "so sánh hai trung tâm đầu", need(tasks=["compare"])
     )
 
@@ -708,7 +710,8 @@ async def test_booking_without_a_service_still_says_it_is_not_ready_before_askin
         ChatState(), "q", need(service=None, tasks=["booking"])
     )
 
-    assert out.answer == f"{TASK_NOTES['booking']}\n\n{ASK_SERVICE}"
+    assert out.answer == f"{CENTER_BOOKING_NOTE_NO_LIST}\n\n{ASK_SERVICE}"
+    assert "Đây là các trung tâm" not in out.answer
 
 
 # ---------- học sinh xin điều hệ thống không cung cấp ----------
@@ -749,3 +752,21 @@ async def test_the_not_provided_notice_also_comes_before_the_service_question():
 
     assert out.answer == f"{NOT_PROVIDED}\n\n{ASK_SERVICE}"
     assert len(out.quick_replies) == len(SERVICES)
+
+
+async def test_comparing_without_a_known_service_does_not_claim_two_centers_are_preselected():
+    # Lỗi thật 27/11/2026: "trung tâm nào uy tín nhất" được đáp "mình chọn sẵn hai trung tâm" rồi hỏi cần hỗ trợ gì,
+    # không có bảng nào hiện ra
+    out = await handler(FakeLLM(), FakeFinder([])).run(
+        ChatState(), "q", need(service=None, tasks=["compare"])
+    )
+
+    assert out.answer == ASK_SERVICE and out.widget is None
+
+
+async def test_one_center_cannot_be_preselected_for_a_comparison():
+    out = await handler(FakeLLM(reasons("Có luyện phỏng vấn visa.")), FakeFinder([HN])).run(
+        ChatState(), "so sánh trung tâm", need(tasks=["compare"])
+    )
+
+    assert "chọn sẵn hai" not in out.answer and "intent" not in out.widget.data

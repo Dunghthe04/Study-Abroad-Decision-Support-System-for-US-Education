@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using StudyAbroad.Application.Advisor;
 using StudyAbroad.Application.TargetSchools;
 using StudyAbroad.Domain.Entities;
 
@@ -57,7 +58,7 @@ public static partial class RoadmapBuilder
     public static RoadmapDto Build(RoadmapInputs input, DateOnly today)
     {
         var profile = input.Profile;
-        var (term, intakeYear, intakeEstimate) = ParseIntake(profile.TargetIntake, today);
+        var (term, intakeYear, intakeEstimate) = ParseIntake(profile.TargetIntake, today, HighSchoolGraduationYear(profile, today));
         var intakeDate = new DateOnly(intakeYear, IntakeMonth[term], 1);
         var scores = RealScores(input.Certifications);
         var targets = input.Targets.Take(MaxSchools).ToList();
@@ -326,7 +327,8 @@ public static partial class RoadmapBuilder
 
     // ---------- Mốc ----------
 
-    public static (string Term, int Year, bool Estimate) ParseIntake(string? intake, DateOnly today)
+    public static (string Term, int Year, bool Estimate) ParseIntake(string? intake, DateOnly today,
+        int? highSchoolGraduationYear = null)
     {
         var match = IntakePattern().Match(intake?.Trim() ?? "");
         if (match.Success)
@@ -334,8 +336,22 @@ public static partial class RoadmapBuilder
             var term = char.ToUpperInvariant(match.Groups[1].Value[0]) + match.Groups[1].Value[1..].ToLowerInvariant();
             return (term, int.Parse(match.Groups[2].Value), false);
         }
-        // chưa chọn kỳ: lấy Fall năm sau làm mốc ước chừng
-        return ("Fall", today.Year + 1, true);
+        // chưa chọn kỳ: ước chừng Fall của năm tốt nghiệp THPT; không biết hoặc đã tới năm đó thì Fall năm sau
+        return ("Fall", highSchoolGraduationYear is { } year && year > today.Year ? year : today.Year + 1, true);
+    }
+
+    // Năm tốt nghiệp THPT của học sinh còn đang học phổ thông. Hồ sơ cấp THCS ghi năm tốt nghiệp là của THCS
+    // nên đoán lại theo lớp tính tới lớp 12. Cấp học khác trả null
+    private static int? HighSchoolGraduationYear(StudentProfile profile, DateOnly today)
+    {
+        var now = today.ToDateTime(TimeOnly.MinValue);
+        return profile.CurrentEducationLevel switch
+        {
+            "high_school" => profile.GraduationYear
+                ?? ChatProfileMapper.GuessGraduationYear("high_school", profile.CurrentGrade, now),
+            "middle_school" => ChatProfileMapper.GuessGraduationYear("high_school", profile.CurrentGrade, now),
+            _ => null,
+        };
     }
 
     /// <summary>

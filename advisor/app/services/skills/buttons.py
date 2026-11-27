@@ -10,6 +10,7 @@ from datetime import date
 
 from app.schemas.chat import ChatState, ProfileField, QuickReply, Widget
 from app.services.chat_flow import SkillOutput, ask
+from app.services.replies import INTAKE_BEFORE_GRADUATION
 from app.services.skills import exchange_rate
 from app.services.skills.validators import (
     ALEVEL_GRADES,
@@ -215,6 +216,33 @@ def guess_graduation_year(level: str | None, grade: str | None, today: date | No
         n = int(match.group(1))
         return school_year_end + max(0, last - n)
     return None
+
+
+# Tốt nghiệp THPT giữa năm, nên kỳ bắt đầu trước tháng 6 của năm tốt nghiệp (hoặc năm trước đó) là trước khi tốt nghiệp
+GRADUATION_MONTH = 6
+TERM_START_MONTH = {"Spring": 1, "Summer": 6, "Fall": 8}
+
+
+# Câu nhắc khi kỳ nhập học đang chọn sớm hơn lúc tốt nghiệp THPT. Không phải học sinh phổ thông, chưa rõ năm tốt nghiệp
+# hoặc kỳ không sớm hơn thì None. Hồ sơ cấp THCS ghi năm tốt nghiệp THCS nên đoán lại theo lớp tính tới lớp 12
+def early_intake_note(profile: dict[str, ProfileField], today: date | None = None) -> str | None:
+    def value(name: str):
+        field = profile.get(name)
+        return field.value if field else None
+
+    parts = str(value("intake") or "").split()
+    if len(parts) != 2 or parts[0] not in TERM_START_MONTH or not parts[1].isdigit():
+        return None
+    level, grade = value("current_level"), value("current_grade")
+    if level == "high_school":
+        year = value("graduation_year") or guess_graduation_year("high_school", grade, today)
+    elif level == "middle_school":
+        year = guess_graduation_year("high_school", grade, today)
+    else:
+        return None
+    if not isinstance(year, int) or (int(parts[1]), TERM_START_MONTH[parts[0]]) >= (year, GRADUATION_MONTH):
+        return None
+    return INTAKE_BEFORE_GRADUATION.format(year=year, intake=" ".join(parts))
 
 
 # Kỳ nhập học: chữ giống INTAKE_TERM_OPTIONS của form, năm từ năm nay tới 5 năm sau

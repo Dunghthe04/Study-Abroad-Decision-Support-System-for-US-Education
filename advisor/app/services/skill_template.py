@@ -17,10 +17,14 @@ from app.schemas.slm import SkillRequest
 from app.services.profile_calc import CRITERION_NAMES, num, test_name
 from app.services.skill_call import SKILLS_DIR, load_skill
 from app.services.skill_input import NONE_TEXT, UNKNOWN_TEXT
-from app.services.skills.buttons import is_middle_school_profile
+from app.services.skills.buttons import early_intake_note, is_middle_school_profile
 from app.services.skills.skill_lo_trinh import choose_route, render, template_reasons
 
 TEMPLATE_PATH = SKILLS_DIR / "skill_ho_so_khuon.md"
+# Chỉ đưa câu nhắc vào skill thì câu hỏi một điểm bị lược mất (đo 27/11/2026: nói ra 1/3 lần), nên ghi rõ là bắt buộc
+EARLY_INTAKE_MUST = (
+    "BẮT BUỘC nói ý sau ngay sau câu đáp đầu tiên, kể cả khi học sinh chỉ hỏi một điểm: {note}"
+)
 # Việc khuôn này làm được. Câu không nói việc nào (hoặc chỉ nói việc khác) thì làm cả hai
 TEMPLATE_TASKS = ("assessment", "roadmap")
 TASK_TITLES = {"assessment": "Đánh giá hồ sơ", "roadmap": "Lộ trình chuẩn bị"}
@@ -370,7 +374,8 @@ def roadmap_part(
     lines = [
         '### Phần "Lộ trình chuẩn bị"',
         "Lộ trình đã chọn (giữ đúng tên lộ trình, lý do và các mốc, không thêm mốc):",
-        render(route, intake, major, roadmap),
+        render(route, intake, major, roadmap, today),
+        *([EARLY_INTAKE_MUST.format(note=note)] if (note := early_intake_note(profile, today)) else []),
         "",
         "Các bước chuẩn bị theo hồ sơ, theo thứ tự:",
         *extra_steps(req.ho_so, req.tinh_san, roadmap),

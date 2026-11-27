@@ -13,7 +13,6 @@ public class ChatSessionConfiguration : IEntityTypeConfiguration<ChatSession>
 
         b.HasKey(x => x.Id);
         b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
-        b.HasOne<Skill>().WithMany().HasForeignKey(x => x.SkillId).OnDelete(DeleteBehavior.SetNull);
         b.Property(x => x.UserId).HasComment("Chủ cuộc chat. Xóa tài khoản thì xóa luôn cuộc chat và các tin nhắn.");
         b.Property(x => x.Title).HasMaxLength(200)
             .HasComment("Tiêu đề trong lịch sử chat của học sinh: câu hỏi đầu tiên, gom khoảng trắng, dài quá 60 ký tự thì cắt kèm dấu ba chấm. Null nếu lượt đầu chỉ bấm nút.");

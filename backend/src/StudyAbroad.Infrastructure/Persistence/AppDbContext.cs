@@ -34,7 +34,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TargetSchool> TargetSchools => Set<TargetSchool>();
     public DbSet<Recommendation> Recommendations => Set<Recommendation>();
     public DbSet<AnalysisResult> AnalysisResults => Set<AnalysisResult>();
-    public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<ChatSession> ChatSessions => Set<ChatSession>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<ReviewBatch> ReviewBatches => Set<ReviewBatch>();
@@ -48,8 +47,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<SlmTrainingSample> SlmTrainingSamples => Set<SlmTrainingSample>();
     public DbSet<SlmSampleVersion> SlmSampleVersions => Set<SlmSampleVersion>();
     public DbSet<AiCall> AiCalls => Set<AiCall>();
-    public DbSet<EvalCase> EvalCases => Set<EvalCase>();
-    public DbSet<EvalRun> EvalRuns => Set<EvalRun>();
     public DbSet<RoadmapStep> RoadmapSteps => Set<RoadmapStep>();
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<BirthDateChangeRequest> BirthDateChangeRequests => Set<BirthDateChangeRequest>();
@@ -61,7 +58,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Media> Media => Set<Media>();
 
     // 13 thực thể bổ sung chuẩn hóa toàn diện 42 bảng DB First
-    public DbSet<RecommendationItem> RecommendationItems => Set<RecommendationItem>();
     public DbSet<ExpertRule> ExpertRules => Set<ExpertRule>();
     public DbSet<WhatIfSimulation> WhatIfSimulations => Set<WhatIfSimulation>();
     public DbSet<LeadMessage> LeadMessages => Set<LeadMessage>();

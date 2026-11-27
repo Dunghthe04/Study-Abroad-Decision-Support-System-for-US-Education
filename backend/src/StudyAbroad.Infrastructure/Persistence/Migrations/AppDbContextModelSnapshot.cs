@@ -1130,10 +1130,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasColumnName("deleted_at")
                         .HasComment("Học sinh xóa cuộc trò chuyện khỏi lịch sử (xóa mềm): không hiện, không mở lại, không hỏi tiếp. Tin nhắn vẫn giữ cho thống kê. Null là chưa xóa.");
 
-                    b.Property<Guid?>("SkillId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("skill_id");
-
                     b.Property<string>("StateJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("state_json")
@@ -1162,9 +1158,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_chat_sessions");
-
-                    b.HasIndex("SkillId")
-                        .HasDatabaseName("ix_chat_sessions_skill_id");
 
                     b.HasIndex("UserId", "CreatedAt")
                         .HasDatabaseName("ix_chat_sessions_user_id_created_at");
@@ -1350,121 +1343,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_email_outbox_status_next_attempt_at");
 
                     b.ToTable("email_outbox", "app");
-                });
-
-            modelBuilder.Entity("StudyAbroad.Domain.Entities.EvalCase", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Category")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("category");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("ExpectedAnswer")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)")
-                        .HasColumnName("expected_answer");
-
-                    b.Property<string>("ExpectedSourcesJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("expected_sources_json");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_active");
-
-                    b.Property<string>("Question")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
-                        .HasColumnName("question");
-
-                    b.Property<string>("StudyLevel")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("study_level");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_eval_cases");
-
-                    b.ToTable("eval_cases", "app");
-                });
-
-            modelBuilder.Entity("StudyAbroad.Domain.Entities.EvalRun", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<DateTime?>("FinishedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("finished_at");
-
-                    b.Property<string>("ModelVersion")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("model_version");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("name");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("notes");
-
-                    b.Property<int>("PassedCases")
-                        .HasColumnType("integer")
-                        .HasColumnName("passed_cases");
-
-                    b.Property<string>("ResultsJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("results_json");
-
-                    b.Property<Guid?>("SkillId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("skill_id");
-
-                    b.Property<DateTime>("StartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("started_at");
-
-                    b.Property<int>("TotalCases")
-                        .HasColumnType("integer")
-                        .HasColumnName("total_cases");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_eval_runs");
-
-                    b.HasIndex("StartedAt")
-                        .HasDatabaseName("ix_eval_runs_started_at");
-
-                    b.ToTable("eval_runs", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ExpertRule", b =>
@@ -3382,78 +3260,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                     b.ToTable("recommendations", "app");
                 });
 
-            modelBuilder.Entity("StudyAbroad.Domain.Entities.RecommendationItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("FinancialFitStatus")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasDefaultValue("affordable")
-                        .HasColumnName("financial_fit_status");
-
-                    b.Property<string>("GapReasons")
-                        .HasColumnType("text")
-                        .HasColumnName("gap_reasons");
-
-                    b.Property<bool>("IsTierDivergent")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_tier_divergent");
-
-                    b.Property<decimal?>("MatchStrength")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("match_strength");
-
-                    b.Property<string>("ProgramName")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("program_name");
-
-                    b.Property<Guid>("RecommendationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("recommendation_id");
-
-                    b.Property<string>("RuleCodesTriggered")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("rule_codes_triggered");
-
-                    b.Property<string>("TierAi")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("tier_ai");
-
-                    b.Property<string>("TierRule")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("tier_rule");
-
-                    b.Property<Guid>("UniversityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("university_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_recommendation_items");
-
-                    b.HasIndex("RecommendationId")
-                        .HasDatabaseName("ix_recommendation_items_recommendation_id");
-
-                    b.HasIndex("UniversityId")
-                        .HasDatabaseName("ix_recommendation_items_university_id");
-
-                    b.ToTable("recommendation_items", "app");
-                });
-
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ReviewBatch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4063,61 +3869,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_sensitivity_runs_counts", "profile_count > 0 AND school_count >= 0 AND stable_count >= 0 AND watch_count >= 0 AND sensitive_count >= 0 AND duration_ms >= 0");
                         });
-                });
-
-            modelBuilder.Entity("StudyAbroad.Domain.Entities.Skill", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("DefinitionJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("definition_json");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("description");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_active");
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("key");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("name");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<int>("Version")
-                        .HasColumnType("integer")
-                        .HasColumnName("version");
-
-                    b.HasKey("Id")
-                        .HasName("pk_skills");
-
-                    b.HasIndex("Key", "Version")
-                        .IsUnique()
-                        .HasDatabaseName("ix_skills_key_version");
-
-                    b.ToTable("skills", "app");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.SlmSampleVersion", b =>
@@ -6312,12 +6063,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ChatSession", b =>
                 {
-                    b.HasOne("StudyAbroad.Domain.Entities.Skill", null)
-                        .WithMany()
-                        .HasForeignKey("SkillId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("fk_chat_sessions_skills_skill_id");
-
                     b.HasOne("StudyAbroad.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
@@ -6645,23 +6390,6 @@ namespace StudyAbroad.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_recommendations_users_user_id");
-                });
-
-            modelBuilder.Entity("StudyAbroad.Domain.Entities.RecommendationItem", b =>
-                {
-                    b.HasOne("StudyAbroad.Domain.Entities.Recommendation", null)
-                        .WithMany()
-                        .HasForeignKey("RecommendationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_recommendation_items_recommendations_recommendation_id");
-
-                    b.HasOne("StudyAbroad.Domain.Entities.University", null)
-                        .WithMany()
-                        .HasForeignKey("UniversityId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_recommendation_items_universities_university_id");
                 });
 
             modelBuilder.Entity("StudyAbroad.Domain.Entities.ReviewBatch", b =>

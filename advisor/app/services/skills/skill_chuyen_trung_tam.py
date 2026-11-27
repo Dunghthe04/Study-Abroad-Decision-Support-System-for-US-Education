@@ -21,6 +21,7 @@ from app.services.replies import (
     CENTER_ASK_SERVICE,
     CENTER_BOOKING_NOTE,
     CENTER_BOOKING_NOTE_IN_CITY,
+    CENTER_BOOKING_NOTE_NO_LIST,
     CENTER_CITY_ASK,
     CENTER_DISCLAIMER,
     CENTER_ELSEWHERE,
@@ -314,7 +315,9 @@ class ChuyenTrungTamHandler:
         # Nhớ thành phố ngay khi học sinh nói, kể cả khi chưa rõ dịch vụ: bấm nút dịch vụ ở câu sau vẫn giữ thành phố
         if need.city:
             state.context.city = need.city
-        notes = [TASK_NOTES[task] for task in entities.get("tasks") or [] if task in TASK_NOTES]
+        tasks = list(entities.get("tasks") or [])
+        # Chưa có danh sách để hiện thì không được nói "đã chọn sẵn hai trung tâm" hay "đây là các trung tâm"
+        notes = [CENTER_BOOKING_NOTE_NO_LIST] if "booking" in tasks else []
         # Chưa rõ dịch vụ: hỏi lại bằng nút, học sinh bấm là gửi lại một câu rõ dịch vụ
         if need.service is None:
             return SkillOutput(
@@ -336,7 +339,10 @@ class ChuyenTrungTamHandler:
             return SkillOutput(UNAVAILABLE, quick_replies=menu_buttons("centers"))
         counts = await self._city_counts(need.service, level)
         label = SERVICES[need.service]
-        parts = list(notes)
+        # So sánh cần ít nhất hai trung tâm mới chọn sẵn được
+        if len(centers) < 2:
+            tasks = [task for task in tasks if task != "compare"]
+        parts = [TASK_NOTES[task] for task in tasks if task in TASK_NOTES] if centers else list(notes)
         if (
             not centers
         ):  # TH-63: không có trung tâm đã xác minh cho dịch vụ này (hoặc ở thành phố học sinh nêu)
@@ -369,9 +375,7 @@ class ChuyenTrungTamHandler:
         return SkillOutput(
             "\n\n".join(parts),
             quick_replies=[],
-            widget=centers_widget(
-                centers, reasons, others, need.service, center_intent(entities.get("tasks") or []), need.city
-            ),
+            widget=centers_widget(centers, reasons, others, need.service, center_intent(tasks), need.city),
             disclaimer=DISCLAIMER,
         )
 
