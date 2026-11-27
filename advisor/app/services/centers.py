@@ -7,13 +7,12 @@ giống phần gợi ý trường: lọc theo luật ở backend, advisor chỉ 
 """
 
 import difflib
-import re
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
-from app.services.priority import unaccent
+from app.services.provinces import city_key
 
 # Danh mục dịch vụ: mã lưu trong cột services -> tên hiển thị cho học sinh.
 # Một nguồn duy nhất cho lời nhắc của AI, nút gợi ý và câu trả lời. Thêm dịch vụ mới thì thêm ở đây.
@@ -43,25 +42,8 @@ def db_service(model_code: str | None) -> str | None:
     return MODEL_SERVICE_TO_DB.get(model_code or "")
 
 
-# Thành phố học sinh viết ("Sài Gòn", "HCM", "TP.HCM", "HN", "Hanoi") khác tên chuẩn trong DB ("TP.HCM", "Hà Nội").
-# So sau khi bỏ dấu, bỏ ký tự lạ và bỏ "TP", "thành phố" ở đầu; các cách viết tắt hay gặp quy về một tên
-_CITY_ALIASES = {
-    "hcm": "ho chi minh",
-    "hcmc": "ho chi minh",
-    "tphcm": "ho chi minh",
-    "sai gon": "ho chi minh",
-    "saigon": "ho chi minh",
-    "hn": "ha noi",
-    "hanoi": "ha noi",
-}
-
-
-def _city_key(text: str) -> str:
-    folded = re.sub(r"[^a-z0-9]+", " ", unaccent(text)).strip()
-    folded = re.sub(r"^(?:thanh pho|tp) ", "", folded)
-    folded = re.sub(r" city$", "", folded)  # "Ho Chi Minh city"
-    return _CITY_ALIASES.get(folded, folded)
-
+# Thành phố học sinh viết ("Sài Gòn", "SG", "TP.HCM", "HN", "Hanoi") khác tên chuẩn trong DB ("TP.HCM", "Hà Nội").
+# So bằng khóa chuẩn của provinces.city_key (bỏ dấu, bỏ tiền tố, đổi tên gọi khác)
 
 # Giống nhau từ mức này trở lên thì coi là gõ sai chính tả của một thành phố trong DB. Mức 0,82 nằm giữa "ha noy" / "ha noi" (0,83)
 # và hai tỉnh khác nhau như "hai duong" / "hai phong" (0,78): nhầm sang thành phố khác tệ hơn là không khớp
@@ -72,8 +54,8 @@ def match_city(text: str | None, cities: list[str]) -> str | None:
     """Tên thành phố trong DB (đúng chữ của `cities`) ứng với chữ học sinh viết; None khi không nói hoặc không khớp thành phố nào."""
     if not text or not text.strip():
         return None
-    key = _city_key(text)
-    by_key = {_city_key(city): city for city in cities}
+    key = city_key(text)
+    by_key = {city_key(city): city for city in cities}
     if key in by_key:
         return by_key[key]
     close = difflib.get_close_matches(

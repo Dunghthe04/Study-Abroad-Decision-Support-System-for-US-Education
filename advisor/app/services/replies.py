@@ -195,7 +195,12 @@ CENTER_NONE = (
 CENTER_UNAVAILABLE = "Phần gợi ý trung tâm đang tạm gián đoạn, bạn thử lại sau ít phút nhé."
 # Học sinh nêu thành phố chưa có trung tâm nào hỗ trợ dịch vụ này: không đưa trung tâm ở nơi khác cho đủ, mà cho chọn nơi đang có
 CENTER_NONE_IN_CITY = (
-    "Hiện chưa có trung tâm đã xác minh ở {city} hỗ trợ {label}. Bạn chọn thành phố khác đang có nhé:"
+    "Tạm thời chưa có trung tâm đã xác minh nào ở {city} hỗ trợ {label}. Bạn chọn nơi khác đang có nhé:"
+)
+# Không nhận ra địa danh (vd "ĐN", "quận 1"): không được nói là ở đó chưa có trung tâm, vì chưa biết là đâu
+CENTER_CITY_UNKNOWN = (
+    "Mình chưa rõ “{city}” là tỉnh, thành nào. Dưới đây là những nơi đang có trung tâm hỗ trợ {label}, "
+    "bạn chọn hoặc gõ vào ô tìm nhé:"
 )
 CENTER_ELSEWHERE = "Hiện chưa có trung tâm đã xác minh ở {city}, các trung tâm dưới đây ở nơi khác:"
 CENTER_MORE = "Còn {count} trung tâm khác, bạn bấm Xem thêm để xem hết."
