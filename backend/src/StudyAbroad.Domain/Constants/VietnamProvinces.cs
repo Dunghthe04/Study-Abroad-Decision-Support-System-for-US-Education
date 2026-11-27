@@ -63,6 +63,10 @@ public static class VietnamProvinces
         return All.FirstOrDefault(p => Normalize(p) == key);
     }
 
+    /// <summary>tên chuẩn nếu nhận ra tỉnh; không nhận ra thì giữ chữ đã nhập (đã cắt khoảng trắng); null khi rỗng</summary>
+    public static string? Canonical(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : Resolve(value) ?? value.Trim();
+
     /// <summary>true khi hai tên chỉ cùng một tỉnh (vd "TP.HCM" và "TP. Hồ Chí Minh")</summary>
     public static bool SameProvince(string? a, string? b)
     {
