@@ -251,18 +251,25 @@ function KnowledgeEntryForm({ entry, reloadKey, onClose, onChanged, onDelete, on
 
   if (isCreate) {
     return (
-      <DetailPanel title="Thêm tri thức" description="Điền đủ các mục có dấu *, và ít nhất một trong hai: nguồn hoặc link nguồn." onClose={onClose} closeDisabled={saving}>
+      <DetailPanel
+        title="Thêm tri thức"
+        description="Điền đủ các mục có dấu *, và ít nhất một trong hai: nguồn hoặc link nguồn."
+        onClose={onClose}
+        closeDisabled={saving}
+        footer={(
+          <>
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Hủy</Button>
+            <Button type="button" onClick={() => void save()} loading={saving}>
+              <SaveIcon /> Lưu
+            </Button>
+          </>
+        )}
+      >
         <form onSubmit={(event) => event.preventDefault()} className="space-y-5">
           {errorBox}
           <TableFrame title="Nội dung">
             <RowsTable rows={editRows} isEditing />
           </TableFrame>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Hủy</Button>
-            <Button type="button" onClick={() => void save()} loading={saving}>
-              <SaveIcon /> Lưu
-            </Button>
-          </div>
         </form>
       </DetailPanel>
     );
@@ -308,7 +315,21 @@ function KnowledgeEntryForm({ entry, reloadKey, onClose, onChanged, onDelete, on
   };
 
   return (
-    <DetailPanel title={`Tri thức #${entry.entryNo}`} description={labelName(entry.label)} onClose={onClose} closeDisabled={saving}>
+    <DetailPanel
+      title={`Tri thức #${entry.entryNo}`}
+      description={labelName(entry.label)}
+      onClose={onClose}
+      closeDisabled={saving}
+      footer={isDeleted ? (
+        <Button type="button" size="sm" variant="outline" disabled={saving || editing} onClick={() => onRestore(entry)}>
+          <RotateCcwIcon /> Khôi phục
+        </Button>
+      ) : (
+        <Button type="button" size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={saving || editing} onClick={() => onDelete(entry)}>
+          <Trash2Icon /> Xóa
+        </Button>
+      )}
+    >
       <div className="space-y-5">
         {errorBox}
         {isDeleted && (
@@ -316,17 +337,6 @@ function KnowledgeEntryForm({ entry, reloadKey, onClose, onChanged, onDelete, on
             <AlertDescription>Mục tri thức này đã bị xóa (chỉ đọc). Hãy khôi phục trước khi chỉnh sửa.</AlertDescription>
           </Alert>
         )}
-        <div className="flex flex-wrap gap-2">
-          {isDeleted ? (
-            <Button type="button" size="sm" variant="outline" className="ml-auto" disabled={saving || editing} onClick={() => onRestore(entry)}>
-              <RotateCcwIcon /> Khôi phục
-            </Button>
-          ) : (
-            <Button type="button" size="sm" variant="outline" className="ml-auto text-destructive hover:text-destructive" disabled={saving || editing} onClick={() => onDelete(entry)}>
-              <Trash2Icon /> Xóa
-            </Button>
-          )}
-        </div>
         <EditableTable title="Nội dung" rows={editing ? editRows : viewRows} edit={editState} />
 
         <TableFrame title={`Lịch sử phiên bản (${versions.length})`}>

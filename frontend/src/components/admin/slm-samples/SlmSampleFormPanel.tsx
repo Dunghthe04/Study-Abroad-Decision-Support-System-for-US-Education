@@ -287,7 +287,20 @@ function SlmSampleForm({ sample: listed, version, onClose, onChanged, onDelete, 
 
   if (isCreate) {
     return (
-      <DetailPanel title="Thêm mẫu mới" description="Điền đầy đủ câu hỏi và danh sách ý định (mảng JSON không rỗng)." onClose={onClose} closeDisabled={saving}>
+      <DetailPanel
+        title="Thêm mẫu mới"
+        description="Điền đầy đủ câu hỏi và danh sách ý định (mảng JSON không rỗng)."
+        onClose={onClose}
+        closeDisabled={saving}
+        footer={(
+          <>
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Hủy</Button>
+            <Button type="button" onClick={() => void save()} loading={saving}>
+              <SaveIcon /> Lưu
+            </Button>
+          </>
+        )}
+      >
         <form onSubmit={(event) => event.preventDefault()} className="space-y-5">
           {submitError && <Alert variant="destructive"><AlertDescription>{submitError}</AlertDescription></Alert>}
           <TableFrame title="Thông tin mẫu">
@@ -296,12 +309,6 @@ function SlmSampleForm({ sample: listed, version, onClose, onChanged, onDelete, 
           <TableFrame title="Nhãn đầu ra">
             <RowsTable rows={labelRows} isEditing />
           </TableFrame>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Hủy</Button>
-            <Button type="button" onClick={() => void save()} loading={saving}>
-              <SaveIcon /> Lưu
-            </Button>
-          </div>
         </form>
       </DetailPanel>
     );
@@ -351,7 +358,21 @@ function SlmSampleForm({ sample: listed, version, onClose, onChanged, onDelete, 
   const busy = saving || editing !== null;
 
   return (
-    <DetailPanel title="Chi tiết mẫu huấn luyện" description={sampleTypeLabel(sample.sampleType)} onClose={onClose} closeDisabled={saving}>
+    <DetailPanel
+      title="Chi tiết mẫu huấn luyện"
+      description={sampleTypeLabel(sample.sampleType)}
+      onClose={onClose}
+      closeDisabled={saving}
+      footer={isDeleted ? (
+        <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onRestore(sample)}>
+          <RotateCcwIcon /> Khôi phục mẫu
+        </Button>
+      ) : (
+        <Button type="button" size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={busy} onClick={() => onDelete(sample)}>
+          <Trash2Icon /> Xóa
+        </Button>
+      )}
+    >
       <div className="space-y-5">
         {detail.error && <Alert variant="destructive"><AlertDescription>{detail.error}</AlertDescription></Alert>}
 
@@ -360,18 +381,6 @@ function SlmSampleForm({ sample: listed, version, onClose, onChanged, onDelete, 
             <AlertDescription>Mẫu này đã bị xóa (chỉ đọc). Khôi phục mẫu để tiếp tục sử dụng hoặc chỉnh sửa.</AlertDescription>
           </Alert>
         )}
-
-        <div className="flex flex-wrap gap-2">
-          {isDeleted ? (
-            <Button type="button" size="sm" variant="outline" className="ml-auto" disabled={busy} onClick={() => onRestore(sample)}>
-              <RotateCcwIcon /> Khôi phục mẫu
-            </Button>
-          ) : (
-            <Button type="button" size="sm" variant="outline" className="ml-auto text-destructive hover:text-destructive" disabled={busy} onClick={() => onDelete(sample)}>
-              <Trash2Icon /> Xóa
-            </Button>
-          )}
-        </div>
 
         <EditableTable title="Thông tin mẫu" rows={formEnabled && editing === "info" ? infoRows : viewInfoRows} edit={editState("info")} />
         <TableFrame title="Nhãn đầu ra" edit={editState("labels")}>

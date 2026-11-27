@@ -92,9 +92,24 @@ export function CreateUniversityPanel({ onClose, onCreated }: CreateUniversityPa
   const mediaRows = rows.filter((row) => row.inputId === "uni-logo" || row.inputId === "uni-cover");
   const infoRows = rows.filter((row) => row.inputId !== "uni-logo" && row.inputId !== "uni-cover");
 
+  const formId = "create-university-form";
+
   return (
-    <DetailPanel title="Thêm trường mới" description="Nhập thông tin trường; mã và tên là bắt buộc." onClose={onClose} closeDisabled={busy}>
-      <form onSubmit={handleSubmit} className="space-y-5">
+    <DetailPanel
+      title="Thêm trường mới"
+      description="Nhập thông tin trường; mã và tên là bắt buộc."
+      onClose={onClose}
+      closeDisabled={busy}
+      footer={(
+        <>
+          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Hủy</Button>
+          <Button type="submit" form={formId} loading={isSaving} disabled={busy}>
+            <PlusIcon /> {duplicateWarning ? "Vẫn tạo trường" : "Tạo trường"}
+          </Button>
+        </>
+      )}
+    >
+      <form id={formId} onSubmit={handleSubmit} className="space-y-5">
         {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
         {duplicateWarning && <Alert><AlertDescription>{duplicateWarning}</AlertDescription></Alert>}
         <TableFrame title="Media">
@@ -104,12 +119,6 @@ export function CreateUniversityPanel({ onClose, onCreated }: CreateUniversityPa
         <TableFrame title="Thông tin trường">
           <RowsTable rows={infoRows} isEditing />
         </TableFrame>
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Hủy</Button>
-          <Button type="submit" loading={isSaving} disabled={busy}>
-            <PlusIcon /> {duplicateWarning ? "Vẫn tạo trường" : "Tạo trường"}
-          </Button>
-        </div>
       </form>
     </DetailPanel>
   );
