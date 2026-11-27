@@ -30,9 +30,9 @@ const FRAME = "overflow-hidden rounded-md border border-border";
 const HEADER =
   "flex min-h-9 items-center justify-between gap-2 bg-muted px-3 py-1 text-xs font-semibold text-foreground";
 const LABEL_CELL =
-  "w-1/2 border-t border-r border-border bg-muted px-3 py-1.5 text-left align-middle text-xs font-normal text-muted-foreground";
-const VALUE_CELL = "border-t border-border px-3 py-1.5 text-right text-sm font-medium";
-const EDIT_VALUE_CELL = "border-t border-border px-2 py-1 text-left text-sm";
+  "border-t border-r border-border bg-muted px-3 py-2 text-left align-top text-xs font-normal text-muted-foreground sm:w-px sm:whitespace-nowrap";
+const VALUE_CELL = "border-t border-border px-3 py-2 text-right align-top text-sm font-medium";
+const EDIT_VALUE_CELL = "border-t border-border px-2 py-1.5 text-left align-top text-sm";
 
 function HeaderActions({ edit }: { edit: TableEditState }) {
   if (!edit.isEditing) {
