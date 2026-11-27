@@ -170,6 +170,11 @@ BUDGET_REVIEW_HINT = 'Bạn xem bảng hồ sơ: đúng thì bấm "Đúng rồi
 # Nút thử đúng số học sinh nói bằng thử giả định (không lưu vào hồ sơ). Câu gửi đi đã thử trên SLM v6: đúng 16/16
 BUDGET_TRY_LABEL = "Thử với đúng {said} USD"
 BUDGET_TRY_VALUE = "Nếu ngân sách của em là {said} USD một năm thì sao?"
+# Còn thay đổi chưa xác nhận mà hỏi việc phải tính trên hồ sơ (UC-19, UC-154, UC-155): đi kèm bảng hồ sơ
+UNSAVED_REVIEW = (
+    'Bạn vừa đổi thông tin hồ sơ mà chưa xác nhận. Bạn xem bảng bên dưới: đúng thì bấm "Đúng rồi", '
+    "mình lưu rồi trả lời câu bạn vừa hỏi."
+)
 # Học sinh sửa mà giá trị nói ra trùng giá trị đang lưu: đi kèm bảng hồ sơ
 PROFILE_SAME = (
     "Thông tin bạn vừa nói trùng với hồ sơ đang lưu nên mình giữ nguyên. "

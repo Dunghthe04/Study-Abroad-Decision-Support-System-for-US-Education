@@ -60,6 +60,7 @@ from app.services.replies import (
     TRIED_SCENARIO,
     TRY_INSTEAD,
     TRY_WHAT,
+    UNSAVED_REVIEW,
     menu_buttons,
 )
 from app.services.scenario import (
@@ -72,7 +73,7 @@ from app.services.scenario import (
     try_buttons,
 )
 from app.services.skill_input import skill_request_of
-from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
+from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields, unanswered_fields
 from app.services.skill_template import TEMPLATE_TASKS, build_skill, tasks_of
 from app.services.skills import major_catalog, skill_ho_so, state_catalog
 from app.services.skills.profile_handler import ChatProfileHandler
@@ -262,6 +263,8 @@ class ScenarioBranch:
             return self.ask_what(state)
         # Câu nối tiếp chỉ nói phần đổi: gộp vào kịch bản lượt trước (UC-155 1a)
         entities = merge_follow_up(said, state.context.scenario)
+        if (waiting := confirm_first(state, slm.intents[0])) is not None:
+            return waiting
         if entities.get("mode") == "goal_seeking":
             return self._goal_seek(state, entities)
         if entities.get("mode") != "what_if":
@@ -422,6 +425,16 @@ def ask_missing_profile(state: ChatState, y: SlmY, required: list[str]) -> Skill
     return ask_major(state) if missing[0] == "major" else start_intake(state, required)
 
 
+# Còn thay đổi hồ sơ chưa xác nhận thì không tính gì trên đó: hiện bảng rà soát, nhớ câu hỏi để trả lời ngay khi học
+# sinh xác nhận (UC-19, UC-154, UC-155). Câu mới nhất thay câu đang chờ. Hồ sơ còn thiếu mục cơ bản thì để luồng hỏi
+# hồ sơ lo. Không có gì chưa lưu thì None
+def confirm_first(state: ChatState, y: SlmY) -> SkillOutput | None:
+    if not state.unsaved or unanswered_fields(state.profile, REQUIRED_B3):
+        return None
+    state.pending_advice = y
+    return skill_ho_so.review(state, UNSAVED_REVIEW)
+
+
 # Câu xin danh sách trường (đã bỏ dấu). SLM xếp các câu này vào profile_review; code giao .NET chạy gợi ý trường
 # (pipeline có sẵn), không sinh skill
 SCHOOL_LIST_WORDS = (
@@ -533,6 +546,8 @@ class GeneratedAdviceBranch:
 
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         y = slm.intents[0]
+        if y.type == "profile_review" and (waiting := confirm_first(state, y)) is not None:
+            return waiting
         question = y.span if y.type == "profile_review" else DEFAULT_QUESTION
         school = single_school(y.entities) if y.type == "profile_review" else None
         if school and state.has_results:
@@ -614,9 +629,10 @@ class GeneratedAdviceBranch:
 # không có thì chỉ lưu rồi hỏi muốn làm gì tiếp, không tự đánh giá hay lên lộ trình.
 # Tin đã có ý profile_review thì thôi: ChatFlow sẽ chạy nhánh tư vấn cho ý đó ngay sau, tư vấn ở đây nữa là trả lời hai lần
 class ProfileBranch:
-    def __init__(self, handler: ChatProfileHandler, advice: Branch) -> None:
+    def __init__(self, handler: ChatProfileHandler, advice: Branch, scenario: Branch | None = None) -> None:
         self._handler = handler
         self._advice = advice
+        self._scenario = scenario
 
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         was_ready = self._handler.ready(state, REQUIRED_B3)
@@ -626,10 +642,15 @@ class ProfileBranch:
             if original is not None:
                 state.pending_advice = None
                 return combine(
-                    output, await self._advice.run(state, original.span, SlmTinResult(intents=[original]))
+                    output,
+                    await self._waiting(original).run(state, original.span, SlmTinResult(intents=[original])),
                 )
             return combine(output, SkillOutput(NEXT_AFTER_SAVE, quick_replies=list(NEXT_AFTER_SAVE_REPLIES)))
         return output
+
+    # Nhánh trả lời câu đang chờ theo loại của nó
+    def _waiting(self, y: SlmY) -> Branch:
+        return self._scenario if y.type == "scenario" and self._scenario is not None else self._advice
 
 
 # Bảng nhánh theo loại câu hỏi SLM. skills: các skill do skills.build_handlers tạo.
@@ -643,10 +664,11 @@ def build_branches(
     advice: Branch = (
         GeneratedAdviceBranch(skills, writer, method_writer) if writer is not None else NotReadyBranch()
     )
+    scenario = ScenarioBranch(what_if_writer, skills.get("skill_tra_loi"))
     return {
-        "collect_profile": ProfileBranch(ChatProfileHandler(skills), advice),
+        "collect_profile": ProfileBranch(ChatProfileHandler(skills), advice, scenario),
         "profile_review": advice,
-        "scenario": ScenarioBranch(what_if_writer, skills.get("skill_tra_loi")),
+        "scenario": scenario,
         "knowledge": KnowledgeBranch(skills["skill_tra_loi"])
         if "skill_tra_loi" in skills
         else NotReadyBranch(),
