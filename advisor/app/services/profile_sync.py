@@ -8,6 +8,7 @@ from app.schemas.chat import ProfileField
 DRAFT_KEYS = {
     "current_level",
     "current_grade",
+    "graduation_year",  # code suy ra từ lớp, form cho sửa: phải đi cùng lớp theo cả hai chiều
     "major",
     "gpa",
     "sat",
