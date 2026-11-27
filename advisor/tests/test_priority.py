@@ -60,7 +60,9 @@ def test_a_message_the_slm_could_not_classify_is_not_guessed_into_a_knowledge_qu
 
 def test_an_ambiguous_label_the_slm_did_return_is_still_rescued():
     # Model trả đúng khuôn mà gán ambiguous cho câu hỏi số liệu trường: vẫn đổi thành câu kiến thức như trước
-    assert with_info_intent("học phí của MIT là bao nhiêu", out_of_scope("ambiguous")).types() == ["knowledge"]
+    assert with_info_intent("học phí của MIT là bao nhiêu", out_of_scope("ambiguous")).types() == [
+        "knowledge"
+    ]
 
 
 def test_other_out_of_scope_kinds_and_other_intents_are_left_alone():

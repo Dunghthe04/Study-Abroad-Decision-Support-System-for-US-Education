@@ -75,7 +75,9 @@ def spread(xs: list[float], gap: float, lo: float, hi: float) -> list[float]:
     return out
 
 
-def leader_labels(ax: Any, items: list[tuple[float, str]], y_from: float, y_text: float, gap: float, lo: float, hi: float) -> None:
+def leader_labels(
+    ax: Any, items: list[tuple[float, str]], y_from: float, y_text: float, gap: float, lo: float, hi: float
+) -> None:
     """Số của các đoạn quá hẹp: ghi phía trên thanh, có đường kẻ trỏ xuống đúng đoạn đó. items: (vị trí giữa đoạn, chữ)."""
     items = sorted(items)
     for (x, text), x_text in zip(items, spread([x for x, _ in items], gap, lo, hi), strict=True):
@@ -303,7 +305,9 @@ def chart_confusion(summaries: dict[str, dict[str, Any]], path: Path) -> Path:
     style()
     n = len(summaries)
     fig, axes = plt.subplots(1, n, figsize=(6.2 * n, 5.6), squeeze=False, gridspec_kw={"wspace": 0.8})
-    images = [heatmap(ax, s["nham_lan"], name) for ax, (name, s) in zip(axes[0], summaries.items(), strict=True)]
+    images = [
+        heatmap(ax, s["nham_lan"], name) for ax, (name, s) in zip(axes[0], summaries.items(), strict=True)
+    ]
     bar = fig.colorbar(images[-1], ax=axes[0].tolist(), fraction=0.025, pad=0.03, shrink=0.8)
     bar.set_label("Share of the true-label row (darker = higher)", fontsize=9)
     bar.ax.tick_params(labelsize=8)
@@ -530,7 +534,9 @@ def chart_roc(summaries: dict[str, dict[str, Any]], path: Path) -> Path | None:
         ax.set_xlabel("False positive rate\n(share of wrong messages that pass the threshold)", fontsize=9)
         ax.set_ylabel("True positive rate\n(share of correct messages that pass the threshold)", fontsize=9)
         ax.legend(loc="lower right", fontsize=8, frameon=True)
-    fig.suptitle("ROC curve: can the confidence score separate correct from wrong categories?", fontweight="bold")
+    fig.suptitle(
+        "ROC curve: can the confidence score separate correct from wrong categories?", fontweight="bold"
+    )
     return save(fig, path)
 
 
@@ -758,7 +764,9 @@ def chart_invalid_causes(summaries: dict[str, dict[str, Any]], path: Path) -> Pa
     # Trục y đảo: giá trị nhỏ hơn nằm cao hơn, nên chữ đặt ở i - 0.45 là phía trên thanh
     for i, items in enumerate(small):
         if items:
-            leader_labels(ax, items, i - 0.275, i - 0.45, gap=0.055 * widest, lo=0.02 * widest, hi=1.02 * widest)
+            leader_labels(
+                ax, items, i - 0.275, i - 0.45, gap=0.055 * widest, lo=0.02 * widest, hi=1.02 * widest
+            )
     ax.set_xlim(0, widest * 1.06)
     ax.set_ylim(len(names) - 0.5, -0.85)
     ax.set_xlabel("Messages with no usable response")

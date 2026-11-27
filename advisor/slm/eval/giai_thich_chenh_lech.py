@@ -47,7 +47,9 @@ def how_it_failed(row: dict, label: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--a", required=True, type=named, help='"Tên=file.jsonl" của model được chọn')
     parser.add_argument("--b", required=True, type=named, help='"Tên=file.jsonl" của model so sánh')
     parser.add_argument("--out", required=True)
