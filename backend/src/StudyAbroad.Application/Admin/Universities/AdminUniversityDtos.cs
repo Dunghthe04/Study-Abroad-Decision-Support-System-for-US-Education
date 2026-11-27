@@ -20,7 +20,8 @@ public record AdminUniversityListItemDto(
     IReadOnlyList<string> StudyLevels,
     DateOnly? LatestRetrievedAt,
     string? LogoUrl = null,
-    int ScholarshipCount = 0);
+    int ScholarshipCount = 0,
+    IReadOnlyList<string>? Aliases = null);
 
 public record AdminUniversityDetailDto(
     Guid Id,
@@ -38,7 +39,8 @@ public record AdminUniversityDetailDto(
     string? LastEditedBy,
     string? LogoUrl = null,
     string? CoverUrl = null,
-    IReadOnlyList<string>? GalleryUrls = null);
+    IReadOnlyList<string>? GalleryUrls = null,
+    IReadOnlyList<string>? Aliases = null);
 
 public record AdminOfferingMajorDto(Guid MajorId, string Name, string? CipCode, bool IsStem, bool IsVerified);
 
@@ -126,7 +128,9 @@ public record CreateUniversityRequest(
     bool IsIvy = false,
     string? LogoUrl = null,
     string? CoverUrl = null,
-    bool ConfirmDuplicateName = false);
+    bool ConfirmDuplicateName = false,
+    // Tên viết tắt (MIT, UCLA). null = giữ nguyên khi sửa
+    IReadOnlyList<string>? Aliases = null);
 
 public record UpdateUniversityRequest(
     string? Name,
@@ -139,7 +143,9 @@ public record UpdateUniversityRequest(
     bool IsIvy,
     string? LogoUrl = null,
     string? CoverUrl = null,
-    bool ConfirmDuplicateName = false);
+    bool ConfirmDuplicateName = false,
+    // Tên viết tắt (MIT, UCLA). null = giữ nguyên khi sửa
+    IReadOnlyList<string>? Aliases = null);
 
 public record CreateOfferingRequest(string? StudyLevel);
 

@@ -112,6 +112,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         var control = Clean(request.Control)?.ToLowerInvariant();
         var logoUrl = Clean(request.LogoUrl);
         var coverUrl = Clean(request.CoverUrl);
+        var aliases = CleanAliases(request.Aliases);
 
         var errors = new Dictionary<string, string>();
         if (code is null)
@@ -139,6 +140,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
             AcceptanceRate = request.AcceptanceRate,
             InternationalStudentCount = request.InternationalStudentCount,
             IsIvy = request.IsIvy,
+            Aliases = aliases ?? [],
             IsActive = true,
             LastEditedByUserId = actorUserId,
         };
@@ -152,7 +154,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
             {
                 code = university.Code, name = university.Name, city, state, website, control,
                 acceptanceRate = request.AcceptanceRate, internationalStudentCount = request.InternationalStudentCount,
-                isIvy = request.IsIvy, logoUrl, coverUrl,
+                isIvy = request.IsIvy, logoUrl, coverUrl, aliases,
             }));
         await repository.SaveChangesAsync(ct);
         return AdminUpdateResult<AdminUniversityDetailDto>.Ok(await ToDetailDtoAsync(university, ct));
@@ -171,6 +173,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         var control = Clean(request.Control)?.ToLowerInvariant();
         var logoUrl = Clean(request.LogoUrl);
         var coverUrl = Clean(request.CoverUrl);
+        var aliases = CleanAliases(request.Aliases) ?? university.Aliases;
 
         var errors = new Dictionary<string, string>();
         ValidateUniversityFields(name, city, state, website, control, request.AcceptanceRate, request.InternationalStudentCount, logoUrl, coverUrl, errors);
@@ -192,6 +195,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         AddChange(changes, "acceptanceRate", university.AcceptanceRate, request.AcceptanceRate);
         AddChange(changes, "internationalStudentCount", university.InternationalStudentCount, request.InternationalStudentCount);
         AddChange(changes, "isIvy", university.IsIvy, request.IsIvy);
+        AddChange(changes, "aliases", string.Join(", ", university.Aliases), string.Join(", ", aliases));
         AddChange(changes, "logoUrl", currentLogo, logoUrl);
         AddChange(changes, "coverUrl", currentCover, coverUrl);
 
@@ -205,6 +209,7 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         university.AcceptanceRate = request.AcceptanceRate;
         university.InternationalStudentCount = request.InternationalStudentCount;
         university.IsIvy = request.IsIvy;
+        university.Aliases = aliases;
         university.LastEditedByUserId = actorUserId;
 
         await repository.SaveUniversityMediaAsync(university.Id, logoUrl, coverUrl, ct);
@@ -690,8 +695,17 @@ public class AdminUniversityService(IAdminUniversityRepository repository) : IAd
         return new AdminUniversityDetailDto(
             u.Id, u.Code, u.Name, u.City, u.State, u.Website, u.Control, u.AcceptanceRate,
             u.InternationalStudentCount, u.IsIvy, u.IsActive, u.UpdatedAt, lastEditedBy,
-            logoUrl, coverUrl, galleryUrls);
+            logoUrl, coverUrl, galleryUrls, u.Aliases);
     }
+
+    // Tên viết tắt: bỏ khoảng trắng thừa, bỏ tên dưới 2 ký tự (chat không khớp được) và tên trùng.
+    // Không chặn trùng giữa các trường: "ASU", "OSU" dùng chung là cố ý, chat hỏi lại để học sinh chọn.
+    private static List<string>? CleanAliases(IReadOnlyList<string>? aliases) =>
+        aliases?.Select(a => Regex.Replace(a ?? "", @"\s+", " ").Trim())
+            .Where(a => a.Length is >= 2 and <= 64)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(20)
+            .ToList();
 
     private static AdminUniversityOfferingDto ToOfferingDto(
         UniversityOffering o, IReadOnlyList<AdminOfferingMajorRow> majorRows, string? lastEditedBy)
