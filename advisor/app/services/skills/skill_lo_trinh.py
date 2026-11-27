@@ -47,6 +47,7 @@ CRITERIA = (
     "- Yêu cầu đầu vào (GPA, tiếng Anh) vừa sức với hồ sơ hiện tại",
 )
 
+
 def month_name(index: int) -> str:
     year, month = divmod(index - 1, 12)
     return f"tháng {month + 1}/{year}"

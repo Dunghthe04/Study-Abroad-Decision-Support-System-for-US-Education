@@ -213,8 +213,12 @@ def test_calibration_compares_confidence_with_the_category_accuracy_and_skips_fa
 
 
 def test_roc_auc_is_the_chance_that_a_correct_message_scores_above_a_wrong_one():
-    right = [row(f"r{i}", [y("knowledge")], [y("knowledge")], confidence=c) for i, c in enumerate((0.99, 0.8))]
-    wrong = [row(f"w{i}", [y("knowledge")], [y("center_referral")], confidence=c) for i, c in enumerate((0.9, 0.4))]
+    right = [
+        row(f"r{i}", [y("knowledge")], [y("knowledge")], confidence=c) for i, c in enumerate((0.99, 0.8))
+    ]
+    wrong = [
+        row(f"w{i}", [y("knowledge")], [y("center_referral")], confidence=c) for i, c in enumerate((0.9, 0.4))
+    ]
 
     curve = roc(right + wrong)
 

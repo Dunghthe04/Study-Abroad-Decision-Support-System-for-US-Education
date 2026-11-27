@@ -22,7 +22,13 @@ from slm.eval.cau_hoi_tu_nhien import TRA_LOI, TU_DO
 
 OUT = Path("slm/results/thu_tu_nhien")
 # Hồ sơ mẫu cho ngữ cảnh "đã có hồ sơ"
-HO_SO = {"current_grade": "lớp 11", "major": "Computer Science", "gpa": "8.5", "english": "IELTS 6.5", "budget": "35000"}
+HO_SO = {
+    "current_grade": "lớp 11",
+    "major": "Computer Science",
+    "gpa": "8.5",
+    "english": "IELTS 6.5",
+    "budget": "35000",
+}
 
 
 def key(intent) -> str:
@@ -79,10 +85,17 @@ def nearest(question: str, train: list[tuple[str, str]]) -> tuple[float, str, st
 
 async def main() -> None:
     s = get_settings()
-    async with httpx.AsyncClient(base_url=s.slm_base_url or s.ollama_base_url, timeout=s.llm_timeout_seconds) as http:
+    async with httpx.AsyncClient(
+        base_url=s.slm_base_url or s.ollama_base_url, timeout=s.llm_timeout_seconds
+    ) as http:
         client = OllamaClient(
-            http, s.slm_model, num_ctx=s.llm_num_ctx, num_gpu=s.llm_num_gpu,
-            seed=s.llm_seed, keep_alive=s.llm_keep_alive, num_predict=s.slm_num_predict,
+            http,
+            s.slm_model,
+            num_ctx=s.llm_num_ctx,
+            num_gpu=s.llm_num_gpu,
+            seed=s.llm_seed,
+            keep_alive=s.llm_keep_alive,
+            num_predict=s.slm_num_predict,
         )
         slm = OllamaSlm(client, output_format(s.slm_format), s.slm_use_context, s.slm_prompt)
         rows = []
@@ -90,11 +103,18 @@ async def main() -> None:
             result = await slm.read(question, profile, pending)
             predicted = [] if result.fallback else [key(y) for y in result.intents]
             verdict = "SAI KHUÔN" if result.fallback else grade(predicted, accepted)
-            rows.append({
-                "nhom": group, "ngu_canh": situation, "cau": question, "dap_an": accepted,
-                "slm": predicted, "ket_qua": verdict, "tin_cay": round(result.confidence, 3),
-                "entities": [y.entities for y in result.intents],
-            })
+            rows.append(
+                {
+                    "nhom": group,
+                    "ngu_canh": situation,
+                    "cau": question,
+                    "dap_an": accepted,
+                    "slm": predicted,
+                    "ket_qua": verdict,
+                    "tin_cay": round(result.confidence, 3),
+                    "entities": [y.entities for y in result.intents],
+                }
+            )
 
     train = train_questions()
     for row in rows:
@@ -109,7 +129,11 @@ async def main() -> None:
 
     totals = defaultdict(lambda: [0, 0, 0])
     for r in rows:
-        for name in ("TẤT CẢ", "ngữ cảnh: " + r["ngu_canh"].split(" B")[0].split(" D")[0], "nhóm: " + r["nhom"]):
+        for name in (
+            "TẤT CẢ",
+            "ngữ cảnh: " + r["ngu_canh"].split(" B")[0].split(" D")[0],
+            "nhóm: " + r["nhom"],
+        ):
             t = totals[name]
             t[0] += 1
             t[1] += r["ket_qua"] == "đúng"
@@ -120,25 +144,53 @@ async def main() -> None:
     print("\n--- các câu chưa đúng ---")
     for r in rows:
         if r["ket_qua"] != "đúng":
-            print(f"[{r['ket_qua']}] ({r['ngu_canh']}) {r['cau']}\n    đáp án: {r['dap_an']}  SLM: {r['slm']}  tin cậy {r['tin_cay']}")
+            print(
+                f"[{r['ket_qua']}] ({r['ngu_canh']}) {r['cau']}\n    đáp án: {r['dap_an']}  SLM: {r['slm']}  tin cậy {r['tin_cay']}"
+            )
 
 
 def write_excel(rows: list[dict], model: str, path: Path = OUT / "thu_cau_tu_nhien.xlsx") -> None:
     book = Workbook()
     sheet = book.active
     sheet.title = "Ket qua"
-    headers = ["Nhóm", "Ngữ cảnh", "Câu hỏi", "Đáp án Claude soạn", f"{model} gán", "Chấm tự động", "Độ tin cậy",
-               "Entities SLM tách", "Câu train giống mặt chữ nhất", "Nhãn câu train đó", "Độ giống (0-1)",
-               "BẠN DUYỆT (đúng / sai / mơ hồ)", "Ghi chú"]
+    headers = [
+        "Nhóm",
+        "Ngữ cảnh",
+        "Câu hỏi",
+        "Đáp án Claude soạn",
+        f"{model} gán",
+        "Chấm tự động",
+        "Độ tin cậy",
+        "Entities SLM tách",
+        "Câu train giống mặt chữ nhất",
+        "Nhãn câu train đó",
+        "Độ giống (0-1)",
+        "BẠN DUYỆT (đúng / sai / mơ hồ)",
+        "Ghi chú",
+    ]
     sheet.append(headers)
     order = {"SAI KHUÔN": 0, "SAI LOẠI": 1, "đúng loại, sai chi tiết": 2, "đúng": 3}
     for r in sorted(rows, key=lambda r: order[r["ket_qua"]]):
-        sheet.append([
-            r["nhom"], r["ngu_canh"], r["cau"], "\nhoặc ".join(r["dap_an"]), " | ".join(r["slm"]), r["ket_qua"],
-            r["tin_cay"], json.dumps(r["entities"], ensure_ascii=False), r["train_gan_nhat"], r["nhan_train"],
-            r["giong"], None, None,
-        ])
-    for column, width in zip("ABCDEFGHIJKLM", [16, 16, 48, 38, 34, 22, 11, 40, 42, 24, 11, 22, 28], strict=True):
+        sheet.append(
+            [
+                r["nhom"],
+                r["ngu_canh"],
+                r["cau"],
+                "\nhoặc ".join(r["dap_an"]),
+                " | ".join(r["slm"]),
+                r["ket_qua"],
+                r["tin_cay"],
+                json.dumps(r["entities"], ensure_ascii=False),
+                r["train_gan_nhat"],
+                r["nhan_train"],
+                r["giong"],
+                None,
+                None,
+            ]
+        )
+    for column, width in zip(
+        "ABCDEFGHIJKLM", [16, 16, 48, 38, 34, 22, 11, 40, 42, 24, 11, 22, 28], strict=True
+    ):
         sheet.column_dimensions[column].width = width
     for line in sheet.iter_rows():
         for cell in line:

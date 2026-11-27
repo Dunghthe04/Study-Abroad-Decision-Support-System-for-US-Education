@@ -57,7 +57,12 @@ async def ask(client: OllamaClient, messages: list, record: dict) -> dict:
         context = record["input"].get("context")
         names = {n.lower() for n in (context or {}).get("schools", [])}
         result = SlmTinResult.from_raw(keep_verbatim(raw, record["input"]["question"], names))
-        return {"content": content, "ok": True, "error": None, "intents": [y.model_dump() for y in result.intents]}
+        return {
+            "content": content,
+            "ok": True,
+            "error": None,
+            "intents": [y.model_dump() for y in result.intents],
+        }
     except (ValueError, TypeError, KeyError, AttributeError) as ex:
         return {"content": content, "ok": False, "error": short_error(ex)}
 
@@ -98,14 +103,24 @@ async def run(args: argparse.Namespace) -> None:
             for k, i in enumerate(ids, start=1):
                 record = by_id[i]
                 answer = await ask(client, build_messages(system, shots, record["input"]), record)
-                out.append({"id": i, "model": model, "question": record["input"]["question"], "gold": record["output"]} | answer)
+                out.append(
+                    {
+                        "id": i,
+                        "model": model,
+                        "question": record["input"]["question"],
+                        "gold": record["output"],
+                    }
+                    | answer
+                )
                 print(f"\r{model}: {k}/{len(ids)}", end="", flush=True)
             print()
 
     name = args.label.replace("/", "_")
     folder = RESULTS_DIR / "soi_dau_ra"
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"{name}.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in out), encoding="utf-8")
+    (folder / f"{name}.jsonl").write_text(
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in out), encoding="utf-8"
+    )
 
     lines = [f"# Đầu ra thô ở nhãn {args.label} ({len(ids)} tin {model_b} đúng mà {model_a} sai)", ""]
     mine = [r for r in out if r["model"] == model_a]
@@ -115,19 +130,36 @@ async def run(args: argparse.Namespace) -> None:
     lines += ["", f"## {min(args.examples, len(ids))} tin đầu, hai model đặt cạnh nhau", ""]
     for i in ids[: args.examples]:
         pair = {r["model"]: r for r in out if r["id"] == i}
-        lines += [f"### {pair[model_a]['question']}", "", f"Đáp án: `{json.dumps(pair[model_a]['gold'], ensure_ascii=False)}`", ""]
+        lines += [
+            f"### {pair[model_a]['question']}",
+            "",
+            f"Đáp án: `{json.dumps(pair[model_a]['gold'], ensure_ascii=False)}`",
+            "",
+        ]
         for model in (model_a, model_b):
             r = pair[model]
-            lines += [f"**{model}** ({'hợp lệ' if r['ok'] else 'BỊ LOẠI: ' + r['error']})", "```json", r["content"][:1200], "```", ""]
+            lines += [
+                f"**{model}** ({'hợp lệ' if r['ok'] else 'BỊ LOẠI: ' + r['error']})",
+                "```json",
+                r["content"][:1200],
+                "```",
+                "",
+            ]
     (folder / f"{name}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines[: 3 + len(failures)]))
     print(f"\nĐã ghi: {folder / (name + '.md')}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--a", required=True, type=named, help='"model Ollama=file kết quả" của model được chọn')
-    parser.add_argument("--b", required=True, type=named, help='"model Ollama=file kết quả" của model so sánh')
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--a", required=True, type=named, help='"model Ollama=file kết quả" của model được chọn'
+    )
+    parser.add_argument(
+        "--b", required=True, type=named, help='"model Ollama=file kết quả" của model so sánh'
+    )
     parser.add_argument("--label", required=True, help="vd scenario/goal_seeking")
     parser.add_argument("--limit", type=int, default=30)
     parser.add_argument("--examples", type=int, default=5)

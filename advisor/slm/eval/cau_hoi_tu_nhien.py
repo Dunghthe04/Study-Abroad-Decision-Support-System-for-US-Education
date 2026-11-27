@@ -12,7 +12,11 @@ TU_DO: list[tuple[str, str, list[str]]] = [
     # ----- bắt đầu, lộ trình
     ("lộ trình", "em muốn đi mỹ học mà chưa biết gì hết, giờ phải làm sao ạ", ["profile_review:roadmap"]),
     ("lộ trình", "cho em hỏi muốn du học mỹ thì mình nên làm gì đầu tiên", ["profile_review:roadmap"]),
-    ("lộ trình", "em đang lớp 11, từ giờ tới lúc nộp đơn cần chuẩn bị những gì", ["collect_profile | profile_review:roadmap"]),
+    (
+        "lộ trình",
+        "em đang lớp 11, từ giờ tới lúc nộp đơn cần chuẩn bị những gì",
+        ["collect_profile | profile_review:roadmap"],
+    ),
     ("lộ trình", "len ke hoach giup em voi", ["profile_review:roadmap"]),
     ("lộ trình", "mốc thời gian của em nên sắp xếp thế nào cho kịp kỳ fall", ["profile_review:roadmap"]),
     # ----- gợi ý trường
@@ -29,7 +33,11 @@ TU_DO: list[tuple[str, str, list[str]]] = [
     # ----- trường cụ thể có hợp mình không
     ("hợp trường", "em nộp UCLA được không ạ", ["profile_review:explain_school"]),
     ("hợp trường", "sức em thì Purdue có với tới không", ["profile_review:explain_school"]),
-    ("hợp trường", "sao trường Boston University lại xếp vào nhóm khó vào vậy", ["profile_review:explain_fit"]),
+    (
+        "hợp trường",
+        "sao trường Boston University lại xếp vào nhóm khó vào vậy",
+        ["profile_review:explain_fit"],
+    ),
     # ----- giả định
     ("giả định", "lỡ em thi ielts được có 6.0 thôi thì sao", ["scenario:what_if"]),
     ("giả định", "giả sử nhà em ráng thêm được 10k nữa thì có thêm trường nào không", ["scenario:what_if"]),
@@ -49,7 +57,11 @@ TU_DO: list[tuple[str, str, list[str]]] = [
     ("tìm trường", "có trường nào ở Cali học phí dưới 30k không", ["knowledge:search"]),
     ("tìm trường", "truong nao ko can sat vay", ["knowledge:search"]),
     ("tìm trường", "kể vài trường rẻ rẻ dạy computer science", ["knowledge:search"]),
-    ("tìm trường", "ielts 5.5 thì học được trường nào", ["knowledge:search", "collect_profile | profile_review:school_list"]),
+    (
+        "tìm trường",
+        "ielts 5.5 thì học được trường nào",
+        ["knowledge:search", "collect_profile | profile_review:school_list"],
+    ),
     # ----- kiến thức chung
     ("kiến thức", "du học mỹ tốn khoảng bao nhiêu tiền 1 năm", ["knowledge"]),
     ("kiến thức", "visa f1 phỏng vấn người ta hay hỏi gì", ["knowledge"]),
@@ -69,14 +81,34 @@ TU_DO: list[tuple[str, str, list[str]]] = [
     ("khai hồ sơ", "em gpa 8.7, ielts 6.5, nhà lo được tầm 800 triệu 1 năm", ["collect_profile"]),
     ("khai hồ sơ", "mình học 12 chuyên anh, thích marketing", ["collect_profile"]),
     ("khai hồ sơ", "con tôi đang học lớp 10, cháu muốn học y", ["collect_profile"]),
-    ("khai hồ sơ", "à em ghi nhầm, gpa em 8.2 chứ không phải 8.7", ["collect_profile:edit", "collect_profile"]),
+    (
+        "khai hồ sơ",
+        "à em ghi nhầm, gpa em 8.2 chứ không phải 8.7",
+        ["collect_profile:edit", "collect_profile"],
+    ),
     # ----- nhiều ý
-    ("nhiều ý", "em gpa 3.4, có trường nào hợp không, với lại visa khó không", ["collect_profile | profile_review:school_list | knowledge"]),
+    (
+        "nhiều ý",
+        "em gpa 3.4, có trường nào hợp không, với lại visa khó không",
+        ["collect_profile | profile_review:school_list | knowledge"],
+    ),
     ("nhiều ý", "toefl là gì và em nên thi cái đó hay ielts", ["knowledge", "knowledge | knowledge"]),
-    ("nhiều ý", "cho em hỏi học phí của UMass và chỗ nào luyện sat ở hà nội", ["knowledge:school_info | center_referral"]),
+    (
+        "nhiều ý",
+        "cho em hỏi học phí của UMass và chỗ nào luyện sat ở hà nội",
+        ["knowledge:school_info | center_referral"],
+    ),
     # ----- phụ huynh
-    ("phụ huynh", "gia đình tôi không dư dả lắm, liệu cho cháu đi mỹ được không", ["profile_review:assessment", "collect_profile | profile_review:assessment", "knowledge"]),
-    ("phụ huynh", "tôi muốn biết với sức học của cháu thì nên chọn trường nào", ["profile_review:school_list"]),
+    (
+        "phụ huynh",
+        "gia đình tôi không dư dả lắm, liệu cho cháu đi mỹ được không",
+        ["profile_review:assessment", "collect_profile | profile_review:assessment", "knowledge"],
+    ),
+    (
+        "phụ huynh",
+        "tôi muốn biết với sức học của cháu thì nên chọn trường nào",
+        ["profile_review:school_list"],
+    ),
     # ----- ngoài phạm vi, xã giao
     ("ngoài phạm vi", "alo có ai ko", ["out_of_scope:greeting"]),
     ("ngoài phạm vi", "ok cảm ơn nha bye", ["out_of_scope:farewell"]),

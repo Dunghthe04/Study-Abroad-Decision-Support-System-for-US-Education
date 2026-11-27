@@ -68,20 +68,34 @@ async def main(call_claude: bool) -> None:
     state, today = profile_state(), date.today()
     rows, total_in, total_out = [], 0, 0
     async with (
-        httpx.AsyncClient(base_url=s.slm_base_url or s.ollama_base_url, timeout=s.llm_timeout_seconds) as slm_http,
+        httpx.AsyncClient(
+            base_url=s.slm_base_url or s.ollama_base_url, timeout=s.llm_timeout_seconds
+        ) as slm_http,
         httpx.AsyncClient(base_url=s.anthropic_base_url, timeout=s.anthropic_timeout_seconds) as claude_http,
     ):
         slm = OllamaSlm(
             OllamaClient(
-                slm_http, s.slm_model, num_ctx=s.llm_num_ctx, num_gpu=s.llm_num_gpu, seed=s.llm_seed,
-                keep_alive=s.llm_keep_alive, num_predict=s.slm_num_predict,
+                slm_http,
+                s.slm_model,
+                num_ctx=s.llm_num_ctx,
+                num_gpu=s.llm_num_gpu,
+                seed=s.llm_seed,
+                keep_alive=s.llm_keep_alive,
+                num_predict=s.slm_num_predict,
             ),
-            output_format(s.slm_format), s.slm_use_context, s.slm_prompt,
+            output_format(s.slm_format),
+            s.slm_use_context,
+            s.slm_prompt,
         )
-        writer = AdviceWriter(ClaudeClient(
-            claude_http, s.anthropic_model, s.anthropic_api_key, max_retries=s.anthropic_max_retries,
-            fallback_model=s.anthropic_fallback_model or None,
-        ))
+        writer = AdviceWriter(
+            ClaudeClient(
+                claude_http,
+                s.anthropic_model,
+                s.anthropic_api_key,
+                max_retries=s.anthropic_max_retries,
+                fallback_model=s.anthropic_fallback_model or None,
+            )
+        )
         for question, expect in CAU_HOI:
             result = await slm.classify(state, question)
             labels = [label(y) for y in result.intents]
@@ -98,17 +112,26 @@ async def main(call_claude: bool) -> None:
                 used_in = sum(c.input_tokens for c in calls if c.source == "claude")
                 used_out = sum(c.output_tokens for c in calls if c.source == "claude")
                 total_in, total_out = total_in + used_in, total_out + used_out
-                row |= {"tra_loi": answer, "so_lan_goi": writer.last_attempts, "loi": writer.last_errors,
-                        "token_vao": used_in, "token_ra": used_out}
+                row |= {
+                    "tra_loi": answer,
+                    "so_lan_goi": writer.last_attempts,
+                    "loi": writer.last_errors,
+                    "token_vao": used_in,
+                    "token_ra": used_out,
+                }
             rows.append(row)
-            print(f"\n## {question}\n   cần đáp: {expect}\n   SLM: {labels}  vào nhánh tư vấn: {goes_to_writer}")
+            print(
+                f"\n## {question}\n   cần đáp: {expect}\n   SLM: {labels}  vào nhánh tư vấn: {goes_to_writer}"
+            )
             if row.get("tra_loi") is not None or "so_lan_goi" in row:
                 print(f"   gọi {row['so_lan_goi']} lần {row['loi']}\n---\n{row['tra_loi']}\n---")
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
     if call_claude:
-        print(f"\nToken Claude: vào {total_in}, ra {total_out}, khoảng {total_in * PRICE_IN + total_out * PRICE_OUT:.4f} USD")
+        print(
+            f"\nToken Claude: vào {total_in}, ra {total_out}, khoảng {total_in * PRICE_IN + total_out * PRICE_OUT:.4f} USD"
+        )
 
 
 if __name__ == "__main__":

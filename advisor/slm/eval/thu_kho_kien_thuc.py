@@ -87,11 +87,21 @@ async def main() -> None:
             for group, question in CAU_HOI:
                 [vector] = await embedder.embed([question])
                 hits = await retriever.search(vector)
-                rows.append({
-                    "nhom": group, "cau": question,
-                    "hits": [{"id": h.entry_no, "diem": round(h.score, 3), "cau_mau": h.question, "tra_loi": h.answer}
-                             for h in hits],
-                })
+                rows.append(
+                    {
+                        "nhom": group,
+                        "cau": question,
+                        "hits": [
+                            {
+                                "id": h.entry_no,
+                                "diem": round(h.score, 3),
+                                "cau_mau": h.question,
+                                "tra_loi": h.answer,
+                            }
+                            for h in hits
+                        ],
+                    }
+                )
     finally:
         pool.close()
 
