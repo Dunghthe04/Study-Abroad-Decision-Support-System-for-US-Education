@@ -107,7 +107,7 @@ def main() -> None:
             "",
             f"## {label}",
             "",
-            f"| | Recall (tìm được bao nhiêu) | Precision (đoán nhãn này thì đúng bao nhiêu) | Gán nhầm nhãn này |",
+            "| | Recall (tìm được bao nhiêu) | Precision (đoán nhãn này thì đúng bao nhiêu) | Gán nhầm nhãn này |",
             "|---|---|---|---|",
             f"| {name_a} | {ta[label]['recall']:.2f} | {ta[label]['precision']:.2f} | {ta[label]['fp']} tin |",
             f"| {name_b} | {tb[label]['recall']:.2f} | {tb[label]['precision']:.2f} | {tb[label]['fp']} tin |",
