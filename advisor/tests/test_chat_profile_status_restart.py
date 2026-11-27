@@ -3,8 +3,9 @@ Trước đây không nơi nào xử lý nên cả hai nhận câu "Hồ sơ c�
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField
 from app.services.chat_flow import QUESTIONS
-from app.services.intake import INTAKE_ID
+from app.services.intake import INTAKE_ID, intake_ask
 from app.services.replies import PROFILE_DONE, PROFILE_NONE_YET, PROFILE_RESTART_INTRO, PROFILE_STATUS
+from app.services.skill_rules import REQUIRED_B3
 from app.services.skills import build_handlers
 from tests.fakes import FakeLLM, flow_with, tin
 from tests.test_chat_no_unsolicited_profile import state
@@ -68,3 +69,42 @@ async def test_status_in_the_middle_of_a_question_does_not_drop_that_question():
     res = await reply(ChatState(profile=profile, **pending), STATUS, llm=FakeLLM(nothing, nothing))
 
     assert res.state.question_id == "F1"
+
+
+async def test_the_forgot_the_exam_date_button_is_handled_as_a_button_not_sent_to_the_classifier():
+    # Lỗi thật 27/11/2026: bấm "Không nhớ ngày thi" của chính hệ thống thì nhận "Mình chưa hiểu rõ ý bạn"
+    # vì chữ của nút bị gửi sang SLM
+    pending = ProfileField(
+        value={"type": "sat", "score": 1350.0, "category": "standardized", "cert_name": "SAT"},
+        status="unknown",
+    )
+    start = ChatState(
+        current_step="B2",
+        question_id="D3",
+        last_question=QUESTIONS["D3"],
+        intake_mode="chat",
+        profile={"cert_pending": pending},
+    )
+    # SLM giả trả ngoài phạm vi: nếu tin bị gửi sang SLM thì test hỏng
+    res = await reply(start, tin(("out_of_scope", {"subtype": "ambiguous"})), "Không nhớ")
+
+    assert "chưa hiểu" not in res.answer
+    assert res.state.profile["sat"].value == 1350
+    assert "cert_pending" not in res.state.profile
+
+
+def test_values_the_student_just_told_are_not_counted_as_missing():
+    # Lỗi thật 27/11/2026: học sinh vừa nói GPA và IELTS mà vẫn được báo "còn thiếu 5 mục", trong khi lúc hỏi tiếp
+    # hai mục đó không bị hỏi lại
+    told = {
+        name: ProfileField(value=value, status="said_in_B0")
+        for name, value in {
+            "gpa": {"value": 3.2, "scale": 4},
+            "english": {"type": "ielts", "value": 7.0},
+        }.items()
+    }
+
+    assert "còn thiếu 3 mục" in intake_ask(told, REQUIRED_B3)
+    assert "còn thiếu 5 mục" in intake_ask(
+        {"major": ProfileField(value="x", status="confirmed")}, REQUIRED_B3
+    )

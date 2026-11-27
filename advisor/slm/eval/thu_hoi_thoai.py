@@ -10,6 +10,7 @@ Chạy trong thư mục advisor (cần Ollama và Postgres):  .venv/Scripts/pyth
 
 import asyncio
 import json
+import sys
 
 import httpx
 
@@ -126,6 +127,65 @@ async def run_conversations(flow: ChatFlow, spy: GhiLai) -> list[dict]:
     return rows
 
 
+# real_claude: chạy riêng 4 hội thoại bằng Claude thật và danh bạ trung tâm của backend (tốn tiền API)
+async def main_claude_that() -> None:
+    from app.services.advice_writer import AdviceWriter
+    from app.services.centers import CenterFinder
+    from app.services.claude import ClaudeClient
+    from app.services.what_if_writer import WhatIfWriter
+
+    s = get_settings()
+    pool = open_pool(s.database_url)
+    try:
+        async with (
+            httpx.AsyncClient(base_url=s.ollama_base_url, timeout=s.llm_timeout_seconds) as ollama_http,
+            httpx.AsyncClient(
+                base_url=s.anthropic_base_url, timeout=s.anthropic_timeout_seconds
+            ) as claude_http,
+            httpx.AsyncClient(base_url=s.backend_base_url, timeout=s.backend_timeout_seconds) as backend_http,
+        ):
+            claude = ClaudeClient(claude_http, s.anthropic_model, s.anthropic_api_key, max_retries=2)
+            client = OllamaClient(
+                ollama_http,
+                s.slm_model,
+                num_ctx=s.llm_num_ctx,
+                num_gpu=s.llm_num_gpu,
+                seed=s.llm_seed,
+                keep_alive=s.llm_keep_alive,
+            )
+            spy = GhiLai(OllamaSlm(client, output_format(s.slm_format), s.slm_use_context, s.slm_prompt))
+            embedder = OllamaClient(ollama_http, s.slm_model, embedding_model=s.embedding_model)
+            skills = build_handlers(
+                claude,
+                s.anthropic_model,
+                KnowledgeRetriever(pool, s.knowledge_top_k),
+                s.knowledge_min_score,
+                CenterFinder(backend_http),
+                embedder,
+            )
+            flow = ChatFlow(
+                spy, build_branches(skills, AdviceWriter(claude), WhatIfWriter(claude, s.anthropic_model))
+            )
+            rows = await run_conversations(flow, spy)
+    finally:
+        pool.close()
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "hoi_thoai_claude_that.jsonl").write_text(
+        "".join(json.dumps(r, ensure_ascii=False, default=str) + "\n" for r in rows), encoding="utf-8"
+    )
+    for r in rows:
+        print(f"\n{r['hoi_thoai']} {r['luot']}: {r['cau']}")
+        print(f"   SLM {r['slm']} {json.dumps(r.get('entities'), ensure_ascii=False)}  [{r['ket_qua']}]")
+        if r["loi"]:
+            print("   LỖI:", r["loi"])
+            continue
+        if r["action"]:
+            print(
+                f"   action={r['action']} {json.dumps(r['action_data'], ensure_ascii=False, default=str)[:200]}"
+            )
+        print("   >> " + r["tra_loi"][:300].replace("\n", " / "))
+
+
 async def main() -> None:
     s = get_settings()
     pool = open_pool(s.database_url)
@@ -205,4 +265,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main_claude_that() if "--goi-claude" in sys.argv else main())

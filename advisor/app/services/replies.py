@@ -56,7 +56,7 @@ GREETING_REPLY = (
 )
 OUT_OF_SCOPE = {
     # Ngoài chủ đề, kể cả muốn học thạc sĩ hoặc tiến sĩ: hệ thống chỉ hỗ trợ du học Mỹ bậc đại học (UC-157, UC-08)
-    "exception": "Mình chỉ hỗ trợ tư vấn du học Mỹ bậc đại học (chưa hỗ trợ thạc sĩ hay tiến sĩ). Bạn chọn một việc dưới đây nhé.",
+    "exception": "Hiện mình chỉ hỗ trợ tư vấn du học Mỹ bậc đại học, chưa hỗ trợ nước khác, thạc sĩ hay tiến sĩ. Bạn chọn một việc dưới đây nhé.",
     "sensitive": "Mình không hỗ trợ việc này. Hồ sơ du học cần trung thực, mình giúp bạn chuẩn bị đúng cách nhé.",
     # farewell gồm cảm ơn và tạm biệt nên dùng một câu hợp với cả hai
     "farewell": "Rất vui được hỗ trợ bạn! Khi cần bạn cứ quay lại hỏi mình nhé.",
@@ -145,7 +145,17 @@ CONTINUE_CHAT = "Tiếp tục bằng chat"
 FORM_DONE = "Hồ sơ của bạn đã đủ thông tin. Bạn muốn mình tư vấn gì tiếp?"
 CHAT_BUTTON = QuickReply(label="Trả lời trong chat", value="Trả lời trong chat")
 FORM_BUTTON = QuickReply(label="Điền bằng form", value="Điền bằng form")
-PROFILE_DONE = "Hồ sơ của bạn đã đầy đủ rồi. Bạn cần mình tư vấn thêm gì không?"
+# Tin khai hồ sơ nhưng không có gì mới để lưu (SLM cũng gắn loại này cho vài câu chỉ nói ý định): không khẳng định gì thêm,
+# mời học sinh nói rõ nếu đang hỏi điều khác
+PROFILE_DONE = (
+    "Mình chưa thấy thông tin nào mới cần cập nhật vào hồ sơ của bạn. "
+    "Nếu bạn đang muốn hỏi một điều khác, bạn nói rõ hơn giúp mình nhé."
+)
+# Kỳ nhập học đang chọn sớm hơn lúc tốt nghiệp THPT theo lớp đang học. Chỉ nhắc để kiểm tra, không chặn vì có em tốt nghiệp sớm
+INTAKE_BEFORE_GRADUATION = (
+    "Lưu ý: bạn dự kiến tốt nghiệp THPT năm {year}, nhưng kỳ nhập học đang chọn là {intake}, tức là trước khi tốt nghiệp. "
+    "Thường học sinh nhập học sớm nhất vào Fall {year}, bạn kiểm tra lại giúp mình nhé."
+)
 # Học sinh hỏi hệ thống đang lưu gì (collect_profile, tasks status): đi kèm bảng hồ sơ
 PROFILE_STATUS = 'Đây là hồ sơ mình đang lưu. Đúng thì bạn bấm "Đúng rồi", muốn đổi thì bấm "Cần sửa".'
 PROFILE_NONE_YET = "Hiện mình chưa lưu thông tin hồ sơ nào của bạn."

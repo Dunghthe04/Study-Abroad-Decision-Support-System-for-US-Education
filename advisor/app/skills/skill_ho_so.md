@@ -1,4 +1,4 @@
-# SKILL ĐỌC THÔNG TIN HỒ SƠ (B2) - skill_version 1.4
+# SKILL ĐỌC THÔNG TIN HỒ SƠ (B2) - skill_version 1.5
 
 ## NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)
 - Chỉ đọc hiểu. Kiểm tra điểm, đổi tiền, chọn câu hỏi tiếp theo do code làm.
@@ -31,9 +31,17 @@ Trả về các giá trị học sinh đã nói (values) và các thông tin h�
   sat               số điểm SAT
   act               số điểm ACT
   english           {"type": ielts|toefl|duolingo|pte, "score": số, "date": "yyyy-MM" ngày thi hoặc null}
-  english_plan      {"planned": true|false, "date": "yyyy-MM" hoặc null}
+  english_plan      {"planned": true|false, "date": "yyyy-MM" hoặc null, "test_type": mã bài thi hoặc null,
+                    "target_score": số hoặc null}
                     "chưa có kế hoạch thi" → planned false. "có định thi nhưng chưa biết khi nào" → planned true, date null.
                     "định thi tháng 3 năm 2027" → planned true, date "2027-03".
+                    "định thi lại IELTS tháng 6/2027, mục tiêu 7.5" → planned true, date "2027-06", test_type "ielts", target_score 7.5.
+                    Mã bài thi tiếng Anh: ielts | toefl | duolingo | pte | cambridge | itep | languagecert
+  standardized_plan cùng khuôn với english_plan, là dự định thi bài chuẩn hóa hoặc học thuật.
+                    Mã bài thi: sat | act | ap | ib | alevel | gre | gmat
+                    "không thi" → planned false. "định thi SAT tháng 10/2027, nhắm 1450" → planned true, date "2027-10",
+                    test_type "sat", target_score 1450.
+                    Bài thi hoặc điểm mục tiêu học sinh không nói thì để null, không đoán.
   budget            {"amount": số, "currency": "USD" hoặc "VND", "tier": null}
                     "800 triệu" → amount 800000000, VND. "40 nghìn đô" → amount 40000, USD.
                     Học sinh nói khoảng ("30 đến 40 nghìn đô") thì lấy số lớn hơn.

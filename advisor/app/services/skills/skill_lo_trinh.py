@@ -192,20 +192,31 @@ def template_reasons(route: Route) -> list[str]:
     return [texts[code] for code in route.codes] or [DIRECT_TEXT]
 
 
+# Mốc đã trôi qua vẫn giữ để học sinh biết mình lỡ hạn nào, nhưng ghi rõ để không đọc thành việc sắp tới
+PASSED = " (đã qua)"
+PASSED_NOTE = "Mốc ghi “đã qua” là hạn đã trôi qua, không phải việc sắp tới: nói rõ là đã qua, không bảo làm vào ngày đó."
+
+
 # Mốc thời gian theo kỳ nhập học (code viết, không qua Qwen)
-def timeline(intake: Intake | None, route: Route) -> list[str]:
+def timeline(intake: Intake | None, route: Route, today: date | None = None) -> list[str]:
     if intake is None:
         return ["Bạn chưa chọn kỳ nhập học, mình chưa lập được mốc thời gian."]
     if route.route == "postpone":
         return [f"Kỳ {intake.term} {intake.year} đã quá sát hạn nộp, bạn nên nhắm kỳ nhập học sau."]
+    now = today or date.today()
+    this_month = month_index(now.year, now.month)
+
+    def line(text: str, month: int) -> str:
+        return f"- {text} {month_name(month)}" + (PASSED if month < this_month else "")
+
     lines = []
     if intake.early is not None:
-        lines.append(f"- Nộp sớm (EA/ED): khoảng {month_name(intake.early)}")
-    lines.append(f"- Nộp thường lệ (RD): khoảng {month_name(intake.deadline)}")
+        lines.append(line("Nộp sớm (EA/ED): khoảng", intake.early))
+    lines.append(line("Nộp thường lệ (RD): khoảng", intake.deadline))
     if route.english_status != "ok":
-        lines.append(f"- Thi xong tiếng Anh trước {month_name(intake.deadline - TEST_LEAD_MONTHS)}")
-    lines.append(f"- Xin visa: khoảng {month_name(intake.start - VISA_LEAD_MONTHS)}")
-    lines.append(f"- Nhập học: {month_name(intake.start)}")
+        lines.append(line("Thi xong tiếng Anh trước", intake.deadline - TEST_LEAD_MONTHS))
+    lines.append(line("Xin visa: khoảng", intake.start - VISA_LEAD_MONTHS))
+    lines.append(line("Nhập học:", intake.start))
     return lines
 
 
@@ -221,12 +232,14 @@ def day_text(raw: Any) -> str | None:
 
 
 # Có lộ trình từ .NET thì chép đúng các mốc Tổng quan đang vẽ, không tự tính mốc khác
-def roadmap_timeline(roadmap: dict | None) -> list[str]:
+def roadmap_timeline(roadmap: dict | None, today: date | None = None) -> list[str]:
+    now = today or date.today()
     lines = []
     for m in (roadmap or {}).get("milestones", []):
         day = day_text(m.get("date"))
         if day and m.get("label"):
-            lines.append(f"- {day}: {m['label']}" + (" (tham khảo)" if m.get("isEstimate") else ""))
+            text = f"- {day}: {m['label']}" + (" (tham khảo)" if m.get("isEstimate") else "")
+            lines.append(text + (PASSED if date.fromisoformat(str(m["date"])[:10]) < now else ""))
     if lines and (roadmap or {}).get("intakeIsEstimate"):
         lines.append(ESTIMATE_INTAKE.format(intake=roadmap.get("intake")))
     return lines
@@ -238,7 +251,9 @@ def target_names(roadmap: dict | None) -> list[str]:
     return [str(s["name"]) for s in roadmap.get("schools", []) if s.get("name")]
 
 
-def render(route: Route, intake: Intake | None, major: Any, roadmap: dict | None = None) -> str:
+def render(
+    route: Route, intake: Intake | None, major: Any, roadmap: dict | None = None, today: date | None = None
+) -> str:
     parts = [
         f"Lộ trình phù hợp với bạn: {ROUTE_LABELS[route.route]}.",
         "\n".join(f"- {r}" for r in route.reasons),
@@ -247,8 +262,9 @@ def render(route: Route, intake: Intake | None, major: Any, roadmap: dict | None
         parts.append(
             "Bạn cũng có thể cân nhắc: " + ", ".join(ROUTE_LABELS[r] for r in route.alt_routes) + "."
         )
-    lines = (route.route != "postpone" and roadmap_timeline(roadmap)) or timeline(intake, route)
-    parts.append("Mốc thời gian dự kiến:\n" + "\n".join(lines) + f"\n{CHECK_DEADLINE}")
+    lines = (route.route != "postpone" and roadmap_timeline(roadmap, today)) or timeline(intake, route, today)
+    note = [PASSED_NOTE] if any(line.endswith(PASSED) for line in lines) else []
+    parts.append("Mốc thời gian dự kiến:\n" + "\n".join([*lines, *note, CHECK_DEADLINE]))
     major_text = f" ({major})" if isinstance(major, str) and major else ""
     criteria = "\n".join(CRITERIA).format(major=major_text)
     names = target_names(roadmap)
