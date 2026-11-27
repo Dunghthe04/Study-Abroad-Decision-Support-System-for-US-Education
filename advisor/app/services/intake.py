@@ -65,20 +65,19 @@ EDIT_ONLY_GOAL = "chi_sua"
 
 
 # Câu tư vấn đang chờ hồ sơ cần những việc nào, giống cách GeneratedAdviceBranch chọn việc:
-# - xin trường: câu có chữ xin trường, SLM tách ra school_list, hoặc chỉ có so sánh / giải thích trường
+# - xin trường: SLM tách ra school_list, hoặc chỉ có so sánh / giải thích trường
 # - việc của khuôn (đánh giá, lộ trình); không có việc nào thì làm cả hai
 # Không có câu chờ, hay câu chờ không phải profile_review: trả rỗng, form để học sinh tự tích
 def form_goals(pending: SlmY | None) -> list[str]:
     if pending is None or pending.type != "profile_review":
         return []
     # Nhập trong hàm: branches.py nhập chat_flow.py, chat_flow.py lại nhập file này
-    from app.services.branches import asks_for_school_list
     from app.services.skill_template import TEMPLATE_TASKS, tasks_of
 
     tasks = pending.entities.get("tasks") or []
     template = [t for t in tasks if t in TEMPLATE_TASKS]
     others_only = bool(tasks) and not template and "school_list" not in tasks
-    school_list = asks_for_school_list(pending.span) or "school_list" in tasks or others_only
+    school_list = "school_list" in tasks or others_only
     work = tasks_of(template) if template or not school_list else []
     if school_list:
         work.append("school_list")

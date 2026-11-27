@@ -1,4 +1,4 @@
-"""Ngữ cảnh hội thoại: nhớ trường, mục, điều kiện tìm trường để hiểu câu hỏi tiếp; model quyết định tiếp nối, quy tắc làm dự phòng."""
+"""Ngữ cảnh hội thoại: nhớ trường, mục, điều kiện tìm trường để hiểu câu hỏi tiếp; chỉ model quyết định câu nào là tiếp nối."""
 
 import pytest
 
@@ -87,41 +87,31 @@ def test_a_new_condition_of_the_same_kind_replaces_the_old_one():
     assert entities_of(out)["filters"] == {"state": ["Texas"]}
 
 
-# ---- quy tắc dự phòng (model chưa trả follow_up)
+# ---- model không nói tiếp nối: câu tự đứng được (hợp đồng SLM), code không đoán lại bằng chữ trong câu
+# Lỗi thật 27/11/2026: câu hỏi chung có chữ như "gpa", "học bổng" bị gắn trường vừa nói trước đó
 @pytest.mark.parametrize(
     "message",
-    ["còn học bổng thì sao", "hạn nộp thì sao nhỉ", "GPA bao nhiêu", "trường này xếp hạng bao nhiêu"],
+    [
+        "Duolingo English Test có được nhận không",
+        "học bổng toàn phần ở Mỹ có nhiều không",
+        "GPA bao nhiêu thì được coi là ổn",
+        "còn học bổng thì sao",
+        "trường này xếp hạng bao nhiêu",
+    ],
 )
-def test_without_the_model_a_missing_school_is_filled_when_the_sentence_asks_a_field_or_points_back(message):
-    out = contextualize(state(schools=["Harvard"]), message, knowledge(message))
+@pytest.mark.parametrize("flag", [{}, {"follow_up": False}], ids=["khong_co_co", "co_la_false"])
+def test_without_a_follow_up_label_no_school_is_attached(message, flag):
+    out = contextualize(state(schools=["Harvard"], fields=["aid"]), message, knowledge(message, **flag))
 
-    assert entities_of(out)["schools"] == ["Harvard"]
-
-
-@pytest.mark.parametrize(
-    "message", ["học bổng là gì", "I-20 là gì", "xin chào", "visa F-1 nộp thế nào", "IELTS khác gì TOEFL"]
-)
-def test_without_the_model_general_questions_are_never_tied_to_the_remembered_school(message):
-    out = contextualize(state(schools=["Harvard"]), message, knowledge(message))
-
-    assert "schools" not in entities_of(out)
+    assert entities_of(out) == flag
 
 
-def test_without_the_model_a_short_follow_up_with_a_school_keeps_the_field():
+def test_without_a_follow_up_label_the_old_field_is_not_added_either():
     out = contextualize(
         state(schools=["Harvard"], fields=["aid"]), "còn Yale?", knowledge("còn Yale?", schools=["Yale"])
     )
 
-    assert entities_of(out)["fields"] == ["aid"]
-
-
-def test_without_the_model_a_long_sentence_with_a_school_is_not_treated_as_a_follow_up():
-    message = "Yale nằm ở bang nào và có đẹp không vậy bạn"
-    out = contextualize(
-        state(schools=["Harvard"], fields=["aid"]), message, knowledge(message, schools=["Yale"])
-    )
-
-    assert "fields" not in entities_of(out)
+    assert entities_of(out) == {"schools": ["Yale"]}
 
 
 def test_nothing_changes_without_a_context_or_for_other_intents():
@@ -252,9 +242,11 @@ async def test_the_second_turn_uses_the_school_remembered_from_the_first_through
     assert r1.action == "school_info"
     assert r1.state.context.schools == ["Harvard"] and r1.state.context.fields == ["cost"]
 
-    # phiên sau (trạng thái đi qua JSON như khi .NET lưu và gửi lại), model không trả trường
+    # phiên sau (trạng thái đi qua JSON như khi .NET lưu và gửi lại), model nói tiếp nối mà không nêu trường
     saved = r1.state.model_dump(by_alias=True)
-    second = flow_with({"skill_tra_loi": _Kb()}, tin(("knowledge", {}, "còn học bổng thì sao")))
+    second = flow_with(
+        {"skill_tra_loi": _Kb()}, tin(("knowledge", {"follow_up": True}, "còn học bổng thì sao"))
+    )
     r2 = await second.reply(
         ChatRequest(
             messages=[ChatMessage(role="user", content="còn học bổng thì sao")],
