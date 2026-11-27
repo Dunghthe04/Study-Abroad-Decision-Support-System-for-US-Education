@@ -57,7 +57,6 @@ export interface AdminNavItem {
   filledIcon: ComponentType<{ className?: string }>;
   section: AdminNavSectionId;
   roles: AdminRole[];
-  useCases: string[];
   /**
    * Ẩn khỏi menu và trang tổng quan nhưng trang vẫn vào được (đường dẫn trực tiếp, liên kết từ trang khác) và vẫn qua kiểm tra vai trò
    * của AdminSection. Dùng cho chức năng chưa muốn đưa lên menu.
@@ -88,7 +87,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: LayoutDashboardFilledIcon,
     section: "overview",
     roles: ["admin", "moderator"],
-    useCases: [],
   },
   {
     href: "/admin/universities",
@@ -99,7 +97,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     section: "data",
     // Quyết định D2 bản 14/11: dữ liệu trường do Moderator quản lý, Admin chỉ xem
     roles: ["admin", "moderator"],
-    useCases: ["UC-65", "UC-66", "UC-67", "UC-84", "UC-109"],
   },
   {
     href: "/admin/slm-samples",
@@ -109,7 +106,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: BookOpenFilledIcon,
     section: "data",
     roles: ["admin", "moderator"],
-    useCases: ["UC-89", "UC-90", "UC-92", "UC-93", "UC-94", "UC-95", "UC-96"],
   },
   {
     href: "/admin/knowledge-base",
@@ -119,7 +115,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: LibraryBigFilledIcon,
     section: "data",
     roles: ["admin", "moderator"],
-    useCases: ["UC-112", "UC-113", "UC-114", "UC-115", "UC-116", "UC-117"],
   },
   {
     href: "/admin/centers",
@@ -130,7 +125,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     section: "moderation",
     // Chỉ moderator quản lý trung tâm; admin chỉ cấp tài khoản moderator
     roles: ["moderator"],
-    useCases: ["UC-59", "UC-64", "UC-71", "UC-72"],
   },
   {
     href: "/admin/center-profile-changes",
@@ -141,7 +135,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     section: "moderation",
     // [UC-114] Chỉ Moderator kiểm tra thay đổi trung tâm
     roles: ["moderator"],
-    useCases: ["UC-114"],
   },
   {
     href: "/admin/center-review-reports",
@@ -152,7 +145,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     section: "moderation",
     // [UC-151 / UC-53] Chỉ Moderator xử lý báo cáo đánh giá trung tâm
     roles: ["moderator"],
-    useCases: ["UC-53", "UC-151"],
   },
   {
     href: "/admin/forum",
@@ -162,7 +154,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: MessagesSquareFilledIcon,
     section: "moderation",
     roles: ["admin", "moderator"],
-    useCases: ["UC-54", "UC-55", "UC-56", "UC-57"],
   },
   {
     href: "/admin/center-deletion-requests",
@@ -172,7 +163,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: ArchiveXFilledIcon,
     section: "moderation",
     roles: ["admin"],
-    useCases: ["UC-93"],
   },
   {
     href: "/admin/lead-message-reports",
@@ -182,7 +172,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: MailWarningFilledIcon,
     section: "moderation",
     roles: ["admin"],
-    useCases: ["UC-58"],
   },
   {
     href: "/admin/ai-usage",
@@ -192,7 +181,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: BarChart3FilledIcon,
     section: "ai",
     roles: ["admin"],
-    useCases: ["UC-83"],
   },
   {
     href: "/admin/ai-quality",
@@ -202,7 +190,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: MessagesSquareFilledIcon,
     section: "ai",
     roles: ["admin"],
-    useCases: ["UC-90"],
   },
   {
     href: "/admin/review-batches",
@@ -212,7 +199,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: ClipboardCheckFilledIcon,
     section: "ai",
     roles: ["admin", "moderator"],
-    useCases: ["UC-147", "UC-148", "UC-149"],
   },
   {
     href: "/admin/users",
@@ -222,7 +208,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: UsersFilledIcon,
     section: "system",
     roles: ["admin"],
-    useCases: ["UC-60", "UC-61", "UC-62", "UC-63"],
   },
   {
     href: "/admin/birth-date-requests",
@@ -233,7 +218,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     section: "system",
     // [UC-150] Chỉ Administrator duyệt ngày sinh
     roles: ["admin"],
-    useCases: ["UC-150"],
   },
   {
     href: "/admin/plans",
@@ -243,7 +227,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: CreditCardFilledIcon,
     section: "system",
     roles: ["admin"],
-    useCases: ["UC-79"],
   },
   {
     href: "/admin/orders",
@@ -253,7 +236,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: ReceiptTextFilledIcon,
     section: "system",
     roles: ["admin"],
-    useCases: ["UC-132", "UC-133", "UC-134"],
   },
   {
     href: "/admin/parameters",
@@ -264,7 +246,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     section: "system",
     // Moderator vào để sửa bảng quy đổi điểm (UC-68); admin chỉ xem bảng này. Tham số thuật toán (UC-89, gộp UC-69) chỉ xem.
     roles: ["admin", "moderator"],
-    useCases: ["UC-68", "UC-70", "UC-89"],
   },
   {
     href: "/admin/policies",
@@ -274,7 +255,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: FileTextFilledIcon,
     section: "system",
     roles: ["admin"],
-    useCases: ["UC-103"],
   },
   {
     href: "/admin/sensitivity",
@@ -284,7 +264,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: ActivityFilledIcon,
     section: "system",
     roles: ["admin"],
-    useCases: ["UC-85"],
   },
   {
     href: "/admin/access-logs",
@@ -294,7 +273,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
     filledIcon: ShieldAlertFilledIcon,
     section: "system",
     roles: ["admin"],
-    useCases: ["UC-91"],
   },
 ];
 
