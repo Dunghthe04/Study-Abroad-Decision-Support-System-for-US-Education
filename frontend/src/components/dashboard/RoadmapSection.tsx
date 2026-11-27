@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
+import { useProvinces } from "@/hooks/use-provinces";
 import { ApiError, dashboardApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
@@ -215,18 +216,10 @@ function TaskItem({ task, provinceKnown }: { task: RoadmapTask; provinceKnown: b
  * Đã có tỉnh: mở từ nút Đổi, chọn sẵn tỉnh cũ, nút Hủy quay lại dòng hiện tỉnh.
  */
 function ProvincePrompt({ current, onSaved, onSkip }: { current?: string | null; onSaved: () => void; onSkip: () => void }) {
-  const [provinces, setProvinces] = useState<string[]>([]);
+  const provinces = useProvinces();
   const [value, setValue] = useState(current ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    dashboardApi.getProvinces()
-      .then((list) => { if (alive) setProvinces(list ?? []); })
-      .catch(() => { if (alive) setError("Chưa tải được danh sách tỉnh/thành."); });
-    return () => { alive = false; };
-  }, []);
 
   const save = async () => {
     setSaving(true);

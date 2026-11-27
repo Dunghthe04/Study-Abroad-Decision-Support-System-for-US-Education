@@ -91,7 +91,7 @@ public class CenterReferralTests
 
         var counts = CenterReferral.CityCounts(centers, "LUYEN_PHONG_VAN", "undergraduate");
 
-        Assert.Equal([("Hà Nội", 2), ("TP.HCM", 1)], counts.Select(c => (c.City, c.Count)).ToArray());
+        Assert.Equal([("Hà Nội", 2), ("TP. Hồ Chí Minh", 1)], counts.Select(c => (c.City, c.Count)).ToArray());
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public class CenterReferralTests
             Center("E", city: null),
         };
 
-        Assert.Equal(["Hà Nội", "TP.HCM"], CenterReferral.Cities(centers));
+        Assert.Equal(["Hà Nội", "TP. Hồ Chí Minh"], CenterReferral.Cities(centers));
     }
 
     private sealed class ReferableRepository(params StudyCenter[] centers) : IStudyCenterRepository
@@ -189,7 +189,7 @@ public class CenterReferralTests
 
         var counts = await service.GetReferralCityCountsAsync(new CenterReferralQuery("LUYEN_PHONG_VAN", "undergraduate"));
 
-        Assert.Equal([("Hà Nội", 2), ("TP.HCM", 1)], counts.Select(c => (c.City, c.Count)).ToArray());
+        Assert.Equal([("Hà Nội", 2), ("TP. Hồ Chí Minh", 1)], counts.Select(c => (c.City, c.Count)).ToArray());
     }
 
     [Fact]
@@ -213,6 +213,6 @@ public class CenterReferralTests
     {
         var service = new StudyCenterService(new ReferableRepository(Center("A", city: "TP.HCM"), Center("B")), _auditLogs);
 
-        Assert.Equal(["Hà Nội", "TP.HCM"], await service.GetReferralCitiesAsync());
+        Assert.Equal(["Hà Nội", "TP. Hồ Chí Minh"], await service.GetReferralCitiesAsync());
     }
 }

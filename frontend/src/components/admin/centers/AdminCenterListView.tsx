@@ -37,6 +37,7 @@ import {
   type CenterConfirmAction,
 } from "@/components/admin/centers/CenterActionConfirmDialog";
 import { usePendingCenterCount } from "@/hooks/use-pending-center-count";
+import { useProvinces } from "@/hooks/use-provinces";
 import {
   CenterLegalModeBadge,
   CenterTypeBadge,
@@ -49,13 +50,6 @@ const PAGE_SIZE = 10;
 const FILTER_FIELD_BG = "bg-surface";
 
 type FilterOption = { value: string; label: string };
-
-const CITY_OPTIONS: FilterOption[] = [
-  { value: "all", label: "Tất cả địa điểm" },
-  { value: "Hà Nội", label: "Hà Nội" },
-  { value: "TP.HCM", label: "TP. Hồ Chí Minh" },
-  { value: "Hải Phòng", label: "Hải Phòng" },
-];
 
 const TYPE_OPTIONS: FilterOption[] = [
   { value: "all", label: "Mọi loại hình" },
@@ -83,6 +77,11 @@ export function AdminCenterListView() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState("all");
+  const provinces = useProvinces();
+  const cityOptions: FilterOption[] = [
+    { value: "all", label: "Tất cả địa điểm" },
+    ...provinces.map((name) => ({ value: name, label: name })),
+  ];
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -428,7 +427,7 @@ export function AdminCenterListView() {
               <OptionSelect
                 id="center-filter-city"
                 value={draftCity}
-                options={CITY_OPTIONS}
+                options={cityOptions}
                 onChange={setDraftCity}
                 size="sm"
                 className={FILTER_FIELD_BG}

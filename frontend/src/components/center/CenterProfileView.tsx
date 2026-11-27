@@ -10,6 +10,8 @@ import {
   LockIcon,
   XIcon
 } from "lucide-react";
+import { OptionSelect } from "@/components/admin/universities/OptionSelect";
+import { useProvinces } from "@/hooks/use-provinces";
 import { centerPortalApi, ApiError } from "@/lib/api";
 import type { StudyCenter } from "@/types/api";
 import { Button } from "@/components/ui/button";
@@ -71,6 +73,13 @@ export function CenterProfileView() {
   const [reviewNotice, setReviewNotice] = useState<string | null>(null);
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
+  const provinces = useProvinces();
+  const cityOptions = [
+    { value: "", label: "Chưa chọn" },
+    ...provinces.map((name) => ({ value: name, label: name })),
+    // Giá trị cũ không thuộc danh sách vẫn hiện để không bị mất khi lưu
+    ...(city && !provinces.includes(city) ? [{ value: city, label: city }] : []),
+  ];
   const [district, setDistrict] = useState("");
   const [services, setServices] = useState<string[]>([]);
   const [studyLevels, setStudyLevels] = useState<string[]>([]);
@@ -513,12 +522,11 @@ export function CenterProfileView() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Field>
                 <FieldLabel htmlFor="city">Tỉnh / Thành phố</FieldLabel>
-                <Input
+                <OptionSelect
                   id="city"
-                  maxLength={128}
                   value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  placeholder="Hà Nội, TP.HCM..."
+                  options={cityOptions}
+                  onChange={setCity}
                 />
               </Field>
 

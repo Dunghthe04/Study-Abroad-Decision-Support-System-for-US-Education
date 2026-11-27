@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { StudyCenter } from "@/types/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { useProvinces } from "@/hooks/use-provinces";
 import { getEnrichedCenterProfile } from "@/lib/center-details";
 import { centerServiceLabel } from "@/lib/center-services";
 import { COMPARE_MAX, COMPARE_MIN, compareHref } from "@/lib/center-compare";
@@ -44,14 +45,6 @@ interface PublicCenterListViewProps {
 }
 
 type SortKey = "default" | "rating_desc" | "name_asc";
-
-const CITY_OPTIONS = [
-  { value: "all", label: "Tất cả địa điểm" },
-  { value: "Hà Nội", label: "Hà Nội" },
-  { value: "TP.HCM", label: "TP. Hồ Chí Minh" },
-  { value: "Hải Phòng", label: "Hải Phòng" },
-  { value: "Đà Nẵng", label: "Đà Nẵng" },
-];
 
 const TYPE_OPTIONS = [
   { value: "all", label: "Mọi loại hình" },
@@ -177,6 +170,11 @@ function CenterFiltersPanel({
   onLicensedOnlyChange,
   onReset,
 }: FilterPanelProps) {
+  const provinces = useProvinces();
+  const cityOptions = [
+    { value: "all", label: "Tất cả địa điểm" },
+    ...provinces.map((name) => ({ value: name, label: name })),
+  ];
   const licensedId = useId();
   const serviceBaseId = useId();
 
@@ -206,7 +204,13 @@ function CenterFiltersPanel({
       </FilterSection>
 
       <FilterSection title="Địa điểm">
-        <RadioFilter name="center-city" options={CITY_OPTIONS} value={cityFilter} onValueChange={onCityChange} />
+        <OptionSelect
+          aria-label="Lọc theo tỉnh / thành"
+          value={cityFilter}
+          options={cityOptions}
+          onChange={onCityChange}
+          className="bg-surface"
+        />
       </FilterSection>
 
       <FilterSection title="Mô hình hoạt động">
@@ -411,8 +415,8 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
       }
 
       if (cityFilter !== "all") {
-        const targetCity = cityFilter === "TP.HCM" ? "hồ chí minh" : cityFilter.toLowerCase();
-        if (!c.city?.toLowerCase().includes(targetCity)) {
+        // API trả city đã đổi về tên chuẩn nên so bằng là đủ
+        if (c.city !== cityFilter) {
           return false;
         }
       }
@@ -499,10 +503,9 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
     });
   }
   if (cityFilter !== "all") {
-    const cityLabel = CITY_OPTIONS.find((c) => c.value === cityFilter)?.label ?? cityFilter;
     activeChips.push({
       key: "city",
-      label: `Địa điểm: ${cityLabel}`,
+      label: `Địa điểm: ${cityFilter}`,
       onRemove: () => {
         setCityFilter("all");
         setPage(1);

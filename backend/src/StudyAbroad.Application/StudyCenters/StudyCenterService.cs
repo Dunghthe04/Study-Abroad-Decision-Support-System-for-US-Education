@@ -132,7 +132,7 @@ public class StudyCenterService(
             Name = name,
             Website = string.IsNullOrWhiteSpace(request.Website) ? null : request.Website.Trim(),
             Address = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim(),
-            City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim(),
+            City = VietnamProvinces.Canonical(request.City),
             StudyLevels = request.StudyLevels?.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).Distinct().ToList() ?? [],
             Services = request.Services?.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).Distinct().ToList() ?? [],
             Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim(),
@@ -298,7 +298,7 @@ public class StudyCenterService(
         center.Name = name;
         center.Website = string.IsNullOrWhiteSpace(request.Website) ? null : request.Website.Trim();
         center.Address = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim();
-        center.City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim();
+        center.City = VietnamProvinces.Canonical(request.City);
         center.District = string.IsNullOrWhiteSpace(request.District) ? null : request.District.Trim();
         center.Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
         center.Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
@@ -407,7 +407,7 @@ public class StudyCenterService(
     internal static StudyCenterDto ToDto(StudyCenter c) => ToDto(c, null);
 
     internal static StudyCenterDto ToDto(StudyCenter c, CenterResponseMetrics? metrics) =>
-        new(c.Id, c.Code, c.Name, c.Website, c.Address, c.City, c.StudyLevels, c.Services, c.SurveyedAt,
+        new(c.Id, c.Code, c.Name, c.Website, c.Address, VietnamProvinces.Canonical(c.City), c.StudyLevels, c.Services, c.SurveyedAt,
             c.Phone, c.Email, c.Description, c.VerificationStatus, c.IsActive,
             c.CenterType, c.LogoUrl, c.CoverImageUrl, c.GalleryImages, c.District,
             c.Latitude, c.Longitude, c.StaffCount, c.EstablishedYear, c.LicenseNumber,
@@ -1160,7 +1160,7 @@ public class StudyCenterService(
             if (request.Fanpage != null) center.Fanpage = incomingFanpage;
         }
         if (request.Address != null) center.Address = TrimOrNull(request.Address);
-        if (request.City != null) center.City = TrimOrNull(request.City);
+        if (request.City != null) center.City = VietnamProvinces.Canonical(request.City);
         if (request.District != null) center.District = TrimOrNull(request.District);
         if (serviceAreas != null) center.ServiceAreas = serviceAreas;
         if (branches != null) center.Branches = branches;
