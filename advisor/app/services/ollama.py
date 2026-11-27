@@ -26,6 +26,7 @@ class OllamaClient:
         num_ctx: int = 6144,
         num_gpu: int = 99,
         seed: int = 42,
+        num_predict: int | None = None,
         keep_alive: str = "30m",
         embedding_model: str = "bge-m3",
     ) -> None:
@@ -33,6 +34,10 @@ class OllamaClient:
         self._model = model
         self._embedding_model = embedding_model
         self._options = {"num_ctx": num_ctx, "num_gpu": num_gpu, "seed": seed}
+        # Trần số token model được sinh. Mặc định Ollama không giới hạn: model hay lặp vô hạn thì sinh mãi tới hết hạn gọi,
+        # đo thì phản hồi phình rất lớn (có logprobs). None = không đặt (giữ hành vi cũ của các lời gọi khác)
+        if num_predict is not None:
+            self._options["num_predict"] = num_predict
         self._keep_alive = keep_alive
 
     # Biến mỗi đoạn chữ thành một vector (bge-m3: 1024 số) để so sánh nghĩa với kho kiến thức.

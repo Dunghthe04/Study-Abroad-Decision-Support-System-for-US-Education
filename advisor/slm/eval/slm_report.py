@@ -794,6 +794,7 @@ def main() -> None:
     note(charts.chart_groups(summaries, out / "06_message_groups.png"))
     note(charts.chart_latency(summaries, out / "07_latency.png"))
     note(charts.chart_confidence(summaries, out / "08_confidence_reliability.png"))
+    note(charts.chart_roc(summaries, out / "08b_confidence_roc_auc.png"))
     audit = None
     if args.data.is_file():
         records = [

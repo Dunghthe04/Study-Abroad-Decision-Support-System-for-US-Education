@@ -5,6 +5,7 @@ import pytest
 from app.schemas.chat import ChatState
 from app.schemas.slm import SlmTinResult, SlmY
 from app.services.chat_flow import with_comparison_intent, with_info_intent
+from app.services.slm_classifier import FALLBACK
 
 
 def collect_profile(message: str) -> SlmTinResult:
@@ -41,6 +42,27 @@ def test_a_school_fact_question_the_slm_took_for_sensitive_becomes_a_knowledge_q
 )
 def test_truly_sensitive_questions_stay_blocked_even_when_they_mention_a_field(message):
     assert with_info_intent(message, out_of_scope("sensitive")).types() == ["out_of_scope"]
+
+
+def test_a_message_the_slm_could_not_classify_is_not_guessed_into_a_knowledge_question():
+    # Lỗi thật 27/11/2026: SLM trả sai khuôn cho câu xin gợi ý trường ở Texas, luật này đổi thành câu kiến thức vì có chữ IELTS,
+    # rồi hệ thống trả số liệu một trường ở Chicago. Sai khuôn thì giữ nguyên để chat nói chưa hiểu và hỏi lại
+    message = "Tài chính nhà mình khoảng 800 triệu/năm, IELTS 6.5. So sánh giúp mình 3 trường ở bang Texas"
+    fallback = FALLBACK.model_copy(
+        deep=True, update={"intents": [FALLBACK.intents[0].model_copy(update={"span": message})]}
+    )
+
+    slm = with_info_intent(message, fallback)
+
+    assert slm.types() == ["out_of_scope"]
+    assert slm.intents[0].entities["subtype"] == "ambiguous"
+
+
+def test_an_ambiguous_label_the_slm_did_return_is_still_rescued():
+    # Model trả đúng khuôn mà gán ambiguous cho câu hỏi số liệu trường: vẫn đổi thành câu kiến thức như trước
+    assert with_info_intent("học phí của MIT là bao nhiêu", out_of_scope("ambiguous")).types() == [
+        "knowledge"
+    ]
 
 
 def test_other_out_of_scope_kinds_and_other_intents_are_left_alone():

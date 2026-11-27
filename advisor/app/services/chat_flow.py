@@ -175,9 +175,12 @@ _SENSITIVE = re.compile(
 
 # SLM thật xếp nhầm "GPA của The University of Texas at Austin là bao nhiêu" vào ngoại phạm vi nhạy cảm ("hồ sơ cần trung thực").
 # Câu nhắc một mục số liệu trường mà không có dấu hiệu làm giả hay khai gian thì đổi thành câu kiến thức, để nhánh số liệu trường trả lời.
-# Câu nhạy cảm thật (sửa GPA, làm giả bảng điểm) vẫn bị chặn như cũ
+# Câu nhạy cảm thật (sửa GPA, làm giả bảng điểm) vẫn bị chặn như cũ.
+# Không áp dụng khi SLM trả sai khuôn (fallback): khi đó không biết học sinh muốn gì, đoán thành câu kiến thức thì trả lời lệch.
+# Đo trên tập test usas-slm-v6 (27/11/2026): 20 trong 38 câu sai khuôn bị luật này đổi thành câu kiến thức, chỉ 1 câu đúng là câu
+# kiến thức, 19 câu là giả định, khai hồ sơ hoặc nhiều ý. Sai khuôn thì giữ "chưa hiểu, nói cụ thể hơn" để học sinh hỏi lại
 def with_info_intent(message: str, slm: SlmTinResult) -> SlmTinResult:
-    if len(slm.intents) != 1:
+    if slm.fallback or len(slm.intents) != 1:
         return slm
     y = slm.intents[0]
     if y.type != "out_of_scope" or y.entities.get("subtype") not in ("sensitive", "ambiguous"):
@@ -431,10 +434,14 @@ class ChatFlow:
         names, output = await self._run_intents(state, message, slm, intents, emit)
 
         # 3-4. Học sinh hỏi xen ngang lúc đang hỏi hồ sơ (câu đang chờ chưa được trả lời): nhắc lại câu đang chờ.
-        # Không nhắc khi nhánh hồ sơ đã chạy (nó tự hỏi câu kế tiếp) hoặc khi câu đang chờ là câu chào mở đầu
+        # Không nhắc khi nhánh hồ sơ đã chạy (nó tự hỏi câu kế tiếp), khi câu đang chờ là câu chào mở đầu, khi đang chờ ở
+        # bảng rà soát X1 (bảng vẫn nằm trên màn hình, dán lại sau mỗi câu hỏi là đòi học sinh làm việc không hỏi),
+        # hoặc khi học sinh chỉ cảm ơn, tạm biệt
         remind = bool(
             pending[0]
             and pending[0] not in OPENING_QUESTIONS
+            and pending[0] != "X1"
+            and not only_farewell(intents)
             and "collect_profile" not in names
             and (state.question_id, state.last_question) == pending
         )
@@ -551,6 +558,11 @@ class ChatFlow:
             action=output.action,
             action_data=output.action_data,
         )
+
+
+# Cả tin chỉ là cảm ơn, tạm biệt
+def only_farewell(intents: list[SlmY]) -> bool:
+    return all(y.type == "out_of_scope" and y.entities.get("subtype") == "farewell" for y in intents)
 
 
 # Gói của học sinh cho chạy loại ý này không (allowed_intents None = mọi loại)

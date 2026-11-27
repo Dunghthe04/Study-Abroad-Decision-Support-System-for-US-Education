@@ -16,6 +16,8 @@ public class University : BaseEntity
     public decimal? AcceptanceRate { get; set; }
     public int? InternationalStudentCount { get; set; }
     public bool IsIvy { get; set; }
+    /// <summary>Tên viết tắt học sinh hay gõ (MIT, UT Austin, ASU), dùng khi khớp tên trường trong chat. Một tên có thể nằm ở nhiều trường: khi đó hệ thống hỏi lại.</summary>
+    public List<string> Aliases { get; set; } = [];
     public bool IsActive { get; set; } = true;
     /// <summary>Người sửa gần nhất (moderator/admin); ngày sửa là UpdatedAt.</summary>
     public Guid? LastEditedByUserId { get; set; }

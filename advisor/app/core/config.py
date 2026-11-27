@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     llm_num_gpu: int = 99
     # cùng đầu vào cho cùng kết quả
     llm_seed: int = 42
+    # Trần token một lần SLM sinh (chỉ dùng khi đo ở slm/eval). Đầu ra hợp lệ dài nhất cỡ vài trăm token; vượt trần coi như model lặp
+    slm_num_predict: int = 2048
     embedding_model: str = "bge-m3"
     database_url: str = ""
     # Địa chỉ backend .NET: B6 lấy trung tâm qua API của backend (luật chọn trung tâm nằm ở đó).

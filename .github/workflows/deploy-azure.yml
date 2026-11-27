@@ -96,7 +96,7 @@ jobs:
         run: |
           az containerapp update \
             --name usas-advisor \
-            --resource-group usas-rg \
+            --resource-group usas-kr-rg \
             --image usasreg.azurecr.io/usas-advisor:${{ github.sha }}
 
       - name: Deploy Frontend to Container App

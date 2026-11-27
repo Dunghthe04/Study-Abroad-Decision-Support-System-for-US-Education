@@ -178,20 +178,31 @@ def ask_major_again(state: ChatState, miss: MajorMiss) -> SkillOutput:
 def save_read(
     state: ChatState, read: BacHocRead, status: str = "confirmed", keep_existing: bool = False
 ) -> None:
+    changed = set()
     for name in READ_FIELDS:
         value = getattr(read, name)
         if value is None or (keep_existing and name in state.profile):
             continue
         if value == UNKNOWN:
             state.profile[name] = ProfileField(value=None, status="unknown")
-        else:
+            changed.add(name)
+        elif not skill_ho_so.repeats_confirmed(state, name, value):
             state.profile[name] = ProfileField(value=value, status=status)
+            changed.add(name)
 
     lvl = getattr(state.profile.get("current_level"), "value", None)
     grd = getattr(state.profile.get("current_grade"), "value", None)
     grad_year = buttons.guess_graduation_year(lvl, grd)
-    if grad_year is not None and (not keep_existing or "graduation_year" not in state.profile):
+    if grad_year is None or (keep_existing and "graduation_year" in state.profile):
+        return
+    # Năm tốt nghiệp do code suy ra từ lớp: lớp và bậc học không đổi thì không được tạo ra "thông tin mới cần xác nhận"
+    if changed & {"current_level", "current_grade"}:
         state.profile["graduation_year"] = ProfileField(value=grad_year, status=status)
+    elif "graduation_year" not in state.profile:
+        source = state.profile.get("current_grade")
+        state.profile["graduation_year"] = ProfileField(
+            value=grad_year, status=source.status if source else status
+        )
 
 
 def answered(state: ChatState, question_id: str) -> bool:

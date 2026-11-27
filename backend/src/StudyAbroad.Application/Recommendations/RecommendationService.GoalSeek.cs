@@ -116,7 +116,7 @@ public partial class RecommendationService
         var profile = await profiles.GetProfileByUserIdAsync(userId, ct);
         var level = string.IsNullOrWhiteSpace(profile?.TargetLevel) ? "undergraduate" : profile!.TargetLevel!;
         var schools = await recommendations.ListSchoolsAsync(level, ct);
-        return SchoolNameMatcher.Match(text, schools.Select(s => new SchoolRef(s.University.Code, s.University.Name)).ToList());
+        return SchoolNameMatcher.Match(text, schools.Select(s => new SchoolRef(s.University.Code, s.University.Name, s.University.Aliases)).ToList());
     }
 
     // Học sinh hỏi "cần gì để vào trường này". target: reach | match | safety; bỏ trống thì nhóm cao hơn một bậc so với hiện tại.

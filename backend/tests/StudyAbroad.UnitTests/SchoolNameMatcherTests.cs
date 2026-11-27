@@ -42,41 +42,90 @@ public class SchoolNameMatcherTests
         Assert.Equal(["x-mit", "x-harvard"], found.Select(s => s.Code));
     }
 
+    // "học lực" bỏ từ thừa "học" còn "luc", trùng chữ cái đầu của Loyola University Chicago (lỗi thật 27/11/2026:
+    // hỏi 3 trường ở Texas mà ra số liệu Loyola Chicago). Cụm chữ thường không được khớp theo chữ cái đầu
+    [Theory]
+    [InlineData("con mình học lực khá, IELTS 6.5, so sánh giúp mình 3 trường ở bang Texas")]
+    [InlineData("em học lực trung bình thì học phí bao nhiêu")]
+    [InlineData("hoc luc kha thi hoc bong the nao")]
+    public void FindMentioned_LowercasePhraseIsNotReadAsAnAcronym(string question)
+    {
+        Assert.Empty(SchoolNameMatcher.FindMentioned(question, Schools));
+    }
+
+    [Theory]
+    [InlineData("học phí đại học MIT bao nhiêu", "x-mit")]
+    [InlineData("Loyola University Chicago học phí bao nhiêu", "x-luc")]
+    public void FindMentioned_StillFindsUppercaseAcronymsAndFullNames(string question, string code)
+    {
+        Assert.Equal(code, Assert.Single(SchoolNameMatcher.FindMentioned(question, Schools)).Code);
+    }
+
+    [Fact]
+    public void Match_OnAnExtractedName_ReadsLowercaseAliases()
+    {
+        // Tên do SLM tách sẵn ("học phí ucla" → "ucla") khớp tên viết tắt bất kể chữ hoa hay thường
+        AssertFound("ucla", "ucla");
+        AssertFound("mit", "mit");
+    }
+
+    [Theory]
+    [InlineData("học phí ucla bao nhiêu", "x-ucla")]             // chữ thường không dấu, từ 4 chữ trở lên
+    [InlineData("UT Austin có ký túc xá không", "x-utaustin")]
+    public void FindMentioned_FindsAliasesInTheSentence(string question, string code)
+    {
+        Assert.Equal(code, Assert.Single(SchoolNameMatcher.FindMentioned(question, Schools)).Code);
+    }
+
+    [Theory]
+    [InlineData("học phí ASU bao nhiêu")]          // ASU của hai trường: quét câu không chọn hộ, để luồng chính hỏi lại
+    [InlineData("trái mít ngon không")]           // bỏ dấu "mít" thành "mit": chữ có dấu và chữ ngắn đều không tra tên viết tắt
+    [InlineData("học phí mit bao nhiêu")]          // tên viết tắt chữ thường dưới 4 chữ dễ trùng chữ tiếng Việt gõ không dấu
+    [InlineData("học phí TCU bao nhiêu")]          // chưa có trong danh sách tên viết tắt: chỉ đoán được, không chọn
+    public void FindMentioned_DoesNotPickWhenItIsNotSure(string question)
+    {
+        Assert.Empty(SchoolNameMatcher.FindMentioned(question, Schools));
+    }
+
     [Fact]
     public void FindMentioned_DoesNotGuessATypo()
     {
         Assert.Empty(SchoolNameMatcher.FindMentioned("học phí harvad bao nhiêu", Schools));
     }
 
-    // Danh sách mẫu lấy từ dữ liệu thật, gồm các tên dễ nhầm (Boston, Washington, University of California-*)
+    // Danh sách mẫu lấy từ dữ liệu thật, gồm các tên dễ nhầm (Boston, Washington, University of California-*).
+    // Tên viết tắt giống cột universities.aliases (migration AddUniversityAliases); vài trường cố ý không có, để kiểm phần đoán
     private static readonly IReadOnlyList<SchoolRef> Schools =
     [
-        new("x-mit", "Massachusetts Institute of Technology"),
+        new("x-mit", "Massachusetts Institute of Technology", ["MIT"]),
         new("x-bu", "Boston University"),
         new("x-bc", "Boston College"),
         new("x-baylor", "Baylor University"),
         new("x-bucknell", "Bucknell University"),
         new("x-harvard", "Harvard University"),
         new("x-stanford", "Stanford University"),
-        new("x-upenn", "University of Pennsylvania"),
-        new("x-pennstate", "Pennsylvania State University-Main Campus"),
-        new("x-ucla", "University of California-Los Angeles"),
-        new("x-ucb", "University of California-Berkeley"),
-        new("x-ucsd", "University of California-San Diego"),
-        new("x-nyu", "New York University"),
-        new("x-usc", "University of Southern California"),
-        new("x-cmu", "Carnegie Mellon University"),
+        new("x-upenn", "University of Pennsylvania", ["UPenn", "Penn"]),
+        new("x-pennstate", "Pennsylvania State University-Main Campus", ["PSU", "Penn"]),
+        new("x-ucla", "University of California-Los Angeles", ["UCLA"]),
+        new("x-ucb", "University of California-Berkeley", ["UC Berkeley", "UCB"]),
+        new("x-ucsd", "University of California-San Diego", ["UC San Diego", "UCSD"]),
+        new("x-nyu", "New York University", ["NYU"]),
+        new("x-usc", "University of Southern California", ["USC"]),
+        new("x-cmu", "Carnegie Mellon University", ["CMU"]),
         new("x-gatech", "Georgia Institute of Technology-Main Campus"),
-        new("x-jhu", "Johns Hopkins University"),
+        new("x-jhu", "Johns Hopkins University", ["JHU"]),
         new("x-gwu", "George Washington University"),
         new("x-washlee", "Washington and Lee University"),
         new("x-columbia", "Columbia University in the City of New York"),
         new("x-michigan", "University of Michigan-Ann Arbor"),
-        new("x-utaustin", "The University of Texas at Austin"),
+        new("x-utaustin", "The University of Texas at Austin", ["UT Austin"]),
         new("x-utdallas", "The University of Texas at Dallas"),
         new("x-tcu", "Texas Christian University"),
         new("x-northeastern", "Northeastern University"),
         new("x-cornell", "Cornell University"),
+        new("x-luc", "Loyola University Chicago"),
+        new("x-asu", "Arizona State University Campus Immersion", ["ASU", "Arizona State"]),
+        new("x-appstate", "Appalachian State University", ["ASU", "App State"]),
     ];
 
     private static NameMatch Match(string query) => SchoolNameMatcher.Match(query, Schools);
@@ -112,6 +161,8 @@ public class SchoolNameMatcherTests
         Assert.Equal("Adelphi University", Assert.Single(match.Schools).Name);
     }
 
+    // ---------------------------------------------------------------- tên viết tắt (cột universities.aliases)
+
     [Theory]
     [InlineData("MIT", "mit")]
     [InlineData("mit", "mit")]
@@ -120,16 +171,44 @@ public class SchoolNameMatcherTests
     [InlineData("CMU", "cmu")]
     [InlineData("JHU", "jhu")]
     [InlineData("UCLA", "ucla")]
-    public void Acronyms_AreFound(string query, string code) => AssertFound(query, code);
-
-    [Theory]
-    [InlineData("UCB", "ucb")]               // chữ cái đầu của University of California-Berkeley, duy nhất trong danh sách
+    [InlineData("UCB", "ucb")]
     [InlineData("ucsd", "ucsd")]
-    public void UniqueAcronymsOfLongNames_AreFound(string query, string code) => AssertFound(query, code);
+    [InlineData("UPenn", "upenn")]
+    public void AliasesOfOneSchool_AreFound(string query, string code) => AssertFound(query, code);
 
-    // Cách gọi thân thuộc không suy ra được từ tên: không tự chọn, hỏi lại (SLM sẽ được dạy chuẩn hóa thành tên đầy đủ)
     [Theory]
-    [InlineData("Penn", new[] { "upenn", "pennstate" })]     // dở từ: Pennsylvania State và University of Pennsylvania
+    [InlineData("UT Austin", "utaustin")]       // không suy ra được từ tên "The University of Texas at Austin"
+    [InlineData("ut-austin", "utaustin")]       // chữ thường, gạch nối: so sau khi chuẩn hóa
+    [InlineData("UC San Diego", "ucsd")]
+    [InlineData("Arizona State", "asu")]        // tên trong dữ liệu là "...Campus Immersion"
+    public void AliasesThatCannotBeDerivedFromTheName_AreFound(string query, string code) => AssertFound(query, code);
+
+    [Theory]
+    [InlineData("ASU", new[] { "asu", "appstate" })]       // Arizona State và Appalachian State cùng dùng ASU
+    [InlineData("asu", new[] { "asu", "appstate" })]
+    [InlineData("Penn", new[] { "upenn", "pennstate" })]
+    public void AnAliasSharedBySeveralSchools_ListsThemForTheStudentToChoose(string query, string[] expected)
+    {
+        var match = Match(query);
+
+        Assert.Equal(NameMatchKind.Ambiguous, match.Kind);
+        Assert.Equal(expected.OrderBy(c => c), match.Schools.Select(s => s.Code[2..]).OrderBy(c => c));
+    }
+
+    // Chữ cái đầu suy từ tên là đoán: không bao giờ tự chọn, chỉ hỏi xác nhận (trước đây "asu" ra thẳng Appalachian State)
+    [Theory]
+    [InlineData("TCU", "tcu")]      // Texas Christian University chưa có tên viết tắt trong danh sách
+    [InlineData("luc", "luc")]      // "học lực" bỏ "học" còn "luc"
+    public void AGuessedAcronym_IsOnlyOfferedForConfirmation(string query, string code)
+    {
+        var match = Match(query);
+
+        Assert.Equal(NameMatchKind.Ambiguous, match.Kind);
+        Assert.Equal("x-" + code, Assert.Single(match.Schools).Code);
+    }
+
+    // Cách gọi thân thuộc chưa có trong danh sách tên viết tắt: không tự chọn, hỏi lại
+    [Theory]
     [InlineData("Berkeley", new[] { "ucb" })]
     [InlineData("Penn State", new[] { "pennstate" })]
     [InlineData("Georgia Tech", new[] { "gatech" })]
@@ -144,18 +223,18 @@ public class SchoolNameMatcherTests
     }
 
     [Fact]
-    public void AnAcronymSharedBySeveralSchools_IsAmbiguous_NeverChosenByLuck()
+    public void AGuessedAcronymSharedBySeveralSchools_IsAmbiguous_NeverChosenByLuck()
     {
-        var match = Match("BU");   // Boston University, Baylor University, Bucknell University
+        var match = Match("BU");   // không có trong danh sách tên viết tắt mẫu: Boston University, Baylor University, Bucknell University
 
         Assert.Equal(NameMatchKind.Ambiguous, match.Kind);
         Assert.Equal(["baylor", "bu", "bucknell"], match.Schools.Select(s => s.Code[2..]).OrderBy(c => c));
     }
 
     [Fact]
-    public void ANicknameThatCannotBeDerived_IsNotFound()
+    public void ANicknameNotInTheAliasList_IsNotFound()
     {
-        Assert.Equal(NameMatchKind.NotFound, Match("UT Austin").Kind);
+        Assert.Equal(NameMatchKind.NotFound, Match("UT San Antonio").Kind);
     }
 
     [Theory]
