@@ -1,0 +1,3 @@
+# Báo nhầm đã kiểm tra: chỉ bỏ qua đúng một phát hiện theo fingerprint, không tắt quy tắc nào.
+# Dòng bị báo trong script đo chỉ truyền tên biến cấu hình vào hàm khởi tạo, trong mã nguồn không ghi khóa nào.
+ccbb004b19726c7e559bc885837b33120106eca6:advisor/slm/eval/thu_dien_ho_so.py:generic-api-key:96
