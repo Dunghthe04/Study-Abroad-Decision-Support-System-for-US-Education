@@ -17,12 +17,14 @@ from typing import Any
 from app.schemas.chat import ChatState, QuickReply, Widget
 from app.services.centers import SERVICES, CenterFinder, CenterHit, CityCount, db_service, match_city
 from app.services.chat_flow import SkillOutput
+from app.services.provinces import province_of
 from app.services.replies import (
     CENTER_ASK_SERVICE,
     CENTER_BOOKING_NOTE,
     CENTER_BOOKING_NOTE_IN_CITY,
     CENTER_BOOKING_NOTE_NO_LIST,
     CENTER_CITY_ASK,
+    CENTER_CITY_UNKNOWN,
     CENTER_DISCLAIMER,
     CENTER_ELSEWHERE,
     CENTER_INTRO,
@@ -65,6 +67,7 @@ INTRO = CENTER_INTRO
 NO_CENTER = CENTER_NONE
 UNAVAILABLE = CENTER_UNAVAILABLE
 NO_CENTER_IN_CITY = CENTER_NONE_IN_CITY
+CITY_UNKNOWN = CENTER_CITY_UNKNOWN
 TASK_NOTES = CENTER_TASK_NOTES
 NOT_PROVIDED = CENTER_NOT_PROVIDED
 _NOT_PROVIDED_RE = re.compile(
@@ -347,7 +350,13 @@ class ChuyenTrungTamHandler:
             not centers
         ):  # TH-63: không có trung tâm đã xác minh cho dịch vụ này (hoặc ở thành phố học sinh nêu)
             if need.asked_city and counts:
-                parts.append(NO_CENTER_IN_CITY.format(city=need.asked_city, label=label))
+                # Nơi đang có trung tâm thì dùng tên trong DB, tỉnh khác dùng tên chuẩn; không rõ là đâu thì nói chưa rõ
+                place = need.city or province_of(need.asked_city)
+                parts.append(
+                    NO_CENTER_IN_CITY.format(city=place, label=label)
+                    if place
+                    else CITY_UNKNOWN.format(city=need.asked_city, label=label)
+                )
                 return SkillOutput("\n\n".join(parts), widget=centers_widget([], {}, counts, need.service))
             parts.append(NO_CENTER.format(label=label))
             return SkillOutput("\n\n".join(parts), quick_replies=menu_buttons("centers"))

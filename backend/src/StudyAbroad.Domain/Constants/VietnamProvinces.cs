@@ -22,11 +22,14 @@ public static class VietnamProvinces
     private static readonly Dictionary<string, string> Aliases = new()
     {
         ["hcm"] = "ho chi minh",
+        ["hcmc"] = "ho chi minh",
         ["tphcm"] = "ho chi minh",
+        ["sg"] = "ho chi minh",
         ["sai gon"] = "ho chi minh",
         ["saigon"] = "ho chi minh",
         ["hn"] = "ha noi",
         ["hanoi"] = "ha noi",
+        ["hp"] = "hai phong",
         ["thua thien hue"] = "hue",
         ["danang"] = "da nang",
     };

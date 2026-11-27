@@ -546,7 +546,8 @@ async def test_a_known_city_with_no_center_for_the_service_lists_only_the_other_
         ChatState(), "q", need(service="ESSAY_EDITING", city="Sài Gòn")
     )
 
-    assert out.answer == NO_CENTER_IN_CITY.format(city="Sài Gòn", label="sửa bài luận")
+    # Nhận ra "Sài Gòn" là TP.HCM thì gọi bằng tên chuẩn
+    assert out.answer == NO_CENTER_IN_CITY.format(city="TP.HCM", label="sửa bài luận")
     assert city_options(out) == [
         ("Hà Nội", 6)
     ]  # TP.HCM không có trung tâm cho dịch vụ này nên không có trong thanh
