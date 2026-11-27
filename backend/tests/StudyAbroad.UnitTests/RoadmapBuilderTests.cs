@@ -204,6 +204,33 @@ public class RoadmapBuilderTests
         Assert.Equal(("Fall", 2027, true), RoadmapBuilder.ParseIntake(null, Today));
     }
 
+    [Theory]
+    [InlineData("high_school", "Lớp 11", null, 2028)]
+    [InlineData("high_school", "Lớp 10", null, 2029)]
+    [InlineData("high_school", "Lớp 12", null, 2027)]
+    [InlineData("high_school", "Lớp 11", 2029, 2029)] // năm tốt nghiệp đã lưu được ưu tiên hơn lớp
+    [InlineData("middle_school", "Lớp 9", 2027, 2030)] // năm đã lưu là của THCS
+    [InlineData("college_university", "Năm 1", 2030, 2027)]
+    [InlineData("high_school", "Đã tốt nghiệp", 2025, 2027)]
+    public void Intake_MissingUsesHighSchoolGraduationYear(string level, string grade, int? saved, int expected)
+    {
+        var profile = new StudentProfile { CurrentEducationLevel = level, CurrentGrade = grade, GraduationYear = saved };
+        var r = Build(profile, [], []);
+
+        Assert.Equal($"Fall {expected}", r.Intake);
+        Assert.True(r.IntakeIsEstimate);
+    }
+
+    [Fact]
+    public void Intake_ChosenByStudentIsKeptEvenBeforeGraduation()
+    {
+        var profile = new StudentProfile { CurrentEducationLevel = "high_school", CurrentGrade = "Lớp 11", TargetIntake = "Spring 2027" };
+        var r = Build(profile, [], []);
+
+        Assert.Equal("Spring 2027", r.Intake);
+        Assert.False(r.IntakeIsEstimate);
+    }
+
     [Fact]
     public void Milestones_TestTwoMonthsBeforeEarliestDeadline_VisaThreeMonthsBeforeIntake()
     {

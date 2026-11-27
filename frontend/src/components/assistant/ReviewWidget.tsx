@@ -77,13 +77,19 @@ const CERT_NAMES: Record<string, string> = {
 // Có danh sách chứng chỉ thì dòng "Chứng chỉ" đã gồm điểm của các dòng này
 const CERT_ROWS = new Set(["sat", "act", "english"]);
 
-// Một thẻ chứng chỉ như form: "AP Calculus BC 5 · thi 05/2025"
+// Một thẻ chứng chỉ như form: "AP Calculus BC 5 · thi 05/2025".
+// Thẻ dự định (isTarget) ghi rõ "Dự định ... mục tiêu", không để đọc thành điểm đã có
 function certText(item: unknown): string {
   const c = obj(item);
   const type = str(c.type).toLowerCase();
   const date = formatYearMonth(str(c.testDate));
   const name = [CERT_NAMES[type] ?? (str(c.customName) || str(c.type)), str(c.subject)].filter(Boolean).join(" ");
-  return [name, str(c.overall) || str(c.scaleText), date && `· thi ${date}`].filter(Boolean).join(" ");
+  const score = str(c.overall) || str(c.scaleText);
+  const parts =
+    c.isTarget === true
+      ? ["Dự định thi", name, score && `· mục tiêu ${score}`, date && `· ${date}`]
+      : [name, score, date && `· thi ${date}`];
+  return parts.filter(Boolean).join(" ");
 }
 
 function obj(v: unknown): Record<string, unknown> {
