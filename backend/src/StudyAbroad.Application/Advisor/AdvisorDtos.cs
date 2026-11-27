@@ -45,7 +45,11 @@ public record AdvisorChatRequest(
     bool FromForm = false,
     bool? ExactBudget = null,
     IReadOnlyList<string>? AllowedIntents = null,
-    JsonElement? Roadmap = null);
+    JsonElement? Roadmap = null,
+    // Lượt xác nhận hồ sơ chạy hai bước (ChatResume): CanResume báo advisor hãy hoãn câu đang chờ, Resume là lần gọi thứ hai
+    // sau khi đã lưu. Chỉ .NET đặt, giá trị trình duyệt gửi bị ghi đè
+    bool CanResume = false,
+    bool Resume = false);
 
 /// <summary>
 /// Hành động có cấu trúc từ một nút trên giao diện (không qua SLM hiểu câu): Type là goal_seek hoặc explain,
@@ -135,4 +139,6 @@ public record AdvisorChatResponse(
     ChatLock? Locked = null,
     // Câu trả lời này nói "chưa có thông tin": kho kiến thức không có dòng phù hợp và cơ sở dữ liệu trường cũng không có số liệu học sinh hỏi.
     // Chỉ .NET đặt (ở bước hỏi thông tin trường), advisor không gửi; dùng để đánh dấu lượt là no_answer, không trả cho trình duyệt
-    bool? NoBasis = null);
+    bool? NoBasis = null,
+    // Advisor còn câu đang chờ: lưu hồ sơ xong thì gọi lại với Resume. Nội bộ: không trả cho trình duyệt
+    bool? ResumeNeeded = null);

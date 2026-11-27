@@ -163,6 +163,21 @@ namespace StudyAbroad.Application.Advisor
                     nextStep = session.CurrentStep;
                     response = response with { Skills = null }; // câu đánh giá đã bị thay, không lưu
                 }
+                // Advisor còn câu đang chờ: hồ sơ vừa lưu xong, giờ mới trả lời bằng lộ trình tính theo hồ sơ mới (ChatResume)
+                else if (response.ResumeNeeded == true)
+                {
+                    var (answered, lockCard) = await ResumeAsync(userId, request, response, charge, onEvent, ct);
+                    response = answered;
+                    locked ??= lockCard;
+                    nextStep = CurrentStep(response.State);
+                    // Đánh giá lượt và ghi token theo cả hai lần gọi. Có giỏ chung thì TurnUsage đã lấy từ giỏ
+                    advisorSignals = advisorSignals with
+                    {
+                        Action = response.Action,
+                        Skills = response.Skills,
+                        Usage = response.AiUsage,
+                    };
+                }
             }
 
             await SaveAnalysesAsync(userId, response, ct);
@@ -241,6 +256,7 @@ namespace StudyAbroad.Application.Advisor
                 AiUsage = null,   // số token là việc nội bộ, học sinh không thấy
                 Slm = null,       // nhãn model gán chứa chữ của học sinh, chỉ lưu cho admin
                 NoBasis = null,   // dấu nội bộ để đánh dấu lượt, học sinh không thấy
+                ResumeNeeded = null,    // việc nội bộ giữa .NET và advisor
                 LockedIntents = null,   // đã đổi thành Locked ở trên; Locked là phần duy nhất của cổng Premium trình duyệt thấy
                 Locked = locked,
             };
@@ -308,12 +324,48 @@ namespace StudyAbroad.Application.Advisor
                 GradeScale = scaleRules,
                 // Hồ sơ trống lúc đầu (nháp mặc định vẫn có loại trường "all") thì advisor hỏi đủ như form; luôn lấy từ server
                 HasCommittedProfile = flow.HasCommittedProfile,
+                // Lượt xác nhận chạy hai bước (ChatResume): chỉ .NET đặt. Resume chỉ bật ở lần gọi thứ hai
+                CanResume = true,
+                Resume = false,
                 // Ý định gói cho phép: luôn ghi đè bằng giá trị server, kể cả null (Premium còn token, nhân viên); không bao giờ chuyển giá trị trình duyệt gửi
                 AllowedIntents = ChatPremiumGate.AllowedIntentsFor(charge),
                 // Lộ trình theo trường mục tiêu (cùng số liệu với Tổng quan), luôn lấy từ server; không có service (test cũ) thì null
                 Roadmap = roadmap is null ? null
                     : StudyAbroad.Application.Dashboard.Roadmap.RoadmapForAdvisor.Slim(await roadmap.GetRoadmapAsync(userId, ct)),
             };
+        }
+
+        // Lần gọi thứ hai của lượt xác nhận: dựng lại request để hồ sơ, danh sách trường và lộ trình đọc theo hồ sơ vừa lưu, rồi
+        // ghép câu trả lời vào sau lời báo đã lưu. Lỗi ở đây không được làm mất lượt vì hồ sơ đã lưu: báo rõ và cho nút trả lời lại,
+        // state của lần đầu còn giữ câu đang chờ
+        private async Task<(AdvisorChatResponse Response, ChatLock? Locked)> ResumeAsync(
+            Guid userId, AdvisorChatRequest request, AdvisorChatResponse saved, StudyAbroad.Application.Billing.ChatCharge? charge,
+            Func<AdvisorStreamEvent, Task>? onEvent, CancellationToken ct)
+        {
+            AdvisorChatResponse next;
+            try
+            {
+                var again = await BuildAdvisorRequestAsync(userId, request, saved.State, charge, ct) with { Resume = true };
+                next = onEvent is null
+                    ? await advisor.ChatAsync(again, ct)
+                    : await advisor.ChatStreamAsync(again, onEvent, ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                logger?.LogWarning(ex, "Đã lưu hồ sơ nhưng không trả lời được câu đang chờ");
+                return (saved with
+                {
+                    Answer = ChatResume.Join(saved.Answer, ChatResume.FailedNote),
+                    QuickReplies = [ChatResume.RetryButton],
+                    Widget = null,
+                }, null);
+            }
+
+            // Cùng cổng gói như lần gọi đầu: ý bị khóa thì kèm thẻ khóa, hành động Premium của tài khoản bị giới hạn thì không chạy
+            next = ChatPremiumGate.AdjustAdvisorLock(charge, next, saved.State);
+            if (ChatPremiumGate.BlockPremiumAction(charge, next, saved.State) is { } blocked)
+                return (ChatResume.Merge(saved, blocked.Reply), blocked.Lock);
+            return (ChatResume.Merge(saved, next), ChatPremiumGate.LockOf(charge, next));
         }
 
         // Tín hiệu của advisor ở lượt này, chụp trước khi .NET xử lý tiếp: lúc học sinh hỏi, nhãn model gán, số đo từng lần gọi AI, hành động, skill đã chạy

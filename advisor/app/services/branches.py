@@ -636,10 +636,17 @@ class ProfileBranch:
 
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         was_ready = self._handler.ready(state, REQUIRED_B3)
+        at_review = state.question_id == "X1"
         output = await self._handler.collect(state, message, slm)
         if not was_ready and self._handler.ready(state, REQUIRED_B3) and "profile_review" not in slm.types():
             original = state.pending_advice
             if original is not None:
+                # Lượt xác nhận ở bảng rà soát: .NET chỉ lưu hồ sơ sau khi nhận câu trả lời này, nên lộ trình đang cầm
+                # còn tính theo hồ sơ cũ. Giữ câu đang chờ, .NET lưu xong gọi lại thì trả lời. Tin còn ý khác thì lượt này
+                # đã có việc riêng cho .NET nên trả lời luôn
+                if state.can_resume and at_review and len(slm.intents) == 1:
+                    state.resume_needed = True
+                    return output
                 state.pending_advice = None
                 return combine(
                     output,
