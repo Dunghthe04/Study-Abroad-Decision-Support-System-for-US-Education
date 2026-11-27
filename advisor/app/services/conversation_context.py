@@ -22,6 +22,80 @@ _INFO_WORDS = re.compile(
 )
 
 
+# NGOẠI LỆ TẠM (chốt 28/11/2026), GỠ SAU KHI TRAIN: code đọc vị trí trong danh sách từ chữ của câu. Lý do: đã nhớ một trường
+# thì model chép luôn trường đó cho cả "trường cuối cùng", còn "trường thứ 2" thì mất số, nên học sinh nhận số liệu SAI
+# TRƯỜNG. Đích đến: model trả đúng cụm học sinh nói trong khóa schools, code chỉ tra giá trị đó.
+# Chỉ nhận khi thứ tự đi liền chữ "trường" (để "thứ 2 mở cửa không", "bước đầu tiên", "số 1 nước Mỹ" không bị coi là vị trí),
+# và chỉ đổi TRƯỜNG của ý model đã nói là hỏi về một trường; không đổi loại ý hay việc
+_ORDINALS = {
+    "nhat": 1,
+    "hai": 2,
+    "ba": 3,
+    "tu": 4,
+    "bon": 4,
+    "nam": 5,
+    "sau": 6,
+    "bay": 7,
+    "tam": 8,
+    "chin": 9,
+    "muoi": 10,
+}
+_NUMBER = rf"(\d{{1,2}}|{'|'.join(_ORDINALS)})\b"
+_LIST_POSITION = re.compile(
+    rf"\btruong (?:(?P<first>dau tien|dau danh sach)|(?P<last>cuoi cung|cuoi danh sach)|thu {_NUMBER}"
+    rf"|so (?P<in_list>\d{{1,2}}) (?:trong|o) danh sach)"
+)
+# Câu nhắc hai vị trí trở lên ("trường thứ 1 với trường thứ 2", "trường đầu tiên và thứ 3") để model xử lý
+_ANOTHER_POSITION = re.compile(rf"\b(?:voi|va|hay|hoac) (?:truong )?thu {_NUMBER}")
+# Việc hỏi về đúng một trường
+_ONE_SCHOOL_TASKS = {"knowledge": {"school_info"}, "profile_review": {"explain_school", "explain_fit"}}
+
+
+def _about_one_school(y: SlmY) -> bool:
+    if y.type == "scenario":
+        return y.entities.get("mode") == "goal_seeking"
+    wanted = _ONE_SCHOOL_TASKS.get(y.type, set())
+    return bool(wanted & set(y.entities.get("tasks") or []))
+
+
+# Vị trí học sinh nói (1 là đầu, -1 là cuối); None khi câu không nói đúng một vị trí trong danh sách
+def _position_in(plain: str) -> int | None:
+    found = list(_LIST_POSITION.finditer(plain))
+    if len(found) != 1 or _ANOTHER_POSITION.search(plain):
+        return None
+    match = found[0]
+    if match["first"]:
+        return 1
+    if match["last"]:
+        return -1
+    word = match["in_list"] or next(g for g in match.groups() if g)
+    return int(word) if word.isdigit() else _ORDINALS[word]
+
+
+# Thay trường của ý bằng trường ở đúng vị trí. Vị trí không có trong danh sách (hoặc chưa có danh sách) thì bỏ trường model
+# chép từ ngữ cảnh để hệ thống hỏi lại, không trả lời nhầm trường khác
+def _with_list_position(state: ChatState, y: SlmY) -> SlmY:
+    if not _about_one_school(y):
+        return y
+    plain = unaccent(y.span)
+    position = _position_in(plain)
+    if position is None:
+        return y
+    key = "school" if y.type == "scenario" else "schools"
+    said = y.entities.get(key) or []
+    # Học sinh nêu đích danh một trường trong câu ("Harvard có phải trường đầu tiên không") thì giữ tên đó
+    for name in [said] if isinstance(said, str) else said:
+        folded = unaccent(name)
+        if folded in plain and not _LIST_POSITION.search(folded):
+            return y
+    entities = {k: v for k, v in y.entities.items() if k not in (key, "follow_up")}
+    index = position - 1 if position > 0 else position
+    if state.schools and -len(state.schools) <= index < len(state.schools):
+        name = state.schools[index].name
+        entities[key] = name if y.type == "scenario" else [name]
+    return y.model_copy(update={"entities": entities})
+
+
 def context_for_model(state: ChatState) -> dict[str, Any] | None:
     """Phần ngữ cảnh đưa vào đầu vào của model (khóa context); None khi chưa có gì để nói."""
     ctx = state.context
@@ -80,7 +154,11 @@ def _continue_knowledge(ctx: ChatContext, message: str, y: SlmY) -> dict[str, An
 
 
 def contextualize(state: ChatState, message: str, slm: SlmTinResult) -> SlmTinResult:
-    """Điền phần còn thiếu của các ý kiến thức từ ngữ cảnh. Không đổi gì khi chưa có ngữ cảnh hoặc câu tự đứng được."""
+    """Điền phần còn thiếu của các ý kiến thức từ ngữ cảnh, và tra trường theo vị trí trong danh sách (xem trên).
+    Không đổi gì khi chưa có ngữ cảnh hoặc câu tự đứng được."""
+    placed = [_with_list_position(state, y) for y in slm.intents]
+    if placed != slm.intents:
+        slm = slm.model_copy(update={"intents": placed})
     ctx = state.context
     if not (ctx.schools or ctx.filters):
         return slm
@@ -115,6 +193,16 @@ def update_context(state: ChatState, output: Any) -> None:
     data = output.action_data or {}
     ctx = state.context
     match output.action:
+        # Vừa giải thích một trường: "trường đó" ở câu sau là trường này (action chỉ mang mã, tên lấy từ danh sách)
+        case "explain":
+            known = [*state.schools, *state.other_schools]
+            if name := next((s.name for s in known if s.code == data.get("code")), None):
+                ctx.schools = [name]
+                _refocus_goal_scenario(ctx)
+        # Danh sách mới: nhiều trường, "trường đó" không còn rõ là trường nào
+        case "recommend":
+            ctx.schools = []
+            _refocus_goal_scenario(ctx)
         case "school_info":
             if data.get("school"):
                 ctx.schools = [str(data["school"])]
