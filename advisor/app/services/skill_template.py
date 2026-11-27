@@ -29,6 +29,16 @@ TASK_GOALS = {
     "roadmap": "nói lộ trình phù hợp, các mốc thời gian và các bước chuẩn bị theo thứ tự",
 }
 
+# Phần lộ trình là toàn bộ dữ kiện để Claude chọn dùng, không phải dàn bài phải chép hết
+ROADMAP_STYLE = (
+    "Cách viết: chỉ viết phần trả lời được câu hỏi.\n"
+    "- Học sinh hỏi chung (xin lộ trình, kế hoạch, cần làm những gì): nói lộ trình và lý do, rồi các mốc thời gian, "
+    "rồi các bước trên bằng lời của bạn.\n"
+    "- Học sinh hỏi một điểm (sớm hay muộn, đủ hay chưa, nên chọn cái nào, nên đợi không, ưu tiên gì trước): sau câu đáp "
+    "chỉ viết tối đa 4 gạch đầu dòng liên quan trực tiếp đến điểm đó, lấy từ các mốc và bước ở trên. Không liệt kê "
+    "hết mốc, không liệt kê hết các bước."
+)
+
 # Mức trong dòng tính sẵn: "3.48 thang 4, thấp (TB các trường 3.73)", "1350, mức trung bình"
 LEVEL = re.compile(r",\s(?:mức\s)?(cao|trung bình|thấp)\b")
 LEVEL_GROUP = {"cao": "strong", "trung bình": "middle", "thấp": "attention"}
@@ -290,6 +300,16 @@ def plan_step(ho_so: dict[str, str], key: str, name: str, needed: bool) -> str |
     return None
 
 
+# Một dòng duy nhất cho SAT / ACT: kế hoạch thi, kèm nhắc chọn một bài khi đã có cả hai điểm
+def standardized_step(ho_so: dict[str, str]) -> str | None:
+    plan = plan_step(ho_so, "standardized_plan", "SAT / ACT", False)
+    if not (has_value(ho_so, "sat") and has_value(ho_so, "act")):
+        return plan
+    if plan is None:
+        return "- SAT / ACT: đã có cả hai điểm, chọn một bài để tập trung."
+    return f"{plan} Bạn đã có cả hai điểm, chọn một bài để tập trung."
+
+
 # Tiếng Anh chưa đạt mốc trường mục tiêu: nói mốc cần đạt; kế hoạch thi đã có thì chỉ nhắc đối chiếu, không khen giữ
 def english_target_step(ho_so: dict[str, str], mark: str) -> str:
     plan = ho_so.get("english_plan", "")
@@ -324,9 +344,7 @@ def extra_steps(ho_so: dict[str, str], tinh_san: dict[str, str], roadmap: dict |
             not has_value(ho_so, "english") or level_word(tinh_san.get("english_level")) == "thấp"
         )
         steps.append(plan_step(ho_so, "english_plan", "Tiếng Anh", english_needed))
-    steps.append(plan_step(ho_so, "standardized_plan", "SAT / ACT", False))
-    if has_value(ho_so, "sat") and has_value(ho_so, "act"):
-        steps.append("- SAT / ACT: đã có cả hai điểm, chọn một bài để tập trung.")
+    steps.append(standardized_step(ho_so))
     if "ec_level" in tinh_san:
         steps.append("- Hoạt động: giữ các hoạt động đang làm, ghi lại kết quả cụ thể của từng việc.")
     else:
@@ -368,9 +386,7 @@ def roadmap_part(
         # Chưa có tỉnh: chat hỏi tỉnh ngay sau câu trả lời (skill_tinh), lời tư vấn không nhắc nữa
     if middle_school:
         lines.append("Bạn đang học THCS: lộ trình trên là định hướng dài hạn, ưu tiên học tốt và tiếng Anh.")
-    lines.append(
-        "Cách viết: nói lộ trình và lý do, rồi các mốc thời gian, rồi các bước trên bằng lời của bạn."
-    )
+    lines.append(ROADMAP_STYLE)
     return "\n".join(lines)
 
 

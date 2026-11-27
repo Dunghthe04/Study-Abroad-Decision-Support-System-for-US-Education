@@ -505,12 +505,22 @@ async def test_question_sent_by_the_form_after_saving_is_answered_without_the_re
     assert res.state.pending_advice is None  # câu từ form thay câu cũ đang chờ
 
 
-async def test_the_same_question_typed_in_chat_still_reminds_the_review_table():
+async def test_a_question_typed_while_the_review_table_waits_does_not_repeat_the_table():
+    # Bảng rà soát vẫn nằm trên màn hình: chỉ trả lời câu hỏi, bảng vẫn chờ xác nhận
     flow, _ = make_flow(tin(("profile_review", {}, "Lập lộ trình cho em")))
 
     res = await flow.reply(saved_from_form("Lập lộ trình cho em", from_form=False))
 
-    assert BACK_TO_QUESTION in res.answer and res.state.question_id == "X1"
+    assert BACK_TO_QUESTION not in res.answer and res.widget is None
+    assert res.state.question_id == "X1"
+
+
+async def test_no_reminder_when_the_student_only_says_goodbye():
+    flow, _ = make_flow(tin(("out_of_scope", {"subtype": "farewell"})))
+
+    res = await flow.reply(request("cảm ơn nhé", pending="D2"))
+
+    assert BACK_TO_QUESTION not in res.answer and res.state.question_id == "D2"
 
 
 async def test_continue_in_chat_after_saving_drops_the_review_table_too():

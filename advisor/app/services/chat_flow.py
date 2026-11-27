@@ -434,10 +434,14 @@ class ChatFlow:
         names, output = await self._run_intents(state, message, slm, intents, emit)
 
         # 3-4. Học sinh hỏi xen ngang lúc đang hỏi hồ sơ (câu đang chờ chưa được trả lời): nhắc lại câu đang chờ.
-        # Không nhắc khi nhánh hồ sơ đã chạy (nó tự hỏi câu kế tiếp) hoặc khi câu đang chờ là câu chào mở đầu
+        # Không nhắc khi nhánh hồ sơ đã chạy (nó tự hỏi câu kế tiếp), khi câu đang chờ là câu chào mở đầu, khi đang chờ ở
+        # bảng rà soát X1 (bảng vẫn nằm trên màn hình, dán lại sau mỗi câu hỏi là đòi học sinh làm việc không hỏi),
+        # hoặc khi học sinh chỉ cảm ơn, tạm biệt
         remind = bool(
             pending[0]
             and pending[0] not in OPENING_QUESTIONS
+            and pending[0] != "X1"
+            and not only_farewell(intents)
             and "collect_profile" not in names
             and (state.question_id, state.last_question) == pending
         )
@@ -554,6 +558,11 @@ class ChatFlow:
             action=output.action,
             action_data=output.action_data,
         )
+
+
+# Cả tin chỉ là cảm ơn, tạm biệt
+def only_farewell(intents: list[SlmY]) -> bool:
+    return all(y.type == "out_of_scope" and y.entities.get("subtype") == "farewell" for y in intents)
 
 
 # Gói của học sinh cho chạy loại ý này không (allowed_intents None = mọi loại)

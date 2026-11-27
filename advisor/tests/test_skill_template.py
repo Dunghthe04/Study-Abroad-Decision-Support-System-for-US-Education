@@ -88,12 +88,20 @@ def skill_of(state: ChatState, tasks: list[str] | None = None) -> str:
     return build_skill(req, tasks, state.profile, TODAY, gpa_table_of(state.grade_scale))
 
 
+def test_sat_and_act_are_one_step_and_a_narrow_question_is_told_to_stay_narrow():
+    skill = skill_of(state_of(FULL), ["roadmap"])
+
+    steps = [line for line in skill.splitlines() if line.startswith("- SAT / ACT:")]
+    assert len(steps) == 1 and "giữ đúng kế hoạch" in steps[0] and "chọn một bài" in steps[0]
+    assert "Không liệt kê hết mốc, không liệt kê hết các bước." in skill
+
+
 def test_common_sections_in_order_and_no_placeholder_left():
     skill = skill_of(state_of(FULL))
 
     positions = [skill.index(title) for title in SECTIONS]
     assert positions == sorted(positions)
-    assert skill.startswith("# SKILL TƯ VẤN HỒ SƠ (skill_ho_so_khuon) - skill_version 1.2")
+    assert skill.startswith("# SKILL TƯ VẤN HỒ SƠ (skill_ho_so_khuon) - skill_version 1.3")
     assert not PLACEHOLDER.search(skill)
     assert "None" not in skill
 

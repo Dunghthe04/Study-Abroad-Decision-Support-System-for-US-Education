@@ -22,11 +22,30 @@ logger = logging.getLogger(__name__)
 
 PROMPT_PATH = SKILLS_DIR / "viet_tra_loi_ho_so.md"
 PURPOSE = PROMPT_PATH.stem  # nhãn trong báo cáo token (ai_calls.purpose): viet_tra_loi_ho_so
+# pham_vi đứng trước tra_loi để Claude phải xác định câu hỏi rộng hay hẹp rồi mới viết. Chỉ dặn trong prompt thì đo
+# 27/11/2026 câu hỏi hẹp ("IELTS 6.5 đủ chưa") vẫn ra nguyên cả lộ trình
+NARROW, BROAD = "mot_diem", "chung"
 ANSWER_SCHEMA = {
     "type": "object",
-    "properties": {"tra_loi": {"type": "string"}},
-    "required": ["tra_loi"],
+    "properties": {
+        "pham_vi": {
+            "type": "string",
+            "enum": [NARROW, BROAD],
+            "description": "mot_diem: học sinh hỏi một điểm cụ thể (sớm hay muộn, đủ hay chưa, ổn không, chọn cái nào, "
+            "nên hay không, ưu tiên gì trước, điểm yếu nhất là gì). chung: học sinh xin đánh giá hồ sơ, lộ trình hoặc kế hoạch.",
+        },
+        "tra_loi": {"type": "string"},
+    },
+    "required": ["pham_vi", "tra_loi"],
 }
+# Câu hỏi một điểm: câu đáp cùng tối đa 4 gạch đầu dòng. Dài hơn mức này là đang chép cả lộ trình hoặc cả bản đánh giá
+MAX_NARROW_WORDS = 170
+TOO_LONG_NOTE = (
+    "Câu trả lời trước của bạn:\n{answer}\n\n"
+    "Học sinh chỉ hỏi một điểm mà câu trả lời dài {words} từ. Viết lại dưới {limit} từ: 1 đến 2 câu đáp thẳng, rồi tối đa "
+    "4 gạch đầu dòng liên quan trực tiếp đến điểm được hỏi. Bỏ danh sách mốc thời gian, danh sách các bước và các mặt hồ sơ "
+    "không liên quan, kể cả khi skill có ghi."
+)
 # Câu hứa đỗ: chỉ bắt cấu trúc khẳng định kết quả (giữ dấu nên "độ/đó/đơn/đầu" không bị nhầm với "đỗ/đậu")
 PROMISE = re.compile(
     r"\b(?:(?:chắc chắn|đảm bảo|bảo đảm|cam kết)(?:\s+là)?(?:\s+bạn)?(?:\s+sẽ)?\s+(?:đỗ|đậu|trúng tuyển|được nhận)"
@@ -95,6 +114,15 @@ class MissingTaskError(ValueError):
         self.answer = answer  # không nằm trong lời lỗi nên không vào log
 
 
+class TooLongError(ValueError):
+    """Hỏi một điểm mà trả lời dài. Giữ câu trả lời để dùng nếu lần viết lại hỏng."""
+
+    def __init__(self, words: int, answer: str) -> None:
+        super().__init__(f"câu hỏi một điểm mà trả lời {words} từ")
+        self.words = words
+        self.answer = answer  # không nằm trong lời lỗi nên không vào log
+
+
 # Việc đầu tiên trong tasks mà câu trả lời không nhắc tới (chỉ xét việc có trong TASK_WORD), None nếu đủ
 def missing_task(text: str, tasks: list[str] | None) -> str | None:
     folded = unicodedata.normalize("NFC", text).lower()
@@ -136,6 +164,8 @@ def retry_note_for(error: Exception) -> dict[str, str] | None:
     elif isinstance(error, MissingTaskError):
         label = TASK_LABEL[error.task]
         content = MISSING_TASK_NOTE.format(label=label, title=label.capitalize())
+    elif isinstance(error, TooLongError):
+        content = TOO_LONG_NOTE.format(answer=error.answer, words=error.words, limit=MAX_NARROW_WORDS)
     else:
         return None
     return {"role": "user", "content": content}
@@ -175,6 +205,8 @@ def error_code(error: Exception) -> str:
         return "json_tho"
     if isinstance(error, MissingTaskError):
         return "thieu_viec"
+    if isinstance(error, TooLongError):
+        return "qua_dai"
     if isinstance(error, OllamaError):
         return "goi_model"
     return "rong"
@@ -225,6 +257,12 @@ class AdviceWriter:
                                 temperature=0.0,
                             )
                         text = check_answer(raw)
+                        if raw.get("pham_vi") == NARROW:
+                            # Hỏi một điểm: không đòi đủ mọi phần, chỉ đòi ngắn
+                            words = len(text.split())
+                            if words > MAX_NARROW_WORDS:
+                                raise TooLongError(words, text)
+                            return text
                         task = missing_task(text, tasks)
                         if task:
                             raise MissingTaskError(task, text)
@@ -235,7 +273,7 @@ class AdviceWriter:
                             "Writer hỏng lần %d/%d: %s", attempt, MAX_ATTEMPTS, e or type(e).__name__
                         )
                         self.last_errors.append(error_code(e))
-                        if isinstance(e, MissingTaskError):
+                        if isinstance(e, (MissingTaskError, TooLongError)):
                             partial = e.answer
                         retry_note = retry_note_for(e)
         except TimeoutError:

@@ -1,4 +1,4 @@
-# SKILL TƯ VẤN HỒ SƠ (skill_ho_so_khuon) - skill_version 1.2
+# SKILL TƯ VẤN HỒ SƠ (skill_ho_so_khuon) - skill_version 1.3
 
 ## NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)
 - Chỉ viết dựa trên số liệu và dữ kiện CÓ TRONG skill này và dữ liệu hệ thống gửi lên (tin user, JSON). Mọi con số, tên trường, ngày tháng, mức xếp loại phải chép đúng, không làm tròn lại, không tự tính thêm.
@@ -46,8 +46,11 @@ Hồ sơ của học sinh này:
 - Mở đầu câu trả lời là câu đáp thẳng điều học sinh hỏi trong cau_hoi: 1 đến 2 câu, không có tiêu đề đứng trước.
   Câu hỏi có/không (có sớm không, có ổn không, có được không) thì mở bằng "Có", "Không" hoặc "Chưa đủ thông tin để nói", rồi nêu lý do chính.
   Dữ liệu không đủ để đáp thì nói rõ còn thiếu gì.
+  Câu hỏi "đủ chưa", "ổn không" về một điểm số: dùng đúng mức và mốc so sánh ở cột Mức của bảng hồ sơ; chỉ nói chưa có dữ liệu
+  khi bảng không có mức và mốc cho mục đó.
 - Sau câu đáp mới đến từng việc ở mục 1, mỗi việc một phần, mở bằng tiêu đề đúng tên việc đó (ví dụ "**Đánh giá hồ sơ**", "**Lộ trình chuẩn bị**").
-- Câu hỏi chỉ về một điểm (sớm hay muộn, được hay không) thì phần trình bày ngắn: ưu tiên ý liên quan đến điểm đó, mỗi phần vài gạch đầu dòng.
+- Câu hỏi chỉ về một điểm (sớm hay muộn, đủ hay chưa, chọn cái nào) thì sau câu đáp chỉ viết tối đa 4 gạch đầu dòng liên quan
+  trực tiếp đến điểm đó. Không liệt kê hết mốc thời gian, hết các bước hay hết các mặt hồ sơ.
 - Tiếng Việt có dấu, xưng "bạn", câu ngắn, dùng gạch đầu dòng khi liệt kê.
 
 ## 7. VÍ DỤ
