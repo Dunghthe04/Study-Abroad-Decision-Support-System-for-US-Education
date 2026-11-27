@@ -177,7 +177,12 @@ def test_a_general_prep_question_the_slm_took_for_a_roadmap_becomes_a_knowledge_
 
 @pytest.mark.parametrize(
     "message",
-    ["Em cần chuẩn bị gì trước kỳ nhập học", "lộ trình chuẩn bị hồ sơ nên thế nào", "mình cần chuẩn bị gì", "đánh giá hồ sơ"],
+    [
+        "Em cần chuẩn bị gì trước kỳ nhập học",
+        "lộ trình chuẩn bị hồ sơ nên thế nào",
+        "mình cần chuẩn bị gì",
+        "đánh giá hồ sơ",
+    ],
 )
 def test_a_prep_question_about_the_student_stays_a_roadmap(message):
     assert with_general_prep_intent(message, roadmap(message)).types() == ["profile_review"]
