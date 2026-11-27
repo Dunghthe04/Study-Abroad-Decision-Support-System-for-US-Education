@@ -293,6 +293,7 @@ class ChatFlow:
             state = req.state.model_copy(deep=True)
         apply_turn_inputs(state, req)
         state.can_resume, state.resume_needed = req.can_resume, False
+        await load_provinces(state)
         # Chụp hồ sơ đầu lượt để cuối lượt biết khóa nào đổi (sao chép sâu vì nhánh sửa trực tiếp trên state)
         profile_before = {key: field.model_copy(deep=True) for key, field in state.profile.items()}
         message = last_user_message(req)
@@ -354,7 +355,9 @@ class ChatFlow:
         pending = (state.question_id, state.last_question)
         # 1. SLM đọc tin nhắn. Bấm nút của câu đang hỏi, hoặc bấm nút ở menu sửa hồ sơ, là trả lời hồ sơ rõ ràng, không cần SLM đoán
         asked_slm = not (
-            (state.question_id and is_button(state.question_id, message)) or is_edit_menu(state, message)
+            await is_province_reply(state, message)
+            or (state.question_id and is_button(state.question_id, message))
+            or is_edit_menu(state, message)
         )
         fell_back = False
         model_intents: list[SlmY] = []
@@ -578,6 +581,23 @@ def is_button(question_id: str | None, message: str) -> bool:
     return buttons.pressed(question_id, message, can_skip=True) is not None or skill_ho_so.is_form_text(
         question_id, message
     )
+
+
+# Đang hỏi tỉnh / thành hoặc lượt này có thể hỏi: lấy danh sách trước để câu hỏi có ô chọn.
+# Nhập muộn vì skill_tinh nhập chat_flow
+async def load_provinces(state: ChatState) -> None:
+    from app.services.skills import province_catalog, skill_tinh
+
+    missing = bool(state.roadmap and state.roadmap.get("provinceMissing"))
+    if missing or state.question_id == skill_tinh.PROVINCE_ID:
+        await province_catalog.names()
+
+
+# Câu trả lời đúng câu hỏi tỉnh / thành (bỏ qua hoặc tên tỉnh): không cần SLM. Phải hỏi backend nên tách khỏi is_button
+async def is_province_reply(state: ChatState, message: str) -> bool:
+    from app.services.skills import skill_tinh
+
+    return state.question_id == skill_tinh.PROVINCE_ID and await skill_tinh.is_reply(message)
 
 
 # Không có câu đang hỏi mà tin là câu ô chọn sửa hồ sơ ("Em muốn sửa Mục tiêu", vd nút của câu trả lời kịch bản):

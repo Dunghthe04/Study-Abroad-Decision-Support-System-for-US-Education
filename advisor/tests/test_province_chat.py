@@ -1,8 +1,10 @@
 """C4. Chat hỏi tỉnh / thành sau câu trả lời lộ trình (roadmap.provinceMissing), lượt sau trả action set_province
 để .NET kiểm tra và lưu; Bỏ qua thì không hỏi lại trong phiên."""
 
+import pytest
+
 from app.schemas.chat import ChatMessage, ChatRequest, ChatState, ProfileField
-from app.services.chat_flow import SkillOutput, is_button
+from app.services.chat_flow import SkillOutput, is_province_reply
 from app.services.replies import BACK_TO_QUESTION
 from app.services.skills import build_handlers
 from app.services.skills.skill_tinh import (
@@ -17,6 +19,9 @@ from app.services.skills.skill_tinh import (
     with_province_question,
 )
 from tests.fakes import flow_with, tin
+from tests.test_province_reply import catalog  # noqa: F401 - backend giả: danh sách và tên gọi khác của tỉnh
+
+pytestmark = pytest.mark.usefixtures("catalog")
 
 MISSING = {"mode": "average", "schools": [], "tasks": [], "provinceMissing": True}
 
@@ -76,30 +81,31 @@ def test_does_not_ask_when_province_known_or_other_question_pending():
 # ---- lượt sau: trả lời câu tỉnh ----
 
 
-def test_answer_gives_set_province_action():
+async def test_answer_gives_set_province_action():
     state = state_with()
     ask_province(state)
-    out = answer_province(state, "em ở Hà Nội")
+    out = await answer_province(state, "em ở Hà Nội")
     assert out.action == SET_PROVINCE
     assert out.action_data == {"province": "Hà Nội"}
     assert labels(out) == ["Xem lộ trình"]
     assert state.question_id is None
 
 
-def test_skip_clears_question_without_action():
+async def test_skip_clears_question_without_action():
     state = state_with()
     ask_province(state)
-    out = answer_province(state, "Bỏ qua")
+    out = await answer_province(state, "Bỏ qua")
     assert out.answer == SKIPPED and out.action is None
     assert state.question_id is None
     assert with_province_question(state, SkillOutput("a")).answer == "a"  # không hỏi lại trong phiên
 
 
-def test_province_answer_skips_slm():
-    assert is_button(PROVINCE_ID, "Hà Nội")
-    assert is_button(PROVINCE_ID, "Bỏ qua")
-    assert not is_button(PROVINCE_ID, "trường nào ở Mỹ có học bổng ngành khoa học máy tính?")
-    assert not is_button("D2", "Hà Nội")
+async def test_province_answer_skips_slm():
+    waiting = state_with(question_id=PROVINCE_ID)
+    assert await is_province_reply(waiting, "Hà Nội")
+    assert await is_province_reply(waiting, "Bỏ qua")
+    assert not await is_province_reply(waiting, "trường nào ở Mỹ có học bổng ngành khoa học máy tính?")
+    assert not await is_province_reply(state_with(question_id="D2"), "Hà Nội")
 
 
 # ---- cả lượt chat ----

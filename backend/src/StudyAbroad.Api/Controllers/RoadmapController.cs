@@ -69,6 +69,17 @@ public class RoadmapController(IRoadmapService roadmapService) : ControllerBase
     [HttpGet("provinces")]
     [AllowAnonymous]
     public ActionResult<IReadOnlyList<string>> GetProvinces() => Ok(VietnamProvinces.All);
+
+    /// <summary>
+    /// Chữ người dùng gõ có phải một tỉnh / thành không (kể cả tên gọi khác như "Sài Gòn", "TP.HCM"): trả tên chính thức,
+    /// không nhận ra thì Province null. Chat dùng để chỉ lưu khi đúng là tên tỉnh.
+    /// </summary>
+    [HttpGet("provinces/resolve")]
+    [AllowAnonymous]
+    public ActionResult<ResolvedProvince> ResolveProvince([FromQuery] string? name) =>
+        Ok(new ResolvedProvince(VietnamProvinces.Resolve(name)));
 }
+
+public record ResolvedProvince(string? Province);
 
 public record SetProvinceRequest(string? Province);

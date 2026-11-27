@@ -26,7 +26,7 @@ from app.services.replies import (
     PROFILE_STATUS,
 )
 from app.services.skill_rules import REQUIRED_B3, missing_fields
-from app.services.skills import buttons, edit_prefill, skill_bac_hoc, skill_ho_so
+from app.services.skills import buttons, edit_prefill, skill_bac_hoc, skill_ho_so, skill_tinh
 from app.services.skills.validators import BUDGET_RANGES, BUDGET_TOLERANCE_PERCENT
 
 # Giá trị hồ sơ nào do skill nào đọc
@@ -69,6 +69,8 @@ class ChatProfileHandler:
         said = set(slm.profile_values())
         # Tin còn ý khác (câu hỏi): giá trị hồ sơ chỉ là bối cảnh của câu hỏi, không phải phản hồi cho bảng rà soát
         aside = any(y.type != "collect_profile" for y in slm.intents)
+        if await self._answers_province_unclearly(state, message, slm, aside):
+            return await self._province_reply(state, message, said, aside)
         # Xem hồ sơ đang lưu, làm lại từ đầu: không phải khai giá trị. Đang hỏi dở một câu hồ sơ thì giữ luồng hỏi như cũ
         task = None if aside else profile_task(slm)
         if task in ("status", "restart") and (
@@ -99,6 +101,34 @@ class ChatProfileHandler:
         # Không có giá trị nào mới cần xác nhận thì im lặng, câu trả lời của ý kia đứng một mình (bảng rà soát đang chờ vẫn
         # chờ như cũ). Có giá trị mới chưa xác nhận thì vẫn hiện bảng rà soát để học sinh xác nhận
         return skill_ho_so.review(state) if has_unconfirmed_news(state, before) else SkillOutput("")
+
+    # Đang hỏi tỉnh, câu này không phải tên tỉnh, model coi là khai hồ sơ (không phải sửa hay xem hồ sơ, không kèm ý khác)
+    async def _answers_province_unclearly(
+        self, state: ChatState, message: str, slm: SlmTinResult, aside: bool
+    ) -> bool:
+        return (
+            state.question_id == skill_tinh.PROVINCE_ID
+            and not aside
+            and profile_task(slm) is None
+            and not wants_edit(slm)
+            and not await skill_tinh.is_reply(message)
+        )
+
+    # Đọc câu đó như khai hồ sơ. Không ghi nhận được gì mới (kể cả khi model gán một mục mà đọc ra trống, vd câu về nơi ở
+    # bị gán người thân ở Mỹ) thì là câu trả lời tỉnh không rõ: giữ hồ sơ như cũ, hỏi lại kèm ô chọn. Xét theo kết quả,
+    # không đổi nhãn của model
+    async def _province_reply(
+        self, state: ChatState, message: str, said: set[str], aside: bool
+    ) -> SkillOutput:
+        if not said:
+            return skill_tinh.ask_again(state)
+        asked, step, intake = dict(state.asked), state.current_step, state.intake_mode
+        before = skill_ho_so.profile_snapshot(state)
+        output = await self._collect(state, message, said)
+        if skill_ho_so.profile_snapshot(state) != before or state.read_now:
+            return output
+        state.asked, state.current_step, state.intake_mode = asked, step, intake
+        return skill_tinh.ask_again(state)
 
     # Hiện bảng hồ sơ đang lưu (không đổi gì); chưa có gì thì nói chưa có và mời điền
     def _show_saved(self, state: ChatState) -> SkillOutput:
