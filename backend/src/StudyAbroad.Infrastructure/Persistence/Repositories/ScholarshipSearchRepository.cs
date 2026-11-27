@@ -20,9 +20,10 @@ public class ScholarshipSearchRepository(AppDbContext db) : IScholarshipSearchRe
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var pattern = $"%{query.Search.Trim()}%";
+            var schoolHit = UniversitySearch.Matches(query.Search);
             q = q.Where(s => EF.Functions.ILike(s.Name, pattern)
                 || (s.Provider != null && EF.Functions.ILike(s.Provider, pattern))
-                || db.Universities.Any(u => u.Id == s.UniversityId && EF.Functions.ILike(u.Name, pattern)));
+                || db.Universities.Where(schoolHit).Any(u => u.Id == s.UniversityId));
         }
         if (!string.IsNullOrWhiteSpace(query.CoverageType))
         {

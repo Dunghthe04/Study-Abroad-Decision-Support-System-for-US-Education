@@ -15,6 +15,7 @@ import type { AdminFieldErrors, AdminUniversityDetail } from "@/types/admin-univ
 import { EditableTable, type TableRow } from "./EditableTable";
 import {
   buildUniversityEditRows,
+  parseAliases,
   universityToFormState,
   type UniversityFormState,
 } from "./UniversityFormFields";
@@ -45,6 +46,7 @@ function viewRows(university: AdminUniversityDetail): TableRow[] {
 
   return [
     { label: "Tên trường", value: university.name },
+    { label: "Tên viết tắt", value: university.aliases?.length ? university.aliases.join(", ") : "—" },
     { label: "Thành phố", value: university.city ?? "—" },
     { label: "Bang", value: university.state ?? "—" },
     { label: "Loại trường", value: controlLabel(university.control) },
@@ -116,6 +118,7 @@ export function UniversityInfoSection({
     try {
       const saved = await updateAdminUniversity(university.id, {
         name: form.name.trim(),
+        aliases: parseAliases(form.aliases),
         city: textOrNull(form.city),
         state: textOrNull(form.state),
         website: textOrNull(form.website),

@@ -74,6 +74,25 @@ public class AdminUniversityServiceTests
     }
 
     [Fact]
+    public async Task UpdateUniversityAsync_Aliases_CleanedAndNullKeepsExisting()
+    {
+        var repo = new FakeRepository();
+        var u = repo.University;
+        var service = new AdminUniversityService(repo);
+        UpdateUniversityRequest Req(IReadOnlyList<string>? aliases) => new(u.Name, u.City, u.State, u.Website, u.Control,
+            u.AcceptanceRate, u.InternationalStudentCount, u.IsIvy, Aliases: aliases);
+
+        var result = await service.UpdateUniversityAsync(u.Id, Req([" MIT ", "mit", "UT   Austin", "X", ""]), Actor);
+        Assert.True(result.Success);
+        Assert.Equal(["MIT", "UT Austin"], u.Aliases);
+        Assert.Equal(["MIT", "UT Austin"], result.Value!.Aliases);
+
+        // Màn sửa ảnh không gửi aliases: giữ nguyên
+        await service.UpdateUniversityAsync(u.Id, Req(null), Actor);
+        Assert.Equal(["MIT", "UT Austin"], u.Aliases);
+    }
+
+    [Fact]
     public async Task SearchAsync_ClampsPageAndPageSize()
     {
         var repo = new FakeRepository();
