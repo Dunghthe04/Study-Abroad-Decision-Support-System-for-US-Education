@@ -160,10 +160,8 @@ EXPLAIN_BUTTON_VALUE = "Giải thích giúp em trường {name}"
 # ---------------------------------------------------------------------------------------------------------------------
 # Hỏi đáp kiến thức (skills/skill_tra_loi.py)
 # ---------------------------------------------------------------------------------------------------------------------
-KNOWLEDGE_NO_BASIS = (
-    "Hiện hệ thống chưa có thông tin chắc chắn về vấn đề này. "
-    "Bạn có thể hỏi lại bằng cách khác, hoặc mình gợi ý các trung tâm tư vấn đã xác minh nếu bạn cần người hỗ trợ trực tiếp."
-)
+# Kho chưa có câu trả lời: nói thẳng, không lan man. Đường đi tiếp (Tìm trung tâm tư vấn...) nằm ở nút menu_buttons("knowledge")
+KNOWLEDGE_NO_BASIS = "Hiện hệ thống chưa có thông tin về vấn đề này."
 KNOWLEDGE_UNAVAILABLE = "Phần trả lời kiến thức đang tạm gián đoạn, bạn thử lại sau ít phút nhé."
 KNOWLEDGE_DISCLAIMER = (
     "Thông tin chỉ mang tính tham khảo. Quy định visa, học phí và học bổng có thể thay đổi; "

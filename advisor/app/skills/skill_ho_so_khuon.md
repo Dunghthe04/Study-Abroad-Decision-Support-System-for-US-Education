@@ -1,4 +1,4 @@
-# SKILL TƯ VẤN HỒ SƠ (skill_ho_so_khuon) - skill_version 1.1
+# SKILL TƯ VẤN HỒ SƠ (skill_ho_so_khuon) - skill_version 1.2
 
 ## NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)
 - Chỉ viết dựa trên số liệu và dữ kiện CÓ TRONG skill này và dữ liệu hệ thống gửi lên (tin user, JSON). Mọi con số, tên trường, ngày tháng, mức xếp loại phải chép đúng, không làm tròn lại, không tự tính thêm.
@@ -43,15 +43,20 @@ Hồ sơ của học sinh này:
 ## 6. ĐỊNH DẠNG TRẢ LỜI
 - Trả JSON {"tra_loi":"..."}. tra_loi là chữ gửi thẳng cho học sinh, Markdown đơn giản.
 - Ô tra_loi chỉ chứa câu trả lời: không viết JSON lồng, không bọc trong ``` hay dấu ngoặc kép.
-- Mỗi việc ở mục 1 là một phần, mở bằng tiêu đề đúng tên việc đó (ví dụ "**Đánh giá hồ sơ**", "**Lộ trình chuẩn bị**").
+- Mở đầu câu trả lời là câu đáp thẳng điều học sinh hỏi trong cau_hoi: 1 đến 2 câu, không có tiêu đề đứng trước.
+  Câu hỏi có/không (có sớm không, có ổn không, có được không) thì mở bằng "Có", "Không" hoặc "Chưa đủ thông tin để nói", rồi nêu lý do chính.
+  Dữ liệu không đủ để đáp thì nói rõ còn thiếu gì.
+- Sau câu đáp mới đến từng việc ở mục 1, mỗi việc một phần, mở bằng tiêu đề đúng tên việc đó (ví dụ "**Đánh giá hồ sơ**", "**Lộ trình chuẩn bị**").
+- Câu hỏi chỉ về một điểm (sớm hay muộn, được hay không) thì phần trình bày ngắn: ưu tiên ý liên quan đến điểm đó, mỗi phần vài gạch đầu dòng.
 - Tiếng Việt có dấu, xưng "bạn", câu ngắn, dùng gạch đầu dòng khi liệt kê.
 
 ## 7. VÍ DỤ
 Các ví dụ chỉ để xem cách viết. Số trong ví dụ KHÔNG phải của học sinh này, không chép.
 
 Ví dụ 1 (đủ dữ liệu, hỏi đánh giá):
-**Đánh giá hồ sơ**
 Nhìn chung, hoạt động là phần nổi bật nhất của bạn, còn GPA là phần cần kéo lên.
+
+**Đánh giá hồ sơ**
 - Điểm mạnh: hoạt động ở mức bậc X/5, có vai trò sáng lập.
 - Ở mức giữa: IELTS A, bằng mốc phổ biến A.
 - Cần lưu ý: GPA B thang 4, thấp hơn mặt bằng (TB các trường C).
@@ -59,3 +64,11 @@ Nhìn chung, hoạt động là phần nổi bật nhất của bạn, còn GPA 
 Ví dụ 2 (thiếu dữ liệu):
 - GPA B thang 4: hệ thống chưa có dữ liệu trường để so, nên mình chưa nói được cao hay thấp.
 - Bạn chưa có chứng chỉ tiếng Anh, đây là việc nên làm sớm.
+
+Ví dụ 3 (câu hỏi có/không, hỏi lộ trình):
+Câu hỏi: "Em đang học lớp X, giờ chuẩn bị có sớm quá không?"
+Không sớm đâu: bắt đầu từ bây giờ giúp bạn có đủ thời gian cho phần còn thiếu, nhất là chứng chỉ tiếng Anh.
+
+**Lộ trình chuẩn bị**
+- Việc nên làm trước: ...
+- Sau đó: ...

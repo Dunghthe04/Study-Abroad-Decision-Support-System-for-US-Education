@@ -175,9 +175,12 @@ _SENSITIVE = re.compile(
 
 # SLM thật xếp nhầm "GPA của The University of Texas at Austin là bao nhiêu" vào ngoại phạm vi nhạy cảm ("hồ sơ cần trung thực").
 # Câu nhắc một mục số liệu trường mà không có dấu hiệu làm giả hay khai gian thì đổi thành câu kiến thức, để nhánh số liệu trường trả lời.
-# Câu nhạy cảm thật (sửa GPA, làm giả bảng điểm) vẫn bị chặn như cũ
+# Câu nhạy cảm thật (sửa GPA, làm giả bảng điểm) vẫn bị chặn như cũ.
+# Không áp dụng khi SLM trả sai khuôn (fallback): khi đó không biết học sinh muốn gì, đoán thành câu kiến thức thì trả lời lệch.
+# Đo trên tập test usas-slm-v6 (27/11/2026): 20 trong 38 câu sai khuôn bị luật này đổi thành câu kiến thức, chỉ 1 câu đúng là câu
+# kiến thức, 19 câu là giả định, khai hồ sơ hoặc nhiều ý. Sai khuôn thì giữ "chưa hiểu, nói cụ thể hơn" để học sinh hỏi lại
 def with_info_intent(message: str, slm: SlmTinResult) -> SlmTinResult:
-    if len(slm.intents) != 1:
+    if slm.fallback or len(slm.intents) != 1:
         return slm
     y = slm.intents[0]
     if y.type != "out_of_scope" or y.entities.get("subtype") not in ("sensitive", "ambiguous"):

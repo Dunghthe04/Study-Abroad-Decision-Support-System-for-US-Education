@@ -93,7 +93,7 @@ def test_common_sections_in_order_and_no_placeholder_left():
 
     positions = [skill.index(title) for title in SECTIONS]
     assert positions == sorted(positions)
-    assert skill.startswith("# SKILL TƯ VẤN HỒ SƠ (skill_ho_so_khuon) - skill_version 1.1")
+    assert skill.startswith("# SKILL TƯ VẤN HỒ SƠ (skill_ho_so_khuon) - skill_version 1.2")
     assert not PLACEHOLDER.search(skill)
     assert "None" not in skill
 

@@ -42,10 +42,32 @@ class ChatProfileHandler:
     # Hồ sơ vẫn đủ nghĩa là không có gì mới, nên không mở lại bước xác nhận
     async def collect(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         said = set(slm.profile_values())
+        # Tin còn ý khác (câu hỏi): giá trị hồ sơ chỉ là bối cảnh của câu hỏi, không phải phản hồi cho bảng rà soát
+        aside = any(y.type != "collect_profile" for y in slm.intents)
         # Muốn sửa khi không có câu chờ, hoặc khi đã hiện bảng rà soát (đang ở bảng, hay đang hỏi dở mục sửa trước)
         if wants_edit(slm) and (self.pending_question(state) is None or skill_ho_so.reviewed(state)):
             return await self._edit(state, message, said)
-        return await self._collect(state, message, said)
+        if not aside:
+            return await self._collect(state, message, said)
+        before = skill_ho_so.profile_snapshot(state)
+        if self.pending_question(state) is None:
+            # Chưa hỏi gì: chỉ ghi nháp giá trị nói kèm câu hỏi (said_in_B0, xác nhận sau). Không tự mời điền hồ sơ:
+            # phần nào cần hồ sơ (tư vấn, gợi ý trường) thì nhánh đó tự hỏi mục còn thiếu, hỏi thêm ở đây là hỏi hai lần.
+            # Riêng hồ sơ đã đủ mà vừa có giá trị mới thì hiện bảng rà soát để học sinh xác nhận
+            limit_to_required(state, REQUIRED_B3)
+            await self._save_said(state, message, said)
+            complete = not missing_fields(state.profile, REQUIRED_B3)
+            return (
+                skill_ho_so.review(state)
+                if complete and has_unconfirmed_news(state, before)
+                else SkillOutput("")
+            )
+        output = await self._collect(state, message, said)
+        if output.answer not in (skill_ho_so.EDIT_MENU, PROFILE_DONE):
+            return output
+        # Không có giá trị nào mới cần xác nhận thì im lặng, câu trả lời của ý kia đứng một mình (bảng rà soát đang chờ vẫn
+        # chờ như cũ). Có giá trị mới chưa xác nhận thì vẫn hiện bảng rà soát để học sinh xác nhận
+        return skill_ho_so.review(state) if has_unconfirmed_news(state, before) else SkillOutput("")
 
     # Ở bảng rà soát: nút Cần sửa, ô chọn nhóm, Sửa trên form, Điền lại từ đầu thì xử lý luôn, không gọi skill.
     # Không có câu đang hỏi (vd nút sửa của câu trả lời kịch bản) thì chỉ nhận câu ô chọn nhóm.
@@ -143,6 +165,12 @@ class ChatProfileHandler:
         if missing_fields(state.profile, required) or self.pending_question(state) is not None:
             return False
         return all(field.status != "said_in_B0" for field in state.profile.values())
+
+
+# So với trước lượt này có giá trị nào mới mà học sinh chưa xác nhận không
+def has_unconfirmed_news(state: ChatState, before: dict) -> bool:
+    after = skill_ho_so.profile_snapshot(state)
+    return any(value != before.get(name) and value[1] != "confirmed" for name, value in after.items())
 
 
 # Tin có ý collect_profile với nhiệm vụ edit

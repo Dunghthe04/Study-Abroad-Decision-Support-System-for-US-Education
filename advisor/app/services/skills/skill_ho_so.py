@@ -522,6 +522,13 @@ class HoSoReader:
         return check_values(raw, question_id, message) if raw is not None else HoSoRead()
 
 
+# Học sinh chỉ nhắc lại đúng giá trị đã xác nhận ("em đang học lớp 11, ... có sớm quá không?"): giữ nguyên "confirmed".
+# Ghi đè thành said_in_B0 thì hệ thống tưởng có thông tin mới và bắt rà soát lại hồ sơ dù không có gì đổi
+def repeats_confirmed(state: ChatState, name: str, value: object) -> bool:
+    saved = state.profile.get(name)
+    return saved is not None and saved.status == "confirmed" and saved.value == value
+
+
 # Ghi kết quả đọc vào hồ sơ. keep_existing=True (thông tin nói ở B0) thì không đè thông tin đã có;
 # còn ở B2 học sinh sửa thì ghi đè. Hoạt động / giải thưởng thì thêm vào danh sách đang có (save_items)
 def save_read(
@@ -540,6 +547,8 @@ def save_read(
     written = []
     for name, value, field_status in fields:
         if keep_existing and name in state.profile:
+            continue
+        if value is not None and repeats_confirmed(state, name, value):
             continue
         state.profile[name] = ProfileField(value=value, status=field_status)
         written.append(name)
