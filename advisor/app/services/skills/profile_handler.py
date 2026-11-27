@@ -16,6 +16,7 @@ from app.services.replies import (
     PROFILE_DONE,
     PROFILE_NONE_YET,
     PROFILE_RESTART_INTRO,
+    PROFILE_SAME,
     PROFILE_STATUS,
 )
 from app.services.skill_rules import REQUIRED_B3, missing_fields
@@ -46,6 +47,11 @@ class ChatProfileHandler:
     # Không có câu chờ: ghi giá trị tự khai rồi hỏi tiếp mục còn thiếu.
     # Hồ sơ vẫn đủ nghĩa là không có gì mới, nên không mở lại bước xác nhận
     async def collect(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
+        state.major_miss = None
+        output = await self._route(state, message, slm)
+        return output if state.major_miss is None else report_major_miss(state)
+
+    async def _route(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         said = set(slm.profile_values())
         # Tin còn ý khác (câu hỏi): giá trị hồ sơ chỉ là bối cảnh của câu hỏi, không phải phản hồi cho bảng rà soát
         aside = any(y.type != "collect_profile" for y in slm.intents)
@@ -147,6 +153,7 @@ class ChatProfileHandler:
         waiting = state.question_id if state.question_id in ALL_QUESTION_FIELDS else None
         old_queue, state.edit_queue = state.edit_queue or [], None
         before = skill_ho_so.profile_snapshot(state)
+        state.read_now.clear()
         if waiting is None:  # đang ở bảng rà soát hoặc không có câu chờ
             output = await self._collect(state, message, said)
         else:  # tin này là yêu cầu sửa, không phải câu trả lời cho câu đang chờ: chỉ ghi giá trị đã nói
@@ -154,15 +161,19 @@ class ChatProfileHandler:
             output = skill_ho_so.review(state)
         after = skill_ho_so.profile_snapshot(state)
 
-        def unchanged(names: list[str] | tuple[str, ...]) -> bool:
-            return all(after.get(name) == before.get(name) for name in names)
+        # Mục chưa được trả lời: hồ sơ không đổi VÀ bộ đọc cũng không đọc ra giá trị nào. Nói lại đúng giá trị đang lưu
+        # là đã trả lời, hỏi lại là sai
+        def unanswered(names: list[str] | tuple[str, ...]) -> bool:
+            return all(after.get(name) == before.get(name) and name not in state.read_now for name in names)
 
-        new = [EDIT_QUESTION[name] for name in PROFILE_KEYS if name in said and unchanged([name])]
-        if waiting is not None and unchanged(ALL_QUESTION_FIELDS[waiting]):
+        new = [EDIT_QUESTION[name] for name in PROFILE_KEYS if name in said and unanswered([name])]
+        if waiting is not None and unanswered(ALL_QUESTION_FIELDS[waiting]):
             new.append(waiting)
         queue = list(dict.fromkeys(new + old_queue))  # bỏ câu trùng (vd SAT và ACT cùng câu D3), giữ thứ tự
         if not queue:
-            return output
+            # Nói rõ giá trị nhưng trùng hồ sơ đang lưu: nói thẳng là trùng và cho xem bảng, không hỏi "sửa mục nào"
+            same = said & state.read_now and all(after.get(name) == before.get(name) for name in PROFILE_KEYS)
+            return skill_ho_so.review(state, PROFILE_SAME) if same else output
         # Ở bảng rà soát mà giá trị sai thì skill_ho_so đã soạn câu hỏi lại (không kèm bảng): giữ câu đó
         text = output.answer if at_review and output.widget is None else None
         state.edit_queue = queue[1:]
@@ -196,6 +207,21 @@ class ChatProfileHandler:
         if missing_fields(state.profile, required) or self.pending_question(state) is not None:
             return False
         return all(field.status != "said_in_B0" for field in state.profile.values())
+
+
+# Báo ngành không có trong danh mục và hỏi lại ngành. Đang hỏi dở mục sửa khác thì mục đó hỏi sau.
+# Đã có ngành cũ thì thêm nút giữ như cũ để học sinh không bị kẹt ở câu này
+def report_major_miss(state: ChatState) -> SkillOutput:
+    waiting = state.question_id
+    queue = [q for q in state.edit_queue or [] if q != "B1.3"]
+    if state.edit_queue is not None and waiting in ALL_QUESTION_FIELDS and waiting != "B1.3":
+        queue.insert(0, waiting)
+    has_major = "major" in state.profile
+    state.edit_queue = queue if has_major or state.edit_queue is not None else None
+    output = skill_bac_hoc.ask_major_again(state, state.major_miss)
+    if has_major:
+        output.quick_replies = [*output.quick_replies, skill_ho_so.KEEP_REPLY]
+    return output
 
 
 # Nhiệm vụ của ý hồ sơ (edit, status, restart); None là khai giá trị hoặc trả lời câu đang chờ

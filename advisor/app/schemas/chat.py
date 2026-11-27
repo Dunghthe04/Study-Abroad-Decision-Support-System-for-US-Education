@@ -68,9 +68,16 @@ class ChatState(CamelModel):
     # mã câu đang chờ học sinh trả lời, ví dụ "B2.D2"; None = không có câu nào chờ
     question_id: str | None = None
     asked: dict[str, int] = {}  # mã câu hỏi → số lần đã hỏi (tối đa 2) ví dụ câu hỏi B0 hỏi tối đa 2
+    # mã câu hỏi → số lần đã nhắc lại khi học sinh hỏi chuyện khác (xóa khi học sinh làm việc với hồ sơ)
+    reminded: dict[str, int] = {}
     # Đang sửa hồ sơ trong chat: mã câu các mục học sinh muốn sửa còn chờ hỏi (vd ["D3", "F1"]), hỏi lần lượt,
     # hết thì về bảng rà soát X1. [] = đang hỏi mục cuối; None = không sửa gì
     edit_queue: list[str] | None = None
+    # Mục hồ sơ bộ đọc ĐỌC RA được giá trị trong lượt này, kể cả giá trị trùng giá trị đang lưu: phân biệt "đã nói giá trị"
+    # với "mới chỉ nêu tên mục". Chỉ dùng trong lượt, không lưu theo phiên
+    read_now: set[str] = Field(default_factory=set, exclude=True)
+    # Ngành học sinh vừa nói mà danh mục không có (skill_bac_hoc.MajorMiss), để lượt này báo học sinh. Không lưu theo phiên
+    major_miss: Any = Field(default=None, exclude=True)
     return_to: Step | None = None  # bước dở cần quay lại sau B5, B6
     intake_mode: Literal["chat", "form"] | None = None  # học sinh chọn điền hồ sơ bằng chat hay form
     # Hồ sơ đã có từ trước (DB, form, lần trước): chỉ hỏi mục bắt buộc còn thiếu của việc học sinh đang muốn làm,

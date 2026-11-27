@@ -159,6 +159,11 @@ INTAKE_BEFORE_GRADUATION = (
 # Học sinh hỏi hệ thống đang lưu gì (collect_profile, tasks status): đi kèm bảng hồ sơ
 PROFILE_STATUS = 'Đây là hồ sơ mình đang lưu. Đúng thì bạn bấm "Đúng rồi", muốn đổi thì bấm "Cần sửa".'
 PROFILE_NONE_YET = "Hiện mình chưa lưu thông tin hồ sơ nào của bạn."
+# Học sinh sửa mà giá trị nói ra trùng giá trị đang lưu: đi kèm bảng hồ sơ
+PROFILE_SAME = (
+    "Thông tin bạn vừa nói trùng với hồ sơ đang lưu nên mình giữ nguyên. "
+    'Bạn xem bảng hồ sơ: đúng thì bấm "Đúng rồi", muốn đổi thì bấm "Cần sửa".'
+)
 # Học sinh muốn làm lại hồ sơ (tasks restart): hỏi lại từng mục, giá trị cũ chỉ đổi khi học sinh trả lời giá trị mới
 PROFILE_RESTART_INTRO = 'Mình hỏi lại từng mục từ đầu. Mục nào không đổi, bạn bấm "Giữ như cũ".'
 

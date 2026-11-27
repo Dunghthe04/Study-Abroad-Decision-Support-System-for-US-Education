@@ -44,6 +44,7 @@ from app.services.replies import (
     INTAKE_MORE,
     MENU,
     NEED_MAJOR,
+    NEED_PROFILE,
     NOT_READY,
     PREMIUM_REQUIRED,
 )
@@ -90,6 +91,8 @@ OPENING_QUESTIONS = {"B0.1", "B0.2"}
 # Loại khác (collect_profile, profile_review...) ghi state nên vẫn chạy lần lượt. Thêm loại vào đây chỉ khi nhánh đó không ghi state
 PARALLEL_SAFE = {"knowledge", "center_referral"}
 # Số ý chạy cùng lúc nhiều nhất trong một tin: tin hỏi 12 câu thì không gửi 12 yêu cầu Claude cùng một lúc
+# Câu hồ sơ đang chờ được nhắc lại tối đa ngần này lần khi học sinh hỏi chuyện khác
+MAX_REMINDERS = 2
 PARALLEL_LIMIT = 4
 # Ý collect_profile thay thế khi SLM không tách ý hồ sơ nhưng tin vẫn có giá trị hồ sơ (nằm trong ý khác)
 PROFILE_ONLY = SlmY(type="collect_profile", span="thông tin hồ sơ")
@@ -402,7 +405,14 @@ class ChatFlow:
             and "collect_profile" not in names
             and (state.question_id, state.last_question) == pending
         )
+        if "collect_profile" in names:
+            state.reminded.clear()
+        # Nhắc tối đa MAX_REMINDERS lần rồi thôi để không bám theo mọi câu trả lời. Việc cần hồ sơ bị chặn thì luôn hiện
+        # câu hỏi, vì lời báo chặn không tự nói đang thiếu gì
+        if remind and NEED_PROFILE not in output.answer:
+            remind = state.reminded.get(pending[0], 0) < MAX_REMINDERS
         if remind:
+            state.reminded[pending[0]] = state.reminded.get(pending[0], 0) + 1
             remind_output = recreate_question_output(state, pending[0], pending[1])
             output = combine(output, remind_output)
 
