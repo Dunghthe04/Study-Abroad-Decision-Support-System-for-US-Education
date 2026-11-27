@@ -30,7 +30,7 @@ from app.services.knowledge_embedding import KnowledgeEmbedJob
 from app.services.ollama import OllamaClient
 from app.services.recommend_writer import RecommendWriter
 from app.services.scenario_writer import ScenarioWriter
-from app.services.skills import build_handlers
+from app.services.skills import build_handlers, province_catalog
 from app.services.slm_classifier import OllamaSlm, output_format
 from app.services.transcript_reader import TranscriptReader
 from app.services.what_if_writer import WhatIfWriter
@@ -103,6 +103,8 @@ async def lifespan(app: FastAPI):
         if app.state.db_pool is not None:
             knowledge = KnowledgeRetriever(app.state.db_pool, settings.knowledge_top_k)
         centers = CenterFinder(backend_http) if settings.backend_base_url else None
+        # Danh sách và tên gọi khác của tỉnh / thành lấy từ backend (ô chọn tỉnh trong chat)
+        province_catalog.configure(backend_http if settings.backend_base_url else None)
         # Claude viết câu trả lời cho mọi skill; Ollama (app.state.llm) chỉ còn embedding cho kho kiến thức
         # Embedding chạy trên dịch vụ tương thích OpenAI nếu có cấu hình, không thì dùng Ollama (app.state.llm)
         embedder: Any = (

@@ -1392,7 +1392,6 @@ def is_form_text(question_id: str | None, message: str) -> bool:
         or read_plan_text(question_id, message) is not None
         or read_item_text(question_id, message) is not None
         or read_cert_text(question_id, message) is not None
-        or skill_tinh.is_province_answer(question_id, message)
     )
 
 
@@ -1431,9 +1430,11 @@ class HoSoHandler:
         await exchange_rate.refresh()
         # Câu tỉnh / thành sau lộ trình (skill_tinh): lưu ở .NET, không ghi hồ sơ chat
         if state.question_id == skill_tinh.PROVINCE_ID:
-            province = skill_tinh.answer_province(state, message)
+            province = await skill_tinh.answer_province(state, message)
             if province is not None:
                 return province
+            # Câu có giá trị hồ sơ: bỏ câu tỉnh, đọc như tin khai hồ sơ
+            state.question_id, state.last_question = None, ""
         question_id = state.question_id
         if question_id == "X1" and is_confirm(message):
             return confirm(state)
