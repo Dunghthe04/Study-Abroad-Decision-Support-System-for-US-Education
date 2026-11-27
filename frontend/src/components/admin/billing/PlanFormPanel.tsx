@@ -147,14 +147,24 @@ export function PlanFormPanel({ plan, freePlan, onClose, onSaved }: PlanFormPane
     </div>
   );
 
+  const formId = "plan-form";
+
   return (
     <DetailPanel
       title={isNew ? "Thêm gói" : `Sửa gói ${plan.name}`}
       description={isNew ? "Mã và loại gói không đổi được sau khi tạo." : `Loại: ${PLAN_KIND_LABELS[plan.kind]}. Giá, thời hạn và quota mới chỉ áp dụng cho đơn và chu kỳ sau này.`}
       onClose={onClose}
       closeDisabled={saving}
+      footer={(
+        <>
+          <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Hủy</Button>
+          <Button type="submit" form={formId} loading={saving}>
+            {isNew ? "Tạo gói" : "Lưu"}
+          </Button>
+        </>
+      )}
     >
-      <form onSubmit={submit} className="space-y-4">
+      <form id={formId} onSubmit={submit} className="space-y-4">
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -252,12 +262,6 @@ export function PlanFormPanel({ plan, freePlan, onClose, onSaved }: PlanFormPane
         <div className="flex items-center justify-between gap-3">
           <label htmlFor="plan-active" className="text-sm font-medium">Đang mở bán</label>
           <Switch id="plan-active" checked={isFree || isActive} disabled={isFree} onCheckedChange={setIsActive} />
-        </div>
-        <div className="sticky bottom-0 -mx-4 -mb-4 flex justify-end gap-2 border-t bg-card p-4">
-          <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Hủy</Button>
-          <Button type="submit" loading={saving}>
-            {isNew ? "Tạo gói" : "Lưu"}
-          </Button>
         </div>
       </form>
     </DetailPanel>

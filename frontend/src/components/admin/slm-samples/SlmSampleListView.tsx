@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/compone
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { DataTable, type DataTableToolbarSlots } from "@/components/admin/shared/DataTable";
+import { RightPanelSlot } from "@/components/admin/shared/DetailPanel";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
 import { SlmImportDialog } from "@/components/admin/slm-samples/SlmImportDialog";
@@ -222,7 +223,19 @@ export function SlmSampleListView() {
   const toolbar: DataTableToolbarSlots = {
     filters: (
       <Popover open={isFilterOpen} onOpenChange={handleFilterOpenChange}>
-        <PopoverTrigger render={<Button variant="outline" size="sm" className={TOOLBAR_BUTTON_BG} />}>
+        <PopoverTrigger
+          render={
+            <Button
+              variant="outline"
+              size="sm"
+              className={
+                activeFilterCount > 0
+                  ? `${TOOLBAR_BUTTON_BG} border-brand/40 font-medium text-brand`
+                  : TOOLBAR_BUTTON_BG
+              }
+            />
+          }
+        >
           <FilterIcon />
           Bộ lọc{activeFilterCount > 0 && ` (${activeFilterCount})`}
         </PopoverTrigger>
@@ -280,7 +293,13 @@ export function SlmSampleListView() {
     actions: (
       <div className="flex flex-wrap items-center gap-2">
         {(draft.search || activeFilterCount > 0) && (
-          <Button type="button" variant="outline" size="sm" onClick={handleReset} className={TOOLBAR_BUTTON_BG}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleReset}
+            className="border-transparent bg-transparent text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
+          >
             <RotateCcwIcon />
             Xóa lọc
           </Button>
@@ -355,16 +374,18 @@ export function SlmSampleListView() {
         />
       </div>
 
-      {formState && (
-        <SlmSampleFormPanel
-          sample={formState.sample}
-          version={reloadCounter}
-          onClose={() => setFormState(null)}
-          onChanged={handlePanelChanged}
-          onDelete={setDeleting}
-          onRestore={(sample) => void handleRestore(sample)}
-        />
-      )}
+      <RightPanelSlot item={formState}>
+        {(active) => (
+          <SlmSampleFormPanel
+            sample={active.sample}
+            version={reloadCounter}
+            onClose={() => setFormState(null)}
+            onChanged={handlePanelChanged}
+            onDelete={setDeleting}
+            onRestore={(sample) => void handleRestore(sample)}
+          />
+        )}
+      </RightPanelSlot>
 
       <SlmImportDialog key={importSession} open={importOpen} onOpenChange={setImportOpen} onImported={handleImported} />
       <SlmImportResultDialog result={importResult} onClose={() => setImportResult(null)} />

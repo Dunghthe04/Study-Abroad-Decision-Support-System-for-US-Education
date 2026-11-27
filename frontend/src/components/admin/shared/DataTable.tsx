@@ -121,9 +121,9 @@ export function DataTable<T>({
           <Table
             aria-label={label}
             aria-busy={isLoading}
-            className="border-separate border-spacing-0 [&_td]:border-r [&_td]:border-b [&_td]:border-border [&_td]:py-1.5 [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-b [&_th]:border-border [&_th]:bg-muted [&_th]:font-semibold [&_th:last-child]:border-r-0 [&_tr:hover_td]:bg-brand-wash/40"
+            className="border-separate border-spacing-0 [&_td]:border-r [&_td]:border-b [&_td]:border-border [&_td]:py-1.5 [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-b [&_th]:border-brand-foreground/15 [&_th]:bg-brand [&_th]:font-semibold [&_th]:text-brand-foreground [&_th:last-child]:border-r-0 [&_tr:hover_td]:bg-brand-wash/40"
           >
-            <TableHeader className="sticky top-0 z-10 bg-card">
+            <TableHeader className="sticky top-0 z-10 bg-brand">
               <TableRow>
                 {visibleColumns.map((column) => (
                   <TableHead key={column.id} scope="col" className={column.headerClassName}>

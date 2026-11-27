@@ -142,7 +142,7 @@ export function ReviewVerificationModal({
           <div className="flex items-center gap-2.5">
             <ShieldCheckIcon className="h-5 w-5 text-brand" />
             <h2 className="text-lg font-bold text-ink">
-              Kiểm duyệt hồ sơ xác minh trung tâm (UC-59)
+              Kiểm duyệt hồ sơ xác minh trung tâm
             </h2>
           </div>
           <Button

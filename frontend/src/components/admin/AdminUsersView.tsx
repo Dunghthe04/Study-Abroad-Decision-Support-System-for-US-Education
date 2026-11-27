@@ -30,7 +30,7 @@ import {
   type DataTableColumn,
   type DataTableToolbarSlots,
 } from "@/components/admin/shared/DataTable";
-import { DetailPanel } from "@/components/admin/shared/DetailPanel";
+import { DetailPanel, RightPanelSlot } from "@/components/admin/shared/DetailPanel";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { OptionSelect } from "@/components/admin/universities/OptionSelect";
 import { cn } from "@/lib/utils";
@@ -418,6 +418,7 @@ export function AdminUsersView() {
   };
 
   const handleOpenCreateModal = () => {
+    setDetailTarget(null);
     setEmail("");
     setPassword("");
     setFullName("");
@@ -538,6 +539,7 @@ export function AdminUsersView() {
   }, [detailTargetId, detailTargetRole]);
 
   const toggleDetailTarget = useCallback((u: UserDto) => {
+    setIsCreateOpen(false);
     const cached = getLockReasonCache(u.id);
     setDetailTarget((prev) =>
       prev?.id === u.id
@@ -687,7 +689,10 @@ export function AdminUsersView() {
               type="button"
               variant="outline"
               size="sm"
-              className="border-border bg-muted/60 text-foreground hover:bg-muted"
+              className={cn(
+                "bg-card shadow-xs hover:bg-muted",
+                activeFilterCount > 0 ? "border-brand/40 font-medium text-brand" : "border-border text-foreground",
+              )}
             />
           }
         >
@@ -750,7 +755,7 @@ export function AdminUsersView() {
           onChange={(e) => setSearchInput(e.target.value)}
           placeholder="Tìm theo email hoặc họ tên..."
           aria-label="Tìm kiếm tài khoản"
-          className="pr-10 bg-surface"
+          className="bg-card pr-10 shadow-xs"
         />
         <Button
           type="submit"
@@ -766,17 +771,23 @@ export function AdminUsersView() {
     actions: (
       <>
         {hasActiveSearchOrFilter && (
-          <Button type="button" variant="outline" size="sm" onClick={handleClearAllFilters}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleClearAllFilters}
+            className="border-transparent bg-transparent text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
+          >
             Xóa lọc
           </Button>
         )}
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
           onClick={() => void loadUsers()}
           disabled={listLoading}
-          className="gap-1.5"
+          className="gap-1.5 border-transparent bg-transparent text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
         >
           <RotateCcwIcon className={cn("size-3.5", listLoading && "animate-spin")} />
           Làm mới
@@ -801,7 +812,7 @@ export function AdminUsersView() {
             columns={userColumns}
             items={users}
             getRowId={(u) => u.id}
-            selectedRowId={detailTarget?.id}
+            selectedRowId={isCreateOpen ? undefined : detailTarget?.id}
             onRowSelect={toggleDetailTarget}
             isLoading={listLoading}
             error={listError ?? undefined}
@@ -821,249 +832,24 @@ export function AdminUsersView() {
           />
         </div>
 
-        {detailTarget && (
+        <RightPanelSlot
+          item={
+            isCreateOpen
+              ? ({ kind: "create" } as const)
+              : detailTarget
+                ? ({ kind: "detail" as const, user: detailTarget })
+                : null
+          }
+        >
+          {(panel) =>
+            panel.kind === "create" ? (
           <DetailPanel
-            title={detailTarget.fullName || detailTarget.email}
-            description={formatUserRole(detailTarget.role)}
-            onClose={() => setDetailTarget(null)}
-          >
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={statusBadgeVariant(detailTarget.status)} className="text-xs">
-                  {formatStatusLabel(detailTarget.status)}
-                </Badge>
-                <Badge variant="outline" className="text-xs">
-                  {formatUserRole(detailTarget.role)}
-                </Badge>
-              </div>
-
-              <div className="rounded-lg border border-line bg-ground p-3.5 text-sm space-y-2.5">
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-ink-2 shrink-0">Email</span>
-                  <span className="font-medium text-ink text-right break-all">
-                    {detailTarget.email}
-                  </span>
-                </div>
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-ink-2 shrink-0">Họ và tên</span>
-                  <span className="font-medium text-ink text-right">
-                    {detailTarget.fullName || "Chưa cập nhật"}
-                  </span>
-                </div>
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-ink-2 shrink-0">Số điện thoại</span>
-                  <span className="font-mono text-ink text-right">
-                    {detailTarget.phone ?? "Chưa cung cấp"}
-                  </span>
-                </div>
-                {detailTarget.dateOfBirth && (
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-ink-2 shrink-0">Ngày sinh</span>
-                    <span className="text-ink text-right">
-                      {formatBirthDate(detailTarget.dateOfBirth)}
-                      {detailTarget.age != null ? ` (${detailTarget.age} tuổi)` : ""}
-                    </span>
-                  </div>
-                )}
-                {detailTarget.pendingBirthDateRequestId && (
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-ink-2 shrink-0">Đề nghị sửa ngày sinh</span>
-                    <span className="text-ink text-right">
-                      {formatBirthDate(detailTarget.pendingBirthDate)}{" "}
-                      <Link
-                        href={`/admin/birth-date-requests?id=${detailTarget.pendingBirthDateRequestId}`}
-                        className="text-primary underline underline-offset-2"
-                      >
-                        Xem yêu cầu
-                      </Link>
-                    </span>
-                  </div>
-                )}
-                {detailTarget.ageGroup && (
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-ink-2 shrink-0">Nhóm độ tuổi</span>
-                    <span className="capitalize text-ink text-right">{detailTarget.ageGroup}</span>
-                  </div>
-                )}
-                {detailTarget.parentConsentStatus && (
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-ink-2 shrink-0">Đồng thuận PH</span>
-                    <span className="capitalize text-ink text-right">
-                      {detailTarget.parentConsentStatus}
-                    </span>
-                  </div>
-                )}
-                <div className="flex items-start justify-between gap-3 pt-1 border-t border-line">
-                  <span className="text-ink-2 shrink-0">ID tài khoản</span>
-                  <span className="font-mono text-xs text-ink-3 text-right break-all">
-                    {detailTarget.id}
-                  </span>
-                </div>
-              </div>
-
-              {(detailTarget.status === "locked" || detailTarget.status === "temp_locked") && (
-                <div className="rounded-lg border border-risk/30 bg-risk-wash p-3 text-xs text-risk space-y-1">
-                  <div className="flex items-center gap-1.5 font-semibold">
-                    <BanIcon className="size-3.5 shrink-0" />
-                    <span>Lý do khóa tài khoản</span>
-                  </div>
-                  <p className="leading-relaxed">
-                    {detailTarget.lockReason ||
-                      getLockReasonCache(detailTarget.id) ||
-                      (detailTarget.status === "temp_locked"
-                        ? "Tài khoản bị tạm khóa do nhập sai mật khẩu 5 lần liên tiếp (chờ Quản trị viên mở khóa)."
-                        : "Vi phạm quy chế sử dụng và chính sách của hệ thống.")}
-                  </p>
-                </div>
-              )}
-
-              {detailTarget.blockedFeatures && detailTarget.blockedFeatures.length > 0 && (
-                <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-ink-2">Tính năng đang bị chặn</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {detailTarget.blockedFeatures.map((f) => (
-                      <Badge key={f} variant="destructive" className="text-xs font-normal">
-                        {f}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {(canAdminLock(detailTarget, currentUser?.role, currentUser?.id) ||
-                canAdminUnlock(detailTarget, currentUser?.role) ||
-                canResetTwoFactor(detailTarget, currentUser?.role)) && (
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line">
-                  {canAdminLock(detailTarget, currentUser?.role, currentUser?.id) && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openLockDialog(detailTarget)}
-                      className="gap-1.5 text-risk border-risk/30 hover:bg-risk-wash hover:text-risk"
-                    >
-                      <BanIcon className="size-3.5" />
-                      Khóa tài khoản
-                    </Button>
-                  )}
-                  {canAdminUnlock(detailTarget, currentUser?.role) && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openUnlockDialog(detailTarget)}
-                      className="gap-1.5 text-ok border-ok/30 hover:bg-ok-wash hover:text-ok"
-                    >
-                      <KeyRoundIcon className="size-3.5" />
-                      Mở khóa tài khoản
-                    </Button>
-                  )}
-                  {canResetTwoFactor(detailTarget, currentUser?.role) && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openResetTfaDialog(detailTarget)}
-                      className="gap-1.5"
-                    >
-                      <ShieldOffIcon className="size-3.5" />
-                      Đặt lại xác thực hai lớp
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-          </DetailPanel>
-        )}
-      </div>
-
-      {/* [UC-63] Dialog Cấp tài khoản mới: chỉ Admin tạo Moderator */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UserPlusIcon className="size-5 text-brand" />
-              Cấp tài khoản mới
-            </DialogTitle>
-            <DialogDescription>
-              Tạo tài khoản Kiểm duyệt viên (tài khoản được kích hoạt ngay).
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleCreateAccount}>
-            <FieldGroup>
-              {formError && (
-                <Alert variant="destructive">
-                  <AlertDescription>{formError}</AlertDescription>
-                </Alert>
-              )}
-
-              <Field>
-                <FieldLabel htmlFor="create-role">Loại tài khoản</FieldLabel>
-                <div
-                  id="create-role"
-                  className="h-9 px-3 flex items-center rounded-md border border-input bg-muted/40 text-sm font-medium"
-                >
-                  Kiểm duyệt viên (Moderator)
-                </div>
-                <FieldDescription>
-                  Tài khoản có quyền kiểm duyệt nội dung, duyệt hồ sơ trung tâm và quản lý người dùng cấp dưới.
-                </FieldDescription>
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="create-fullName">
-                  Họ và tên người dùng
-                </FieldLabel>
-                <Input
-                  id="create-fullName"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Ví dụ: Nguyễn Văn A"
-                  autoComplete="name"
-                  required
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="create-email">Email đăng nhập</FieldLabel>
-                <Input
-                  id="create-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
-                  autoComplete="off"
-                  required
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="create-password">Mật khẩu khởi tạo</FieldLabel>
-                <Input
-                  id="create-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="new-password"
-                  required
-                  minLength={8}
-                />
-                <FieldDescription>{PASSWORD_RULE_HINT}.</FieldDescription>
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="create-phone">Số điện thoại (tùy chọn)</FieldLabel>
-                <Input
-                  id="create-phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="0912345678"
-                />
-              </Field>
-
-              <DialogFooter className="pt-2">
+            title="Cấp tài khoản mới"
+            description="Tạo tài khoản Kiểm duyệt viên (tài khoản được kích hoạt ngay)."
+            onClose={() => !isSubmitting && setIsCreateOpen(false)}
+            closeDisabled={isSubmitting}
+            footer={(
+              <>
                 <Button
                   type="button"
                   variant="outline"
@@ -1072,15 +858,245 @@ export function AdminUsersView() {
                 >
                   Hủy
                 </Button>
-                <Button type="submit" loading={isSubmitting} className="gap-2 bg-brand text-white hover:bg-brand/90">
+                <Button type="submit" form="create-user-form" loading={isSubmitting} className="gap-2">
                   <ShieldCheckIcon className="size-4" />
                   Tạo tài khoản
                 </Button>
-              </DialogFooter>
-            </FieldGroup>
-          </form>
-        </DialogContent>
-      </Dialog>
+              </>
+            )}
+          >
+            <form id="create-user-form" onSubmit={handleCreateAccount}>
+              <FieldGroup>
+                {formError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{formError}</AlertDescription>
+                  </Alert>
+                )}
+
+                <Field>
+                  <FieldLabel htmlFor="create-role">Loại tài khoản</FieldLabel>
+                  <div
+                    id="create-role"
+                    className="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium"
+                  >
+                    Kiểm duyệt viên (Moderator)
+                  </div>
+                  <FieldDescription>
+                    Tài khoản có quyền kiểm duyệt nội dung, duyệt hồ sơ trung tâm và quản lý người dùng cấp dưới.
+                  </FieldDescription>
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="create-fullName">
+                    Họ và tên người dùng
+                  </FieldLabel>
+                  <Input
+                    id="create-fullName"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Ví dụ: Nguyễn Văn A"
+                    autoComplete="name"
+                    required
+                  />
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="create-email">Email đăng nhập</FieldLabel>
+                  <Input
+                    id="create-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="admin@example.com"
+                    autoComplete="off"
+                    required
+                  />
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="create-password">Mật khẩu khởi tạo</FieldLabel>
+                  <Input
+                    id="create-password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="new-password"
+                    required
+                    minLength={8}
+                  />
+                  <FieldDescription>{PASSWORD_RULE_HINT}.</FieldDescription>
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="create-phone">Số điện thoại (tùy chọn)</FieldLabel>
+                  <Input
+                    id="create-phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="0912345678"
+                  />
+                </Field>
+              </FieldGroup>
+            </form>
+          </DetailPanel>
+            ) : (
+          <DetailPanel
+            title={panel.user.fullName || panel.user.email}
+            description={formatUserRole(panel.user.role)}
+            onClose={() => setDetailTarget(null)}
+            footer={(canAdminLock(panel.user, currentUser?.role, currentUser?.id) ||
+              canAdminUnlock(panel.user, currentUser?.role) ||
+              canResetTwoFactor(panel.user, currentUser?.role)) ? (
+              <>
+                {canAdminLock(panel.user, currentUser?.role, currentUser?.id) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openLockDialog(panel.user)}
+                    className="gap-1.5 border-risk/30 text-risk hover:bg-risk-wash hover:text-risk"
+                  >
+                    <BanIcon className="size-3.5" />
+                    Khóa tài khoản
+                  </Button>
+                )}
+                {canAdminUnlock(panel.user, currentUser?.role) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openUnlockDialog(panel.user)}
+                    className="gap-1.5 border-ok/30 text-ok hover:bg-ok-wash hover:text-ok"
+                  >
+                    <KeyRoundIcon className="size-3.5" />
+                    Mở khóa tài khoản
+                  </Button>
+                )}
+                {canResetTwoFactor(panel.user, currentUser?.role) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openResetTfaDialog(panel.user)}
+                    className="gap-1.5"
+                  >
+                    <ShieldOffIcon className="size-3.5" />
+                    Đặt lại xác thực hai lớp
+                  </Button>
+                )}
+              </>
+            ) : undefined}
+          >
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={statusBadgeVariant(panel.user.status)} className="text-xs">
+                  {formatStatusLabel(panel.user.status)}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  {formatUserRole(panel.user.role)}
+                </Badge>
+              </div>
+
+              <div className="rounded-lg border border-line bg-ground p-3.5 text-sm space-y-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-ink-2 shrink-0">Email</span>
+                  <span className="font-medium text-ink text-right break-all">
+                    {panel.user.email}
+                  </span>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-ink-2 shrink-0">Họ và tên</span>
+                  <span className="font-medium text-ink text-right">
+                    {panel.user.fullName || "Chưa cập nhật"}
+                  </span>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-ink-2 shrink-0">Số điện thoại</span>
+                  <span className="font-mono text-ink text-right">
+                    {panel.user.phone ?? "Chưa cung cấp"}
+                  </span>
+                </div>
+                {panel.user.dateOfBirth && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-ink-2 shrink-0">Ngày sinh</span>
+                    <span className="text-ink text-right">
+                      {formatBirthDate(panel.user.dateOfBirth)}
+                      {panel.user.age != null ? ` (${panel.user.age} tuổi)` : ""}
+                    </span>
+                  </div>
+                )}
+                {panel.user.pendingBirthDateRequestId && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-ink-2 shrink-0">Đề nghị sửa ngày sinh</span>
+                    <span className="text-ink text-right">
+                      {formatBirthDate(panel.user.pendingBirthDate)}{" "}
+                      <Link
+                        href={`/admin/birth-date-requests?id=${panel.user.pendingBirthDateRequestId}`}
+                        className="text-primary underline underline-offset-2"
+                      >
+                        Xem yêu cầu
+                      </Link>
+                    </span>
+                  </div>
+                )}
+                {panel.user.ageGroup && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-ink-2 shrink-0">Nhóm độ tuổi</span>
+                    <span className="capitalize text-ink text-right">{panel.user.ageGroup}</span>
+                  </div>
+                )}
+                {panel.user.parentConsentStatus && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-ink-2 shrink-0">Đồng thuận PH</span>
+                    <span className="capitalize text-ink text-right">
+                      {panel.user.parentConsentStatus}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-start justify-between gap-3 pt-1 border-t border-line">
+                  <span className="text-ink-2 shrink-0">ID tài khoản</span>
+                  <span className="font-mono text-xs text-ink-3 text-right break-all">
+                    {panel.user.id}
+                  </span>
+                </div>
+              </div>
+
+              {(panel.user.status === "locked" || panel.user.status === "temp_locked") && (
+                <div className="rounded-lg border border-risk/30 bg-risk-wash p-3 text-xs text-risk space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <BanIcon className="size-3.5 shrink-0" />
+                    <span>Lý do khóa tài khoản</span>
+                  </div>
+                  <p className="leading-relaxed">
+                    {panel.user.lockReason ||
+                      getLockReasonCache(panel.user.id) ||
+                      (panel.user.status === "temp_locked"
+                        ? "Tài khoản bị tạm khóa do nhập sai mật khẩu 5 lần liên tiếp (chờ Quản trị viên mở khóa)."
+                        : "Vi phạm quy chế sử dụng và chính sách của hệ thống.")}
+                  </p>
+                </div>
+              )}
+
+              {panel.user.blockedFeatures && panel.user.blockedFeatures.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-ink-2">Tính năng đang bị chặn</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {panel.user.blockedFeatures.map((f) => (
+                      <Badge key={f} variant="destructive" className="text-xs font-normal">
+                        {f}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </DetailPanel>
+            )
+          }
+        </RightPanelSlot>
+      </div>
 
       {/* [UC-61] Xác nhận khóa tài khoản */}
       <Dialog open={lockTarget !== null} onOpenChange={(open) => !open && closeLockDialog()}>

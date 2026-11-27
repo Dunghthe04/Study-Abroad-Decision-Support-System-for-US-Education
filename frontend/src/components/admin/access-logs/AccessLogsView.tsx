@@ -71,26 +71,26 @@ const ACTION_FRIENDLY_NAMES: Record<string, string> = {
   "center.document_viewed": "Xem tài liệu xác minh trung tâm",
   "lead_message.report_queue_view": "Xem danh sách tin nhắn bị báo cáo",
   "lead_message.report_view": "Đọc tin nhắn bị báo cáo & ngữ cảnh",
-  "slm_sample.export": "Xuất mẫu huấn luyện SLM (UC-96)",
+  "slm_sample.export": "Xuất mẫu huấn luyện SLM",
   "review_batch.view_item": "Xem tin nhắn chat kiểm thử (đợt duyệt)",
-  "order.deleted_buyer_viewed": "Xem thông tin người mua của tài khoản đã xóa (UC-124)",
-  "birth_date.evidence_viewed": "Xem minh chứng yêu cầu sửa ngày sinh (UC-150)",
+  "order.deleted_buyer_viewed": "Xem thông tin người mua của tài khoản đã xóa",
+  "birth_date.evidence_viewed": "Xem minh chứng yêu cầu sửa ngày sinh",
 
-  // Kho tri thức (UC-113..117)
-  "knowledge_base.create": "Thêm mục kho tri thức (UC-114)",
-  "knowledge_base.update": "Sửa mục kho tri thức (UC-115)",
-  "knowledge_base.delete": "Xóa mềm mục kho tri thức (UC-116)",
-  "knowledge_base.restore": "Khôi phục mục kho tri thức đã xóa (UC-116)",
-  "knowledge_base.restore_version": "Khôi phục phiên bản cũ của mục kho tri thức (UC-113)",
-  "knowledge_base.import": "Nhập kho tri thức từ Excel (UC-117)",
+  // Kho tri thức
+  "knowledge_base.create": "Thêm mục kho tri thức",
+  "knowledge_base.update": "Sửa mục kho tri thức",
+  "knowledge_base.delete": "Xóa mềm mục kho tri thức",
+  "knowledge_base.restore": "Khôi phục mục kho tri thức đã xóa",
+  "knowledge_base.restore_version": "Khôi phục phiên bản cũ của mục kho tri thức",
+  "knowledge_base.import": "Nhập kho tri thức từ Excel",
 
-  // Mẫu huấn luyện SLM (UC-90, UC-92..95)
-  "slm_sample.create": "Thêm mẫu huấn luyện SLM (UC-92)",
-  "slm_sample.update": "Sửa mẫu huấn luyện SLM (UC-93)",
-  "slm_sample.delete": "Xóa mềm mẫu huấn luyện SLM (UC-94)",
-  "slm_sample.restore": "Khôi phục mẫu huấn luyện SLM đã xóa (UC-94)",
-  "slm_sample.restore_version": "Khôi phục phiên bản cũ của mẫu SLM (UC-90)",
-  "slm_sample.import": "Nhập mẫu huấn luyện SLM từ Excel (UC-95)",
+  // Mẫu huấn luyện SLM
+  "slm_sample.create": "Thêm mẫu huấn luyện SLM",
+  "slm_sample.update": "Sửa mẫu huấn luyện SLM",
+  "slm_sample.delete": "Xóa mềm mẫu huấn luyện SLM",
+  "slm_sample.restore": "Khôi phục mẫu huấn luyện SLM đã xóa",
+  "slm_sample.restore_version": "Khôi phục phiên bản cũ của mẫu SLM",
+  "slm_sample.import": "Nhập mẫu huấn luyện SLM từ Excel",
 
   // Phụ huynh & Đại diện
   "parent.acting.start": "Bắt đầu quyền đại diện con",
@@ -108,8 +108,8 @@ const ACTION_FRIENDLY_NAMES: Record<string, string> = {
   "user.login_recovery_code": "Đăng nhập bằng mã khôi phục",
   "user.role_change": "Thay đổi phân quyền vai trò",
   "user.birth_date_edit": "Cập nhật ngày sinh và tuổi",
-  "user.birth_date_approved": "Duyệt yêu cầu sửa ngày sinh (UC-150)",
-  "user.birth_date_rejected": "Từ chối yêu cầu sửa ngày sinh (UC-150)",
+  "user.birth_date_approved": "Duyệt yêu cầu sửa ngày sinh",
+  "user.birth_date_rejected": "Từ chối yêu cầu sửa ngày sinh",
   "user.anonymized": "Ẩn danh tài khoản",
   "user.deleted": "Xóa vĩnh viễn tài khoản",
 
@@ -547,7 +547,7 @@ export function AccessLogsView() {
                           Chưa ghi nhận lượt truy cập dữ liệu nhạy cảm nào
                         </p>
                         <p className="text-xs text-muted-foreground max-w-md">
-                          Chưa có lượt xem tài liệu xác minh (UC-55), đọc tin nhắn báo cáo (UC-54) hay xuất mẫu SLM (UC-96) trong khoảng thời gian này.
+                          Chưa có lượt xem tài liệu xác minh, đọc tin nhắn báo cáo hay xuất mẫu SLM trong khoảng thời gian này.
                         </p>
                         <Button
                           type="button"

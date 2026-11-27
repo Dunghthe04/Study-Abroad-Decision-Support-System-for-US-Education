@@ -11,7 +11,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
@@ -20,6 +19,7 @@ import { adminBillingApi, adminBillingErrorMessage, PLAN_KIND_LABELS } from "@/l
 import { formatMultiplier, formatVnd } from "@/lib/billing-api";
 import type { AdminPlanDto, SavePlanRequest } from "@/types/admin-billing";
 import { DataTable, type DataTableColumn } from "../shared/DataTable";
+import { RightPanelSlot } from "../shared/DetailPanel";
 import { PlanFormPanel } from "./PlanFormPanel";
 
 interface LoadResult {
@@ -108,12 +108,12 @@ export function PlansTab() {
       id: "name",
       label: "Tên gói",
       required: true,
-      render: (p) => (
-        <>
-          <div className="font-medium">{p.name}</div>
-          <Badge variant="neutral">{PLAN_KIND_LABELS[p.kind]}</Badge>
-        </>
-      ),
+      render: (p) => <span className="font-medium">{p.name}</span>,
+    },
+    {
+      id: "kind",
+      label: "Loại gói",
+      render: (p) => PLAN_KIND_LABELS[p.kind],
     },
     { id: "price", label: "Giá", render: (p) => formatVnd(p.priceVnd) },
     { id: "duration", label: "Thời hạn", render: (p) => (p.durationDays ? `${p.durationDays} ngày` : "Không giới hạn") },
@@ -191,19 +191,21 @@ export function PlansTab() {
         />
       </div>
 
-      {editing.kind !== "none" && (
-        <PlanFormPanel
-          key={editing.kind === "edit" ? editing.plan.id : "new"}
-          plan={editing.kind === "edit" ? editing.plan : null}
-          freePlan={plans.find((p) => p.kind === "free") ?? null}
-          onClose={() => setEditing({ kind: "none" })}
-          onSaved={() => {
-            toast.add({ type: "success", title: editing.kind === "new" ? "Đã tạo gói" : "Đã lưu gói" });
-            setEditing({ kind: "none" });
-            refresh();
-          }}
-        />
-      )}
+      <RightPanelSlot item={editing.kind === "none" ? null : editing}>
+        {(active) => (
+          <PlanFormPanel
+            key={active.kind === "edit" ? active.plan.id : "new"}
+            plan={active.kind === "edit" ? active.plan : null}
+            freePlan={plans.find((p) => p.kind === "free") ?? null}
+            onClose={() => setEditing({ kind: "none" })}
+            onSaved={() => {
+              toast.add({ type: "success", title: active.kind === "new" ? "Đã tạo gói" : "Đã lưu gói" });
+              setEditing({ kind: "none" });
+              refresh();
+            }}
+          />
+        )}
+      </RightPanelSlot>
 
       <AlertDialog open={deleting !== null} onOpenChange={(open) => !open && busyId === null && setDeleting(null)}>
         <AlertDialogContent>
