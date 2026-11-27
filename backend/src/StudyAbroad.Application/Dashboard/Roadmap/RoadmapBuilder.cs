@@ -347,8 +347,8 @@ public static partial class RoadmapBuilder
         var now = today.ToDateTime(TimeOnly.MinValue);
         return profile.CurrentEducationLevel switch
         {
-            "high_school" => profile.GraduationYear
-                ?? ChatProfileMapper.GuessGraduationYear("high_school", profile.CurrentGrade, now),
+            "high_school" => ChatProfileMapper.EffectiveGraduationYear("high_school", profile.CurrentGrade,
+                profile.GraduationYear, now),
             "middle_school" => ChatProfileMapper.GuessGraduationYear("high_school", profile.CurrentGrade, now),
             _ => null,
         };

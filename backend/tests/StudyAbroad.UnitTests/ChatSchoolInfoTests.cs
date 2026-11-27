@@ -103,6 +103,27 @@ public class ChatSchoolInfoTests
         Assert.Contains("học phí 44.908 USD, sinh hoạt 14.828 USD, chi phí khác 5.930 USD, tổng khoảng 65.666 USD", text);
     }
 
+    // Lỗi thật 27/11/2026: tổng chi phí có cộng bảo hiểm y tế mà dòng liệt kê bỏ khoản này, học sinh cộng không ra tổng
+    // (Drexel: bốn khoản 88.046 USD, tổng ghi 91.224 USD)
+    [Fact]
+    public void Answer_Cost_ListsHealthInsuranceSoThePartsAddUpToTheTotal()
+    {
+        var school = Full() with
+        {
+            Cost = new SchoolCostInfo(63_078m, 19_398m, 2_370m, 3_200m, 91_224m),
+            Extra = new SchoolExtraInfo(null, HealthInsuranceUsd: 3_178m, null, null, null),
+        };
+
+        var line = ChatSchoolInfo.Answer(school, [InfoField.Cost], false).Text
+            .Split('\n').Single(l => l.Contains("Chi phí mỗi năm"));
+
+        Assert.Contains("bảo hiểm y tế 3.178 USD", line);
+        var amounts = System.Text.RegularExpressions.Regex.Matches(line, @"(\d[\d.]*) USD")
+            .Select(m => decimal.Parse(m.Groups[1].Value.Replace(".", ""), System.Globalization.CultureInfo.InvariantCulture))
+            .ToList();
+        Assert.Equal(amounts[^1], amounts.SkipLast(1).Sum());
+    }
+
     [Fact]
     public void Answer_Aid_NamesTheKindAndSaysTheAverageIsOfRecipientsNotAPromise()
     {

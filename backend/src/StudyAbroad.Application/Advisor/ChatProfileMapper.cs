@@ -46,7 +46,8 @@ public static class ChatProfileMapper
         {
             ["current_level"] = Text(step1?.CurrentEducationLevel),
             ["current_grade"] = Text(step1?.CurrentGrade),
-            ["graduation_year"] = step1?.ExpectedGraduationYear != null ? JsonValue.Create(step1.ExpectedGraduationYear.Value) : null,
+            ["graduation_year"] = EffectiveGraduationYear(step1?.CurrentEducationLevel, step1?.CurrentGrade, step1?.ExpectedGraduationYear)
+                is { } graduation ? JsonValue.Create(graduation) : null,
             ["target_level"] = Text(step1?.TargetDegreeLevel),
             ["major"] = Text(step1?.TargetMajor),
             ["gpa"] = Gpa(draft.Step2),
@@ -161,6 +162,21 @@ public static class ChatProfileMapper
         return draft;
     }
 
+    /// <summary>
+    /// Năm tốt nghiệp dùng để tính: số đã lưu, trừ khi nó mâu thuẫn với lớp đang học. Còn đang học (lớp đọc được) thì không thể
+    /// tốt nghiệp ở năm học đã qua, khi đó tính lại theo lớp. Tốt nghiệp sớm hay học lại (năm chưa qua) vẫn giữ số đã lưu.
+    /// Chưa lưu thì trả số tính theo lớp, "Đã tốt nghiệp" thì giữ nguyên số đã lưu.
+    /// </summary>
+    public static int? EffectiveGraduationYear(string? level, string? grade, int? saved, DateTime? now = null)
+    {
+        var byGrade = GuessGraduationYear(level, grade, now);
+        if (saved is null) return byGrade;
+        return byGrade is not null && saved < SchoolYearEnd(now ?? DateTime.UtcNow) ? byGrade : saved;
+    }
+
+    // Năm học Việt Nam kết thúc giữa năm, từ tháng 8 tính là năm học mới
+    private static int SchoolYearEnd(DateTime date) => date.Month >= 8 ? date.Year + 1 : date.Year;
+
     public static int? GuessGraduationYear(string? level, string? grade, DateTime? now = null)
     {
         var lastGrade = level switch
@@ -174,7 +190,7 @@ public static class ChatProfileMapper
         if (lastGrade == null || string.IsNullOrWhiteSpace(grade)) return null;
 
         var current = now ?? DateTime.UtcNow;
-        var schoolYearEnd = current.Month >= 8 ? current.Year + 1 : current.Year;
+        var schoolYearEnd = SchoolYearEnd(current);
         if (grade == "Năm cuối") return schoolYearEnd;
 
         var match = System.Text.RegularExpressions.Regex.Match(grade, @"(?:Lớp|Năm)\s*(\d+)");

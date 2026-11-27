@@ -112,6 +112,18 @@ def contextualize(state: ChatState, message: str, slm: SlmTinResult) -> SlmTinRe
     return slm.model_copy(update={"intents": out}) if changed else slm
 
 
+def _refocus_goal_scenario(ctx: ChatContext) -> None:
+    """Câu tìm mức cần đạt nối tiếp lấy trường từ kịch bản đã nhớ, nên trường đó phải là trường đang nói tới.
+    Đang nói đúng một trường thì kịch bản theo trường đó; đang nói nhiều trường hoặc không trường nào thì bỏ trường,
+    câu nối tiếp không nêu tên sẽ được hỏi lại thay vì lấy trường cũ."""
+    if not ctx.scenario or ctx.scenario.get("mode") != "goal_seeking":
+        return
+    if len(ctx.schools) == 1:
+        ctx.scenario = {**ctx.scenario, "school": ctx.schools[0]}
+    else:
+        ctx.scenario = {key: value for key, value in ctx.scenario.items() if key != "school"}
+
+
 def update_context(state: ChatState, output: Any) -> None:
     """Ghi lại trường, mục và điều kiện của câu vừa trả lời (theo action cuối của lượt)."""
     data = output.action_data or {}
@@ -120,17 +132,20 @@ def update_context(state: ChatState, output: Any) -> None:
         case "school_info":
             if data.get("school"):
                 ctx.schools = [str(data["school"])]
+                _refocus_goal_scenario(ctx)
             if data.get("fields"):
                 ctx.fields = list(data["fields"])
         case "school_compare" | "school_fit_compare":
             if data.get("schools"):
                 ctx.schools = list(data["schools"])
+                _refocus_goal_scenario(ctx)
             if data.get("fields"):
                 ctx.fields = list(data["fields"])
         case "school_search":
             ctx.filters = data.get("model_filters") or None
             ctx.sort = data.get("model_sort") or None
             ctx.schools = []  # chưa chọn trường nào
+            _refocus_goal_scenario(ctx)
         case "goal_seek":
             if data.get("school"):
                 ctx.schools = [str(data["school"])]

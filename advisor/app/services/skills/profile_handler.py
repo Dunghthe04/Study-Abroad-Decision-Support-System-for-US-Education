@@ -84,9 +84,7 @@ class ChatProfileHandler:
     def _show_saved(self, state: ChatState) -> SkillOutput:
         if not state.profile:
             return self._offer_intake(state)
-        output = skill_ho_so.review(state)
-        output.answer = PROFILE_STATUS
-        return output
+        return skill_ho_so.review(state, PROFILE_STATUS)
 
     # Làm lại từ đầu như nút "Điền lại từ đầu" ở bảng rà soát: hỏi lại từng mục, giá trị cũ chỉ đổi khi trả lời giá trị mới
     def _restart(self, state: ChatState) -> SkillOutput:

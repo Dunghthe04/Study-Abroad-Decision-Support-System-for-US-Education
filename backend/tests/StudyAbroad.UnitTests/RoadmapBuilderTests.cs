@@ -209,6 +209,7 @@ public class RoadmapBuilderTests
     [InlineData("high_school", "Lớp 10", null, 2029)]
     [InlineData("high_school", "Lớp 12", null, 2027)]
     [InlineData("high_school", "Lớp 11", 2029, 2029)] // năm tốt nghiệp đã lưu được ưu tiên hơn lớp
+    [InlineData("high_school", "Lớp 11", 2026, 2028)] // năm đã lưu đã qua mà vẫn đang học: tính theo lớp
     [InlineData("middle_school", "Lớp 9", 2027, 2030)] // năm đã lưu là của THCS
     [InlineData("college_university", "Năm 1", 2030, 2027)]
     [InlineData("high_school", "Đã tốt nghiệp", 2025, 2027)]

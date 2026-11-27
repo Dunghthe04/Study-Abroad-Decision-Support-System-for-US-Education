@@ -730,6 +730,8 @@ public static class ChatSchoolInfo
                 if (c.Living is { } living) parts.Add($"sinh hoạt {Money(living)} USD");
                 // Phí bằng 0 là số trong dữ liệu nhưng không rõ là "không có phí" hay "đã gồm trong học phí": không nêu dòng này, tổng chi phí không đổi
                 if (c.Fees is > 0 and var fees) parts.Add($"phí {Money(fees)} USD");
+                // Tổng (AnnualCost) có cộng bảo hiểm y tế: liệt kê đủ mọi khoản đã cộng, nếu không học sinh cộng không ra tổng
+                if (s.Extra?.HealthInsuranceUsd is > 0 and var insurance) parts.Add($"bảo hiểm y tế {Money(insurance)} USD");
                 if (c.Other is { } other) parts.Add($"chi phí khác {Money(other)} USD");
                 var total = c.Total is { } t ? $", tổng khoảng {Money(t)} USD" : "";
                 return $"Chi phí mỗi năm: {string.Join(", ", parts)}{total}.";

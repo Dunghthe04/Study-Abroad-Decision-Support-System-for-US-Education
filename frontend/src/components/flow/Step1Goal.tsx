@@ -51,13 +51,17 @@ const LAST_GRADE: Partial<Record<CurrentEducationLevel, number>> = {
   master: 2,
 };
 
-// Năm tốt nghiệp dự kiến theo lớp đang học. Năm học Việt Nam kết thúc tháng 6, từ tháng 8 tính là năm học mới.
-// "Đã tốt nghiệp" hay lớp không đọc được thì trả null (không tự điền)
+// Năm kết thúc của năm học hiện tại. Năm học Việt Nam kết thúc tháng 6, từ tháng 8 tính là năm học mới
+function currentSchoolYearEnd() {
+  const now = new Date();
+  return now.getMonth() >= 7 ? now.getFullYear() + 1 : now.getFullYear();
+}
+
+// Năm tốt nghiệp dự kiến theo lớp đang học. "Đã tốt nghiệp" hay lớp không đọc được thì trả null (không tự điền)
 function guessGraduationYear(level: CurrentEducationLevel | null | undefined, grade: string | null | undefined) {
   const last = level ? LAST_GRADE[level] : undefined;
   if (!last || !grade) return null;
-  const now = new Date();
-  const schoolYearEnd = now.getMonth() >= 7 ? now.getFullYear() + 1 : now.getFullYear();
+  const schoolYearEnd = currentSchoolYearEnd();
   if (grade === "Năm cuối") return schoolYearEnd;
   const n = Number(/^(?:Lớp|Năm) (\d+)$/.exec(grade)?.[1]);
   return n ? schoolYearEnd + Math.max(0, last - n) : null;
@@ -156,11 +160,16 @@ export function Step1Goal({ data, metadata, onUpdate, onNext, goals, onEditNeeds
   );
   const yearOptions = intakeYearOptions(data.expectedGraduationYear);
   const isHighSchool = data.currentEducationLevel === "high_school";
-  // Năm đã lưu có thể nằm ngoài danh sách (từ chat): vẫn hiện để không mất
+  // Còn đang học thì không thể tốt nghiệp ở năm học đã qua (cùng quy tắc EffectiveGraduationYear của backend)
+  const earliestGraduationYear = guessGraduationYear(data.currentEducationLevel, data.currentGrade)
+    ? currentSchoolYearEnd()
+    : THIS_YEAR;
+  const graduationYearOptions = GRADUATION_YEAR_OPTIONS.filter((y) => y >= earliestGraduationYear);
+  // Năm đã lưu có thể nằm ngoài danh sách (từ chat, hồ sơ cũ): vẫn hiện để không mất
   const graduationYearItems = (
-    data.expectedGraduationYear && !GRADUATION_YEAR_OPTIONS.includes(data.expectedGraduationYear)
-      ? [data.expectedGraduationYear, ...GRADUATION_YEAR_OPTIONS]
-      : GRADUATION_YEAR_OPTIONS
+    data.expectedGraduationYear && !graduationYearOptions.includes(data.expectedGraduationYear)
+      ? [data.expectedGraduationYear, ...graduationYearOptions]
+      : graduationYearOptions
   ).map((y) => ({ value: String(y), label: String(y) }));
   const intakeYearItems = (intakeYear && !yearOptions.includes(intakeYear) ? [intakeYear, ...yearOptions] : yearOptions).map(
     (y) => ({ value: y, label: y })

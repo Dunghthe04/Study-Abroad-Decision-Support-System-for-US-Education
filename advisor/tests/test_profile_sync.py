@@ -1,5 +1,8 @@
 """Việc 1.5: gộp hồ sơ từ bản nháp (.NET gửi) vào state chat, và báo khóa nào đổi. Hàm thuần nên không cần AI hay DB."""
 
+import re
+from pathlib import Path
+
 from app.schemas.chat import ProfileField
 from app.services.profile_sync import DRAFT_KEYS, changed_keys, merge_profile
 
@@ -101,3 +104,24 @@ def test_changed_keys_ignores_chat_only_keys_and_returns_empty_when_nothing_chan
 
     assert changed_keys(before, {"gpa": field(3.4), "visa_refused": field(False)}) == []
     assert changed_keys(before, {"gpa": field(3.4)}) == []
+
+
+def test_graduation_year_flows_both_ways_between_the_chat_and_the_draft():
+    # Lỗi thật 27/11/2026: thiếu khóa này nên năm tốt nghiệp trong DB không tới advisor, đổi lớp trong chat cũng không ghi
+    # năm mới về DB (một hồ sơ "Lớp 11" mà năm tốt nghiệp vẫn là 2026)
+    assert merge_profile({}, {"graduation_year": field(2027)})["graduation_year"].value == 2027
+    before = {"current_grade": field("Lớp 12"), "graduation_year": field(2027)}
+    after = {"current_grade": field("Lớp 11"), "graduation_year": field(2028)}
+    assert changed_keys(before, after) == ["current_grade", "graduation_year"]
+
+
+def test_every_key_the_backend_sends_has_a_place_here():
+    # Hai danh sách phải khớp nhau, nếu không khóa bị bỏ âm thầm. target_level là ngoại lệ có chủ đích (chỉ có đại học)
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "backend/src/StudyAbroad.Application/Advisor/ChatProfileMapper.cs"
+    ).read_text(encoding="utf-8")
+    block = re.search(r"DraftKeys =\s*\[(.*?)\];", source, re.DOTALL)[1]
+    backend = set(re.findall(r'"(\w+)"', block))
+
+    assert backend - {"target_level"} == DRAFT_KEYS

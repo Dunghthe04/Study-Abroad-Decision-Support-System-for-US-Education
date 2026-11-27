@@ -226,6 +226,24 @@ public class ChatProfileMapperTests
         Assert.Equal(expected, actual);
     }
 
+    // Còn đang học mà năm tốt nghiệp đã lưu là năm học đã qua thì số đó sai (lỗi thật: Lớp 11 mà ghi 2026 vào tháng 11/2026):
+    // gửi sang chat năm tính theo lớp. Tốt nghiệp sớm (năm chưa qua) và "Đã tốt nghiệp" giữ nguyên số đã lưu
+    [Theory]
+    [InlineData("Lớp 11", -2, 0)]            // đã qua: thay bằng năm theo lớp
+    [InlineData("Lớp 11", -1, -1)]           // tốt nghiệp sớm một năm: còn hợp lý, giữ
+    [InlineData("Lớp 11", 1, 1)]             // học lại một năm: giữ
+    [InlineData("Đã tốt nghiệp", -3, -3)]
+    public void ToChatProfile_ReplacesAGraduationYearThatHasAlreadyPassed(string grade, int savedOffset, int expectedOffset)
+    {
+        var byGrade = ChatProfileMapper.GuessGraduationYear("high_school", "Lớp 11")!.Value;
+        var draft = new ProfileFlowDraftDto(Step1: new FlowGoalDraftDto(
+            CurrentEducationLevel: "high_school", CurrentGrade: grade, ExpectedGraduationYear: byGrade + savedOffset));
+
+        var sent = ChatProfileMapper.ToChatProfile(draft)["graduation_year"]!["value"]!.GetValue<int>();
+
+        Assert.Equal(byGrade + expectedOffset, sent);
+    }
+
     // Trạng thái nháp không lưu được thì lấy lại từ profile lượt trước
     [Fact]
     public void NoneAndUnknown_KeptFromPreviousProfile()
