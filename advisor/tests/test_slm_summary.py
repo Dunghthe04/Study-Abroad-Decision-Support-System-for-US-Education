@@ -26,8 +26,8 @@ async def test_summary_lists_the_intents_and_confidence_of_the_turn():
     ]
 
 
-async def test_model_intents_keep_the_raw_model_label_even_when_a_code_rule_rewrites_the_turn():
-    # SLM gán nhầm câu hỏi số liệu vào "mơ hồ"; luật code cứu thành câu kiến thức. Admin phải thấy nhãn GỐC của model
+async def test_the_turn_runs_the_label_the_model_gave_even_when_it_looks_wrong():
+    # Câu hỏi số liệu mà model gán "mơ hồ": code không dò từ khóa để đổi nhãn, admin thấy đúng nhãn đã chạy để sửa dữ liệu
     flow = flow_with(
         {"skill_tra_loi": _Say("trả lời")},
         tin(("out_of_scope", {"subtype": "ambiguous"}, "gpa cua truong x")),
@@ -35,7 +35,7 @@ async def test_model_intents_keep_the_raw_model_label_even_when_a_code_rule_rewr
 
     res = await flow.reply(ask("gpa cua truong x"))
 
-    assert res.slm.intents == ["knowledge"]  # cái hệ thống đã chạy
+    assert res.slm.intents == ["out_of_scope"]  # cái hệ thống đã chạy
     assert [y.type for y in res.slm.model_intents] == ["out_of_scope"]  # cái model đã nói
     assert res.slm.model_intents[0].entities == {"subtype": "ambiguous"}
 
