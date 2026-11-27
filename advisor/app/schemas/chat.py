@@ -70,6 +70,9 @@ class ChatState(CamelModel):
     asked: dict[str, int] = {}  # mã câu hỏi → số lần đã hỏi (tối đa 2) ví dụ câu hỏi B0 hỏi tối đa 2
     # mã câu hỏi → số lần đã nhắc lại khi học sinh hỏi chuyện khác (xóa khi học sinh làm việc với hồ sơ)
     reminded: dict[str, int] = {}
+    # Chat đã đổi giá trị hồ sơ mà học sinh chưa xác nhận, tức .NET chưa lưu hồ sơ chính thức. Bật khi giá trị đổi,
+    # tắt khi bấm "Đúng rồi" hoặc lưu bằng form. Không suy từ trạng thái từng ô vì trạng thái đó mất khi .NET gửi lại nháp
+    unsaved: bool = False
     # Đang sửa hồ sơ trong chat: mã câu các mục học sinh muốn sửa còn chờ hỏi (vd ["D3", "F1"]), hỏi lần lượt,
     # hết thì về bảng rà soát X1. [] = đang hỏi mục cuối; None = không sửa gì
     edit_queue: list[str] | None = None

@@ -544,7 +544,14 @@ class HoSoReader:
 # Ghi đè thành said_in_B0 thì hệ thống tưởng có thông tin mới và bắt rà soát lại hồ sơ dù không có gì đổi
 def repeats_confirmed(state: ChatState, name: str, value: object) -> bool:
     saved = state.profile.get(name)
-    return saved is not None and saved.status == "confirmed" and saved.value == value
+    return saved is not None and saved.status == "confirmed" and stated(saved.value) == stated(value)
+
+
+# Phần học sinh khai của một giá trị: GPA .NET gửi lại có thêm nguồn ("source"), không phải học sinh khai
+def stated(value: object) -> object:
+    if isinstance(value, dict) and "source" in value:
+        return {key: item for key, item in value.items() if key != "source"}
+    return value
 
 
 # Bộ đọc được gửi kèm giá trị đang lưu và có khi chép lại nó dù tin không nêu giá trị ("em muốn sửa GPA").
@@ -552,7 +559,7 @@ def repeats_confirmed(state: ChatState, name: str, value: object) -> bool:
 # (ngân sách lưu theo mức nên chỉ cần tin có số). Mục không kiểm được bằng số thì coi như chưa nói, hỏi lại
 def really_read(state: ChatState, name: str, value: object, message: str) -> bool:
     saved = state.profile.get(name)
-    if saved is None or saved.value != value:
+    if saved is None or stated(saved.value) != stated(value):
         return True
     numbers = {float(found.replace(",", ".")) for found in re.findall(r"\d+(?:[.,]\d+)?", message)}
     if name == "budget":
@@ -846,6 +853,9 @@ def confirm(state: ChatState) -> SkillOutput:
     if not missing:
         # Sang B3: hồ sơ đủ để tư vấn (nhánh tư vấn dựng skill từ khuôn rồi nhờ Claude viết)
         go_to(state, "B3")
+        state.unsaved = (
+            False  # .NET lưu hồ sơ chính thức ở lượt này; lưu lỗi thì .NET giữ trạng thái cũ, dấu vẫn còn
+        )
         return SkillOutput(SAVED)
     output = ask_question(state, FIELD_QUESTION[missing[0]])
     output.answer = f"{NEED_PROFILE} {output.answer}"

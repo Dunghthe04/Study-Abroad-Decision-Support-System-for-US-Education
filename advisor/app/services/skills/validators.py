@@ -81,6 +81,9 @@ ALEVEL_GRADES = ("A*", "A", "B", "C", "D", "E")
 CURRENCIES = ("USD", "VND")
 # Ngân sách tối đa mỗi năm (giống MaxAnnualBudget của .NET)
 MAX_BUDGET_USD = 10_000_000
+# UC-22: trường được xét khi chi phí một năm không quá ngân sách cộng phần trăm này. Phải khớp BudgetTolerance bên .NET
+# (test so hai bên). Advisor chỉ dùng để nói cho học sinh, việc lọc trường do .NET làm
+BUDGET_TOLERANCE_PERCENT = 10
 # Mức ngân sách (USD mỗi năm): mã → (sàn, trần), xếp từ thấp lên cao. Trần None = không giới hạn.
 # Bảng duy nhất cho mọi chỗ cần khoảng tiền của một mức; phải giống budgetTiers (minUsd, maxUsd) trong
 # backend DbSeeder.cs và shared/profile_rules.json

@@ -27,7 +27,7 @@ from app.services.replies import (
 )
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.skills import buttons, edit_prefill, skill_bac_hoc, skill_ho_so
-from app.services.skills.validators import BUDGET_RANGES
+from app.services.skills.validators import BUDGET_RANGES, BUDGET_TOLERANCE_PERCENT
 
 # Giá trị hồ sơ nào do skill nào đọc
 BAC_HOC_FIELDS = set(skill_bac_hoc.READ_FIELDS)
@@ -55,9 +55,12 @@ class ChatProfileHandler:
     # Hồ sơ vẫn đủ nghĩa là không có gì mới, nên không mở lại bước xác nhận
     async def collect(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         state.major_miss, state.budget_said = None, None
+        values_before = profile_values(state)
         saved = state.profile.get("budget")
         before = saved.value if saved is not None else None
         output = await self._route(state, message, slm)
+        if profile_values(state) != values_before:
+            state.unsaved = True
         if state.major_miss is not None:
             return report_major_miss(state)
         return add_budget_note(state, output, before)
@@ -252,7 +255,12 @@ def add_budget_note(state: ChatState, output: SkillOutput, before: str | None) -
         said=said_text, label=buttons.BUDGET_LABELS[saved.value]
     )
     if below:
-        note += BUDGET_NOTE_CEILING.format(ceiling=f"{ceiling:,}".replace(",", "."))
+        limit = ceiling * (100 + BUDGET_TOLERANCE_PERCENT) // 100
+        note += BUDGET_NOTE_CEILING.format(
+            ceiling=f"{ceiling:,}".replace(",", "."),
+            percent=BUDGET_TOLERANCE_PERCENT,
+            limit=f"{limit:,}".replace(",", "."),
+        )
     rest = output.answer.replace(PROFILE_SAME, BUDGET_REVIEW_HINT).replace(PROFILE_DONE, "").strip()
     output.answer = "\n\n".join(part for part in (note, rest) if part)
     if below and state.has_results:
@@ -261,6 +269,15 @@ def add_budget_note(state: ChatState, output: SkillOutput, before: str | None) -
         )
         output.quick_replies = [*output.quick_replies, button]
     return output
+
+
+# Giá trị học sinh khai ở từng ô, để biết lượt này có đổi gì không. Không tính: trạng thái (xác nhận chỉ đổi trạng thái),
+# năm tốt nghiệp (code suy từ lớp, lớp đổi thì đã tính ở lớp) và nguồn GPA (.NET thêm khi gửi lại hồ sơ nháp)
+def profile_values(state: ChatState) -> dict:
+    values = {name: f.value for name, f in state.profile.items() if name != "graduation_year"}
+    if isinstance(gpa := values.get("gpa"), dict):
+        values["gpa"] = {key: value for key, value in gpa.items() if key != "source"}
+    return values
 
 
 # Nhiệm vụ của ý hồ sơ (edit, status, restart); None là khai giá trị hoặc trả lời câu đang chờ

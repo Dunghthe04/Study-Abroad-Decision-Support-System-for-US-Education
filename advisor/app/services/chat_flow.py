@@ -325,23 +325,17 @@ class ChatFlow:
                 return self._response(state, output, [], profile_before)
             if continue_chat and state.pending_advice is not None and profile_ready(state):
                 # Khóa trước khi lấy câu tư vấn đang chờ ra, để nâng cấp xong câu đó vẫn còn
-                if not allows(req, "profile_review"):
-                    return self._locked(req, state, message, started, profile_before, ["profile_review"])
+                kind = state.pending_advice.type
+                if not allows(req, kind):
+                    return self._locked(req, state, message, started, profile_before, [kind])
                 original = state.pending_advice
                 state.pending_advice = None
                 state.intake_mode = "chat"
-                output = await self._branches["profile_review"].run(
+                output = await self._branches[kind].run(
                     state, original.span, SlmTinResult(intents=[original])
                 )
-                log_turn(
-                    state,
-                    message,
-                    None,
-                    ["profile_review"],
-                    (time.perf_counter() - started) * 1000,
-                    req.session_id,
-                )
-                return self._response(state, output, ["profile_review"], profile_before)
+                log_turn(state, message, None, [kind], (time.perf_counter() - started) * 1000, req.session_id)
+                return self._response(state, output, [kind], profile_before)
             if choice:
                 if not allows(req, "collect_profile"):
                     return self._locked(req, state, message, started, profile_before, ["collect_profile"])
@@ -596,6 +590,7 @@ def back_from_form(state: ChatState) -> None:
         state.question_id = None
         state.last_question = ""
     state.edit_queue = None
+    state.unsaved = False  # form đã lưu hồ sơ
     state.intake_mode = "form"  # đến từ form, để limit_to_required không coi là đang hỏi đủ trong chat
     # Bắt buộc như form: cấp học hiện tại (B1.1, cần để lưu hồ sơ) + mục B3; lộ trình / gợi ý trường cần thêm ngành
     goals = form_goals(state.pending_advice)

@@ -5,9 +5,13 @@ tính theo 35.000 mà không nói gì. Chỉ nói khi con số học sinh nói t
 kèm nút thử đúng con số đó (thử giả định, không lưu).
 """
 
+import re
+from pathlib import Path
+
 from app.schemas.chat import ChatState, ProfileField
 from app.services.chat_flow import ask
 from app.services.replies import PROFILE_DONE
+from app.services.skills.validators import BUDGET_TOLERANCE_PERCENT
 from tests.fakes import FakeLLM, tin
 from tests.test_profile_handler import NO_HO_SO, full_profile, make_handler
 
@@ -38,7 +42,7 @@ async def test_a_new_amount_says_the_range_and_how_much_is_counted():
 
     assert state.profile["budget"].value == TIER
     assert "25.000 USD" in output.answer and "20.000 – 35.000 USD" in output.answer
-    assert "tính tối đa 35.000 USD" in output.answer
+    assert "tính theo mức 35.000 USD" in output.answer
 
 
 async def test_another_amount_in_the_same_range_says_why_nothing_changed():
@@ -85,7 +89,7 @@ async def test_a_typed_amount_gets_the_same_note():
 
     output = await make_handler(FakeLLM()).collect(state, "25.000 USD", tin("collect_profile"))
 
-    assert "tính tối đa 35.000 USD" in output.answer
+    assert "tính theo mức 35.000 USD" in output.answer
 
 
 # Nói đúng trần, mức tối thiểu, hoặc khoảng không có trần: không có gì chênh để báo
@@ -94,7 +98,7 @@ async def test_nothing_is_added_when_the_amount_is_the_ceiling_or_a_minimum():
         output = await make_handler(FakeLLM(budget(amount, **extra))).collect(
             state_with("tier_50k_70k"), f"{amount} đô", said(f"{amount} đô")
         )
-        assert "tính tối đa" not in output.answer, amount
+        assert "tính theo mức" not in output.answer, amount
 
 
 # Bộ đọc chép lại mức đang lưu (không có số tiền) thì không được bịa ra con số học sinh nói
@@ -105,4 +109,23 @@ async def test_a_copied_range_adds_no_note():
         state_with(), "em muốn sửa ngân sách", said("ngân sách", "edit")
     )
 
-    assert "tính tối đa" not in output.answer and "vẫn nằm trong mức" not in output.answer
+    assert "tính theo mức" not in output.answer and "vẫn nằm trong mức" not in output.answer
+
+
+# UC-22: trường được xét khi chi phí không quá ngân sách cộng 10%. Lời nhắn phải nói cả phần cho vượt
+async def test_the_note_includes_the_ten_percent_allowance():
+    output = await make_handler(FakeLLM(budget(25_000))).collect(
+        state_with("tier_50k_70k"), "nhà em lo được 25000 đô", said("25000 đô")
+    )
+
+    assert "tính theo mức 35.000 USD và cho vượt thêm 10% (tới 38.500 USD)" in output.answer
+    assert "tối đa 35.000" not in output.answer
+
+
+def test_the_allowance_matches_the_recommendation_engine():
+    path = "backend/src/StudyAbroad.Application/Recommendations/RecommendationService.cs"
+    source = (Path(__file__).resolve().parents[2] / path).read_text(encoding="utf-8")
+
+    found = re.search(r"const decimal BudgetTolerance = ([0-9.]+)m;", source)
+
+    assert BUDGET_TOLERANCE_PERCENT == round(float(found[1]) * 100)
