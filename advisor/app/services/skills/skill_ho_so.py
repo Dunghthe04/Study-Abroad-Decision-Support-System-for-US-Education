@@ -531,6 +531,20 @@ def repeats_confirmed(state: ChatState, name: str, value: object) -> bool:
     return saved is not None and saved.status == "confirmed" and saved.value == value
 
 
+# Bộ đọc được gửi kèm giá trị đang lưu và có khi chép lại nó dù tin không nêu giá trị ("em muốn sửa GPA").
+# Giá trị khác hồ sơ thì chắc chắn đọc từ tin. Giá trị trùng hồ sơ chỉ tính khi con số của nó có trong tin
+# (ngân sách lưu theo mức nên chỉ cần tin có số). Mục không kiểm được bằng số thì coi như chưa nói, hỏi lại
+def really_read(state: ChatState, name: str, value: object, message: str) -> bool:
+    saved = state.profile.get(name)
+    if saved is None or saved.value != value:
+        return True
+    numbers = {float(found.replace(",", ".")) for found in re.findall(r"\d+(?:[.,]\d+)?", message)}
+    if name == "budget":
+        return bool(numbers)
+    number = value.get("value") if isinstance(value, dict) else value
+    return isinstance(number, int | float) and float(number) in numbers
+
+
 # Ghi kết quả đọc vào hồ sơ. keep_existing=True (thông tin nói ở B0) thì không đè thông tin đã có;
 # còn ở B2 học sinh sửa thì ghi đè. Hoạt động / giải thưởng thì thêm vào danh sách đang có (save_items)
 def save_read(
@@ -546,6 +560,9 @@ def save_read(
     fields += [(name, None, "none") for name in read.none_fields]
     if buttons.budget_locked(state):  # ngân sách phụ huynh đã nhập: không ghi đè số học sinh nói
         fields = [field for field in fields if field[0] != "budget"]
+    # Sau khi bỏ ngân sách bị khóa: mục đó không tính là đã nhận, để luồng sửa vẫn báo học sinh là không sửa được.
+    # Xét trước khi ghi, lúc hồ sơ còn giá trị cũ
+    state.read_now.update(name for name, value, _ in fields if really_read(state, name, value, message))
     written = []
     for name, value, field_status in fields:
         if keep_existing and name in state.profile:

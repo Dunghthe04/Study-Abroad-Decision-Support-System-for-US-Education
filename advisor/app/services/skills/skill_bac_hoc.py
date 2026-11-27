@@ -181,7 +181,10 @@ def save_read(
     changed = set()
     for name in READ_FIELDS:
         value = getattr(read, name)
-        if value is None or (keep_existing and name in state.profile):
+        if value is None:
+            continue
+        state.read_now.add(name)
+        if keep_existing and name in state.profile:
             continue
         if value == UNKNOWN:
             state.profile[name] = ProfileField(value=None, status="unknown")

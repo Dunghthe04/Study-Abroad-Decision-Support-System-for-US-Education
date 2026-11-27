@@ -16,6 +16,7 @@ from app.services.replies import (
     PROFILE_DONE,
     PROFILE_NONE_YET,
     PROFILE_RESTART_INTRO,
+    PROFILE_SAME,
     PROFILE_STATUS,
 )
 from app.services.skill_rules import REQUIRED_B3, missing_fields
@@ -147,6 +148,7 @@ class ChatProfileHandler:
         waiting = state.question_id if state.question_id in ALL_QUESTION_FIELDS else None
         old_queue, state.edit_queue = state.edit_queue or [], None
         before = skill_ho_so.profile_snapshot(state)
+        state.read_now.clear()
         if waiting is None:  # đang ở bảng rà soát hoặc không có câu chờ
             output = await self._collect(state, message, said)
         else:  # tin này là yêu cầu sửa, không phải câu trả lời cho câu đang chờ: chỉ ghi giá trị đã nói
@@ -154,15 +156,19 @@ class ChatProfileHandler:
             output = skill_ho_so.review(state)
         after = skill_ho_so.profile_snapshot(state)
 
-        def unchanged(names: list[str] | tuple[str, ...]) -> bool:
-            return all(after.get(name) == before.get(name) for name in names)
+        # Mục chưa được trả lời: hồ sơ không đổi VÀ bộ đọc cũng không đọc ra giá trị nào. Nói lại đúng giá trị đang lưu
+        # là đã trả lời, hỏi lại là sai
+        def unanswered(names: list[str] | tuple[str, ...]) -> bool:
+            return all(after.get(name) == before.get(name) and name not in state.read_now for name in names)
 
-        new = [EDIT_QUESTION[name] for name in PROFILE_KEYS if name in said and unchanged([name])]
-        if waiting is not None and unchanged(ALL_QUESTION_FIELDS[waiting]):
+        new = [EDIT_QUESTION[name] for name in PROFILE_KEYS if name in said and unanswered([name])]
+        if waiting is not None and unanswered(ALL_QUESTION_FIELDS[waiting]):
             new.append(waiting)
         queue = list(dict.fromkeys(new + old_queue))  # bỏ câu trùng (vd SAT và ACT cùng câu D3), giữ thứ tự
         if not queue:
-            return output
+            # Nói rõ giá trị nhưng trùng hồ sơ đang lưu: nói thẳng là trùng và cho xem bảng, không hỏi "sửa mục nào"
+            same = said & state.read_now and all(after.get(name) == before.get(name) for name in PROFILE_KEYS)
+            return skill_ho_so.review(state, PROFILE_SAME) if same else output
         # Ở bảng rà soát mà giá trị sai thì skill_ho_so đã soạn câu hỏi lại (không kèm bảng): giữ câu đó
         text = output.answer if at_review and output.widget is None else None
         state.edit_queue = queue[1:]
