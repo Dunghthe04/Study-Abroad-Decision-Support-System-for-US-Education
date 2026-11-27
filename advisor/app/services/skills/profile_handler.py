@@ -47,6 +47,11 @@ class ChatProfileHandler:
     # Không có câu chờ: ghi giá trị tự khai rồi hỏi tiếp mục còn thiếu.
     # Hồ sơ vẫn đủ nghĩa là không có gì mới, nên không mở lại bước xác nhận
     async def collect(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
+        state.major_miss = None
+        output = await self._route(state, message, slm)
+        return output if state.major_miss is None else report_major_miss(state)
+
+    async def _route(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         said = set(slm.profile_values())
         # Tin còn ý khác (câu hỏi): giá trị hồ sơ chỉ là bối cảnh của câu hỏi, không phải phản hồi cho bảng rà soát
         aside = any(y.type != "collect_profile" for y in slm.intents)
@@ -202,6 +207,21 @@ class ChatProfileHandler:
         if missing_fields(state.profile, required) or self.pending_question(state) is not None:
             return False
         return all(field.status != "said_in_B0" for field in state.profile.values())
+
+
+# Báo ngành không có trong danh mục và hỏi lại ngành. Đang hỏi dở mục sửa khác thì mục đó hỏi sau.
+# Đã có ngành cũ thì thêm nút giữ như cũ để học sinh không bị kẹt ở câu này
+def report_major_miss(state: ChatState) -> SkillOutput:
+    waiting = state.question_id
+    queue = [q for q in state.edit_queue or [] if q != "B1.3"]
+    if state.edit_queue is not None and waiting in ALL_QUESTION_FIELDS and waiting != "B1.3":
+        queue.insert(0, waiting)
+    has_major = "major" in state.profile
+    state.edit_queue = queue if has_major or state.edit_queue is not None else None
+    output = skill_bac_hoc.ask_major_again(state, state.major_miss)
+    if has_major:
+        output.quick_replies = [*output.quick_replies, skill_ho_so.KEEP_REPLY]
+    return output
 
 
 # Nhiệm vụ của ý hồ sơ (edit, status, restart); None là khai giá trị hoặc trả lời câu đang chờ

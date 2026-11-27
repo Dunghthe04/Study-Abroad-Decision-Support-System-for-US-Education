@@ -258,7 +258,12 @@ class BacHocHandler:
     # Ngành không khớp danh sách thì bỏ, tới B1.3 hỏi lại
     async def save_said(self, state: ChatState, message: str) -> None:
         read = await self._reader.read("B1.1", message)
-        await resolve_major(read)
+        # "em muốn đổi ngành" bị đọc thành "chưa rõ": nói kèm tin thì không được xóa ngành đã lưu, luồng sửa sẽ hỏi ngành mới
+        saved = state.profile.get("major")
+        if read.major == UNKNOWN and saved is not None and saved.value:
+            read.major = None
+        # Ngành không có trong danh mục thì nhớ lại để báo học sinh, không bỏ im lặng
+        state.major_miss = await resolve_major(read)
         save_read(state, read, status="said_in_B0")
 
     async def run(self, state: ChatState, message: str) -> SkillOutput:
@@ -280,7 +285,7 @@ class BacHocHandler:
         read = await self._reader.read(question_id, message)
         miss = await resolve_major(read)
         save_read(state, read)
-        if miss is not None and question_id == "B1.3" and not answered(state, "B1.3"):
+        if miss is not None and question_id == "B1.3":
             return ask_major_again(state, miss)
         # Học sinh chưa trả lời câu đang hỏi thì hỏi lại (tối đa 2 lần, ngành thì hỏi tới khi có)
         if (

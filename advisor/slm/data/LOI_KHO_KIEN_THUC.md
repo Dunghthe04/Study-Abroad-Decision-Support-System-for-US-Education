@@ -122,3 +122,7 @@ Bảng `university_offerings` có 3 dòng số được nhận LỚN HƠN số n
 | Williams College | 16856 | 14616 |
 
 Cần đối chiếu nguồn rồi mới sửa.
+
+### Danh mục ngành thiếu tên gọi tiếng Anh (27/11/2026, đã tra danh mục)
+
+"Artificial Intelligence", "Information Systems" không khớp ngành nào, cũng không có ngành gần giống; trong khi "trí tuệ nhân tạo", "an ninh mạng" khớp được "Computer and information sciences". Cần nhóm duyệt tên gọi khác cho từng nhóm ngành (Information Systems có thể thuộc nhóm máy tính hoặc kinh doanh) rồi thêm bằng migration.
