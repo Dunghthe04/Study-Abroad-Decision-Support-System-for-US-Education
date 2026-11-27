@@ -1,17 +1,16 @@
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Billing;
 using System;
 using System.Globalization;
 using System.Net;
-using System.Net.Mail;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace StudyAbroad.Infrastructure.Auth
 {
-    public class SmtpEmailSender(IOptions<SmtpOptions> options, ILogger<SmtpEmailSender> logger) : IEmailSender
+    /// <summary>Dựng nội dung từng loại mail rồi đưa vào hàng đợi email_outbox (đã mã hóa); job nền gửi qua SMTP.</summary>
+    public class SmtpEmailSender(IOptions<SmtpOptions> options, EmailOutboxWriter outbox) : IEmailSender
     {
         private readonly SmtpOptions _options = options.Value;
 
@@ -33,7 +32,7 @@ namespace StudyAbroad.Infrastructure.Auth
                 </div>
                 """;
 
-            await SendEmailAsync(toEmail, subject, body, ct);
+            await SendEmailAsync(toEmail, subject, body, ct, "verify_email", TimeSpan.FromMinutes(expiryMinutes));
         }
 
         public async Task SendPasswordResetEmailAsync(string toEmail, string fullName, string otpCode, int expiryMinutes = 10, CancellationToken ct = default)
@@ -54,7 +53,7 @@ namespace StudyAbroad.Infrastructure.Auth
                 </div>
                 """;
 
-            await SendEmailAsync(toEmail, subject, body, ct);
+            await SendEmailAsync(toEmail, subject, body, ct, "reset_password", TimeSpan.FromMinutes(expiryMinutes));
         }
 
         public async Task SendAccountTempLockedNotificationAsync(string toEmail, string fullName, int lockoutMinutes = 0, CancellationToken ct = default)
@@ -173,7 +172,7 @@ namespace StudyAbroad.Infrastructure.Auth
                 </div>
                 """;
 
-            await SendEmailAsync(toEmail, subject, body, ct);
+            await SendEmailAsync(toEmail, subject, body, ct, $"parent_invite|{student}");
         }
 
         // [UC-109] Học sinh 16–17 tự đồng ý được và đã dùng hệ thống: thư chỉ mời phụ huynh liên kết để theo dõi,
@@ -197,7 +196,7 @@ namespace StudyAbroad.Infrastructure.Auth
                 </div>
                 """;
 
-            await SendEmailAsync(toEmail, subject, body, ct);
+            await SendEmailAsync(toEmail, subject, body, ct, $"parent_invite|{student}");
         }
 
         public async Task SendCenterVerificationOutcomeEmailAsync(string toEmail, string centerName, string outcome, string? reason, IReadOnlyList<string>? unmetConditions, CancellationToken ct = default)
@@ -466,7 +465,7 @@ namespace StudyAbroad.Infrastructure.Auth
                 </div>
                 """;
 
-            await SendEmailAsync(toEmail, subject, body, ct);
+            await SendEmailAsync(toEmail, subject, body, ct, $"lead_parent_confirm|{studentName}|{centerName}");
         }
 
         public async Task SendLeadParentDecisionEmailAsync(string toEmail, string studentName, string centerName, string outcome, CancellationToken ct = default)
@@ -678,7 +677,7 @@ namespace StudyAbroad.Infrastructure.Auth
                 </div>
                 """;
 
-            await SendEmailAsync(toEmail, subject, body, ct);
+            await SendEmailAsync(toEmail, subject, body, ct, $"family_invite|{ownerName}");
         }
 
         /// <summary>Giờ Việt Nam dạng dd/MM/yyyy HH:mm (chuỗi chỉ gồm số và dấu / :, an toàn để chèn thẳng vào HTML).</summary>
@@ -689,39 +688,14 @@ namespace StudyAbroad.Infrastructure.Auth
         public static string Vnd(decimal amount) =>
             amount.ToString("N0", CultureInfo.InvariantCulture).Replace(',', '.') + " đ";
 
-        private async Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken ct)
+        /// <param name="dedupeKind">Loại mail mà mail mới làm mail cũ hết giá trị (OTP mới, lời mời mới): mail cũ chưa gửi thì bỏ.</param>
+        /// <param name="lifetime">Hạn của nội dung mail (OTP): quá hạn mà chưa gửi được thì không gửi nữa.</param>
+        private Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken ct,
+            string? dedupeKind = null, TimeSpan? lifetime = null)
         {
-            if (string.IsNullOrWhiteSpace(_options.User) || string.IsNullOrWhiteSpace(_options.Password))
-            {
-                logger.LogWarning("[SMTP Warning] SMTP chưa được cấu hình thông tin đăng nhập trong .env (SMTP_USER/SMTP_PASSWORD). Email gửi tới {Email} với tiêu đề '{Subject}' đã được ghi nhận trong log hệ thống.", toEmail, subject);
-                return;
-            }
-
-            try
-            {
-                using var client = new SmtpClient(_options.Host, _options.Port)
-                {
-                    EnableSsl = _options.EnableSsl,
-                    Credentials = new NetworkCredential(_options.User, _options.Password),
-                    Timeout = 10000 // 10 giây
-                };
-
-                using var message = new MailMessage
-                {
-                    From = new MailAddress(_options.FromEmail, _options.FromName),
-                    Subject = subject,
-                    Body = htmlBody,
-                    IsBodyHtml = true
-                };
-                message.To.Add(toEmail);
-
-                await client.SendMailAsync(message, ct);
-                logger.LogInformation("Đã gửi email thật thành công tới {Email} qua SMTP {Host}:{Port}", toEmail, _options.Host, _options.Port);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Lỗi khi gửi email SMTP tới {Email}: {Message}", toEmail, ex.Message);
-            }
+            // Không dùng ct: mail đã quyết định gửi thì vẫn đi dù người dùng đóng tab
+            _ = ct;
+            return outbox.EnqueueAsync(new OutgoingMail(toEmail, subject, htmlBody), dedupeKind, lifetime);
         }
     }
 }

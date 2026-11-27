@@ -159,11 +159,18 @@ public static class DependencyInjection
             options.FromName = NonEmpty(configuration["SMTP_FROM_NAME"]) ?? NonEmpty(configuration["SMTP_SENDER_NAME"]) ?? options.FromName;
             options.AppBaseUrl = NonEmpty(configuration["APP_PUBLIC_URL"]) ?? options.AppBaseUrl;
         });
-        // Mail gửi ở nền qua hàng đợi: request không chờ SMTP
-        services.AddSingleton<SmtpEmailSender>();
-        services.AddSingleton<EmailQueue>();
-        services.AddSingleton<IEmailSender, QueuedEmailSender>();
-        services.AddHostedService<EmailDispatchBackgroundService>();
+        // Mail ghi vào bảng email_outbox (đã mã hóa) rồi job nền gửi: request không chờ SMTP,
+        // api khởi động lại hay mất mạng thì mail vẫn còn và được gửi lại theo lịch
+        services.Configure<MailOutboxOptions>(options =>
+            options.EncryptionKey = NonEmpty(configuration["MAIL_ENCRYPTION_KEY"]) ?? options.EncryptionKey);
+        services.AddSingleton<MailPayloadProtector>();
+        services.AddSingleton<EmailOutboxSignal>();
+        services.AddSingleton<IEmailOutboxStore, EfEmailOutboxStore>();
+        services.AddSingleton<EmailOutboxWriter>();
+        services.AddSingleton<IMailTransport, SmtpMailTransport>();
+        services.AddSingleton<EmailOutboxProcessor>();
+        services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.EmailOutboxBackgroundService>();
 
         // [UC-80] Thời hạn chờ xóa tài khoản và chu kỳ job xóa hẳn (appsettings "AccountDeletion")
         services.Configure<StudyAbroad.Application.Auth.AccountDeletionOptions>(

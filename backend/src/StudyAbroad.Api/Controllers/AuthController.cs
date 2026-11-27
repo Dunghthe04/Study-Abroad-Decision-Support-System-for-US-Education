@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using StudyAbroad.Api.Extensions;
+using StudyAbroad.Api.Filters;
 using StudyAbroad.Api.RateLimiting;
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.StudyCenters;
@@ -17,6 +18,7 @@ namespace StudyAbroad.Api.Controllers
         // Trùng email/SĐT vẫn trả cùng thông báo (chống dò tài khoản), chủ hộp thư nhận mail báo riêng.
         [HttpPost("register")]
         [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        [MinimumResponseTime(400)]
         public async Task<IActionResult> Register(RegisterRequest request, CancellationToken ct)
         {
             var result = await auth.RegisterAsync(request, ct, HttpContext.Connection.RemoteIpAddress?.ToString());
@@ -49,6 +51,7 @@ namespace StudyAbroad.Api.Controllers
         // [USAS-12] Gửi lại mã OTP (verify_email, reset_password)
         [HttpPost("resend-otp")]
         [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        [MinimumResponseTime(400)]
         public async Task<IActionResult> ResendOtp(ResendOtpRequest request, CancellationToken ct)
         {
             var result = await auth.ResendOtpAsync(request, ct);
@@ -154,6 +157,7 @@ namespace StudyAbroad.Api.Controllers
         // [USAS-12] Yêu cầu đặt lại mật khẩu (Gửi mã OTP qua Email)
         [HttpPost("forgot-password")]
         [EnableRateLimiting(AuthRateLimit.PolicyName)]
+        [MinimumResponseTime(400)]
         public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request, CancellationToken ct)
         {
             var result = await auth.ForgotPasswordAsync(request, ct);
