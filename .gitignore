@@ -2,6 +2,8 @@
 .env
 !.env.example
 **/appsettings.Local.json
+# Dev settings hold real SMTP/Cloudinary creds: copy appsettings.Development.example.json, secrets go in user-secrets
+**/appsettings.Development.json
 
 # Certificates & backups (production)
 deploy/certbot/

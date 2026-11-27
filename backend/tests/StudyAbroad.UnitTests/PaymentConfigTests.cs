@@ -130,7 +130,7 @@ public class PaymentConfigTests
     [Fact]
     public void DevelopmentSettings_TurnOnTheFakeGatewayWithTheDevChecksumKey()
     {
-        var payOs = LoadSettings("appsettings.json", "appsettings.Development.json").GetSection("PayOs").Get<PayOsOptions>()!;
+        var payOs = LoadSettings("appsettings.json", "appsettings.Development.example.json").GetSection("PayOs").Get<PayOsOptions>()!;
 
         Assert.Equal((true, "dev-checksum-key"), (payOs.UseFake, payOs.ChecksumKey));
     }

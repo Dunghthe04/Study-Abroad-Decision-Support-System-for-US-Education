@@ -4,6 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>studyabroad-api-7c1e5a52-3b0f-4d6e-9a41-2f8d6b0c91e3</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
