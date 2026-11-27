@@ -27,7 +27,7 @@ from app.services.replies import (
 )
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.skills import buttons, edit_prefill, skill_bac_hoc, skill_ho_so
-from app.services.skills.validators import BUDGET_RANGES
+from app.services.skills.validators import BUDGET_RANGES, BUDGET_TOLERANCE_PERCENT
 
 # Giá trị hồ sơ nào do skill nào đọc
 BAC_HOC_FIELDS = set(skill_bac_hoc.READ_FIELDS)
@@ -252,7 +252,12 @@ def add_budget_note(state: ChatState, output: SkillOutput, before: str | None) -
         said=said_text, label=buttons.BUDGET_LABELS[saved.value]
     )
     if below:
-        note += BUDGET_NOTE_CEILING.format(ceiling=f"{ceiling:,}".replace(",", "."))
+        limit = ceiling * (100 + BUDGET_TOLERANCE_PERCENT) // 100
+        note += BUDGET_NOTE_CEILING.format(
+            ceiling=f"{ceiling:,}".replace(",", "."),
+            percent=BUDGET_TOLERANCE_PERCENT,
+            limit=f"{limit:,}".replace(",", "."),
+        )
     rest = output.answer.replace(PROFILE_SAME, BUDGET_REVIEW_HINT).replace(PROFILE_DONE, "").strip()
     output.answer = "\n\n".join(part for part in (note, rest) if part)
     if below and state.has_results:

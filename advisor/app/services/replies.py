@@ -163,7 +163,8 @@ PROFILE_NONE_YET = "Hiện mình chưa lưu thông tin hồ sơ nào của bạn
 BUDGET_NOTE_NEW = "Bạn nói khoảng {said} USD mỗi năm. Mình lưu theo mức {label}."
 BUDGET_NOTE_SAME = "{said} USD vẫn nằm trong mức {label} đang lưu nên hồ sơ không đổi."
 BUDGET_NOTE_CEILING = (
-    " Khi gợi ý trường, hệ thống tính tối đa {ceiling} USD nên có thể có trường tốn hơn mức bạn nói."
+    " Khi gợi ý trường, hệ thống tính theo mức {ceiling} USD và cho vượt thêm {percent}% (tới {limit} USD) "
+    "nên có thể có trường tốn hơn mức bạn nói."
 )
 BUDGET_REVIEW_HINT = 'Bạn xem bảng hồ sơ: đúng thì bấm "Đúng rồi", muốn đổi thì bấm "Cần sửa".'
 # Nút thử đúng số học sinh nói bằng thử giả định (không lưu vào hồ sơ). Câu gửi đi đã thử trên SLM v6: đúng 16/16
