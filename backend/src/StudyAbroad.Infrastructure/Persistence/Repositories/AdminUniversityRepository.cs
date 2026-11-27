@@ -14,8 +14,7 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
 
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
-            var pattern = $"%{query.Search.Trim()}%";
-            q = q.Where(u => EF.Functions.ILike(u.Name, pattern) || EF.Functions.ILike(u.Code, pattern));
+            q = q.Where(UniversitySearch.Matches(query.Search));
         }
         if (!string.IsNullOrWhiteSpace(query.State))
         {
@@ -31,7 +30,10 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
             q = q.Where(u => u.IsActive == query.IsActive);
 
         var total = await q.CountAsync(ct);
-        var items = await q.OrderBy(u => u.Name)
+        var ordered = string.IsNullOrWhiteSpace(query.Search)
+            ? q.OrderBy(u => u.Name)
+            : q.OrderByDescending(UniversitySearch.ExactHit(query.Search)).ThenBy(u => u.Name);
+        var items = await ordered
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
             .Select(u => new AdminUniversityListItemDto(
@@ -46,7 +48,8 @@ public class AdminUniversityRepository(AppDbContext db) : IAdminUniversityReposi
                 db.UniversityOfferings.Where(o => o.UniversityId == u.Id).Select(o => o.StudyLevel).ToList(),
                 db.UniversityOfferings.Where(o => o.UniversityId == u.Id).Max(o => o.RetrievedAt),
                 db.Media.Where((m) => m.EntityType == "University" && m.EntityId == u.Id && m.Type == "logo").Select(m => m.Url).FirstOrDefault(),
-                db.Scholarships.Count(s => s.UniversityId == u.Id)))
+                db.Scholarships.Count(s => s.UniversityId == u.Id),
+                u.Aliases))
             .ToListAsync(ct);
 
         return new PagedResult<AdminUniversityListItemDto>(items, query.Page, query.PageSize, total);
