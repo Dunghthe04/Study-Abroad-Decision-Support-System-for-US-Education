@@ -21,7 +21,7 @@ public class SubscriptionController(IEntitlementService entitlements) : Controll
         return Ok(await entitlements.GetSummaryAsync(userId, DateTime.UtcNow, ct));
     }
 
-    /// <summary>Hạn mức chung còn lại của tôi ngay lúc này, một con số phần trăm (menu tài khoản).</summary>
+    /// <summary>Hạn mức còn lại của tôi ngay lúc này, hai thanh Premium và Free (menu tài khoản).</summary>
     [HttpGet("quota")]
     [ProducesResponseType(typeof(QuotaOverviewDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetQuota(CancellationToken ct)
