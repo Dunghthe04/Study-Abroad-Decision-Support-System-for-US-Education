@@ -1,6 +1,10 @@
-"""Che thông tin cá nhân trong chữ đọc từ bảng điểm trước khi gửi cho LLM (GB-06 trong SRS).
+"""Che thông tin cá nhân trước khi gửi cho LLM (GB-06 trong SRS). Hai mức:
 
-Che theo nhãn ("Họ và tên:", "Ngày sinh:", "Mã học sinh:", "Số CCCD:"...), cả dạng "Nhãn: giá trị" lẫn ô bảng
+- mask_personal_info: chữ đọc từ BẢNG ĐIỂM và chữ ghi log. Che mạnh (mọi ngày, mọi dãy số dài).
+- mask_outgoing: mọi nội dung gửi sang Claude, gọi ở một cửa duy nhất (ClaudeClient). Chỉ che thứ nhận ra chắc chắn, vì
+  câu chat và hồ sơ có số tiền, điểm, ngày thi mà Claude cần để tư vấn. Họ tên viết tự do trong câu không nhận ra được.
+
+Mức bảng điểm che theo nhãn ("Họ và tên:", "Ngày sinh:", "Mã học sinh:", "Số CCCD:"...), cả dạng "Nhãn: giá trị" lẫn ô bảng
 Markdown "| Nhãn | giá trị |"; thêm ngày dạng dd/mm/yyyy, email và dãy số dài (CCCD, số điện thoại, mã số).
 Không đụng tới điểm, tên môn, "Lớp 10", "HK1", năm học "2023-2024" vì bước sau cần các thông tin này.
 """
@@ -83,6 +87,70 @@ _EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _LONG_NUMBER_RE = re.compile(r"(?<![\d.,])\+?\d{2,}(?:[ .]\d{3,})*(?!\d|[.,]\d)")
 MIN_ID_DIGITS = 8
 _YEAR_RE = re.compile(r"(?:19|20)\d{2}")
+
+
+# --- Mức gửi đi (mask_outgoing) ---
+# Di động 0[35789] + 8 số, máy bàn 02 + 9 số, đầu +84 thay cho 0; cho phép cách, chấm, gạch giữa các số.
+# Số tiền không bắt đầu bằng 0 nên không dính
+_PHONE_RE = re.compile(
+    r"(?<![\d.,])(?:(?:\(\+84\)|\+84)[ .\-]?|0)(?:[35789](?:[ .\-]?\d){8}|2(?:[ .\-]?\d){9})(?!\d|[.,]\d)"
+    # "84912345678" không có dấu cộng: chỉ nhận khi viết liền đúng 11 chữ số, để không trúng số tiền viết tách nhóm
+    r"|(?<![\d.,])84[35789]\d{8}(?!\d|[.,]\d)"
+)
+_CITIZEN_ID_RE = re.compile(r"(?<![\d.,])0\d{11}(?!\d|[.,]\d)")
+# Ngày sinh chỉ khi câu nói rõ là ngày sinh, để không che ngày thi (so trên bản không dấu)
+_BIRTH_RE = re.compile(
+    r"(?<![a-z0-9])(?:ngay thang nam sinh|ngay sinh|sinh ngay|(?:em|minh|con) sinh|date of birth|dob)"
+    r"(?:\s+(?:cua\s+)?(?:em|minh|con|toi))?(?:\s+la)?\s*[:：]?\s*"
+    r"(?P<value>\d{1,2}\s*[/.\-]\s*\d{1,2}\s*[/.\-]\s*(?:19|20)\d{2}"
+    r"|\d{1,2}\s+thang\s+\d{1,2}\s+nam\s+(?:19|20)\d{2})"
+)
+# Nhãn định danh có dấu hai chấm. Không dùng "name", "email", "học sinh" như mức bảng điểm vì dễ trúng chữ thường.
+# Giá trị dừng ở dấu phẩy, chấm, ngoặc kép... để không nuốt phần còn lại của câu hay của JSON
+_OUTGOING_LABELS = (
+    "ho va ten",
+    "ho ten",
+    "dia chi",
+    "so dien thoai",
+    "dien thoai",
+    "sdt",
+    "so cccd",
+    "cccd",
+    "so cmnd",
+    "cmnd",
+    "can cuoc cong dan",
+    "so dinh danh",
+    "ma dinh danh",
+    "ho chieu",
+    "passport",
+    "ngay thang nam sinh",
+    "ngay sinh",
+)
+_OUTGOING_LABEL_RE = re.compile(
+    rf"(?<![a-z0-9])(?P<label>{'|'.join(sorted(_OUTGOING_LABELS, key=len, reverse=True))}){_OWNER}"
+    r"\s*[:：]\s*(?P<value>[^\s,;.|\[\]\"\\{}][^,;.|\n\[\]\"\\{}]{0,59})"
+)
+
+
+def mask_outgoing(text: str) -> str:
+    """Che những thông tin cá nhân nhận ra chắc chắn trong nội dung gửi sang LLM bên ngoài. Hàm thuần."""
+    text = unicodedata.normalize("NFC", text)
+    text = _EMAIL_RE.sub(EMAIL_MASK, text)
+    text = _mask_group(text, _BIRTH_RE, lambda m: BIRTH_MASK)
+    text = _CITIZEN_ID_RE.sub(ID_MASK, text)
+    text = _PHONE_RE.sub(CONTACT_MASK, text)
+    return _mask_group(text, _OUTGOING_LABEL_RE, lambda m: _LABELS[m["label"]])
+
+
+# Tìm trên bản không dấu (cùng độ dài), thay đúng đoạn "value" trên chữ gốc
+def _mask_group(text: str, pattern: re.Pattern[str], mask_of) -> str:
+    out: list[str] = []
+    pos = 0
+    for m in pattern.finditer(_plain_keep_length(text)):
+        start, end = m.span("value")
+        out += [text[pos:start], mask_of(m)]
+        pos = end
+    return "".join(out) + text[pos:]
 
 
 def mask_personal_info(text: str) -> str:
