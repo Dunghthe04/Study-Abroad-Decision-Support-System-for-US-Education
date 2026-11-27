@@ -81,6 +81,10 @@ class ChatState(CamelModel):
     read_now: set[str] = Field(default_factory=set, exclude=True)
     # Ngành học sinh vừa nói mà danh mục không có (skill_bac_hoc.MajorMiss), để lượt này báo học sinh. Không lưu theo phiên
     major_miss: Any = Field(default=None, exclude=True)
+    # Lượt này .NET có làm được hai bước không (ChatRequest.can_resume), và nhánh hồ sơ có vừa hoãn câu đang chờ không.
+    # Chỉ dùng trong lượt
+    can_resume: bool = Field(default=False, exclude=True)
+    resume_needed: bool = Field(default=False, exclude=True)
     # Số tiền (USD mỗi năm) học sinh vừa nói trong lượt này, để nói rõ hệ thống tính tới mức nào. Không lưu theo phiên
     budget_said: float | None = Field(default=None, exclude=True)
     return_to: Step | None = None  # bước dở cần quay lại sau B5, B6
@@ -172,6 +176,11 @@ class ChatRequest(TurnInputs):
     # Tin này do form gửi ngay sau khi lưu hồ sơ chính thức (câu gộp việc đã tích, hoặc "Tiếp tục bằng chat"):
     # form đã là bước rà soát nên không hỏi lại bảng xác nhận X1 trong chat
     from_form: bool = False
+    # .NET làm được hai bước ở lượt xác nhận hồ sơ: advisor hoãn câu đang chờ, .NET lưu hồ sơ rồi gọi lại với resume.
+    # .NET bản cũ không gửi thì advisor trả lời luôn trong lượt xác nhận
+    can_resume: bool = False
+    # Lần gọi thứ hai của lượt xác nhận: hồ sơ đã lưu, lộ trình đã tính lại. Chỉ trả lời câu đang chờ, không gọi SLM
+    resume: bool = False
     # Loại ý được chạy theo gói của học sinh (.NET gửi, vd gói Free: ["knowledge", "out_of_scope"]); None = chạy mọi loại
     allowed_intents: list[str] | None = None
 
@@ -285,5 +294,7 @@ class ChatResponse(CamelModel):
     ai_usage: list[
         AiUsageCall
     ] = []  # token từng lần gọi AI trong lượt này, để .NET ghi nhật ký và tính chi phí
+    # Còn câu đang chờ chưa trả lời: .NET lưu hồ sơ chính thức xong thì gọi lại với resume=True
+    resume_needed: bool = False
     locked_intents: list[str] = []  # loại ý bị bỏ vì gói không cho (allowed_intents), .NET hiện thẻ nâng cấp
     slm: SlmSummary | None = None  # SLM hiểu tin nhắn ra sao; None nếu lượt không qua bước đọc tin

@@ -9,7 +9,7 @@ using StudyAbroad.Domain.Constants;
 
 namespace StudyAbroad.UnitTests;
 
-public class ChatServiceTests
+public partial class ChatServiceTests
 {
     private static readonly IReadOnlyList<Application.Advisor.ChatMessage> Hello = [new Application.Advisor.ChatMessage("user", "chào")];
 

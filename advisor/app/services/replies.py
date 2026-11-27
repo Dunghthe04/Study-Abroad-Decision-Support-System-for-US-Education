@@ -175,6 +175,8 @@ UNSAVED_REVIEW = (
     'Bạn vừa đổi thông tin hồ sơ mà chưa xác nhận. Bạn xem bảng bên dưới: đúng thì bấm "Đúng rồi", '
     "mình lưu rồi trả lời câu bạn vừa hỏi."
 )
+# Chữ của nút trả lời lại câu đang chờ, hiện khi hồ sơ đã lưu mà lần gọi trả lời bị lỗi. Phải khớp ChatResume.cs bên .NET
+RESUME_VALUE = "Trả lời giúp câu em vừa hỏi"
 # Học sinh sửa mà giá trị nói ra trùng giá trị đang lưu: đi kèm bảng hồ sơ
 PROFILE_SAME = (
     "Thông tin bạn vừa nói trùng với hồ sơ đang lưu nên mình giữ nguyên. "
