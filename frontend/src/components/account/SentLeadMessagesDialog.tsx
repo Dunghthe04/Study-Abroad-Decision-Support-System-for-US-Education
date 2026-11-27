@@ -60,22 +60,28 @@ export function SentLeadMessagesDialog({ lead, open, onOpenChange, onThreadChang
           </DialogDescription>
         </DialogHeader>
         {/* Chỉ dựng phần thân khi mở, để mỗi lần mở là tải lại luồng tin */}
-        {open && <ThreadBody leadId={lead.id} initialStatus={lead.status} leadCreatedAt={lead.createdAt} onThreadChange={onThreadChange} />}
+        {open && <SentLeadThread leadId={lead.id} initialStatus={lead.status} leadCreatedAt={lead.createdAt} onThreadChange={onThreadChange} />}
       </DialogContent>
     </Dialog>
   );
 }
 
-function ThreadBody({
+/**
+ * Thân khung tin nhắn phía người gửi. Dùng trong hộp thoại ở thẻ UC-44 và trong khung chat nổi của hộp thư tin nhắn
+ * (compact: lấp đầy chiều cao khung, bỏ thẻ hướng dẫn, cảnh báo ngắn gọn).
+ */
+export function SentLeadThread({
   leadId,
   initialStatus,
   leadCreatedAt,
   onThreadChange,
+  compact = false,
 }: {
   leadId: string;
   initialStatus: string;
   leadCreatedAt?: string | null;
   onThreadChange?: (change: SentLeadThreadChange) => void;
+  compact?: boolean;
 }) {
   const { user } = useAuth();
   const [messages, setMessages] = useState<LeadMessageDto[]>([]);
@@ -250,7 +256,7 @@ function ThreadBody({
   };
 
   return (
-    <div className="space-y-3">
+    <div className={cn(compact ? "flex h-full min-h-0 flex-col gap-2" : "space-y-3")}>
       <div className="flex items-center justify-end gap-2">
         <PeerPresenceBadge connected={chat.connected} online={chat.peerOnline} peerLabel="Trung tâm" />
         {lastSyncedAt && !isLoading && (
@@ -265,7 +271,7 @@ function ThreadBody({
       </div>
 
       {/* [UC-44] Thẻ hướng dẫn từ Kho tri thức (CENTER_ASK / CENTER_WARNING) */}
-      {(guidanceCards?.askCard || guidanceCards?.warningCard) && (
+      {!compact && (guidanceCards?.askCard || guidanceCards?.warningCard) && (
         <div className="space-y-1.5">
           {guidanceCards.askCard && (
             <details className="rounded-md border border-brand/25 bg-brand-wash/20 px-3 py-2 text-xs">
@@ -292,11 +298,24 @@ function ThreadBody({
       <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
         <AlertTriangleIcon className="size-4 text-amber-600 shrink-0 mt-0.5" />
         <span>
-          <strong>Cảnh báo an toàn:</strong> Tuyệt đối không chuyển tiền cọc hoặc thanh toán chi phí qua tài khoản cá nhân được cung cấp trong khung chat khi chưa có hợp đồng pháp lý rõ ràng. USDSS không chịu trách nhiệm đối với các giao dịch chuyển khoản cá nhân bên ngoài hệ thống.
+          <strong>Cảnh báo an toàn:</strong>{" "}
+          {compact ? (
+            "Không chuyển tiền cọc qua tài khoản cá nhân khi chưa có hợp đồng."
+          ) : (
+            <>
+              Tuyệt đối không chuyển tiền cọc hoặc thanh toán chi phí qua tài khoản cá nhân được cung cấp trong khung chat khi chưa có hợp đồng pháp lý rõ ràng. USDSS không chịu trách nhiệm đối với các giao dịch chuyển khoản cá nhân bên ngoài hệ thống.
+            </>
+          )}
         </span>
       </div>
 
-      <div className="max-h-80 space-y-2.5 overflow-y-auto rounded-lg border bg-muted/20 p-3" aria-live="polite">
+      <div
+        className={cn(
+          "space-y-2.5 overflow-y-auto rounded-lg border bg-muted/20 p-3",
+          compact ? "min-h-0 flex-1" : "max-h-80",
+        )}
+        aria-live="polite"
+      >
         {isLoading && messages.length === 0 ? (
           <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
             <Spinner />
@@ -355,7 +374,7 @@ function ThreadBody({
               }
             }}
             maxLength={MAX_LEAD_MESSAGE_LENGTH}
-            rows={3}
+            rows={compact ? 2 : 3}
             disabled={isSending}
             placeholder="Nhập tin nhắn cho trung tâm (Ctrl+Enter để gửi)..."
             aria-label="Nội dung tin nhắn"

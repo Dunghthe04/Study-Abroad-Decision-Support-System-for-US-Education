@@ -309,6 +309,12 @@ public class LeadsControllerTests
 
         public Task<int> RemoveAllMessagesOfLockedSenderAsync(Guid adminUserId, Guid senderUserId, string? reason, CancellationToken ct = default) =>
             Task.FromResult(0);
+
+        public Task<LeadInboxDto> GetSentInboxAsync(Guid userId, CancellationToken ct = default) =>
+            RuleToThrow is not null ? throw RuleToThrow : Task.FromResult(new LeadInboxDto([], 0));
+
+        public Task<LeadInboxDto> GetCenterInboxAsync(Guid userId, string? userEmail, string userRole, CancellationToken ct = default) =>
+            RuleToThrow is not null ? throw RuleToThrow : Task.FromResult(new LeadInboxDto([], 0));
     }
 
     private static (LeadsController Controller, FakeLeadService Service) CreateController(Guid userId)

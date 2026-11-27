@@ -432,6 +432,8 @@ CALC_KEYS = (
     "ec_level",
     "scholarship_chance",
     "timeline",
+    "target_schools",  # mức sẵn sàng theo từng trường mục tiêu (roadmap)
+    "urgent_tasks",  # 1–2 việc chưa xong gấp nhất trên lộ trình (roadmap)
 )
 
 

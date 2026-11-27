@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ShieldCheckIcon, XIcon } from "lucide-react";
@@ -47,10 +47,26 @@ export function PolicyGate({ children }: { children: ReactNode }) {
   );
   const refresh = useCallback(() => setAttempt((n) => n + 1), []);
 
+  // Trang phía sau đã có lời gọi bị chặn 403 (dữ liệu chưa tải được): đồng ý xong thì dựng lại trang một lần để nó tự tải lại.
+  // Không có lời gọi nào bị chặn thì giữ nguyên trang, không mất dữ liệu đang nhập.
+  const missed = useRef(false);
+  const [epoch, setEpoch] = useState(0);
+  const accepted = useCallback(() => {
+    if (missed.current) {
+      missed.current = false;
+      setEpoch((n) => n + 1);
+    }
+    refresh();
+  }, [refresh]);
+
   // Server báo 403 policy_acceptance_required ở bất kỳ lời gọi nào (vd. admin vừa công bố bản bắt buộc): kiểm tra lại
   useEffect(() => {
-    window.addEventListener(POLICY_REQUIRED_EVENT, refresh);
-    return () => window.removeEventListener(POLICY_REQUIRED_EVENT, refresh);
+    const onRequired = () => {
+      missed.current = true;
+      refresh();
+    };
+    window.addEventListener(POLICY_REQUIRED_EVENT, onRequired);
+    return () => window.removeEventListener(POLICY_REQUIRED_EVENT, onRequired);
   }, [refresh]);
 
   // Chỉ tin kết quả của CHÍNH người đang đăng nhập (đổi tài khoản không tải lại trang thì kết quả cũ thuộc người khác).
@@ -63,10 +79,10 @@ export function PolicyGate({ children }: { children: ReactNode }) {
   return (
     <>
       {status && !blocked && status.hasUpdates && !status.mustAccept ? <PolicyUpdateNotice status={status} /> : null}
-      <div inert={blocked} aria-hidden={blocked || undefined} className="contents">
+      <div key={epoch} inert={blocked} aria-hidden={blocked || undefined} className="contents">
         {children}
       </div>
-      {blocked && status ? <PolicyAcceptanceDialog status={status} loading={loading} onChanged={refresh} /> : null}
+      {blocked && status ? <PolicyAcceptanceDialog status={status} loading={loading} onAccepted={accepted} onChanged={refresh} /> : null}
     </>
   );
 }
@@ -76,10 +92,13 @@ export function PolicyGate({ children }: { children: ReactNode }) {
 function PolicyAcceptanceDialog({
   status,
   loading,
+  onAccepted,
   onChanged,
 }: {
   status: PolicyAcceptanceStatus;
   loading: boolean;
+  /** Đồng ý thành công: kiểm tra lại trạng thái và cho trang phía sau tải lại dữ liệu bị chặn */
+  onAccepted: () => void;
   onChanged: () => void;
 }) {
   const { logout } = useAuth();
@@ -96,7 +115,7 @@ function PolicyAcceptanceDialog({
       // Gửi ĐÚNG phiên bản đang hiển thị; admin vừa công bố bản khác thì server từ chối và không ghi gì
       const items: AcceptedPolicy[] = blocking.map((i) => ({ kind: i.kind as AcceptedPolicy["kind"], version: i.currentVersion ?? "" }));
       await acceptPolicies(items);
-      onChanged();
+      onAccepted();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Có lỗi kết nối máy chủ. Vui lòng thử lại.");
       if (err instanceof ApiError && err.status === 409) onChanged();   // nội dung đã đổi: tải lại để hiện bản mới

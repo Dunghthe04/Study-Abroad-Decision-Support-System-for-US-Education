@@ -26,6 +26,8 @@ public record AdvisorStreamEvent(string Type, int? Answers = null, string? Text 
 /// câu ngân sách F1 hỏi số tiền tối đa/năm chính xác bằng VNĐ như bước 4 của form; null/false = hỏi chọn mức như cũ.</param>
 /// <param name="AllowedIntents">Gói của tài khoản cho chạy những loại ý nào trong chat (ChatPremiumGate); null = tất cả (Premium còn token, nhân viên).
 /// Cùng record này được nhận từ trình duyệt nên ChatService LUÔN ghi đè bằng giá trị của server, không bao giờ chuyển giá trị trình duyệt gửi.</param>
+/// <param name="Roadmap">Bản rút gọn lộ trình theo trường mục tiêu (RoadmapForAdvisor, không có trung tâm) để chat đánh giá và nêu việc gấp
+/// theo cùng số liệu với Tổng quan; null = chưa có hồ sơ. ChatService luôn ghi đè bằng giá trị server.</param>
 public record AdvisorChatRequest(
     IReadOnlyList<ChatMessage> Messages,
     string? SessionId = null,
@@ -42,7 +44,8 @@ public record AdvisorChatRequest(
     bool? HasCommittedProfile = null,
     bool FromForm = false,
     bool? ExactBudget = null,
-    IReadOnlyList<string>? AllowedIntents = null);
+    IReadOnlyList<string>? AllowedIntents = null,
+    JsonElement? Roadmap = null);
 
 /// <summary>
 /// Hành động có cấu trúc từ một nút trên giao diện (không qua SLM hiểu câu): Type là goal_seek hoặc explain,

@@ -23,7 +23,7 @@ from app.services.chat_flow import SkillOutput, ask, go_to
 from app.services.replies import NEED_PROFILE
 from app.services.skill_call import SKILLS_DIR, SkillCall
 from app.services.skill_rules import REQUIRED_B3, missing_fields
-from app.services.skills import buttons, exchange_rate, state_catalog
+from app.services.skills import buttons, exchange_rate, skill_tinh, state_catalog
 from app.services.skills.validators import (
     CERT_NAMES,
     CERT_TYPES,
@@ -1336,6 +1336,7 @@ def is_form_text(question_id: str | None, message: str) -> bool:
         or read_plan_text(question_id, message) is not None
         or read_item_text(question_id, message) is not None
         or read_cert_text(question_id, message) is not None
+        or skill_tinh.is_province_answer(question_id, message)
     )
 
 
@@ -1372,6 +1373,11 @@ class HoSoHandler:
     async def run(self, state: ChatState, message: str) -> SkillOutput:
         # Tỷ giá cũ hơn 1 ngày thì lấy lại trước khi đổi tiền hoặc vẽ ô ngân sách
         await exchange_rate.refresh()
+        # Câu tỉnh / thành sau lộ trình (skill_tinh): lưu ở .NET, không ghi hồ sơ chat
+        if state.question_id == skill_tinh.PROVINCE_ID:
+            province = skill_tinh.answer_province(state, message)
+            if province is not None:
+                return province
         question_id = state.question_id
         if question_id == "X1" and is_confirm(message):
             return confirm(state)

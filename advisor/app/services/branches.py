@@ -76,6 +76,7 @@ from app.services.skill_template import TEMPLATE_TASKS, build_skill, tasks_of
 from app.services.skills import major_catalog, skill_ho_so, state_catalog
 from app.services.skills.profile_handler import ChatProfileHandler
 from app.services.skills.skill_danh_gia import gpa_table_of
+from app.services.skills.skill_tinh import ROADMAP_BUTTON, with_province_question
 from app.services.skills.validators import AskAgain
 from app.services.what_if_writer import WhatIfWriter
 
@@ -580,7 +581,7 @@ class GeneratedAdviceBranch:
         # Code dựng skill từ khuôn (không gọi SLM, không hỏng); writer chỉ nhận việc của khuôn
         today = datetime.date.today()
         req = skill_request_of(state, question, today)
-        skill = build_skill(req, tasks, state.profile, today, gpa_table_of(state.grade_scale))
+        skill = build_skill(req, tasks, state.profile, today, gpa_table_of(state.grade_scale), state.roadmap)
         answer = await self._writer.write(skill, req, state.schools, tasks_of(tasks))
         if answer is None:
             return SkillOutput(
@@ -588,7 +589,13 @@ class GeneratedAdviceBranch:
                 quick_replies=[QuickReply(label=ASK_AGAIN_LABEL, value=question)],
                 action=recommend,
             )
-        return SkillOutput(answer, action=recommend)
+        # Có lộ trình .NET và học sinh hỏi lộ trình: thêm nút mở lộ trình đầy đủ ở Tổng quan,
+        # chưa có tỉnh thì hỏi luôn tỉnh (một lần mỗi phiên, lượt sau .NET lưu)
+        if state.roadmap is None or "roadmap" not in tasks_of(tasks):
+            return SkillOutput(answer, action=recommend)
+        return with_province_question(
+            state, SkillOutput(answer, quick_replies=[ROADMAP_BUTTON.model_copy()], action=recommend)
+        )
 
 
 # Hồ sơ vừa lưu mà không có câu tư vấn bị hoãn: hỏi học sinh muốn làm gì tiếp. Nút gửi câu như học sinh tự gõ,

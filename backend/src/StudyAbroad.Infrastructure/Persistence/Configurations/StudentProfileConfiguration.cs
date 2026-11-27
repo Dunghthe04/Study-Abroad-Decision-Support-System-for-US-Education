@@ -21,6 +21,7 @@ public class StudentProfileConfiguration : IEntityTypeConfiguration<StudentProfi
         b.Property(x => x.GpaMode).HasMaxLength(16);
         b.Property(x => x.OverallGpa10).HasPrecision(4, 2);
         b.Property(x => x.IntendedMajor).HasMaxLength(128);
+        b.Property(x => x.Province).HasMaxLength(64);
         b.Property(x => x.TargetIntake).HasMaxLength(16);
         // điểm thi đọc từ profile_certifications, không có cột trong bảng này
         b.Ignore(x => x.Ielts);

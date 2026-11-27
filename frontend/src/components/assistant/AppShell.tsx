@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { ActingAsBanner } from "@/components/parent/ActingAsBanner";
+import { ChatDock, ChatDockProvider } from "@/components/messages/ChatDock";
 import { Toaster } from "@/components/ui/toast";
 import { useAutoHideScrollbar } from "@/hooks/use-auto-hide-scrollbar";
 import { AssistantLauncher, AssistantPanel, useAssistantVisible } from "./AssistantPanel";
@@ -21,7 +22,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const visible = useAssistantVisible();
   const adminRoute = isAdminRoute(pathname);
   const authRoute = isAuthRoute(pathname);
-  const lockedViewport = pathname === "/universities" || pathname === "/scholarships";
+  // /analysis: biểu mẫu tự cuộn bên trong, trang không được cao hơn màn hình (tránh thanh cuộn thừa ở đáy)
+  const lockedViewport = pathname === "/universities" || pathname === "/scholarships" || pathname.startsWith("/analysis");
   const showAssistant = !adminRoute && !authRoute;
   const docked = panelMode === "compact" || panelMode === "half";
   const pushed = showAssistant && open && visible && docked;
@@ -32,6 +34,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const collapsed = hideable && headerHidden;
 
   return (
+    <ChatDockProvider>
     <div
       className={cn(
         "flex min-h-full flex-1 flex-col",
@@ -75,7 +78,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {showAssistant && <AssistantPanel />}
       {/* Trang phân tích có nút chat ở thanh bước; nút nổi sẽ che nút "Tiếp tục" */}
       {showAssistant && !hideable && <AssistantLauncher />}
+      {/* [Hộp thư tin nhắn] Khung chat nổi với trung tâm / học sinh, bên trái nút trợ lý */}
+      {!adminRoute && !authRoute && <ChatDock besideLauncher={showAssistant && !hideable} pushed={pushed} />}
       <Toaster />
     </div>
+    </ChatDockProvider>
   );
 }
