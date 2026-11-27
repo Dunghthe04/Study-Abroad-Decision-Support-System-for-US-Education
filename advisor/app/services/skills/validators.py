@@ -391,11 +391,19 @@ CURRENCY_ALIASES = {"VNĐ": "VND", "ĐỒNG": "VND", "Đ": "VND", "$": "USD", "�
 VND_GUESS_FROM = 1_000_000
 
 
-def check_budget(amount: float, currency: str | None = None) -> str:
+# Mã đơn vị chuẩn của một số tiền; không nói đơn vị thì đoán theo độ lớn
+def money_currency(amount: float, currency: str | None) -> str:
     if currency is None or not currency.strip():
         currency = "VND" if amount >= VND_GUESS_FROM else "USD"
     currency = currency.strip().upper()
-    currency = CURRENCY_ALIASES.get(currency, currency)
+    return CURRENCY_ALIASES.get(currency, currency)
+
+
+# Số tiền học sinh nói là mức TỐI ĐA gia đình chi được: đúng bằng trần của một khoảng thì thuộc khoảng đó ("tối đa 35.000"
+# là 20-35 nghìn, không phải 35-50 nghìn). at_least: học sinh nói đó là mức TỐI THIỂU ("trên 70 nghìn") thì lấy khoảng trên.
+# Khác budget_tier (số chính xác phụ huynh nhập, cùng quy tắc xếp khoảng với .NET)
+def check_budget(amount: float, currency: str | None = None, at_least: bool = False) -> str:
+    currency = money_currency(amount, currency)
     if currency not in CURRENCIES:
         raise AskAgain("Bạn cho mình biết số tiền theo USD hoặc VNĐ nhé?")
     if amount <= 0:
@@ -405,7 +413,9 @@ def check_budget(amount: float, currency: str | None = None) -> str:
         raise AskAgain(
             "Số tiền này lớn bất thường. Bạn kiểm tra lại số tiền và đơn vị (USD hay VNĐ) giúp mình nhé?"
         )
-    return budget_tier(usd)
+    if at_least:
+        return budget_tier(usd)
+    return next(tier for tier, (_, ceiling) in BUDGET_RANGES.items() if ceiling is None or usd <= ceiling)
 
 
 # Câu nói số tiền: "800 triệu", "1,2 tỷ", "900.000.000 đ", "36.000 USD", "40k usd/năm"

@@ -2,7 +2,7 @@ import hashlib
 import json
 from typing import Any
 
-from app.schemas.chat import ChatState, Widget
+from app.schemas.chat import ChatState, QuickReply, Widget
 from app.schemas.slm import PROFILE_KEYS, SlmTinResult, task_of
 from app.services.chat_flow import (
     OPENING_QUESTIONS,
@@ -13,6 +13,12 @@ from app.services.chat_flow import (
 )
 from app.services.intake import EDIT_ONLY_GOAL, form_goals
 from app.services.replies import (
+    BUDGET_NOTE_CEILING,
+    BUDGET_NOTE_NEW,
+    BUDGET_NOTE_SAME,
+    BUDGET_REVIEW_HINT,
+    BUDGET_TRY_LABEL,
+    BUDGET_TRY_VALUE,
     PROFILE_DONE,
     PROFILE_NONE_YET,
     PROFILE_RESTART_INTRO,
@@ -21,6 +27,7 @@ from app.services.replies import (
 )
 from app.services.skill_rules import REQUIRED_B3, missing_fields
 from app.services.skills import buttons, edit_prefill, skill_bac_hoc, skill_ho_so
+from app.services.skills.validators import BUDGET_RANGES
 
 # Giá trị hồ sơ nào do skill nào đọc
 BAC_HOC_FIELDS = set(skill_bac_hoc.READ_FIELDS)
@@ -47,9 +54,13 @@ class ChatProfileHandler:
     # Không có câu chờ: ghi giá trị tự khai rồi hỏi tiếp mục còn thiếu.
     # Hồ sơ vẫn đủ nghĩa là không có gì mới, nên không mở lại bước xác nhận
     async def collect(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
-        state.major_miss = None
+        state.major_miss, state.budget_said = None, None
+        saved = state.profile.get("budget")
+        before = saved.value if saved is not None else None
         output = await self._route(state, message, slm)
-        return output if state.major_miss is None else report_major_miss(state)
+        if state.major_miss is not None:
+            return report_major_miss(state)
+        return add_budget_note(state, output, before)
 
     async def _route(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         said = set(slm.profile_values())
@@ -221,6 +232,34 @@ def report_major_miss(state: ChatState) -> SkillOutput:
     output = skill_bac_hoc.ask_major_again(state, state.major_miss)
     if has_major:
         output.quick_replies = [*output.quick_replies, skill_ho_so.KEEP_REPLY]
+    return output
+
+
+# Học sinh nói một số thấp hơn trần của khoảng được lưu: nói rõ lưu mức nào và gợi ý trường tính tới đâu.
+# Số khác mà cùng khoảng thì nói đúng lý do hồ sơ không đổi, thay câu "chưa thấy thông tin mới" hay "trùng hồ sơ".
+# Có danh sách gợi ý thì kèm nút thử đúng số đó. Phụ huynh nhập số chính xác thì không cần
+def add_budget_note(state: ChatState, output: SkillOutput, before: str | None) -> SkillOutput:
+    saved = state.profile.get("budget")
+    if state.budget_said is None or state.exact_budget or saved is None or saved.value not in BUDGET_RANGES:
+        return output
+    ceiling = BUDGET_RANGES[saved.value][1]
+    below = ceiling is not None and state.budget_said < ceiling
+    same = saved.value == before
+    if not below and not same:
+        return output
+    said_text = f"{state.budget_said:,.0f}".replace(",", ".")
+    note = (BUDGET_NOTE_SAME if same else BUDGET_NOTE_NEW).format(
+        said=said_text, label=buttons.BUDGET_LABELS[saved.value]
+    )
+    if below:
+        note += BUDGET_NOTE_CEILING.format(ceiling=f"{ceiling:,}".replace(",", "."))
+    rest = output.answer.replace(PROFILE_SAME, BUDGET_REVIEW_HINT).replace(PROFILE_DONE, "").strip()
+    output.answer = "\n\n".join(part for part in (note, rest) if part)
+    if below and state.has_results:
+        button = QuickReply(
+            label=BUDGET_TRY_LABEL.format(said=said_text), value=BUDGET_TRY_VALUE.format(said=said_text)
+        )
+        output.quick_replies = [*output.quick_replies, button]
     return output
 
 

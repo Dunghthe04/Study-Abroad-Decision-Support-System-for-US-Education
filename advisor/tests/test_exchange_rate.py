@@ -32,8 +32,8 @@ def fetch_returning(*rates):
 async def test_new_rate_is_used_to_convert_vnd():
     fetch, _ = fetch_returning(26_000)
     assert await exchange_rate.refresh(fetch, NOW) == 26_000
-    # 910 triệu / 26.000 = 35.000 USD → mức 35k–50k (tỷ giá 25.000 thì là 36.400, cũng mức này)
-    assert check_budget(910_000_000, "VND") == "tier_35k_50k"
+    # 920 triệu / 26.000 ≈ 35.385 USD → mức 35k–50k (tỷ giá 25.000 thì là 36.800, cũng mức này)
+    assert check_budget(920_000_000, "VND") == "tier_35k_50k"
     # 900 triệu / 26.000 ≈ 34.615 USD → mức 20k–35k (tỷ giá 25.000 thì là 36.000, mức 35k–50k)
     assert check_budget(900_000_000, "VND") == "tier_20k_35k"
 
