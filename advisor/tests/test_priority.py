@@ -4,7 +4,7 @@ import pytest
 
 from app.schemas.chat import ChatState
 from app.schemas.slm import SlmTinResult, SlmY
-from app.services.chat_flow import with_comparison_intent, with_info_intent
+from app.services.chat_flow import with_comparison_intent, with_general_prep_intent, with_info_intent
 from app.services.slm_classifier import FALLBACK
 
 
@@ -158,3 +158,31 @@ async def test_a_scholarship_need_the_model_read_is_not_also_counted_as_a_priori
     assert out.action == "simulate"
     assert "priorities" not in out.action_data
     assert "Ưu tiên" not in out.answer
+
+
+def roadmap(message: str) -> SlmTinResult:
+    return SlmTinResult(intents=[SlmY(type="profile_review", span=message, entities={"tasks": ["roadmap"]})])
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Thường thì du học Mỹ cần chuẩn bị những gì vậy?",  # lỗi thật: gói hết token bị khóa câu kiến thức chung
+        "đi du học Mỹ cần chuẩn bị giấy tờ gì",
+    ],
+)
+def test_a_general_prep_question_the_slm_took_for_a_roadmap_becomes_a_knowledge_question(message):
+    assert with_general_prep_intent(message, roadmap(message)).types() == ["knowledge"]
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Em cần chuẩn bị gì trước kỳ nhập học",
+        "lộ trình chuẩn bị hồ sơ nên thế nào",
+        "mình cần chuẩn bị gì",
+        "đánh giá hồ sơ",
+    ],
+)
+def test_a_prep_question_about_the_student_stays_a_roadmap(message):
+    assert with_general_prep_intent(message, roadmap(message)).types() == ["profile_review"]

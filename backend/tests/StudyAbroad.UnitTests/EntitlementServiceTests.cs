@@ -339,30 +339,44 @@ public class EntitlementServiceTests
     }
 
     [Fact]
-    public async Task QuotaOverview_AddsRemainingOfEveryUsableCycleAndFree()
+    public async Task QuotaOverview_SplitsPremiumCyclesFromFree()
     {
         var repo = new FakeBilling();
         var personal = repo.AddActive(Me, "personal-1m");                                  // 500.000
         repo.AddFamily(Me, startsAt: Now.AddDays(-1));                                   // family-1m, 500.000
         repo.Use(Me, personal, 400_000);
+        repo.UseFree(Me, 12_000, Now.AddHours(-1));                                       // Free 120.000
+
+        var overview = await Service(repo).GetQuotaOverviewAsync(Me, Now);
+
+        Assert.Equal(new QuotaBarDto(60, 40, false), overview.Premium);                  // 400.000 / 1.000.000
+        Assert.Equal(new QuotaBarDto(90, 10, false), overview.Free);
+    }
+
+    [Fact]
+    public async Task QuotaOverview_PremiumOutOfTokens_ShowsEmptyPremiumBar_EvenWithFreeLeft()
+    {
+        var repo = new FakeBilling();
+        var personal = repo.AddActive(Me, "personal-1m");
+        repo.Use(Me, personal, 500_000);
         repo.UseFree(Me, 12_000, Now.AddHours(-1));
 
         var overview = await Service(repo).GetQuotaOverviewAsync(Me, Now);
 
-        var quota = 500_000 + 500_000 + 120_000;
-        var usedPercent = (int)((400_000 + 12_000) * 100L / quota);
-        Assert.Equal((100 - usedPercent, usedPercent, false), (overview.RemainingPercent, overview.UsedPercent, overview.LowQuota));
+        Assert.Equal(new QuotaBarDto(0, 100, true), overview.Premium);
+        Assert.Equal(90, overview.Free.RemainingPercent);
     }
 
     [Fact]
-    public async Task QuotaOverview_FreeOnly_IsTheFreeAllowance_AndFullUseIsLow()
+    public async Task QuotaOverview_FreeOnly_HasNoPremiumBar_AndFullUseIsLow()
     {
         var repo = new FakeBilling();
         repo.UseFree(Me, 120_000, Now.AddHours(-1));
 
         var overview = await Service(repo).GetQuotaOverviewAsync(Me, Now);
 
-        Assert.Equal((0, 100, true), (overview.RemainingPercent, overview.UsedPercent, overview.LowQuota));
+        Assert.Null(overview.Premium);
+        Assert.Equal(new QuotaBarDto(0, 100, true), overview.Free);
     }
 
     [Fact]

@@ -19,6 +19,7 @@ import {
   HeartHandshakeIcon,
   HomeIcon,
   InboxIcon,
+  InfoIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
   LogOutIcon,
@@ -36,8 +37,9 @@ import { formatUserRole } from "@/lib/user-role-labels";
 import { UserRoleIcon } from "@/components/layout/UserRoleIcon";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsLinkedParent } from "@/hooks/use-is-linked-parent";
-import type { QuotaOverviewDto, SubscriptionSummaryDto } from "@/types/billing";
+import type { QuotaBarDto, QuotaOverviewDto, SubscriptionSummaryDto } from "@/types/billing";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -287,28 +289,16 @@ export function SiteHeader() {
                     </div>
 
                     {showQuota && (
-                      <Link href="/account#quota" className="block space-y-2 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                        <div className="flex items-baseline justify-between gap-3 text-sm">
-                          <span className="text-ink-2">Hạn mức chung của bạn còn lại</span>
-                          {quota.data ? (
-                            <span className="font-semibold text-ink tabular-nums">{quota.data.remainingPercent}%</span>
-                          ) : (
-                            <Skeleton className="h-3.5 w-8" />
-                          )}
-                        </div>
-                        <div
-                          role="progressbar"
-                          aria-label="Hạn mức chung còn lại"
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-valuenow={quota.data?.remainingPercent ?? 0}
-                          className="h-3 w-full overflow-hidden rounded-full bg-surface ring-1 ring-brand/15"
-                        >
-                          <div
-                            className={cn("h-full rounded-full transition-[width] duration-500", quota.data?.lowQuota ? "bg-risk" : "bg-brand")}
-                            style={{ width: `${quota.data?.remainingPercent ?? 0}%` }}
-                          />
-                        </div>
+                      <Link href="/account#quota" className="block space-y-3 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+                        {/* Hai thanh riêng: Premium mở mọi tính năng, Miễn phí chỉ hỏi kiến thức; gộp chung thì Premium hết token vẫn hiện còn % */}
+                        {!quota.data ? (
+                          <QuotaBar label="Hạn mức còn lại" />
+                        ) : (
+                          <>
+                            {quota.data.premium && <QuotaBar label="Gói Premium còn lại" bar={quota.data.premium} />}
+                            <QuotaBar label="Hạn mức miễn phí còn lại" bar={quota.data.free} hint={FREE_QUOTA_HINT} />
+                          </>
+                        )}
                       </Link>
                     )}
                   </div>
@@ -552,5 +542,45 @@ export function SiteHeader() {
         </nav>
       </div>
     </header>
+  );
+}
+
+// Một thanh hạn mức trong menu tài khoản; chưa có bar = đang tải
+const FREE_QUOTA_HINT =
+  "Hạn mức miễn phí chỉ dùng để hỏi kiến thức chung. Lộ trình, gợi ý trường, nhận xét hồ sơ... cần gói Premium.";
+
+function QuotaBar({ label, bar, hint }: { label: string; bar?: QuotaBarDto; hint?: string }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between gap-3 text-sm">
+        <span className="flex items-center gap-1.5 text-ink-2">
+          {label}
+          {hint && (
+            <Tooltip>
+              <TooltipTrigger render={<span tabIndex={0} aria-label={hint} className="inline-flex cursor-help text-ink-3" />}>
+                <InfoIcon className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-56">
+                {hint}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </span>
+        {bar ? <span className="font-semibold text-ink tabular-nums">{bar.remainingPercent}%</span> : <Skeleton className="h-3.5 w-8" />}
+      </div>
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={bar?.remainingPercent ?? 0}
+        className="h-3 w-full overflow-hidden rounded-full bg-surface ring-1 ring-brand/15"
+      >
+        <div
+          className={cn("h-full rounded-full transition-[width] duration-500", bar?.lowQuota ? "bg-risk" : "bg-brand")}
+          style={{ width: `${bar?.remainingPercent ?? 0}%` }}
+        />
+      </div>
+    </div>
   );
 }

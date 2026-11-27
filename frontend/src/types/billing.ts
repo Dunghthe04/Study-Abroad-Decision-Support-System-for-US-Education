@@ -68,11 +68,16 @@ export interface SubscriptionCycleDto {
   ownerName: string | null;
 }
 
-/** GET /api/v1/subscription/quota: hạn mức chung còn lại ngay lúc này (mọi kỳ dùng được + Free), chỉ phần trăm. */
-export interface QuotaOverviewDto {
+export interface QuotaBarDto {
   remainingPercent: number;
   usedPercent: number;
   lowQuota: boolean;
+}
+
+/** GET /api/v1/subscription/quota: hạn mức còn lại ngay lúc này, tách Premium (mọi kỳ dùng được gộp; null khi không có kỳ) và Free. Chỉ phần trăm. */
+export interface QuotaOverviewDto {
+  premium: QuotaBarDto | null;
+  free: QuotaBarDto;
 }
 
 export interface SubscriptionSummaryDto {
