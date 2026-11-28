@@ -26,6 +26,7 @@ from PIL import Image, ImageOps
 
 from app.core.config import Settings
 from app.schemas.transcript_ocr import (
+    KnownPersonalInfo,
     TranscriptFilePayload,
     TranscriptOcrRequest,
     TranscriptOcrResponse,
@@ -34,8 +35,8 @@ from app.schemas.transcript_ocr import (
 )
 from app.services import usage_meter
 from app.services.ollama import OllamaError
-from app.services.pii_mask import mask_personal_info
-from app.services.transcript_text import read_term_tables, tidy_transcription
+from app.services.pii_mask import mask_known_values, mask_personal_info
+from app.services.transcript_text import keep_score_lines, read_term_tables, tidy_transcription
 from app.services.transcript_validate import Issue, drop_bad_cells, retry_message, validate_parsed
 
 logger = logging.getLogger(__name__)
@@ -346,7 +347,7 @@ class TranscriptReader:
 
         for idx, file_item in enumerate(files_to_process, 1):
             file_name = file_item.file_name or f"Tệp {idx}"
-            result = await self._read_file(file_item, file_name)
+            result = await self._read_file(file_item, file_name, request.known_personal_info)
             warnings.extend(result.warnings)
             if result.model and result.model not in models_used:
                 models_used.append(result.model)
@@ -415,7 +416,9 @@ class TranscriptReader:
 
     # ---------- Đọc từng tệp ----------
 
-    async def _read_file(self, file_item: TranscriptFilePayload, file_name: str) -> _FileResult:
+    async def _read_file(
+        self, file_item: TranscriptFilePayload, file_name: str, known: KnownPersonalInfo | None = None
+    ) -> _FileResult:
         raw_base64 = file_item.image_base64.strip()
         if "," in raw_base64:
             raw_base64 = raw_base64.split(",", 1)[1].strip()
@@ -426,10 +429,10 @@ class TranscriptReader:
 
         # Nhận diện định dạng qua magic bytes (tránh ảnh bị đặt đuôi .pdf và ngược lại)
         if file_bytes.startswith(b"%PDF"):
-            return await self._read_pdf(file_bytes, file_name)
+            return await self._read_pdf(file_bytes, file_name, known)
         if not self._looks_like_image(file_bytes) and self._declared_pdf(file_item):
-            return await self._read_pdf(file_bytes, file_name)
-        return await self._read_images([file_bytes], file_name)
+            return await self._read_pdf(file_bytes, file_name, known)
+        return await self._read_images([file_bytes], file_name, known)
 
     @staticmethod
     def _looks_like_image(data: bytes) -> bool:
@@ -448,7 +451,9 @@ class TranscriptReader:
             or (file_item.file_name and file_item.file_name.lower().endswith(".pdf"))
         )
 
-    async def _read_pdf(self, pdf_bytes: bytes, file_name: str) -> _FileResult:
+    async def _read_pdf(
+        self, pdf_bytes: bytes, file_name: str, known: KnownPersonalInfo | None = None
+    ) -> _FileResult:
         """PDF có chữ: đưa thẳng chữ sang bước B. PDF scan: render từng trang thành ảnh rồi đi bước A."""
         try:
             reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
@@ -458,7 +463,7 @@ class TranscriptReader:
             text = ""
 
         if len(text.strip()) > 50:
-            return await self._parse_source(text, file_name, model_used=None)
+            return await self._parse_source(text, file_name, model_used=None, known=known)
 
         try:
             page_images = self._render_pdf_pages(pdf_bytes)
@@ -471,7 +476,7 @@ class TranscriptReader:
             )
         if not page_images:
             return _FileResult(warnings=[f"Tệp '{file_name}': tệp PDF không có trang nào."])
-        return await self._read_images(page_images, file_name)
+        return await self._read_images(page_images, file_name, known)
 
     def _render_pdf_pages(self, pdf_bytes: bytes) -> list[bytes]:
         import pypdfium2 as pdfium
@@ -493,7 +498,9 @@ class TranscriptReader:
         finally:
             pdf.close()
 
-    async def _read_images(self, images: list[bytes], file_name: str) -> _FileResult:
+    async def _read_images(
+        self, images: list[bytes], file_name: str, known: KnownPersonalInfo | None = None
+    ) -> _FileResult:
         """Bước A cho từng ảnh (hoặc từng trang PDF scan), gộp văn bản rồi đi bước B một lần."""
         vision_model = await self._pick_vision_model()
         if not vision_model:
@@ -530,7 +537,7 @@ class TranscriptReader:
                     f"Tệp '{file_name}': AI không đọc được chữ nào trong ảnh. Bạn chụp rõ và thẳng hơn giúp nhé."
                 ],
             )
-        result = await self._parse_source("\n\n".join(pages), file_name, model_used=vision_model)
+        result = await self._parse_source("\n\n".join(pages), file_name, model_used=vision_model, known=known)
         result.warnings[:0] = skipped
         # Chữ do model thị giác chép lại có thể sai số: mọi ô từ nguồn này đều cần người dùng kiểm tra
         for term in result.terms:
@@ -607,10 +614,18 @@ class TranscriptReader:
             content = await self._chat(payload, self._settings.vision_timeout_seconds)
         return re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
 
-    async def _parse_source(self, source: str, file_name: str, model_used: str | None) -> _FileResult:
+    async def _parse_source(
+        self, source: str, file_name: str, model_used: str | None, known: KnownPersonalInfo | None = None
+    ) -> _FileResult:
         """Bước B: LLM chữ đọc văn bản, trả JSON theo schema; sau đó hậu kiểm bằng code."""
-        # Che họ tên, ngày sinh, mã số trước khi đưa cho LLM; điểm, lớp, năm học giữ nguyên
-        source = mask_personal_info(source)[:MAX_SOURCE_CHARS]
+        # Ba lớp che trước khi đưa cho LLM, điểm/lớp/năm học giữ nguyên:
+        # 1) đúng họ tên, ngày sinh, email, SĐT .NET đã biết; 2) mẫu chung (nhãn họ tên, mọi ngày, dãy số dài);
+        # 3) chỉ giữ dòng điểm, lớp, kỳ, phần còn lại (tên trường, địa chỉ, lời phê, chữ ký) không gửi đi
+        if known is not None:
+            source = mask_known_values(
+                source, known.names, date_of_birth=known.date_of_birth, email=known.email, phone=known.phone
+            )
+        source = keep_score_lines(mask_personal_info(source))[:MAX_SOURCE_CHARS]
         # Bảng học bạ đã dựng thẳng cột thì code đọc luôn: nhanh và không lệch cột như LLM nhỏ
         if table_terms := read_term_tables(source):
             level = "thpt" if any(t["grade"] for t in table_terms) else "unknown"

@@ -1,5 +1,7 @@
 """Hợp đồng dữ liệu .NET <-> advisor cho bước OCR đọc bảng điểm (học bạ THPT/ĐH đa tệp)."""
 
+from datetime import date
+
 from pydantic import Field
 
 from app.schemas.chat import AiUsageMixin
@@ -35,12 +37,28 @@ class TranscriptFilePayload(CamelModel):
     content_type: str | None = Field(default=None, max_length=100)
 
 
+MAX_KNOWN_NAMES = 10
+
+
+class KnownPersonalInfo(CamelModel):
+    """Thông tin .NET đã biết của chủ hồ sơ (và phụ huynh đã liên kết) để che đúng chỗ trước khi chữ bảng điểm lên LLM.
+
+    Chỉ dùng để che rồi bỏ: advisor không lưu, không ghi log.
+    """
+
+    names: list[str] = Field(default_factory=list, max_length=MAX_KNOWN_NAMES)
+    date_of_birth: date | None = None
+    email: str | None = Field(default=None, max_length=320)
+    phone: str | None = Field(default=None, max_length=30)
+
+
 class TranscriptOcrRequest(CamelModel):
     # Hỗ trợ gửi danh sách nhiều file (từng trang học bạ) hoặc 1 file đơn lẻ
     files: list[TranscriptFilePayload] = Field(default_factory=list, max_length=MAX_FILES)
     image_base64: str | None = Field(default=None, max_length=MAX_BASE64_CHARS)
     file_name: str | None = Field(default=None, max_length=1000)
     content_type: str | None = Field(default=None, max_length=100)
+    known_personal_info: KnownPersonalInfo | None = None
 
 
 # AiUsageMixin thêm khóa aiUsage: token của các lần gọi Ollama vision và Claude khi đọc học bạ, để .NET ghi nhật ký ai_calls
