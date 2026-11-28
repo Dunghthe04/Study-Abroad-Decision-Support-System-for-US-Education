@@ -1,5 +1,6 @@
 "use client";
 
+import { SafeImage } from "@/components/shared/safe-image";
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -66,17 +67,13 @@ export function CenterDashboardView() {
       <div className="rounded-xl border border-line bg-surface p-6 shadow-none">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start gap-4">
-            <div className="h-14 w-14 rounded-xl border border-line bg-surface-2 flex items-center justify-center text-brand shrink-0">
-              {center?.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={center.logoUrl}
-                  alt={center.name}
-                  className="h-full w-full rounded-xl object-cover"
-                />
-              ) : (
-                <Building2Icon className="h-7 w-7" />
-              )}
+            <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-line bg-surface-2 flex items-center justify-center text-brand shrink-0">
+              <SafeImage
+                src={center?.logoUrl}
+                alt={center?.name ?? "Logo trung tâm"}
+                className="rounded-xl"
+                fallback={<Building2Icon className="h-7 w-7" />}
+              />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
