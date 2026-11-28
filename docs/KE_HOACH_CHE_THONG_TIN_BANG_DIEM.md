@@ -180,3 +180,28 @@ Việt chốt: **Q1 có** (che cả họ tên phụ huynh đã liên kết), **Q
 - **Sau khi sửa:** không còn họ tên, ngày sinh hay mã học sinh nào trong chữ gửi đi của cả 11 ảnh. Các cụm chữ viết hoa còn lại chỉ là tên môn ("Tiếng Anh", "Tiếng Việt").
 - **Lớp 1 (họ tên .NET gửi kèm):** che được cả khi OCR chép sai dấu ("Trā" so với "Trà").
 - **Số ô điểm:** vẫn đủ 741/741. Toàn bộ test advisor pass (2497).
+
+### 9.2 Gửi Claude thật để kiểm điểm đọc ra (28/11)
+
+- **Cách chạy:** lấy chữ bước A đã lưu của 11 ảnh (mục 9.1), đưa qua đúng `_parse_source` (che 3 lớp rồi gửi `claude-haiku-5-5`). Ghi lại nguyên văn mọi request gửi Claude vào `advisor/.ocr-eval/che_ten_28_11/<ảnh>.claude.json`.
+- **Đem so với:** kết quả cũ trước khi có lớp che (`bench_check/.../<ảnh>__r1.json`, chạy ngày 22/11, cùng model).
+- **Lọt thông tin:** không request nào chứa họ tên, ngày sinh hay mã học sinh đã biết trong ảnh.
+
+| Ảnh | Ô cũ | Ô mới | Trùng | Ghi chú |
+|---|---|---|---|---|
+| 500289857, diem-so-hoc-ba, hoc-ba-8848, Hoc-ba-dep, images, images (1) | 208 | 208 | 208 | giống hệt |
+| k1-155194… | 23 | 24 | 23 | mới đọc thêm GDQP HK2 |
+| 20200701 | 12 | 10 | 10 | mới bỏ GDCD, Tin học. Bản cũ ghi Tin học = 8.5, sai: đó là ĐTB, Tin đúng là 9.6 |
+| 3794687… | 26 | 36 | 24 | mới bỏ dòng "Điểm TB" (đúng), nhưng tạo thêm kỳ **"HK3" bịa từ cột CN** (sai, xem dưới) |
+| 499489625… | 16 | 16 | 5 | bảng dọc nhiều cột, cả bản cũ lẫn bản mới đều đọc lệch cột |
+| 500289857_v1 | — | 18 | — | không có bản cũ để so |
+| **Tổng** | 285 | 312 | **270** | |
+
+- **Độ dao động sẵn có:** chính bản cũ chạy 2 lần (r1 với r2) cũng chỉ trùng 269/285 ô. Mức trùng giữa bản mới (đã che) và bản cũ là 270/285, ngang mức đó.
+- **Ở 2 ảnh lệch nhiều (20200701, 499489625):** phần bảng điểm trong chữ gửi đi giống hệt chữ gốc. Chỗ lệch đến từ Claude đọc bảng khó, không đến từ việc che.
+- **Kết luận:** che thông tin không làm sai điểm đọc ra.
+- **Lỗi có từ trước, không do che:** từ commit `27d22586` (kiểm tra kết quả bước B, sau ngày chạy bộ cũ), `_resolve_term` chỉ nhận "Cả năm / tổng kết", không nhận **"CN"**.
+  - Khi Claude trả về kỳ "CN", bước kiểm tra báo "tên kỳ không hiểu được" và bắt thử lại.
+  - Lần thử lại, Claude hoặc giữ "CN" (k1, hoc-ba-8848, diem-so: tốn thêm 1 lần gọi), hoặc **đổi thành "HK3"** (3794687: 12 ô điểm cả năm bị nhận là một kỳ).
+  - Nên sửa: coi "CN" là dòng cả năm và bỏ đi.
+- **OCR mất dấu thập phân** ("85" thay cho "8.5", diem-so, Hoc-ba-dep): bước kiểm tra báo ngoài thang 10. Kết quả cuối giống bản cũ.
