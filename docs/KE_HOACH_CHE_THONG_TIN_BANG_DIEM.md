@@ -205,3 +205,30 @@ Việt chốt: **Q1 có** (che cả họ tên phụ huynh đã liên kết), **Q
   - Lần thử lại, Claude hoặc giữ "CN" (k1, hoc-ba-8848, diem-so: tốn thêm 1 lần gọi), hoặc **đổi thành "HK3"** (3794687: 12 ô điểm cả năm bị nhận là một kỳ).
   - Nên sửa: coi "CN" là dòng cả năm và bỏ đi.
 - **OCR mất dấu thập phân** ("85" thay cho "8.5", diem-so, Hoc-ba-dep): bước kiểm tra báo ngoài thang 10. Kết quả cuối giống bản cũ.
+
+### 9.3 Cơ chế hiểu tên kỳ khi mỗi trường ghi một kiểu (28/11)
+
+Không sửa kiểu "gặp chữ nào thêm chữ đó" (thêm "CN" rồi mai lại "TBcn", "T.Kết"...). Làm 3 lớp, lớp sau đỡ lớp trước:
+
+- **Lớp 1, Claude phân loại theo nghĩa:** mỗi kỳ Claude trả thêm `kind` = `hk1` / `hk2` / `ca_nam` / `khac`. Code tin `kind` trước, chữ tên kỳ chỉ là dự phòng. Tên lạ như "Đợt I", "Giai đoạn cuối", "HKý I" vẫn vào đúng HK1/HK2. Kỳ `ca_nam` bỏ đi dù tên viết thế nào.
+- **Lớp 2, R7 không ép đổi tên:** trước đây R7 bắt Claude "ghi rõ HK1/HK2", ép quá nên Claude bịa ra "HK3". Giờ R7 chỉ báo lỗi khi `kind` sai giá trị hoặc trái với chữ ghi rõ (ví dụ tên "HK1" mà `kind` = `hk2`). Kỳ `khac` được giữ lại kèm cảnh báo, học sinh tự chọn tên kỳ ở bước 2 (màn hình đã có sẵn chỗ chọn).
+- **Lớp 3, kiểm bằng số:** trong cùng lớp/năm học có từ 3 kỳ trở lên, kỳ đáng ngờ (không phải HK1/HK2, hoặc trùng học kỳ) mà ít nhất 80% môn (tối thiểu 3 môn) có điểm ≈ (HK1 + 2·HK2)/3 hoặc ≈ (HK1 + HK2)/2 (lệch ≤ 0,1) thì là cột cả năm, bỏ đi. Lớp này không cần biết tên cột.
+- **Dự phòng khi không có `kind`** (bảng code tự đọc, không qua Claude): chữ nhận thêm CN, TBcn, TB năm, Tổng kết, Annual... Học bạ THPT không có học kỳ 3, nên "HK3" không còn bị đổi thành HK1 (trước đây ghi đè HK1 thật). Học kỳ 3, 4 của ĐH vẫn tính thành Năm 2 như cũ.
+- **Luật gộp cùng học kỳ:** cùng một tệp, học bạ không ghi lớp/năm, Claude trả cùng một học kỳ hai lần dưới hai tên ("Kết quả học tập học kỳ 1" và "HK1") thì gộp thành một kỳ nếu không môn nào mâu thuẫn điểm. Có mâu thuẫn thì để riêng.
+
+Commit: `cf34c42d` (3 lớp), `71b57255` (luật gộp). Test mới `advisor/tests/test_transcript_term_kind.py` (15 test), toàn bộ advisor 2512 test pass.
+
+**Chạy lại 11 ảnh với `claude-haiku-5-5`** (chữ bước A như mục 9.2, so với bộ cũ chưa che, 285 ô):
+
+| Lần chạy | Trùng | Khác điểm | Chỉ có ở bản cũ |
+|---|---|---|---|
+| Trước khi sửa (mục 9.2) | 270/285 | 9 | 6 |
+| Sau sửa, lần 1 (chưa có luật gộp) | 265 | 14 | — |
+| Sau sửa, lần 2 (`che_ten_28_11/lan2/`) | **274/285** | 7 | 4 |
+
+- Mức dao động sẵn có (bộ cũ chạy 2 lần) là 269/285, lần 2 cao hơn mức đó.
+- **3794687:** hết kỳ "Lớp 12 HK3" bịa ra, HK1 không còn bị ghi đè, chỉ gọi Claude 1 lần (trước 2 lần). Cả 2 lần chạy trùng 24/24 ô với bản cũ.
+- **hoc-ba-8848, k1:** "CN" được nhận là cả năm, không còn bị R7 bắt thử lại, giảm từ 2 xuống 1 lần gọi. hoc-ba-8848 24/24; k1 lần 2 23/23 (lần 1 Claude bỏ dòng OCR rác "Ngoại ngũ / Gung...inh", còn 21).
+- **20200701:** lần 1 bị tách HK1 thành 2 kỳ, có luật gộp thì lần 2 còn 1 kỳ, 12 ô.
+- **Không lọt thông tin cá nhân** ở cả 3 lần chạy.
+- **Còn lệch, không do thay đổi này:** 499489625 (bảng dọc nhiều cột, Claude dao động 5 / 3 / 8 ô trùng qua các lần); diem-so, Hoc-ba-dep (OCR mất dấu thập phân "85" thay "8.5", R5 bắt như cũ).
