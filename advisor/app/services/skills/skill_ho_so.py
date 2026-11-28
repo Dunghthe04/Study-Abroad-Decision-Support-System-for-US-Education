@@ -88,6 +88,9 @@ REQUIRED_QUESTIONS = ("D2", "E1", "E2", "D3", "E3", "F1", "F2")
 # (gợi ý bang theo người thân). N4 (từng bị từ chối visa) hỏi một lần sau N1, luôn có nút "Bỏ qua" (UC-35, UC-08).
 # N1, N4 chỉ hỏi trong chat, không lưu vào form
 OPTIONAL_QUESTIONS = ("D1", "D4", "D5", "F3", "N1", "N2", "N3", "N4")
+# Câu tùy chọn có nút Bỏ qua. D4, D5, N1, N3 đã có nút trả lời "không có" / "Không lọc", N2 mặc định
+# "Tất cả các bang" nên không cần thêm nút Bỏ qua (nhận xét của thầy 28/11)
+SKIP_QUESTIONS = ("D1", "F3", "N4")
 # Thứ tự hỏi theo trang form: hỏi xong các câu của một trang mới sang trang sau, không quay lại trang trước.
 # Trang 1 mục tiêu (D1, N2, N3), 2 học bạ (D2), 3 tiếng Anh, SAT (E1, E2, D3, E3), 4 tài chính (F1-F3),
 # 5 hoạt động, giải thưởng (D4, D5). Hết form mới hỏi hai thông tin thêm không có trong form: N1 người thân ở Mỹ, N4 visa
@@ -697,7 +700,9 @@ def needed(state: ChatState, question_id: str) -> bool:
         level = state.profile.get("current_level")
         return level is not None and level.value == "high_school"
     if question_id == "N1":
-        return "preferred_states" not in state.profile
+        # Chưa chọn bang hoặc chọn "Tất cả các bang" (danh sách rỗng) thì hỏi bang có người thân
+        states = state.profile.get("preferred_states")
+        return states is None or not states.value
     if question_id == "F1":
         return not buttons.budget_locked(state)
     return True
@@ -805,7 +810,7 @@ STEP3_TEXT = {
 # Hỏi một câu B2 kèm nút; câu tùy chọn có thêm nút "Bỏ qua". text: câu khác câu chuẩn (câu hỏi lại)
 def ask_question(state: ChatState, question_id: str, text: str | None = None) -> SkillOutput:
     text = text or STEP3_TEXT.get(question_id)
-    return buttons.ask_with_buttons(state, question_id, text, can_skip=question_id in OPTIONAL_QUESTIONS)
+    return buttons.ask_with_buttons(state, question_id, text, can_skip=question_id in SKIP_QUESTIONS)
 
 
 # Hỏi câu tiếp theo của B2, hết câu thì sang rà soát. skill_bac_hoc gọi hàm này khi chuyển sang B2.
@@ -1457,7 +1462,7 @@ class HoSoHandler:
             parent_budget = answer_parent_budget(state, message)
             if parent_budget is not None:
                 return parent_budget
-        button = buttons.pressed(question_id, message, can_skip=question_id in OPTIONAL_QUESTIONS)
+        button = buttons.pressed(question_id, message, can_skip=question_id in SKIP_QUESTIONS)
         if button is not None:
             return press_button(state, button)
         gpa_text = read_gpa_text(message)
@@ -1474,7 +1479,7 @@ class HoSoHandler:
         pending_field = state.profile.get("cert_pending")
         if pending_field is not None and isinstance(pending_field.value, dict):
             # Nếu người dùng bấm nút của câu hỏi (hoặc nút bỏ qua):
-            button = buttons.pressed(question_id, message, can_skip=question_id in OPTIONAL_QUESTIONS)
+            button = buttons.pressed(question_id, message, can_skip=question_id in SKIP_QUESTIONS)
             if button is not None:
                 state.profile.pop("cert_pending", None)
                 return press_button(state, button)

@@ -132,6 +132,141 @@ def _try_table(lines: list[str], start: int) -> tuple[list[str], int] | None:
     return md, len(rows) + 1
 
 
+# --- keep_score_lines: chỉ gửi bước B những dòng cần để đọc điểm (danh sách trắng) ---
+# Chữ (không dấu) cho biết dòng thuộc bảng điểm. Chữ "mạnh" đứng cạnh một con số là đủ tin dòng có điểm; chữ dễ trùng
+# tên người / địa chỉ (văn, anh, địa, sinh, hoa...) chỉ được tính khi đếm chữ của dòng tiêu đề bảng.
+_STRONG_SCORE_WORDS = frozenset(
+    "mon subject course term semester score grade gpa credit credits diem tb hk hl toan gdcd gdqp mathematics math "
+    "physics chemistry biology literature english history geography informatics".split()
+)
+_SCORE_WORDS = _STRONG_SCORE_WORDS | frozenset(
+    "ly li hoa sinh van su dia anh tin tieng science economics".split()
+)
+_SCORE_PHRASE_RE = re.compile(r"\b(?:" + "|".join(MULTI_WORD_HEADERS) + r")\b")
+# Lớp / kỳ / năm học ở bất kỳ đâu trong dòng: "Họ và tên: [HỌ TÊN]   Lớp: 10A1" giữ lại "Lớp: 10A1" để biết lớp.
+# "Học kỳ" OCR hay chép sai chữ "kỳ" (Hoc kg, Hoc kj, Hoc ki): nhận "hoc k" + tối đa 1 chữ, không liệt kê từng kiểu sai
+_CONTEXT_RE = re.compile(
+    r"(?<![a-z0-9])(?:lop\W*(?:6|7|8|9|10|11|12)(?![0-9])|hk\s*[12i]+(?![a-z0-9])|hoc k[a-z]?(?![a-z])|ca nam|nam hoc|semester"
+    r"|(?:fall|spring|summer)\s*20\d\d)"
+)
+_SCORE_TOKEN_RE = re.compile(r"(?<![\w.,])(?:\d{1,2}(?:[.,]\d{1,2})?)(?![\w.,]?\d)")
+MIN_SCORES_PLAIN_LINE = 3  # "Số 12, ngõ 5" (địa chỉ) có 2 số, không được lọt
+MIN_HEADER_WORDS = 3  # "Trần Văn Anh" trùng 2 chữ tên môn (văn, anh), tiêu đề bảng có nhiều hơn
+# Tiêu đề bảng gần như toàn chữ môn/cột; câu văn xuôi chỉ tình cờ trùng vài chữ ("cô Di Li post toàn bộ số điểm...")
+MIN_HEADER_DENSITY = 1 / 4
+# Họ tên người: 2-4 chữ đều viết hoa đầu, không chữ nào là tên môn ("Vũ Thị Hà"; "Tiếng Anh", "Ngoại ngữ" không phải)
+NAME_WORDS = range(2, 5)
+# Xếp loại học lực / hạnh kiểm đứng cuối dòng điểm ("Khá Khá", "TB Tốt", "Giỏi Tốt HSG"): bộ từ cố định theo quy chế
+_RATING_WORDS = frozenset("gioi kha tot yeu kem dat chua trung binh xuat sac".split())
+# Model OCR hay chép bảng dọc: mỗi ô một dòng ("Toán" / "8,2" / "8,2" / "8,2"). Các dòng dưới đây giữ cho kiểu đó.
+_LONE_VALUES = frozenset("t k tb y g x | - ⊗".split())  # xếp loại viết tắt, ô trống OCR chép thành | hoặc -
+_COLUMN_WORD_RE = re.compile(
+    r"(?<![a-z])(?:hk\w*|dtb\w*|ddg\w*|tbm\w*|cn|kqht)(?![a-z])"
+)  # HKý I, CN, ĐTBmhkI, ĐĐGtx
+MAX_LABEL_WORDS = (
+    6  # nhãn hàng của bảng dọc ngắn ("Lich sú và dja lý"); câu dài trước một con số không được tính
+)
+
+
+def keep_score_lines(text: str) -> str:
+    """Giữ dòng bảng điểm, dòng lớp/kỳ/năm học, dòng chữ có điểm; bỏ quốc hiệu, tên trường, họ tên, lời phê, chữ ký.
+
+    Thứ không gửi thì không thể lộ, nên đây là lớp che cuối trước LLM. Dòng bị bỏ thay bằng dòng trống để hai bảng liền
+    nhau vẫn tách ra như cũ (read_term_tables coi dòng không bắt đầu bằng "|" là hết bảng). Bảng chép dọc giữ dòng chỉ có
+    điểm, dòng tiêu đề cột ngắn và dòng nhãn ngắn đứng ngay trước dòng điểm (tên môn); tên giáo viên đứng sau điểm bị bỏ.
+    """
+    lines = text.splitlines()
+    out: list[str] = []
+    for i, line in enumerate(lines):
+        next_line = next((ln for ln in lines[i + 1 :] if ln.strip()), "")
+        label = _short_label(line) and not _looks_like_name(line) and _lone_value_line(next_line)
+        useful = _useful_line(line) or _vertical_cell(line) or label
+        kept = _cut_trailing_name(line) if useful else _context_tail(line)
+        if kept or (out and out[-1]):
+            out.append(kept)
+    return "\n".join(out).strip()
+
+
+def _context_tail(line: str) -> str:
+    """Dòng không có điểm nhưng có lớp/kỳ/năm học: chỉ giữ từ chữ "Lớp…" trở đi.
+
+    OCR hay làm mất nhãn "Họ và tên:", còn lại "Nguyễn Văn A  Lớp: 12A1  Năm học 2010-2011": cắt phần trước
+    để không gửi họ tên không nhãn. Không có lớp/kỳ/năm học thì bỏ cả dòng.
+    """
+    tokens = line.split()
+    for i in range(len(tokens)):
+        if _CONTEXT_RE.match(plain(" ".join(tokens[i:]))):
+            return " ".join(tokens[i:])
+    return ""
+
+
+def _lone_value_line(line: str) -> bool:
+    tokens = line.split()
+    return bool(tokens) and all(_VALUE_RE.match(t) or plain(t) in _LONE_VALUES for t in tokens)
+
+
+def _short_label(line: str) -> bool:
+    words = line.split()
+    return 0 < len(words) <= MAX_LABEL_WORDS and "|" not in line
+
+
+def _cut_trailing_name(line: str) -> str:
+    """Tên giáo viên bộ môn hay đứng cuối dòng điểm ("Toán 6,3 4,9 5,4 Hoàng Lưu"): cắt phần sau số cuối nếu giống họ tên."""
+    if line.lstrip().startswith("|"):
+        return line
+    scores = list(_SCORE_TOKEN_RE.finditer(line))
+    if not scores or not _looks_like_name(line[scores[-1].end() :]):
+        return line
+    return line[: scores[-1].end()]
+
+
+def _looks_like_name(line: str) -> bool:
+    words = re.findall(r"[^\W\d_]+", line)
+    if len(words) not in NAME_WORDS or not all(w[0].isupper() and not w.isupper() for w in words):
+        return False  # chữ viết tắt in hoa (HSG, TB, HL) không phải họ tên
+    flat = plain(" ".join(words))
+    return not (set(flat.split()) & (_SCORE_WORDS | _RATING_WORDS) or _SCORE_PHRASE_RE.search(flat))
+
+
+def _vertical_cell(line: str) -> bool:
+    """Ô của bảng chép dọc: chỉ có điểm, tiêu đề cột ngắn (HKý I, CN), hoặc tên môn nhiều chữ đứng riêng (Ngoại ngữ)."""
+    if _lone_value_line(line):
+        return True
+    if not _short_label(line):
+        return False
+    flat = plain(line)
+    return bool(_COLUMN_WORD_RE.search(flat) or (len(line.split()) <= 4 and _SCORE_PHRASE_RE.search(flat)))
+
+
+def _useful_line(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return False
+    flat = plain(stripped)
+    tokens = re.findall(r"[a-z]+", flat)
+    words = set(tokens)
+    phrases = set(_SCORE_PHRASE_RE.findall(flat))
+    score_words = len(words & _SCORE_WORDS) + len(phrases)
+    # Mật độ đếm cả chữ lặp và chữ cột ("Điểm kiểm tra HS I Điểm kiểm tra HS II HK TBM")
+    column_tokens = sum(t in _SCORE_WORDS or bool(_COLUMN_WORD_RE.fullmatch(t)) for t in tokens) + len(
+        phrases
+    )
+    header_words = score_words >= MIN_HEADER_WORDS and column_tokens >= MIN_HEADER_DENSITY * len(tokens)
+    if stripped.startswith("|"):
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        if (
+            _CONTEXT_RE.search(flat)
+            or all(set(c) <= set("-: ") for c in cells)
+            or any(_VALUE_RE.match(c) for c in cells if c)
+        ):
+            return True
+        return bool(_header_lead(cells[0].split())) or header_words
+    if _header_lead(stripped.split()) or header_words:
+        return True
+    scores = len(_SCORE_TOKEN_RE.findall(stripped))
+    return scores >= MIN_SCORES_PLAIN_LINE or (scores >= 1 and bool(phrases or words & _STRONG_SCORE_WORDS))
+
+
 _GRADE_LINE_RE = re.compile(r"^\W*lop\W*(6|7|8|9|10|11|12)\b")
 _TERM_LABEL_RE = re.compile(r"^(?:hk\s*\w|hoc ky|ky\b|ca nam|semester)")
 
@@ -227,3 +362,50 @@ def _segment_header(words: list[str], columns: int) -> list[str] | None:
 def _pair_score(a: str, b: str) -> float:
     pair = plain(f"{a} {b}")
     return max(SequenceMatcher(None, pair, known).ratio() for known in MULTI_WORD_HEADERS)
+
+
+# --- hint_term_columns: OCR mất dòng tiêu đề cột ("Học kỳ I  Học kỳ II  Cả năm") ---
+# Học bạ THPT: cả năm = (HK1 + 2·HK2) / 3 (hoặc trung bình cộng). Dòng môn có đúng 3 số mà cột 3 khớp công thức thì thứ
+# tự cột là HK1, HK2, Cả năm; ghi thêm một dòng gợi ý cho LLM. Không sửa số nào, dòng gợi ý không chứa chữ số.
+TERM_COLUMNS_HINT = "Thứ tự cột điểm của các dòng môn dưới đây (hệ thống suy từ số vì ảnh mất dòng tiêu đề): Học kỳ I, Học kỳ II, Cả năm"
+_THREE_SCORE_ROW_RE = re.compile(
+    r"^\s*[^\d|]*[^\W\d_][^\d|]*?\s+(\d{1,3}(?:[.,]\d{1,2})?)\s+(\d{1,3}(?:[.,]\d{1,2})?)\s+(\d{1,3}(?:[.,]\d{1,2})?)\s*$"
+)
+_TERM_HEADER_RE = re.compile(r"(?<![a-z])(?:hk\w*|hoc k[a-z]?(?![a-z])|ky\s*(?:1|2|i)|ca nam|cn)(?![a-z])")
+MIN_HINT_ROWS = 3
+MIN_HINT_SHARE = 0.8
+YEAR_AVERAGE_TOLERANCE = 0.11  # điểm làm tròn 1 chữ số
+HEADER_LOOKBACK = 3  # tiêu đề cột thật nằm ngay trên các dòng môn
+
+
+def hint_term_columns(text: str) -> str:
+    lines = text.splitlines()
+    rows = [
+        (i, [_ten_point(v) for v in m.groups()])
+        for i, line in enumerate(lines)
+        if (m := _THREE_SCORE_ROW_RE.match(line))
+    ]
+    rows = [(i, v) for i, v in rows if None not in v]
+    if len(rows) < MIN_HINT_ROWS:
+        return text
+    fits = [v for _, v in rows if _is_year_average(*v)]
+    varied = [v for v in fits if len(set(v)) > 1]
+    if len(fits) < MIN_HINT_SHARE * len(rows) or len(varied) < 2:
+        return text
+    first = rows[0][0]
+    if any(
+        len(_TERM_HEADER_RE.findall(plain(ln))) >= 2 for ln in lines[max(0, first - HEADER_LOOKBACK) : first]
+    ):
+        return text
+    return "\n".join([*lines[:first], TERM_COLUMNS_HINT, *lines[first:]])
+
+
+def _ten_point(raw: str) -> float | None:
+    value = float(raw.replace(",", "."))
+    if value <= 10:
+        return value
+    return value / 10 if raw.isdigit() and value <= 100 else None  # mất dấu thập phân: "85" là 8.5
+
+
+def _is_year_average(hk1: float, hk2: float, year: float) -> bool:
+    return any(abs(year - avg) <= YEAR_AVERAGE_TOLERANCE for avg in ((hk1 + 2 * hk2) / 3, (hk1 + hk2) / 2))

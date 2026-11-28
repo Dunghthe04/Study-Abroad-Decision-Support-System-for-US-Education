@@ -95,6 +95,7 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Billing.Admin.IAdminOrderService, StudyAbroad.Application.Billing.Admin.AdminOrderService>();   // UC-132..134: admin xử lý đơn
         services.AddScoped<StudyAbroad.Application.BirthDateChanges.IBirthDateChangeService, StudyAbroad.Application.BirthDateChanges.BirthDateChangeService>();   // [UC-107] gửi, hủy yêu cầu sửa ngày sinh
         services.AddScoped<StudyAbroad.Application.BirthDateChanges.IAdminBirthDateChangeService, StudyAbroad.Application.BirthDateChanges.AdminBirthDateChangeService>();   // [UC-150] Admin duyệt, từ chối yêu cầu sửa ngày sinh
+        services.AddScoped<StudyAbroad.Application.BirthDateChanges.IBirthDateEvidenceSweeper, StudyAbroad.Application.BirthDateChanges.BirthDateEvidenceSweeper>();   // [UC-107/150] dọn minh chứng mồ côi
         return services;
     }
 }

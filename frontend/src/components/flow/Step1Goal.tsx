@@ -420,9 +420,19 @@ export function Step1Goal({ data, metadata, onUpdate, onNext, goals, onEditNeeds
         <FormGroup title="Thu hẹp gợi ý trường">
 
               {/* Bang mong muốn: chọn nhiều, bấm để bật/tắt; ngoài các bang hay chọn thì tìm trong cả 51 bang */}
-              <FormSection title="Bang mong muốn" description="Chọn một hoặc nhiều bang, bỏ trống nếu bang nào cũng được.">
+              <FormSection title="Bang mong muốn" description="Mặc định là tất cả các bang; chọn một hoặc nhiều bang nếu muốn thu hẹp.">
                 <div ref={stateDropdownRef} className="relative">
                   <div role="group" aria-label="Bang mong muốn" className="flex flex-wrap items-center gap-2">
+                    {/* Mặc định: chưa chọn bang nào = tất cả các bang (lưu danh sách rỗng); bấm để bỏ hết bang đã chọn */}
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={selectedStates.length === 0}
+                      onClick={() => onUpdate({ targetStates: [] })}
+                      className={CHOICE_CHIP}
+                    >
+                      Tất cả các bang
+                    </button>
                     {stateChips.map((s) => (
                       <button
                         key={s.code}

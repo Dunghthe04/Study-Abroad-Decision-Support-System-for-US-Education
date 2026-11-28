@@ -216,6 +216,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 var app = builder.Build();
 
 app.UseForwardedHeaders();
+app.UseMiddleware<StudyAbroad.Api.Extensions.SecurityHeadersMiddleware>();   // header bảo mật: bản Azure không qua Nginx
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseSerilogRequestLogging();

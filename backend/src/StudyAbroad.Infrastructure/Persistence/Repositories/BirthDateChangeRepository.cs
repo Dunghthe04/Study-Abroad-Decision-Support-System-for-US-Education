@@ -38,6 +38,12 @@ public class BirthDateChangeRepository(AppDbContext db) : IBirthDateChangeReposi
         }
     }
 
+    public async Task<IReadOnlyList<string>> GetEvidencePathsAsync(CancellationToken ct = default) =>
+        await db.BirthDateChangeRequests.AsNoTracking()
+            .Where(x => x.EvidencePath != null)
+            .Select(x => x.EvidencePath!)
+            .ToListAsync(ct);
+
     public async Task<bool> TryCloseAsync(Guid id, string newStatus, Guid? reviewedByUserId, string? rejectReason, DateTime at, CancellationToken ct = default)
     {
         DateTime? reviewedAt = reviewedByUserId == null ? null : at;   // người dùng tự hủy thì không có người duyệt

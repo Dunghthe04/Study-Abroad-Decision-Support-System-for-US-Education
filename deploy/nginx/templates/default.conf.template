@@ -25,11 +25,8 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_session_cache shared:SSL:10m;
 
-    add_header Strict-Transport-Security "max-age=31536000" always;
-    add_header X-Content-Type-Options nosniff always;
-    add_header X-Frame-Options SAMEORIGIN always;
-    add_header Referrer-Policy strict-origin-when-cross-origin always;
-    include /etc/nginx/snippets/csp.conf;
+    # Header bảo mật (CSP, HSTS, X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy) do ứng dụng tự gắn:
+    # trang web ở frontend/next.config.ts, API ở SecurityHeadersMiddleware. Bản Azure không qua Nginx nên không đặt ở đây.
 
     client_max_body_size 10m;
     gzip on;

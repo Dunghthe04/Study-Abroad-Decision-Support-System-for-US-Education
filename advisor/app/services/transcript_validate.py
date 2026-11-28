@@ -11,7 +11,7 @@ Luật (xem docs/KE_HOACH_OCR_SO_SANH_VA_KIEM_TRA_TIENG_VIET.md mục 2.2):
 - R4b môn tiếng Anh có trong SUBJECT_MAP phải dịch đúng tên chuẩn (Chemistry -> Hóa học)
 - R5 điểm có nguyên văn trong văn bản, trong khoảng 0-10
 - R6 không bỏ sót quá nhiều: số ô trả về so với số thập phân trong văn bản
-- R7 tên kỳ hiểu được (ra học kỳ 1 / 2)
+- R7 "kind" của kỳ hợp lệ (hk1 / hk2 / ca_nam / khac) và không trái với chữ tên kỳ; không ép đổi tên kỳ
 """
 
 from __future__ import annotations
@@ -31,6 +31,8 @@ _VOWEL_MARKS = {"\u0302", "\u0306", "\u031b"}
 _ALLOWED_PUNCT = set(" -&()/.,+'")
 _DECIMAL_RE = re.compile(r"\d+[.,]\d+")
 _SCORE_RE = re.compile(r"\d+(?:[.,]\d+)?")
+# OCR hay làm mất dấu thập phân ("85" thay "8.5", "100" thay "10.0"): trên thang 10, số nguyên 11-100 chỉ có thể là vậy
+_LOST_DECIMAL_RE = re.compile(r"[1-9]\d|100")
 
 # R6: đo trên 9 ảnh học bạ thật (benchmark 22/11), số ô điểm đúng / số thập phân 0-10 trong văn bản glm-ocr
 # dao động 0,06-3,67 (văn bản còn điểm thành phần, dòng Cả năm, cột TB...). Ngưỡng 80% trượt oan gần hết ảnh,
@@ -130,6 +132,54 @@ def _score(raw: Any) -> float | None:
     return float(text)
 
 
+def lost_decimal_score(raw: Any) -> float | None:
+    """Ô điểm thang 10 bị OCR làm mất dấu thập phân: "85" -> 8.5, "100" -> 10.0. Không phải kiểu đó thì None.
+    "10", "9", "4" là điểm đúng, không đụng tới."""
+    text = str(raw).strip()
+    if not _LOST_DECIMAL_RE.fullmatch(text) or int(text) <= 10:
+        return None
+    return int(text) / 10
+
+
+def decimal_may_be_lost(data: Any) -> bool:
+    """Chắc chắn là thang 10 thì mới được hiểu "85" là 8.5: học bạ THPT (phổ thông Việt Nam luôn chấm thang 10, có ảnh
+    mất dấu ở mọi ô), hoặc bảng có ít nhất một ô ghi dấu thập phân trong 0-10. Bảng khác toàn số nguyên (có thể thang
+    100) thì không đoán."""
+    if not isinstance(data, dict):
+        return False
+    if data.get("level") == "thpt":
+        return True
+    for term in data.get("terms") or []:
+        for item in (term.get("subjects") or []) if isinstance(term, dict) else []:
+            text = str(item.get("score", "")).strip() if isinstance(item, dict) else ""
+            if _DECIMAL_RE.fullmatch(text) and float(text.replace(",", ".")) <= 10:
+                return True
+    return False
+
+
+_KIND_TEXT = {"hk1": "học kỳ 1", "hk2": "học kỳ 2", "ca_nam": "cả năm", "khac": "không rõ"}
+
+
+def _term_kind_problem(subjects: _Subjects, grade: str, term_name: str, kind: Any) -> str | None:
+    """R7: "kind" (Claude phân loại kỳ theo nghĩa) phải hợp lệ và không trái với chữ tên kỳ đọc được.
+    Không ép đổi tên kỳ: tên giữ nguyên văn, "khac" là câu trả lời hợp lệ khi thật sự không rõ."""
+    label = f"{grade} {term_name}".strip()
+    resolved = subjects.resolve_term(grade, term_name)
+    text_kind = "ca_nam" if resolved is None else {1: "hk1", 2: "hk2"}.get(resolved.semester)
+    if kind is None:
+        if text_kind is None:
+            return f'Kỳ "{label}": thiếu "kind", chọn hk1 / hk2 / ca_nam / khac theo nghĩa của kỳ.'
+        return None
+    if kind not in _KIND_TEXT:
+        return f'Kỳ "{label}": "kind" = "{kind}" không hợp lệ, chỉ được hk1 / hk2 / ca_nam / khac.'
+    if text_kind is not None and kind != "khac" and kind != text_kind:
+        return (
+            f'Kỳ "{label}": "kind" = "{kind}" ({_KIND_TEXT[kind]}) trái với tên kỳ '
+            f"(chữ ghi {_KIND_TEXT[text_kind]}), xem lại kỳ này."
+        )
+    return None
+
+
 def validate_parsed(data: Any, source: str) -> list[Issue]:
     """Kiểm tra JSON bước B so với văn bản nguồn (đã che thông tin cá nhân). Rỗng = đạt."""
     if not isinstance(data, dict) or not isinstance(data.get("terms"), list):
@@ -141,6 +191,9 @@ def validate_parsed(data: Any, source: str) -> list[Issue]:
     language = str(data.get("language") or "vi")
     plain_source = _plain(source)
     source_numbers = {round(float(n.replace(",", ".")), 2) for n in _SCORE_RE.findall(source)}
+    restore_decimal = decimal_may_be_lost(data)
+    if restore_decimal:  # Claude ghi "8.5" khi văn bản là "85" cũng là chép đúng
+        source_numbers |= {v for n in _SCORE_RE.findall(source) if (v := lost_decimal_score(n)) is not None}
     issues: list[Issue] = []
     cells = 0
 
@@ -149,10 +202,8 @@ def validate_parsed(data: Any, source: str) -> list[Issue]:
             issues.append(Issue("R1", f'Kỳ thứ {ti + 1} sai cấu trúc (thiếu "subjects").', ti))
             continue
         grade, term_name = str(term.get("grade") or ""), str(term.get("term") or "")
-        resolved = subjects.resolve_term(grade, term_name)
-        if resolved is not None and resolved.semester not in (1, 2):
-            label = f"{grade} {term_name}".strip()
-            issues.append(Issue("R7", f'Tên kỳ "{label}" không hiểu được, ghi rõ dạng "HK1" / "HK2".', ti))
+        if (problem := _term_kind_problem(subjects, grade, term_name, term.get("kind"))) is not None:
+            issues.append(Issue("R7", problem, ti))
 
         for si, item in enumerate(term["subjects"]):
             if not isinstance(item, dict):
@@ -162,6 +213,10 @@ def validate_parsed(data: Any, source: str) -> list[Issue]:
             value = _score(item.get("score", ""))
             if value is None or subjects.normalize(name) is None:
                 continue  # điểm chữ hoặc mục không chấm (TB, hạnh kiểm, thể dục)
+            if restore_decimal and value > 10 and value in source_numbers:
+                value = (
+                    lost_decimal_score(item.get("score")) or value
+                )  # "85" có nguyên văn: OCR mất dấu, là 8.5
             cells += 1
             original = str(item.get("name_original") or "").strip()
             if found := subjects.check(name, original, language, plain_source):

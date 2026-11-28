@@ -120,6 +120,8 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
 
   const allStates = metadata?.states ?? [];
   const certificationTypes = metadata?.certificationTypes ?? [];
+  const currentCerts = step3.certifications.filter((c) => !c.isTarget);
+  const targetCerts = step3.certifications.filter((c) => c.isTarget);
   const stateNames = (step1.targetStates ?? [])
     .map((code) => allStates.find((s) => s.code === code)?.name ?? code)
     .join(", ");
@@ -183,7 +185,7 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
         </div>
         <div>
           <strong className="text-ink">Bang: </strong>
-          {stateNames || "Không lọc"}
+          {stateNames || "Tất cả các bang"}
           {step1.targetSchoolType && step1.targetSchoolType !== "all" && ` · ${labelOf(SCHOOL_TYPE_OPTIONS, step1.targetSchoolType)}`}
         </div>
         {step1.expectedGraduationYear && (
@@ -265,14 +267,26 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
       </ReviewSection>
 
       <ReviewSection icon={BookOpenIcon} title="Chứng chỉ" onEdit={edit(3)} errors={errorsByStep?.[3]}>
-        {step3.certifications.length > 0 ? (
-          step3.certifications.map((cert) => (
+        {/* Điểm đã thi và điểm mục tiêu (dự định thi) tách hai nhóm, mục tiêu khác màu để không đọc nhầm (nhận xét demo 28/11) */}
+        {targetCerts.length > 0 && <div className="text-xs font-semibold text-ink-2">Hiện có</div>}
+        {currentCerts.length > 0 ? (
+          currentCerts.map((cert) => (
             <div key={cert.id} className="text-ink">
               {formatCertSummary(cert, findCertType(certificationTypes, cert.type))}
             </div>
           ))
         ) : (
-          <div>Chưa có chứng chỉ</div>
+          <div>{targetCerts.length > 0 ? "Chưa có chứng chỉ đã thi" : "Chưa có chứng chỉ"}</div>
+        )}
+        {targetCerts.length > 0 && (
+          <div className="mt-2 space-y-1 rounded-lg border border-gold/30 bg-gold-wash p-2.5">
+            <div className="text-xs font-semibold text-gold">Mục tiêu (chưa thi)</div>
+            {targetCerts.map((cert) => (
+              <div key={cert.id} className="font-medium text-gold">
+                {formatCertSummary(cert, findCertType(certificationTypes, cert.type))}
+              </div>
+            ))}
+          </div>
         )}
         {step3.englishPlanned && <div>Tiếng Anh: chưa thi và chưa có dự định thi</div>}
         {step3.standardizedPlanned && <div>Bài thi chuẩn hóa: chưa thi và chưa có dự định thi</div>}

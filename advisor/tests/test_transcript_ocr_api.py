@@ -420,7 +420,7 @@ def test_outlier_score_is_flagged_and_text_pdf_scores_are_not():
         ),
     ]
 
-    async def fake_read_file(_file_item, _file_name):
+    async def fake_read_file(_file_item, _file_name, *_known):
         return _FileResult(terms=terms)
 
     reader._read_file = fake_read_file  # type: ignore[method-assign]
@@ -473,3 +473,53 @@ def test_step_b_parser_failure_gives_the_friendly_message():
 
     assert res.status_code == 200 and not res.json()["success"]
     assert any("AI chưa đọc được" in w for w in res.json()["warnings"])
+
+
+UNIVERSITY_WITH_PERSONAL = (
+    "HANOI UNIVERSITY OF SCIENCE\n"
+    "Student: Lê Minh Châu   Date of birth: 12/05/2005\n"
+    "Address: Số 12, ngõ 5, Đội Cấn\n"
+    "Email: chau.le@example.com - Phone: 0912 345 678\n"
+    "Contact: Lê Văn Hùng (father)\n" + UNIVERSITY_MARKDOWN + "Registrar: Nguyễn Thị Hoa (signed)\n"
+)
+
+
+def test_known_personal_info_is_masked_and_non_score_lines_never_reach_llm():
+    fake = FakeOllama(UNIVERSITY_WITH_PERSONAL, UNIVERSITY_PARSED)
+    resp = make_client(fake).post(
+        "/api/v1/profile/transcript-ocr",
+        json={
+            "files": [
+                {"imageBase64": _png_base64(), "fileName": "bang_diem.png", "contentType": "image/png"}
+            ],
+            "knownPersonalInfo": {
+                "names": ["Lê Minh Châu", "Lê Văn Hùng"],
+                "dateOfBirth": "2005-05-12",
+                "email": "chau.le@example.com",
+                "phone": "+84 912 345 678",
+            },
+        },
+    )
+
+    assert resp.status_code == 200
+    assert scores_by_term(resp.json())["Năm 1 HK1"] == {"Toán": 8.2}
+    prompt = next(c for c in fake.calls if not c["messages"][0].get("images"))["messages"][0]["content"]
+    for leaked in (
+        "Châu",
+        "12/05/2005",
+        "Đội Cấn",
+        "chau.le",
+        "345",
+        "Hùng",
+        "Nguyễn Thị Hoa",
+        "HANOI UNIVERSITY",
+    ):
+        assert leaked not in prompt
+    assert "| Fall2023 | Mathematics | 8,2 |" in prompt
+
+
+def test_request_without_known_personal_info_still_works():
+    body = post_image(make_client(FakeOllama(UNIVERSITY_WITH_PERSONAL, UNIVERSITY_PARSED)))
+
+    assert body["success"] is True
+    assert scores_by_term(body)["Năm 1 HK2"] == {"Vật lý": 7.0, "Tiếng Anh": 9.1}

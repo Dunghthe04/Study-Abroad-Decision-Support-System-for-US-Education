@@ -733,6 +733,35 @@ def test_relatives_question_skipped_when_states_known():
     assert next_question(state) == "N3"
 
 
+# 28/11 (nhận xét thầy): N2 không có nút Bỏ qua, ô chọn bang mặc định "Tất cả các bang" = danh sách rỗng
+async def test_states_question_has_no_skip_and_all_states_saves_empty_list():
+    llm = FakeLLM()
+    profile = {**b3_profile(), "current_level": field("college_university")}
+    res = await turn(
+        llm, "Em muốn học ở tất cả các bang", current_step="B2", question_id="N2", profile=profile
+    )
+
+    assert llm.calls == []  # chữ của ô chọn do code xử lý, không gửi qua SLM
+    assert res.state.profile["preferred_states"] == field([])
+    assert res.state.question_id == "N3"
+    assert "Bỏ qua" not in [r.label for r in res.quick_replies]
+
+
+def test_relatives_question_is_asked_when_all_states_picked():
+    state = required_done(preferred_states=field([]), school_type=field("all"))
+    assert next_question(state) == "N1"
+
+
+@pytest.mark.parametrize("question_id", ["N1", "N2", "N3", "D4", "D5"])
+def test_questions_with_own_answer_have_no_skip_button(question_id):
+    from app.services.skills import buttons
+    from app.services.skills.skill_ho_so import SKIP_QUESTIONS
+
+    assert question_id not in SKIP_QUESTIONS
+    widget = buttons.widget("N2")
+    assert widget.data["fields"][0]["allLabel"] == "Tất cả các bang"
+
+
 # UC-35, UC-08: câu visa (N4) là câu thêm cuối cùng, hỏi một lần sau câu người thân (N1), luôn có nút Bỏ qua
 def test_visa_question_is_asked_once_and_last():
     assert "N4" in OPTIONAL_QUESTIONS
@@ -757,7 +786,12 @@ def visa_stage_asked() -> dict:
 async def test_visa_question_has_two_answer_buttons_and_a_skip_button():
     profile = {**b3_profile(), "current_level": field("college_university")}
     res = await turn(
-        FakeLLM(), "Bỏ qua", current_step="B2", question_id="N1", asked=visa_stage_asked(), profile=profile
+        FakeLLM(),
+        "Không có người thân ở Mỹ",
+        current_step="B2",
+        question_id="N1",
+        asked=visa_stage_asked(),
+        profile=profile,
     )
 
     assert res.state.question_id == "N4"
