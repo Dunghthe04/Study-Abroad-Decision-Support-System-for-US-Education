@@ -1,17 +1,22 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { BookmarkIcon, BookmarkCheckIcon, Loader2, Trash2Icon, CalendarIcon, AlertCircleIcon } from "lucide-react";
+import { BookmarkIcon, BookmarkCheckIcon, BookmarkPlusIcon, Loader2, CalendarIcon, AlertCircleIcon } from "lucide-react";
 import { targetSchoolsApi, ApiError } from "@/lib/api";
 import type { AddTargetSchoolRequest, TargetSchoolDto } from "@/types/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -514,177 +519,188 @@ function StudentTargetSchoolButton({
       )}
 
       {/* Modal [UC-30] Thêm trường mục tiêu */}
-      <Dialog open={isOpenAdd} onOpenChange={setIsOpenAdd}>
-        <DialogContent className="max-w-md">
-          <form onSubmit={handleSubmitAdd} className="space-y-4">
+      <Dialog
+        open={isOpenAdd}
+        onOpenChange={(next) => !isSubmitting && setIsOpenAdd(next)}
+        disablePointerDismissal={isSubmitting}
+      >
+        <DialogContent variant="form" size="md">
+          <form onSubmit={handleSubmitAdd} noValidate className="flex min-h-0 flex-1 flex-col gap-6">
             <DialogHeader>
-              <DialogTitle className="text-lg font-bold">
-                Lưu vào danh sách mục tiêu
-              </DialogTitle>
+              <DialogIcon tone="brand">
+                <BookmarkPlusIcon />
+              </DialogIcon>
+              <DialogTitle>Lưu vào danh sách mục tiêu</DialogTitle>
               <DialogDescription>
                 Thêm <span className="font-semibold text-foreground">{universityName}</span>
                 {locationStr && ` (${locationStr})`} vào kế hoạch nộp hồ sơ của bạn.
               </DialogDescription>
             </DialogHeader>
 
-            {error && (
-              <div className="rounded-md border border-risk/25 bg-risk-wash p-3 text-sm text-risk">
-                {error}
-              </div>
-            )}
+            <DialogBody className="space-y-4">
+              {error && (
+                <div className="rounded-md border border-risk/25 bg-risk-wash p-3 text-sm text-risk">
+                  {error}
+                </div>
+              )}
 
-            <div className="space-y-3">
-              <Field>
-                <FieldLabel className="text-sm font-semibold">Phân loại mục tiêu</FieldLabel>
-                <RadioGroup
-                  value={category}
-                  onValueChange={(val) => {
-                    const next = String(val);
-                    setCategory(next);
-                    setUserPickedCategory(next !== recommendedCategory);
-                  }}
-                  className="gap-2 pt-1"
-                >
-                  {CATEGORY_OPTIONS.map((opt) => (
-                    <label
-                      key={opt.value}
-                      htmlFor={`cat-${opt.value}`}
-                      className={cn(
-                        "flex cursor-pointer flex-col rounded-xl border p-3 transition-colors",
-                        category === opt.value
-                          ? "border-brand bg-brand/5 text-foreground"
-                          : "border-border hover:bg-muted/50"
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <RadioGroupItem id={`cat-${opt.value}`} value={opt.value} />
-                          <span className="font-semibold text-sm" title={opt.englishTerm}>{opt.title}</span>
-                        </div>
-                        {recommendedCategory === opt.value && (
-                          <Badge variant="outline" className="text-[11px] font-medium">
-                            Theo gợi ý gần nhất
-                          </Badge>
+              <div className="space-y-3">
+                <Field>
+                  <FieldLabel className="text-sm font-semibold">Phân loại mục tiêu</FieldLabel>
+                  <RadioGroup
+                    value={category}
+                    onValueChange={(val) => {
+                      const next = String(val);
+                      setCategory(next);
+                      setUserPickedCategory(next !== recommendedCategory);
+                    }}
+                    className="gap-2 pt-1"
+                  >
+                    {CATEGORY_OPTIONS.map((opt) => (
+                      <label
+                        key={opt.value}
+                        htmlFor={`cat-${opt.value}`}
+                        className={cn(
+                          "flex cursor-pointer flex-col rounded-xl border p-3 transition-colors",
+                          category === opt.value
+                            ? "border-brand bg-brand/5 text-foreground"
+                            : "border-border hover:bg-muted/50"
                         )}
-                      </div>
-                      <p className="mt-1 pl-6.5 text-xs text-muted-foreground">{opt.desc}</p>
-                    </label>
-                  ))}
-                </RadioGroup>
-              </Field>
-
-              <Field>
-                <FieldLabel className="text-sm font-semibold">Vòng nộp dự kiến (Tùy chọn)</FieldLabel>
-                <Select
-                  value={round || "none"}
-                  onValueChange={(val) => {
-                    if (val !== null) {
-                      setRound(val === "none" ? "" : String(val));
-                      setConfirmBindingAdd(false);
-                    }
-                  }}
-                  items={addRoundOptions}
-                >
-                  <SelectTrigger className="w-full text-sm">
-                    <SelectValue placeholder="-- Chưa chọn vòng nộp --" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {addRoundOptions.map((r) => (
-                      <SelectItem key={r.value} value={r.value}>
-                        {r.label}
-                      </SelectItem>
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <RadioGroupItem id={`cat-${opt.value}`} value={opt.value} />
+                            <span className="font-semibold text-sm" title={opt.englishTerm}>{opt.title}</span>
+                          </div>
+                          {recommendedCategory === opt.value && (
+                            <Badge variant="outline" className="text-[11px] font-medium">
+                              Theo gợi ý gần nhất
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="mt-1 pl-6.5 text-xs text-muted-foreground">{opt.desc}</p>
+                      </label>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </RadioGroup>
+                </Field>
 
-                {/* [UC-32 3a/E1] Cảnh báo ràng buộc Early Decision / Early Decision II */}
-                {isBindingRound(round) && (
-                  <div className="mt-2 rounded-lg border border-warn/40 bg-warn-wash/60 p-3 text-xs space-y-2 text-foreground">
-                    <p className="font-semibold text-warn">
-                      Cảnh báo vòng ràng buộc ({round})
-                    </p>
-                    <p>
-                      Đây là vòng nộp ràng buộc: nếu trúng tuyển, bạn phải nhập học tại trường này và rút toàn bộ hồ sơ đã nộp ở các trường khác.
-                    </p>
-                    {isScholarshipMandatory && (
-                      <p className="font-medium text-risk">
-                        Lưu ý rủi ro tài chính: Hồ sơ của bạn đang chọn nhu cầu học bổng &ldquo;Bắt buộc&rdquo;. Nộp {round} có thể gây áp lực tài chính nếu gói hỗ trợ của trường không đủ trang trải.
+                <Field>
+                  <FieldLabel className="text-sm font-semibold">Vòng nộp dự kiến (Tùy chọn)</FieldLabel>
+                  <Select
+                    value={round || "none"}
+                    onValueChange={(val) => {
+                      if (val !== null) {
+                        setRound(val === "none" ? "" : String(val));
+                        setConfirmBindingAdd(false);
+                      }
+                    }}
+                    items={addRoundOptions}
+                  >
+                    <SelectTrigger className="w-full text-sm">
+                      <SelectValue placeholder="-- Chưa chọn vòng nộp --" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {addRoundOptions.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          {r.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {/* [UC-32 3a/E1] Cảnh báo ràng buộc Early Decision / Early Decision II */}
+                  {isBindingRound(round) && (
+                    <div className="mt-2 rounded-lg border border-warn/40 bg-warn-wash/60 p-3 text-xs space-y-2 text-foreground">
+                      <p className="font-semibold text-warn">
+                        Cảnh báo vòng ràng buộc ({round})
                       </p>
-                    )}
-                    {round === "Early Decision" && existingEdSchoolName && existingEdSchoolName !== universityName && (
-                      <p className="font-semibold text-risk">
-                        Bạn đã chọn Early Decision cho {existingEdSchoolName}. Mỗi học sinh chỉ được chọn tối đa một trường ở vòng này.
+                      <p>
+                        Đây là vòng nộp ràng buộc: nếu trúng tuyển, bạn phải nhập học tại trường này và rút toàn bộ hồ sơ đã nộp ở các trường khác.
                       </p>
-                    )}
-                    {round === "Early Decision II" && existingEd2SchoolName && existingEd2SchoolName !== universityName && (
-                      <p className="font-semibold text-risk">
-                        Bạn đã chọn Early Decision II cho {existingEd2SchoolName}. Mỗi học sinh chỉ được chọn tối đa một trường ở vòng này.
+                      {isScholarshipMandatory && (
+                        <p className="font-medium text-risk">
+                          Lưu ý rủi ro tài chính: Hồ sơ của bạn đang chọn nhu cầu học bổng &ldquo;Bắt buộc&rdquo;. Nộp {round} có thể gây áp lực tài chính nếu gói hỗ trợ của trường không đủ trang trải.
+                        </p>
+                      )}
+                      {round === "Early Decision" && existingEdSchoolName && existingEdSchoolName !== universityName && (
+                        <p className="font-semibold text-risk">
+                          Bạn đã chọn Early Decision cho {existingEdSchoolName}. Mỗi học sinh chỉ được chọn tối đa một trường ở vòng này.
+                        </p>
+                      )}
+                      {round === "Early Decision II" && existingEd2SchoolName && existingEd2SchoolName !== universityName && (
+                        <p className="font-semibold text-risk">
+                          Bạn đã chọn Early Decision II cho {existingEd2SchoolName}. Mỗi học sinh chỉ được chọn tối đa một trường ở vòng này.
+                        </p>
+                      )}
+                      <label className="flex items-start gap-2 cursor-pointer pt-1">
+                        <Checkbox
+                          checked={confirmBindingAdd}
+                          onCheckedChange={(c) => setConfirmBindingAdd(c === true)}
+                          className="mt-0.5"
+                        />
+                        <span>Tôi đã hiểu quy định ràng buộc của {round} và xác nhận lưu vòng nộp này.</span>
+                      </label>
+                    </div>
+                  )}
+
+                  {/* [UC-32 3b] Cảnh báo Restrictive / Single-Choice Early Action */}
+                  {isRestrictiveRound(round) && (
+                    <div className="mt-2 rounded-lg border border-brand/30 bg-brand-wash/50 p-3 text-xs space-y-1 text-foreground">
+                      <p className="font-semibold text-brand">Lưu ý vòng nộp sớm có giới hạn (REA / SCEA)</p>
+                      <p>
+                        Vòng Restrictive / Single-Choice Early Action không bắt buộc nhập học nhưng thường giới hạn việc nộp sớm (EA/ED) sang các trường tư thục khác theo quy định riêng của trường.
                       </p>
-                    )}
-                    <label className="flex items-start gap-2 cursor-pointer pt-1">
-                      <input
-                        type="checkbox"
-                        checked={confirmBindingAdd}
-                        onChange={(e) => setConfirmBindingAdd(e.target.checked)}
-                        className="mt-0.5 rounded border-line"
-                      />
-                      <span>Tôi đã hiểu quy định ràng buộc của {round} và xác nhận lưu vòng nộp này.</span>
-                    </label>
-                  </div>
-                )}
+                    </div>
+                  )}
+                </Field>
 
-                {/* [UC-32 3b] Cảnh báo Restrictive / Single-Choice Early Action */}
-                {isRestrictiveRound(round) && (
-                  <div className="mt-2 rounded-lg border border-brand/30 bg-brand-wash/50 p-3 text-xs space-y-1 text-foreground">
-                    <p className="font-semibold text-brand">Lưu ý vòng nộp sớm có giới hạn (REA / SCEA)</p>
-                    <p>
-                      Vòng Restrictive / Single-Choice Early Action không bắt buộc nhập học nhưng thường giới hạn việc nộp sớm (EA/ED) sang các trường tư thục khác theo quy định riêng của trường.
-                    </p>
-                  </div>
-                )}
-              </Field>
+                <Field>
+                  <FieldLabel className="text-sm font-semibold">Ghi chú cá nhân (Tùy chọn)</FieldLabel>
+                  <Textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Ví dụ: Ngành Computer Science, cần xin hỗ trợ tài chính..."
+                    maxLength={1000}
+                    rows={3}
+                    className="resize-none text-sm"
+                  />
+                </Field>
+              </div>
+            </DialogBody>
 
-              <Field>
-                <FieldLabel className="text-sm font-semibold">Ghi chú cá nhân (Tùy chọn)</FieldLabel>
-                <Textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Ví dụ: Ngành Computer Science, cần xin hỗ trợ tài chính..."
-                  maxLength={1000}
-                  rows={3}
-                  className="resize-none text-sm"
-                />
-              </Field>
-            </div>
-
-            <DialogFooter className="pt-2 sm:justify-stretch">
-              <Button
+            <DialogFooter layout="pair">
+              <DialogCancel disabled={isSubmitting}>Hủy</DialogCancel>
+              <DialogAction
                 type="submit"
+                tone="primary"
                 loading={isSubmitting}
                 disabled={isBindingRound(round) && !confirmBindingAdd}
-                className="w-full gap-2 font-semibold"
               >
                 Lưu
-              </Button>
+              </DialogAction>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
       {/* Modal [UC-31] Quản lý & Xóa trường mục tiêu */}
-      <Dialog open={isOpenManage} onOpenChange={setIsOpenManage}>
-        <DialogContent className="max-w-md">
-          <div className="space-y-4">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-lg">
-                <BookmarkCheckIcon className="size-5 text-ok" />
-                Thông tin trường mục tiêu
-              </DialogTitle>
-              <DialogDescription>
-                <span className="font-semibold text-foreground">{universityName}</span> đang nằm trong danh sách mục tiêu của bạn.
-              </DialogDescription>
-            </DialogHeader>
+      <Dialog
+        open={isOpenManage}
+        onOpenChange={(next) => !(isDeleting || isUpdatingRound || isUpdatingCategory) && setIsOpenManage(next)}
+        disablePointerDismissal={isDeleting || isUpdatingRound || isUpdatingCategory}
+      >
+        <DialogContent variant="form" size="md">
+          <DialogHeader>
+            <DialogIcon tone="brand">
+              <BookmarkCheckIcon />
+            </DialogIcon>
+            <DialogTitle>Thông tin trường mục tiêu</DialogTitle>
+            <DialogDescription>
+              <span className="font-semibold text-foreground">{universityName}</span> đang nằm trong danh sách mục tiêu của bạn.
+            </DialogDescription>
+          </DialogHeader>
 
+          <DialogBody className="space-y-4">
             {error && (
               <div className="rounded-md border border-risk/25 bg-risk-wash p-3 text-sm text-risk">
                 {error}
@@ -839,11 +855,10 @@ function StudentTargetSchoolButton({
                           </p>
                         )}
                         <label className="flex items-start gap-2 cursor-pointer pt-0.5">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={confirmBindingEdit}
-                            onChange={(e) => setConfirmBindingEdit(e.target.checked)}
-                            className="mt-0.5 rounded border-line"
+                            onCheckedChange={(c) => setConfirmBindingEdit(c === true)}
+                            className="mt-0.5"
                           />
                           <span>Tôi đã hiểu cam kết ràng buộc và xác nhận chọn vòng này.</span>
                         </label>
@@ -910,7 +925,7 @@ function StudentTargetSchoolButton({
               </div>
             )}
 
-            {confirmDelete ? (
+            {confirmDelete && (
               <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3.5 space-y-2">
                 <div className="flex items-start gap-2 text-destructive text-sm font-medium">
                   <AlertCircleIcon className="size-4 shrink-0 mt-0.5" />
@@ -919,51 +934,39 @@ function StudentTargetSchoolButton({
                 <p className="text-xs text-muted-foreground pl-6">
                   Trường này sẽ được gỡ khỏi kế hoạch theo dõi và dòng thời gian nộp đơn của bạn.
                 </p>
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setConfirmDelete(false)}
-                    disabled={isDeleting}
-                  >
-                    Hủy
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    onClick={handleDeleteTargetSchool}
-                    loading={isDeleting}
-                    className="gap-1.5"
-                  >
-                    <Trash2Icon className="size-3.5" />
-                    Đồng ý xóa
-                  </Button>
-                </div>
               </div>
-            ) : (
-              <DialogFooter className="flex items-center justify-between sm:justify-between w-full">
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setConfirmDelete(true)}
-                  className="gap-1.5"
-                >
-                  <Trash2Icon className="size-4" />
-                  Xóa khỏi mục tiêu
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsOpenManage(false)}
-                >
-                  Đóng
-                </Button>
-              </DialogFooter>
             )}
-          </div>
+          </DialogBody>
+
+          {confirmDelete ? (
+            <DialogFooter layout="pair">
+              <DialogCancel asClose={false} onClick={() => setConfirmDelete(false)} disabled={isDeleting}>
+                Hủy
+              </DialogCancel>
+              <DialogAction
+                type="button"
+                tone="destructive"
+                onClick={handleDeleteTargetSchool}
+                loading={isDeleting}
+              >
+                Đồng ý xóa
+              </DialogAction>
+            </DialogFooter>
+          ) : (
+            <DialogFooter layout="pair">
+              <DialogCancel disabled={isDeleting || isUpdatingRound || isUpdatingCategory}>
+                Đóng
+              </DialogCancel>
+              <DialogAction
+                type="button"
+                tone="destructive-tint"
+                onClick={() => setConfirmDelete(true)}
+                disabled={isUpdatingRound || isUpdatingCategory}
+              >
+                Xóa khỏi mục tiêu
+              </DialogAction>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
     </>

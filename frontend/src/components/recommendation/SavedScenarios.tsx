@@ -4,9 +4,20 @@
 // Chỉ lưu khi học sinh bấm "Lưu kịch bản" (không lưu mỗi lần kéo thanh). Tối đa 20 kịch bản, backend kiểm tra.
 
 import { useCallback, useEffect, useState } from "react";
-import { BookmarkIcon, HistoryIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import { BookmarkIcon, FolderOpenIcon, HistoryIcon, PencilIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogIcon,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { scenarioApi } from "@/lib/scenario-api";
 import { describeSimulation } from "@/lib/simulation-link";
@@ -108,20 +119,24 @@ export function SaveScenarioButton({ overrides, onSave }: { overrides: Simulatio
         {done ? "Đã lưu, lưu thêm" : "Lưu kịch bản"}
       </Button>
 
-      <Dialog open={open} onOpenChange={(next) => !busy && setOpen(next)}>
-        <DialogContent>
+      <Dialog open={open} onOpenChange={(next) => !busy && setOpen(next)} disablePointerDismissal={busy}>
+        <DialogContent variant="form" size="sm">
           <form
-            className="grid gap-4"
+            noValidate
+            className="flex min-h-0 flex-1 flex-col gap-6"
             onSubmit={(e) => {
               e.preventDefault();
               void submit();
             }}
           >
             <DialogHeader>
+              <DialogIcon tone="brand">
+                <BookmarkIcon />
+              </DialogIcon>
               <DialogTitle>Lưu kịch bản</DialogTitle>
               <DialogDescription>Đặt tên để lần sau mở lại đúng các giá trị đang giả định.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-1.5">
+            <DialogBody className="space-y-1.5">
               <Input
                 value={title}
                 maxLength={MAX_TITLE}
@@ -132,14 +147,12 @@ export function SaveScenarioButton({ overrides, onSave }: { overrides: Simulatio
               />
               <p className="text-xs text-muted-foreground">Đang giả định: {describeSimulation(overrides)}</p>
               {error && <p className="text-xs text-destructive">{error}</p>}
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={busy}>
-                Hủy
-              </Button>
-              <Button type="submit" disabled={busy}>
-                {busy ? "Đang lưu..." : "Lưu"}
-              </Button>
+            </DialogBody>
+            <DialogFooter layout="pair">
+              <DialogCancel disabled={busy}>Hủy</DialogCancel>
+              <DialogAction type="submit" tone="primary" loading={busy}>
+                Lưu
+              </DialogAction>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -206,53 +219,76 @@ export function SavedScenariosButton({ store, onOpen, readOnly = false }: SavedS
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent variant="form" size="md">
           <DialogHeader>
+            <DialogIcon tone="brand">
+              <FolderOpenIcon />
+            </DialogIcon>
             <DialogTitle>Kịch bản đã lưu</DialogTitle>
             <DialogDescription>
               Số trường mỗi nhóm là kết quả lúc lưu. Bấm &quot;Mở&quot; để tính lại theo hồ sơ hiện tại.
             </DialogDescription>
           </DialogHeader>
 
-          {store.error ? (
-            <p className="text-sm text-destructive">{store.error}</p>
-          ) : store.items.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Chưa có kịch bản nào. Kéo các thanh mô phỏng rồi bấm &quot;Lưu kịch bản&quot;.
-            </p>
-          ) : (
-            <ul className="-mx-4 max-h-[60vh] divide-y divide-line overflow-y-auto px-4">
-              {store.items.map((s) => (
-                <ScenarioRow
-                  key={s.id}
-                  scenario={s}
-                  onRename={store.rename}
-                  onOpen={openScenario}
-                  onDelete={askDelete}
-                  readOnly={readOnly}
-                />
-              ))}
-            </ul>
-          )}
+          <DialogBody>
+            {store.error ? (
+              <p className="text-sm text-destructive">{store.error}</p>
+            ) : store.items.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Chưa có kịch bản nào. Kéo các thanh mô phỏng rồi bấm &quot;Lưu kịch bản&quot;.
+              </p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {store.items.map((s) => (
+                  <ScenarioRow
+                    key={s.id}
+                    scenario={s}
+                    onRename={store.rename}
+                    onOpen={openScenario}
+                    onDelete={askDelete}
+                    readOnly={readOnly}
+                  />
+                ))}
+              </ul>
+            )}
+          </DialogBody>
+
+          <DialogFooter layout="single">
+            <DialogCancel>Đóng</DialogCancel>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={deleting !== null} onOpenChange={(next) => !next && !deleteBusy && setDeleting(null)}>
-        <DialogContent>
+      <Dialog
+        open={deleting !== null}
+        onOpenChange={(next) => !next && !deleteBusy && setDeleting(null)}
+        disablePointerDismissal={deleteBusy}
+      >
+        <DialogContent variant="action">
           <DialogHeader>
+            <DialogIcon tone="destructive">
+              <Trash2Icon />
+            </DialogIcon>
             <DialogTitle>Xóa kịch bản?</DialogTitle>
             <DialogDescription>
               Kịch bản &quot;{deleting?.title}&quot; sẽ bị xóa và không khôi phục lại được.
             </DialogDescription>
           </DialogHeader>
-          {deleteError && <p className="text-xs text-destructive">{deleteError}</p>}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDeleting(null)} disabled={deleteBusy}>
-              Không
-            </Button>
-            <Button type="button" variant="destructive" onClick={() => void confirmDelete()} disabled={deleteBusy}>
-              {deleteBusy ? "Đang xóa..." : "Xóa"}
-            </Button>
+          {deleteError && (
+            <DialogBody>
+              <p className="text-center text-xs text-destructive">{deleteError}</p>
+            </DialogBody>
+          )}
+          <DialogFooter layout="pair">
+            <DialogCancel disabled={deleteBusy}>Không</DialogCancel>
+            <DialogAction
+              type="button"
+              tone="destructive"
+              onClick={() => void confirmDelete()}
+              loading={deleteBusy}
+            >
+              Xóa
+            </DialogAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>
