@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { adminBillingApi, adminBillingErrorMessage, PLAN_KIND_LABELS } from "@/lib/admin-billing-api";
@@ -15,6 +15,10 @@ import { DetailPanel } from "../shared/DetailPanel";
 
 const CODE_PATTERN = /^[a-z0-9-]+$/;
 const DURATION_PRESETS = [7, 30, 90, 365] as const;
+const KIND_OPTIONS = [
+  { value: "personal", label: PLAN_KIND_LABELS.personal },
+  { value: "family", label: PLAN_KIND_LABELS.family },
+];
 
 interface PlanFormPanelProps {
   /** null = tạo gói mới. */
@@ -176,10 +180,24 @@ export function PlanFormPanel({ plan, freePlan, onClose, onSaved }: PlanFormPane
               <Input id="plan-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="personal-1m" required pattern="[a-z0-9\-]+" />
             ), "Chữ thường, số, dấu gạch ngang")}
             {field("plan-kind", "Loại gói", (
-              <NativeSelect id="plan-kind" className="w-full" value={kind} onChange={(e) => setKind(e.target.value as PlanKind)}>
-                <NativeSelectOption value="personal">{PLAN_KIND_LABELS.personal}</NativeSelectOption>
-                <NativeSelectOption value="family">{PLAN_KIND_LABELS.family}</NativeSelectOption>
-              </NativeSelect>
+              <Select
+                value={kind}
+                onValueChange={(v) => {
+                  if (v !== null) setKind(v as PlanKind);
+                }}
+                items={KIND_OPTIONS}
+              >
+                <SelectTrigger id="plan-kind" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {KIND_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             ))}
           </div>
         )}

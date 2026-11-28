@@ -7,11 +7,14 @@ import { CENTER_REVIEW_REPORT_REASON_OPTIONS } from "@/components/centers/Center
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogIcon,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -411,43 +414,53 @@ export function CenterReviewsPortalView() {
           }
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent variant="form">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="warning">
+              <FlagIcon />
+            </AlertDialogIcon>
             <AlertDialogTitle>Báo cáo đánh giá về trung tâm</AlertDialogTitle>
             <AlertDialogDescription>
               Kiểm duyệt viên sẽ xem xét khách quan theo quy chuẩn cộng đồng. Báo cáo do trung tâm gửi sẽ được đánh dấu rõ để đảm bảo minh bạch.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <RadioGroup
-            value={reportReason}
-            onValueChange={(v) => setReportReason(v as CenterReviewReportReason)}
-            className="gap-2"
-          >
-            {CENTER_REVIEW_REPORT_REASON_OPTIONS.map((opt) => (
-              <div key={opt.value} className="flex items-center gap-2.5">
-                <RadioGroupItem id={`portal-report-${opt.value}`} value={opt.value} disabled={isReporting} />
-                <Label htmlFor={`portal-report-${opt.value}`} className="cursor-pointer text-sm font-normal">
-                  {opt.label}
-                </Label>
-              </div>
-            ))}
-          </RadioGroup>
-          <Textarea
-            value={reportDetail}
-            onChange={(e) => setReportDetail(e.target.value)}
-            maxLength={1000}
-            rows={3}
-            disabled={isReporting}
-            placeholder="Chi tiết bổ sung (tùy chọn, tối đa 1.000 ký tự)"
-            aria-label="Chi tiết báo cáo đánh giá"
-            className="text-sm resize-y"
-          />
-          <AlertDialogFooter>
+          <AlertDialogBody className="space-y-3">
+            <RadioGroup
+              value={reportReason}
+              onValueChange={(v) => setReportReason(v as CenterReviewReportReason)}
+              className="gap-2"
+            >
+              {CENTER_REVIEW_REPORT_REASON_OPTIONS.map((opt) => (
+                <div key={opt.value} className="flex items-center gap-2.5">
+                  <RadioGroupItem id={`portal-report-${opt.value}`} value={opt.value} disabled={isReporting} />
+                  <Label htmlFor={`portal-report-${opt.value}`} className="cursor-pointer text-sm font-normal">
+                    {opt.label}
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
+            <Textarea
+              value={reportDetail}
+              onChange={(e) => setReportDetail(e.target.value)}
+              maxLength={1000}
+              rows={3}
+              disabled={isReporting}
+              placeholder="Chi tiết bổ sung (tùy chọn, tối đa 1.000 ký tự)"
+              aria-label="Chi tiết báo cáo đánh giá"
+              className="text-sm resize-y"
+            />
+          </AlertDialogBody>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={isReporting}>Hủy</AlertDialogCancel>
-            <Button type="button" onClick={() => void confirmReport()} disabled={isReporting} loading={isReporting} className="gap-1.5">
-              <FlagIcon className="size-3.5" />
+            <AlertDialogAction
+              type="button"
+              tone="primary"
+              onClick={() => void confirmReport()}
+              disabled={isReporting}
+              loading={isReporting}
+            >
               Gửi báo cáo
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

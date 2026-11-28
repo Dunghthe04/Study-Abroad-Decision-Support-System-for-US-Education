@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangleIcon,
   Building2Icon,
   CheckCircle2Icon,
   AlertCircleIcon,
@@ -15,6 +16,8 @@ import { useProvinces } from "@/hooks/use-provinces";
 import { centerPortalApi, ApiError } from "@/lib/api";
 import type { StudyCenter } from "@/types/api";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { AppDialog } from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ImageUploadField } from "@/components/admin/shared/ImageUploadField";
@@ -107,6 +110,7 @@ export function CenterProfileView() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmLegalOpen, setConfirmLegalOpen] = useState(false);
 
   // Tự động xóa thông báo thành công sau 5 giây
   useEffect(() => {
@@ -176,41 +180,11 @@ export function CenterProfileView() {
     );
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-    setReviewNotice(null);
-
+  const performSave = async () => {
     const fMin = feeMin ? Number(feeMin) : null;
     const fMax = feeMax ? Number(feeMax) : null;
-
-    if (fMin != null && fMax != null && fMin > fMax) {
-      setError("Mức phí tối thiểu không được lớn hơn mức phí tối đa.");
-      return;
-    }
-
     const fCertified = certifiedCount.trim() ? Number(certifiedCount) : null;
-    const fStaff = staffCount ? Number(staffCount) : null;
-    if (!legalLocked) {
-      if (fCertified != null && (!Number.isInteger(fCertified) || fCertified < 0)) {
-        setError("Số tư vấn viên có chứng chỉ phải là số nguyên không âm.");
-        return;
-      }
-      if (fCertified != null && fStaff != null && fCertified > fStaff) {
-        setError("Số tư vấn viên có chứng chỉ không được vượt quá quy mô nhân sự.");
-        return;
-      }
-    }
 
-    // [UC-92] Đang chờ duyệt: không gửi tên, loại hình và các trường pháp lý (server cũng chặn).
-    // Đã xác minh vẫn gửi; server chỉ đưa hồ sơ về Chờ duyệt khi giá trị pháp lý thực sự đổi.
-    if (isVerified && legalChanged) {
-      const ok = window.confirm(
-        "Bạn đang đổi thông tin pháp lý của trung tâm đã xác minh. Hồ sơ sẽ chuyển về Chờ duyệt và tạm ẩn dấu xác minh cho tới khi Moderator duyệt lại. Tiếp tục?"
-      );
-      if (!ok) return;
-    }
     const legalPayload = legalLocked
       ? {}
       : {
@@ -266,6 +240,43 @@ export function CenterProfileView() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setReviewNotice(null);
+
+    const fMin = feeMin ? Number(feeMin) : null;
+    const fMax = feeMax ? Number(feeMax) : null;
+
+    if (fMin != null && fMax != null && fMin > fMax) {
+      setError("Mức phí tối thiểu không được lớn hơn mức phí tối đa.");
+      return;
+    }
+
+    const fCertified = certifiedCount.trim() ? Number(certifiedCount) : null;
+    const fStaff = staffCount ? Number(staffCount) : null;
+    if (!legalLocked) {
+      if (fCertified != null && (!Number.isInteger(fCertified) || fCertified < 0)) {
+        setError("Số tư vấn viên có chứng chỉ phải là số nguyên không âm.");
+        return;
+      }
+      if (fCertified != null && fStaff != null && fCertified > fStaff) {
+        setError("Số tư vấn viên có chứng chỉ không được vượt quá quy mô nhân sự.");
+        return;
+      }
+    }
+
+    // [UC-92] Đang chờ duyệt: không gửi tên, loại hình và các trường pháp lý (server cũng chặn).
+    // Đã xác minh vẫn gửi; server chỉ đưa hồ sơ về Chờ duyệt khi giá trị pháp lý thực sự đổi.
+    if (isVerified && legalChanged) {
+      setConfirmLegalOpen(true);
+      return;
+    }
+
+    await performSave();
   };
 
   // [UC-92] Chỉ khóa thông tin pháp lý khi hồ sơ đang chờ duyệt. Đã xác minh vẫn sửa được nhưng hồ sơ sẽ về Chờ duyệt.
@@ -675,11 +686,9 @@ export function CenterProfileView() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {SERVICE_OPTIONS.map((opt) => (
                   <label key={opt.key} className="flex items-center gap-2.5 text-sm text-ink-2 cursor-pointer p-2 rounded-lg hover:bg-surface-2 transition-colors">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={services.includes(opt.key)}
-                      onChange={() => toggleService(opt.key)}
-                      className="h-4 w-4 rounded border-line text-brand focus:ring-brand"
+                      onCheckedChange={() => toggleService(opt.key)}
                     />
                     <span>{opt.label}</span>
                   </label>
@@ -693,11 +702,9 @@ export function CenterProfileView() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {STUDY_LEVEL_OPTIONS.map((opt) => (
                   <label key={opt.key} className="flex items-center gap-2.5 text-sm text-ink-2 cursor-pointer p-2 rounded-lg hover:bg-surface-2 transition-colors">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={studyLevels.includes(opt.key)}
-                      onChange={() => toggleLevel(opt.key)}
-                      className="h-4 w-4 rounded border-line text-brand focus:ring-brand"
+                      onCheckedChange={() => toggleLevel(opt.key)}
                     />
                     <span>{opt.label}</span>
                   </label>
@@ -767,6 +774,24 @@ export function CenterProfileView() {
       </div>
 
       <CenterDeletionRequestCard />
+
+      <AppDialog
+        open={confirmLegalOpen}
+        onOpenChange={setConfirmLegalOpen}
+        variant="action"
+        icon={<AlertTriangleIcon />}
+        iconTone="warning"
+        title="Xác nhận đổi thông tin pháp lý"
+        description="Bạn đang đổi thông tin pháp lý của trung tâm đã xác minh. Hồ sơ sẽ chuyển về Chờ duyệt và tạm ẩn dấu xác minh cho tới khi Moderator duyệt lại. Tiếp tục?"
+        cancelLabel="Hủy"
+        confirmLabel="Tiếp tục"
+        confirmTone="primary"
+        loading={isSubmitting}
+        onConfirm={() => {
+          setConfirmLegalOpen(false);
+          void performSave();
+        }}
+      />
     </div>
   );
 }

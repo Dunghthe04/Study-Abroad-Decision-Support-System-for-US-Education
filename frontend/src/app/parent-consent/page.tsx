@@ -5,7 +5,7 @@ import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
 import { ParentConsentForm } from "@/components/auth/ParentConsentForm";
 
 export const metadata: Metadata = {
-  title: "Phụ huynh xác nhận đồng ý – USDSS",
+  title: "Xác nhận phụ huynh – USDSS",
   description: "Phụ huynh xác nhận liên kết tài khoản và đồng ý cho xử lý dữ liệu cá nhân của con",
 };
 

@@ -64,11 +64,17 @@ public class EntitlementService(IBillingRepository repository, INotificationServ
     public async Task<QuotaOverviewDto> GetQuotaOverviewAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default)
     {
         var (e, freeUsed, freeQuota) = await LoadQuotaNumbersAsync(userId, nowUtc, ct);
-        // Mỗi nguồn góp tối đa bằng hạn mức của nó (dùng lố không làm âm phần còn lại của nguồn khác)
-        var quota = e.Usable.Sum(c => (long)c.Cycle.TokenQuota) + freeQuota;
-        var used = e.Usable.Sum(c => Math.Min(c.Used, c.Cycle.TokenQuota)) + Math.Min(freeUsed, freeQuota);
+        // Mỗi kỳ góp tối đa bằng hạn mức của nó (kỳ dùng lố không làm âm phần còn lại của kỳ khác)
+        var premium = e.Usable.Count == 0
+            ? null
+            : Bar(e.Usable.Sum(c => Math.Min(c.Used, c.Cycle.TokenQuota)), e.Usable.Sum(c => (long)c.Cycle.TokenQuota));
+        return new QuotaOverviewDto(premium, Bar(freeUsed, freeQuota));
+    }
+
+    private static QuotaBarDto Bar(long used, long quota)
+    {
         var usedPercent = CycleRules.UsedPercent(used, quota);
-        return new QuotaOverviewDto(100 - usedPercent, usedPercent, CycleRules.IsLowQuota(usedPercent));
+        return new QuotaBarDto(100 - usedPercent, usedPercent, CycleRules.IsLowQuota(usedPercent));
     }
 
     public async Task<UserQuotaUsageDto> GetCurrentQuotaUsageAsync(Guid userId, DateTime nowUtc, CancellationToken ct = default)

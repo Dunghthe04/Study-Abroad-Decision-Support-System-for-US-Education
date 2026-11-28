@@ -45,12 +45,15 @@ interface UniversityListViewProps {
   initialData: PagedResult<UniversityListItem>;
   options: UniversityFilterOptions;
   currentParams: UniversitySearchParams;
+  // ponytail: temporary /audit/universities callback so interactive filters work without leaving /audit/universities
+  onParamsChange?: (next: UniversitySearchParams) => void;
 }
 
 export function UniversityListView({
   initialData,
   options,
   currentParams,
+  onParamsChange,
 }: UniversityListViewProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -72,6 +75,11 @@ export function UniversityListView({
       page: resetPage ? 1 : next.page ?? currentParams.page ?? 1,
     };
 
+    if (onParamsChange) {
+      onParamsChange(updated);
+      return;
+    }
+
     const qs = buildUniversitySearchQuery({
       ...updated,
       sortBy: updated.sortBy && updated.sortBy !== "name" ? updated.sortBy : undefined,
@@ -88,6 +96,10 @@ export function UniversityListView({
   };
 
   const handleResetFilters = () => {
+    if (onParamsChange) {
+      onParamsChange({ page: 1, pageSize: currentParams.pageSize ?? 12, sortBy: "name", studyLevel: "undergraduate" });
+      return;
+    }
     startTransition(() => {
       router.push("/universities");
     });

@@ -9,6 +9,7 @@ import { setPendingEmail } from "@/lib/pending-email";
 import { useAccountPolicies } from "@/lib/use-account-policies";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
@@ -347,12 +348,11 @@ export function RegisterCenterForm() {
 
           <Field className="pt-1">
             <div className="flex items-start gap-2.5">
-              <input
+              <Checkbox
                 id="agreeTerms"
-                type="checkbox"
                 checked={agreeTerms}
-                onChange={(e) => setAgreeTerms(e.target.checked)}
-                className="mt-0.5 size-4 rounded border-line text-brand focus:ring-brand cursor-pointer"
+                onCheckedChange={(c) => setAgreeTerms(c === true)}
+                className="mt-0.5 cursor-pointer"
               />
               <label htmlFor="agreeTerms" className="text-sm leading-snug text-ink-2 cursor-pointer select-none">
                 Tôi đồng ý với{" "}
@@ -376,12 +376,11 @@ export function RegisterCenterForm() {
             </div>
 
             <div className="flex items-start gap-2.5">
-              <input
+              <Checkbox
                 id="agreeCommitment"
-                type="checkbox"
                 checked={agreeCommitment}
-                onChange={(e) => setAgreeCommitment(e.target.checked)}
-                className="mt-0.5 size-4 rounded border-line text-brand focus:ring-brand cursor-pointer"
+                onCheckedChange={(c) => setAgreeCommitment(c === true)}
+                className="mt-0.5 cursor-pointer"
               />
               <label htmlFor="agreeCommitment" className="text-sm leading-snug text-ink-2 cursor-pointer select-none">
                 Tôi cam kết: Các thông tin hồ sơ và mức phí dịch vụ tôi công bố trên USDSS là đúng sự thật và tuân thủ các quy định hiện hành.

@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -172,18 +172,24 @@ export function FinancialCard() {
             <Label htmlFor="financial-funding-source">
               Nguồn tài chính chính *
             </Label>
-            <NativeSelect
-              id="financial-funding-source"
-              className="w-full"
+            <Select
               value={fundingSource}
-              onChange={(e) => setFundingSource(e.target.value)}
+              onValueChange={(v) => {
+                if (v !== null) setFundingSource(v);
+              }}
+              items={FUNDING_OPTIONS}
             >
-              {FUNDING_OPTIONS.map((opt) => (
-                <NativeSelectOption key={opt.value} value={opt.value}>
-                  {opt.label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              <SelectTrigger id="financial-funding-source" className="w-full bg-surface">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FUNDING_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex items-center gap-3">

@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ListRestartIcon, PlusIcon, RotateCcwIcon, SaveIcon, Trash2Icon } from "lucide-react";
+import { AlertTriangleIcon, ListRestartIcon, PlusIcon, RotateCcwIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getAdminGradeScale,
@@ -19,6 +19,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogIcon,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -344,15 +345,18 @@ export function GradeScaleSettings() {
 
 
       <AlertDialog open={confirmOpen} onOpenChange={(open) => !saving && setConfirmOpen(open)}>
-        <AlertDialogContent>
+        <AlertDialogContent variant="action">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="warning">
+              <AlertTriangleIcon />
+            </AlertDialogIcon>
             <AlertDialogTitle>Lưu bảng quy đổi mới?</AlertDialogTitle>
             <AlertDialogDescription>
               Từ lúc lưu, mọi chỗ tính GPA (form hồ sơ, đọc học bạ, chat tư vấn) dùng bảng này. GPA của các hồ sơ lấy
               từ học bạ sẽ được tính lại; hồ sơ tự nhập GPA giữ nguyên.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={saving}>Hủy</AlertDialogCancel>
             <AlertDialogAction onClick={() => void save()} loading={saving}>
               Lưu

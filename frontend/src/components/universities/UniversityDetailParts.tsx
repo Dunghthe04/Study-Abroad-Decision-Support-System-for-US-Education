@@ -1,30 +1,30 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import Image from "next/image";
+import { type ReactNode } from "react";
 import { Building2Icon, ExternalLinkIcon } from "lucide-react";
 import { cn } from "cn";
 import { isValidRate, universityHost, universityNumber, universityPercent, universityUrl } from "@/lib/university-display";
+import { SafeImage } from "@/components/shared/safe-image";
 import { MissingValue } from "@/components/shared/missing-value";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableRow } from "@/components/ui/table";
 
-export function SchoolImage({ url, alt, className, priority = false, contain = false }: {
+export function SchoolImage({ url, alt, className, contain = false }: {
   url: string | null; alt: string; className: string; priority?: boolean; contain?: boolean;
 }) {
-  const [failed, setFailed] = useState<string | null>(null);
-  const source = universityUrl(url);
   return (
     <div className={`relative overflow-hidden ${className}`}>
-      {source && failed !== source ? (
-        <Image src={source} alt={alt} fill unoptimized priority={priority}
-          sizes={contain ? "96px" : "(max-width: 768px) 100vw, 1200px"}
-          className={contain ? "object-contain p-2" : "object-cover"} onError={() => setFailed(source)} />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-brand-wash text-brand/50">
-          <Building2Icon className={contain ? "size-9" : "size-16"} aria-label={alt} />
-        </div>
-      )}
+      <SafeImage
+        src={universityUrl(url)}
+        alt={alt}
+        fit={contain ? "contain" : "cover"}
+        className={contain ? "p-2" : undefined}
+        fallback={
+          <div className="absolute inset-0 flex items-center justify-center bg-brand-wash text-brand/50">
+            <Building2Icon className={contain ? "size-9" : "size-16"} aria-label={alt} />
+          </div>
+        }
+      />
     </div>
   );
 }

@@ -1,12 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import { FileTextIcon } from "lucide-react";
 import { PolicyContent } from "@/components/policy/PolicyContent";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogIcon,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { adminPoliciesApi } from "@/lib/admin-policies-api";
@@ -81,8 +92,11 @@ function VersionViewer({ id, onClose }: { id: string | null; onClose: () => void
 
   return (
     <Dialog open={id !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent variant="form" size="xl">
         <DialogHeader>
+          <DialogIcon tone="brand">
+            <FileTextIcon />
+          </DialogIcon>
           <DialogTitle>{shown ? shown.title : "Đang tải..."}</DialogTitle>
           <DialogDescription>
             {shown
@@ -90,12 +104,17 @@ function VersionViewer({ id, onClose }: { id: string | null; onClose: () => void
               : null}
           </DialogDescription>
         </DialogHeader>
-        {doc.error && !shown ? <Alert variant="destructive"><AlertDescription>{doc.error}</AlertDescription></Alert> : null}
-        {shown ? (
-          shown.content.trim() ? <PolicyContent content={shown.content} /> : <p className="text-sm text-ink-3">Chưa có nội dung.</p>
-        ) : doc.error ? null : (
-          <div className="flex flex-col gap-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-5/6" /></div>
-        )}
+        <DialogBody>
+          {doc.error && !shown ? <Alert variant="destructive"><AlertDescription>{doc.error}</AlertDescription></Alert> : null}
+          {shown ? (
+            shown.content.trim() ? <PolicyContent content={shown.content} /> : <p className="text-sm text-ink-3">Chưa có nội dung.</p>
+          ) : doc.error ? null : (
+            <div className="flex flex-col gap-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-5/6" /></div>
+          )}
+        </DialogBody>
+        <DialogFooter layout="single">
+          <DialogCancel onClick={onClose}>Đóng</DialogCancel>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

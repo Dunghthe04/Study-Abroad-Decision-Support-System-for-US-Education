@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { RedirectToAnalysis } from "@/components/profile/RedirectToAnalysis";
 
 export const metadata: Metadata = {
-  title: "Chuyển hướng Hồ sơ tài chính & Ngoại khóa – USDSS",
+  title: "Tài chính – USDSS",
   description: "Trang khai báo tài chính và ngoại khóa đã được tích hợp vào Luồng phân tích một cửa tại /analysis.",
 };
 

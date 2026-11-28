@@ -193,12 +193,12 @@ export function LayerStack() {
                     {/* Cạnh dày của tầng, giả lập bằng nhiều bản sao lệch xuống */}
                     {Array.from({ length: 11 }, (_, k) => 10 - k).map((k) => (
                       <g key={k} transform={`translate(0 ${k * 1.5})`}>
-                        <rect transform={ISO} x="-65" y="-65" width="130" height="130" rx="14" strokeWidth="1" className={on ? "fill-brand-ink stroke-brand" : "fill-surface stroke-line"} />
+                        <rect transform={ISO} x="-65" y="-65" width="130" height="130" rx="14" strokeWidth="1" className={on ? "fill-brand-deep stroke-brand" : "fill-surface stroke-line"} />
                       </g>
                     ))}
                     {/* Mặt trên */}
                     <g transform={ISO}>
-                      <rect x="-65" y="-65" width="130" height="130" rx="14" strokeWidth={on ? 2 : 1} className={on ? "fill-brand-ink stroke-brand" : "fill-surface stroke-ink-3"} />
+                      <rect x="-65" y="-65" width="130" height="130" rx="14" strokeWidth={on ? 2 : 1} className={on ? "fill-brand-deep stroke-brand" : "fill-surface stroke-ink-3"} />
                       {!on && <rect x="-65" y="-65" width="130" height="130" rx="14" fill="url(#plateGrid)" />}
                       <rect x="-56" y="-56" width="112" height="112" rx="10" fill="none" strokeDasharray="2 4" className={on ? "stroke-white/25" : "stroke-ink-3/50"} />
                       <PlateDetail level={l.level} active={on} />

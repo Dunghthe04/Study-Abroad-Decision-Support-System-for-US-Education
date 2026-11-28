@@ -3,7 +3,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { OrdersHistoryView } from "@/components/billing/OrdersHistoryView";
 
 export const metadata: Metadata = {
-  title: "Lịch sử giao dịch – USDSS",
+  title: "Giao dịch – USDSS",
 };
 
 export default function OrdersPage() {

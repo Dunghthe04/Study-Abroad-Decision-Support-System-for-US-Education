@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileDownIcon, FileInputIcon, FilterIcon, PlusIcon, RotateCcwIcon, SearchIcon } from "lucide-react";
+import { FileDownIcon, FileInputIcon, FilterIcon, PlusIcon, RotateCcwIcon, SearchIcon, Trash2Icon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,6 +10,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogIcon,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -312,14 +313,17 @@ export function KnowledgeBaseListView() {
       <KnowledgeImportResultDialog result={importResult} onClose={() => setImportResult(null)} />
 
       <AlertDialog open={deleting !== null} onOpenChange={(open) => !open && !deleteBusy && setDeleting(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent variant="action">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="destructive">
+              <Trash2Icon />
+            </AlertDialogIcon>
             <AlertDialogTitle>Xóa tri thức này?</AlertDialogTitle>
             <AlertDialogDescription>Chat sẽ không còn dùng mục tri thức này để trả lời. Bạn có thể xem lại và khôi phục trong tab Đã xóa.</AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={deleteBusy}>Hủy</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirmDelete()} loading={deleteBusy}>
+            <AlertDialogAction tone="destructive" onClick={() => void confirmDelete()} loading={deleteBusy}>
               Xóa
             </AlertDialogAction>
           </AlertDialogFooter>

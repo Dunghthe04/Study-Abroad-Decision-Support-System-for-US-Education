@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { NativeSelect } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChoiceGroup } from "@/components/admin/review-batches/ChoiceGroup";
 import { ApiError } from "@/lib/api";
 import { formatDateTime } from "@/lib/ai-usage-format";
@@ -13,6 +13,12 @@ import {
   toRequest, validateVerdict, type VerdictForm as VerdictFormState,
 } from "@/lib/review-batch-format";
 import type { ReviewVerdict, SlmIntentType } from "@/types/review-batch";
+
+const UNSURE_INTENT = "__unsure__";
+const CORRECT_INTENT_ITEMS = [
+  { value: UNSURE_INTENT, label: "Không chắc" },
+  ...INTENT_OPTIONS.map((option) => ({ value: option.id, label: option.label })),
+];
 
 interface Props {
   batchId: string;
@@ -60,16 +66,30 @@ export function VerdictForm({ batchId, itemId, initial, isLastToGrade, onSaved }
           onChange={(label) => setForm({ ...form, label })}
         />
         {needsCorrectIntent(form) ? (
-          <label className="flex flex-col gap-1 text-sm text-ink">
-            Nhãn đúng phải là gì?
-            <NativeSelect
-              value={form.correctIntent ?? ""}
-              onChange={(event) => setForm({ ...form, correctIntent: (event.target.value || null) as SlmIntentType | null })}
+          <div className="flex flex-col gap-1 text-sm text-ink">
+            <label htmlFor="verdict-correct-intent">Nhãn đúng phải là gì?</label>
+            <Select
+              value={form.correctIntent ?? UNSURE_INTENT}
+              onValueChange={(v) =>
+                setForm({
+                  ...form,
+                  correctIntent: (v === UNSURE_INTENT || v === null ? null : v) as SlmIntentType | null,
+                })
+              }
+              items={CORRECT_INTENT_ITEMS}
             >
-              <option value="">Không chắc</option>
-              {INTENT_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-            </NativeSelect>
-          </label>
+              <SelectTrigger id="verdict-correct-intent" className="w-full sm:w-fit">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CORRECT_INTENT_ITEMS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         ) : null}
       </div>
 

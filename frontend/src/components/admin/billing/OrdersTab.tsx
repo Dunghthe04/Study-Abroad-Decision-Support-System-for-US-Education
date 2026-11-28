@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { SearchIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { adminBillingApi, adminBillingErrorMessage, formatVnDateTime } from "@/lib/admin-billing-api";
 import { formatVnd } from "@/lib/billing-api";
 import type { PagedResult } from "@/types/api";
@@ -17,6 +17,11 @@ import { OrderDetailPanel } from "./OrderDetailPanel";
 import { ORDER_STATUS_LABELS, OrderStatusBadge } from "./OrderStatusBadge";
 
 const EMPTY_FILTERS: AdminOrderFilters = { status: "", q: "", from: "", to: "", page: 1 };
+const ALL_STATUS = "__all__";
+const STATUS_OPTIONS = [
+  { value: ALL_STATUS, label: "Mọi trạng thái" },
+  ...Object.entries(ORDER_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+];
 
 interface LoadResult {
   key: string;
@@ -105,17 +110,28 @@ export function OrdersTab() {
           toolbar={{
             filters: (
               <div className="flex flex-wrap items-center gap-2">
-                <NativeSelect
-                  aria-label="Lọc theo trạng thái"
-                  value={applied.status}
-                  onChange={(e) => setApplied({ ...applied, status: e.target.value as OrderStatus | "", page: 1 })}
-                  className="[&_select]:bg-card [&_select]:shadow-xs"
+                <Select
+                  value={applied.status || ALL_STATUS}
+                  onValueChange={(v) =>
+                    setApplied({
+                      ...applied,
+                      status: (v === ALL_STATUS || v === null ? "" : v) as OrderStatus | "",
+                      page: 1,
+                    })
+                  }
+                  items={STATUS_OPTIONS}
                 >
-                  <NativeSelectOption value="">Mọi trạng thái</NativeSelectOption>
-                  {Object.entries(ORDER_STATUS_LABELS).map(([value, label]) => (
-                    <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SelectTrigger aria-label="Lọc theo trạng thái" className="bg-card shadow-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Input
                   type="date"
                   aria-label="Từ ngày"

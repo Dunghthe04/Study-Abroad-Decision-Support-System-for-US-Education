@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* Chưa có dark mode: giữ biến thể dark gắn với class .dark (không bao giờ bật) để các class dark: cũ không ăn theo chế độ tối của hệ điều hành */
+/* Chế độ tối kích hoạt qua class .dark trên <html> (chọn Sáng / Tối / Tự động ở thanh đầu trang) */
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -20,6 +20,7 @@
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-brand-ink: var(--brand-ink);
+  --color-brand-deep: var(--brand-deep);
   --color-brand-wash: var(--brand-wash);
   --color-ok: var(--ok);
   --color-ok-wash: var(--ok-wash);
@@ -82,6 +83,7 @@
   --brand: #0a3161;
   --brand-foreground: #ffffff;
   --brand-ink: #071f3e;
+  --brand-deep: #071f3e;
   --brand-wash: #e7ecf4;
   --ok: #1b7052;
   --ok-wash: #e3f1eb;
@@ -139,6 +141,44 @@
   --sidebar-accent-foreground: var(--brand-ink);
   --sidebar-border: var(--line);
   --sidebar-ring: var(--brand);
+}
+
+:root.dark {
+  color-scheme: dark;
+  --ink: #ecf1f8;
+  --ink-2: #9ba8ba;
+  --ink-3: #7d8da3; /* 5.1:1 trên --surface, đạt AA */
+  --ground: #0d1117;
+  --surface: #141a23;
+  --surface-2: #1b2330;
+  --surface-3: #232d3d;
+  --line: #273244;
+  --control-border: #3a485e;
+  --elev-1: 0 1px 2px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.08);
+  /* Giữ cùng sắc xanh Old Glory Blue (hue 213°), nâng độ sáng vừa đủ (4.7:1 với chữ trắng, không gắt) */
+  --brand: #3e75ba;
+  --brand-foreground: #ffffff;
+  --brand-ink: #cfe2f8;
+  --brand-deep: #071f3e;
+  --brand-wash: #162436;
+  --ok: #3cc495;
+  --ok-wash: #112b23;
+  --warn: #eb9f4c;
+  --warn-wash: #2e2012;
+  --risk: #b31942;
+  --risk-wash: #331620;
+  --reach: #b09be3;
+  --reach-wash: #231c36;
+  --gold: #e8c55a;
+  --gold-wash: #2d2511;
+  --secondary-foreground: var(--brand-ink);
+  --accent-foreground: var(--brand-ink);
+  --sidebar-accent-foreground: var(--brand-ink);
+  --chart-1: #5a94d6;
+  --chart-2: #7fb0e6;
+  --chart-3: #a4c6eb;
+  --chart-4: #7e92aa;
+  --chart-5: #ddb05c;
 }
 
 @layer base {

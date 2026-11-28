@@ -6,7 +6,18 @@ import { RoadmapSection } from "@/components/dashboard/RoadmapSection";
 import { StudentDashboardView } from "@/components/dashboard/StudentDashboardView";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogIcon,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,36 +78,41 @@ function BudgetDialog({ studentId, open, onOpenChange, onSaved }: {
   const error = rangeError ?? serverError;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!saving) { setServerError(null); onOpenChange(o); } }}>
-      <DialogContent>
+    <Dialog open={open} disablePointerDismissal={saving} onOpenChange={(o) => { if (!saving) { setServerError(null); onOpenChange(o); } }}>
+      <DialogContent variant="form" size="sm">
         <DialogHeader>
+          <DialogIcon tone="brand">
+            <WalletIcon aria-hidden />
+          </DialogIcon>
           <DialogTitle>Số tiền tối đa chi trả được mỗi năm</DialogTitle>
           <DialogDescription>
             Chỉ lưu số tiền để so với chi phí các trường. Số này cũng tự điền vào tab So sánh ưu tiên. Con không nhận thông báo.
           </DialogDescription>
         </DialogHeader>
-        <Field data-invalid={error ? true : undefined}>
-          <FieldLabel htmlFor="parent-budget-vnd">Số tiền mỗi năm (VND)</FieldLabel>
-          <Input
-            id="parent-budget-vnd"
-            inputMode="numeric"
-            placeholder="Ví dụ 1.300.000.000"
-            value={text}
-            onChange={(e) => { setServerError(null); setText(digits(e.target.value) ? VND.format(Number(digits(e.target.value))) : ""); }}
-            onKeyDown={(e) => { if (e.key === "Enter" && canSave) void save(); }}
-            aria-invalid={error ? true : undefined}
-          />
-          <FieldDescription>
-            Từ 100 triệu đến 10 tỷ đồng.
-            {amount != null && rate ? ` ≈ ${usd(amount / rate)}/năm theo tỷ giá hôm nay (${VND.format(Math.round(rate))} VND/USD).` : ""}
-          </FieldDescription>
-          {error && <FieldError>{error}</FieldError>}
-        </Field>
-        <DialogFooter>
-          <Button type="button" variant="outline" disabled={saving} onClick={() => onOpenChange(false)}>Hủy</Button>
-          <Button type="button" disabled={!canSave} onClick={() => void save()}>
-            {saving && <Spinner className="size-4" />} Lưu số tiền
-          </Button>
+        <DialogBody>
+          <Field data-invalid={error ? true : undefined}>
+            <FieldLabel htmlFor="parent-budget-vnd">Số tiền mỗi năm (VND)</FieldLabel>
+            <Input
+              id="parent-budget-vnd"
+              inputMode="numeric"
+              placeholder="Ví dụ 1.300.000.000"
+              value={text}
+              onChange={(e) => { setServerError(null); setText(digits(e.target.value) ? VND.format(Number(digits(e.target.value))) : ""); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && canSave) void save(); }}
+              aria-invalid={error ? true : undefined}
+            />
+            <FieldDescription>
+              Từ 100 triệu đến 10 tỷ đồng.
+              {amount != null && rate ? ` ≈ ${usd(amount / rate)}/năm theo tỷ giá hôm nay (${VND.format(Math.round(rate))} VND/USD).` : ""}
+            </FieldDescription>
+            {error && <FieldError>{error}</FieldError>}
+          </Field>
+        </DialogBody>
+        <DialogFooter layout="pair">
+          <DialogCancel disabled={saving}>Hủy</DialogCancel>
+          <DialogAction tone="primary" disabled={!canSave} loading={saving} onClick={() => void save()}>
+            Lưu số tiền
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>

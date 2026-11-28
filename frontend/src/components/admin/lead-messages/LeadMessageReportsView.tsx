@@ -1,15 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { BanIcon, CheckIcon, EyeIcon, Trash2Icon, TriangleAlertIcon } from "lucide-react";
+import { BanIcon, CheckIcon, EyeIcon, MessageSquareIcon, ShieldAlertIcon, Trash2Icon, TriangleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogIcon,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -315,41 +318,54 @@ export function LeadMessageReportsView() {
       ) : null}
 
       {/* Gỡ tin, cảnh cáo, khóa tài khoản: cùng một hộp thoại xác nhận, lý do bắt buộc */}
-      <AlertDialog open={actionTarget !== null} onOpenChange={(open) => !open && closeActionDialog()}>
-        <AlertDialogContent>
+      <AlertDialog open={actionTarget !== null} onOpenChange={(open) => !open && busyId === null && closeActionDialog()}>
+        <AlertDialogContent variant="form">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="destructive">
+              <ShieldAlertIcon />
+            </AlertDialogIcon>
             <AlertDialogTitle>{actionText?.title}</AlertDialogTitle>
             <AlertDialogDescription>{actionText?.description(actionTarget?.item.senderName ?? "Người gửi")}</AlertDialogDescription>
           </AlertDialogHeader>
-          {actionTarget ? (
-            <p className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              {actionTarget.item.content || "(tin nhắn chỉ có ảnh)"}
-            </p>
-          ) : null}
-          <Textarea
-            value={actionReason}
-            onChange={(event) => setActionReason(event.target.value)}
-            maxLength={500}
-            rows={2}
-            disabled={busyId !== null}
-            placeholder={actionText?.placeholder}
-            aria-label="Lý do xử lý"
-            aria-required
-            className="resize-y text-sm"
-          />
-          <AlertDialogFooter>
+          <AlertDialogBody className="space-y-3">
+            {actionTarget ? (
+              <p className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                {actionTarget.item.content || "(tin nhắn chỉ có ảnh)"}
+              </p>
+            ) : null}
+            <Textarea
+              value={actionReason}
+              onChange={(event) => setActionReason(event.target.value)}
+              maxLength={500}
+              rows={2}
+              disabled={busyId !== null}
+              placeholder={actionText?.placeholder}
+              aria-label="Lý do xử lý"
+              aria-required
+              className="resize-y text-sm"
+            />
+          </AlertDialogBody>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={busyId !== null}>Hủy</AlertDialogCancel>
-            <Button type="button" variant="destructive" onClick={() => void confirmAction()} loading={busyId !== null} disabled={!actionReason.trim()} className="gap-1.5">
+            <AlertDialogAction
+              tone="destructive"
+              onClick={() => void confirmAction()}
+              loading={busyId !== null}
+              disabled={!actionReason.trim()}
+            >
               {actionText?.confirm}
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       {/* Tin bị báo cáo kèm vài tin liền kề; Admin không đọc toàn bộ cuộc trò chuyện */}
       <AlertDialog open={contextTarget !== null} onOpenChange={(open) => !open && closeContext()}>
-        <AlertDialogContent>
+        <AlertDialogContent variant="form" size="md">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="brand">
+              <MessageSquareIcon />
+            </AlertDialogIcon>
             <AlertDialogTitle>Ngữ cảnh tin nhắn bị báo cáo</AlertDialogTitle>
             <AlertDialogDescription>
               {context
@@ -357,34 +373,36 @@ export function LeadMessageReportsView() {
                 : "Chỉ hiển thị một số tin liền kề tin bị báo cáo. Lần xem này được ghi vào nhật ký truy cập."}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {contextError ? (
-            <Alert variant="destructive">
-              <AlertDescription>{contextError}</AlertDescription>
-            </Alert>
-          ) : null}
-          {!context && !contextError ? <p className="text-sm text-ink-2">Đang tải...</p> : null}
-          {context ? (
-            <ol className="flex max-h-80 flex-col gap-2 overflow-y-auto">
-              {context.messages.map((m) => (
-                <li
-                  key={m.id}
-                  className={`rounded-md border px-3 py-2 text-sm ${m.isReported ? "border-risk bg-risk-wash" : "border-line"}`}
-                >
-                  <div className="flex flex-wrap items-center gap-x-2 text-xs text-ink-2">
-                    <span className="font-medium text-ink">{m.senderName}</span>
-                    <span>{m.isFromCenter ? "Trung tâm" : "Học sinh / phụ huynh"}</span>
-                    <span className="tabular">{formatDateTime(m.createdAt)}</span>
-                    {m.isReported ? <Badge variant="risk">Bị báo cáo</Badge> : null}
-                    {m.isFlagged ? <Badge variant="warn">Gắn cờ tự động{m.flagReason ? `: ${m.flagReason}` : ""}</Badge> : null}
-                    {m.status === "removed" ? <Badge variant="neutral">Đã gỡ</Badge> : null}
-                  </div>
-                  <p className="mt-1 whitespace-pre-wrap break-words">{m.content || "(tin nhắn chỉ có ảnh)"}</p>
-                  <LeadMessageAttachment url={m.attachmentUrl} />
-                </li>
-              ))}
-            </ol>
-          ) : null}
-          <AlertDialogFooter>
+          <AlertDialogBody className="space-y-3">
+            {contextError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{contextError}</AlertDescription>
+              </Alert>
+            ) : null}
+            {!context && !contextError ? <p className="text-sm text-ink-2">Đang tải...</p> : null}
+            {context ? (
+              <ol className="flex flex-col gap-2">
+                {context.messages.map((m) => (
+                  <li
+                    key={m.id}
+                    className={`rounded-md border px-3 py-2 text-sm ${m.isReported ? "border-risk bg-risk-wash" : "border-line"}`}
+                  >
+                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-ink-2">
+                      <span className="font-medium text-ink">{m.senderName}</span>
+                      <span>{m.isFromCenter ? "Trung tâm" : "Học sinh / phụ huynh"}</span>
+                      <span className="tabular">{formatDateTime(m.createdAt)}</span>
+                      {m.isReported ? <Badge variant="risk">Bị báo cáo</Badge> : null}
+                      {m.isFlagged ? <Badge variant="warn">Gắn cờ tự động{m.flagReason ? `: ${m.flagReason}` : ""}</Badge> : null}
+                      {m.status === "removed" ? <Badge variant="neutral">Đã gỡ</Badge> : null}
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap break-words">{m.content || "(tin nhắn chỉ có ảnh)"}</p>
+                    <LeadMessageAttachment url={m.attachmentUrl} />
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </AlertDialogBody>
+          <AlertDialogFooter layout="single">
             <AlertDialogCancel>Đóng</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -7,7 +7,17 @@ import { ShieldCheckIcon, XIcon } from "lucide-react";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogIcon,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { acceptPolicies, getPolicyAcceptanceStatus } from "@/lib/policy-acceptance-api";
 import { POLICY_REQUIRED_EVENT } from "@/lib/policy-events";
 import { useFetched } from "@/lib/use-fetched";
@@ -16,7 +26,8 @@ import type { AcceptedPolicy, PolicyAcceptanceItem, PolicyAcceptanceStatus } fro
 /** Chỉ ba loại tài khoản này phải đồng ý (khớp backend); admin và moderator là người nội bộ. */
 const SUBJECT_ROLES = ["student", "parent", "center"];
 /** Hai trang này luôn đọc được, kể cả khi đang bị chặn. */
-const READABLE_PATHS = ["/terms", "/privacy"];
+// ponytail: include /audit so temporary UI audit pages are never blocked by policy acceptance modal
+const READABLE_PATHS = ["/terms", "/privacy", "/audit"];
 
 const KIND_LABELS: Record<string, string> = {
   terms_of_use: "Điều khoản sử dụng",
@@ -38,7 +49,8 @@ const kindHref = (item: PolicyAcceptanceItem) => KIND_HREFS[item.kind] ?? "/term
 export function PolicyGate({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const pathname = usePathname();
-  const subject = user !== null && SUBJECT_ROLES.includes(user.role);
+  const readable = READABLE_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const subject = user !== null && SUBJECT_ROLES.includes(user.role) && !readable;
 
   const [attempt, setAttempt] = useState(0);
   const key = subject ? `${user.id}:${attempt}` : "none";
@@ -72,7 +84,6 @@ export function PolicyGate({ children }: { children: ReactNode }) {
   // Chỉ tin kết quả của CHÍNH người đang đăng nhập (đổi tài khoản không tải lại trang thì kết quả cũ thuộc người khác).
   // Đang tải lại thì vẫn dùng kết quả cũ của người này, để hộp không nhấp nháy.
   const status = subject && data?.userId === user.id ? data.status : null;
-  const readable = READABLE_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const blocked = status?.mustAccept === true && !readable;
 
   // Cấu trúc cố định (thông báo, trang, hộp) để trang phía sau không bị dựng lại mỗi lần đổi trạng thái
@@ -125,53 +136,45 @@ function PolicyAcceptanceDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-ink/40 p-4 backdrop-blur-sm">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="policy-dialog-title"
-        className="w-full max-w-md space-y-5 rounded-2xl bg-background p-6 shadow-xl"
-      >
-        <div className="space-y-2">
-          <div className="inline-flex size-10 items-center justify-center rounded-xl bg-brand/10 text-brand">
-            <ShieldCheckIcon className="size-5" aria-hidden />
-          </div>
-          <h2 id="policy-dialog-title" className="font-heading text-xl font-semibold tracking-tight text-ink">
+    <Dialog open disablePointerDismissal onOpenChange={() => {}}>
+      <DialogContent variant="action" size="lg">
+        <DialogHeader>
+          <DialogIcon tone="brand">
+            <ShieldCheckIcon aria-hidden />
+          </DialogIcon>
+          <DialogTitle>
             {firstTime ? "Trước khi tiếp tục" : "Chúng tôi vừa cập nhật điều khoản"}
-          </h2>
-          <p className="text-sm text-ink-2">
+          </DialogTitle>
+          <DialogDescription>
             {firstTime
               ? "USDSS cần bạn xác nhận đã xem các nội dung sau."
               : "Vui lòng xem nội dung mới và xác nhận để tiếp tục sử dụng USDSS."}
-          </p>
-        </div>
+          </DialogDescription>
+        </DialogHeader>
 
-        <ul className="space-y-3">
-          {blocking.map((item) => (
-            <li key={item.kind} className="space-y-0.5">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <Link href={kindHref(item)} target="_blank" rel="noopener noreferrer" className="font-medium text-brand hover:underline">
-                  {kindLabel(item)}
-                </Link>
-                {item.currentVersion && <span className="text-body-s text-ink-3">Phiên bản {item.currentVersion}</span>}
-              </div>
-              {item.state === "update_required" && item.changeSummary && <p className="text-sm text-ink-2">Có gì mới: {item.changeSummary}</p>}
-            </li>
-          ))}
-        </ul>
+        <DialogBody className="space-y-4 text-left">
+          <ul className="space-y-3">
+            {blocking.map((item) => (
+              <li key={item.kind} className="space-y-0.5">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <Link href={kindHref(item)} target="_blank" rel="noopener noreferrer" className="font-medium text-brand hover:underline">
+                    {kindLabel(item)}
+                  </Link>
+                  {item.currentVersion && <span className="text-body-s text-ink-3">Phiên bản {item.currentVersion}</span>}
+                </div>
+                {item.state === "update_required" && item.changeSummary && <p className="text-sm text-ink-2">Có gì mới: {item.changeSummary}</p>}
+              </li>
+            ))}
+          </ul>
 
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-        <div className="space-y-3">
-          <Button type="button" size="xl" className="w-full" autoFocus disabled={submitting || loading} loading={submitting} onClick={accept}>
-            {submitting ? "Đang ghi nhận..." : "Đồng ý và tiếp tục"}
-          </Button>
           <p className="text-center text-body-s text-ink-3">
-            Bằng việc bấm nút trên, bạn đồng ý với{" "}
+            Bằng việc bấm nút bên dưới, bạn đồng ý với{" "}
             {blocking.map((item, i) => (
               <span key={item.kind}>
                 {i > 0 && (i === blocking.length - 1 ? " và " : ", ")}
@@ -182,14 +185,18 @@ function PolicyAcceptanceDialog({
             ))}{" "}
             của USDSS.
           </p>
-          <div className="text-center">
-            <button type="button" disabled={submitting} onClick={() => logout()} className="text-sm text-ink-3 hover:text-ink hover:underline">
-              Không đồng ý, đăng xuất
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+        </DialogBody>
+
+        <DialogFooter layout="stack">
+          <DialogAction type="button" tone="primary" autoFocus disabled={submitting || loading} loading={submitting} onClick={accept}>
+            Đồng ý và tiếp tục
+          </DialogAction>
+          <DialogAction type="button" tone="ghost" disabled={submitting} onClick={() => logout()}>
+            Không đồng ý, đăng xuất
+          </DialogAction>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

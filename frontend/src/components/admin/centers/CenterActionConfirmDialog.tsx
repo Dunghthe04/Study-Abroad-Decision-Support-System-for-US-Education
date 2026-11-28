@@ -3,7 +3,6 @@
 import { useState } from "react";
 import {
   AlertTriangleIcon,
-  CheckCircle2Icon,
   EyeIcon,
   EyeOffIcon,
   ShieldAlertIcon,
@@ -11,13 +10,16 @@ import {
 } from "lucide-react";
 import type { StudyCenter } from "@/types/api";
 import { getCenterLegalMissingChecklist } from "@/lib/center-legal";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -46,6 +48,7 @@ export function CenterActionConfirmDialog({
       onOpenChange={(open) => {
         if (!open && !isSubmitting) onClose();
       }}
+      disablePointerDismissal={isSubmitting}
     >
       {center && action && (
         <CenterActionConfirmContent
@@ -81,33 +84,32 @@ function CenterActionConfirmContent({
   const isVerificationAction = action === "verify" || action === "unverify";
   const missingChecklist =
     action === "verify" ? getCenterLegalMissingChecklist(center) : [];
+  const isPositive = action === "verify" || action === "show";
 
   return (
-    <DialogContent className="sm:max-w-md">
+    <DialogContent variant={isVerificationAction ? "form" : "action"}>
       <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
+        <DialogIcon tone={isPositive ? "success" : "destructive"}>
           {action === "verify" ? (
-            <>
-              <ShieldCheckIcon className="w-5 h-5 text-ok" />
-            </>
+            <ShieldCheckIcon />
           ) : action === "unverify" ? (
-            <>
-              <ShieldAlertIcon className="w-5 h-5 text-risk" />
-              <span>Hủy xác minh trung tâm tư vấn</span>
-            </>
+            <ShieldAlertIcon />
           ) : action === "hide" ? (
-            <>
-              <EyeOffIcon className="w-5 h-5 text-risk" />
-              <span>Ẩn trung tâm tư vấn</span>
-            </>
+            <EyeOffIcon />
           ) : (
-            <>
-              <EyeIcon className="w-5 h-5 text-ok" />
-              <span>Hiện lại trung tâm tư vấn</span>
-            </>
+            <EyeIcon />
           )}
+        </DialogIcon>
+        <DialogTitle>
+          {action === "verify"
+            ? "Xác minh trung tâm tư vấn"
+            : action === "unverify"
+              ? "Hủy xác minh trung tâm tư vấn"
+              : action === "hide"
+                ? "Ẩn trung tâm tư vấn"
+                : "Hiện lại trung tâm tư vấn"}
         </DialogTitle>
-        <DialogDescription className="pt-2 text-sm leading-relaxed">
+        <DialogDescription>
           {action === "verify" ? (
             <>
               Bạn có chắc chắn muốn xác minh trung tâm{" "}
@@ -140,76 +142,60 @@ function CenterActionConfirmContent({
         </DialogDescription>
       </DialogHeader>
 
-      {missingChecklist.length > 0 && (
-        <div className="rounded-lg border border-warn/30 bg-warn-wash p-3 text-xs text-warn space-y-1">
-          <div className="font-semibold flex items-center gap-1.5">
-            <AlertTriangleIcon className="w-4 h-4 shrink-0" />
-            Lưu ý hồ sơ pháp lý còn thiếu ({missingChecklist.length}):
-          </div>
-          <div>{missingChecklist.join(", ")}.</div>
-        </div>
+      {(missingChecklist.length > 0 || isVerificationAction) && (
+        <DialogBody className="space-y-4">
+          {missingChecklist.length > 0 && (
+            <div className="rounded-lg border border-warn/30 bg-warn-wash p-3 text-xs text-warn space-y-1">
+              <div className="font-semibold flex items-center gap-1.5">
+                <AlertTriangleIcon className="w-4 h-4 shrink-0" />
+                Lưu ý hồ sơ pháp lý còn thiếu ({missingChecklist.length}):
+              </div>
+              <div>{missingChecklist.join(", ")}.</div>
+            </div>
+          )}
+
+          {isVerificationAction && (
+            <Field>
+              <FieldLabel htmlFor="verify-center-note">
+                {action === "verify"
+                  ? "Ghi chú xác minh / đối chiếu hồ sơ (tùy chọn)"
+                  : "Lý do hủy xác minh / ghi chú pháp lý (tùy chọn)"}
+              </FieldLabel>
+              <Textarea
+                id="verify-center-note"
+                rows={2}
+                placeholder={
+                  action === "verify"
+                    ? "Ví dụ: Đã đối chiếu GCN ĐKDN, giấy phép Sở GD&ĐT bản gốc..."
+                    : "Ví dụ: Chưa bổ sung giấy phép đào tạo hoặc giấy tờ hết hiệu lực..."
+                }
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                disabled={isSubmitting}
+                maxLength={1000}
+              />
+            </Field>
+          )}
+        </DialogBody>
       )}
 
-      {isVerificationAction && (
-        <Field className="pt-1">
-          <FieldLabel htmlFor="verify-center-note" className="text-xs">
-            {action === "verify"
-              ? "Ghi chú xác minh / đối chiếu hồ sơ (tùy chọn)"
-              : "Lý do hủy xác minh / ghi chú pháp lý (tùy chọn)"}
-          </FieldLabel>
-          <Textarea
-            id="verify-center-note"
-            rows={2}
-            placeholder={
-              action === "verify"
-                ? "Ví dụ: Đã đối chiếu GCN ĐKDN, giấy phép Sở GD&ĐT bản gốc..."
-                : "Ví dụ: Chưa bổ sung giấy phép đào tạo hoặc giấy tờ hết hiệu lực..."
-            }
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            disabled={isSubmitting}
-            maxLength={1000}
-            className="text-xs"
-          />
-        </Field>
-      )}
-
-      <DialogFooter className="mt-4 gap-2 sm:gap-0">
-        <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+      <DialogFooter layout="pair">
+        <DialogCancel onClick={onClose} disabled={isSubmitting}>
           Hủy bỏ
-        </Button>
-        <Button
-          variant={action === "verify" || action === "show" ? "default" : "destructive"}
+        </DialogCancel>
+        <DialogAction
+          tone={isPositive ? "ok" : "destructive"}
           onClick={() => onConfirm(isVerificationAction ? note.trim() : undefined)}
           loading={isSubmitting}
-          className={
-            action === "verify" || action === "show"
-              ? "bg-ok hover:bg-ok/90 text-white"
-              : undefined
-          }
         >
-          {action === "verify" ? (
-            <>
-              <CheckCircle2Icon className="w-4 h-4 mr-1.5" />
-              Xác nhận xác minh
-            </>
-          ) : action === "unverify" ? (
-            <>
-              <ShieldAlertIcon className="w-4 h-4 mr-1.5" />
-              Xác nhận hủy xác minh
-            </>
-          ) : action === "hide" ? (
-            <>
-              <EyeOffIcon className="w-4 h-4 mr-1.5" />
-              Xác nhận ẩn
-            </>
-          ) : (
-            <>
-              <EyeIcon className="w-4 h-4 mr-1.5" />
-              Xác nhận hiện
-            </>
-          )}
-        </Button>
+          {action === "verify"
+            ? "Xác nhận xác minh"
+            : action === "unverify"
+              ? "Xác nhận hủy xác minh"
+              : action === "hide"
+                ? "Xác nhận ẩn"
+                : "Xác nhận hiện"}
+        </DialogAction>
       </DialogFooter>
     </DialogContent>
   );

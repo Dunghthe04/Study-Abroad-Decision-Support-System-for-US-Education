@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowUpRightIcon, Building2Icon, CalculatorIcon, GlobeIcon, HomeIcon, MapPinIcon, TreesIcon, WarehouseIcon, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { FloatingBackButton } from "@/components/shared/floating-back-button";
 import { MissingValue } from "@/components/shared/missing-value";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -188,12 +189,13 @@ export function UniversityDetailView({
 
   return (
     <article className="@container space-y-6 pb-12">
+      <FloatingBackButton href="/universities" label="Về danh sách trường" />
       {/* Ảnh bìa lớn tràn mép, nằm dưới thanh đầu trong suốt giống trang chủ */}
       <header>
-        <div className="relative -mt-(--header-h) h-[min(60svh,520px)] min-h-72 overflow-hidden bg-brand-ink">
+        <div className="relative -mt-(--header-h) h-[min(60svh,520px)] min-h-72 overflow-hidden bg-brand-deep">
           <SchoolImage url={university.coverUrl} alt={`Khuôn viên ${university.name}`} className="size-full" priority />
           {/* Chỉ làm tối phần trên để chữ thanh đầu đọc được */}
-          <div className="absolute inset-x-0 top-0 h-48 bg-linear-to-b from-brand-ink/80 to-transparent" />
+          <div className="absolute inset-x-0 top-0 h-48 bg-linear-to-b from-brand-deep/80 to-transparent" />
         </div>
 
         {/* Dưới ảnh: logo đè nhẹ lên mép ảnh, tên và vị trí bên trái, các nút bên phải canh giữa theo khối tên */}

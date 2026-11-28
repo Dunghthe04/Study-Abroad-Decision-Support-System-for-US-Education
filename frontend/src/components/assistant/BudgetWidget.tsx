@@ -72,7 +72,7 @@ function ExactBudgetInput({ data, onPick }: { data: Record<string, unknown>; onP
           type="button"
           disabled={!onPick || !valid}
           onClick={submit}
-          className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-lg bg-brand px-3 text-xs font-semibold text-white transition-colors hover:bg-brand-ink disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-lg bg-brand px-3 text-xs font-semibold text-white transition-colors hover:bg-brand/85 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Gửi
         </button>
@@ -148,7 +148,7 @@ function TierBudgetInput({ data, onPick }: { data?: Record<string, unknown> | nu
           size="sm"
           disabled={!onPick || !tier}
           onClick={submit}
-          className="shrink-0 rounded-lg bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-ink"
+          className="shrink-0 rounded-lg bg-brand px-3 text-xs font-semibold text-white hover:bg-brand/85"
         >
           Gửi
         </Button>

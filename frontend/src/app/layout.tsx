@@ -20,13 +20,26 @@ const sourceSerif = Source_Serif_4({
 });
 
 export const metadata: Metadata = {
-  title: "USDSS – Study Abroad Decision Support System",
+  title: "USDSS – Du học Mỹ",
   description: "Hệ thống hỗ trợ ra quyết định du học Mỹ: tư vấn AI, tra cứu thông tin và tìm trung tâm.",
+  icons: {
+    icon: "/icons/USDSS.png",
+    shortcut: "/icons/USDSS.png",
+    apple: "/icons/USDSS.png",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="vi" className={cn("h-full antialiased font-sans", inter.variable, sourceSerif.variable)} suppressHydrationWarning>
+      <head>
+        {/* Áp dụng theme sớm trước khi vẽ để tránh nháy sáng/tối */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem("theme");var d=t==="dark"||(t==="auto"&&matchMedia("(prefers-color-scheme:dark)").matches);document.documentElement.classList.toggle("dark",d)}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="flex min-h-full flex-col bg-background text-foreground" suppressHydrationWarning>
         <AuthProvider>
           <RealtimeProvider />

@@ -34,9 +34,5 @@ export default async function CenterComparePage({ searchParams }: ComparePagePro
   const byId = new Map(all.map((c) => [c.id, c]));
   const selected = ids.map((id) => byId.get(id)).filter((c): c is StudyCenter => !!c);
 
-  return (
-    <section className="space-y-6 pb-12">
-      <CenterCompareView selected={selected} all={all} />
-    </section>
-  );
+  return <CenterCompareView selected={selected} all={all} />;
 }

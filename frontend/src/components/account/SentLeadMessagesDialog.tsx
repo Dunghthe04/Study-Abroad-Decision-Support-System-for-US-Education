@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangleIcon, HelpCircleIcon, RefreshCwIcon, SendIcon } from "lucide-react";
+import { AlertTriangleIcon, HelpCircleIcon, MessageSquareIcon, RefreshCwIcon, SendIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError, studyCentersApi } from "@/lib/api";
 import { getLeadRuleError, leadApi } from "@/lib/lead-api";
@@ -19,7 +19,17 @@ import { cn } from "@/lib/utils";
 import type { CenterGuidanceCardsDto, LeadMessageDto, LeadMessagesThreadDto } from "@/types/api";
 import { LEAD_MESSAGING_BLOCK_CODES, getLeadMessagingBlockReason, type SentLeadDto } from "@/types/lead";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogIcon,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
@@ -52,15 +62,23 @@ const loadErrorText = (err: unknown) =>
 export function SentLeadMessagesDialog({ lead, open, onOpenChange, onThreadChange }: SentLeadMessagesDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent variant="form" size="lg">
         <DialogHeader>
+          <DialogIcon tone="brand">
+            <MessageSquareIcon aria-hidden />
+          </DialogIcon>
           <DialogTitle>Tin nhắn với {lead.studyCenterName}</DialogTitle>
           <DialogDescription>
             Gửi ngày {new Date(lead.createdAt).toLocaleDateString("vi-VN")} · Học sinh: {lead.studentName}
           </DialogDescription>
         </DialogHeader>
         {/* Chỉ dựng phần thân khi mở, để mỗi lần mở là tải lại luồng tin */}
-        {open && <SentLeadThread leadId={lead.id} initialStatus={lead.status} leadCreatedAt={lead.createdAt} onThreadChange={onThreadChange} />}
+        <DialogBody>
+          {open && <SentLeadThread leadId={lead.id} initialStatus={lead.status} leadCreatedAt={lead.createdAt} onThreadChange={onThreadChange} />}
+        </DialogBody>
+        <DialogFooter layout="single">
+          <DialogCancel>Đóng</DialogCancel>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

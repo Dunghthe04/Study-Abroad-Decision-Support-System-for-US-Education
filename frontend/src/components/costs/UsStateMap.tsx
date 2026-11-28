@@ -86,7 +86,7 @@ export function UsStateMap({
                   on ? "fill-brand" : "fill-brand-wash",
                   locked ? "cursor-not-allowed opacity-40" : "cursor-pointer",
                   !on && !locked && "hover:fill-brand/40",
-                  on && "hover:fill-brand-ink",
+                  on && "hover:fill-brand/80",
                 )}
               />
             );
@@ -137,7 +137,7 @@ export function UsStateMap({
                   onClick={() => onToggle(s.code)}
                   className={cn(
                     "h-8 min-w-10 rounded-md px-2 text-xs font-semibold tabular-nums transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-                    on ? "bg-brand text-brand-foreground hover:bg-brand-ink" : "bg-brand-wash text-brand-ink hover:bg-brand/20",
+                    on ? "bg-brand text-brand-foreground hover:bg-brand/85" : "bg-brand-wash text-brand-ink hover:bg-brand/20",
                   )}
                 >
                   {s.code}

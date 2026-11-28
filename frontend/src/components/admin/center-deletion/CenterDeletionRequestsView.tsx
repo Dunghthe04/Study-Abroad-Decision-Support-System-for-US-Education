@@ -1,17 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { CheckIcon, ClockIcon, ScaleIcon, XIcon } from "lucide-react";
+import { AlertTriangleIcon, CheckIcon, ClockIcon, ScaleIcon, ShieldCheckIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import { CenterLegalHoldDialog, type LegalHoldAction } from "./CenterLegalHoldDialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogIcon,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -344,51 +347,68 @@ export function CenterDeletionRequestsView() {
         }
       />
 
-      <AlertDialog open={target !== null} onOpenChange={(isOpen) => !isOpen && close()}>
-        <AlertDialogContent>
+      <AlertDialog open={target !== null} onOpenChange={(isOpen) => !isOpen && !busy && close()}>
+        <AlertDialogContent variant="form">
           <AlertDialogHeader>
+            <AlertDialogIcon
+              tone={
+                target?.decision === "approve"
+                  ? "destructive"
+                  : target?.decision === "extend"
+                    ? "warning"
+                    : "brand"
+              }
+            >
+              {target?.decision === "approve" ? (
+                <AlertTriangleIcon />
+              ) : target?.decision === "extend" ? (
+                <ClockIcon />
+              ) : (
+                <ShieldCheckIcon />
+              )}
+            </AlertDialogIcon>
             <AlertDialogTitle>{decisionText?.title}</AlertDialogTitle>
             <AlertDialogDescription>{decisionText?.description}</AlertDialogDescription>
           </AlertDialogHeader>
-          {target ? (
-            <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              {target.item.centerName} · {target.item.requesterEmail ?? "người gửi đã xóa tài khoản"}
-              {target.item.requesterIsOwner ? "" : " · người gửi không phải tài khoản chủ trung tâm"}
-            </p>
-          ) : null}
-          {target?.decision === "approve" && target.item.openReportCount > 0 ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                Trung tâm có {target.item.openReportCount} tin nhắn bị người dùng báo cáo chưa xử lý. Nếu có dấu hiệu lừa đảo, hãy bật giữ pháp lý
-                thay vì duyệt xóa để không mất bằng chứng.
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          <Textarea
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            maxLength={MAX_NOTE}
-            rows={3}
-            disabled={busy}
-            placeholder={decisionText?.placeholder}
-            aria-label={
-              target?.decision === "approve" ? "Kết quả kiểm tra danh tính" : target?.decision === "extend" ? "Lý do gia hạn" : "Lý do từ chối"
-            }
-            aria-required
-            className="resize-y text-sm"
-          />
-          <AlertDialogFooter>
+          <AlertDialogBody className="space-y-3">
+            {target ? (
+              <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                {target.item.centerName} · {target.item.requesterEmail ?? "người gửi đã xóa tài khoản"}
+                {target.item.requesterIsOwner ? "" : " · người gửi không phải tài khoản chủ trung tâm"}
+              </p>
+            ) : null}
+            {target?.decision === "approve" && target.item.openReportCount > 0 ? (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  Trung tâm có {target.item.openReportCount} tin nhắn bị người dùng báo cáo chưa xử lý. Nếu có dấu hiệu lừa đảo, hãy bật giữ pháp lý
+                  thay vì duyệt xóa để không mất bằng chứng.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            <Textarea
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              maxLength={MAX_NOTE}
+              rows={3}
+              disabled={busy}
+              placeholder={decisionText?.placeholder}
+              aria-label={
+                target?.decision === "approve" ? "Kết quả kiểm tra danh tính" : target?.decision === "extend" ? "Lý do gia hạn" : "Lý do từ chối"
+              }
+              aria-required
+              className="resize-y text-sm"
+            />
+          </AlertDialogBody>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={busy}>Hủy</AlertDialogCancel>
-            <Button
-              type="button"
-              variant={target?.decision === "approve" ? "destructive" : "default"}
+            <AlertDialogAction
+              tone={target?.decision === "approve" ? "destructive" : "primary"}
               onClick={() => void confirm()}
               disabled={!note.trim()}
               loading={busy}
-              className="gap-1.5"
             >
               {decisionText?.confirm}
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

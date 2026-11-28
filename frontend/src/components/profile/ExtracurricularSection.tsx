@@ -3,6 +3,7 @@
 // [USAS-364] Component quản lý danh sách hoạt động ngoại khóa & vai trò lãnh đạo
 
 import { useState, useEffect } from "react";
+import { Trash2Icon } from "lucide-react";
 import {
   getExtracurricularActivities,
   addExtracurricularActivity,
@@ -13,12 +14,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { AppDialog } from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { FieldError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+
+const IMPACT_OPTIONS = [
+  { value: "1", label: "1 - Cấp Trường / Câu lạc bộ" },
+  { value: "2", label: "2 - Cấp Quận / Huyện / Liên trường" },
+  { value: "3", label: "3 - Cấp Tỉnh / Thành phố" },
+  { value: "4", label: "4 - Cấp Quốc gia" },
+  { value: "5", label: "5 - Cấp Quốc tế" },
+];
 
 const IMPACT_LEVEL_LABELS: Record<number, { label: string; variant: "neutral" | "brand" }> = {
   1: { label: "Cấp Trường / CLB", variant: "neutral" },
@@ -44,6 +54,9 @@ export function ExtracurricularSection() {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -106,13 +119,19 @@ export function ExtracurricularSection() {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Bạn có chắc chắn muốn xóa hoạt động này không?")) return;
+  async function confirmDelete() {
+    if (!deleteTargetId) return;
+    setDeleteError(null);
+    setDeleting(true);
     try {
-      await deleteExtracurricularActivity(id);
-      setActivities(activities.filter((a) => a.id !== id));
+      await deleteExtracurricularActivity(deleteTargetId);
+      setActivities((prev) => prev.filter((a) => a.id !== deleteTargetId));
+      setDeleteTargetId(null);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Không thể xóa hoạt động.");
+      setDeleteError(err instanceof Error ? err.message : "Không thể xóa hoạt động.");
+      setDeleteTargetId(null);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -131,6 +150,7 @@ export function ExtracurricularSection() {
       </CardHeader>
 
       <CardContent>
+        {deleteError && <FieldError className="mb-3">{deleteError}</FieldError>}
         {showAddForm && (
           <Card size="sm" className="mb-6">
             <CardContent>
@@ -179,18 +199,24 @@ export function ExtracurricularSection() {
 
                   <div className="space-y-1.5">
                     <Label htmlFor="activity-impact">Mức độ ảnh hưởng (Quy mô) *</Label>
-                    <NativeSelect
-                      id="activity-impact"
-                      className="w-full"
-                      value={impact}
-                      onChange={(e) => setImpact(parseInt(e.target.value, 10))}
+                    <Select
+                      value={String(impact)}
+                      onValueChange={(v) => {
+                        if (v !== null) setImpact(parseInt(v, 10));
+                      }}
+                      items={IMPACT_OPTIONS}
                     >
-                      <NativeSelectOption value={1}>1 - Cấp Trường / Câu lạc bộ</NativeSelectOption>
-                      <NativeSelectOption value={2}>2 - Cấp Quận / Huyện / Liên trường</NativeSelectOption>
-                      <NativeSelectOption value={3}>3 - Cấp Tỉnh / Thành phố</NativeSelectOption>
-                      <NativeSelectOption value={4}>4 - Cấp Quốc gia</NativeSelectOption>
-                      <NativeSelectOption value={5}>5 - Cấp Quốc tế</NativeSelectOption>
-                    </NativeSelect>
+                      <SelectTrigger id="activity-impact" className="w-full bg-surface">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {IMPACT_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-1.5">
@@ -276,7 +302,10 @@ export function ExtracurricularSection() {
                       <Button
                         variant="destructive"
                         size="xs"
-                        onClick={() => handleDelete(act.id)}
+                        onClick={() => {
+                          setDeleteError(null);
+                          setDeleteTargetId(act.id);
+                        }}
                         title="Xóa hoạt động"
                       >
                         Xóa
@@ -304,6 +333,23 @@ export function ExtracurricularSection() {
           </div>
         )}
       </CardContent>
+
+      <AppDialog
+        open={deleteTargetId !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteTargetId(null);
+        }}
+        variant="action"
+        icon={<Trash2Icon aria-hidden />}
+        iconTone="destructive"
+        title="Xóa hoạt động?"
+        description="Bạn có chắc chắn muốn xóa hoạt động này không?"
+        cancelLabel="Hủy"
+        confirmLabel="Xóa"
+        confirmTone="destructive"
+        loading={deleting}
+        onConfirm={() => void confirmDelete()}
+      />
     </Card>
   );
 }

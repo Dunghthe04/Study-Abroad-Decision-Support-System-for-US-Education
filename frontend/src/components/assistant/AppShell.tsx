@@ -3,9 +3,9 @@
 import { usePathname } from "next/navigation";
 import { isAdminRoute } from "@/lib/admin-nav";
 import { useHeaderHidden } from "@/lib/header-visibility";
-import { isAuthRoute, isFullRoute, isWideRoute } from "@/lib/layout-routes";
+import { isAuthRoute, isCenterPortalRoute, isFullRoute, isWideRoute } from "@/lib/layout-routes";
 import { cn } from "@/lib/utils";
-import { SiteFooter } from "@/components/layout/SiteFooter";
+import { FooterBar } from "@/components/layout/footerbar";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { ActingAsBanner } from "@/components/parent/ActingAsBanner";
 import { ChatDock, ChatDockProvider } from "@/components/messages/ChatDock";
@@ -22,8 +22,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const visible = useAssistantVisible();
   const adminRoute = isAdminRoute(pathname);
   const authRoute = isAuthRoute(pathname);
+  const centerPortalRoute = isCenterPortalRoute(pathname);
   // /analysis: biểu mẫu tự cuộn bên trong, trang không được cao hơn màn hình (tránh thanh cuộn thừa ở đáy)
-  const lockedViewport = pathname === "/universities" || pathname === "/scholarships" || pathname.startsWith("/analysis");
+  const lockedViewport = pathname === "/universities" || pathname === "/scholarships" || pathname === "/centers" || pathname === "/community" || pathname.startsWith("/analysis");
+  const showFooter = !adminRoute && !authRoute && !centerPortalRoute && !lockedViewport;
   const showAssistant = !adminRoute && !authRoute;
   const docked = panelMode === "compact" || panelMode === "half";
   const pushed = showAssistant && open && visible && docked;
@@ -31,7 +33,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Trang phân tích cho ẩn thanh trên cùng để dành chỗ cho biểu mẫu; nút ở thanh đầu bước bật/tắt
   const hideable = pathname.startsWith("/analysis");
   const headerHidden = useHeaderHidden();
-  const collapsed = hideable && headerHidden;
+  // /community cũng cho ẩn thanh trên cùng (nút ở thanh kênh), dùng chung lựa chọn đã lưu
+  const collapsed = (hideable || pathname === "/community") && headerHidden;
 
   return (
     <ChatDockProvider>
@@ -53,7 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           lockedViewport && "lg:min-h-0 lg:overflow-hidden",
           pushed && "min-[900px]:pr-(--assistant-w)",
           // Trang phân tích: khung chat nổi trên nền xanh đậm cùng màu thanh bước
-          pushed && hideable && "min-[900px]:bg-brand",
+          pushed && hideable && "min-[900px]:bg-brand dark:min-[900px]:bg-brand-deep",
         )}
       >
         {!adminRoute && !authRoute && !collapsed && <SiteHeader />}
@@ -73,7 +76,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           {children}
         </main>
-        {(pathname === "/" || pathname === "/methodology") && <SiteFooter />}
+        {showFooter && <FooterBar />}
       </div>
       {showAssistant && <AssistantPanel />}
       {/* Trang phân tích có nút chat ở thanh bước; nút nổi sẽ che nút "Tiếp tục" */}

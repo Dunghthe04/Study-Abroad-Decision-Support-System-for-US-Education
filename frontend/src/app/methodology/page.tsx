@@ -7,7 +7,7 @@ import type { GradeScaleConfig } from "@/types/academic";
 import type { MethodologyParameters } from "@/types/methodology";
 
 export const metadata: Metadata = {
-  title: "Cách hệ thống xếp trường – USDSS",
+  title: "Phương pháp – USDSS",
   description:
     "Hệ thống so hồ sơ của bạn với sinh viên từng trường đã nhận rồi xếp vào nhóm Khó vào, Vừa sức, An toàn hơn. Có hình minh họa và ví dụ có số.",
 };

@@ -4,10 +4,14 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -62,39 +66,42 @@ export function ConsultationBookingModal({ centerName }: ConsultationBookingModa
         Đặt lịch tư vấn 1-1 miễn phí
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
+      <Dialog
+        open={open}
+        onOpenChange={(next) => !loading && setOpen(next)}
+        disablePointerDismissal={loading}
+      >
+        <DialogContent variant={isSubmitted ? "action" : "form"} size={isSubmitted ? "sm" : "md"}>
           {isSubmitted ? (
-            <div className="py-6 text-center space-y-4">
-              <div className="w-14 h-14 bg-ok-wash text-ok rounded-full flex items-center justify-center mx-auto">
-                <CheckCircle2Icon className="w-8 h-8" />
-              </div>
+            <>
               <DialogHeader>
-                <DialogTitle className="text-xl text-center">Gửi yêu cầu hẹn thành công!</DialogTitle>
-                <DialogDescription className="text-center text-sm pt-2">
+                <DialogIcon tone="success">
+                  <CheckCircle2Icon />
+                </DialogIcon>
+                <DialogTitle>Gửi yêu cầu hẹn thành công!</DialogTitle>
+                <DialogDescription>
                   Hệ thống đã chuyển thông tin của bạn tới ban tư vấn của <strong>{centerName}</strong>. Chuyên viên sẽ gọi điện thoại hoặc gửi email xác nhận lịch trong vòng <strong>2 giờ làm việc</strong>.
                 </DialogDescription>
               </DialogHeader>
-              <div className="pt-4">
-                <Button onClick={handleReset} className="w-full">
+              <DialogFooter layout="single">
+                <DialogAction type="button" tone="primary" onClick={handleReset}>
                   Hoàn tất
-                </Button>
-              </div>
-            </div>
+                </DialogAction>
+              </DialogFooter>
+            </>
           ) : (
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col gap-6">
               <DialogHeader>
-                <div className="flex items-center gap-2 text-brand text-xs font-semibold">
-                  <SparklesIcon className="w-3.5 h-3.5" />
-                  Kết nối trực tiếp trung tâm
-                </div>
-                <DialogTitle className="text-xl">Đặt lịch hẹn tư vấn 1-1</DialogTitle>
-                <DialogDescription className="text-xs">
+                <DialogIcon tone="brand">
+                  <SparklesIcon />
+                </DialogIcon>
+                <DialogTitle>Đặt lịch hẹn tư vấn 1-1</DialogTitle>
+                <DialogDescription>
                   Tư vấn lộ trình, săn học bổng và rà soát hồ sơ cùng chuyên gia tại <strong>{centerName}</strong>.
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="grid gap-3.5 py-4">
+              <DialogBody className="space-y-3.5">
                 <div className="space-y-1.5">
                   <Label htmlFor="c-name" className="text-xs font-medium">
                     Họ và tên học sinh / phụ huynh <span className="text-destructive">*</span>
@@ -164,7 +171,7 @@ export function ConsultationBookingModal({ centerName }: ConsultationBookingModa
                   </Label>
                   <select
                     id="c-degree"
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="flex h-11 w-full rounded-xl border border-input bg-transparent px-3.5 py-1 text-[0.9375rem] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     value={targetDegree}
                     onChange={(e) => setTargetDegree(e.target.value)}
                   >
@@ -188,15 +195,13 @@ export function ConsultationBookingModal({ centerName }: ConsultationBookingModa
                     onChange={(e) => setNote(e.target.value)}
                   />
                 </div>
-              </div>
+              </DialogBody>
 
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                  Hủy
-                </Button>
-                <Button type="submit" disabled={loading || !fullName || !phone}>
-                  {loading ? "Đang gửi..." : "Gửi yêu cầu hẹn"}
-                </Button>
+              <DialogFooter layout="pair">
+                <DialogCancel disabled={loading}>Hủy</DialogCancel>
+                <DialogAction type="submit" tone="primary" loading={loading} disabled={!fullName || !phone}>
+                  Gửi yêu cầu hẹn
+                </DialogAction>
               </DialogFooter>
             </form>
           )}

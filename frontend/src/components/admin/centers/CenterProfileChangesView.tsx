@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CheckIcon, EyeOffIcon, ExternalLinkIcon, XIcon } from "lucide-react";
+import { CheckIcon, EyeOffIcon, ExternalLinkIcon, XCircleIcon, XIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogIcon,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -260,9 +263,12 @@ export function CenterProfileChangesView() {
         />
       ) : null}
 
-      <AlertDialog open={failTarget !== null} onOpenChange={(open) => !open && closeFail()}>
-        <AlertDialogContent>
+      <AlertDialog open={failTarget !== null} onOpenChange={(open) => !open && !busyId && closeFail()}>
+        <AlertDialogContent variant="form">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="destructive">
+              <XCircleIcon />
+            </AlertDialogIcon>
             <AlertDialogTitle>Đánh giá Không đạt?</AlertDialogTitle>
             <AlertDialogDescription>
               {failTarget
@@ -270,29 +276,39 @@ export function CenterProfileChangesView() {
                 : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <Textarea
-            value={failReason}
-            onChange={(event) => setFailReason(event.target.value)}
-            maxLength={MAX_REASON}
-            rows={3}
-            disabled={busyId !== null}
-            placeholder={`Lý do Không đạt (bắt buộc, tối đa ${MAX_REASON} ký tự)`}
-            aria-label="Lý do Không đạt"
-            aria-required
-            className="resize-y text-sm"
-          />
-          <AlertDialogFooter>
+          <AlertDialogBody>
+            <Textarea
+              value={failReason}
+              onChange={(event) => setFailReason(event.target.value)}
+              maxLength={MAX_REASON}
+              rows={3}
+              disabled={busyId !== null}
+              placeholder={`Lý do Không đạt (bắt buộc, tối đa ${MAX_REASON} ký tự)`}
+              aria-label="Lý do Không đạt"
+              aria-required
+              className="resize-y text-sm"
+            />
+          </AlertDialogBody>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={busyId !== null}>Hủy</AlertDialogCancel>
-            <Button type="button" variant="destructive" onClick={() => void confirmFail()} disabled={!failReason.trim()} loading={busyId !== null} className="gap-1.5">
+            <AlertDialogAction
+              tone="destructive"
+              onClick={() => void confirmFail()}
+              disabled={!failReason.trim()}
+              loading={busyId !== null}
+            >
               Xác nhận Không đạt
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       <AlertDialog open={hideTarget !== null} onOpenChange={(open) => !open && !busyId && setHideTarget(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent variant="action">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="destructive">
+              <EyeOffIcon />
+            </AlertDialogIcon>
             <AlertDialogTitle>Ẩn trung tâm?</AlertDialogTitle>
             <AlertDialogDescription>
               {hideTarget
@@ -300,11 +316,15 @@ export function CenterProfileChangesView() {
                 : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={busyId !== null}>Hủy</AlertDialogCancel>
-            <Button type="button" variant="destructive" onClick={() => void confirmHide()} loading={busyId !== null} className="gap-1.5">
+            <AlertDialogAction
+              tone="destructive"
+              onClick={() => void confirmHide()}
+              loading={busyId !== null}
+            >
               Ẩn trung tâm
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

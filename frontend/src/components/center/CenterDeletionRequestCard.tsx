@@ -6,11 +6,14 @@ import { centerPortalApi, ApiError } from "@/lib/api";
 import type { CenterDeletionRequestDto } from "@/types/api";
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogIcon,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -121,37 +124,42 @@ export function CenterDeletionRequestCard() {
       </Button>
 
       <AlertDialog open={open} onOpenChange={(next) => !submitting && setOpen(next)}>
-        <AlertDialogContent>
+        <AlertDialogContent variant="form">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="destructive">
+              <Trash2Icon />
+            </AlertDialogIcon>
             <AlertDialogTitle>Xác nhận yêu cầu xóa tài khoản trung tâm</AlertDialogTitle>
             <AlertDialogDescription>
               Sau khi được xử lý, tài khoản và dữ liệu trung tâm sẽ bị xóa và không khôi phục được. Vui lòng cho biết lý do.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <Textarea
-            rows={4}
-            maxLength={MAX_REASON_LENGTH}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Lý do yêu cầu xóa (bắt buộc)"
-            aria-label="Lý do yêu cầu xóa tài khoản"
-          />
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <AlertDialogFooter>
+          <AlertDialogBody className="space-y-3">
+            <Textarea
+              rows={4}
+              maxLength={MAX_REASON_LENGTH}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Lý do yêu cầu xóa (bắt buộc)"
+              aria-label="Lý do yêu cầu xóa tài khoản"
+            />
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+          </AlertDialogBody>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={submitting}>Hủy</AlertDialogCancel>
-            <Button
+            <AlertDialogAction
               type="button"
-              variant="destructive"
+              tone="destructive"
               onClick={() => void submit()}
               loading={submitting}
               disabled={!reason.trim()}
             >
               Gửi yêu cầu xóa
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

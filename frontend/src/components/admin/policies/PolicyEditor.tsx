@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { SaveIcon, SendIcon, Trash2Icon } from "lucide-react";
+import { SaveIcon, SendIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { PolicyContent } from "@/components/policy/PolicyContent";
 import { Segmented } from "@/components/admin/ai-usage/parts";
 import {
-  AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogIcon, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
 import { adminPoliciesApi } from "@/lib/admin-policies-api";
@@ -196,8 +195,11 @@ export function PolicyEditor({ draft, currentVersion, onPublished, onDiscarded }
       </CardContent>
 
       <AlertDialog open={confirm !== null} onOpenChange={(open) => !open && busy === null && setConfirm(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent variant="action">
           <AlertDialogHeader>
+            <AlertDialogIcon tone={confirm === "discard" ? "destructive" : "brand"}>
+              {confirm === "discard" ? <Trash2Icon /> : <UploadIcon />}
+            </AlertDialogIcon>
             <AlertDialogTitle>{confirm === "publish" ? "Công bố bản này?" : "Bỏ bản nháp này?"}</AlertDialogTitle>
             <AlertDialogDescription>
               {confirm === "publish" ? (
@@ -212,17 +214,15 @@ export function PolicyEditor({ draft, currentVersion, onPublished, onDiscarded }
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={busy !== null}>Hủy</AlertDialogCancel>
-            <Button
-              type="button"
-              variant={confirm === "discard" ? "destructive" : "default"}
+            <AlertDialogAction
+              tone={confirm === "discard" ? "destructive" : "primary"}
               onClick={() => void (confirm === "publish" ? doPublish() : doDiscard())}
-              disabled={busy !== null}
+              loading={busy !== null}
             >
-              {busy !== null && <Spinner className="size-3.5" />}
               {confirm === "publish" ? "Công bố" : "Bỏ bản nháp"}
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -8,15 +8,25 @@ import {
   FileTextIcon,
   ExternalLinkIcon,
   CheckSquareIcon,
-  XIcon
 } from "lucide-react";
 import { adminCenterVerificationsApi, ApiError } from "@/lib/api";
 import type { CenterVerificationDto } from "@/types/api";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogIcon,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Props {
   requestId: string | null;
@@ -83,8 +93,6 @@ export function ReviewVerificationModal({
     };
   }, [isOpen, requestId]);
 
-  if (!isOpen) return null;
-
   const handleAction = async (action: "approve" | "reject" | "revoke") => {
     if (!requestId) return;
     setError(null);
@@ -135,30 +143,20 @@ export function ReviewVerificationModal({
     isServiceContractValid;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-3xl max-h-[90vh] flex flex-col rounded-xl border border-line bg-surface shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-line px-6 py-4 bg-surface-2">
-          <div className="flex items-center gap-2.5">
-            <ShieldCheckIcon className="h-5 w-5 text-brand" />
-            <h2 className="text-lg font-bold text-ink">
-              Kiểm duyệt hồ sơ xác minh trung tâm
-            </h2>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onClose}
-            aria-label="Đóng"
-            className="text-ink-3 hover:bg-surface-3 hover:text-ink"
-          >
-            <XIcon className="h-5 w-5" />
-          </Button>
-        </div>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(next) => !next && !submitting && onClose()}
+      disablePointerDismissal={submitting}
+    >
+      <DialogContent variant="form" size="xl">
+        <DialogHeader>
+          <DialogIcon tone="brand">
+            <ShieldCheckIcon />
+          </DialogIcon>
+          <DialogTitle>Kiểm duyệt hồ sơ xác minh trung tâm</DialogTitle>
+        </DialogHeader>
 
-        {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 text-sm">
+        <DialogBody className="space-y-6 text-sm">
           {loading ? (
             <div className="flex h-48 items-center justify-center gap-2 text-ink-2">
               <Spinner />
@@ -301,11 +299,9 @@ export function ReviewVerificationModal({
 
                   {/* Moderator Condition 2 */}
                   <label className="flex items-center gap-2.5 p-2 rounded bg-surface-2 cursor-pointer hover:bg-surface-3 transition-colors">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={isNationalRegistryMatched}
-                      onChange={(e) => setIsNationalRegistryMatched(e.target.checked)}
-                      className="h-4 w-4 rounded border-line text-brand focus:ring-brand"
+                      onCheckedChange={(c) => setIsNationalRegistryMatched(c === true)}
                     />
                     <span className="text-ink font-medium">
                       2. Tên pháp lý và MST hoàn toàn trùng khớp với Cổng ĐKDN Quốc gia (dangkykinhdoanh.gov.vn)
@@ -314,11 +310,9 @@ export function ReviewVerificationModal({
 
                   {/* Moderator Condition 3 */}
                   <label className="flex items-center gap-2.5 p-2 rounded bg-surface-2 cursor-pointer hover:bg-surface-3 transition-colors">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={isBusinessOperating}
-                      onChange={(e) => setIsBusinessOperating(e.target.checked)}
-                      className="h-4 w-4 rounded border-line text-brand focus:ring-brand"
+                      onCheckedChange={(c) => setIsBusinessOperating(c === true)}
                     />
                     <span className="text-ink font-medium">
                       3. Doanh nghiệp đang trong trạng thái &quot;Đang hoạt động&quot; trên Cổng ĐKDN
@@ -327,11 +321,9 @@ export function ReviewVerificationModal({
 
                   {/* Moderator Condition 4 */}
                   <label className="flex items-center gap-2.5 p-2 rounded bg-surface-2 cursor-pointer hover:bg-surface-3 transition-colors">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={isRepresentativeValid}
-                      onChange={(e) => setIsRepresentativeValid(e.target.checked)}
-                      className="h-4 w-4 rounded border-line text-brand focus:ring-brand"
+                      onCheckedChange={(c) => setIsRepresentativeValid(c === true)}
                     />
                     <span className="text-ink font-medium">
                       4. Người đăng ký là người đại diện pháp luật hoặc có Giấy ủy quyền hợp lệ
@@ -340,11 +332,9 @@ export function ReviewVerificationModal({
 
                   {/* Moderator Condition 5 (UC-55) */}
                   <label className="flex items-center gap-2.5 p-2 rounded bg-surface-2 cursor-pointer hover:bg-surface-3 transition-colors">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={isServiceContractValid}
-                      onChange={(e) => setIsServiceContractValid(e.target.checked)}
-                      className="h-4 w-4 rounded border-line text-brand focus:ring-brand"
+                      onCheckedChange={(c) => setIsServiceContractValid(c === true)}
                     />
                     <span className="text-ink font-medium">
                       5. Hợp đồng dịch vụ mẫu nêu rõ phạm vi dịch vụ, biểu phí và chính sách hoàn phí
@@ -381,55 +371,51 @@ export function ReviewVerificationModal({
               </div>
             </>
           ) : null}
-        </div>
+        </DialogBody>
 
-        {/* Footer Actions */}
-        <div className="flex items-center justify-between border-t border-line px-6 py-4 bg-surface-2">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={submitting}>
-            Đóng
-          </Button>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {data?.status === "verified" ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={submitting}
-                loading={submitting}
-                onClick={() => handleAction("revoke")}
-                className="text-rose-600 border-rose-500/30 hover:bg-rose-500/10"
-              >
-                Thu hồi dấu xác minh
-              </Button>
-            ) : (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={submitting}
-                  onClick={() => handleAction("reject")}
-                  className="text-rose-600 border-rose-500/30 hover:bg-rose-500/10"
-                >
-                  Từ chối hồ sơ
-                </Button>
-
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={!allConditionsMet}
-                  loading={submitting}
-                  onClick={() => handleAction("approve")}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                >
-                  Duyệt & Cấp tick xanh
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+        {loading || !data ? (
+          <DialogFooter layout="single">
+            <DialogCancel disabled={submitting} onClick={onClose}>
+              Đóng
+            </DialogCancel>
+          </DialogFooter>
+        ) : data.status === "verified" ? (
+          <DialogFooter layout="pair">
+            <DialogCancel disabled={submitting} onClick={onClose}>
+              Đóng
+            </DialogCancel>
+            <DialogAction
+              tone="destructive"
+              disabled={submitting}
+              loading={submitting}
+              onClick={() => handleAction("revoke")}
+            >
+              Thu hồi dấu xác minh
+            </DialogAction>
+          </DialogFooter>
+        ) : (
+          <DialogFooter layout="split-top">
+            <DialogAction
+              tone="ok"
+              disabled={!allConditionsMet || submitting}
+              loading={submitting}
+              onClick={() => handleAction("approve")}
+            >
+              Duyệt & Cấp tick xanh
+            </DialogAction>
+            <DialogCancel disabled={submitting} onClick={onClose}>
+              Đóng
+            </DialogCancel>
+            <DialogAction
+              tone="destructive"
+              disabled={submitting}
+              onClick={() => handleAction("reject")}
+            >
+              Từ chối hồ sơ
+            </DialogAction>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

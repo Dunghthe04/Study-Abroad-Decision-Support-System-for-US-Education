@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ApiError } from "@/lib/api";
@@ -135,12 +136,11 @@ function Form({ onClose, onCreated }: Omit<Props, "open">) {
             return (
               <li key={option.id}>
                 <label className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-ground">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     className="mt-1"
                     checked={checked}
                     disabled={!checked && reviewerIds.length >= MAX_REVIEWERS}
-                    onChange={() => toggleReviewer(option.id)}
+                    onCheckedChange={() => toggleReviewer(option.id)}
                   />
                   <span className="flex flex-col">
                     <span className="text-ink">

@@ -1,5 +1,6 @@
+import Image from "next/image";
 import Link from "next/link";
-import { PHOTO_CREDITS } from "@/lib/landing-schools";
+import { cn } from "@/lib/utils";
 
 const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
   {
@@ -16,6 +17,8 @@ const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
   {
     title: "Khám phá",
     links: [
+      { href: "/universities", label: "Tra cứu trường Mỹ" },
+      { href: "/scholarships", label: "Học bổng" },
       { href: "/centers", label: "Trung tâm tư vấn" },
       { href: "/community", label: "Cộng đồng" },
       { href: "/methodology", label: "Giới thiệu phương pháp" },
@@ -23,22 +26,60 @@ const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
     ],
   },
   {
-    title: "Tài khoản",
+    title: "Tài khoản & Pháp lý",
     links: [
+      { href: "/account", label: "Tài khoản của tôi" },
       { href: "/login", label: "Đăng nhập" },
       { href: "/register", label: "Đăng ký" },
-      { href: "/account", label: "Tài khoản của tôi" },
+      { href: "/terms", label: "Điều khoản sử dụng" },
+      { href: "/privacy", label: "Chính sách bảo mật" },
     ],
   },
 ];
 
-/** Chân trang cho trang chủ, dùng màu theo token của hệ thống */
-export function SiteFooter() {
+export interface FooterBarProps {
+  /** `default` cho các trang khách hàng thông thường; `compact` cho khung hẹp cần chân trang gọn. */
+  variant?: "default" | "compact";
+  className?: string;
+}
+
+/** Chân trang tái sử dụng cho các tuyến khách hàng, dùng màu theo token của hệ thống */
+export function FooterBar({ variant = "default", className }: FooterBarProps) {
+  if (variant === "compact") {
+    return (
+      <footer className={cn("border-t border-line bg-surface text-ink", className)}>
+        <div className="mx-auto flex max-w-[1560px] flex-col gap-2 px-4 py-4 text-xs text-ink-3 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-12">
+          <span>© 2026 USDSS · Study Abroad Decision Support System for US Education</span>
+          <div className="flex flex-wrap items-center gap-4">
+            <Link href="/methodology" className="transition-colors hover:text-brand">
+              Phương pháp
+            </Link>
+            <Link href="/terms" className="transition-colors hover:text-brand">
+              Điều khoản
+            </Link>
+            <Link href="/privacy" className="transition-colors hover:text-brand">
+              Bảo mật
+            </Link>
+          </div>
+        </div>
+      </footer>
+    );
+  }
+
   return (
-    <footer className="mt-8 border-t border-line bg-surface text-ink">
+    <footer className={cn("mt-8 border-t border-line bg-surface text-ink", className)}>
       <div className="mx-auto grid max-w-[1560px] gap-10 px-4 py-14 sm:px-8 lg:grid-cols-12 lg:px-12">
         <div className="space-y-4 lg:col-span-5">
           <div className="flex items-center gap-2.5">
+            <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-0.5">
+              <Image
+                src="/icons/USDSS.png"
+                alt=""
+                width={32}
+                height={32}
+                className="size-8 object-contain"
+              />
+            </span>
             <span className="font-heading text-xl font-semibold">USDSS</span>
           </div>
           <p className="max-w-sm text-sm leading-relaxed text-ink-2">
@@ -71,7 +112,6 @@ export function SiteFooter() {
             Thông tin chỉ mang tính tham khảo, không cam kết kết quả trúng tuyển hay học bổng. Hãy kiểm tra trang chính thức của trường trước khi quyết định.
           </span>
         </div>
-        <p className="mx-auto max-w-[1560px] px-4 pb-6 text-xs text-ink-3 sm:px-8 lg:px-12">Ảnh khuôn viên từ Wikimedia Commons: {PHOTO_CREDITS}.</p>
       </div>
     </footer>
   );

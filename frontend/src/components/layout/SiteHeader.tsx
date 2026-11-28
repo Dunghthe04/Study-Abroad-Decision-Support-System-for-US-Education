@@ -2,14 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AwardIcon,
   BookOpenIcon,
   BookmarkCheckIcon,
   Building2Icon,
-  CalculatorIcon,
   ChevronDownIcon,
   MapPinIcon,
   CreditCardIcon,
@@ -19,14 +18,21 @@ import {
   HeartHandshakeIcon,
   HomeIcon,
   InboxIcon,
+  InfoIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
+  LogInIcon,
   LogOutIcon,
   MessagesSquareIcon,
+  MonitorIcon,
+  MoonIcon,
   PlusIcon,
+  ScaleIcon,
   SearchIcon,
   SendIcon,
   ShieldIcon,
+  SunIcon,
+  SunMoonIcon,
   UserIcon,
   UsersIcon,
 } from "lucide-react";
@@ -36,8 +42,20 @@ import { formatUserRole } from "@/lib/user-role-labels";
 import { UserRoleIcon } from "@/components/layout/UserRoleIcon";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsLinkedParent } from "@/hooks/use-is-linked-parent";
-import type { QuotaOverviewDto, SubscriptionSummaryDto } from "@/types/billing";
+import type { QuotaBarDto, QuotaOverviewDto, SubscriptionSummaryDto } from "@/types/billing";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogAction,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogIcon,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,6 +79,46 @@ import { cn } from "@/lib/utils";
 // Mục menu avatar: to và thoáng hơn mặc định để dễ bấm
 const MENU_ITEM = "cursor-pointer gap-3 rounded-lg px-3 py-2 text-sm [&_svg:not([class*='size-'])]:size-[17px]";
 const MENU_LABEL = "px-3 pt-3 pb-1 text-[13px]";
+
+type ThemeMode = "light" | "dark" | "auto";
+const THEME_OPTIONS: { value: ThemeMode; label: string; icon: typeof SunIcon }[] = [
+  { value: "light", label: "Sáng", icon: SunIcon },
+  { value: "dark", label: "Tối", icon: MoonIcon },
+  { value: "auto", label: "Tự động", icon: MonitorIcon },
+];
+
+function applyTheme(mode: ThemeMode) {
+  const isDark =
+    mode === "dark" ||
+    (mode === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.classList.toggle("dark", isDark);
+}
+
+const themeListeners = new Set<() => void>();
+function readTheme(): ThemeMode {
+  try {
+    const saved = localStorage.getItem("theme");
+    if (saved === "light" || saved === "dark" || saved === "auto") return saved;
+  } catch {
+    // Bỏ qua nếu localStorage bị chặn
+  }
+  return "light";
+}
+function subscribeTheme(cb: () => void) {
+  themeListeners.add(cb);
+  return () => {
+    themeListeners.delete(cb);
+  };
+}
+function writeTheme(next: ThemeMode) {
+  try {
+    localStorage.setItem("theme", next);
+  } catch {
+    // Bỏ qua nếu localStorage bị chặn
+  }
+  applyTheme(next);
+  themeListeners.forEach((cb) => cb());
+}
 
 function formatSubscriptionLabel(sub: SubscriptionSummaryDto): string {
   const activePool =
@@ -106,14 +164,17 @@ export function SiteHeader() {
   // Phụ huynh chưa có con nào, không làm thay: nút "Thêm con" thay cho "Phân tích hồ sơ của tôi"
   const isParentWithoutChild = user?.role === "parent" && !acting && isLinkedParent === false;
 
-  const leftLinks = [
+  const leftLinks: { href: string; label: string; icon: typeof HomeIcon; requiresAuth?: boolean }[] = [
     { href: "/", label: "Trang chủ", icon: HomeIcon },
     { href: "/universities", label: "Tìm trường", icon: GraduationCapIcon },
     { href: "/scholarships", label: "Học bổng", icon: AwardIcon },
     { href: "/centers", label: "Trung tâm tư vấn", icon: Building2Icon },
-    { href: "/community", label: "Cộng đồng", icon: MessagesSquareIcon },
-    ...(!user ? [{ href: "/plans", label: "Gói dịch vụ", icon: CrownIcon }] : []),
+    { href: "/community", label: "Cộng đồng", icon: MessagesSquareIcon, requiresAuth: true },
+    ...(!user ? [{ href: "/plans", label: "Premium", icon: CrownIcon }] : []),
   ];
+
+  // Hộp thoại yêu cầu đăng nhập khi khách bấm mục cần tài khoản trên thanh đầu trang
+  const [authPrompt, setAuthPrompt] = useState<{ href: string; label: string } | null>(null);
 
   const rightLinks = [
     ...(hasOwnProfile
@@ -127,18 +188,25 @@ export function SiteHeader() {
     ...(user?.role === "center" ? [{ href: "/center/leads", label: "Yêu cầu liên hệ", icon: InboxIcon }] : []),
   ];
 
-  const isCostActive = pathname.startsWith("/costs");
+  const isCostActive = pathname.startsWith("/costs") || pathname === "/centers/compare";
 
   const isLinkActive = (href: string) => {
     if (href === "/") return pathname === href;
     if (href === "/universities") {
       return !isCostActive && (pathname.startsWith("/universities") || pathname.startsWith("/university"));
     }
+    if (href === "/centers") {
+      return !isCostActive && pathname.startsWith("/centers");
+    }
     return pathname.startsWith(href);
   };
 
-  // Trang có ảnh lớn ở đầu (trang chủ, phương pháp, chi tiết trường): thanh đầu trong suốt nằm trên ảnh cho tới khi cuộn
-  const overHero = pathname === "/" || pathname === "/methodology" || pathname.startsWith("/university/");
+  // Trang có ảnh lớn ở đầu (trang chủ, phương pháp, chi tiết trường, chi tiết trung tâm): thanh đầu trong suốt nằm trên ảnh cho tới khi cuộn
+  const overHero =
+    pathname === "/" ||
+    pathname === "/methodology" ||
+    pathname.startsWith("/university/") ||
+    (pathname.startsWith("/centers/") && pathname !== "/centers/compare");
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     if (!overHero) return;
@@ -157,6 +225,17 @@ export function SiteHeader() {
     router.push(q ? `/universities?search=${encodeURIComponent(q)}` : "/universities");
   };
 
+  // Giao diện (Sáng / Tối / Tự động), mặc định Sáng — ponytail: inline thay vì context riêng vì chỉ SiteHeader dùng
+  const theme = useSyncExternalStore(subscribeTheme, readTheme, () => "light" as ThemeMode);
+  useEffect(() => {
+    applyTheme(theme);
+    if (theme !== "auto") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => applyTheme("auto");
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [theme]);
+
   const handleLogout = async () => {
     await logout();
     router.push("/login");
@@ -167,7 +246,7 @@ export function SiteHeader() {
     <header
       className={cn(
         "sticky top-0 z-40 border-b text-white transition-colors duration-300 print:hidden",
-        clear ? "border-white/15 bg-brand-ink/55" : "border-brand-ink bg-brand",
+        clear ? "border-white/15 bg-brand-deep/55" : "border-brand-deep bg-[#0a3161] dark:border-white/12",
       )}
     >
       <div className="@container mx-auto max-w-[1560px] px-4 @2xl:px-8 @5xl:px-12">
@@ -200,8 +279,8 @@ export function SiteHeader() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Tìm trường theo tên, thành phố, bang…"
-              // Ô tìm kiếm luôn nền trắng trên nền xanh của thanh đầu
-              className="h-9 w-full rounded-lg border border-transparent bg-surface pr-11 pl-3.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus-visible:ring-3 focus-visible:ring-white/40"
+              // Ô tìm kiếm nổi trên nền xanh thương hiệu của thanh đầu
+              className="h-9 w-full rounded-lg border border-transparent bg-surface pr-11 pl-3.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus-visible:ring-3 focus-visible:ring-white/40 dark:border-white/15"
             />
             <Button
               type="submit"
@@ -233,7 +312,7 @@ export function SiteHeader() {
                     className={buttonVariants({
                       variant: "ghost",
                       size: "sm",
-                      className: "h-8 rounded-lg !bg-gold-wash px-3 text-xs font-semibold !text-brand-ink hover:!bg-white",
+                      className: "h-8 rounded-lg !bg-gold-wash px-3 text-xs font-semibold !text-brand-deep hover:!bg-white dark:!bg-gold/20 dark:!text-[#f5d77a] dark:ring-1 dark:ring-gold/40 dark:hover:!bg-gold/30",
                     })}
                   >
                     <CrownIcon className="size-3.5" aria-hidden />
@@ -255,65 +334,81 @@ export function SiteHeader() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" sideOffset={8} className="w-[22rem] p-0">
                   {/* Đầu menu: biểu tượng vai trò, tên, gói; học sinh / phụ huynh có thêm hạn mức chung còn lại */}
-                  <div className="space-y-5 bg-brand-wash px-5 py-5">
+                  <div className="space-y-5 bg-brand-deep px-5 py-5 text-white">
                     <div className="flex items-center gap-4">
                       <span
                         aria-hidden="true"
-                        className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand text-white"
+                        className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-white/15 text-white"
                       >
                         <UserRoleIcon role={user.role} className="size-7" />
                       </span>
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="truncate text-base font-semibold text-ink">{user.fullName}</span>
+                        <span className="truncate text-base font-semibold text-white">{user.fullName}</span>
                         {isStudentOrParent ? (
                           sub.data ? (
-                            <span className="truncate text-sm text-ink-2">{formatSubscriptionLabel(sub.data)}</span>
+                            <span className="truncate text-sm text-white/80">{formatSubscriptionLabel(sub.data)}</span>
                           ) : (
-                            <Skeleton className="h-3.5 w-20" />
+                            <Skeleton className="h-3.5 w-20 bg-white/25" />
                           )
                         ) : (
-                          <span className="truncate text-sm text-ink-2">{formatUserRole(user.role)}</span>
+                          <span className="truncate text-sm text-white/80">{formatUserRole(user.role)}</span>
                         )}
                       </span>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={handleLogout}
-                        aria-label="Đăng xuất"
-                        title="Đăng xuất"
-                        className="size-10 shrink-0 cursor-pointer justify-center rounded-lg p-0 text-risk hover:bg-risk-wash focus:bg-risk-wash [&_svg:not([class*='size-'])]:size-5"
-                      >
-                        <LogOutIcon />
-                      </DropdownMenuItem>
                     </div>
 
                     {showQuota && (
-                      <Link href="/account#quota" className="block space-y-2 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                        <div className="flex items-baseline justify-between gap-3 text-sm">
-                          <span className="text-ink-2">Hạn mức chung của bạn còn lại</span>
-                          {quota.data ? (
-                            <span className="font-semibold text-ink tabular-nums">{quota.data.remainingPercent}%</span>
-                          ) : (
-                            <Skeleton className="h-3.5 w-8" />
-                          )}
-                        </div>
-                        <div
-                          role="progressbar"
-                          aria-label="Hạn mức chung còn lại"
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-valuenow={quota.data?.remainingPercent ?? 0}
-                          className="h-3 w-full overflow-hidden rounded-full bg-surface ring-1 ring-brand/15"
-                        >
-                          <div
-                            className={cn("h-full rounded-full transition-[width] duration-500", quota.data?.lowQuota ? "bg-risk" : "bg-brand")}
-                            style={{ width: `${quota.data?.remainingPercent ?? 0}%` }}
-                          />
-                        </div>
+                      <Link href="/account#quota" className="block space-y-3 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-white/50">
+                        {/* Hai thanh riêng: Premium mở mọi tính năng, Miễn phí chỉ hỏi kiến thức; gộp chung thì Premium hết token vẫn hiện còn % */}
+                        {!quota.data ? (
+                          <QuotaBar label="Hạn mức còn lại" />
+                        ) : (
+                          <>
+                            {quota.data.premium && <QuotaBar label="Gói Premium còn lại" bar={quota.data.premium} />}
+                            <QuotaBar label="Hạn mức miễn phí còn lại" bar={quota.data.free} hint={FREE_QUOTA_HINT} />
+                          </>
+                        )}
                       </Link>
                     )}
                   </div>
 
-                  <div className="px-2 pt-1 pb-2">
+                  <div className="px-2 pt-2 pb-2">
+                  {/* Giao diện: Sáng / Tối / Tự động */}
+                  <div className="flex items-center justify-between gap-3 rounded-lg px-3 py-1.5">
+                    <span className="flex items-center gap-3 text-sm text-foreground">
+                      <SunMoonIcon className="size-[17px] shrink-0 text-muted-foreground" aria-hidden />
+                      Giao diện
+                    </span>
+                    <div
+                      role="radiogroup"
+                      aria-label="Chọn giao diện"
+                      className="inline-flex items-center rounded-lg border border-border bg-muted p-0.5"
+                    >
+                      {THEME_OPTIONS.map(({ value, label, icon: Icon }) => {
+                        const active = theme === value;
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            aria-label={label}
+                            title={label}
+                            onClick={() => writeTheme(value)}
+                            className={cn(
+                              "flex size-7 cursor-pointer items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                              active
+                                ? "bg-surface text-foreground shadow-xs ring-1 ring-border"
+                                : "text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            <Icon className="size-3.5" aria-hidden />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <DropdownMenuSeparator className="mt-1.5 mb-0" />
+
                   {/* Tài khoản */}
                   <DropdownMenuGroup>
                     <DropdownMenuLabel className={MENU_LABEL}>Tài khoản của bạn</DropdownMenuLabel>
@@ -410,6 +505,13 @@ export function SiteHeader() {
                       )}
                     </DropdownMenuGroup>
                   )}
+
+                  {/* Đăng xuất */}
+                  <DropdownMenuSeparator className="mt-2 mb-1" />
+                  <DropdownMenuItem variant="destructive" onClick={handleLogout} className={MENU_ITEM}>
+                    <LogOutIcon />
+                    Đăng xuất
+                  </DropdownMenuItem>
                   </div>
                 </DropdownMenuContent>
                 </DropdownMenu>
@@ -456,6 +558,14 @@ export function SiteHeader() {
                     aria-label={l.label}
                     title={l.label}
                     aria-current={active ? "page" : undefined}
+                    onClick={
+                      l.requiresAuth && !user && !isLoading
+                        ? (e) => {
+                            e.preventDefault();
+                            setAuthPrompt({ href: l.href, label: l.label });
+                          }
+                        : undefined
+                    }
                     className={cn(
                       "relative inline-flex h-11 items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium transition-colors",
                       "after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:rounded-full after:transition-transform after:duration-300 hover:after:scale-x-100 motion-reduce:after:transition-none",
@@ -472,7 +582,7 @@ export function SiteHeader() {
             <li>
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  aria-label="Menu Chi phí"
+                  aria-label="Menu Tra cứu và so sánh"
                   className={cn(
                     "relative inline-flex h-11 cursor-pointer items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium outline-none transition-colors",
                     "after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-left after:scale-x-0 after:rounded-full after:transition-transform after:duration-300 hover:after:scale-x-100 motion-reduce:after:transition-none",
@@ -480,18 +590,22 @@ export function SiteHeader() {
                     isCostActive ? "font-semibold text-white after:scale-x-100" : "text-white/80 hover:text-white",
                   )}
                 >
-                  <CalculatorIcon className="size-4 shrink-0" aria-hidden />
-                  <span className={cn(!isCostActive && "hidden @6xl:inline")}>Chi phí</span>
+                  <ScaleIcon className="size-4 shrink-0" aria-hidden />
+                  <span className={cn(!isCostActive && "hidden @6xl:inline")}>Tra cứu và so sánh</span>
                   <ChevronDownIcon className="size-3.5 shrink-0 opacity-80" aria-hidden />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" sideOffset={4} className="w-60 p-1.5">
+                <DropdownMenuContent align="start" sideOffset={4} className="min-w-64 w-max p-1.5">
                   <DropdownMenuItem className={MENU_ITEM} render={<Link href="/costs" />}>
-                    <CalculatorIcon />
-                    Tra cứu chi phí theo trường
+                    <GraduationCapIcon />
+                    Chi phí trường
                   </DropdownMenuItem>
                   <DropdownMenuItem className={MENU_ITEM} render={<Link href="/costs?mode=state" />}>
                     <MapPinIcon />
-                    Tra cứu chi phí theo bang
+                    Chi phí Bang
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className={MENU_ITEM} render={<Link href="/centers/compare" />}>
+                    <Building2Icon />
+                    Trung tâm tư vấn
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -527,7 +641,7 @@ export function SiteHeader() {
                 className={buttonVariants({
                   variant: "ghost",
                   size: "sm",
-                  className: "ml-1 h-8 shrink-0 px-3 text-xs font-semibold !bg-white !text-brand-ink hover:!bg-white/90",
+                  className: "ml-1 h-8 shrink-0 px-3 text-xs font-semibold !bg-white !text-brand-deep hover:!bg-white/90",
                 })}
               >
                 <PlusIcon className="size-3.5" aria-hidden />
@@ -541,7 +655,7 @@ export function SiteHeader() {
                 className={buttonVariants({
                   variant: "ghost",
                   size: "sm",
-                  className: "ml-1 h-8 shrink-0 px-3 text-xs font-semibold !bg-white !text-brand-ink hover:!bg-white/90",
+                  className: "ml-1 h-8 shrink-0 px-3 text-xs font-semibold !bg-white !text-brand-deep hover:!bg-white/90",
                 })}
               >
                 <span className="@7xl:hidden">Phân tích</span>
@@ -551,6 +665,82 @@ export function SiteHeader() {
           </div>
         </nav>
       </div>
+
+      <Dialog open={authPrompt !== null} onOpenChange={(open) => !open && setAuthPrompt(null)}>
+        <DialogContent variant="action">
+          <DialogHeader>
+            <DialogIcon tone="brand">
+              <LogInIcon />
+            </DialogIcon>
+            <DialogTitle>Đăng nhập để tiếp tục</DialogTitle>
+            <DialogDescription>
+              Bạn cần đăng nhập để truy cập {authPrompt?.label ?? "tính năng này"}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter layout="split-top">
+            <DialogAction
+              tone="primary"
+              onClick={() => {
+                const next = authPrompt?.href;
+                setAuthPrompt(null);
+                router.push(next ? `/login?redirect=${encodeURIComponent(next)}` : "/login");
+              }}
+            >
+              Đăng nhập
+            </DialogAction>
+            <DialogAction
+              tone="primary-tint"
+              onClick={() => {
+                setAuthPrompt(null);
+                router.push("/register");
+              }}
+            >
+              Tạo tài khoản
+            </DialogAction>
+            <DialogCancel>Để sau</DialogCancel>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </header>
+  );
+}
+
+// Một thanh hạn mức trong menu tài khoản; chưa có bar = đang tải
+const FREE_QUOTA_HINT =
+  "Hạn mức miễn phí chỉ dùng để hỏi kiến thức chung. Lộ trình, gợi ý trường, nhận xét hồ sơ... cần gói Premium.";
+
+function QuotaBar({ label, bar, hint }: { label: string; bar?: QuotaBarDto; hint?: string }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between gap-3 text-sm">
+        <span className="flex items-center gap-1.5 text-white/85">
+          {label}
+          {hint && (
+            <Tooltip>
+              <TooltipTrigger render={<span tabIndex={0} aria-label={hint} className="inline-flex cursor-help text-white/70 hover:text-white" />}>
+                <InfoIcon className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-56">
+                {hint}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </span>
+        {bar ? <span className="font-semibold text-white tabular-nums">{bar.remainingPercent}%</span> : <Skeleton className="h-3.5 w-8 bg-white/25" />}
+      </div>
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={bar?.remainingPercent ?? 0}
+        className="h-3 w-full overflow-hidden rounded-sm bg-white/20"
+      >
+        <div
+          className={cn("h-full rounded-sm transition-[width] duration-500", bar?.lowQuota ? "bg-amber-300" : "bg-white")}
+          style={{ width: `${bar?.remainingPercent ?? 0}%` }}
+        />
+      </div>
+    </div>
   );
 }

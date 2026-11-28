@@ -8,7 +8,18 @@ import { Cell, CompareTable, CornerCell, HeadCell, RowHead } from "@/components/
 import { MissingValue } from "@/components/shared/missing-value";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogIcon,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
@@ -130,12 +141,15 @@ export function CostEstimateView({
             Ngân sách và học bổng
             {parentMode && <span className="size-1.5 rounded-full bg-brand" aria-label="Đang áp dụng" />}
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
+          <DialogContent variant="form" size="md">
             <DialogHeader>
+              <DialogIcon tone="brand">
+                <SlidersHorizontalIcon aria-hidden />
+              </DialogIcon>
               <DialogTitle>Ngân sách và học bổng</DialogTitle>
               <DialogDescription>Nhập mức giả định để đối chiếu với chi phí các trường. Không lưu vào hồ sơ.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-5">
+            <DialogBody className="space-y-5">
               <label className="flex items-center gap-3 text-sm font-medium text-ink">
                 <Switch checked={parentMode} onCheckedChange={(checked) => setParentOverride(checked)} />
                 Chế độ phụ huynh
@@ -160,7 +174,10 @@ export function CostEstimateView({
                 {rate.asOf ? `, áp dụng ${new Date(rate.asOf).toLocaleDateString("vi-VN")}` : ""}, nguồn {rate.source}
                 {rate.isFallback && " (không lấy được tỉ giá mới, đang dùng số tạm tính)"}. Số VND chỉ để tham khảo.
               </p>
-            </div>
+            </DialogBody>
+            <DialogFooter layout="single">
+              <DialogCancel>Đóng</DialogCancel>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

@@ -16,7 +16,7 @@ import { ParentPreferencePanel } from "@/components/parent/ParentPreferencePanel
 import { ParentDashboardKpiSection } from "@/components/parent/ParentDashboardKpiSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
@@ -128,18 +128,24 @@ export function ChildDashboard({ studentId, initialTab = "overview" }: { student
           {!child.isManaged && <ChildConsentActions studentId={child.studentUserId} childName={child.studentName} />}
           <AddManagedChildButton />
           {list.length > 1 && (
-            <NativeSelect
-              className="w-56"
+            <Select
               value={studentId}
-              aria-label="Chọn con"
-              onChange={(e) => router.push(`/parent/children/${encodeURIComponent(e.target.value)}`)}
+              onValueChange={(v) => {
+                if (v !== null) router.push(`/parent/children/${encodeURIComponent(v)}`);
+              }}
+              items={list.map((c) => ({ value: c.studentUserId, label: c.studentName }))}
             >
-              {list.map((c) => (
-                <NativeSelectOption key={c.studentUserId} value={c.studentUserId}>
-                  {c.studentName}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              <SelectTrigger className="w-56 bg-surface" aria-label="Chọn con">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {list.map((c) => (
+                  <SelectItem key={c.studentUserId} value={c.studentUserId}>
+                    {c.studentName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
         </div>
       </div>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowRightIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { MonthPicker } from "@/components/ui/month-picker";
@@ -253,11 +254,9 @@ export function Step5Extracurricular({ activities, onUpdate, onPrev, onNext }: S
                   onChange={(m) => setDates(item.startDate ?? null, formatMonthYear(m), false)}
                 />
                 <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-ink">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={Boolean(item.isOngoing)}
-                    onChange={(e) => setDates(item.startDate ?? null, item.endDate ?? null, e.target.checked)}
-                    className="size-4 cursor-pointer rounded border-line accent-brand"
+                    onCheckedChange={(c) => setDates(item.startDate ?? null, item.endDate ?? null, c === true)}
                   />
                   Đến nay
                 </label>

@@ -1,17 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import { LockIcon, UnlockIcon } from "lucide-react";
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogIcon,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { ApiError, centerLegalHoldApi } from "@/lib/api";
@@ -83,38 +85,41 @@ export function CenterLegalHoldDialog({ target, onClose, onDone }: CenterLegalHo
   };
 
   return (
-    <AlertDialog open={target !== null} onOpenChange={(isOpen) => !isOpen && close()}>
-      <AlertDialogContent>
+    <AlertDialog open={target !== null} onOpenChange={(isOpen) => !isOpen && !busy && close()}>
+      <AlertDialogContent variant="form">
         <AlertDialogHeader>
+          <AlertDialogIcon tone={target?.action === "set" ? "destructive" : "brand"}>
+            {target?.action === "set" ? <LockIcon /> : <UnlockIcon />}
+          </AlertDialogIcon>
           <AlertDialogTitle>{text?.title}</AlertDialogTitle>
           <AlertDialogDescription>{text?.description}</AlertDialogDescription>
         </AlertDialogHeader>
-        {target ? (
-          <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">{target.centerName}</p>
-        ) : null}
-        <Textarea
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-          maxLength={MAX_REASON}
-          rows={3}
-          disabled={busy}
-          placeholder={text?.placeholder}
-          aria-label={target?.action === "set" ? "Lý do giữ pháp lý" : "Lý do gỡ giữ pháp lý"}
-          aria-required
-          className="resize-y text-sm"
-        />
-        <AlertDialogFooter>
+        <AlertDialogBody className="space-y-3">
+          {target ? (
+            <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">{target.centerName}</p>
+          ) : null}
+          <Textarea
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            maxLength={MAX_REASON}
+            rows={3}
+            disabled={busy}
+            placeholder={text?.placeholder}
+            aria-label={target?.action === "set" ? "Lý do giữ pháp lý" : "Lý do gỡ giữ pháp lý"}
+            aria-required
+            className="resize-y text-sm"
+          />
+        </AlertDialogBody>
+        <AlertDialogFooter layout="pair">
           <AlertDialogCancel disabled={busy}>Hủy</AlertDialogCancel>
-          <Button
-            type="button"
-            variant={target?.action === "set" ? "destructive" : "default"}
+          <AlertDialogAction
+            tone={target?.action === "set" ? "destructive" : "primary"}
             onClick={() => void confirm()}
-            disabled={busy || !reason.trim()}
-            className="gap-1.5"
+            disabled={!reason.trim()}
+            loading={busy}
           >
-            {busy ? <Spinner className="size-3.5" /> : null}
             {text?.confirm}
-          </Button>
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

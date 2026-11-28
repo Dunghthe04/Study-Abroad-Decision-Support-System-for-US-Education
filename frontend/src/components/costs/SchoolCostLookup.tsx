@@ -20,7 +20,14 @@ interface Picked {
  * Một trường thì ra ước tính đầy đủ (năm đầu, cả khóa, ngân sách); từ hai đến bốn trường thì đặt cạnh nhau.
  * Danh sách mã nằm trên URL (?codes=A,B) để chia sẻ được.
  */
-export function SchoolCostLookup({ initialCodes }: { initialCodes: string[] }) {
+export function SchoolCostLookup({
+  initialCodes,
+  onCodesChange,
+}: {
+  initialCodes: string[];
+  // ponytail: temporary /audit/universities callback so adding/removing schools doesn't navigate away
+  onCodesChange?: (codes: string[]) => void;
+}) {
   const router = useRouter();
   const searchRef = useRef<HTMLInputElement>(null);
   const [codes, setCodes] = useState(initialCodes);
@@ -33,8 +40,12 @@ export function SchoolCostLookup({ initialCodes }: { initialCodes: string[] }) {
       first.current = false;
       return;
     }
+    if (onCodesChange) {
+      onCodesChange(codes);
+      return;
+    }
     router.replace(codes.length ? `/costs?codes=${codes.map(encodeURIComponent).join(",")}` : "/costs", { scroll: false });
-  }, [codes, router]);
+  }, [codes, onCodesChange, router]);
 
   const add = (code: string, picked: Picked) => {
     if (codes.includes(code)) return;

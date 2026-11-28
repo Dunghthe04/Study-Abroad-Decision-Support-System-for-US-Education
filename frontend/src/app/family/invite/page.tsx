@@ -5,7 +5,7 @@ import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
 import { FamilyInviteForm } from "@/components/billing/FamilyInviteForm";
 
 export const metadata: Metadata = {
-  title: "Lời mời gói Gia đình – USDSS",
+  title: "Lời mời gia đình – USDSS",
   description: "Chấp nhận hoặc từ chối lời mời tham gia gói USDSS Premium Gia đình",
 };
 

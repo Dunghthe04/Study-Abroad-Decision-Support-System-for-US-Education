@@ -48,6 +48,18 @@ let connection: HubConnection | null = null;
 let wanted = false;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let retryCount = 0;
+// ponytail: temporary mock bridge for /audit/community preview without SignalR server
+let mockHandler: ((method: string, args: unknown[]) => Promise<unknown>) | null = null;
+
+export function setRealtimeMockHandler(handler: ((method: string, args: unknown[]) => Promise<unknown>) | null) {
+  mockHandler = handler;
+  notifyState();
+  if (handler) emit("connected");
+}
+
+export function emitRealtimeMock<T = unknown>(event: RealtimeEvent, payload?: T) {
+  emit(event, payload);
+}
 
 function emit(event: RealtimeEvent, payload?: unknown) {
   listeners.get(event)?.forEach((listener) => {
@@ -138,7 +150,7 @@ export function stopRealtime() {
 }
 
 export function isRealtimeConnected(): boolean {
-  return connection?.state === HubConnectionState.Connected;
+  return mockHandler !== null || connection?.state === HubConnectionState.Connected;
 }
 
 /** Cho <c>useSyncExternalStore</c>: gọi lại mỗi khi trạng thái kết nối đổi. */
@@ -165,6 +177,9 @@ export function onRealtime<T = undefined>(event: RealtimeEvent, listener: (paylo
 
 /** Gọi một hàm trên hub. Ném lỗi nếu chưa kết nối hoặc server từ chối. */
 export async function invokeRealtime<T = void>(method: string, ...args: unknown[]): Promise<T> {
+  if (mockHandler) {
+    return (await mockHandler(method, args)) as T;
+  }
   if (!connection || connection.state !== HubConnectionState.Connected) {
     throw new Error("realtime_not_connected");
   }

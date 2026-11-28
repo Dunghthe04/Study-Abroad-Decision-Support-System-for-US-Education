@@ -37,10 +37,14 @@ import { cn } from "@/lib/utils";
 import { PASSWORD_RULE_HINT, checkPhone, emailError, fullNameError, passwordRuleError } from "@/lib/auth-validation";
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 
@@ -1099,13 +1103,17 @@ export function AdminUsersView() {
       </div>
 
       {/* [UC-61] Xác nhận khóa tài khoản */}
-      <Dialog open={lockTarget !== null} onOpenChange={(open) => !open && closeLockDialog()}>
-        <DialogContent>
+      <Dialog
+        open={lockTarget !== null}
+        onOpenChange={(open) => !open && !lockSubmitting && closeLockDialog()}
+        disablePointerDismissal={lockSubmitting}
+      >
+        <DialogContent variant="form">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-risk">
-              <BanIcon className="size-5" />
-              Khóa tài khoản người dùng
-            </DialogTitle>
+            <DialogIcon tone="destructive">
+              <BanIcon />
+            </DialogIcon>
+            <DialogTitle>Khóa tài khoản người dùng</DialogTitle>
             <DialogDescription>
               {lockTarget
                 ? `Khóa tài khoản ${lockTarget.fullName} (${lockTarget.email}). Người dùng sẽ không thể đăng nhập vào hệ thống.`
@@ -1113,50 +1121,53 @@ export function AdminUsersView() {
             </DialogDescription>
           </DialogHeader>
 
-          <Field>
-            <FieldLabel htmlFor="lock-reason">Lý do khóa tài khoản <span className="text-destructive">*</span></FieldLabel>
-            <Input
-              id="lock-reason"
-              value={lockReason}
-              onChange={(e) => setLockReason(e.target.value)}
-              placeholder="Ví dụ: Vi phạm quy định sử dụng, nghi vấn gian lận thông tin..."
-              maxLength={500}
-              disabled={lockSubmitting}
-            />
-          </Field>
+          <DialogBody className="space-y-4">
+            <Field>
+              <FieldLabel htmlFor="lock-reason">Lý do khóa tài khoản <span className="text-destructive">*</span></FieldLabel>
+              <Input
+                id="lock-reason"
+                value={lockReason}
+                onChange={(e) => setLockReason(e.target.value)}
+                placeholder="Ví dụ: Vi phạm quy định sử dụng, nghi vấn gian lận thông tin..."
+                maxLength={500}
+                disabled={lockSubmitting}
+              />
+            </Field>
 
-          {lockDialogError && (
-            <Alert variant="destructive">
-              <AlertDescription>{lockDialogError}</AlertDescription>
-            </Alert>
-          )}
+            {lockDialogError && (
+              <Alert variant="destructive">
+                <AlertDescription>{lockDialogError}</AlertDescription>
+              </Alert>
+            )}
+          </DialogBody>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeLockDialog} disabled={lockSubmitting}>
+          <DialogFooter layout="pair">
+            <DialogCancel onClick={closeLockDialog} disabled={lockSubmitting}>
               Hủy
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
+            </DialogCancel>
+            <DialogAction
+              tone="destructive"
               onClick={() => void handleConfirmLock()}
               loading={lockSubmitting}
-              className="gap-1.5"
             >
-              <BanIcon className="size-4" />
               Xác nhận khóa
-            </Button>
+            </DialogAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* [UC-62] Xác nhận mở khóa tài khoản */}
-      <Dialog open={unlockTarget !== null} onOpenChange={(open) => !open && closeUnlockDialog()}>
-        <DialogContent>
+      <Dialog
+        open={unlockTarget !== null}
+        onOpenChange={(open) => !open && !unlockSubmitting && closeUnlockDialog()}
+        disablePointerDismissal={unlockSubmitting}
+      >
+        <DialogContent variant="form">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-ok">
-              <KeyRoundIcon className="size-5" />
-              Mở khóa tài khoản
-            </DialogTitle>
+            <DialogIcon tone="success">
+              <KeyRoundIcon />
+            </DialogIcon>
+            <DialogTitle>Mở khóa tài khoản</DialogTitle>
             <DialogDescription>
               {unlockTarget
                 ? `Mở khóa cho ${unlockTarget.fullName} (${unlockTarget.email}). Tài khoản sẽ có thể đăng nhập bình thường.`
@@ -1164,49 +1175,53 @@ export function AdminUsersView() {
             </DialogDescription>
           </DialogHeader>
 
-          <Field>
-            <FieldLabel htmlFor="unlock-reason">Lý do mở khóa <span className="text-destructive">*</span></FieldLabel>
-            <Input
-              id="unlock-reason"
-              value={unlockReason}
-              onChange={(e) => setUnlockReason(e.target.value)}
-              placeholder="Ví dụ: Người dùng đã xác minh danh tính và giải trình hợp lệ..."
-              maxLength={500}
-              disabled={unlockSubmitting}
-            />
-          </Field>
+          <DialogBody className="space-y-4">
+            <Field>
+              <FieldLabel htmlFor="unlock-reason">Lý do mở khóa <span className="text-destructive">*</span></FieldLabel>
+              <Input
+                id="unlock-reason"
+                value={unlockReason}
+                onChange={(e) => setUnlockReason(e.target.value)}
+                placeholder="Ví dụ: Người dùng đã xác minh danh tính và giải trình hợp lệ..."
+                maxLength={500}
+                disabled={unlockSubmitting}
+              />
+            </Field>
 
-          {unlockDialogError && (
-            <Alert variant="destructive">
-              <AlertDescription>{unlockDialogError}</AlertDescription>
-            </Alert>
-          )}
+            {unlockDialogError && (
+              <Alert variant="destructive">
+                <AlertDescription>{unlockDialogError}</AlertDescription>
+              </Alert>
+            )}
+          </DialogBody>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeUnlockDialog} disabled={unlockSubmitting}>
+          <DialogFooter layout="pair">
+            <DialogCancel onClick={closeUnlockDialog} disabled={unlockSubmitting}>
               Hủy
-            </Button>
-            <Button
-              type="button"
-              className="bg-ok text-white hover:bg-ok/90 gap-1.5"
+            </DialogCancel>
+            <DialogAction
+              tone="ok"
               onClick={() => void handleConfirmUnlock()}
               loading={unlockSubmitting}
             >
-              <KeyRoundIcon className="size-4" />
               Xác nhận mở khóa
-            </Button>
+            </DialogAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* [UC-58 2a] Xác nhận đặt lại xác thực hai lớp cho Moderator */}
-      <Dialog open={resetTfaTarget !== null} onOpenChange={(open) => !open && closeResetTfaDialog()}>
-        <DialogContent>
+      <Dialog
+        open={resetTfaTarget !== null}
+        onOpenChange={(open) => !open && !resetTfaSubmitting && closeResetTfaDialog()}
+        disablePointerDismissal={resetTfaSubmitting}
+      >
+        <DialogContent variant="form">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ShieldOffIcon className="size-5" />
-              Đặt lại xác thực hai lớp
-            </DialogTitle>
+            <DialogIcon tone="destructive">
+              <ShieldOffIcon />
+            </DialogIcon>
+            <DialogTitle>Đặt lại xác thực hai lớp</DialogTitle>
             <DialogDescription>
               {resetTfaTarget
                 ? `Đặt lại cho ${resetTfaTarget.fullName} (${resetTfaTarget.email}). Khóa xác thực và các mã khôi phục cũ hết hiệu lực, mọi phiên đăng nhập bị thu hồi. Lần đăng nhập tới người dùng quét QR mới. Chỉ làm sau khi đã xác minh đúng người.`
@@ -1214,38 +1229,37 @@ export function AdminUsersView() {
             </DialogDescription>
           </DialogHeader>
 
-          <Field>
-            <FieldLabel htmlFor="reset-2fa-reason">Lý do đặt lại <span className="text-destructive">*</span></FieldLabel>
-            <Input
-              id="reset-2fa-reason"
-              value={resetTfaReason}
-              onChange={(e) => setResetTfaReason(e.target.value)}
-              placeholder="Ví dụ: Mất điện thoại và mã khôi phục, đã xác minh qua cuộc gọi..."
-              maxLength={500}
-              disabled={resetTfaSubmitting}
-            />
-          </Field>
+          <DialogBody className="space-y-4">
+            <Field>
+              <FieldLabel htmlFor="reset-2fa-reason">Lý do đặt lại <span className="text-destructive">*</span></FieldLabel>
+              <Input
+                id="reset-2fa-reason"
+                value={resetTfaReason}
+                onChange={(e) => setResetTfaReason(e.target.value)}
+                placeholder="Ví dụ: Mất điện thoại và mã khôi phục, đã xác minh qua cuộc gọi..."
+                maxLength={500}
+                disabled={resetTfaSubmitting}
+              />
+            </Field>
 
-          {resetTfaError && (
-            <Alert variant="destructive">
-              <AlertDescription>{resetTfaError}</AlertDescription>
-            </Alert>
-          )}
+            {resetTfaError && (
+              <Alert variant="destructive">
+                <AlertDescription>{resetTfaError}</AlertDescription>
+              </Alert>
+            )}
+          </DialogBody>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeResetTfaDialog} disabled={resetTfaSubmitting}>
+          <DialogFooter layout="pair">
+            <DialogCancel onClick={closeResetTfaDialog} disabled={resetTfaSubmitting}>
               Hủy
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
+            </DialogCancel>
+            <DialogAction
+              tone="destructive"
               onClick={() => void handleConfirmResetTfa()}
               loading={resetTfaSubmitting}
-              className="gap-1.5"
             >
-              <ShieldOffIcon className="size-4" />
               Xác nhận đặt lại
-            </Button>
+            </DialogAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>

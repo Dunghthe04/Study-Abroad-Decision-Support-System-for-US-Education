@@ -1,11 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CircleAlertIcon, FileDownIcon, FileSpreadsheetIcon, FolderOpenIcon, XIcon } from "lucide-react";
+import { CircleAlertIcon, FileDownIcon, FileSpreadsheetIcon, FolderOpenIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogIcon,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -253,72 +264,17 @@ export function SlmImportDialog({ open, onOpenChange, onImported }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} disablePointerDismissal={importing}>
-      <DialogContent
-        showCloseButton={false}
-        className="flex h-[min(46rem,calc(100dvh-2rem))] flex-col gap-3 sm:max-w-[min(72rem,calc(100vw-3rem))]"
-      >
-        <DialogHeader className="shrink-0 flex-row items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <DialogTitle className="text-lg">Nhập Excel</DialogTitle>
-            <DialogDescription>Chọn một file .xlsx, kiểm tra dữ liệu xem trước rồi mới nhập vào danh sách mẫu.</DialogDescription>
-          </div>
-          <DialogClose disabled={importing} render={<Button type="button" variant="ghost" size="icon-sm" aria-label="Đóng" />}>
-            <XIcon />
-          </DialogClose>
+      <DialogContent variant="form" size="full" className="h-[min(46rem,calc(100dvh-2rem))]">
+        <DialogHeader>
+          <DialogIcon tone="brand">
+            <FileSpreadsheetIcon />
+          </DialogIcon>
+          <DialogTitle>Nhập Excel</DialogTitle>
+          <DialogDescription>Chọn một file .xlsx, kiểm tra dữ liệu xem trước rồi mới nhập vào danh sách mẫu.</DialogDescription>
         </DialogHeader>
 
-        {file && (
-          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            <div className="flex min-w-0 items-center gap-2">
-              <FileSpreadsheetIcon className="size-4 shrink-0 text-muted-foreground" />
-              <span className="truncate font-medium" title={file.name}>{file.name}</span>
-              <span className="shrink-0 text-muted-foreground">{formatFileSize(file.size)}</span>
-            </div>
-            {preview && (
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="neutral">{totalRows} dòng</Badge>
-                <Badge variant="ok">{validRows} hợp lệ</Badge>
-                <Badge variant={invalidRows > 0 ? "risk" : "neutral"}>{invalidRows} dòng lỗi</Badge>
-              </div>
-            )}
-          </div>
-        )}
-
-        {pickError && (
-          <Alert variant="destructive" className="shrink-0">
-            <CircleAlertIcon />
-            <AlertDescription>{pickError}</AlertDescription>
-          </Alert>
-        )}
-        {previewError && (
-          <Alert variant="destructive" className="shrink-0">
-            <CircleAlertIcon />
-            <AlertDescription>{previewError}</AlertDescription>
-          </Alert>
-        )}
-        {preview && validRows === 0 && (
-          <Alert variant="destructive" className="shrink-0">
-            <CircleAlertIcon />
-            <AlertDescription>Không có dòng hợp lệ để nhập.</AlertDescription>
-          </Alert>
-        )}
-        {preview && validRows > 0 && errors.length > 0 && (
-          <Alert variant="warning" className="shrink-0">
-            <CircleAlertIcon />
-            <AlertDescription>Có {errors.length} lỗi. Các dòng lỗi sẽ bị bỏ qua, chỉ {validRows} dòng hợp lệ được nhập.</AlertDescription>
-          </Alert>
-        )}
-        {importError && (
-          <Alert variant="destructive" className="shrink-0">
-            <CircleAlertIcon />
-            <AlertDescription>{importError}</AlertDescription>
-          </Alert>
-        )}
-
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">{renderBody()}</div>
-
-        <DialogFooter className="shrink-0 flex-col sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
+        <DialogBody className="flex flex-col gap-3">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <input
               ref={inputRef}
               type="file"
@@ -326,18 +282,74 @@ export function SlmImportDialog({ open, onOpenChange, onImported }: Props) {
               className="hidden"
               onChange={handleFileChange}
             />
-            <Button type="button" variant="outline" disabled={importing || completed} onClick={() => inputRef.current?.click()}>
+            <Button type="button" variant="outline" size="sm" disabled={importing || completed} onClick={() => inputRef.current?.click()}>
               <FolderOpenIcon />
               Chọn file
             </Button>
-            <Button type="button" variant="link" loading={downloading} onClick={() => void handleDownload()}>
+            <Button type="button" variant="link" size="sm" loading={downloading} onClick={() => void handleDownload()}>
               <FileDownIcon />
               Tải file mẫu
             </Button>
           </div>
-          <Button type="button" disabled={!canImport} loading={importing} onClick={() => void handleImport()}>
+
+          {file && (
+            <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+              <div className="flex min-w-0 items-center gap-2">
+                <FileSpreadsheetIcon className="size-4 shrink-0 text-muted-foreground" />
+                <span className="truncate font-medium" title={file.name}>{file.name}</span>
+                <span className="shrink-0 text-muted-foreground">{formatFileSize(file.size)}</span>
+              </div>
+              {preview && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="neutral">{totalRows} dòng</Badge>
+                  <Badge variant="ok">{validRows} hợp lệ</Badge>
+                  <Badge variant={invalidRows > 0 ? "risk" : "neutral"}>{invalidRows} dòng lỗi</Badge>
+                </div>
+              )}
+            </div>
+          )}
+
+          {pickError && (
+            <Alert variant="destructive" className="shrink-0">
+              <CircleAlertIcon />
+              <AlertDescription>{pickError}</AlertDescription>
+            </Alert>
+          )}
+          {previewError && (
+            <Alert variant="destructive" className="shrink-0">
+              <CircleAlertIcon />
+              <AlertDescription>{previewError}</AlertDescription>
+            </Alert>
+          )}
+          {preview && validRows === 0 && (
+            <Alert variant="destructive" className="shrink-0">
+              <CircleAlertIcon />
+              <AlertDescription>Không có dòng hợp lệ để nhập.</AlertDescription>
+            </Alert>
+          )}
+          {preview && validRows > 0 && errors.length > 0 && (
+            <Alert variant="warning" className="shrink-0">
+              <CircleAlertIcon />
+              <AlertDescription>Có {errors.length} lỗi. Các dòng lỗi sẽ bị bỏ qua, chỉ {validRows} dòng hợp lệ được nhập.</AlertDescription>
+            </Alert>
+          )}
+          {importError && (
+            <Alert variant="destructive" className="shrink-0">
+              <CircleAlertIcon />
+              <AlertDescription>{importError}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">{renderBody()}</div>
+        </DialogBody>
+
+        <DialogFooter layout="pair">
+          <DialogCancel disabled={importing} onClick={() => handleOpenChange(false)}>
+            Đóng
+          </DialogCancel>
+          <DialogAction tone="primary" disabled={!canImport} loading={importing} onClick={() => void handleImport()}>
             Nhập dữ liệu
-          </Button>
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>

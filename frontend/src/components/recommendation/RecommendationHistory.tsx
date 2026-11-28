@@ -5,12 +5,22 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertCircleIcon, ArrowLeftIcon, ArrowRightIcon, GitCompareIcon } from "lucide-react";
+import { AlertCircleIcon, ArrowLeftIcon, ArrowRightIcon, GitCompareArrowsIcon, GitCompareIcon, HistoryIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogIcon,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { recommendationHistoryApi } from "@/lib/recommendation-history-api";
 import { cn } from "@/lib/utils";
@@ -227,13 +237,13 @@ export function RecommendationHistory({ studentId }: { studentId?: string } = {}
 
       {/* Xem lại một lần và kết quả so sánh đều hiện dạng popup; dài thì cuộn bên trong popup */}
       <Dialog open={viewing !== null} onOpenChange={(isOpen) => !isOpen && setViewing(null)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent variant="form" size="xl">
           {viewing && <RunBody rec={viewing} />}
         </DialogContent>
       </Dialog>
 
       <Dialog open={comparison !== null} onOpenChange={(isOpen) => !isOpen && setComparison(null)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent variant="form" size="xl">
           {comparison && <ComparisonBody comparison={comparison} />}
         </DialogContent>
       </Dialog>
@@ -256,88 +266,97 @@ function ComparisonBody({ comparison }: { comparison: RunComparison }) {
   const inputs = comparison.inputChanges ?? [];
   return (
     <>
-      <DialogHeader className="pr-8">
+      <DialogHeader>
+        <DialogIcon tone="brand">
+          <GitCompareArrowsIcon />
+        </DialogIcon>
         <DialogTitle>So sánh hai lần gợi ý</DialogTitle>
         <DialogDescription className="text-xs">
           Lần trước {formatTime(from.createdAt)} → lần sau {formatTime(to.createdAt)}
         </DialogDescription>
       </DialogHeader>
 
-      {/* UC-76 2h-3: đầu vào khác gì giữa hai lần, để hiểu vì sao danh sách đổi */}
-      <section className="rounded-xl border border-line bg-ground p-3" aria-labelledby="input-changes">
-        <h3 id="input-changes" className="text-sm font-semibold text-foreground">
-          Đầu vào đã đổi
-        </h3>
-        {inputs.length === 0 ? (
-          <p className="mt-1 text-sm text-ink-2">
-            {changes.length === 0
-              ? "Đầu vào giữ nguyên."
-              : "Đầu vào giữ nguyên; danh sách đổi do dữ liệu trường được cập nhật."}
+      <DialogBody className="space-y-4">
+        {/* UC-76 2h-3: đầu vào khác gì giữa hai lần, để hiểu vì sao danh sách đổi */}
+        <section className="rounded-xl border border-line bg-ground p-3" aria-labelledby="input-changes">
+          <h3 id="input-changes" className="text-sm font-semibold text-foreground">
+            Đầu vào đã đổi
+          </h3>
+          {inputs.length === 0 ? (
+            <p className="mt-1 text-sm text-ink-2">
+              {changes.length === 0
+                ? "Đầu vào giữ nguyên."
+                : "Đầu vào giữ nguyên; danh sách đổi do dữ liệu trường được cập nhật."}
+            </p>
+          ) : (
+            <ul className="mt-2 space-y-1 text-sm">
+              {inputs.map((c) => (
+                <li key={c.key} className="flex flex-wrap items-center gap-x-1.5">
+                  <span className="text-muted-foreground">{c.label}:</span>
+                  <span className="text-ink-2">{c.from}</span>
+                  <ArrowRightIcon className="size-3.5 text-ink-3" aria-label="thành" />
+                  <span className="font-semibold text-foreground">{c.to}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-xs text-ink-3">Điểm tiếng Anh không được lưu theo từng lần nên không so được.</p>
+        </section>
+
+        {changes.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            Hai lần gợi ý có cùng danh sách trường, cùng nhóm và cùng thứ hạng.
           </p>
         ) : (
-          <ul className="mt-2 space-y-1 text-sm">
-            {inputs.map((c) => (
-              <li key={c.key} className="flex flex-wrap items-center gap-x-1.5">
-                <span className="text-muted-foreground">{c.label}:</span>
-                <span className="text-ink-2">{c.from}</span>
-                <ArrowRightIcon className="size-3.5 text-ink-3" aria-label="thành" />
-                <span className="font-semibold text-foreground">{c.to}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-xs text-muted-foreground">
+                <tr className="border-b border-line">
+                  <th className="py-2 pr-3 font-medium">Trường</th>
+                  <th className="py-2 pr-3 font-medium">Lần trước</th>
+                  <th className="w-6 py-2" aria-hidden />
+                  <th className="py-2 pr-3 font-medium">Lần sau</th>
+                  <th className="py-2 font-medium">Thay đổi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {changes.map((c) => {
+                  const label = CHANGE_LABEL[changeKind(c)];
+                  return (
+                    <tr key={c.code}>
+                      <td className="py-2 pr-3">
+                        <Link
+                          href={`/university/${encodeURIComponent(c.code)}?from=recommendations`}
+                          className="font-semibold text-foreground underline-offset-4 hover:underline"
+                        >
+                          {c.name}
+                        </Link>
+                      </td>
+                      <td className="py-2 pr-3">
+                        <Place group={c.fromGroup} rank={c.fromRank} />
+                      </td>
+                      <td className="py-2 text-ink-3">
+                        <ArrowRightIcon className="size-3.5" />
+                      </td>
+                      <td className="py-2 pr-3">
+                        <Place group={c.toGroup} rank={c.toRank} />
+                      </td>
+                      <td className="py-2">
+                        <Badge variant={label.variant}>{label.text}</Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
-        <p className="mt-2 text-xs text-ink-3">Điểm tiếng Anh không được lưu theo từng lần nên không so được.</p>
-      </section>
+        <p className="text-xs text-ink-3">Chỉ liệt kê trường có thay đổi. Thứ hạng tính trong từng nhóm.</p>
+      </DialogBody>
 
-      {changes.length === 0 ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">
-          Hai lần gợi ý có cùng danh sách trường, cùng nhóm và cùng thứ hạng.
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="text-xs text-muted-foreground">
-              <tr className="border-b border-line">
-                <th className="py-2 pr-3 font-medium">Trường</th>
-                <th className="py-2 pr-3 font-medium">Lần trước</th>
-                <th className="w-6 py-2" aria-hidden />
-                <th className="py-2 pr-3 font-medium">Lần sau</th>
-                <th className="py-2 font-medium">Thay đổi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {changes.map((c) => {
-                const label = CHANGE_LABEL[changeKind(c)];
-                return (
-                  <tr key={c.code}>
-                    <td className="py-2 pr-3">
-                      <Link
-                        href={`/university/${encodeURIComponent(c.code)}?from=recommendations`}
-                        className="font-semibold text-foreground underline-offset-4 hover:underline"
-                      >
-                        {c.name}
-                      </Link>
-                    </td>
-                    <td className="py-2 pr-3">
-                      <Place group={c.fromGroup} rank={c.fromRank} />
-                    </td>
-                    <td className="py-2 text-ink-3">
-                      <ArrowRightIcon className="size-3.5" />
-                    </td>
-                    <td className="py-2 pr-3">
-                      <Place group={c.toGroup} rank={c.toRank} />
-                    </td>
-                    <td className="py-2">
-                      <Badge variant={label.variant}>{label.text}</Badge>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <p className="text-xs text-ink-3">Chỉ liệt kê trường có thay đổi. Thứ hạng tính trong từng nhóm.</p>
+      <DialogFooter layout="single">
+        <DialogCancel>Đóng</DialogCancel>
+      </DialogFooter>
     </>
   );
 }
@@ -345,13 +364,21 @@ function ComparisonBody({ comparison }: { comparison: RunComparison }) {
 // Xem lại một lần chạy: các nhóm và thẻ trường như trang Gợi ý trường, nhưng chỉ xem (không hỏi trợ lý)
 function RunBody({ rec }: { rec: Recommendation }) {
   return (
-    <div className="space-y-6">
-      <DialogHeader className="pr-8">
+    <>
+      <DialogHeader>
+        <DialogIcon tone="brand">
+          <HistoryIcon />
+        </DialogIcon>
         <DialogTitle>Lần gợi ý lúc {formatTime(rec.createdAt)}</DialogTitle>
         <DialogDescription className="text-xs">{describePref(rec.criteria.pref ?? null)}</DialogDescription>
       </DialogHeader>
-      <RunGroups rec={rec} />
-    </div>
+      <DialogBody>
+        <RunGroups rec={rec} />
+      </DialogBody>
+      <DialogFooter layout="single">
+        <DialogCancel>Đóng</DialogCancel>
+      </DialogFooter>
+    </>
   );
 }
 

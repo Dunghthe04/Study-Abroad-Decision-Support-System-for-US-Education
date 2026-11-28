@@ -1,5 +1,6 @@
 "use client";
 
+import { SafeImage } from "@/components/shared/safe-image";
 import { formatRating } from "@/lib/rating";
 import { useState } from "react";
 import { useCenterReviews } from "@/hooks/use-center-reviews";
@@ -185,7 +186,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
       <div className="relative rounded-xl overflow-hidden border border-border bg-card ">
         {/* Cover Background */}
         <div
-          className="h-44 sm:h-52 w-full bg-cover bg-center relative bg-brand-ink"
+          className="h-44 sm:h-52 w-full bg-cover bg-center relative bg-brand-deep"
           style={profile.coverImage ? { backgroundImage: `url(${profile.coverImage})` } : undefined}
         >
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
@@ -203,16 +204,12 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
         <div className="px-6 pb-6 pt-0 relative">
           <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 -mt-12 sm:-mt-14">
             {/* Logo / Avatar */}
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden border-4 border-background bg-card shrink-0 flex items-center justify-center">
-              {profile.logoImage ? (
-                <img
+            <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden border-4 border-background bg-card shrink-0 flex items-center justify-center">
+              <SafeImage
                   src={profile.logoImage}
                   alt={center.name}
-                  className="w-full h-full object-cover"
+                  fallback={<Building2Icon className="w-10 h-10 text-brand/40" />}
                 />
-              ) : (
-                <Building2Icon className="w-10 h-10 text-brand/40" />
-              )}
             </div>
 
             {/* Kênh tư vấn USDSS (Ẩn hotline & website để tránh liên hệ trực tiếp ngoài hệ thống) */}

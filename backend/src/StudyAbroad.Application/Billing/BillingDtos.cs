@@ -37,8 +37,14 @@ public sealed record FamilyPoolDto(
 /// <summary>Hạn mức Free; làm mới 00:00 ngày 1 giờ Việt Nam hoặc mỗi QuotaPeriodDays ngày.</summary>
 public sealed record FreePoolDto(int UsedPercent, DateTimeOffset ResetsAt, int? QuotaPeriodDays = null);
 
-/// <summary>Hạn mức chung còn lại ngay lúc này (GET subscription/quota): token còn lại của mọi kỳ dùng được cộng với Free, chia cho tổng hạn mức. Chỉ phần trăm.</summary>
-public sealed record QuotaOverviewDto(int RemainingPercent, int UsedPercent, bool LowQuota);
+/// <summary>Một thanh hạn mức còn lại (phần trăm) và cờ sắp hết.</summary>
+public sealed record QuotaBarDto(int RemainingPercent, int UsedPercent, bool LowQuota);
+
+/// <summary>
+/// Hạn mức còn lại ngay lúc này (GET subscription/quota), tách hai thanh vì hai nguồn mở khóa khác nhau: Premium (mọi kỳ dùng được gộp lại;
+/// null khi không có kỳ nào) mở mọi tính năng, Free chỉ cho hỏi kiến thức. Gộp chung thì Premium hết token vẫn hiện còn % (phần Free). Chỉ phần trăm.
+/// </summary>
+public sealed record QuotaOverviewDto(QuotaBarDto? Premium, QuotaBarDto Free);
 
 /// <summary>Số token thô tính hạn mức trong chu kỳ hiện tại của một người dùng (chỉ dùng cho Admin UC-78, dùng chung luồng tính với QuotaOverview).</summary>
 public sealed record UserQuotaUsageDto(long UsedTokens, long QuotaTokens, string Tier);

@@ -27,10 +27,13 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
@@ -670,15 +673,15 @@ export function CenterLeadsListView() {
 
       {/* Detail Dialog */}
       <Dialog open={selectedLead !== null} onOpenChange={(open) => !open && setSelectedLead(null)}>
-        <DialogContent className="w-full sm:max-w-3xl max-h-[90vh] overflow-y-auto p-6">
+        <DialogContent variant="form" size="xl">
           {selectedLead && (
             <>
               <DialogHeader>
-                <div className="flex flex-wrap items-center justify-between gap-2 pr-8">
-                  <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                    <InboxIcon className="size-5 text-brand shrink-0" />
-                    Chi tiết yêu cầu liên hệ
-                  </DialogTitle>
+                <DialogIcon tone="brand">
+                  <InboxIcon />
+                </DialogIcon>
+                <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                  <DialogTitle>Chi tiết yêu cầu liên hệ</DialogTitle>
                   <LeadStatusBadge status={selectedLead.status} />
                 </div>
                 <DialogDescription>
@@ -686,20 +689,21 @@ export function CenterLeadsListView() {
                 </DialogDescription>
               </DialogHeader>
 
-              {selectedLead.status === "withdrawn" || selectedLead.dataHidden ? (
-                // [UC-80] Người gửi đã xóa tài khoản / [UC-73] quá 90 ngày / [UC-111 bước 5] rút đồng ý: ẩn mọi dữ liệu đã chia sẻ
-                <div className="my-2 rounded-lg border border-dashed p-4 text-center bg-muted/20">
-                  <LockIcon className="size-5 text-muted-foreground mx-auto mb-1" />
-                  <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
-                    {selectedLead.status === "withdrawn"
-                      ? "Người dùng đã thu hồi yêu cầu này. Thông tin liên hệ, hồ sơ và tin nhắn không còn hiển thị."
-                      : selectedLead.consentRevoked
-                        ? "Phụ huynh của học sinh đã rút đồng ý nên trung tâm không còn xem được dữ liệu người gửi đã chia sẻ."
-                        : "Yêu cầu đã quá 90 ngày nên trung tâm không còn xem được dữ liệu người gửi đã chia sẻ."}
-                  </p>
-                </div>
-              ) : (
-              <div className="space-y-5 my-2 min-w-0">
+              <DialogBody>
+                {selectedLead.status === "withdrawn" || selectedLead.dataHidden ? (
+                  // [UC-80] Người gửi đã xóa tài khoản / [UC-73] quá 90 ngày / [UC-111 bước 5] rút đồng ý: ẩn mọi dữ liệu đã chia sẻ
+                  <div className="rounded-lg border border-dashed p-4 text-center bg-muted/20">
+                    <LockIcon className="size-5 text-muted-foreground mx-auto mb-1" />
+                    <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
+                      {selectedLead.status === "withdrawn"
+                        ? "Người dùng đã thu hồi yêu cầu này. Thông tin liên hệ, hồ sơ và tin nhắn không còn hiển thị."
+                        : selectedLead.consentRevoked
+                          ? "Phụ huynh của học sinh đã rút đồng ý nên trung tâm không còn xem được dữ liệu người gửi đã chia sẻ."
+                          : "Yêu cầu đã quá 90 ngày nên trung tâm không còn xem được dữ liệu người gửi đã chia sẻ."}
+                    </p>
+                  </div>
+                ) : (
+                <div className="space-y-5 min-w-0">
                 {/* Contact Card */}
                 <Card size="sm" className="bg-muted/30">
                   <CardContent className="pt-4 space-y-3">
@@ -980,13 +984,12 @@ export function CenterLeadsListView() {
                   </div>
                 </div>
                 )}
-              </div>
-              )}
+                </div>
+                )}
+              </DialogBody>
 
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setSelectedLead(null)}>
-                  Đóng
-                </Button>
+              <DialogFooter layout="single">
+                <DialogCancel>Đóng</DialogCancel>
               </DialogFooter>
             </>
           )}

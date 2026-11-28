@@ -1,16 +1,20 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { CheckIcon, EyeIcon, FileSearchIcon, XIcon } from "lucide-react";
+import { CakeIcon, EyeIcon, FileSearchIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
@@ -282,125 +286,158 @@ function RequestDetailDialog({ id, onClosed }: { id: string; onClosed: (changed:
   const pending = item?.status === "pending";
 
   return (
-    <Dialog open onOpenChange={(open) => !open && close()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+    <Dialog
+      open
+      onOpenChange={(open) => !open && busy === null && close()}
+      disablePointerDismissal={busy !== null}
+    >
+      <DialogContent variant="form" size="lg">
         <DialogHeader>
+          <DialogIcon tone="brand">
+            <CakeIcon />
+          </DialogIcon>
           <DialogTitle>Yêu cầu sửa ngày sinh</DialogTitle>
           <DialogDescription>
             Đối chiếu ngày sinh đề nghị với minh chứng (nếu có) rồi Duyệt hoặc Từ chối. Duyệt hay từ chối đều xóa tệp minh chứng.
           </DialogDescription>
         </DialogHeader>
 
-        {detail.error && !item ? (
-          <Alert variant="destructive">
-            <AlertDescription>{detail.error}</AlertDescription>
-          </Alert>
-        ) : null}
-        {!item && !detail.error ? <p className="py-6 text-center text-sm text-ink-2">Đang tải...</p> : null}
+        <DialogBody className="space-y-4">
+          {detail.error && !item ? (
+            <Alert variant="destructive">
+              <AlertDescription>{detail.error}</AlertDescription>
+            </Alert>
+          ) : null}
+          {!item && !detail.error ? <p className="py-6 text-center text-sm text-ink-2">Đang tải...</p> : null}
 
-        {item ? (
-          <div className="flex flex-col gap-4">
-            <dl className="flex flex-col gap-2">
-              <DetailRow label="Người dùng">
-                <span className="font-medium">{item.fullName}</span>
-                <span className="block text-xs text-ink-2">{item.email} · {ROLE_LABELS[item.role] ?? item.role}</span>
-              </DetailRow>
-              <DetailRow label="Trạng thái"><StatusBadge status={item.status} /></DetailRow>
-              <DetailRow label="Gửi lúc">{formatDateTime(item.createdAt)}</DetailRow>
-              <DetailRow label="Ngày sinh hiện tại">{formatDob(item.currentBirthDate)}{ageText(item.currentAge)}</DetailRow>
-              <DetailRow label="Ngày sinh đề nghị">
-                <span className="font-medium">{formatDob(item.requestedBirthDate)}</span>{ageText(item.requestedAge)}
-              </DetailRow>
-              <DetailRow label="Vượt mốc tuổi"><ThresholdBadges item={item} /></DetailRow>
-              <DetailRow label="Lý do"><span className="whitespace-pre-wrap">{item.reason}</span></DetailRow>
-              {item.representativeEmail ? (
-                <DetailRow label="Email người đại diện">{item.representativeEmail}</DetailRow>
-              ) : null}
-              {item.evidenceType ? (
-                <DetailRow label="Loại minh chứng">{EVIDENCE_TYPE_LABELS[item.evidenceType] ?? item.evidenceType}</DetailRow>
-              ) : null}
-              {item.rejectReason ? (
-                <DetailRow label="Lý do từ chối"><span className="whitespace-pre-wrap">{item.rejectReason}</span></DetailRow>
-              ) : null}
-              {item.reviewedAt ? <DetailRow label="Xử lý lúc">{formatDateTime(item.reviewedAt)}</DetailRow> : null}
-            </dl>
+          {item ? (
+            <div className="flex flex-col gap-4">
+              <dl className="flex flex-col gap-2">
+                <DetailRow label="Người dùng">
+                  <span className="font-medium">{item.fullName}</span>
+                  <span className="block text-xs text-ink-2">{item.email} · {ROLE_LABELS[item.role] ?? item.role}</span>
+                </DetailRow>
+                <DetailRow label="Trạng thái"><StatusBadge status={item.status} /></DetailRow>
+                <DetailRow label="Gửi lúc">{formatDateTime(item.createdAt)}</DetailRow>
+                <DetailRow label="Ngày sinh hiện tại">{formatDob(item.currentBirthDate)}{ageText(item.currentAge)}</DetailRow>
+                <DetailRow label="Ngày sinh đề nghị">
+                  <span className="font-medium">{formatDob(item.requestedBirthDate)}</span>{ageText(item.requestedAge)}
+                </DetailRow>
+                <DetailRow label="Vượt mốc tuổi"><ThresholdBadges item={item} /></DetailRow>
+                <DetailRow label="Lý do"><span className="whitespace-pre-wrap">{item.reason}</span></DetailRow>
+                {item.representativeEmail ? (
+                  <DetailRow label="Email người đại diện">{item.representativeEmail}</DetailRow>
+                ) : null}
+                {item.evidenceType ? (
+                  <DetailRow label="Loại minh chứng">{EVIDENCE_TYPE_LABELS[item.evidenceType] ?? item.evidenceType}</DetailRow>
+                ) : null}
+                {item.rejectReason ? (
+                  <DetailRow label="Lý do từ chối"><span className="whitespace-pre-wrap">{item.rejectReason}</span></DetailRow>
+                ) : null}
+                {item.reviewedAt ? <DetailRow label="Xử lý lúc">{formatDateTime(item.reviewedAt)}</DetailRow> : null}
+              </dl>
 
-            {item.hasEvidence ? (
-              <div className="flex flex-col gap-2">
-                {evidence ? (
-                  evidence.isPdf ? (
-                    <iframe src={evidence.url} title="Minh chứng ngày sinh" className="h-[60vh] w-full rounded-md border border-line" />
+              {item.hasEvidence ? (
+                <div className="flex flex-col gap-2">
+                  {evidence ? (
+                    evidence.isPdf ? (
+                      <iframe src={evidence.url} title="Minh chứng ngày sinh" className="h-[60vh] w-full rounded-md border border-line" />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element -- ảnh tạm từ blob, không qua next/image
+                      <img src={evidence.url} alt="Minh chứng ngày sinh" className="max-h-[60vh] w-full rounded-md border border-line object-contain" />
+                    )
                   ) : (
-                    // eslint-disable-next-line @next/next/no-img-element -- ảnh tạm từ blob, không qua next/image
-                    <img src={evidence.url} alt="Minh chứng ngày sinh" className="max-h-[60vh] w-full rounded-md border border-line object-contain" />
-                  )
-                ) : (
-                  <Button type="button" variant="outline" size="sm" onClick={() => void openEvidence()} loading={busy === "evidence"} disabled={busy !== null} className="w-fit gap-1.5">
-                    <FileSearchIcon className="size-3.5" />
-                    Xem minh chứng{item.evidenceFileName ? ` (${item.evidenceFileName})` : ""}
-                  </Button>
-                )}
-                <p className="text-xs text-ink-2">Mỗi lần mở minh chứng được ghi vào nhật ký truy cập.</p>
-              </div>
-            ) : item.crossedThresholds.length > 0 && pending ? (
-              <p className="text-sm text-ink-2">Không có tệp minh chứng.</p>
-            ) : null}
+                    <Button type="button" variant="outline" size="sm" onClick={() => void openEvidence()} loading={busy === "evidence"} disabled={busy !== null} className="w-fit gap-1.5">
+                      <FileSearchIcon className="size-3.5" />
+                      Xem minh chứng{item.evidenceFileName ? ` (${item.evidenceFileName})` : ""}
+                    </Button>
+                  )}
+                  <p className="text-xs text-ink-2">Mỗi lần mở minh chứng được ghi vào nhật ký truy cập.</p>
+                </div>
+              ) : item.crossedThresholds.length > 0 && pending ? (
+                <p className="text-sm text-ink-2">Không có tệp minh chứng.</p>
+              ) : null}
 
-            {pending && rejecting ? (
-              <Field data-invalid={rejectError ? true : undefined}>
-                <FieldLabel htmlFor="birth-reject-reason">Lý do từ chối</FieldLabel>
-                <Textarea
-                  id="birth-reject-reason"
-                  value={rejectReason}
-                  onChange={(event) => {
-                    setRejectReason(event.target.value);
-                    setRejectError(null);
-                  }}
-                  maxLength={MAX_REJECT_REASON}
-                  rows={3}
-                  disabled={busy !== null}
-                  placeholder={`Người dùng sẽ thấy lý do này (tối đa ${MAX_REJECT_REASON} ký tự)`}
-                  aria-invalid={rejectError ? true : undefined}
-                  className="resize-y text-sm"
-                />
-                {rejectError ? <FieldError>{rejectError}</FieldError> : null}
-              </Field>
-            ) : null}
+              {pending && rejecting ? (
+                <Field data-invalid={rejectError ? true : undefined}>
+                  <FieldLabel htmlFor="birth-reject-reason">Lý do từ chối</FieldLabel>
+                  <Textarea
+                    id="birth-reject-reason"
+                    value={rejectReason}
+                    onChange={(event) => {
+                      setRejectReason(event.target.value);
+                      setRejectError(null);
+                    }}
+                    maxLength={MAX_REJECT_REASON}
+                    rows={3}
+                    disabled={busy !== null}
+                    placeholder={`Người dùng sẽ thấy lý do này (tối đa ${MAX_REJECT_REASON} ký tự)`}
+                    aria-invalid={rejectError ? true : undefined}
+                    className="resize-y text-sm"
+                  />
+                  {rejectError ? <FieldError>{rejectError}</FieldError> : null}
+                </Field>
+              ) : null}
 
-            {actionError ? (
-              <Alert variant="destructive">
-                <AlertDescription>{actionError}</AlertDescription>
-              </Alert>
-            ) : null}
-          </div>
-        ) : null}
+              {actionError ? (
+                <Alert variant="destructive">
+                  <AlertDescription>{actionError}</AlertDescription>
+                </Alert>
+              ) : null}
+            </div>
+          ) : null}
+        </DialogBody>
 
-        <DialogFooter>
-          {pending && rejecting ? (
-            <>
-              <Button type="button" variant="outline" disabled={busy !== null} onClick={() => { setRejecting(false); setRejectError(null); }}>
-                Quay lại
-              </Button>
-              <Button type="button" variant="destructive" loading={busy === "reject"} disabled={busy !== null} onClick={() => void reject()} className="gap-1.5">
-                <XIcon className="size-3.5" />
-                Xác nhận từ chối
-              </Button>
-            </>
-          ) : pending ? (
-            <>
-              <Button type="button" variant="outline" disabled={busy !== null} onClick={() => { setRejecting(true); setActionError(null); }} className="gap-1.5 text-risk hover:text-risk">
-                <XIcon className="size-3.5" />
-                Từ chối
-              </Button>
-              <Button type="button" loading={busy === "approve"} disabled={busy !== null} onClick={() => void approve()} className="gap-1.5">
-                <CheckIcon className="size-3.5" />
-                Duyệt
-              </Button>
-            </>
-          ) : (
-            <Button type="button" variant="outline" onClick={close}>Đóng</Button>
-          )}
-        </DialogFooter>
+        {pending && rejecting ? (
+          <DialogFooter layout="pair">
+            <DialogAction
+              tone="tint"
+              disabled={busy !== null}
+              onClick={() => {
+                setRejecting(false);
+                setRejectError(null);
+              }}
+            >
+              Quay lại
+            </DialogAction>
+            <DialogAction
+              tone="destructive"
+              loading={busy === "reject"}
+              disabled={busy !== null}
+              onClick={() => void reject()}
+            >
+              Xác nhận từ chối
+            </DialogAction>
+          </DialogFooter>
+        ) : pending ? (
+          <DialogFooter layout="split-top">
+            <DialogAction
+              tone="ok"
+              loading={busy === "approve"}
+              disabled={busy !== null}
+              onClick={() => void approve()}
+            >
+              Duyệt
+            </DialogAction>
+            <DialogCancel disabled={busy !== null} onClick={close}>
+              Đóng
+            </DialogCancel>
+            <DialogAction
+              tone="destructive-tint"
+              disabled={busy !== null}
+              onClick={() => {
+                setRejecting(true);
+                setActionError(null);
+              }}
+            >
+              Từ chối
+            </DialogAction>
+          </DialogFooter>
+        ) : (
+          <DialogFooter layout="single">
+            <DialogCancel onClick={close}>Đóng</DialogCancel>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

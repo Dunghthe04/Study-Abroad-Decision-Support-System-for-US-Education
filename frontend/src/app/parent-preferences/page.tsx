@@ -6,7 +6,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { ChildParentPreferenceView } from "@/components/parent/ChildParentPreferenceView";
 
 export const metadata: Metadata = {
-  title: "So với cha mẹ – USDSS",
+  title: "Mong muốn phụ huynh – USDSS",
   description: "Xem danh sách trường theo ưu tiên của cha mẹ, đặt cạnh danh sách của bạn",
 };
 
