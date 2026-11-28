@@ -135,7 +135,15 @@ public class AdminBirthDateChangeService(
                 "Không ghi được nhật ký truy cập nên chưa mở được minh chứng. Vui lòng thử lại.");
         }
 
-        var stream = evidenceStorage.Open(path);
+        Stream? stream;
+        try
+        {
+            stream = await evidenceStorage.OpenAsync(path, ct);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            return BirthDateChangeResult<BirthDateEvidenceFile>.Fail(BirthDateChangeError.Validation, "Chưa đọc được tệp minh chứng, vui lòng thử lại.");
+        }
         if (stream is null)
             return BirthDateChangeResult<BirthDateEvidenceFile>.Fail(BirthDateChangeError.NotFound, "Tệp minh chứng không còn trên máy chủ.");
         return BirthDateChangeResult<BirthDateEvidenceFile>.Ok(new BirthDateEvidenceFile(
@@ -226,7 +234,7 @@ public class AdminBirthDateChangeService(
         if (roseTo16 && leadHolds is not null)
             await leadHolds.ReleaseParentHoldAsync(user, now, ct);
 
-        evidenceStorage.Delete(entity.EvidencePath);
+        await evidenceStorage.DeleteAsync(entity.EvidencePath, ct);
         entity.Status = BirthDateChangeStatuses.Approved;
         entity.EvidencePath = null;
         entity.EvidenceFileName = null;
@@ -288,7 +296,7 @@ public class AdminBirthDateChangeService(
         if (!closed)
             return await ReloadNotPendingAsync(entity.Id, ct);
 
-        evidenceStorage.Delete(entity.EvidencePath);
+        await evidenceStorage.DeleteAsync(entity.EvidencePath, ct);
         entity.Status = BirthDateChangeStatuses.Rejected;
         entity.EvidencePath = null;
         entity.EvidenceFileName = null;

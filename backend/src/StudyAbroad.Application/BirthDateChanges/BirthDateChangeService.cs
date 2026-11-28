@@ -133,13 +133,21 @@ public class BirthDateChangeService(
             entity.EvidenceFileName = TrimFileName(evidence.FileName, kind.Extension);
             entity.EvidenceContentType = kind.ContentType;
             entity.EvidenceSize = evidence.Content.Length;
-            entity.EvidencePath = await evidenceStorage.SaveAsync(entity.Id, evidence.Content, kind.Extension, ct);
+            try
+            {
+                entity.EvidencePath = await evidenceStorage.SaveAsync(entity.Id, evidence.Content, kind.Extension, ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Nơi lưu (Cloudinary) lỗi: chưa ghi yêu cầu, người dùng gửi lại
+                return Fail(BirthDateChangeError.Validation, ex.Message);
+            }
         }
 
         if (!await requests.TryAddAsync(entity, ct))
         {
             // Bấm gửi hai lần cùng lúc: lần sau đụng chỉ mục duy nhất, bỏ tệp vừa lưu
-            evidenceStorage.Delete(entity.EvidencePath);
+            await evidenceStorage.DeleteAsync(entity.EvidencePath, ct);
             var existing = await requests.GetPendingByUserAsync(userId, ct);
             return existing is null
                 ? Fail(BirthDateChangeError.Conflict, "Bạn đã có yêu cầu sửa ngày sinh đang chờ duyệt.")
@@ -162,7 +170,7 @@ public class BirthDateChangeService(
         if (!await requests.TryCloseAsync(entity.Id, BirthDateChangeStatuses.Cancelled, null, null, now, ct))
             return Fail(BirthDateChangeError.Conflict, "Yêu cầu vừa được Administrator xử lý, không còn hủy được.");
 
-        evidenceStorage.Delete(entity.EvidencePath);
+        await evidenceStorage.DeleteAsync(entity.EvidencePath, ct);
         entity.Status = BirthDateChangeStatuses.Cancelled;
         entity.EvidencePath = null;
         entity.EvidenceFileName = null;

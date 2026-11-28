@@ -30,13 +30,15 @@ public class BirthDateChangeServiceTests
             return Task.FromResult(path);
         }
 
-        public Stream? Open(string path) => Files.TryGetValue(path, out var c) ? new MemoryStream(c) : null;
+        public Task<Stream?> OpenAsync(string path, CancellationToken ct = default) =>
+            Task.FromResult<Stream?>(Files.TryGetValue(path, out var c) ? new MemoryStream(c) : null);
 
-        public void Delete(string? path)
+        public Task DeleteAsync(string? path, CancellationToken ct = default)
         {
-            if (path is null) return;
+            if (path is null) return Task.CompletedTask;
             Files.Remove(path);
             Deleted.Add(path);
+            return Task.CompletedTask;
         }
     }
 
