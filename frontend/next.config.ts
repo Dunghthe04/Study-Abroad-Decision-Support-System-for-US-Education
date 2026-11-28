@@ -29,9 +29,11 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
   // next dev cần eval cho Fast Refresh và chạy http, nên CSP + HSTS chỉ bật ở bản build production
+  // CSP đang ở chế độ Report-Only (chỉ báo vào Console, không chặn) cho lần deploy Azure đầu tiên.
+  // Thử hết các trang trên web thật, Console không có cảnh báo CSP thì đổi key thành "Content-Security-Policy" để chặn thật.
   ...(process.env.NODE_ENV === "production"
     ? [
-        { key: "Content-Security-Policy", value: contentSecurityPolicy },
+        { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy },
         { key: "Strict-Transport-Security", value: "max-age=31536000" },
       ]
     : []),
