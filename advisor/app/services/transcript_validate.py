@@ -31,6 +31,8 @@ _VOWEL_MARKS = {"\u0302", "\u0306", "\u031b"}
 _ALLOWED_PUNCT = set(" -&()/.,+'")
 _DECIMAL_RE = re.compile(r"\d+[.,]\d+")
 _SCORE_RE = re.compile(r"\d+(?:[.,]\d+)?")
+# OCR hay làm mất dấu thập phân ("85" thay "8.5", "100" thay "10.0"): trên thang 10, số nguyên 11-100 chỉ có thể là vậy
+_LOST_DECIMAL_RE = re.compile(r"[1-9]\d|100")
 
 # R6: đo trên 9 ảnh học bạ thật (benchmark 22/11), số ô điểm đúng / số thập phân 0-10 trong văn bản glm-ocr
 # dao động 0,06-3,67 (văn bản còn điểm thành phần, dòng Cả năm, cột TB...). Ngưỡng 80% trượt oan gần hết ảnh,
@@ -130,6 +132,26 @@ def _score(raw: Any) -> float | None:
     return float(text)
 
 
+def lost_decimal_score(raw: Any) -> float | None:
+    """Ô điểm thang 10 bị OCR làm mất dấu thập phân: "85" -> 8.5, "100" -> 10.0. Không phải kiểu đó thì None.
+    "10", "9", "4" là điểm đúng, không đụng tới."""
+    text = str(raw).strip()
+    if not _LOST_DECIMAL_RE.fullmatch(text) or int(text) <= 10:
+        return None
+    return int(text) / 10
+
+
+def has_real_decimal_scores(data: Any) -> bool:
+    """Bảng có ít nhất một ô điểm ghi dấu thập phân trong 0-10: chắc chắn là thang 10, mới được hiểu "85" là 8.5.
+    Bảng toàn số nguyên lớn (thang 100) thì không đoán."""
+    for term in (data.get("terms") or []) if isinstance(data, dict) else []:
+        for item in (term.get("subjects") or []) if isinstance(term, dict) else []:
+            text = str(item.get("score", "")).strip() if isinstance(item, dict) else ""
+            if _DECIMAL_RE.fullmatch(text) and float(text.replace(",", ".")) <= 10:
+                return True
+    return False
+
+
 _KIND_TEXT = {"hk1": "học kỳ 1", "hk2": "học kỳ 2", "ca_nam": "cả năm", "khac": "không rõ"}
 
 
@@ -164,6 +186,9 @@ def validate_parsed(data: Any, source: str) -> list[Issue]:
     language = str(data.get("language") or "vi")
     plain_source = _plain(source)
     source_numbers = {round(float(n.replace(",", ".")), 2) for n in _SCORE_RE.findall(source)}
+    restore_decimal = has_real_decimal_scores(data)
+    if restore_decimal:  # Claude ghi "8.5" khi văn bản là "85" cũng là chép đúng
+        source_numbers |= {v for n in _SCORE_RE.findall(source) if (v := lost_decimal_score(n)) is not None}
     issues: list[Issue] = []
     cells = 0
 
@@ -183,6 +208,10 @@ def validate_parsed(data: Any, source: str) -> list[Issue]:
             value = _score(item.get("score", ""))
             if value is None or subjects.normalize(name) is None:
                 continue  # điểm chữ hoặc mục không chấm (TB, hạnh kiểm, thể dục)
+            if restore_decimal and value > 10 and value in source_numbers:
+                value = (
+                    lost_decimal_score(item.get("score")) or value
+                )  # "85" có nguyên văn: OCR mất dấu, là 8.5
             cells += 1
             original = str(item.get("name_original") or "").strip()
             if found := subjects.check(name, original, language, plain_source):

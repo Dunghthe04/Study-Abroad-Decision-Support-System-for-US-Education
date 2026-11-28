@@ -38,7 +38,14 @@ from app.services import usage_meter
 from app.services.ollama import OllamaError
 from app.services.pii_mask import mask_known_values, mask_personal_info
 from app.services.transcript_text import keep_score_lines, read_term_tables, tidy_transcription
-from app.services.transcript_validate import Issue, drop_bad_cells, retry_message, validate_parsed
+from app.services.transcript_validate import (
+    Issue,
+    drop_bad_cells,
+    has_real_decimal_scores,
+    lost_decimal_score,
+    retry_message,
+    validate_parsed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +83,7 @@ Hãy trích điểm tổng kết từng môn theo từng học kỳ.
 
 Quy tắc:
 1. "score" chép NGUYÊN VĂN ô điểm trong văn bản (giữ dấu phẩy nếu có, VD "8,2"). Không tự tính, không đoán, không làm tròn. Ô trống thì bỏ môn đó.
+   Ảnh chụp hay làm mất dấu thập phân ("85" thay "8.5", "100" thay "10.0"): vẫn chép nguyên văn "85", hệ thống tự hiểu.
 2. Mỗi học kỳ là một phần tử của "terms":
    - "grade": khối lớp hoặc năm học như ghi trong văn bản, VD "Lớp 10", "Năm 2", "2023-2024". Không có thì để "".
    - "term": tên kỳ nguyên văn, VD "HK1", "Học kỳ II", "Fall2023", "Summer2024".
@@ -857,7 +865,13 @@ class TranscriptReader:
 
         source_numbers = {round(float(n.replace(",", ".")), 2) for n in _NUMBER_RE.findall(source)}
         high_school = data.get("level") == "thpt"
+        restore_decimal = has_real_decimal_scores(data)
+        if restore_decimal:
+            source_numbers |= {
+                v for n in _NUMBER_RE.findall(source) if (v := lost_decimal_score(n)) is not None
+            }
         dropped: list[str] = []
+        restored: list[str] = []
 
         for raw in data.get("terms") or []:
             if not isinstance(raw, dict):
@@ -878,6 +892,11 @@ class TranscriptReader:
                 value = self._parse_score(item.get("score"))
                 if value is None:
                     continue
+                if restore_decimal and value > 10 and value in source_numbers:
+                    fixed = lost_decimal_score(item.get("score"))
+                    if fixed is not None:
+                        restored.append(f"{subject} {item.get('score')} → {fixed:g}")
+                        value = fixed
                 if not 0.0 <= value <= 10.0 or round(value, 2) not in source_numbers:
                     dropped.append(f"{subject} {item.get('score')}")
                     continue
@@ -892,6 +911,12 @@ class TranscriptReader:
             sample = ", ".join(dropped[:4]) + ("…" if len(dropped) > 4 else "")
             result.warnings.append(
                 f"Tệp '{file_name}': bỏ {len(dropped)} điểm không khớp với ảnh ({sample}). Bạn kiểm tra và điền lại các ô còn trống."
+            )
+        if restored:
+            sample = ", ".join(restored[:4]) + ("…" if len(restored) > 4 else "")
+            result.warnings.append(
+                f"Tệp '{file_name}': ảnh bị mất dấu thập phân ở {len(restored)} ô, đã đọc lại theo thang 10 ({sample}). "
+                "Bạn so lại với học bạ giúp nhé."
             )
         self._combine_same_semester(result.terms)
         for label in self._drop_whole_year_terms(result.terms):
