@@ -26,6 +26,7 @@ import { Step6Review } from "./Step6Review";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import { migrateLegacyStep3 } from "@/lib/certification-utils";
 import { recommendationApi } from "@/lib/recommendation-api";
+import { sha256Hex } from "@/lib/clear-user-storage";
 import {
   EDIT_ONLY,
   FORM_GOAL_OPTIONS,
@@ -79,8 +80,9 @@ const INITIAL_DRAFT: ProfileFlowDraft = {
   },
 };
 
-// Nháp của lần nộp gần nhất, để nộp lại y hệt thì không lọc trường và gửi AI lần nữa
-const LAST_COMMITTED_KEY = "usas_last_committed_draft";
+// Mã băm SHA-256 của lần nộp gần nhất, để nộp lại y hệt thì không lọc trường và gửi AI lần nữa.
+// Chỉ lưu mã băm (không đọc ngược ra được), không lưu cả bộ hồ sơ trong trình duyệt (nhận xét của thầy, mục A2).
+const LAST_COMMITTED_KEY = "usas_last_committed_hash";
 
 // Câu gợi ý riêng cho từng bước trong khung trợ lý
 const STEP_SUGGESTIONS: Record<number, string> = {
@@ -573,14 +575,14 @@ export function ProfileFlowWizard() {
       }
 
       // Hồ sơ y hệt lần nộp trước (đã có kết quả) thì xem lại kết quả cũ, không lọc và gửi AI lần nữa
-      const draftJson = JSON.stringify({ user: user.id, draft });
+      const draftHash = await sha256Hex(JSON.stringify({ user: user.id, draft }));
       let lastCommitted: string | null = null;
       try {
         lastCommitted = localStorage.getItem(LAST_COMMITTED_KEY);
       } catch {
         // trình duyệt chặn storage → coi như hồ sơ mới
       }
-      if (!backToChat && !editOnly && lastCommitted === draftJson && (await recommendationApi.getLatest().catch(() => null))) {
+      if (!backToChat && !editOnly && draftHash && lastCommitted === draftHash && (await recommendationApi.getLatest().catch(() => null))) {
         router.push("/recommendations");
         return;
       }
@@ -590,7 +592,9 @@ export function ProfileFlowWizard() {
       if (isSuccessful) {
         try {
           localStorage.removeItem("usas_flow_draft");
-          localStorage.setItem(LAST_COMMITTED_KEY, draftJson);
+          localStorage.removeItem("usas_last_committed_draft"); // bản cũ lưu cả hồ sơ
+          if (draftHash) localStorage.setItem(LAST_COMMITTED_KEY, draftHash);
+          else localStorage.removeItem(LAST_COMMITTED_KEY);
         } catch {
           // bỏ qua
         }

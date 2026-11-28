@@ -5,7 +5,8 @@
 // localStorage: còn lại cả khi đóng trình duyệt
 const LOCAL_KEYS = [
   "usas_flow_draft", // nháp form hồ sơ (khách điền trước khi đăng nhập)
-  "usas_last_committed_draft", // bản hồ sơ đã nộp gần nhất (ProfileFlowWizard)
+  "usas_last_committed_draft", // khóa cũ: cả bộ hồ sơ đã nộp, máy cũ có thể vẫn còn
+  "usas_last_committed_hash", // mã băm lần nộp gần nhất (ProfileFlowWizard)
   "usas_user", // khóa cũ, giờ không còn ghi nhưng máy cũ có thể vẫn còn
 ];
 
@@ -24,6 +25,17 @@ function removeKeys(storage: Storage, keys: string[], prefixes: string[] = []) {
   for (let i = storage.length - 1; i >= 0; i--) {
     const key = storage.key(i);
     if (key && prefixes.some((prefix) => key.startsWith(prefix))) storage.removeItem(key);
+  }
+}
+
+// SHA-256 có sẵn trong trình duyệt (Web Crypto). crypto.subtle chỉ có trên https hoặc localhost → trả null, coi như hồ sơ mới
+export async function sha256Hex(text: string): Promise<string | null> {
+  try {
+    if (typeof window === "undefined" || !window.crypto?.subtle) return null;
+    const digest = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return null;
   }
 }
 
