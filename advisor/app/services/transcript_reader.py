@@ -37,7 +37,12 @@ from app.schemas.transcript_ocr import (
 from app.services import usage_meter
 from app.services.ollama import OllamaError
 from app.services.pii_mask import mask_known_values, mask_personal_info
-from app.services.transcript_text import keep_score_lines, read_term_tables, tidy_transcription
+from app.services.transcript_text import (
+    hint_term_columns,
+    keep_score_lines,
+    read_term_tables,
+    tidy_transcription,
+)
 from app.services.transcript_validate import (
     Issue,
     decimal_may_be_lost,
@@ -651,7 +656,8 @@ class TranscriptReader:
             source = mask_known_values(
                 source, known.names, date_of_birth=known.date_of_birth, email=known.email, phone=known.phone
             )
-        source = keep_score_lines(mask_personal_info(source))[:MAX_SOURCE_CHARS]
+        # OCR mất dòng tiêu đề cột thì thêm dòng gợi ý thứ tự cột suy từ số
+        source = hint_term_columns(keep_score_lines(mask_personal_info(source)))[:MAX_SOURCE_CHARS]
         # Bảng học bạ đã dựng thẳng cột thì code đọc luôn: nhanh và không lệch cột như LLM nhỏ
         if table_terms := read_term_tables(source):
             level = "thpt" if any(t["grade"] for t in table_terms) else "unknown"

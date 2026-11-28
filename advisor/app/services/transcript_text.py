@@ -350,3 +350,49 @@ def _segment_header(words: list[str], columns: int) -> list[str] | None:
 def _pair_score(a: str, b: str) -> float:
     pair = plain(f"{a} {b}")
     return max(SequenceMatcher(None, pair, known).ratio() for known in MULTI_WORD_HEADERS)
+
+# --- hint_term_columns: OCR mất dòng tiêu đề cột ("Học kỳ I  Học kỳ II  Cả năm") ---
+# Học bạ THPT: cả năm = (HK1 + 2·HK2) / 3 (hoặc trung bình cộng). Dòng môn có đúng 3 số mà cột 3 khớp công thức thì thứ
+# tự cột là HK1, HK2, Cả năm; ghi thêm một dòng gợi ý cho LLM. Không sửa số nào, dòng gợi ý không chứa chữ số.
+TERM_COLUMNS_HINT = "Thứ tự cột điểm của các dòng môn dưới đây (hệ thống suy từ số vì ảnh mất dòng tiêu đề): Học kỳ I, Học kỳ II, Cả năm"
+_THREE_SCORE_ROW_RE = re.compile(
+    r"^\s*[^\d|]*[^\W\d_][^\d|]*?\s+(\d{1,3}(?:[.,]\d{1,2})?)\s+(\d{1,3}(?:[.,]\d{1,2})?)\s+(\d{1,3}(?:[.,]\d{1,2})?)\s*$"
+)
+_TERM_HEADER_RE = re.compile(r"(?<![a-z])(?:hk\w*|hoc k[a-z]?(?![a-z])|ky\s*(?:1|2|i)|ca nam|cn)(?![a-z])")
+MIN_HINT_ROWS = 3
+MIN_HINT_SHARE = 0.8
+YEAR_AVERAGE_TOLERANCE = 0.11  # điểm làm tròn 1 chữ số
+HEADER_LOOKBACK = 3  # tiêu đề cột thật nằm ngay trên các dòng môn
+
+
+def hint_term_columns(text: str) -> str:
+    lines = text.splitlines()
+    rows = [
+        (i, [_ten_point(v) for v in m.groups()])
+        for i, line in enumerate(lines)
+        if (m := _THREE_SCORE_ROW_RE.match(line))
+    ]
+    rows = [(i, v) for i, v in rows if None not in v]
+    if len(rows) < MIN_HINT_ROWS:
+        return text
+    fits = [v for _, v in rows if _is_year_average(*v)]
+    varied = [v for v in fits if len(set(v)) > 1]
+    if len(fits) < MIN_HINT_SHARE * len(rows) or len(varied) < 2:
+        return text
+    first = rows[0][0]
+    if any(
+        len(_TERM_HEADER_RE.findall(plain(ln))) >= 2 for ln in lines[max(0, first - HEADER_LOOKBACK) : first]
+    ):
+        return text
+    return "\n".join([*lines[:first], TERM_COLUMNS_HINT, *lines[first:]])
+
+
+def _ten_point(raw: str) -> float | None:
+    value = float(raw.replace(",", "."))
+    if value <= 10:
+        return value
+    return value / 10 if raw.isdigit() and value <= 100 else None  # mất dấu thập phân: "85" là 8.5
+
+
+def _is_year_average(hk1: float, hk2: float, year: float) -> bool:
+    return any(abs(year - avg) <= YEAR_AVERAGE_TOLERANCE for avg in ((hk1 + 2 * hk2) / 3, (hk1 + hk2) / 2))
