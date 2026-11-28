@@ -275,3 +275,24 @@ Commit: `ae4f8273`, `84084d31` (luật + điều kiện THPT), `67b159ac` (tiêu
   - 1654860257: dòng "Vũ Thị Hà 8" bị giữ, vì có tên viết hoa đứng cạnh một con số.
   - Cả hai tên không có nhãn ("Họ tên:"), không có trong dữ liệu .NET gửi kèm, nên lớp 1, 2 không che được. Hướng sửa chung: dòng có chuỗi chữ viết hoa giống họ tên người mà không phải tên môn, chỉ đi kèm 1 số, thì bỏ hoặc che phần tên.
 - **OCR mất tiêu đề cột:** có thể suy cột bằng số (cột 3 ≈ (cột 1 + 2·cột 2)/3 thì cột 1, 2 là HK1, HK2), dùng lại cách tính của lớp 3.
+
+### 9.5 Sửa lọt tên qua lớp lọc dòng (28/11)
+
+Không thêm tên cụ thể nào. Sửa 3 chỗ trong luật của lớp 3 (`keep_score_lines`), theo hình dạng dòng:
+
+- **Câu văn xuôi tình cờ trùng chữ môn** ("cô Di Li post toàn bộ số điểm…" có "Li", "toàn", "điểm"): trước đây đủ 3 chữ môn là được coi là tiêu đề bảng. Giờ còn phải đạt **mật độ**: ít nhất 1/4 số chữ trong dòng là chữ môn/cột (đếm cả chữ lặp như "Điểm … Điểm …", chữ cột HK, TBM). Tiêu đề bảng gần như toàn chữ môn; câu văn chỉ khoảng 1/5.
+- **Họ tên đứng trước một con số** ("Vũ Thị Hà 8", chữ ký hiệu trưởng): trước đây bị coi là nhãn môn của bảng chép dọc. Giờ dòng **giống họ tên** thì không được coi là nhãn môn. Giống họ tên = 2–4 chữ, chữ nào cũng viết hoa đầu (không phải viết tắt in hoa như HSG), không chữ nào là chữ môn hay chữ xếp loại.
+- **Tên giáo viên bộ môn cuối dòng điểm** ("Toán 6,3 4,9 5,4 Hoàng Lưu"): cắt phần sau con số cuối nếu phần đó giống họ tên. Xếp loại học lực/hạnh kiểm ("Khá Khá", "Giỏi Tốt HSG") được giữ nhờ bộ từ xếp loại cố định theo quy chế (giỏi, khá, tốt, trung bình, yếu, kém, đạt…) và luật bỏ qua chữ viết tắt in hoa.
+- Thêm chữ "tiếng" vào nhóm chữ môn để "Tiếng Pháp", "Tiếng Nhật"… không bị nhầm là họ tên.
+
+**Kiểm trên cả 15 ảnh** (so chữ gửi đi trước/sau): chỉ bỏ đúng tên người và câu văn xuôi, không mất dòng điểm nào. 12 ảnh còn lại có chữ gửi đi giống hệt trước nên kết quả bước B không đổi.
+
+| Ảnh | Bỏ thêm | Bước B (Claude thật) |
+|---|---|---|
+| anh-chup | câu có "Di Li" | 2 kỳ, 20–22 ô (dòng "Böl" OCR hỏng lúc được nhận là Lịch sử, lúc bị bỏ qua) |
+| 1654860257 | "Vũ Thị Hà 8", tên giáo viên "Hoàng Lưu", "Liên Lưu", "Ngọc Huong" ở 13 dòng điểm | 2 kỳ HK1/HK2, 20 ô (trước 1 kỳ chưa rõ, 10 ô) |
+| 2452048341 | "Do Chi Nhàng" (2 dòng, lọt mà lần trước chưa phát hiện) | 2 kỳ, 18 ô như cũ |
+
+Không request nào còn chứa các tên trên. Test mới 4 test trong `test_transcript_text.py`, toàn bộ advisor 2524 test pass.
+
+**Giới hạn còn lại:** họ tên viết thường hoặc viết in hoa toàn bộ đứng cuối dòng điểm, tên nằm trong ô bảng Markdown `| … |`, và tên đứng giữa dòng điểm thì chưa bắt được.
