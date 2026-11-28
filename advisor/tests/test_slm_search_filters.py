@@ -97,7 +97,7 @@ def test_filters_belong_to_knowledge_only():
 
 
 def test_the_filter_key_list_is_the_one_in_the_contract():
-    assert FILTER_KEYS[0] == "state" and len(FILTER_KEYS) == len(set(FILTER_KEYS)) == 15
+    assert FILTER_KEYS[0] == "state" and len(FILTER_KEYS) == len(set(FILTER_KEYS)) == 16
 
 
 # ---- group: nhóm kết quả của học sinh ("các trường trong nhóm Khó vào của em")

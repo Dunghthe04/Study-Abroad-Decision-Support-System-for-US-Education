@@ -42,10 +42,20 @@ PROFILE_KEYS = (
 # Khóa entities riêng của từng loại. Loại nào cũng được kèm thêm khóa hồ sơ khi tin có giá trị hồ sơ
 ENTITY_KEYS = {
     "collect_profile": {"tasks", "follow_up"},
-    "profile_review": {"tasks", "schools", "follow_up"},
-    "scenario": {"mode", "changes", "school", "factor", "target_group", "follow_up"},
-    "knowledge": {"tasks", "schools", "fields", "filters", "sort", "group", "follow_up"},
-    "center_referral": {"service", "city", "tasks", "centers", "follow_up"},
+    "profile_review": {"tasks", "schools", "follow_up", "unsupported", "limit", "group"},
+    "scenario": {"mode", "changes", "school", "factor", "target_group", "follow_up", "unsupported"},
+    "knowledge": {
+        "tasks",
+        "schools",
+        "fields",
+        "filters",
+        "sort",
+        "group",
+        "follow_up",
+        "unsupported",
+        "limit",
+    },
+    "center_referral": {"service", "city", "tasks", "centers", "follow_up", "unsupported"},
     "out_of_scope": {"subtype"},
 }
 # Nhiệm vụ (tasks) luôn là danh sách. Vắng hoặc rỗng nghĩa là việc mặc định của loại đó
@@ -66,7 +76,8 @@ REVIEW_TASKS = ("assessment", "school_list", "roadmap", "compare", "explain_scho
 #   search: tìm trường theo điều kiện, không nêu trường nào ("trường nào ở California có học bổng"): filters (các điều kiện học sinh nói,
 #     điều kiện không nói thì bỏ trống) và sort nếu học sinh nói muốn xếp theo gì ("rẻ nhất", "dễ vào nhất").
 #     Không dùng hồ sơ học sinh: ai hỏi cùng câu cũng nhận cùng danh sách (khác "gợi ý trường cho em")
-KNOWLEDGE_TASKS = ("school_info", "compare_facts", "search")
+#   fit_method (v16): hỏi CÁCH TÍNH điểm phù hợp nói chung, không kèm schools (hỏi điểm của một trường là explain_fit)
+KNOWLEDGE_TASKS = ("school_info", "compare_facts", "search", "fit_method")
 # center_referral: vắng = tìm trung tâm. compare kèm centers (từ hai tên trở lên) khi học sinh nêu tên; câu chỉ nói theo thứ tự
 # ("so sánh hai trung tâm đầu tiên") thì không có tên để trích nên vắng centers. Hệ thống không so sánh trung tâm nên không cần tên
 CENTER_TASKS = ("booking", "compare")
@@ -123,6 +134,7 @@ FILTER_TEXT_KEYS = (
     "city",
     "major",
     "max_cost",
+    "max_tuition",  # v16: mức HỌC PHÍ tối đa; max_cost là tổng chi phí cả năm
     "max_ielts",
     "max_toefl",
     "max_duolingo",
@@ -140,7 +152,20 @@ FILTER_ENUMS = {
 FILTER_KEYS = ("state", *FILTER_TEXT_KEYS, *FILTER_ENUMS)
 # Cách xếp danh sách học sinh muốn; không nói thì xếp theo xếp hạng (điểm chất lượng của trường)
 # lowest_cost / highest_cost: chi phí thấp / cao nhất; easiest_admission / most_selective: tỷ lệ nhận cao / thấp nhất; most_aid: học bổng trung bình lớn nhất
-SORTS = ("ranking", "lowest_cost", "highest_cost", "easiest_admission", "most_selective", "most_aid")
+# lowest_tuition / highest_tuition (v16): xếp theo riêng HỌC PHÍ; lowest_cost / highest_cost là tổng chi phí hoặc chỉ nói "rẻ"
+SORTS = (
+    "ranking",
+    "lowest_cost",
+    "highest_cost",
+    "lowest_tuition",
+    "highest_tuition",
+    "easiest_admission",
+    "most_selective",
+    "most_aid",
+)
+MAX_SCHOOL_LIMIT = 100  # bằng số trường tối đa một lượt tìm bên backend
+# action của một thay đổi ngân sách (v16): cộng thêm / bớt đi so với ngân sách hiện có; vắng = value là mức MỚI
+BUDGET_ACTIONS = ("add", "subtract")
 # Chế độ trong kịch bản
 SCENARIO_MODES = ("what_if", "goal_seeking")
 # Nhóm đích của goal_seeking: khó vào, vừa sức, an toàn
@@ -216,10 +241,9 @@ def check_entities(intent: str, entities: dict[str, Any]) -> None:
     if group is not None:
         if group not in TARGET_GROUPS:
             raise ValueError(f"group phải là một trong {TARGET_GROUPS}")
-        if "compare_facts" not in tasks or schools is not None:
-            raise ValueError("group chỉ đi với tasks = compare_facts và không kèm schools")
-    elif "compare_facts" in tasks and not _is_text_list(schools, 2):
-        raise ValueError("compare_facts cần schools từ hai tên trường trở lên")
+        in_list = intent == "profile_review" and "school_list" in tasks  # xin gợi ý theo nhóm (v16)
+        if not in_list and ("compare_facts" not in tasks or schools is not None):
+            raise ValueError("group chỉ đi với school_list, hoặc compare_facts không kèm schools")
     fields = entities.get("fields")
     if fields is not None and not (
         isinstance(fields, list) and fields and all(f in INFO_FIELDS for f in fields)
@@ -232,6 +256,38 @@ def check_entities(intent: str, entities: dict[str, Any]) -> None:
     if intent == "scenario":
         _check_scenario(entities)
     _check_task_entities(intent, entities, tasks, schools)
+    _check_unsupported(intent, entities, tasks)
+    _check_limit(intent, entities, tasks)
+
+
+# unsupported (v16): điều kiện học sinh nói mà hệ thống không làm được, mỗi cụm là đoạn chữ trong tin. Chỉ đi với ba việc
+# có điều kiện: tìm trường, gợi ý trường theo hồ sơ, tìm mức cần đạt
+def _check_unsupported(intent: str, entities: dict[str, Any], tasks: list[str]) -> None:
+    if "unsupported" not in entities:
+        return
+    if not _is_text_list(entities["unsupported"], 1):
+        raise ValueError("unsupported phải là danh sách có ít nhất một cụm chữ")
+    allowed = (
+        (intent == "knowledge" and "search" in tasks)
+        or (intent == "profile_review" and "school_list" in tasks)
+        or intent in ("scenario", "center_referral")
+    )
+    if not allowed:
+        raise ValueError("unsupported chỉ đi với search, school_list, kịch bản hoặc trung tâm")
+
+
+# limit (v16): số trường học sinh xin, chuỗi số đã chuẩn hóa ("ba trường" → "3"). Chỉ với tìm trường và gợi ý trường
+def _check_limit(intent: str, entities: dict[str, Any], tasks: list[str]) -> None:
+    if "limit" not in entities:
+        return
+    value = entities["limit"]
+    if not (isinstance(value, str) and value.isdigit() and 1 <= int(value) <= MAX_SCHOOL_LIMIT):
+        raise ValueError(f"limit phải là chuỗi số từ 1 đến {MAX_SCHOOL_LIMIT}")
+    if not (
+        (intent == "knowledge" and "search" in tasks)
+        or (intent == "profile_review" and "school_list" in tasks)
+    ):
+        raise ValueError("limit chỉ đi với search hoặc school_list")
 
 
 # Nhiệm vụ của loại đang xét: danh sách không lặp các mã của loại. Loại chỉ có một nhiệm vụ mỗi ý thì tối đa một mã.
@@ -259,6 +315,10 @@ def _check_scenario(entities: dict[str, Any]) -> None:
     for change in changes:
         if "factor" not in change or not ({"value", "action"} & set(change)):
             raise ValueError("mỗi change cần factor và value hoặc action")
+        if change.get("action") in BUDGET_ACTIONS and (
+            change["factor"] != "budget" or not change.get("value")
+        ):
+            raise ValueError("action add / subtract chỉ đi với factor budget và phải có value")
     if entities.get("target_group") is not None and entities["target_group"] not in TARGET_GROUPS:
         raise ValueError(f"target_group phải là một trong {TARGET_GROUPS}")
     factor = entities.get("factor")
@@ -277,9 +337,10 @@ def _check_task_entities(intent: str, entities: dict[str, Any], tasks: list[str]
         has_profile = bool(set(entities) & set(PROFILE_KEYS))
         if ({"status", "restart"} & set(tasks)) and has_profile:
             raise ValueError(f"{tasks[0]} không kèm giá trị hồ sơ")
-    elif intent == "profile_review":
-        if "compare" in tasks and not _is_text_list(schools, 2):
-            raise ValueError("compare cần schools từ hai tên trường trở lên")
+    elif intent == "knowledge":
+        # compare / compare_facts không bắt buộc đủ hai tên (v16): học sinh chỉ bằng vị trí hoặc cả danh sách, thiếu thì code hỏi
+        if "fit_method" in tasks and schools is not None:
+            raise ValueError("fit_method không kèm schools: hỏi điểm của một trường là explain_fit")
     elif intent == "center_referral":
         centers = entities.get("centers")
         if centers is not None and not _is_text_list(centers, 2):
@@ -476,6 +537,8 @@ _ENTITY_SCHEMA = {
     "target_group": {"enum": list(TARGET_GROUPS)},
     "group": {"enum": list(TARGET_GROUPS)},
     "factor": {"type": "array", "items": _TEXT},
+    "unsupported": {"type": "array", "minItems": 1, "items": _TEXT},
+    "limit": _TEXT,
     "service": {"enum": list(SERVICE_CODES)},
     "city": _TEXT,
     "subtype": {"enum": list(SUBTYPES)},

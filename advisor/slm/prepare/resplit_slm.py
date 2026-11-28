@@ -25,7 +25,7 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from slm.prepare.build_slm_jsonl import DEFAULT_EXCEL, SPLITS
+from slm.prepare.build_slm_jsonl import DEFAULT_EXCEL, NOTE_SHEETS, SPLITS
 from slm.prepare.check_slm_data import (
     MIN_PROFILE_KEY,
     MIN_TEST,
@@ -235,7 +235,7 @@ def apply_to_excel(path: Path, items: list[Item], splits: list[str]) -> None:
     new_split = {(it.sheet, it.row): s for it, s in zip(items, splits, strict=True)}
     workbook = load_workbook(path)
     for sheet in workbook.worksheets:
-        if sheet.title in ("README", "summary", "model_errors"):
+        if sheet.title in NOTE_SHEETS:
             continue
         header = [c.value for c in sheet[1]]
         split_col = header.index("split")
@@ -248,9 +248,16 @@ def apply_to_excel(path: Path, items: list[Item], splits: list[str]) -> None:
         rows.sort(key=lambda r: (r[0], r[1]))
         for target, (_, _, values) in enumerate(rows, start=2):
             for col, value in enumerate(values, start=1):
-                sheet.cell(
-                    row=target, column=col
-                ).value = value  # gán cả None: cell(value=None) sẽ giữ giá trị cũ
+                cell = sheet.cell(row=target, column=col)
+                cell.value = value  # gán cả None: cell(value=None) sẽ giữ giá trị cũ
+                # Sheet dữ liệu không có công thức: tin nhắn bắt đầu bằng "=" (vd "=)))") phải giữ là chữ,
+                # nếu không openpyxl lưu thành công thức và lần đọc sau ra ô trống
+                if isinstance(value, str) and value.startswith("="):
+                    cell.data_type = "s"
+        # Sheet có dòng trống thì số dòng dữ liệu ít hơn trước: xóa phần đuôi cũ, nếu không các dòng cuối bị lặp
+        for target in range(len(rows) + 2, sheet.max_row + 1):
+            for col in range(1, len(header) + 1):
+                sheet.cell(row=target, column=col).value = None
     workbook.save(path)
 
 
