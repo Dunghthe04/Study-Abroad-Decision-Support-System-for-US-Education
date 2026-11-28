@@ -232,3 +232,46 @@ Commit: `cf34c42d` (3 lớp), `71b57255` (luật gộp). Test mới `advisor/tes
 - **20200701:** lần 1 bị tách HK1 thành 2 kỳ, có luật gộp thì lần 2 còn 1 kỳ, 12 ô.
 - **Không lọt thông tin cá nhân** ở cả 3 lần chạy.
 - **Còn lệch, không do thay đổi này:** 499489625 (bảng dọc nhiều cột, Claude dao động 5 / 3 / 8 ô trùng qua các lần); diem-so, Hoc-ba-dep (OCR mất dấu thập phân "85" thay "8.5", R5 bắt như cũ).
+
+### 9.4 OCR mất dấu thập phân và chạy với ảnh mới (28/11)
+
+Không vá theo từng con số. Dùng một luật chung theo thang điểm:
+
+- **Luật:** trên thang 10, số nguyên từ 11 đến 100 không thể là điểm đúng. Gặp số như vậy thì hiểu là OCR làm mất dấu thập phân: "85" thành 8.5, "100" thành 10.0 (`lost_decimal_score` trong `transcript_validate.py`). Số 10 trở xuống, số trên 100 (năm học "2010"), số có số 0 đứng đầu thì giữ nguyên.
+- **Chỉ áp dụng khi chắc là thang 10** (`decimal_may_be_lost`): học bạ THPT, hoặc bảng có ô điểm thập phân thật ≤ 10. Bảng ĐH hay bảng chưa rõ cấp học mà toàn số nguyên thì có thể là thang 100, nên không tự chia 10.
+- **R5 vẫn giữ nguyên:** số phải có trong chữ OCR. Claude chép "85" hay "8.5" đều được chấp nhận. Số bịa ra (không có trong chữ) vẫn bị bắt.
+- **Báo học sinh:** khi đã đọc lại ô nào, kết quả có cảnh báo "ảnh bị mất dấu thập phân ở N ô, đã đọc lại theo thang 10 (ví dụ…). Bạn so lại với học bạ giúp nhé." Ở bước 2, học sinh sửa được từng ô.
+- **Lớp 3 (nhận cột cả năm bằng số)** chạy sau khi đã đọc lại, nên cột CN bị mất dấu vẫn được nhận ra và bỏ.
+- **Prompt:** dặn Claude cứ chép nguyên văn "85", hệ thống tự hiểu, để Claude không đoán.
+- **Dòng tiêu đề kỳ bị OCR chép sai** ("Hoc kg I Hoc kg II Ca nám"): danh sách trắng nhận "hoc k" cộng tối đa 1 chữ, không liệt kê từng kiểu sai. Trước đây dòng này bị bỏ nên Claude mất cột HK1, HK2.
+
+Commit: `ae4f8273`, `84084d31` (luật + điều kiện THPT), `67b159ac` (tiêu đề kỳ). Test mới `advisor/tests/test_transcript_lost_decimal.py` (7 test) và 1 test trong `test_transcript_text.py`. Toàn bộ advisor 2520 test pass, ruff sạch.
+
+**Chạy lại 11 ảnh cũ** (`che_ten_28_11/lan3/`, `claude-haiku-5-5`, so với bộ cũ 285 ô):
+
+| Lần chạy | Trùng | Khác điểm | Chỉ có ở bản cũ |
+|---|---|---|---|
+| Mục 9.3, lần 2 | 274/285 | 7 | 4 |
+| Sau sửa mất dấu (lan3) | **278/285** | 5 | 2 |
+
+- **diem-so-hoc-ba:** 24 ô (trước 18–19). Đọc lại 6 ô, ví dụ "Công nghệ 95 → 9.5", "Sinh 100 → 10".
+- **Hoc-ba-dep:** 24 ô (trước 4). Đọc lại 20 ô.
+- Cả hai chỉ gọi Claude 1 lần (trước đó R5 bắt thử lại).
+- **Còn lệch như cũ:** 499489625 (bảng dọc); 20200701 Tin học (bản cũ ghi 8.5 là sai).
+
+**4 ảnh mới chưa từng chạy** (lấy từ `G:\DO_AN\học_ba`, bước A bằng glm-ocr):
+
+| Ảnh | Kết quả | Ghi chú |
+|---|---|---|
+| 2452048341 (học bạ Lớp 8) | 2 kỳ, 18 ô | đọc ổn |
+| anh-chup-man-hinh… (ảnh chụp bài đăng, học bạ THPT) | 2 kỳ, 20 ô | mất dấu ở **mọi** ô, đọc lại 22 ô. Có 1 lỗi gán môn: OCR chép tên môn thành "Böl 63 64 66" (có lẽ là Sử), Claude gán thành Toán, rồi dòng "Toàn 42 47 45" ghi đè. Lỗi do tên môn OCR hỏng, không do luật mất dấu |
+| 1654860257 | 1 kỳ chưa rõ tên, 10 ô | OCR không chép dòng tiêu đề cột, Claude không biết cột nào là HK1, HK2. Học sinh phải tự chọn kỳ ở bước 2 |
+| 740314228 | 0 ô | OCR hỏng, chỉ ra 7 dòng chữ, không có bảng điểm |
+
+**Vấn đề còn lại, phát hiện ở ảnh mới (chưa sửa, cần Việt quyết):**
+
+- **Lọt tên qua lớp lọc dòng (lớp 3):**
+  - anh-chup: câu bài đăng Facebook "cô Di Li post toàn bố so diêm" bị giữ.
+  - 1654860257: dòng "Vũ Thị Hà 8" bị giữ, vì có tên viết hoa đứng cạnh một con số.
+  - Cả hai tên không có nhãn ("Họ tên:"), không có trong dữ liệu .NET gửi kèm, nên lớp 1, 2 không che được. Hướng sửa chung: dòng có chuỗi chữ viết hoa giống họ tên người mà không phải tên môn, chỉ đi kèm 1 số, thì bỏ hoặc che phần tên.
+- **OCR mất tiêu đề cột:** có thể suy cột bằng số (cột 3 ≈ (cột 1 + 2·cột 2)/3 thì cột 1, 2 là HK1, HK2), dùng lại cách tính của lớp 3.
