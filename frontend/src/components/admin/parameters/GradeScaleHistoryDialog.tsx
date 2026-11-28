@@ -6,7 +6,17 @@ import { getGradeScaleHistory, type GradeScaleHistoryItem } from "@/lib/admin-gr
 import type { PagedResult } from "@/types/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogIcon,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 
@@ -86,13 +96,16 @@ export function GradeScaleHistoryDialog() {
         <HistoryIcon /> Xem lịch sử sửa bảng
       </Button>
       <Dialog open={open} onOpenChange={changeOpen}>
-        <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl">
+        <DialogContent variant="form" size="lg">
           <DialogHeader>
+            <DialogIcon tone="brand">
+              <HistoryIcon />
+            </DialogIcon>
             <DialogTitle>Lịch sử sửa bảng quy đổi</DialogTitle>
             <DialogDescription>Tất cả các lần sửa, mới nhất ở trên.</DialogDescription>
           </DialogHeader>
 
-          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          <DialogBody className="space-y-4">
             {error ? (
               <Alert variant="destructive">
                 <AlertDescription>Không tải được lịch sử. Vui lòng thử lại sau.</AlertDescription>
@@ -121,16 +134,20 @@ export function GradeScaleHistoryDialog() {
                 ))}
               </ul>
             )}
-          </div>
 
-          <TablePagination
-            page={page}
-            totalPages={data?.totalPages ?? 0}
-            totalCount={data?.totalCount}
-            itemLabel="lần sửa"
-            disabled={loading}
-            onPageChange={(next) => void loadPage(next)}
-          />
+            <TablePagination
+              page={page}
+              totalPages={data?.totalPages ?? 0}
+              totalCount={data?.totalCount}
+              itemLabel="lần sửa"
+              disabled={loading}
+              onPageChange={(next) => void loadPage(next)}
+            />
+          </DialogBody>
+
+          <DialogFooter layout="single">
+            <DialogCancel>Đóng</DialogCancel>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

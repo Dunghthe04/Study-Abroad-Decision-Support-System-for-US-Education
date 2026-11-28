@@ -7,10 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -421,17 +425,24 @@ function SlmSampleForm({ sample: listed, version, onClose, onChanged, onDelete, 
         </TableFrame>
       </div>
 
-      <Dialog open={inspecting !== null} onOpenChange={(open) => !open && !restoringVersion && setInspecting(null)}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
+      <Dialog
+        open={inspecting !== null}
+        onOpenChange={(open) => !open && !restoringVersion && setInspecting(null)}
+        disablePointerDismissal={restoringVersion}
+      >
+        <DialogContent variant="form" size="lg">
           {inspecting && (
             <>
               <DialogHeader>
+                <DialogIcon tone="brand">
+                  <HistoryIcon />
+                </DialogIcon>
                 <DialogTitle>Phiên bản v{inspecting.version}</DialogTitle>
                 <DialogDescription>
                   {versionActionLabel(inspecting.action, inspecting.restoredFromVersion)} · {inspecting.actorName ?? "Hệ thống"} · {formatDateTime(inspecting.createdAt)}
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-3 text-sm">
+              <DialogBody className="space-y-3 text-sm">
                 <div><span className="text-muted-foreground">Loại mẫu:</span> {sampleTypeLabel(inspecting.sampleType)} · <span className="text-muted-foreground">Tập:</span> {inspecting.split} · <span className="text-muted-foreground">Nguồn:</span> {SOURCE_LABELS[inspecting.source] ?? inspecting.source}</div>
                 <div>
                   <div className="text-xs text-muted-foreground">Câu hỏi</div>
@@ -459,13 +470,15 @@ function SlmSampleForm({ sample: listed, version, onClose, onChanged, onDelete, 
                     <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-2 font-mono text-xs">{prettyJson(inspecting.context)}</pre>
                   </div>
                 )}
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" disabled={restoringVersion} onClick={() => setInspecting(null)}>Đóng</Button>
+              </DialogBody>
+              <DialogFooter layout={!isDeleted && inspecting.version !== sample.version ? "pair" : "single"}>
+                <DialogCancel disabled={restoringVersion} onClick={() => setInspecting(null)}>
+                  Đóng
+                </DialogCancel>
                 {!isDeleted && inspecting.version !== sample.version && (
-                  <Button type="button" loading={restoringVersion} onClick={() => void restoreOldVersion(inspecting)}>
-                    <RotateCcwIcon /> Khôi phục phiên bản này
-                  </Button>
+                  <DialogAction tone="primary" loading={restoringVersion} onClick={() => void restoreOldVersion(inspecting)}>
+                    Khôi phục phiên bản này
+                  </DialogAction>
                 )}
               </DialogFooter>
             </>

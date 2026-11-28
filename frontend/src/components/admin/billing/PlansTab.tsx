@@ -4,15 +4,16 @@ import { useEffect, useState } from "react";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import {
   AlertDialog,
+  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogIcon,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import { adminBillingApi, adminBillingErrorMessage, PLAN_KIND_LABELS } from "@/lib/admin-billing-api";
@@ -208,17 +209,19 @@ export function PlansTab() {
       </RightPanelSlot>
 
       <AlertDialog open={deleting !== null} onOpenChange={(open) => !open && busyId === null && setDeleting(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent variant="action">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="destructive">
+              <Trash2Icon />
+            </AlertDialogIcon>
             <AlertDialogTitle>Xóa gói {deleting?.name}?</AlertDialogTitle>
             <AlertDialogDescription>Gói chưa có đơn hàng hay chu kỳ nào. Xóa rồi không khôi phục được.</AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={busyId !== null}>Hủy</AlertDialogCancel>
-            <Button type="button" variant="destructive" onClick={() => void confirmDelete()} disabled={busyId !== null}>
-              {busyId !== null && <Spinner className="size-3.5" />}
+            <AlertDialogAction tone="destructive" onClick={() => void confirmDelete()} loading={busyId !== null}>
               Xóa gói
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

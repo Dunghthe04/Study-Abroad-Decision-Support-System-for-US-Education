@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { EyeIcon } from "lucide-react";
+import { CheckCircle2Icon, EyeIcon, XCircleIcon } from "lucide-react";
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogIcon,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -292,48 +295,52 @@ export function OrderDetailPanel({ orderCode, onClose, onChanged }: OrderDetailP
       )}
 
       <AlertDialog open={action !== null} onOpenChange={(open) => !open && !busy && setAction(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent variant="form">
           <AlertDialogHeader>
+            <AlertDialogIcon tone={action === "reject" ? "destructive" : "success"}>
+              {action === "reject" ? <XCircleIcon /> : <CheckCircle2Icon />}
+            </AlertDialogIcon>
             <AlertDialogTitle>{current?.title}</AlertDialogTitle>
             <AlertDialogDescription>{current?.description}</AlertDialogDescription>
           </AlertDialogHeader>
-          {action === "reject" && isDeletedBuyer && (
-            <div className="rounded-md border border-line bg-muted/50 p-2.5 text-xs space-y-1">
-              {revealedBuyer ? (
-                <>
-                  <div className="font-medium">Email hoàn tiền ngoài hệ thống: {revealedBuyer.email}</div>
-                  <div className="text-muted-foreground">Người mua: {revealedBuyer.fullName} ({revealedBuyer.buyerCode})</div>
-                </>
-              ) : (
-                <div className="flex items-center justify-between gap-2">
-                  <span>Tài khoản người mua đã xóa. Xem email lưu trữ để hoàn tiền:</span>
-                  <Button type="button" variant="outline" size="sm" onClick={() => void revealBuyer()} disabled={revealing}>
-                    {revealing ? <Spinner className="size-3.5" /> : "Xem email"}
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-          <Textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            rows={3}
-            disabled={busy}
-            placeholder={action === "reject" ? "Ghi chú cách hoàn tiền ngoài hệ thống (bắt buộc)" : "Lý do kích hoạt (bắt buộc)"}
-            aria-label="Ghi chú"
-            aria-required
-          />
-          <AlertDialogFooter>
+          <AlertDialogBody className="space-y-3">
+            {action === "reject" && isDeletedBuyer && (
+              <div className="rounded-md border border-line bg-muted/50 p-2.5 text-xs space-y-1">
+                {revealedBuyer ? (
+                  <>
+                    <div className="font-medium">Email hoàn tiền ngoài hệ thống: {revealedBuyer.email}</div>
+                    <div className="text-muted-foreground">Người mua: {revealedBuyer.fullName} ({revealedBuyer.buyerCode})</div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Tài khoản người mua đã xóa. Xem email lưu trữ để hoàn tiền:</span>
+                    <Button type="button" variant="outline" size="sm" onClick={() => void revealBuyer()} disabled={revealing}>
+                      {revealing ? <Spinner className="size-3.5" /> : "Xem email"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+            <Textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={3}
+              disabled={busy}
+              placeholder={action === "reject" ? "Ghi chú cách hoàn tiền ngoài hệ thống (bắt buộc)" : "Lý do kích hoạt (bắt buộc)"}
+              aria-label="Ghi chú"
+              aria-required
+            />
+          </AlertDialogBody>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={busy}>Hủy</AlertDialogCancel>
-            <Button
-              type="button"
-              variant={action === "reject" ? "destructive" : "default"}
+            <AlertDialogAction
+              tone={action === "reject" ? "destructive" : "ok"}
               onClick={() => void run()}
               disabled={busy || !note.trim()}
+              loading={busy}
             >
-              {busy && <Spinner className="size-3.5" />}
               {current?.confirm}
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
