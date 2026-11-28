@@ -11,7 +11,7 @@ Luật (xem docs/KE_HOACH_OCR_SO_SANH_VA_KIEM_TRA_TIENG_VIET.md mục 2.2):
 - R4b môn tiếng Anh có trong SUBJECT_MAP phải dịch đúng tên chuẩn (Chemistry -> Hóa học)
 - R5 điểm có nguyên văn trong văn bản, trong khoảng 0-10
 - R6 không bỏ sót quá nhiều: số ô trả về so với số thập phân trong văn bản
-- R7 tên kỳ hiểu được (ra học kỳ 1 / 2)
+- R7 "kind" của kỳ hợp lệ (hk1 / hk2 / ca_nam / khac) và không trái với chữ tên kỳ; không ép đổi tên kỳ
 """
 
 from __future__ import annotations
@@ -130,6 +130,29 @@ def _score(raw: Any) -> float | None:
     return float(text)
 
 
+_KIND_TEXT = {"hk1": "học kỳ 1", "hk2": "học kỳ 2", "ca_nam": "cả năm", "khac": "không rõ"}
+
+
+def _term_kind_problem(subjects: _Subjects, grade: str, term_name: str, kind: Any) -> str | None:
+    """R7: "kind" (Claude phân loại kỳ theo nghĩa) phải hợp lệ và không trái với chữ tên kỳ đọc được.
+    Không ép đổi tên kỳ: tên giữ nguyên văn, "khac" là câu trả lời hợp lệ khi thật sự không rõ."""
+    label = f"{grade} {term_name}".strip()
+    resolved = subjects.resolve_term(grade, term_name)
+    text_kind = "ca_nam" if resolved is None else {1: "hk1", 2: "hk2"}.get(resolved.semester)
+    if kind is None:
+        if text_kind is None:
+            return f'Kỳ "{label}": thiếu "kind", chọn hk1 / hk2 / ca_nam / khac theo nghĩa của kỳ.'
+        return None
+    if kind not in _KIND_TEXT:
+        return f'Kỳ "{label}": "kind" = "{kind}" không hợp lệ, chỉ được hk1 / hk2 / ca_nam / khac.'
+    if text_kind is not None and kind != "khac" and kind != text_kind:
+        return (
+            f'Kỳ "{label}": "kind" = "{kind}" ({_KIND_TEXT[kind]}) trái với tên kỳ '
+            f"(chữ ghi {_KIND_TEXT[text_kind]}), xem lại kỳ này."
+        )
+    return None
+
+
 def validate_parsed(data: Any, source: str) -> list[Issue]:
     """Kiểm tra JSON bước B so với văn bản nguồn (đã che thông tin cá nhân). Rỗng = đạt."""
     if not isinstance(data, dict) or not isinstance(data.get("terms"), list):
@@ -149,10 +172,8 @@ def validate_parsed(data: Any, source: str) -> list[Issue]:
             issues.append(Issue("R1", f'Kỳ thứ {ti + 1} sai cấu trúc (thiếu "subjects").', ti))
             continue
         grade, term_name = str(term.get("grade") or ""), str(term.get("term") or "")
-        resolved = subjects.resolve_term(grade, term_name)
-        if resolved is not None and resolved.semester not in (1, 2):
-            label = f"{grade} {term_name}".strip()
-            issues.append(Issue("R7", f'Tên kỳ "{label}" không hiểu được, ghi rõ dạng "HK1" / "HK2".', ti))
+        if (problem := _term_kind_problem(subjects, grade, term_name, term.get("kind"))) is not None:
+            issues.append(Issue("R7", problem, ti))
 
         for si, item in enumerate(term["subjects"]):
             if not isinstance(item, dict):

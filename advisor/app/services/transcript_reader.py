@@ -17,6 +17,7 @@ import math
 import re
 import time
 import unicodedata
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -78,6 +79,11 @@ Quy tắc:
 2. Mỗi học kỳ là một phần tử của "terms":
    - "grade": khối lớp hoặc năm học như ghi trong văn bản, VD "Lớp 10", "Năm 2", "2023-2024". Không có thì để "".
    - "term": tên kỳ nguyên văn, VD "HK1", "Học kỳ II", "Fall2023", "Summer2024".
+   - "kind": bạn tự xác định kỳ này là gì theo NGHĨA, dù văn bản viết kiểu nào, viết tắt hay sai chính tả:
+     "hk1" = học kỳ 1 / kỳ đầu năm học (HK1, HKý I, Kỳ I, Semester 1, Fall, học kỳ lẻ của đại học);
+     "hk2" = học kỳ 2 / kỳ cuối năm học (HK2, HKý II, Kỳ II, Semester 2, Spring, Summer, học kỳ chẵn của đại học);
+     "ca_nam" = điểm tổng kết cả năm (Cả năm, CN, TBcn, TB năm, Tổng kết, Year, Annual...);
+     "khac" = không xác định được là kỳ nào. Không tự nghĩ ra học kỳ thứ 3 cho học bạ THPT.
 3. Học bạ THPT thường chia khối "Lớp 10", "Lớp 11", "Lớp 12"; mỗi khối có dòng HK1, HK2, Cả năm và môn học nằm ở các cột.
    Mỗi dòng HK1 / HK2 là một kỳ riêng, "grade" là lớp của khối chứa dòng đó.
 4. Bảng điểm đại học thường mỗi dòng một môn và có cột hoặc tiêu đề kỳ học. Gom các môn cùng kỳ vào một phần tử.
@@ -103,6 +109,10 @@ Văn bản:
 """
 )
 
+# Loại kỳ do LLM phân loại theo nghĩa: code không phải đoán mọi cách viết tên kỳ ("CN", "TBcn", "Kỳ I"...)
+TERM_KINDS = ("hk1", "hk2", "ca_nam", "khac")
+_KIND_SEMESTER = {"hk1": 1, "hk2": 2}
+
 PARSE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -115,6 +125,7 @@ PARSE_SCHEMA: dict[str, Any] = {
                 "properties": {
                     "grade": {"type": "string"},
                     "term": {"type": "string"},
+                    "kind": {"type": "string", "enum": list(TERM_KINDS)},
                     "subjects": {
                         "type": "array",
                         "items": {
@@ -128,7 +139,7 @@ PARSE_SCHEMA: dict[str, Any] = {
                         },
                     },
                 },
-                "required": ["grade", "term", "subjects"],
+                "required": ["grade", "term", "kind", "subjects"],
             },
         },
         "language": {"type": "string", "enum": ["vi", "en", "mixed"]},
@@ -280,6 +291,11 @@ _ROMAN = {"i": 1, "ii": 2, "iii": 3}
 # [UC-12] Điểm lệch khỏi trung vị mọi môn từ ngưỡng này trở lên thì đánh dấu cần kiểm tra (cần đủ số điểm để so)
 OUTLIER_DISTANCE = 3.5
 OUTLIER_MIN_SCORES = 4
+# Lớp 3 nhận cột cả năm bằng số: điểm một kỳ ≈ (HK1 + 2·HK2)/3 hoặc (HK1 + HK2)/2 ở hầu hết các môn chung.
+# Điểm ghi 1 chữ số thập phân nên trung bình làm tròn lệch tối đa 0,05; lấy 0,1 cho cả bảng ghi 2 chữ số
+WHOLE_YEAR_TOLERANCE = 0.1
+WHOLE_YEAR_MIN_SUBJECTS = 3
+WHOLE_YEAR_MIN_RATIO = 0.8
 REVIEW_SOURCE_IMAGE = "source_image"
 REVIEW_OUTLIER = "outlier"
 
@@ -299,6 +315,8 @@ class _RawTerm:
     academic_year: int | None = None
     high_school: bool = False
     from_image: bool = False
+    # Không biết là học kỳ 1 hay 2 (tên lạ, LLM xếp "khac"): giữ điểm, nhắc học sinh chọn lại tên kỳ
+    unclear: bool = False
 
 
 @dataclass
@@ -846,7 +864,7 @@ class TranscriptReader:
                 continue
             grade = str(raw.get("grade") or "").strip()
             term = str(raw.get("term") or "").strip()
-            resolved = self._resolve_term(grade, term)
+            resolved = self._resolve_parsed_term(grade, term, raw.get("kind"), high_school)
             if resolved is None:
                 continue
 
@@ -875,7 +893,56 @@ class TranscriptReader:
             result.warnings.append(
                 f"Tệp '{file_name}': bỏ {len(dropped)} điểm không khớp với ảnh ({sample}). Bạn kiểm tra và điền lại các ô còn trống."
             )
+        for label in self._drop_whole_year_terms(result.terms):
+            result.warnings.append(
+                f"Tệp '{file_name}': cột \"{label}\" có điểm bằng trung bình hai học kỳ nên là điểm cả năm, đã bỏ."
+            )
+        for t in result.terms:
+            if t.unclear:
+                result.warnings.append(
+                    f"Tệp '{file_name}': chưa rõ \"{t.label}\" là học kỳ 1 hay học kỳ 2, bạn chọn lại tên kỳ trong bảng giúp nhé."
+                )
         return result
+
+    @staticmethod
+    def _drop_whole_year_terms(terms: list[_RawTerm]) -> list[str]:
+        """Lớp 3: dù tên ghi kiểu gì, kỳ có điểm từng môn bằng trung bình HK1, HK2 cùng lớp là cột cả năm thì bỏ.
+        Chỉ xét kỳ đáng ngờ (chưa rõ học kỳ, hoặc trùng học kỳ với kỳ khác cùng lớp) để kỳ thật không bị bỏ nhầm
+        khi điểm hai kỳ trùng nhau (VD toàn 10). Trả tên các kỳ đã bỏ."""
+        groups: dict[tuple[str | None, int | None], list[_RawTerm]] = {}
+        for t in terms:
+            if t.grade_name is not None or t.academic_year is not None:
+                groups.setdefault((t.grade_name, t.academic_year), []).append(t)
+
+        def is_average(cand: _RawTerm, first: _RawTerm, second: _RawTerm) -> bool:
+            common = [s for s in cand.scores if s in first.scores and s in second.scores]
+            if len(common) < WHOLE_YEAR_MIN_SUBJECTS:
+                return False
+            hits = 0
+            for s in common:
+                a, b, c = first.scores[s], second.scores[s], cand.scores[s]
+                if min(abs(c - (a + 2 * b) / 3), abs(c - (a + b) / 2)) <= WHOLE_YEAR_TOLERANCE:
+                    hits += 1
+            return hits >= WHOLE_YEAR_MIN_RATIO * len(common)
+
+        dropped: list[_RawTerm] = []
+        for group in groups.values():
+            if len(group) < 3:
+                continue
+            counts = Counter(t.semester for t in group)
+            # Kỳ chưa rõ xét trước, rồi kỳ trùng học kỳ (kỳ đứng sau trước: cột cả năm thường ở cuối bảng)
+            suspects = [t for t in group if t.semester not in (1, 2)] + [
+                t for t in reversed(group) if t.semester in (1, 2) and counts[t.semester] > 1
+            ]
+            for cand in suspects:
+                rest = [t for t in group if t is not cand and t not in dropped]
+                firsts = [t for t in rest if t.semester == 1]
+                seconds = [t for t in rest if t.semester == 2]
+                if any(is_average(cand, a, b) for a in firsts for b in seconds):
+                    dropped.append(cand)
+        for t in dropped:
+            terms.remove(t)
+        return [t.label for t in dropped]
 
     @classmethod
     def _drop_invented_grade(cls, term: _RawTerm, source: str) -> None:
@@ -914,12 +981,30 @@ class TranscriptReader:
         return re.sub(r"\s+", " ", text).strip().lower()
 
     @classmethod
-    def _resolve_term(cls, grade: str, term: str) -> _RawTerm | None:
+    def _resolve_parsed_term(cls, grade: str, term: str, kind: Any, high_school: bool) -> _RawTerm | None:
+        """Kỳ LLM trả: tin "kind" (LLM phân loại theo nghĩa, mọi cách viết) trước, chữ tên kỳ là dự phòng.
+        None = cột cả năm, bỏ. Không ra học kỳ 1/2 thì giữ điểm, đánh dấu chưa rõ."""
+        if kind == "ca_nam":
+            return None
+        raw = cls._resolve_term(grade, term, high_school)
+        if raw is None:
+            return None
+        if raw.semester not in (1, 2):
+            raw.semester = _KIND_SEMESTER.get(kind) if isinstance(kind, str) else None
+            raw.unclear = raw.semester is None
+        return raw
+
+    @classmethod
+    def _resolve_term(cls, grade: str, term: str, high_school: bool = False) -> _RawTerm | None:
         """Hiểu tên kỳ: trả None nếu là dòng cả năm. Kỳ ĐH ghi theo năm học thì để academic_year, gán "Năm n" sau."""
         label = f"{grade} {term}".strip()
         both = cls._plain(label)
         term_plain = cls._plain(term)
-        if re.search(r"\b(ca nam|tong ket|whole year|full year|annual)\b", term_plain or both):
+        # Dự phòng khi không có "kind" (bảng code tự đọc, LLM cũ): CN, TBcn, TB năm, Cả năm, tổng kết...
+        if re.search(
+            r"\b(ca nam|cn|tb ?cn|tb ?nam|trung binh nam|tong ket|whole year|full year|annual)\b",
+            term_plain or both,
+        ):
             return None
 
         raw = _RawTerm(label=label, scores={})
@@ -950,8 +1035,11 @@ class TranscriptReader:
                 y = int(year.group(1))
                 raw.academic_year = y if season in ("fall", "autumn") else y - 1
 
-        # "Học kỳ 5" không kèm năm: kỳ thứ n tính từ đầu khoá -> Năm ⌈n/2⌉
-        if raw.semester and raw.semester > 2:
+        # Học bạ THPT chỉ có 2 học kỳ: "HK3" là tên lạ (thường là cột cả năm ghi sai), không đổi thành HK1
+        if raw.semester and raw.semester > 2 and (high_school or school):
+            raw.semester = None
+        # "Học kỳ 5" của ĐH không kèm năm: kỳ thứ n tính từ đầu khoá -> Năm ⌈n/2⌉
+        elif raw.semester and raw.semester > 2:
             if raw.grade_name is None and raw.academic_year is None:
                 raw.grade_name = f"Năm {math.ceil(raw.semester / 2)}"
             raw.semester = 1 if raw.semester % 2 == 1 else 2
