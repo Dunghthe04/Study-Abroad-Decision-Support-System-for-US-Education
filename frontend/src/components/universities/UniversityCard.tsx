@@ -115,7 +115,7 @@ export function UniversityCard({ university, sortBy }: UniversityCardProps) {
 
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
-          <div className="absolute bottom-3 left-3 right-3 flex items-end gap-3">
+          <div className="absolute bottom-3 left-3 right-3 flex items-start gap-3">
             <div className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
               {logoUrl ? (
                 <Image src={logoUrl} alt={`Logo ${university.name}`} fill sizes="64px" className="object-contain p-1.5" />

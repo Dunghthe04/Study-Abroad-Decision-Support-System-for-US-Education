@@ -29,7 +29,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -46,6 +45,13 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { SafeImage } from "@/components/shared/safe-image";
+import {
+  BooleanFilterRow,
+  CheckboxChoiceFilter,
+  CollapsibleFilter,
+  FilterCategory,
+  findLabel,
+} from "@/components/universities/UniversityFilters";
 import { feeHeadline } from "@/lib/center-fee";
 import { centerServiceLabel } from "@/lib/center-services";
 import { TrustIcon } from "./CenterBadges";
@@ -57,7 +63,6 @@ interface PublicCenterListViewProps {
 type SortKey = "default" | "rating_desc" | "name_asc";
 
 const CITY_OPTIONS = [
-  { value: "all", label: "Tất cả địa điểm" },
   { value: "Hà Nội", label: "Hà Nội" },
   { value: "TP.HCM", label: "TP. Hồ Chí Minh" },
   { value: "Hải Phòng", label: "Hải Phòng" },
@@ -65,14 +70,12 @@ const CITY_OPTIONS = [
 ];
 
 const TYPE_OPTIONS = [
-  { value: "all", label: "Mọi loại hình" },
   { value: "study_abroad", label: "Tư vấn Du học" },
   { value: "test_prep", label: "Luyện thi Chứng chỉ" },
   { value: "hybrid", label: "Toàn diện (Du học & Luyện thi)" },
 ];
 
 const STATUS_OPTIONS = [
-  { value: "all", label: "Tất cả trạng thái" },
   { value: "verified", label: "Đã xác minh" },
   { value: "unverified", label: "Chờ xác minh" },
 ];
@@ -91,49 +94,6 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "name_asc", label: "Tên trung tâm (A–Z)" },
 ];
 
-function FilterSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <fieldset>
-      <legend className="mb-1.5 text-sm font-semibold text-foreground">{title}</legend>
-      {children}
-    </fieldset>
-  );
-}
-
-function RadioFilter({
-  name,
-  options,
-  value,
-  onValueChange,
-}: {
-  name: string;
-  options: { value: string; label: string }[];
-  value: string;
-  onValueChange: (value: string) => void;
-}) {
-  const baseId = useId();
-  return (
-    <RadioGroup
-      name={name}
-      value={value}
-      onValueChange={(next) => onValueChange(String(next))}
-      className="gap-2"
-    >
-      {options.map((option) => {
-        const id = `${baseId}-${option.value}`;
-        return (
-          <div key={option.value} className="flex items-center gap-2.5">
-            <RadioGroupItem id={id} value={option.value} />
-            <Label htmlFor={id} className="cursor-pointer text-sm font-normal text-ink">
-              {option.label}
-            </Label>
-          </div>
-        );
-      })}
-    </RadioGroup>
-  );
-}
-
 function centerTypeLabel(centerType?: string | null) {
   if (centerType === "hybrid") return "Toàn diện";
   if (centerType === "english_training" || centerType === "test_prep") return "Luyện thi Chứng chỉ";
@@ -151,19 +111,20 @@ function StatItem({ label, value }: { label: string; value: React.ReactNode }) {
 
 interface FilterPanelProps {
   search: string;
-  cityFilter: string;
-  typeFilter: string;
-  statusFilter: string;
+  cityFilter: string | undefined;
+  typeFilter: string | undefined;
+  statusFilter: string | undefined;
   selectedServices: string[];
   licensedOnly: boolean;
   isAdmin: boolean;
   hasActiveFilter: boolean;
   hideTitle?: boolean;
   onSearchChange: (val: string) => void;
-  onCityChange: (val: string) => void;
-  onTypeChange: (val: string) => void;
-  onStatusChange: (val: string) => void;
+  onCityChange: (val: string | undefined) => void;
+  onTypeChange: (val: string | undefined) => void;
+  onStatusChange: (val: string | undefined) => void;
   onToggleService: (svc: string) => void;
+  onClearServices: () => void;
   onLicensedOnlyChange: (checked: boolean) => void;
   onReset: () => void;
 }
@@ -183,97 +144,117 @@ function CenterFiltersPanel({
   onTypeChange,
   onStatusChange,
   onToggleService,
+  onClearServices,
   onLicensedOnlyChange,
   onReset,
 }: FilterPanelProps) {
-  const licensedId = useId();
   const serviceBaseId = useId();
 
+  const renderChoice = (
+    title: string,
+    choiceOptions: { value: string; label: string }[],
+    value: string | undefined,
+    onSelect: (next: string | undefined) => void,
+    defaultOpen = false,
+  ) => (
+    <CollapsibleFilter
+      title={title}
+      activeSummary={findLabel(choiceOptions, value)}
+      onClear={() => onSelect(undefined)}
+      defaultOpen={defaultOpen}
+    >
+      {(collapse) => (
+        <CheckboxChoiceFilter
+          label={title}
+          options={choiceOptions}
+          value={value}
+          onValueChange={(next) => {
+            onSelect(next);
+            if (next !== undefined) collapse();
+          }}
+        />
+      )}
+    </CollapsibleFilter>
+  );
+
+  const serviceSummary =
+    selectedServices.length > 0 ? selectedServices.map(centerServiceLabel).join(", ") : null;
+
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-4 overflow-x-hidden">
       {!hideTitle && (
-        <div className="flex h-8 items-center justify-between">
-          <h2 className="font-heading text-xl font-bold text-ink">Bộ lọc</h2>
-          {hasActiveFilter && (
-            <Button variant="ghost" size="sm" onClick={onReset} className="text-ink-2 hover:text-ink">
-              <RotateCcwIcon className="size-3.5" />
-              Đặt lại
-            </Button>
-          )}
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-heading text-2xl font-bold text-foreground">Bộ lọc</h2>
         </div>
       )}
 
-      <FilterSection title="Tìm kiếm">
-        <div className="relative">
-          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <FilterCategory>
+        <div className="relative pb-2">
+          <SearchIcon className="pointer-events-none absolute left-3 top-[18px] size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             aria-label="Tìm trung tâm theo tên, mã hoặc địa chỉ"
             placeholder="Tên trung tâm, mã, địa chỉ..."
-            className="h-9 bg-surface pl-9"
+            className="h-9 border-ink-3/45 bg-surface pl-9 text-sm"
           />
         </div>
-      </FilterSection>
+        {renderChoice("Địa điểm", CITY_OPTIONS, cityFilter, onCityChange, true)}
+        {renderChoice("Mô hình hoạt động", TYPE_OPTIONS, typeFilter, onTypeChange, true)}
+      </FilterCategory>
 
-      <FilterSection title="Địa điểm">
-        <RadioFilter name="center-city" options={CITY_OPTIONS} value={cityFilter} onValueChange={onCityChange} />
-      </FilterSection>
+      <FilterCategory className="border-t border-line pt-4">
+        <CollapsibleFilter
+          title="Dịch vụ cung cấp"
+          activeSummary={serviceSummary}
+          onClear={onClearServices}
+          defaultOpen
+        >
+          <div role="group" aria-label="Dịch vụ cung cấp" className="flex flex-col gap-2">
+            {SERVICE_OPTIONS.map((svc) => {
+              const id = `${serviceBaseId}-${svc}`;
+              return (
+                <div key={svc} className="flex min-w-0 items-start gap-2.5">
+                  <Checkbox
+                    id={id}
+                    checked={selectedServices.includes(svc)}
+                    className="mt-0.5 border-ink-3/65 bg-surface"
+                    onCheckedChange={() => onToggleService(svc)}
+                  />
+                  <Label
+                    htmlFor={id}
+                    className="min-w-0 cursor-pointer text-sm leading-snug font-normal text-foreground"
+                  >
+                    {centerServiceLabel(svc)}
+                  </Label>
+                </div>
+              );
+            })}
+          </div>
+        </CollapsibleFilter>
+      </FilterCategory>
 
-      <FilterSection title="Mô hình hoạt động">
-        <RadioFilter name="center-type" options={TYPE_OPTIONS} value={typeFilter} onValueChange={onTypeChange} />
-      </FilterSection>
+      <FilterCategory className="border-t border-line pt-4">
+        <BooleanFilterRow
+          label="Có Giấy phép Sở GD&ĐT"
+          checked={licensedOnly}
+          onCheckedChange={onLicensedOnlyChange}
+        />
+        {isAdmin && renderChoice("Trạng thái xác minh", STATUS_OPTIONS, statusFilter, onStatusChange)}
+      </FilterCategory>
 
-      <FilterSection title="Dịch vụ cung cấp">
-        <div className="space-y-2">
-          {SERVICE_OPTIONS.map((svc) => {
-            const id = `${serviceBaseId}-${svc}`;
-            return (
-              <div key={svc} className="flex items-center gap-2.5">
-                <Checkbox
-                  id={id}
-                  checked={selectedServices.includes(svc)}
-                  onCheckedChange={() => onToggleService(svc)}
-                />
-                <Label htmlFor={id} className="cursor-pointer text-sm font-normal text-ink">
-                  {centerServiceLabel(svc)}
-                </Label>
-              </div>
-            );
-          })}
-        </div>
-      </FilterSection>
-
-      <FilterSection title="Pháp lý minh bạch">
-        <div className="flex items-center gap-2.5">
-          <Checkbox
-            id={licensedId}
-            checked={licensedOnly}
-            onCheckedChange={(checked) => onLicensedOnlyChange(Boolean(checked))}
-          />
-          <Label htmlFor={licensedId} className="cursor-pointer text-sm font-normal text-ink">
-            Có Giấy phép Sở GD&amp;ĐT
-          </Label>
-        </div>
-      </FilterSection>
-
-      {isAdmin && (
-        <FilterSection title="Trạng thái xác minh">
-          <RadioFilter
-            name="center-status"
-            options={STATUS_OPTIONS}
-            value={statusFilter}
-            onValueChange={onStatusChange}
-          />
-        </FilterSection>
-      )}
-
-      {hideTitle && hasActiveFilter && (
-        <Button variant="outline" size="sm" onClick={onReset} className="w-full gap-2">
-          <RotateCcwIcon className="size-3.5" />
+      <div className="border-t border-line pt-4">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!hasActiveFilter}
+          onClick={onReset}
+          className="w-full border-ink-3/45 bg-surface text-foreground hover:bg-muted"
+        >
+          <RotateCcwIcon className="size-4" />
           Đặt lại bộ lọc
         </Button>
-      )}
+      </div>
     </div>
   );
 }
@@ -333,7 +314,6 @@ function CenterCard({
             <SafeImage
               src={profile.coverImage}
               alt={center.name}
-              className="group-hover:scale-[1.03]"
               fallback={
                 <div className="flex h-full w-full items-center justify-center">
                   <Building2Icon className="size-10 text-brand/30" />
@@ -343,7 +323,7 @@ function CenterCard({
           </div>
 
           <CardContent className="flex flex-1 flex-col gap-3 py-4">
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3">
               <div className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-white">
                 <SafeImage
                   src={profile.logoImage}
@@ -416,9 +396,9 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
   const isAdmin = user?.role === "admin" || user?.role === "moderator";
 
   const [search, setSearch] = useState("");
-  const [cityFilter, setCityFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [cityFilter, setCityFilter] = useState<string | undefined>(undefined);
+  const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [licensedOnly, setLicensedOnly] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("default");
@@ -459,14 +439,14 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
         }
       }
 
-      if (cityFilter !== "all") {
+      if (cityFilter) {
         const targetCity = cityFilter === "TP.HCM" ? "hồ chí minh" : cityFilter.toLowerCase();
         if (!c.city?.toLowerCase().includes(targetCity)) {
           return false;
         }
       }
 
-      if (typeFilter !== "all") {
+      if (typeFilter) {
         const rawType = c.centerType || "study_abroad";
         const centerType = rawType === "english_training" ? "test_prep" : rawType;
         if (centerType !== typeFilter) {
@@ -488,7 +468,7 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
         }
       }
 
-      if (isAdmin && statusFilter !== "all") {
+      if (isAdmin && statusFilter) {
         const status = c.verificationStatus || "unverified";
         if (status !== statusFilter) {
           return false;
@@ -521,9 +501,9 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
 
   const handleResetFilters = () => {
     setSearch("");
-    setCityFilter("all");
-    setTypeFilter("all");
-    setStatusFilter("all");
+    setCityFilter(undefined);
+    setTypeFilter(undefined);
+    setStatusFilter(undefined);
     setSelectedServices([]);
     setLicensedOnly(false);
     setPage(1);
@@ -547,24 +527,24 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
       },
     });
   }
-  if (cityFilter !== "all") {
+  if (cityFilter) {
     const cityLabel = CITY_OPTIONS.find((c) => c.value === cityFilter)?.label ?? cityFilter;
     activeChips.push({
       key: "city",
       label: `Địa điểm: ${cityLabel}`,
       onRemove: () => {
-        setCityFilter("all");
+        setCityFilter(undefined);
         setPage(1);
       },
     });
   }
-  if (typeFilter !== "all") {
+  if (typeFilter) {
     const typeLabel = TYPE_OPTIONS.find((t) => t.value === typeFilter)?.label ?? typeFilter;
     activeChips.push({
       key: "type",
       label: `Mô hình: ${typeLabel}`,
       onRemove: () => {
-        setTypeFilter("all");
+        setTypeFilter(undefined);
         setPage(1);
       },
     });
@@ -586,12 +566,12 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
       },
     });
   }
-  if (isAdmin && statusFilter !== "all") {
+  if (isAdmin && statusFilter) {
     activeChips.push({
       key: "status",
       label: statusFilter === "verified" ? "Đã xác minh" : "Chờ xác minh",
       onRemove: () => {
-        setStatusFilter("all");
+        setStatusFilter(undefined);
         setPage(1);
       },
     });
@@ -623,6 +603,10 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
       setPage(1);
     },
     onToggleService: toggleService,
+    onClearServices: () => {
+      setSelectedServices([]);
+      setPage(1);
+    },
     onLicensedOnlyChange: (checked) => {
       setLicensedOnly(checked);
       setPage(1);

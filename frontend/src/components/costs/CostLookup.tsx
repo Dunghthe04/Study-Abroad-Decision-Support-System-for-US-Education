@@ -17,7 +17,7 @@ const MODES: { value: CostMode; label: string; href: string; icon: typeof Gradua
 ];
 
 const DESCRIPTION: Record<CostMode, string | null> = {
-  school: "Xem chi phí của một trường, hoặc thêm đến 4 trường để so sánh.",
+  school: "",
   state: null,
 };
 
@@ -26,11 +26,13 @@ export function CostLookup({
   mode,
   initialCodes,
   states,
+  onCodesChange,
 }: {
   mode: CostMode;
   initialCodes: string[];
   /** Chỉ có khi mode = "state"; null là tải lỗi */
   states: StateLivingCost[] | null;
+  onCodesChange?: (codes: string[]) => void;
 }) {
   return (
     // Chưa chọn trường nào (SchoolCostLookup đặt data-empty): đưa tiêu đề và ô tìm ra giữa vùng nhìn thấy
@@ -44,7 +46,7 @@ export function CostLookup({
       </header>
 
       {mode === "school" ? (
-        <SchoolCostLookup initialCodes={initialCodes} />
+        <SchoolCostLookup initialCodes={initialCodes} onCodesChange={onCodesChange} />
       ) : states ? (
         <StateLivingCostCompare states={states} />
       ) : (

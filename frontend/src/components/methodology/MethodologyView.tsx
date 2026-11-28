@@ -181,7 +181,7 @@ export function MethodologyView({ parameters, gradeScale }: MethodologyViewProps
       {/* HERO: cùng ngôn ngữ tràn màn hình với trang chủ, thẻ bên phải minh họa thang vị trí 0–100% */}
       <section
         aria-label="Cách hệ thống xếp trường"
-        className="relative isolate -mt-[var(--header-h)] flex min-h-[min(100svh,960px)] items-end overflow-hidden bg-brand-ink text-white"
+        className="relative isolate -mt-[var(--header-h)] flex min-h-[min(100svh,960px)] items-end overflow-hidden bg-brand-deep text-white"
       >
         <SchoolPhotoBackdrop schools={HERO_CAMPUS} activeIndex={0} />
 
@@ -196,7 +196,7 @@ export function MethodologyView({ parameters, gradeScale }: MethodologyViewProps
             <div className="flex flex-wrap gap-3">
               <Link
                 href="/analysis"
-                className={buttonVariants({ size: "xl", className: "!bg-white !text-brand-ink hover:!bg-white/90" })}
+                className={buttonVariants({ size: "xl", className: "!bg-white !text-brand-deep hover:!bg-white/90" })}
               >
                 Phân tích hồ sơ
                 <ArrowRightIcon className="transition-transform group-hover/button:translate-x-0.5" />

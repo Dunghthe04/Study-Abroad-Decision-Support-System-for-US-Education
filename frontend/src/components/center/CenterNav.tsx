@@ -1,10 +1,14 @@
 "use client";
 
-import React from "react";
+import React, { createContext, useContext } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboardIcon, MessageSquareIcon, ShieldCheckIcon, Building2Icon, StarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// ponytail: temporary path override so /audit/center highlights the previewed tab without altering production routes
+const CenterNavPathContext = createContext<string | null>(null);
+export const CenterNavPathProvider = CenterNavPathContext.Provider;
 
 const NAV_ITEMS = [
   { href: "/center", label: "Tổng quan", icon: LayoutDashboardIcon, exact: true },
@@ -15,7 +19,8 @@ const NAV_ITEMS = [
 ];
 
 export function CenterNav() {
-  const pathname = usePathname();
+  const realPathname = usePathname();
+  const pathname = useContext(CenterNavPathContext) ?? realPathname;
 
   return (
     <div className="border-b border-line bg-surface">

@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import Link from "next/link";
 import {
   AlertTriangleIcon,
-  ArrowLeftIcon,
   ArrowUpRightIcon,
   BadgeCheckIcon,
   CheckIcon,
@@ -29,6 +27,7 @@ import { formatRating } from "@/lib/rating";
 import { STUDY_LEVELS, studyLevelLabel } from "@/lib/study-levels";
 import { universityHost, universityUrl } from "@/lib/university-display";
 import { cn } from "@/lib/utils";
+import { FloatingBackButton } from "@/components/shared/floating-back-button";
 import { Badge } from "@/components/ui/badge";
 import { TrustIcon } from "./CenterBadges";
 import { DetailRows, DetailSection, Gauge, SchoolImage, type GaugeTone } from "@/components/universities/UniversityDetailParts";
@@ -276,21 +275,13 @@ export function StudyCenterDetailView({ center }: StudyCenterDetailViewProps) {
 
   return (
     <article className="@container space-y-6 pb-12">
-      {/* Nút tròn nổi góc trái trên, mờ nhẹ, không hiệu ứng khi rê chuột, luôn hiện khi cuộn, đưa về danh bạ trung tâm */}
-      <Link
-        href="/centers"
-        aria-label="Về danh bạ trung tâm"
-        title="Danh bạ trung tâm"
-        className="fixed top-[calc(var(--header-h)+0.75rem)] left-4 z-30 flex size-11 items-center justify-center rounded-full border border-line bg-surface text-ink opacity-70 shadow-md @2xl:left-8"
-      >
-        <ArrowLeftIcon className="size-5" aria-hidden="true" />
-      </Link>
+      <FloatingBackButton href="/centers" label="Về danh bạ trung tâm" />
 
       {/* Ảnh bìa tràn mép dưới thanh đầu trong suốt giống trang chi tiết trường */}
       <header>
-        <div className="relative -mt-(--header-h) h-[min(50svh,440px)] min-h-64 overflow-hidden bg-brand-ink">
+        <div className="relative -mt-(--header-h) h-[min(50svh,440px)] min-h-64 overflow-hidden bg-brand-deep">
           <SchoolImage url={profile.coverImage} alt={`Không gian ${center.name}`} className="size-full" priority />
-          <div className="absolute inset-x-0 top-0 h-48 bg-linear-to-b from-brand-ink/80 to-transparent" />
+          <div className="absolute inset-x-0 top-0 h-48 bg-linear-to-b from-brand-deep/80 to-transparent" />
         </div>
 
         <div className="border-b border-line bg-surface">
