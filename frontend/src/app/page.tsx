@@ -38,7 +38,6 @@ import { LayerStack } from "@/components/landing/LayerStack";
 import { StepsWheel } from "@/components/landing/StepsWheel";
 import { SchoolLogoStrip } from "@/components/landing/SchoolLogoStrip";
 import { UniversityCard } from "@/components/universities/UniversityCard";
-import { LANDING_SCHOOLS, type LandingSchool } from "@/lib/landing-schools";
 import { searchUniversities } from "@/lib/university-api";
 import { useAuth } from "@/contexts/AuthContext";
 import type { UniversityListItem } from "@/types/university";
@@ -111,34 +110,6 @@ const FAQS = [
   },
 ];
 
-function fallbackToUniversityListItem(s: LandingSchool, idx: number): UniversityListItem {
-  const [city, state] = s.city.split(", ");
-  return {
-    id: `landing-${idx}`,
-    code: s.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-    name: s.name,
-    city: city ?? null,
-    state: state ?? null,
-    stateName: null,
-    control: s.type === "public" ? "public" : "private",
-    acceptanceRate: s.acceptRate,
-    isIvy: s.typeLabel === "Ivy League",
-    logoUrl: null,
-    coverUrl: s.image,
-    tuitionUsd: null,
-    totalCostUsd: null,
-    minIelts: null,
-    minToefl: null,
-    minDuolingo: null,
-    bestRank: null,
-    bestRankList: null,
-    satPolicy: null,
-    actPolicy: null,
-    intlAidPolicy: null,
-    majors: s.majors,
-  };
-}
-
 function SectionHead({ title, desc, className }: { title: string; desc?: string; className?: string }) {
   return (
     <div className={cn("max-w-2xl space-y-2", className)}>
@@ -157,9 +128,7 @@ function HomeView() {
   const searchParams = useSearchParams();
   const isPublicPreview = searchParams.get("view") === "public";
   const [customQuestion, setCustomQuestion] = useState("");
-  const [schools, setSchools] = useState<UniversityListItem[]>(() =>
-    LANDING_SCHOOLS.map(fallbackToUniversityListItem),
-  );
+  const [schools, setSchools] = useState<UniversityListItem[]>([]);
   const [schoolsLoading, setSchoolsLoading] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -167,7 +136,7 @@ function HomeView() {
 
   useEffect(() => {
     let alive = true;
-    searchUniversities({ sortBy: "rank", pageSize: 10 })
+    searchUniversities({ sortBy: "rank", pageSize: 12 })
       .then((res) => {
         if (!alive) return;
         if (res.items && res.items.length > 0) {
@@ -175,7 +144,7 @@ function HomeView() {
         }
       })
       .catch(() => {
-        // Giữ fallback đã khởi tạo từ LANDING_SCHOOLS
+        // Bỏ qua lỗi mạng tạm thời; giao diện giữ trạng thái rỗng an toàn
       })
       .finally(() => {
         if (alive) setSchoolsLoading(false);
@@ -231,8 +200,8 @@ function HomeView() {
 
   return (
     <>
-    <LandingHero />
-    <SchoolLogoStrip />
+    <LandingHero schools={schools} loading={schoolsLoading} />
+    <SchoolLogoStrip schools={schools} />
     <div className="mx-auto max-w-[1560px] space-y-28 px-4 pt-16 pb-28 sm:space-y-40 sm:px-8 sm:pt-24 lg:px-12">
       {isStaff && isPublicPreview && (
         <Alert variant="warning">

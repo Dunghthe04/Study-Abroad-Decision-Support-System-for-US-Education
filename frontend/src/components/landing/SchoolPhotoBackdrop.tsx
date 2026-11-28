@@ -54,7 +54,7 @@ export function SchoolPhotoBackdrop({
       {/* Lớp tối để chữ trắng đọc được trên mọi ảnh (đạt AA ở vùng chữ) */}
       <div
         className={cn(
-          "absolute inset-0 bg-linear-to-t from-brand-ink/90 via-brand-ink/70 via-45% to-brand-ink/35",
+          "absolute inset-0 bg-linear-to-t from-brand-deep/90 via-brand-deep/70 via-45% to-brand-deep/35",
           overlayClassName,
         )}
       />
