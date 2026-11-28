@@ -60,6 +60,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // [Bảo mật cao - Không dùng localStorage]:
   // Khi tải ứng dụng: gọi trực tiếp /api/v1/auth/me với HttpOnly Cookie được trình duyệt gửi tự động.
   useEffect(() => {
+    // ponytail: /audit/* pages install their own mock fetch interceptor before calling refreshUser()
+    if (typeof window !== "undefined" && window.location.pathname.startsWith("/audit")) {
+      queueMicrotask(() => setIsLoading(false));
+      return;
+    }
+
     async function initAuth() {
       try {
         const profile = await authApi.getMe();

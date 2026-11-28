@@ -54,7 +54,7 @@ export function AdminCenterDetailPanel({ center, onClose }: AdminCenterDetailPan
     >
       <div className="space-y-5">
         {/* Banner & Logo Preview */}
-        <div className="relative rounded-lg overflow-hidden border border-line bg-gradient-to-br from-brand via-brand/85 to-brand-ink aspect-[3/1]">
+        <div className="relative rounded-lg overflow-hidden border border-line bg-gradient-to-br from-brand via-brand/85 to-brand-deep aspect-[3/1]">
           {showCover && (
             <img
               src={profile.coverImage ?? undefined}

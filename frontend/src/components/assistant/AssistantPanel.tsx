@@ -15,6 +15,7 @@ import {
   Minimize2Icon,
   PlusIcon,
   RotateCwIcon,
+  SquareIcon,
   TriangleAlertIcon,
   Undo2Icon,
   UsersIcon,
@@ -137,7 +138,7 @@ export function AssistantPanel() {
     el.style.transition = "";
     el.style.height = `${next}px`;
     lastHeightRef.current = next;
-  }, [input, composerExpanded, open, loading]);
+  }, [input, composerExpanded, open]);
 
   if (!visible) return null;
 
@@ -302,6 +303,15 @@ export function AssistantPanel() {
         ) : empty ? (
           /* Chưa hỏi gì: lời chào ở giữa khung và các câu hỏi gợi ý xếp dọc */
           <div className="flex flex-1 flex-col items-center justify-center px-6 pb-10 text-center">
+            <span className="mb-3 flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1 shadow-xs">
+              <Image
+                src="/icons/USDSS.png"
+                alt=""
+                width={36}
+                height={36}
+                className="size-9 object-contain"
+              />
+            </span>
             <p className="font-heading text-xl font-semibold text-ink">USDSS Advisor</p>
             <p className="mt-1.5 max-w-[34ch] text-sm leading-relaxed text-ink-2">
               {page.greeting ?? "Tôi có thể giúp gì cho bạn?"}
@@ -400,7 +410,7 @@ export function AssistantPanel() {
             </div>
             <Link
               href={`/login?redirect=${encodeURIComponent(pathname)}`}
-              className={cn(buttonVariants({ size: "sm" }), "shrink-0 rounded-lg bg-brand text-brand-foreground hover:bg-brand-ink")}
+              className={cn(buttonVariants({ size: "sm" }), "shrink-0 rounded-lg bg-brand text-brand-foreground hover:bg-brand/85")}
             >
               Đăng nhập
             </Link>
@@ -416,23 +426,10 @@ export function AssistantPanel() {
             </div>
             <Link
               href="/account#parent-links"
-              className={cn(buttonVariants({ size: "sm" }), "shrink-0 rounded-lg bg-brand text-brand-foreground hover:bg-brand-ink")}
+              className={cn(buttonVariants({ size: "sm" }), "shrink-0 rounded-lg bg-brand text-brand-foreground hover:bg-brand/85")}
             >
               Xác nhận
             </Link>
-          </div>
-        ) : loading ? (
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--control-border)]/70 bg-[var(--surface-2)] px-4 py-3">
-            <AnimatedShinyText className="text-sm font-medium">USDSS đang trả lời...</AnimatedShinyText>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={stop}
-              className="shrink-0 rounded-lg bg-brand-wash text-brand hover:bg-brand hover:text-white"
-            >
-              Dừng
-            </Button>
           </div>
         ) : (
           <div
@@ -528,21 +525,36 @@ export function AssistantPanel() {
                     variant="ghost"
                     size="icon"
                     onClick={newChat}
+                    disabled={loading || openingSession}
                     aria-label="Cuộc trò chuyện mới"
                     title="Cuộc trò chuyện mới"
                     className="size-8 rounded-lg text-ink-2 hover:bg-ground hover:text-ink"
                   >
                     <PlusIcon className="size-4.5" />
                   </Button>
-                  <Button
-                    type="submit"
-                    size="icon"
-                    aria-label="Gửi"
-                    disabled={loading || openingSession || !canSend || !input.trim()}
-                    className="size-9 rounded-lg bg-brand text-brand-foreground hover:bg-brand hover:opacity-90 [&:disabled:not([aria-busy])]:opacity-40"
-                  >
-                    <ArrowUpIcon className="size-4.5" />
-                  </Button>
+                  {loading ? (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      onClick={stop}
+                      aria-label="Dừng"
+                      title="Dừng"
+                      className="size-9 rounded-lg"
+                    >
+                      <SquareIcon className="size-3.5 fill-current" />
+                    </Button>
+                  ) : (
+                    <Button
+                      type="submit"
+                      size="icon"
+                      aria-label="Gửi"
+                      disabled={openingSession || !canSend || !input.trim()}
+                      className="size-9 rounded-lg bg-brand text-brand-foreground hover:bg-brand hover:opacity-90 [&:disabled:not([aria-busy])]:opacity-40"
+                    >
+                      <ArrowUpIcon className="size-4.5" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </form>
@@ -679,7 +691,7 @@ function QuotaAlertBadge({ subscription, onNavigate }: { subscription: Subscript
           onClick={onNavigate}
           className={cn(
             buttonVariants({ size: "sm" }),
-            "mt-1 w-full justify-center rounded-lg bg-brand text-brand-foreground hover:bg-brand-ink",
+            "mt-1 w-full justify-center rounded-lg bg-brand text-brand-foreground hover:bg-brand/85",
           )}
         >
           {isLowQuota ? "Xem gói dịch vụ" : "Gia hạn ngay"}
@@ -852,7 +864,7 @@ function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (va
       {turn.widget?.type === "form" && (
         <Link
           href={formLink(turn.widget.data)}
-          className="mt-2.5 inline-flex h-8 items-center rounded-lg bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-ink"
+          className="mt-2.5 inline-flex h-8 items-center rounded-lg bg-brand px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand/85"
         >
           Mở form hồ sơ
         </Link>
@@ -866,7 +878,7 @@ function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (va
             shrinkIfFull();
             router.push(`/recommendations?ts=${Date.now()}`);
           }}
-          className="mt-2.5 rounded-lg bg-brand px-3.5 text-[13px] font-semibold text-white hover:bg-brand-ink"
+          className="mt-2.5 rounded-lg bg-brand px-3.5 text-[13px] font-semibold text-white hover:bg-brand/85"
         >
           Xem đầy đủ danh sách trường
         </Button>
@@ -879,7 +891,7 @@ function Turn({ turn, onReply, className }: { turn: AssistantTurn; onReply?: (va
             shrinkIfFull();
             showSimulation(turn.widget?.data, router.push);
           }}
-          className="mt-2.5 rounded-lg bg-brand px-3.5 text-[13px] font-semibold text-white hover:bg-brand-ink"
+          className="mt-2.5 rounded-lg bg-brand px-3.5 text-[13px] font-semibold text-white hover:bg-brand/85"
         >
           Xem trên thanh kéo
         </Button>
@@ -1056,11 +1068,22 @@ export function AssistantLauncher() {
       className="fixed right-5 bottom-5 z-30 w-[min(22rem,calc(100vw-2.5rem))] rounded-2xl border border-line bg-surface p-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-300 print:hidden"
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p id="advisor-peek-title" className="font-heading text-base font-semibold text-ink">
-            USDSS Advisor
-          </p>
-          <p className="mt-1 text-sm text-ink-2">Tôi có thể giúp gì cho bạn?</p>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-0.5">
+            <Image
+              src="/icons/USDSS.png"
+              alt=""
+              width={28}
+              height={28}
+              className="size-7 object-contain"
+            />
+          </span>
+          <div className="min-w-0">
+            <p id="advisor-peek-title" className="font-heading text-base font-semibold text-ink">
+              USDSS Advisor
+            </p>
+            <p className="mt-0.5 text-sm text-ink-2">Tôi có thể giúp gì cho bạn?</p>
+          </div>
         </div>
         <IconButton label="Thu gọn" onClick={dismiss} className="-mt-1 -mr-1">
           <XIcon className="size-4.5" />

@@ -26,7 +26,8 @@ import type { AcceptedPolicy, PolicyAcceptanceItem, PolicyAcceptanceStatus } fro
 /** Chỉ ba loại tài khoản này phải đồng ý (khớp backend); admin và moderator là người nội bộ. */
 const SUBJECT_ROLES = ["student", "parent", "center"];
 /** Hai trang này luôn đọc được, kể cả khi đang bị chặn. */
-const READABLE_PATHS = ["/terms", "/privacy"];
+// ponytail: include /audit so temporary UI audit pages are never blocked by policy acceptance modal
+const READABLE_PATHS = ["/terms", "/privacy", "/audit"];
 
 const KIND_LABELS: Record<string, string> = {
   terms_of_use: "Điều khoản sử dụng",
@@ -48,7 +49,8 @@ const kindHref = (item: PolicyAcceptanceItem) => KIND_HREFS[item.kind] ?? "/term
 export function PolicyGate({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const pathname = usePathname();
-  const subject = user !== null && SUBJECT_ROLES.includes(user.role);
+  const readable = READABLE_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const subject = user !== null && SUBJECT_ROLES.includes(user.role) && !readable;
 
   const [attempt, setAttempt] = useState(0);
   const key = subject ? `${user.id}:${attempt}` : "none";
@@ -82,7 +84,6 @@ export function PolicyGate({ children }: { children: ReactNode }) {
   // Chỉ tin kết quả của CHÍNH người đang đăng nhập (đổi tài khoản không tải lại trang thì kết quả cũ thuộc người khác).
   // Đang tải lại thì vẫn dùng kết quả cũ của người này, để hộp không nhấp nháy.
   const status = subject && data?.userId === user.id ? data.status : null;
-  const readable = READABLE_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const blocked = status?.mustAccept === true && !readable;
 
   // Cấu trúc cố định (thông báo, trang, hộp) để trang phía sau không bị dựng lại mỗi lần đổi trạng thái

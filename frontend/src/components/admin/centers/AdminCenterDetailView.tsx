@@ -186,7 +186,7 @@ export function AdminCenterDetailView({ center: initialCenter }: AdminCenterDeta
       <div className="relative rounded-xl overflow-hidden border border-border bg-card ">
         {/* Cover Background */}
         <div
-          className="h-44 sm:h-52 w-full bg-cover bg-center relative bg-brand-ink"
+          className="h-44 sm:h-52 w-full bg-cover bg-center relative bg-brand-deep"
           style={profile.coverImage ? { backgroundImage: `url(${profile.coverImage})` } : undefined}
         >
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />

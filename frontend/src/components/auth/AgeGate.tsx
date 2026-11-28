@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ShieldAlertIcon } from "lucide-react";
 import { useAgeBlock, type AgeFeature } from "@/lib/age-features";
 import { buttonVariants } from "@/components/ui/button";
@@ -14,8 +15,10 @@ interface AgeGateProps {
 
 // [Q11] Bọc trang/nút của chức năng bị chặn theo tuổi: bị chặn thì thay bằng thông báo, được dùng thì hiện bình thường.
 export function AgeGate({ feature, children }: AgeGateProps) {
+  const pathname = usePathname();
   const block = useAgeBlock(feature);
-  if (!block) return <>{children}</>;
+  // ponytail: bypass age gate under /audit/* so age-restricted views can be audited directly
+  if (pathname?.startsWith("/audit") || !block) return <>{children}</>;
 
   return (
     <div className="flex min-h-[50vh] items-center justify-center p-4">

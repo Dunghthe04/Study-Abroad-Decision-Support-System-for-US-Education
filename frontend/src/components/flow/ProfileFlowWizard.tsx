@@ -719,7 +719,7 @@ export function ProfileFlowWizard() {
 
   // Khung trợ lý đóng: thanh bước bên trái từ 1024px (dưới đó là thanh dính); khung trợ lý mở: luôn là thanh dính
   return (
-    <div data-flow-motion className="bg-surface lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden lg:bg-brand">
+    <div data-flow-motion className="bg-surface lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden lg:bg-brand dark:lg:bg-brand-deep">
       <div className="flex min-h-[calc(100dvh-var(--header-h))] lg:min-h-0 lg:flex-1">
         {!assistantOpen && <ProfileFlowStepper variant="sidebar" {...stepperProps} />}
         <section className={cn("flow-panel flex min-w-0 flex-1 flex-col bg-surface lg:my-3 lg:mr-3 lg:min-h-0 lg:overflow-hidden lg:rounded-2xl", assistantOpen && "lg:ml-3")}>

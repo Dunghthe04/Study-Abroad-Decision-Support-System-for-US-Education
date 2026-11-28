@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { LANDING_SCHOOLS } from "@/lib/landing-schools";
 import { SchoolPhotoBackdrop, useSchoolPhotoCycle } from "@/components/landing/SchoolPhotoBackdrop";
@@ -25,19 +26,29 @@ export function AuthSplitLayout({ children, containerClassName }: AuthSplitLayou
     // Desktop: khung cao đúng một màn hình, trang không cuộn; form dài (đăng ký) chỉ cuộn bên trong cột phải
     <div className="flex min-h-svh w-full flex-col bg-surface min-[900px]:h-svh min-[900px]:flex-row min-[900px]:overflow-hidden">
       {/* Cột trái (hoặc băng ngang 160px trên điện thoại/màn hình <900px) */}
-      <div className="relative isolate flex h-40 shrink-0 flex-col justify-end overflow-hidden bg-brand-ink p-5 text-white sm:p-6 min-[900px]:h-full min-[900px]:w-[62%] min-[900px]:flex-1 min-[900px]:justify-center min-[900px]:px-12 lg:min-[900px]:px-16 xl:min-[900px]:px-20">
+      <div className="relative isolate flex h-40 shrink-0 flex-col justify-end overflow-hidden bg-brand-deep p-5 text-white sm:p-6 min-[900px]:h-full min-[900px]:w-[62%] min-[900px]:flex-1 min-[900px]:justify-center min-[900px]:px-12 lg:min-[900px]:px-16 xl:min-[900px]:px-20">
         <SchoolPhotoBackdrop
           schools={LANDING_SCHOOLS}
           activeIndex={index}
           overlayClassName="min-[900px]:bg-linear-135"
         />
 
-        {/* Chữ USDSS về trang chủ, góc trên bên trái */}
+        {/* Logo USDSS về trang chủ, góc trên bên trái */}
         <Link
           href="/"
-          className="absolute top-4 left-5 z-10 rounded-md font-heading text-xl font-bold tracking-tight text-white outline-none focus-visible:ring-3 focus-visible:ring-white/60 sm:left-6 min-[900px]:top-8 min-[900px]:left-12 lg:min-[900px]:left-16 xl:min-[900px]:left-20"
+          aria-label="USDSS"
+          className="absolute top-4 left-5 z-10 flex items-center rounded-lg outline-none transition-opacity hover:opacity-90 focus-visible:ring-3 focus-visible:ring-white/60 sm:left-6 min-[900px]:top-8 min-[900px]:left-12 lg:min-[900px]:left-16 xl:min-[900px]:left-20"
         >
-          USDSS
+          <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-0.5">
+            <Image
+              src="/icons/USDSS.png"
+              alt=""
+              width={32}
+              height={32}
+              priority
+              className="size-8 object-contain"
+            />
+          </span>
         </Link>
 
         <div className="relative z-10 max-w-xl">

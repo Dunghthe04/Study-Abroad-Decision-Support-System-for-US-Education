@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ChevronDownIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import type { UsStateOption } from "@/types/profile-flow";
@@ -358,12 +359,10 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
               key={f.name}
               className="flex cursor-pointer items-center gap-2 text-sm text-foreground sm:col-span-2"
             >
-              <input
-                type="checkbox"
+              <Checkbox
                 disabled={!onPick}
                 checked={isChecked(f.name)}
-                onChange={(e) => setValue(f.name, e.target.checked ? "1" : "")}
-                className="size-4 cursor-pointer accent-brand"
+                onCheckedChange={(c) => setValue(f.name, c === true ? "1" : "")}
               />
               {f.label}
             </label>
@@ -399,7 +398,7 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
           disabled={!onPick || !ready}
           title={firstError ?? undefined}
           onClick={submit}
-          className="shrink-0 rounded-lg bg-brand px-3.5 text-xs font-semibold text-white hover:bg-brand-ink"
+          className="shrink-0 rounded-lg bg-brand px-3.5 text-xs font-semibold text-white hover:bg-brand/85"
         >
           Gửi
         </Button>

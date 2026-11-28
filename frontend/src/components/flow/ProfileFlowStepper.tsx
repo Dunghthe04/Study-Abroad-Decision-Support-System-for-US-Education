@@ -140,7 +140,7 @@ export function ProfileFlowStepper({
           size="sm"
           onClick={needs.onEdit}
           aria-label="Đổi nhu cầu"
-          className="shrink-0 bg-brand-wash text-brand hover:bg-white"
+          className="shrink-0 bg-brand-wash text-brand hover:bg-white dark:bg-white/15 dark:text-white dark:hover:bg-white/25"
         >
           Đổi
         </Button>
@@ -155,7 +155,7 @@ export function ProfileFlowStepper({
         className={cn(
           // Bản ngang thu gọn của thanh bước bên trái: nền xanh đậm nhạt hơn một bậc, cùng biểu tượng bước.
           // Màn hẹp dính dưới thanh trên cùng; từ 1024px trang không cuộn nên để yên ở đầu bảng
-          "@container sticky top-(--header-h) z-20 bg-[color-mix(in_oklab,var(--brand),white_14%)] px-3 py-2 text-white lg:static",
+          "@container sticky top-(--header-h) z-20 bg-[color-mix(in_oklab,var(--brand),white_14%)] dark:bg-brand-deep px-3 py-2 text-white lg:static",
           className,
         )}
       >
@@ -208,7 +208,7 @@ export function ProfileFlowStepper({
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetContent
             side={sheetSide}
-            className={cn("overflow-y-auto bg-brand px-4 pb-6 text-white", sheetSide === "bottom" ? "max-h-[85dvh] rounded-t-2xl pt-4" : "pt-4")}
+            className={cn("overflow-y-auto bg-brand dark:bg-brand-deep px-4 pb-6 text-white", sheetSide === "bottom" ? "max-h-[85dvh] rounded-t-2xl pt-4" : "pt-4")}
           >
             <SheetHeader className="px-1">
               <SheetTitle className="text-base font-semibold text-white">Hồ sơ chọn trường</SheetTitle>
@@ -223,7 +223,7 @@ export function ProfileFlowStepper({
   }
 
   return (
-    <aside className="hidden w-[300px] shrink-0 flex-col bg-brand px-5 py-6 text-white lg:flex lg:h-full lg:overflow-y-auto">
+    <aside className="hidden w-[300px] shrink-0 flex-col bg-brand dark:bg-brand-deep px-5 py-6 text-white lg:flex lg:h-full lg:overflow-y-auto">
       <h2 className="font-heading text-2xl leading-snug text-white">Hồ sơ chọn trường</h2>
       <p className="mt-2 text-sm leading-relaxed text-white/70">
         Cho chúng tôi biết điểm số, chứng chỉ và ngân sách của bạn để tìm ra những trường Mỹ phù hợp nhất.
@@ -255,5 +255,5 @@ function StepIcon({ state }: { state: "done" | "current" | "todo" }) {
       </span>
     );
   }
-  return <span aria-hidden className="size-5 shrink-0 rounded-full border-2 border-white/35 bg-brand" />;
+  return <span aria-hidden className="size-5 shrink-0 rounded-full border-2 border-white/35 bg-brand dark:bg-brand-deep" />;
 }

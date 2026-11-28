@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 
 const INVALID_LINK = "Liên kết rút đồng ý không hợp lệ hoặc đã được sử dụng.";
@@ -135,42 +136,38 @@ export function ParentRevokeForm() {
 
           <fieldset className="space-y-3">
             <legend className="mb-2 text-sm font-semibold text-ink">Bạn muốn làm gì?</legend>
-            <label
-              className={`flex cursor-pointer gap-3 rounded-xl border p-4 text-sm ${choice === "revoke" ? "border-brand bg-brand-wash" : "border-line"}`}
+            <RadioGroup
+              value={choice}
+              onValueChange={(v) => setChoice(v as "revoke" | "delete")}
+              className="gap-3"
             >
-              <input
-                type="radio"
-                name="revoke-choice"
-                className="mt-1"
-                checked={choice === "revoke"}
-                onChange={() => setChoice("revoke")}
-              />
-              <span className="space-y-1">
-                <span className="block font-semibold text-ink">Chỉ rút đồng ý</span>
-                <span className="block text-ink-2">
-                  Hệ thống ngừng xử lý hồ sơ học tập của con; con tạm không dùng được các chức năng cần hồ sơ. Liên kết giữa bạn và con bị
-                  hủy. Tài khoản và dữ liệu của con không bị xóa; muốn cho phép lại, con gửi lời mời mới từ trang Tài khoản.
+              <label
+                htmlFor="revoke-choice-revoke"
+                className={`flex cursor-pointer gap-3 rounded-xl border p-4 text-sm ${choice === "revoke" ? "border-brand bg-brand-wash" : "border-line"}`}
+              >
+                <RadioGroupItem value="revoke" id="revoke-choice-revoke" className="mt-1" />
+                <span className="space-y-1">
+                  <span className="block font-semibold text-ink">Chỉ rút đồng ý</span>
+                  <span className="block text-ink-2">
+                    Hệ thống ngừng xử lý hồ sơ học tập của con; con tạm không dùng được các chức năng cần hồ sơ. Liên kết giữa bạn và con bị
+                    hủy. Tài khoản và dữ liệu của con không bị xóa; muốn cho phép lại, con gửi lời mời mới từ trang Tài khoản.
+                  </span>
                 </span>
-              </span>
-            </label>
-            <label
-              className={`flex cursor-pointer gap-3 rounded-xl border p-4 text-sm ${choice === "delete" ? "border-risk bg-risk-wash" : "border-line"}`}
-            >
-              <input
-                type="radio"
-                name="revoke-choice"
-                className="mt-1"
-                checked={choice === "delete"}
-                onChange={() => setChoice("delete")}
-              />
-              <span className="space-y-1">
-                <span className="block font-semibold text-ink">Rút đồng ý và xóa tài khoản của con</span>
-                <span className="block text-ink-2">
-                  Ngoài việc rút đồng ý, tài khoản của con bị khóa ngay và xóa vĩnh viễn sau 30 ngày. Con không tự khôi phục được; bạn nhận
-                  email có nút hủy xóa dùng được tới ngày xóa vĩnh viễn.
+              </label>
+              <label
+                htmlFor="revoke-choice-delete"
+                className={`flex cursor-pointer gap-3 rounded-xl border p-4 text-sm ${choice === "delete" ? "border-risk bg-risk-wash" : "border-line"}`}
+              >
+                <RadioGroupItem value="delete" id="revoke-choice-delete" className="mt-1" />
+                <span className="space-y-1">
+                  <span className="block font-semibold text-ink">Rút đồng ý và xóa tài khoản của con</span>
+                  <span className="block text-ink-2">
+                    Ngoài việc rút đồng ý, tài khoản của con bị khóa ngay và xóa vĩnh viễn sau 30 ngày. Con không tự khôi phục được; bạn nhận
+                    email có nút hủy xóa dùng được tới ngày xóa vĩnh viễn.
+                  </span>
                 </span>
-              </span>
-            </label>
+              </label>
+            </RadioGroup>
           </fieldset>
 
           <p className="text-sm text-ink-2">Con sẽ nhận email báo việc này.</p>

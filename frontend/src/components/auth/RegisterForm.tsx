@@ -11,6 +11,7 @@ import { NETWORK_ERROR, PASSWORD_RULE_HINT, checkPhone, confirmPasswordError, em
 import { useAccountPolicies } from "@/lib/use-account-policies";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/auth/PasswordInput";
@@ -18,7 +19,6 @@ import { PasswordMatchStatus, PasswordStrengthMeter } from "@/components/auth/Pa
 import { REGISTER_PARENT_EMAIL_KEY } from "@/components/auth/ParentConsentForm";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 
 // [Q11] Ngưỡng tuổi theo luật VN (khớp AgeGroups ở backend; backend tính lại và là nơi quyết định)
 const STUDENT_MIN_AGE = 13;
@@ -518,20 +518,16 @@ export function RegisterForm() {
           {/* Đồng ý điều khoản và chính sách bảo mật */}
           <Field data-invalid={Boolean(fieldErrors.agreeTerms)} className="pt-1">
             <div className="flex items-start gap-2.5">
-              <input
+              <Checkbox
                 id="agreeTerms"
-                type="checkbox"
                 checked={agreeTerms}
                 aria-invalid={Boolean(fieldErrors.agreeTerms)}
                 aria-describedby={fieldErrors.agreeTerms ? "agreeTerms-error" : undefined}
-                onChange={(e) => {
-                  setAgreeTerms(e.target.checked);
+                onCheckedChange={(c) => {
+                  setAgreeTerms(c === true);
                   clearFieldError("agreeTerms");
                 }}
-                className={cn(
-                  "mt-0.5 size-4 rounded border-line text-brand focus:ring-brand cursor-pointer",
-                  fieldErrors.agreeTerms && "border-destructive ring-2 ring-destructive/20"
-                )}
+                className="mt-0.5 cursor-pointer"
               />
               <label htmlFor="agreeTerms" className="text-sm leading-snug text-ink-2 cursor-pointer select-none">
                 Tôi đồng ý với{" "}

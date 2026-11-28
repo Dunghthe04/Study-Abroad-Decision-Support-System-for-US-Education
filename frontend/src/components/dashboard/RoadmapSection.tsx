@@ -9,8 +9,8 @@ import { ContactRequestDialog } from "@/components/centers/ContactRequestDialog"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { ApiError, dashboardApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -246,10 +246,25 @@ function ProvincePrompt({ current, onSaved, onSkip }: { current?: string | null;
       <label htmlFor="roadmap-province" className="text-foreground">
         {current ? "Đổi tỉnh/thành để gợi ý trung tâm gần bạn." : "Bạn ở tỉnh nào? Để gợi ý trung tâm gần bạn."}
       </label>
-      <NativeSelect id="roadmap-province" size="sm" value={value} onChange={(e) => setValue(e.target.value)} disabled={saving}>
-        <NativeSelectOption value="">Chọn tỉnh/thành</NativeSelectOption>
-        {provinces.map((p) => <NativeSelectOption key={p} value={p}>{p}</NativeSelectOption>)}
-      </NativeSelect>
+      <Select
+        value={value || null}
+        onValueChange={(v) => {
+          if (v !== null) setValue(v);
+        }}
+        disabled={saving}
+        items={provinces.map((p) => ({ value: p, label: p }))}
+      >
+        <SelectTrigger id="roadmap-province" size="sm" className="bg-surface">
+          <SelectValue placeholder="Chọn tỉnh/thành" />
+        </SelectTrigger>
+        <SelectContent>
+          {provinces.map((p) => (
+            <SelectItem key={p} value={p}>
+              {p}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <Button type="button" size="sm" disabled={!value || value === current || saving} onClick={() => void save()}>
         {saving && <Spinner className="size-4" />} Lưu
       </Button>
