@@ -139,7 +139,9 @@ _STRONG_SCORE_WORDS = frozenset(
     "mon subject course term semester score grade gpa credit credits diem tb hk hl toan gdcd gdqp mathematics math "
     "physics chemistry biology literature english history geography informatics".split()
 )
-_SCORE_WORDS = _STRONG_SCORE_WORDS | frozenset("ly li hoa sinh van su dia anh tin tieng science economics".split())
+_SCORE_WORDS = _STRONG_SCORE_WORDS | frozenset(
+    "ly li hoa sinh van su dia anh tin tieng science economics".split()
+)
 _SCORE_PHRASE_RE = re.compile(r"\b(?:" + "|".join(MULTI_WORD_HEADERS) + r")\b")
 # Lớp / kỳ / năm học ở bất kỳ đâu trong dòng: "Họ và tên: [HỌ TÊN]   Lớp: 10A1" giữ lại "Lớp: 10A1" để biết lớp.
 # "Học kỳ" OCR hay chép sai chữ "kỳ" (Hoc kg, Hoc kj, Hoc ki): nhận "hoc k" + tối đa 1 chữ, không liệt kê từng kiểu sai
@@ -158,8 +160,12 @@ NAME_WORDS = range(2, 5)
 _RATING_WORDS = frozenset("gioi kha tot yeu kem dat chua trung binh xuat sac".split())
 # Model OCR hay chép bảng dọc: mỗi ô một dòng ("Toán" / "8,2" / "8,2" / "8,2"). Các dòng dưới đây giữ cho kiểu đó.
 _LONE_VALUES = frozenset("t k tb y g x | - ⊗".split())  # xếp loại viết tắt, ô trống OCR chép thành | hoặc -
-_COLUMN_WORD_RE = re.compile(r"(?<![a-z])(?:hk\w*|dtb\w*|ddg\w*|tbm\w*|cn|kqht)(?![a-z])")  # HKý I, CN, ĐTBmhkI, ĐĐGtx
-MAX_LABEL_WORDS = 6  # nhãn hàng của bảng dọc ngắn ("Lich sú và dja lý"); câu dài trước một con số không được tính
+_COLUMN_WORD_RE = re.compile(
+    r"(?<![a-z])(?:hk\w*|dtb\w*|ddg\w*|tbm\w*|cn|kqht)(?![a-z])"
+)  # HKý I, CN, ĐTBmhkI, ĐĐGtx
+MAX_LABEL_WORDS = (
+    6  # nhãn hàng của bảng dọc ngắn ("Lich sú và dja lý"); câu dài trước một con số không được tính
+)
 
 
 def keep_score_lines(text: str) -> str:
@@ -242,11 +248,17 @@ def _useful_line(line: str) -> bool:
     phrases = set(_SCORE_PHRASE_RE.findall(flat))
     score_words = len(words & _SCORE_WORDS) + len(phrases)
     # Mật độ đếm cả chữ lặp và chữ cột ("Điểm kiểm tra HS I Điểm kiểm tra HS II HK TBM")
-    column_tokens = sum(t in _SCORE_WORDS or bool(_COLUMN_WORD_RE.fullmatch(t)) for t in tokens) + len(phrases)
+    column_tokens = sum(t in _SCORE_WORDS or bool(_COLUMN_WORD_RE.fullmatch(t)) for t in tokens) + len(
+        phrases
+    )
     header_words = score_words >= MIN_HEADER_WORDS and column_tokens >= MIN_HEADER_DENSITY * len(tokens)
     if stripped.startswith("|"):
         cells = [c.strip() for c in stripped.strip("|").split("|")]
-        if _CONTEXT_RE.search(flat) or all(set(c) <= set("-: ") for c in cells) or any(_VALUE_RE.match(c) for c in cells if c):
+        if (
+            _CONTEXT_RE.search(flat)
+            or all(set(c) <= set("-: ") for c in cells)
+            or any(_VALUE_RE.match(c) for c in cells if c)
+        ):
             return True
         return bool(_header_lead(cells[0].split())) or header_words
     if _header_lead(stripped.split()) or header_words:
@@ -350,6 +362,7 @@ def _segment_header(words: list[str], columns: int) -> list[str] | None:
 def _pair_score(a: str, b: str) -> float:
     pair = plain(f"{a} {b}")
     return max(SequenceMatcher(None, pair, known).ratio() for known in MULTI_WORD_HEADERS)
+
 
 # --- hint_term_columns: OCR mất dòng tiêu đề cột ("Học kỳ I  Học kỳ II  Cả năm") ---
 # Học bạ THPT: cả năm = (HK1 + 2·HK2) / 3 (hoặc trung bình cộng). Dòng môn có đúng 3 số mà cột 3 khớp công thức thì thứ

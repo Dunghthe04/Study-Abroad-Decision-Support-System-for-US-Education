@@ -151,7 +151,21 @@ các môn
 
 def test_keep_score_lines_keeps_vertical_table_and_drops_teacher_names():
     kept = keep_score_lines(VERTICAL_TABLE).splitlines()
-    for line in ("Hký I", "Hký II", "CN", "Toán", "6.2", "7.7", "7.2", "Ngoại ngũ", "Gung...inh", "Thé dúc", "⊗", "DTB", "7.4"):
+    for line in (
+        "Hký I",
+        "Hký II",
+        "CN",
+        "Toán",
+        "6.2",
+        "7.7",
+        "7.2",
+        "Ngoại ngũ",
+        "Gung...inh",
+        "Thé dúc",
+        "⊗",
+        "DTB",
+        "7.4",
+    ):
         assert line in kept
     assert "Nguyen Huong Ngun" not in kept
     assert "Trần Thị Luận Minh" not in kept

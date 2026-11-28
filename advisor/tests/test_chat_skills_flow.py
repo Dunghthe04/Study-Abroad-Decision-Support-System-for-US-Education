@@ -737,7 +737,9 @@ def test_relatives_question_skipped_when_states_known():
 async def test_states_question_has_no_skip_and_all_states_saves_empty_list():
     llm = FakeLLM()
     profile = {**b3_profile(), "current_level": field("college_university")}
-    res = await turn(llm, "Em muốn học ở tất cả các bang", current_step="B2", question_id="N2", profile=profile)
+    res = await turn(
+        llm, "Em muốn học ở tất cả các bang", current_step="B2", question_id="N2", profile=profile
+    )
 
     assert llm.calls == []  # chữ của ô chọn do code xử lý, không gửi qua SLM
     assert res.state.profile["preferred_states"] == field([])

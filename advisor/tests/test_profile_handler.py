@@ -553,7 +553,9 @@ async def test_restart_keeping_everything_returns_to_review():
     for _ in range(len(skill_ho_so.EDIT_ORDER)):
         if state.edit_queue is None:
             break
-        output = await chat.collect(state, KEEP if KEEP in labels(output) else answer_without_value(output), MAC_DINH)
+        output = await chat.collect(
+            state, KEEP if KEEP in labels(output) else answer_without_value(output), MAC_DINH
+        )
     assert (state.question_id, state.edit_queue) == ("X1", None)
     assert output.widget.type == "review"
     assert {name: state.profile[name] for name in full_profile()} == full_profile()
