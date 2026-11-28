@@ -5,7 +5,7 @@ import { getStateLivingCosts } from "@/lib/cost-api";
 import type { StateLivingCost } from "@/types/cost";
 
 export const metadata: Metadata = {
-  title: "Tra cứu chi phí – USAS",
+  title: "Chi phí – USDSS",
   description:
     "Tra cứu chi phí du học Mỹ theo trường hoặc theo bang: ước tính năm đầu và cả khóa, so sánh 2 đến 4 trường, so mặt bằng giá sinh hoạt các bang.",
 };

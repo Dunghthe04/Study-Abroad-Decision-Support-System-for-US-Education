@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { RedirectToAnalysis } from "@/components/profile/RedirectToAnalysis";
 
 export const metadata: Metadata = {
-  title: "Chuyển hướng Phân tích điểm học thuật – USDSS",
+  title: "Phân tích hồ sơ – USDSS",
   description: "Trang phân tích GPA đã được nâng cấp sang Luồng phân tích một cửa tại /analysis.",
 };
 

@@ -5,7 +5,7 @@ import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
 import { ParentRestoreForm } from "@/components/auth/ParentRestoreForm";
 
 export const metadata: Metadata = {
-  title: "Hủy yêu cầu xóa tài khoản của con – USDSS",
+  title: "Khôi phục tài khoản – USDSS",
   description: "Người đại diện hủy yêu cầu xóa tài khoản của con bằng nút trong email, không cần đăng nhập",
 };
 

@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import { PolicyPage } from "@/components/policy/PolicyPage";
 
 export const metadata: Metadata = {
-  title: "Điều khoản sử dụng – USDSS",
+  title: "Điều khoản – USDSS",
   description: "Điều khoản sử dụng hệ thống hỗ trợ ra quyết định du học Mỹ USAS (USDSS)",
 };
 

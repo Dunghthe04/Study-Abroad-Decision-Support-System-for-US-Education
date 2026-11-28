@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import { PolicyPage } from "@/components/policy/PolicyPage";
 
 export const metadata: Metadata = {
-  title: "Chính sách bảo mật – USDSS",
+  title: "Bảo mật – USDSS",
   description: "Chính sách quyền riêng tư và bảo vệ dữ liệu cá nhân của hệ thống USAS (USDSS)",
 };
 

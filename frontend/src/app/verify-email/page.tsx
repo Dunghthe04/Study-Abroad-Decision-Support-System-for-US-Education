@@ -5,7 +5,7 @@ import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
 import { VerifyEmailForm } from "@/components/auth/VerifyEmailForm";
 
 export const metadata: Metadata = {
-  title: "Xác thực Email – USDSS",
+  title: "Xác thực email – USDSS",
   description: "Xác thực địa chỉ email bằng mã OTP để kích hoạt tài khoản",
 };
 

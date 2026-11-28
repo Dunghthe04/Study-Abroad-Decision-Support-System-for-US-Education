@@ -4,7 +4,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { ProfileFlowWizard } from "@/components/flow/ProfileFlowWizard";
 
 export const metadata: Metadata = {
-  title: "Phân tích hồ sơ chọn trường – USDSS",
+  title: "Phân tích hồ sơ – USDSS",
   description:
     "Luồng phân tích hồ sơ du học Mỹ 6 bước: mục tiêu, bảng điểm OCR thông minh, chứng chỉ, tài chính, hoạt động ngoại khóa và gợi ý trường tối ưu.",
 };

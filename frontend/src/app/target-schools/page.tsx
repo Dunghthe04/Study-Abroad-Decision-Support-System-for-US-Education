@@ -3,7 +3,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { TargetSchoolListView } from "@/components/target-schools/TargetSchoolListView";
 
 export const metadata: Metadata = {
-  title: "Danh sách trường mục tiêu – USDSS",
+  title: "Trường mục tiêu – USDSS",
   description: "Theo dõi danh sách các trường đại học mục tiêu, phân nhóm Khó vào - Vừa sức - An toàn và dòng thời gian hạn nộp hồ sơ.",
 };
 

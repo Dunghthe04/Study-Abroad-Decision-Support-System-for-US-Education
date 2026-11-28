@@ -5,7 +5,7 @@ import { AuthSplitLayout } from "@/components/auth/AuthSplitLayout";
 import { ParentRevokeForm } from "@/components/auth/ParentRevokeForm";
 
 export const metadata: Metadata = {
-  title: "Phụ huynh rút đồng ý – USDSS",
+  title: "Rút đồng ý – USDSS",
   description: "Phụ huynh rút lại sự đồng ý cho hệ thống xử lý dữ liệu của con, không cần đăng nhập",
 };
 

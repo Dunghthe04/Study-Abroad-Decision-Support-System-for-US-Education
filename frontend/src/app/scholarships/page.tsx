@@ -7,7 +7,7 @@ import type { PagedResult } from "@/types/api";
 import type { ScholarshipItem, ScholarshipSearchParams } from "@/types/scholarship";
 
 export const metadata: Metadata = {
-  title: "Tìm học bổng – USAS",
+  title: "Học bổng – USDSS",
   description: "Tìm và lọc học bổng du học Mỹ bậc đại học theo giá trị, điều kiện và hạn nộp, mỗi học bổng đều có nguồn.",
 };
 

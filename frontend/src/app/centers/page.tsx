@@ -4,7 +4,7 @@ import type { PagedResult, StudyCenter } from "@/types/api";
 import { ErrorFallback } from "@/components/ui/error-fallback";
 import { PublicCenterListView } from "@/components/centers/PublicCenterListView";
 
-export const metadata = { title: "Trung tâm tư vấn – USDSS" };
+export const metadata = { title: "Trung tâm – USDSS" };
 
 export default async function CentersPage() {
   await connection();
@@ -26,7 +26,7 @@ export default async function CentersPage() {
   }
 
   return (
-    <section className="space-y-6 pb-12">
+    <section className="mx-auto w-full max-w-[1560px] px-4 pt-4 pb-8 sm:px-8 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden lg:px-12 lg:pb-0">
       <PublicCenterListView initialCenters={data.items ?? []} />
     </section>
   );
