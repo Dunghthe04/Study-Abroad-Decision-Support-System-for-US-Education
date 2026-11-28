@@ -1,14 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { AlertTriangleIcon, ShieldAlertIcon } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  AppDialog,
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -26,24 +31,20 @@ export function RevokeConsentDialog({
   onConfirm: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Rút lại sự đồng ý?</DialogTitle>
-        </DialogHeader>
-        <DialogDescription>
-          Hệ thống sẽ ngừng xử lý dữ liệu của con; con dưới 16 tuổi quay về chế độ hạn chế cho tới khi có đồng ý mới.
-        </DialogDescription>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Không
-          </Button>
-          <Button type="button" variant="destructive" onClick={onConfirm}>
-            Xác nhận
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <AppDialog
+      open={open}
+      onOpenChange={(next) => !next && onCancel()}
+      variant="action"
+      icon={<ShieldAlertIcon aria-hidden />}
+      iconTone="destructive"
+      title="Rút lại sự đồng ý?"
+      description="Hệ thống sẽ ngừng xử lý dữ liệu của con; con dưới 16 tuổi quay về chế độ hạn chế cho tới khi có đồng ý mới."
+      cancelLabel="Không"
+      confirmLabel="Xác nhận"
+      confirmTone="destructive"
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   );
 }
 
@@ -68,33 +69,37 @@ export function RevokeAndDeleteChildDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && close()}>
-      <DialogContent>
+      <DialogContent variant="form" size="md">
         <DialogHeader>
-          <DialogTitle className="pr-6">Rút đồng ý và xóa tài khoản của {childName}?</DialogTitle>
+          <DialogIcon tone="destructive">
+            <AlertTriangleIcon aria-hidden />
+          </DialogIcon>
+          <DialogTitle>Rút đồng ý và xóa tài khoản của {childName}?</DialogTitle>
+          <DialogDescription>Việc này khác với chỉ rút đồng ý:</DialogDescription>
         </DialogHeader>
-        <DialogDescription>Việc này khác với chỉ rút đồng ý:</DialogDescription>
-        <ul className="list-disc space-y-1 pl-5 text-sm text-ink-2">
-          <li>Hệ thống ngừng xử lý dữ liệu và rút mọi đồng ý của phụ huynh cho con.</li>
-          <li>Tài khoản của con bị khóa ngay và xóa vĩnh viễn sau 30 ngày. Con không tự khôi phục được khi chưa đủ 16 tuổi.</li>
-          <li>Bạn nhận email có nút &quot;Hủy xóa và đồng ý lại cho con&quot; và &quot;Chỉ hủy xóa&quot;, dùng được tới ngày xóa vĩnh viễn.</li>
-        </ul>
-        <div className="flex items-start gap-2">
-          <Checkbox
-            id="parent-delete-child-understood"
-            checked={understood}
-            onCheckedChange={(checked) => setUnderstood(Boolean(checked))}
-          />
-          <Label htmlFor="parent-delete-child-understood" className="leading-snug text-ink">
-            Tôi hiểu tài khoản và dữ liệu của con sẽ bị xóa vĩnh viễn nếu không hủy trong 30 ngày.
-          </Label>
-        </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={close}>
-            Không
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
+
+        <DialogBody className="space-y-4">
+          <ul className="list-disc space-y-1 pl-5 text-sm text-ink-2">
+            <li>Hệ thống ngừng xử lý dữ liệu và rút mọi đồng ý của phụ huynh cho con.</li>
+            <li>Tài khoản của con bị khóa ngay và xóa vĩnh viễn sau 30 ngày. Con không tự khôi phục được khi chưa đủ 16 tuổi.</li>
+            <li>Bạn nhận email có nút &quot;Hủy xóa và đồng ý lại cho con&quot; và &quot;Chỉ hủy xóa&quot;, dùng được tới ngày xóa vĩnh viễn.</li>
+          </ul>
+          <div className="flex items-start gap-2">
+            <Checkbox
+              id="parent-delete-child-understood"
+              checked={understood}
+              onCheckedChange={(checked) => setUnderstood(Boolean(checked))}
+            />
+            <Label htmlFor="parent-delete-child-understood" className="leading-snug text-ink">
+              Tôi hiểu tài khoản và dữ liệu của con sẽ bị xóa vĩnh viễn nếu không hủy trong 30 ngày.
+            </Label>
+          </div>
+        </DialogBody>
+
+        <DialogFooter layout="pair">
+          <DialogCancel onClick={close}>Không</DialogCancel>
+          <DialogAction
+            tone="destructive"
             disabled={!understood}
             onClick={() => {
               setUnderstood(false);
@@ -102,7 +107,7 @@ export function RevokeAndDeleteChildDialog({
             }}
           >
             Rút đồng ý và xóa
-          </Button>
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>

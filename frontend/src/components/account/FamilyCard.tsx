@@ -5,8 +5,8 @@ import Link from "next/link";
 import {
   LogOutIcon,
   MailIcon,
-  SendIcon,
   Trash2Icon,
+  UserMinusIcon,
   UserPlusIcon,
   XIcon,
 } from "lucide-react";
@@ -15,11 +15,13 @@ import { AccountSectionHeader } from "@/components/account/AccountSectionHeader"
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
+  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogIcon,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -27,10 +29,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -42,7 +48,7 @@ import {
 } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatVnDateTime } from "@/lib/billing-api";
@@ -404,89 +410,109 @@ export function FamilyCard({
       {/* Hộp thoại mời thành viên */}
       <Dialog
         open={inviteOpen}
+        disablePointerDismissal={busy === "invite"}
         onOpenChange={(open) => {
           if (busy === "invite") return;
           setInviteOpen(open);
           if (!open) setDialogError(null);
         }}
       >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Mời thành viên vào gói Gia đình</DialogTitle>
-            <DialogDescription>
-              Lời mời có hiệu lực 7 ngày. Loại tài khoản của người được mời phải khớp với loại chỗ đã chọn. Gói Gia đình có tối đa 2 Học sinh và 2 Phụ huynh.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent variant="form" size="md">
+          <form onSubmit={submitInvite} noValidate className="flex min-h-0 flex-1 flex-col gap-6">
+            <DialogHeader>
+              <DialogIcon tone="brand">
+                <UserPlusIcon aria-hidden />
+              </DialogIcon>
+              <DialogTitle>Mời thành viên vào gói Gia đình</DialogTitle>
+              <DialogDescription>
+                Lời mời có hiệu lực 7 ngày. Loại tài khoản của người được mời phải khớp với loại chỗ đã chọn. Gói Gia đình có tối đa 2 Học sinh và 2 Phụ huynh.
+              </DialogDescription>
+            </DialogHeader>
 
-          <form onSubmit={submitInvite} noValidate className="space-y-4">
-            {dialogError && (
-              <Alert variant="destructive">
-                <AlertDescription>{dialogError}</AlertDescription>
-              </Alert>
-            )}
+            <DialogBody className="space-y-4">
+              {dialogError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{dialogError}</AlertDescription>
+                </Alert>
+              )}
 
-            <Field>
-              <FieldLabel htmlFor="family-invite-email">Email thành viên</FieldLabel>
-              <Input
-                id="family-invite-email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={allFull || busy === "invite"}
-                placeholder="email@vidu.com"
-                className="h-10"
-              />
-            </Field>
+              <Field>
+                <FieldLabel htmlFor="family-invite-email">Email thành viên</FieldLabel>
+                <Input
+                  id="family-invite-email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={allFull || busy === "invite"}
+                  placeholder="email@vidu.com"
+                />
+              </Field>
 
-            <Field>
-              <FieldLabel htmlFor="family-invite-role">Loại chỗ</FieldLabel>
-              <NativeSelect
-                id="family-invite-role"
-                value={effectiveSeat}
-                onChange={(e) => setSeatRole(e.target.value as SeatRole)}
-                disabled={allFull || busy === "invite"}
-                className="h-10 w-full"
-              >
-                <NativeSelectOption value="student" disabled={studentsFull}>
-                  Học sinh{studentsFull ? " (đã đủ)" : ""}
-                </NativeSelectOption>
-                <NativeSelectOption value="parent" disabled={parentsFull}>
-                  Phụ huynh{parentsFull ? " (đã đủ)" : ""}
-                </NativeSelectOption>
-              </NativeSelect>
-              <FieldDescription>
-                {allFull
-                  ? "Gói đã đủ chỗ (tính cả lời mời đang chờ)."
-                  : `Còn ${f.seats.students.max - f.seats.students.used} chỗ Học sinh · ${f.seats.parents.max - f.seats.parents.used} chỗ Phụ huynh.`}
-              </FieldDescription>
-            </Field>
+              <Field>
+                <FieldLabel htmlFor="family-invite-role">Loại chỗ</FieldLabel>
+                {(() => {
+                  const seatItems = [
+                    { value: "student", label: `Học sinh${studentsFull ? " (đã đủ)" : ""}`, disabled: studentsFull },
+                    { value: "parent", label: `Phụ huynh${parentsFull ? " (đã đủ)" : ""}`, disabled: parentsFull },
+                  ];
+                  return (
+                    <Select
+                      value={effectiveSeat}
+                      onValueChange={(v) => {
+                        if (v !== null) setSeatRole(v as SeatRole);
+                      }}
+                      disabled={allFull || busy === "invite"}
+                      items={seatItems}
+                    >
+                      <SelectTrigger id="family-invite-role" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {seatItems.map((item) => (
+                          <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  );
+                })()}
+                <FieldDescription>
+                  {allFull
+                    ? "Gói đã đủ chỗ (tính cả lời mời đang chờ)."
+                    : `Còn ${f.seats.students.max - f.seats.students.used} chỗ Học sinh · ${f.seats.parents.max - f.seats.parents.used} chỗ Phụ huynh.`}
+                </FieldDescription>
+              </Field>
+            </DialogBody>
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setInviteOpen(false)}
-                disabled={busy === "invite"}
-              >
-                Hủy
-              </Button>
-              <Button
+            <DialogFooter layout="pair">
+              <DialogCancel disabled={busy === "invite"}>Hủy</DialogCancel>
+              <DialogAction
                 type="submit"
+                tone="primary"
                 disabled={allFull || busy !== null || !email.trim()}
                 loading={busy === "invite"}
               >
-                <SendIcon data-icon="inline-start" aria-hidden />
-                {busy === "invite" ? "Đang gửi..." : "Gửi lời mời"}
-              </Button>
+                Gửi lời mời
+              </DialogAction>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)}>
-        <AlertDialogContent>
+      <AlertDialog
+        open={confirm !== null}
+        onOpenChange={(open) => {
+          if (busy !== null) return;
+          if (!open) setConfirm(null);
+        }}
+      >
+        <AlertDialogContent variant="action">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="destructive">
+              {confirm?.kind === "leave" ? <LogOutIcon aria-hidden /> : <UserMinusIcon aria-hidden />}
+            </AlertDialogIcon>
             <AlertDialogTitle>
               {confirm?.kind === "leave"
                 ? "Rời gói Gia đình?"
@@ -498,12 +524,11 @@ export function FamilyCard({
                 : "Thành viên này sẽ không dùng chung lượt hỏi của các gói Gia đình nữa và chỗ được giải phóng. Phần đã dùng vẫn được tính vào gói."}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {error && <p className="text-sm text-risk" role="alert">{error}</p>}
-          <AlertDialogFooter>
+          {error && <p className="text-center text-sm text-risk" role="alert">{error}</p>}
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={busy !== null}>Hủy</AlertDialogCancel>
-            <Button
-              type="button"
-              variant="destructive"
+            <AlertDialogAction
+              tone="destructive"
               disabled={busy !== null}
               loading={busy === "leave" || (confirm?.kind === "remove" && busy === `remove:${confirm.memberId}`)}
               onClick={() => {
@@ -515,7 +540,7 @@ export function FamilyCard({
               }}
             >
               {confirm?.kind === "leave" ? "Rời gói" : "Xóa"}
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

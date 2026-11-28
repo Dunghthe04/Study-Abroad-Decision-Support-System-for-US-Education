@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangleIcon,
   ArrowRightLeftIcon,
   CheckIcon,
   HourglassIcon,
@@ -25,11 +26,16 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
+  AppDialog,
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -368,60 +374,57 @@ export function ParentLinksCard() {
       {/* Hộp thoại mời / đổi email phụ huynh */}
       <Dialog
         open={inviteOpen}
+        disablePointerDismissal={busy === "change"}
         onOpenChange={(open) => {
           if (busy === "change") return;
           setInviteOpen(open);
           if (!open) setDialogError(null);
         }}
       >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{hasPending ? "Đổi email phụ huynh" : "Mời phụ huynh liên kết"}</DialogTitle>
-            <DialogDescription>
-              {hasPending
-                ? "Lời mời cũ sẽ bị hủy và hệ thống gửi lời mời mới tới email này."
-                : "Phụ huynh sẽ nhận được email chứa liên kết xác nhận, có hiệu lực trong 7 ngày."}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent variant="form" size="md">
+          <form onSubmit={handleChangeEmail} noValidate className="flex min-h-0 flex-1 flex-col gap-6">
+            <DialogHeader>
+              <DialogIcon tone="brand">
+                <MailIcon aria-hidden />
+              </DialogIcon>
+              <DialogTitle>{hasPending ? "Đổi email phụ huynh" : "Mời phụ huynh liên kết"}</DialogTitle>
+              <DialogDescription>
+                {hasPending
+                  ? "Lời mời cũ sẽ bị hủy và hệ thống gửi lời mời mới tới email này."
+                  : "Phụ huynh sẽ nhận được email chứa liên kết xác nhận, có hiệu lực trong 7 ngày."}
+              </DialogDescription>
+            </DialogHeader>
 
-          <form onSubmit={handleChangeEmail} noValidate className="space-y-4">
-            {dialogError && (
-              <Alert variant="destructive">
-                <AlertDescription>{dialogError}</AlertDescription>
-              </Alert>
-            )}
+            <DialogBody className="space-y-4">
+              {dialogError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{dialogError}</AlertDescription>
+                </Alert>
+              )}
 
-            <Field>
-              <FieldLabel htmlFor="parent-email-input">Email phụ huynh</FieldLabel>
-              <Input
-                id="parent-email-input"
-                type="email"
-                required
-                maxLength={100}
-                value={newParentEmail}
-                onChange={(e) => setNewParentEmail(e.target.value)}
-                placeholder="phuhuynh@gmail.com"
-                disabled={busy === "change"}
-                className="h-10"
-              />
-              <FieldDescription>
-                Nhập đúng địa chỉ email phụ huynh đang sử dụng để nhận thư xác nhận.
-              </FieldDescription>
-            </Field>
+              <Field>
+                <FieldLabel htmlFor="parent-email-input">Email phụ huynh</FieldLabel>
+                <Input
+                  id="parent-email-input"
+                  type="email"
+                  required
+                  maxLength={100}
+                  value={newParentEmail}
+                  onChange={(e) => setNewParentEmail(e.target.value)}
+                  placeholder="phuhuynh@gmail.com"
+                  disabled={busy === "change"}
+                />
+                <FieldDescription>
+                  Nhập đúng địa chỉ email phụ huynh đang sử dụng để nhận thư xác nhận.
+                </FieldDescription>
+              </Field>
+            </DialogBody>
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setInviteOpen(false)}
-                disabled={busy === "change"}
-              >
-                Hủy
-              </Button>
-              <Button type="submit" disabled={busy !== null} loading={busy === "change"}>
-                <SendIcon data-icon="inline-start" aria-hidden />
-                {busy === "change" ? "Đang gửi..." : "Gửi lời mời"}
-              </Button>
+            <DialogFooter layout="pair">
+              <DialogCancel disabled={busy === "change"}>Hủy</DialogCancel>
+              <DialogAction type="submit" tone="primary" disabled={busy !== null} loading={busy === "change"}>
+                Gửi lời mời
+              </DialogAction>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -435,31 +438,24 @@ export function ParentLinksCard() {
       />
 
       {/* Hộp thoại xác nhận hủy liên kết (học sinh) / hủy lời mời */}
-      <Dialog
+      <AppDialog
         open={revokeTarget !== null && (isStudent || revokeTarget.status !== "active")}
         onOpenChange={(open) => !open && setRevokeTarget(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {revokeTarget && revokeTarget.status !== "active" ? "Hủy lời mời?" : "Hủy liên kết phụ huynh?"}
-            </DialogTitle>
-          </DialogHeader>
-          <DialogDescription>
-            {revokeTarget && revokeTarget.status !== "active"
-              ? "Link trong mail mời sẽ không dùng được nữa."
-              : "Phụ huynh sẽ không còn liên kết với tài khoản của bạn và sẽ nhận email thông báo."}
-          </DialogDescription>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setRevokeTarget(null)}>
-              Không
-            </Button>
-            <Button type="button" variant="destructive" onClick={handleRevoke}>
-              Xác nhận
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        variant="action"
+        icon={<AlertTriangleIcon aria-hidden />}
+        iconTone="destructive"
+        title={revokeTarget && revokeTarget.status !== "active" ? "Hủy lời mời?" : "Hủy liên kết phụ huynh?"}
+        description={
+          revokeTarget && revokeTarget.status !== "active"
+            ? "Link trong mail mời sẽ không dùng được nữa."
+            : "Phụ huynh sẽ không còn liên kết với tài khoản của bạn và sẽ nhận email thông báo."
+        }
+        cancelLabel="Không"
+        confirmLabel="Xác nhận"
+        confirmTone="destructive"
+        onCancel={() => setRevokeTarget(null)}
+        onConfirm={handleRevoke}
+      />
 
       {/* [UC-75 1a] Hộp thoại xác nhận rút đồng ý kèm xóa tài khoản con dưới 16 */}
       <RevokeAndDeleteChildDialog

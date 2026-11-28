@@ -1,22 +1,25 @@
 "use client";
 
 import React, { useState } from "react";
-import { CakeIcon, SendIcon } from "lucide-react";
+import { CakeIcon } from "lucide-react";
 import { birthDateRequestsApi, ApiError } from "@/lib/api";
 import { emailError } from "@/lib/auth-validation";
 import type { BirthDateChangeDto, BirthDateEvidenceType, UserDto } from "@/types/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 
@@ -34,6 +37,11 @@ export const EVIDENCE_TYPE_LABELS: Record<BirthDateEvidenceType, string> = {
   passport: "Hộ chiếu",
   student_card: "Thẻ học sinh",
 };
+
+const EVIDENCE_TYPE_ITEMS = (Object.keys(EVIDENCE_TYPE_LABELS) as BirthDateEvidenceType[]).map((type) => ({
+  value: type,
+  label: EVIDENCE_TYPE_LABELS[type],
+}));
 
 type FieldErrors = Partial<Record<"birthDate" | "reason" | "evidenceType" | "evidence" | "representativeEmail", string>>;
 
@@ -182,26 +190,27 @@ export function BirthDateRequestDialog({ open, onOpenChange, user, onSubmitted }
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <form onSubmit={handleSubmit} noValidate className="space-y-5">
+    <Dialog open={open} onOpenChange={handleOpenChange} disablePointerDismissal={submitting}>
+      <DialogContent variant="form" size="md">
+        <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col gap-6">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CakeIcon className="size-5" aria-hidden />
-              Yêu cầu sửa ngày sinh
-            </DialogTitle>
+            <DialogIcon tone="brand">
+              <CakeIcon aria-hidden />
+            </DialogIcon>
+            <DialogTitle>Yêu cầu sửa ngày sinh</DialogTitle>
             <DialogDescription>
               Administrator sẽ xem xét yêu cầu. Ngày sinh chỉ đổi khi yêu cầu được duyệt.
             </DialogDescription>
           </DialogHeader>
 
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+          <DialogBody className="space-y-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-          <FieldGroup className="gap-4">
+            <FieldGroup className="gap-4">
             <Field data-invalid={!!fieldErrors.birthDate || undefined}>
               <FieldLabel htmlFor="birth-request-date">
                 Ngày sinh mới <span className="text-destructive">*</span>
@@ -260,24 +269,30 @@ export function BirthDateRequestDialog({ open, onOpenChange, user, onSubmitted }
                   <FieldLabel htmlFor="birth-request-evidence-type">
                     Loại giấy tờ <span className="text-destructive">*</span>
                   </FieldLabel>
-                  <NativeSelect
-                    id="birth-request-evidence-type"
-                    value={evidenceType}
-                    className="w-full"
-                    aria-invalid={!!fieldErrors.evidenceType || undefined}
-                    onChange={(e) => {
-                      setEvidenceType(e.target.value as BirthDateEvidenceType | "");
+                  <Select
+                    value={evidenceType || null}
+                    onValueChange={(v) => {
+                      setEvidenceType((v ?? "") as BirthDateEvidenceType | "");
                       clearFieldError("evidenceType");
                     }}
                     disabled={submitting}
+                    items={EVIDENCE_TYPE_ITEMS}
                   >
-                    <NativeSelectOption value="">Chọn loại giấy tờ</NativeSelectOption>
-                    {(Object.keys(EVIDENCE_TYPE_LABELS) as BirthDateEvidenceType[]).map((type) => (
-                      <NativeSelectOption key={type} value={type}>
-                        {EVIDENCE_TYPE_LABELS[type]}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger
+                      id="birth-request-evidence-type"
+                      className="w-full"
+                      aria-invalid={!!fieldErrors.evidenceType || undefined}
+                    >
+                      <SelectValue placeholder="Chọn loại giấy tờ" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EVIDENCE_TYPE_ITEMS.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   {fieldErrors.evidenceType && <FieldError>{fieldErrors.evidenceType}</FieldError>}
                 </Field>
 
@@ -330,16 +345,14 @@ export function BirthDateRequestDialog({ open, onOpenChange, user, onSubmitted }
                 {fieldErrors.representativeEmail && <FieldError>{fieldErrors.representativeEmail}</FieldError>}
               </Field>
             )}
-          </FieldGroup>
+            </FieldGroup>
+          </DialogBody>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={submitting}>
-              Đóng
-            </Button>
-            <Button type="submit" loading={submitting}>
-              <SendIcon data-icon="inline-start" aria-hidden />
+          <DialogFooter layout="pair">
+            <DialogCancel disabled={submitting}>Đóng</DialogCancel>
+            <DialogAction type="submit" tone="primary" loading={submitting}>
               Gửi yêu cầu
-            </Button>
+            </DialogAction>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -7,10 +7,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -97,61 +101,62 @@ export function DeleteAccountCard() {
         Xóa tài khoản
       </Button>
 
-      <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent>
+      <Dialog open={open} onOpenChange={handleOpenChange} disablePointerDismissal={isSubmitting}>
+        <DialogContent variant="form" size="md">
           <DialogHeader>
+            <DialogIcon tone="destructive">
+              <Trash2Icon aria-hidden />
+            </DialogIcon>
             <DialogTitle>Xóa tài khoản của bạn?</DialogTitle>
             <DialogDescription>Hãy đọc kỹ trước khi xác nhận.</DialogDescription>
           </DialogHeader>
 
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            <li>Tài khoản bị khóa ngay, bạn sẽ bị đăng xuất khỏi mọi thiết bị.</li>
-            <li>
-              Ngày <strong>{purgeDate}</strong> (sau {RETENTION_DAYS} ngày), mọi dữ liệu của bạn bị xóa hẳn, không lấy lại được: thông tin cá nhân, hồ sơ,
-              bảng điểm, nội dung bài viết diễn đàn, kể cả dữ liệu đã chia sẻ cho trung tâm tư vấn và tin nhắn với trung tâm.
-            </li>
-            <li>Trước ngày đó, đăng nhập lại và chọn khôi phục là dùng tiếp như cũ.</li>
-            <li>
-              Liên kết với phụ huynh và các chia sẻ hồ sơ cho trung tâm bị hủy ngay; trung tâm thôi xem được dữ liệu của bạn. Nếu khôi phục, các liên
-              kết và chia sẻ này không tự nối lại.
-            </li>
-            <li>
-              Gói của bạn dừng khi tài khoản bị xóa hẳn sau 30 ngày. Nếu bạn là chủ gói Gia đình, các thành viên vẫn dùng được tới lúc đó hoặc tới khi gói hết
-              hạn. Thông tin đơn hàng (mã đơn, số tiền, họ tên, email) được giữ 10 năm, chỉ dùng để đối soát và hoàn tiền.
-            </li>
-            <li>
-              Nhật ký trò chuyện với trợ lý tư vấn đã được che thông tin cá nhân và tự xóa sau {CHAT_LOG_KEEP_DAYS} ngày.
-            </li>
-          </ul>
+          <DialogBody className="space-y-4">
+            <ul className="list-disc space-y-1 pl-5 text-sm">
+              <li>Tài khoản bị khóa ngay, bạn sẽ bị đăng xuất khỏi mọi thiết bị.</li>
+              <li>
+                Ngày <strong>{purgeDate}</strong> (sau {RETENTION_DAYS} ngày), mọi dữ liệu của bạn bị xóa hẳn, không lấy lại được: thông tin cá nhân, hồ sơ,
+                bảng điểm, nội dung bài viết diễn đàn, kể cả dữ liệu đã chia sẻ cho trung tâm tư vấn và tin nhắn với trung tâm.
+              </li>
+              <li>Trước ngày đó, đăng nhập lại và chọn khôi phục là dùng tiếp như cũ.</li>
+              <li>
+                Liên kết với phụ huynh và các chia sẻ hồ sơ cho trung tâm bị hủy ngay; trung tâm thôi xem được dữ liệu của bạn. Nếu khôi phục, các liên
+                kết và chia sẻ này không tự nối lại.
+              </li>
+              <li>
+                Gói của bạn dừng khi tài khoản bị xóa hẳn sau 30 ngày. Nếu bạn là chủ gói Gia đình, các thành viên vẫn dùng được tới lúc đó hoặc tới khi gói hết
+                hạn. Thông tin đơn hàng (mã đơn, số tiền, họ tên, email) được giữ 10 năm, chỉ dùng để đối soát và hoàn tiền.
+              </li>
+              <li>
+                Nhật ký trò chuyện với trợ lý tư vấn đã được che thông tin cá nhân và tự xóa sau {CHAT_LOG_KEEP_DAYS} ngày.
+              </li>
+            </ul>
 
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-          <Field>
-            <FieldLabel htmlFor="delete-account-confirm">
-              Gõ <strong>{DELETE_CONFIRM_WORD}</strong> để xác nhận
-            </FieldLabel>
-            <Input
-              id="delete-account-confirm"
-              autoComplete="off"
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              disabled={isSubmitting}
-              className="h-10"
-            />
-          </Field>
+            <Field>
+              <FieldLabel htmlFor="delete-account-confirm">
+                Gõ <strong>{DELETE_CONFIRM_WORD}</strong> để xác nhận
+              </FieldLabel>
+              <Input
+                id="delete-account-confirm"
+                autoComplete="off"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                disabled={isSubmitting}
+              />
+            </Field>
+          </DialogBody>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isSubmitting}>
-              Hủy
-            </Button>
-            <Button type="button" variant="destructive" onClick={handleDelete} disabled={!canConfirm || isSubmitting} loading={isSubmitting}>
-              <Trash2Icon data-icon="inline-start" aria-hidden />
-              {isSubmitting ? "Đang xóa..." : "Xóa tài khoản"}
-            </Button>
+          <DialogFooter layout="pair">
+            <DialogCancel disabled={isSubmitting}>Hủy</DialogCancel>
+            <DialogAction tone="destructive" onClick={handleDelete} disabled={!canConfirm || isSubmitting} loading={isSubmitting}>
+              Xóa tài khoản
+            </DialogAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>
