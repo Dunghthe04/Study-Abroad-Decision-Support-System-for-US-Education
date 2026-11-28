@@ -29,20 +29,20 @@ public class DbContextSchemaTests
         {
             // Phân hệ 1: Tài khoản & Gia đình (5)
             "User", "UserSession", "OtpToken", "Consent", "ParentStudentLink",
-            // Phân hệ 2: Hồ sơ & Học bạ (4)
-            "StudentProfile", "TranscriptScore", "ProfileActivity", "RoadmapStep",
+            // Phân hệ 2: Hồ sơ & Học bạ (3)
+            "StudentProfile", "TranscriptScore", "ProfileActivity",
             // Phân hệ 3: Trường, Tuyển sinh & Chi phí (5)
             "University", "UniversityOffering", "Scholarship", "TargetSchool", "StateLivingCost",
-            // Phân hệ 4: Mô hình DSS & Mô phỏng (5)
-            "AppSetting", "AnalysisResult", "Recommendation", "ExpertRule", "WhatIfSimulation",
+            // Phân hệ 4: Mô hình DSS & Mô phỏng (4)
+            "AppSetting", "AnalysisResult", "Recommendation", "WhatIfSimulation",
             // Phân hệ 5: Trung tâm tư vấn (4)
             "StudyCenter", "Lead", "LeadMessage", "CenterReview",
             // Phân hệ 6: Trợ lý AI RAG (4)
             "KnowledgeDocument", "ChatSession", "ChatMessage", "AiCall",
-            // Phân hệ 7: Gói dịch vụ & Thanh toán (4)
-            "SubscriptionPlan", "UserSubscription", "UserDailyUsage", "PaymentTransaction", "FamilyGroup", "FamilyMember",
-            // Phân hệ 8: Diễn đàn, Thông báo & Kiểm toán (5)
-            "ForumPost", "ForumReport", "PolicyAlert", "Notification", "AuditLog",
+            // Phân hệ 7: Gói dịch vụ & Thanh toán (5)
+            "SubscriptionPlan", "UserSubscription", "PaymentTransaction", "FamilyGroup", "FamilyMember",
+            // Phân hệ 8: Diễn đàn, Thông báo & Kiểm toán (4)
+            "ForumPost", "ForumReport", "Notification", "AuditLog",
             // Phân hệ 9: Xác minh dữ liệu (1)
             "FieldEvidence"
         };
@@ -62,15 +62,12 @@ public class DbContextSchemaTests
             .Options;
         using var db = new AppDbContext(options);
 
-        Assert.Equal("expert_rules", TableName<ExpertRule>(db));
         Assert.Equal("what_if_simulations", TableName<WhatIfSimulation>(db));
         Assert.Equal("lead_messages", TableName<LeadMessage>(db));
         Assert.Equal("center_reviews", TableName<CenterReview>(db));
         Assert.Equal("subscription_plans", TableName<SubscriptionPlan>(db));
         Assert.Equal("user_subscriptions", TableName<UserSubscription>(db));
-        Assert.Equal("user_daily_usages", TableName<UserDailyUsage>(db));
         Assert.Equal("payment_transactions", TableName<PaymentTransaction>(db));
-        Assert.Equal("policy_alerts", TableName<PolicyAlert>(db));
         Assert.Equal("field_evidence", TableName<FieldEvidence>(db));
 
         AssertForeignKey<WhatIfSimulation>(db, nameof(WhatIfSimulation.UserId), "users", DeleteBehavior.Cascade);
@@ -83,7 +80,6 @@ public class DbContextSchemaTests
         AssertForeignKey<CenterReview>(db, nameof(CenterReview.LeadId), "leads", DeleteBehavior.SetNull);
         AssertForeignKey<UserSubscription>(db, nameof(UserSubscription.UserId), "users", DeleteBehavior.Cascade);
         AssertForeignKey<UserSubscription>(db, nameof(UserSubscription.SubscriptionPlanId), "subscription_plans", DeleteBehavior.Restrict);   // gói đã có kỳ thì không xóa được
-        AssertForeignKey<UserDailyUsage>(db, nameof(UserDailyUsage.UserId), "users", DeleteBehavior.Cascade);
         AssertForeignKey<PaymentTransaction>(db, nameof(PaymentTransaction.UserId), "users", DeleteBehavior.SetNull);   // [UC-80] giữ giao dịch ẩn danh khi xóa hẳn user
         AssertForeignKey<PaymentTransaction>(db, nameof(PaymentTransaction.UserSubscriptionId), "user_subscriptions", DeleteBehavior.SetNull);
         AssertForeignKey<FieldEvidence>(db, nameof(FieldEvidence.UniversityId), "universities", DeleteBehavior.Cascade);
@@ -99,12 +95,9 @@ public class DbContextSchemaTests
 
         Assert.Equal("jsonb", ColumnType<ChatMessage>(db, nameof(ChatMessage.MetaJson)));
         AssertBillingSchema(db);
-        Assert.Equal("jsonb", ColumnType<ExpertRule>(db, nameof(ExpertRule.ConditionJson)));
         Assert.Equal("jsonb", ColumnType<WhatIfSimulation>(db, nameof(WhatIfSimulation.SimulatedProfileJson)));
         Assert.Equal("jsonb", ColumnType<WhatIfSimulation>(db, nameof(WhatIfSimulation.SimulatedRecommendationsJson)));
-        Assert.True(HasUniqueIndex<ExpertRule>(db, nameof(ExpertRule.RuleCode)));
         Assert.True(HasUniqueIndex<SubscriptionPlan>(db, nameof(SubscriptionPlan.Code)));
-        Assert.True(HasUniqueIndex<UserDailyUsage>(db, nameof(UserDailyUsage.UserId), nameof(UserDailyUsage.UsageDate)));
 
         var studyCenterEntity = db.Model.FindEntityType(typeof(StudyCenter))!;
         Assert.Equal(32, studyCenterEntity.FindProperty(nameof(StudyCenter.TaxCode))!.GetMaxLength());

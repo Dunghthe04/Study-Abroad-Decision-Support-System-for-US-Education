@@ -32,7 +32,7 @@ from openpyxl import load_workbook
 
 from app.schemas.slm import INFO_FIELDS, PROFILE_KEYS
 from slm.eval.slm_metrics import DEFAULT_TASK
-from slm.prepare.build_slm_jsonl import DEFAULT_EXCEL, SPLITS, TYPES, as_text, to_record
+from slm.prepare.build_slm_jsonl import DEFAULT_EXCEL, NOTE_SHEETS, SPLITS, TYPES, as_text, to_record
 
 MIN_TEST = 10  # số dòng test tối thiểu của một nhãn con
 # Khóa trong entities dùng làm nhãn con của từng loại ý
@@ -74,7 +74,7 @@ def read_items(path: Path) -> tuple[list[Item], list[Issue]]:
     items: list[Item] = []
     issues: list[Issue] = []
     for sheet in workbook.worksheets:
-        if sheet.title in ("README", "summary", "model_errors"):
+        if sheet.title in NOTE_SHEETS:
             continue
         intent = sheet.title
         if intent not in TYPES:

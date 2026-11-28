@@ -121,8 +121,6 @@ def test_the_task_keys_are_accepted(kind, entities):
         ("profile_review", {"tasks": ["assessment", "assessment"]}),  # lặp
         ("profile_review", {"tasks": ["write_essay"]}),  # nhiệm vụ lạ
         ("profile_review", {"tasks": "assessment"}),  # phải là danh sách
-        ("profile_review", {"tasks": ["compare"]}),  # so sánh mà không có hai trường
-        ("profile_review", {"tasks": ["compare"], "schools": ["BU"]}),  # chỉ một trường
         ("profile_review", {"tasks": ["compare"], "schools": "BU"}),  # schools phải là danh sách
         ("center_referral", {"tasks": ["search"]}),  # nhiệm vụ của kiến thức
         ("center_referral", {"tasks": ["compare"], "centers": ["PEC"]}),  # chỉ một trung tâm
@@ -148,7 +146,10 @@ def test_centers_and_knowledge_both_have_a_compare_task_without_mixing_their_rul
     with pytest.raises(ValidationError):
         y("knowledge", tasks=["compare_facts"], centers=["PEC", "Kosam"])  # kiến thức không có centers
     with pytest.raises(ValidationError):
-        y("knowledge", tasks=["compare_facts"], schools=["BU"])  # kiến thức đòi schools từ hai tên
+        y("knowledge", tasks=["compare_facts"], schools=[])  # đã ghi schools thì phải có tên
+    y(
+        "knowledge", tasks=["compare_facts"], schools=["trường thứ 2"]
+    )  # v16: chỉ bằng vị trí, thiếu thì code hỏi
 
 
 def test_task_of_and_single_school_read_the_entities_the_way_the_branches_do():

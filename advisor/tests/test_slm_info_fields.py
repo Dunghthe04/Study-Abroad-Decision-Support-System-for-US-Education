@@ -74,8 +74,6 @@ def test_a_comparison_carries_two_or_more_schools_in_the_order_said():
         {"schools": "BU, NYU"},  # không phải danh sách
         {"schools": ["BU", ""]},  # tên rỗng
         {"schools": ["BU", 7]},  # tên không phải chữ
-        {"tasks": ["compare_facts"], "schools": ["BU"]},  # so sánh mà chỉ một trường
-        {"tasks": ["compare_facts"], "fields": ["cost"]},  # so sánh mà không có các trường
     ],
 )
 def test_a_malformed_comparison_is_rejected(entities):

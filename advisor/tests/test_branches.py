@@ -698,7 +698,9 @@ async def test_roadmap_with_only_the_major_missing_shows_the_major_widget():
     state = ChatState(has_results=True, profile=profile)
 
     out = await new_advice([]).run(
-        state, "gợi ý trường cho em", tin(("profile_review", {}, "gợi ý trường cho em"))
+        state,
+        "gợi ý trường cho em",
+        tin(("profile_review", {"tasks": ["school_list"]}, "gợi ý trường cho em")),
     )
 
     assert out.answer == NEED_MAJOR and out.widget == Widget(type="major")
@@ -1057,10 +1059,11 @@ async def test_explaining_a_named_school_before_any_recommendation_runs_the_reco
     "question",
     ["em nên chọn những trường nào ạ?", "Em nen nop truong nao", "Which US universities should I apply to?"],
 )
-async def test_asking_for_a_school_list_runs_the_recommendation_without_the_slm(question):
+async def test_the_school_list_label_runs_the_recommendation_without_writing_a_skill(question):
     state = ChatState(profile=filled(REQUIRED_B4))
+    label = tin(("profile_review", {"tasks": ["school_list"]}, question))
 
-    out = await new_advice([]).run(state, question, tin(("profile_review", {}, question)))
+    out = await new_advice([]).run(state, question, label)
 
     assert out.action == "recommend" and out.answer == RECOMMENDING
 
@@ -1070,7 +1073,9 @@ async def test_a_school_list_without_the_major_shows_the_major_widget():
     state = ChatState(profile=profile)
 
     out = await new_advice([]).run(
-        state, "gợi ý trường cho em", tin(("profile_review", {}, "gợi ý trường cho em"))
+        state,
+        "gợi ý trường cho em",
+        tin(("profile_review", {"tasks": ["school_list"]}, "gợi ý trường cho em")),
     )
 
     assert out.answer == NEED_MAJOR and out.widget == Widget(type="major")

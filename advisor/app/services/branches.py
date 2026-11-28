@@ -60,6 +60,7 @@ from app.services.replies import (
     TRIED_SCENARIO,
     TRY_INSTEAD,
     TRY_WHAT,
+    UNSAVED_REVIEW,
     menu_buttons,
 )
 from app.services.scenario import (
@@ -72,7 +73,7 @@ from app.services.scenario import (
     try_buttons,
 )
 from app.services.skill_input import skill_request_of
-from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields
+from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields, unanswered_fields
 from app.services.skill_template import TEMPLATE_TASKS, build_skill, tasks_of
 from app.services.skills import major_catalog, skill_ho_so, state_catalog
 from app.services.skills.profile_handler import ChatProfileHandler
@@ -262,6 +263,8 @@ class ScenarioBranch:
             return self.ask_what(state)
         # Câu nối tiếp chỉ nói phần đổi: gộp vào kịch bản lượt trước (UC-155 1a)
         entities = merge_follow_up(said, state.context.scenario)
+        if (waiting := confirm_first(state, slm.intents[0])) is not None:
+            return waiting
         if entities.get("mode") == "goal_seeking":
             return self._goal_seek(state, entities)
         if entities.get("mode") != "what_if":
@@ -422,27 +425,16 @@ def ask_missing_profile(state: ChatState, y: SlmY, required: list[str]) -> Skill
     return ask_major(state) if missing[0] == "major" else start_intake(state, required)
 
 
-# Câu xin danh sách trường (đã bỏ dấu). SLM xếp các câu này vào profile_review; code giao .NET chạy gợi ý trường
-# (pipeline có sẵn), không sinh skill
-SCHOOL_LIST_WORDS = (
-    "truong nao",
-    "chon truong",
-    "nhung truong",
-    "danh sach truong",
-    "goi y truong",
-    "de xuat truong",
-    "nop truong",
-    "apply truong",
-    "which universit",
-    "which school",
-    "which college",
-    "universities should",
-    "schools should",
-    "colleges should",
-    "recommend universit",
-    "recommend school",
-    "recommend college",
-)
+# Còn thay đổi hồ sơ chưa xác nhận thì không tính gì trên đó: hiện bảng rà soát, nhớ câu hỏi để trả lời ngay khi học
+# sinh xác nhận (UC-19, UC-154, UC-155). Câu mới nhất thay câu đang chờ. Hồ sơ còn thiếu mục cơ bản thì để luồng hỏi
+# hồ sơ lo. Không có gì chưa lưu thì None
+def confirm_first(state: ChatState, y: SlmY) -> SkillOutput | None:
+    if not state.unsaved or unanswered_fields(state.profile, REQUIRED_B3):
+        return None
+    state.pending_advice = y
+    return skill_ho_so.review(state, UNSAVED_REVIEW)
+
+
 # Hồ sơ vừa đủ mà học sinh chưa hỏi câu tư vấn nào (tin là "Đúng rồi"): đánh giá hồ sơ như trước đây
 # Câu chỉ hỏi giải thích trường mà chưa nêu trường nào
 # Số trường đầu danh sách gợi ý hiện sẵn trong ô chọn (cùng giá trị với ChatActions.MaxSuggested bên .NET)
@@ -474,19 +466,11 @@ def asks_how_fit_is_computed(text: str) -> bool:
     return any(word in folded for word in FIT_METHOD_WORDS)
 
 
-def asks_for_school_list(text: str) -> bool:
-    folded = plain(text)
-    return any(word in folded for word in SCHOOL_LIST_WORDS)
-
-
 # Câu profile_review chỉ có so sánh hoặc giải thích trường (không có việc của khuôn, không chọn trường):
-# - compare (schema bắt có từ hai trường): giao .NET so số liệu như câu so sánh kiến thức, kể cả khi câu có
-#   chữ "trường nào" ("Iowa và Purdue trường nào hợp với em hơn")
-# - explain_school chưa nêu trường và không xin danh sách trường: nhờ nêu tên trường
-# - còn lại (có tên trường mà chưa có kết quả gợi ý, hoặc xin danh sách): trả None để chạy gợi ý trường
-def others_only_output(
-    y: SlmY, tasks: list[str], school_list_words: bool, state: ChatState | None = None
-) -> SkillOutput | None:
+# - compare (schema bắt có từ hai trường): giao .NET so số liệu như câu so sánh kiến thức
+# - giải thích mà chưa nêu trường: nhờ nêu tên trường
+# - còn lại (có tên trường mà chưa có kết quả gợi ý): trả None để chạy gợi ý trường
+def others_only_output(y: SlmY, tasks: list[str], state: ChatState | None = None) -> SkillOutput | None:
     schools = [t.strip() for t in y.entities.get("schools") or []]
     if "compare" in tasks and len(schools) >= 2:
         # UC-154: câu so sánh theo hồ sơ ("BU hay NYU hợp với em hơn"): .NET tính nhóm và điểm phù hợp từng trường bằng công thức gợi ý.
@@ -497,14 +481,9 @@ def others_only_output(
             action_data={"question": y.span, "schools": schools, "kb_answer": LOOKING_UP},
         )
     # UC-153 1a: hỏi cách tính điểm phù hợp, không nêu trường: giải thích cách tính, dẫn tới trang tham số, không dùng số của trường nào
-    if (
-        "explain_fit" in tasks
-        and not school_list_words
-        and not single_school(y.entities)
-        and asks_how_fit_is_computed(y.span)
-    ):
+    if "explain_fit" in tasks and not single_school(y.entities) and asks_how_fit_is_computed(y.span):
         return SkillOutput(FIT_METHOD, quick_replies=[ABOUT_SYSTEM_PAGE_BUTTON.model_copy()])
-    if not school_list_words and not single_school(y.entities):
+    if not single_school(y.entities):
         # Ô chọn trường (chọn xong .NET giải thích trường đó), hiện sẵn vài trường đầu danh sách gợi ý nếu có
         suggested = [s.code for s in (state.schools if state else None) or []][:MAX_SUGGESTED]
         return SkillOutput(
@@ -533,6 +512,8 @@ class GeneratedAdviceBranch:
 
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         y = slm.intents[0]
+        if y.type == "profile_review" and (waiting := confirm_first(state, y)) is not None:
+            return waiting
         question = y.span if y.type == "profile_review" else DEFAULT_QUESTION
         school = single_school(y.entities) if y.type == "profile_review" else None
         if school and state.has_results:
@@ -552,10 +533,9 @@ class GeneratedAdviceBranch:
         # phần của Dũng. Câu chỉ có việc của Dũng thì giao code có sẵn (xem others_only_output)
         tasks = (y.entities.get("tasks") or None) if y.type == "profile_review" else None
         others_only = tasks is not None and not any(t in TEMPLATE_TASKS for t in tasks)
-        # Xin trường: câu có chữ xin trường, hoặc SLM tách ra việc chọn trường (câu gõ sai, nói kiểu khác vẫn nhận)
-        school_list = y.type == "profile_review" and (
-            asks_for_school_list(question) or others_only or "school_list" in (tasks or [])
-        )
+        # Chạy gợi ý trường: SLM tách ra việc chọn trường, hoặc câu chỉ hỏi về một trường mà chưa có danh sách (gợi ý
+        # trước rồi mới giải thích được). Không đoán lại bằng chữ trong câu: nhãn sai thì sửa bằng dữ liệu train
+        school_list = y.type == "profile_review" and (others_only or "school_list" in (tasks or []))
         if others_only and "school_list" not in tasks:
             # UC-154: so sánh theo hồ sơ cần hồ sơ đủ như gợi ý trường (UC-22 E1): thiếu thì hỏi tiếp, hồ sơ xong thì trả lời lại đúng câu này
             if (
@@ -565,7 +545,7 @@ class GeneratedAdviceBranch:
                 asked = ask_missing_profile(state, y, REQUIRED_B4)
                 if asked is not None:
                     return asked
-            out = others_only_output(y, tasks, asks_for_school_list(question), state)
+            out = others_only_output(y, tasks, state)
             if out is not None:
                 # UC-153 1a: Claude viết lời từ tham số công bố; không viết được thì giữ câu cố định FIT_METHOD
                 if out.answer == FIT_METHOD and self._method_writer is not None:
@@ -614,22 +594,35 @@ class GeneratedAdviceBranch:
 # không có thì chỉ lưu rồi hỏi muốn làm gì tiếp, không tự đánh giá hay lên lộ trình.
 # Tin đã có ý profile_review thì thôi: ChatFlow sẽ chạy nhánh tư vấn cho ý đó ngay sau, tư vấn ở đây nữa là trả lời hai lần
 class ProfileBranch:
-    def __init__(self, handler: ChatProfileHandler, advice: Branch) -> None:
+    def __init__(self, handler: ChatProfileHandler, advice: Branch, scenario: Branch | None = None) -> None:
         self._handler = handler
         self._advice = advice
+        self._scenario = scenario
 
     async def run(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         was_ready = self._handler.ready(state, REQUIRED_B3)
+        at_review = state.question_id == "X1"
         output = await self._handler.collect(state, message, slm)
         if not was_ready and self._handler.ready(state, REQUIRED_B3) and "profile_review" not in slm.types():
             original = state.pending_advice
             if original is not None:
+                # Lượt xác nhận ở bảng rà soát: .NET chỉ lưu hồ sơ sau khi nhận câu trả lời này, nên lộ trình đang cầm
+                # còn tính theo hồ sơ cũ. Giữ câu đang chờ, .NET lưu xong gọi lại thì trả lời. Tin còn ý khác thì lượt này
+                # đã có việc riêng cho .NET nên trả lời luôn
+                if state.can_resume and at_review and len(slm.intents) == 1:
+                    state.resume_needed = True
+                    return output
                 state.pending_advice = None
                 return combine(
-                    output, await self._advice.run(state, original.span, SlmTinResult(intents=[original]))
+                    output,
+                    await self._waiting(original).run(state, original.span, SlmTinResult(intents=[original])),
                 )
             return combine(output, SkillOutput(NEXT_AFTER_SAVE, quick_replies=list(NEXT_AFTER_SAVE_REPLIES)))
         return output
+
+    # Nhánh trả lời câu đang chờ theo loại của nó
+    def _waiting(self, y: SlmY) -> Branch:
+        return self._scenario if y.type == "scenario" and self._scenario is not None else self._advice
 
 
 # Bảng nhánh theo loại câu hỏi SLM. skills: các skill do skills.build_handlers tạo.
@@ -643,10 +636,11 @@ def build_branches(
     advice: Branch = (
         GeneratedAdviceBranch(skills, writer, method_writer) if writer is not None else NotReadyBranch()
     )
+    scenario = ScenarioBranch(what_if_writer, skills.get("skill_tra_loi"))
     return {
-        "collect_profile": ProfileBranch(ChatProfileHandler(skills), advice),
+        "collect_profile": ProfileBranch(ChatProfileHandler(skills), advice, scenario),
         "profile_review": advice,
-        "scenario": ScenarioBranch(what_if_writer, skills.get("skill_tra_loi")),
+        "scenario": scenario,
         "knowledge": KnowledgeBranch(skills["skill_tra_loi"])
         if "skill_tra_loi" in skills
         else NotReadyBranch(),

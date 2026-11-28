@@ -84,7 +84,10 @@ namespace StudyAbroad.Application.Auth
         StudyAbroad.Application.Leads.ILeadRepository? leadRepo = null,
         // [UC-03 3d] Xác thực hai lớp TOTP cho Moderator, Administrator; null trong test cũ thì đăng nhập một bước như trước
         ITotpService? totp = null,
-        ITwoFactorRepository? twoFactor = null) : IAuthService, IParentRequestedDeletion, ITwoFactorLogin
+        ITwoFactorRepository? twoFactor = null,
+        // [UC-75 bước 4] Xóa mềm hủy yêu cầu sửa ngày sinh đang chờ duyệt và xóa minh chứng; null trong test cũ thì bỏ qua
+        StudyAbroad.Application.BirthDateChanges.IBirthDateChangeRepository? birthDateRequests = null,
+        StudyAbroad.Application.BirthDateChanges.IBirthDateEvidenceStorage? birthDateEvidence = null) : IAuthService, IParentRequestedDeletion, ITwoFactorLogin
     {
         private readonly AccountDeletionOptions _accountDeletion = accountDeletion ?? new AccountDeletionOptions();
 
@@ -1552,6 +1555,8 @@ namespace StudyAbroad.Application.Auth
         {
             List<ParentLinkRevokeNotice> notices = [];
             Func<CancellationToken, Task>? billingAfterCommit = null;
+            string? cancelledEvidencePath = null;
+            var cancelledBirthDateRequest = false;
 
             await unitOfWork.ExecuteInTransactionAsync(async txCt =>
             {
@@ -1576,6 +1581,19 @@ namespace StudyAbroad.Application.Auth
                 // 5. Thu hồi yêu cầu liên hệ còn mở (new/contacted); lead đã hoàn tất giữ nguyên
                 var withdrawnLeads = await leadWithdrawals.WithdrawOpenLeadsAsync(user.Id, now, txCt);
 
+                // 5a. [UC-75 bước 4 "ngừng xử lý dữ liệu"] Yêu cầu sửa ngày sinh đang chờ duyệt chuyển sang Đã hủy như người dùng tự hủy;
+                //     Admin mở lại thì báo không còn hiệu lực (UC-150 E1). Khôi phục tài khoản thì người dùng gửi yêu cầu mới.
+                if (birthDateRequests is not null
+                    && await birthDateRequests.GetPendingByUserAsync(user.Id, txCt) is { } pendingBirthDate)
+                {
+                    var evidencePath = pendingBirthDate.EvidencePath;   // lấy trước: đóng yêu cầu là đường dẫn về null
+                    if (await birthDateRequests.TryCloseAsync(pendingBirthDate.Id, BirthDateChangeStatuses.Cancelled, null, null, now, txCt))
+                    {
+                        cancelledBirthDateRequest = true;
+                        cancelledEvidencePath = evidencePath;
+                    }
+                }
+
                 // 5b. Gói dịch vụ: thành viên Gia đình rời nhóm, đơn chờ thanh toán bị hủy (nhóm và kỳ của chủ gói chạy tiếp, O1)
                 if (billingHooks is not null)
                     billingAfterCommit = await billingHooks.OnAccountSoftDeletedAsync(user.Id, now, txCt);
@@ -1590,7 +1608,8 @@ namespace StudyAbroad.Application.Auth
                     userId = user.Id,
                     deletedAt = now,
                     revokedParentLinks = notices.Count,
-                    withdrawnLeads
+                    withdrawnLeads,
+                    cancelledBirthDateRequest
                 });
 
                 await auditLogs.AddAsync(new AuditLog
@@ -1612,6 +1631,11 @@ namespace StudyAbroad.Application.Auth
             // Thông báo chủ nhóm và hủy link thanh toán ở cổng: cũng chỉ sau commit
             if (billingAfterCommit is not null)
                 await billingAfterCommit(ct);
+
+            // Minh chứng ngày sinh bị xóa ngay khi yêu cầu bị hủy (UC-150); sau commit để rollback không mất tệp của yêu cầu còn chờ.
+            // Xóa lỗi thì job dọn hằng ngày xóa sau
+            if (cancelledEvidencePath is not null && birthDateEvidence is not null)
+                await birthDateEvidence.DeleteAsync(cancelledEvidencePath, ct);
         }
     }
 }

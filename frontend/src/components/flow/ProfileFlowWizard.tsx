@@ -26,6 +26,7 @@ import { Step6Review } from "./Step6Review";
 import { profileFlowApi } from "@/lib/profile-flow-api";
 import { migrateLegacyStep3 } from "@/lib/certification-utils";
 import { recommendationApi } from "@/lib/recommendation-api";
+import { sha256Hex } from "@/lib/clear-user-storage";
 import {
   EDIT_ONLY,
   FORM_GOAL_OPTIONS,
@@ -79,8 +80,21 @@ const INITIAL_DRAFT: ProfileFlowDraft = {
   },
 };
 
-// Nháp của lần nộp gần nhất, để nộp lại y hệt thì không lọc trường và gửi AI lần nữa
-const LAST_COMMITTED_KEY = "usas_last_committed_draft";
+// Mã băm SHA-256 của lần nộp gần nhất, để nộp lại y hệt thì không lọc trường và gửi AI lần nữa.
+// Chỉ lưu mã băm (không đọc ngược ra được), không lưu cả bộ hồ sơ trong trình duyệt (nhận xét của thầy, mục A2).
+// Lưu dạng { hash, prevRecId }: prevRecId là gợi ý mới nhất ngay trước lần nộp đó; lần nộp y hệt chỉ mở lại kết quả
+// khi đã có gợi ý mới hơn (lần chạy trước bị 403 / lỗi thì vẫn chạy lại, không mở gợi ý của hồ sơ cũ)
+const LAST_COMMITTED_KEY = "usas_last_committed_hash";
+
+// Máy chủ xóa rồi chèn lại chứng chỉ, hoạt động mỗi lần lưu nên id đổi sau mỗi lần nộp → bỏ id trước khi băm
+// (JSON.stringify bỏ qua trường undefined)
+function draftFingerprint(draft: ProfileFlowDraft) {
+  return {
+    ...draft,
+    step3: { ...draft.step3, certifications: (draft.step3.certifications ?? []).map((c) => ({ ...c, id: undefined })) },
+    step5: { ...draft.step5, activities: (draft.step5.activities ?? []).map((a) => ({ ...a, id: undefined })) },
+  };
+}
 
 // Câu gợi ý riêng cho từng bước trong khung trợ lý
 const STEP_SUGGESTIONS: Record<number, string> = {
@@ -573,14 +587,19 @@ export function ProfileFlowWizard() {
       }
 
       // Hồ sơ y hệt lần nộp trước (đã có kết quả) thì xem lại kết quả cũ, không lọc và gửi AI lần nữa
-      const draftJson = JSON.stringify({ user: user.id, draft });
-      let lastCommitted: string | null = null;
+      const draftHash = await sha256Hex(JSON.stringify({ user: user.id, draft: draftFingerprint(draft) }));
+      let lastCommitted: { hash?: string; prevRecId?: string | null } | null = null;
       try {
-        lastCommitted = localStorage.getItem(LAST_COMMITTED_KEY);
+        // khóa cũ chỉ có chuỗi băm (JSON.parse lỗi hoặc không phải object) → coi như hồ sơ mới
+        const parsed = JSON.parse(localStorage.getItem(LAST_COMMITTED_KEY) ?? "null");
+        if (parsed && typeof parsed === "object") lastCommitted = parsed;
       } catch {
         // trình duyệt chặn storage → coi như hồ sơ mới
       }
-      if (!backToChat && !editOnly && lastCommitted === draftJson && (await recommendationApi.getLatest().catch(() => null))) {
+      const canReuse = !backToChat && !editOnly && Boolean(draftHash);
+      // Gợi ý mới nhất lúc này: nộp y hệt thì so với lần trước; hồ sơ mới thì ghi lại làm mốc trước khi chạy
+      const latestRec = canReuse ? await recommendationApi.getLatest().catch(() => null) : null;
+      if (canReuse && lastCommitted?.hash === draftHash && latestRec && latestRec.id !== lastCommitted.prevRecId) {
         router.push("/recommendations");
         return;
       }
@@ -590,7 +609,10 @@ export function ProfileFlowWizard() {
       if (isSuccessful) {
         try {
           localStorage.removeItem("usas_flow_draft");
-          localStorage.setItem(LAST_COMMITTED_KEY, draftJson);
+          localStorage.removeItem("usas_last_committed_draft"); // bản cũ lưu cả hồ sơ
+          if (canReuse && draftHash) {
+            localStorage.setItem(LAST_COMMITTED_KEY, JSON.stringify({ hash: draftHash, prevRecId: latestRec?.id ?? null }));
+          } else localStorage.removeItem(LAST_COMMITTED_KEY);
         } catch {
           // bỏ qua
         }

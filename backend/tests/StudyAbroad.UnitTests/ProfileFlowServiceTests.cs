@@ -183,6 +183,7 @@ public class ProfileFlowServiceTests
     private sealed class FakeTranscriptOcrClient : StudyAbroad.Application.Advisor.ITranscriptOcrClient
     {
         public bool Called { get; private set; }
+        public StudyAbroad.Application.Advisor.TranscriptOcrRequest? LastRequest { get; private set; }
         public StudyAbroad.Application.Advisor.TranscriptOcrResponse ResponseToReturn { get; set; } = new(
             Success: true,
             ModelUsed: "minicpm-v",
@@ -202,6 +203,7 @@ public class ProfileFlowServiceTests
             StudyAbroad.Application.Advisor.TranscriptOcrRequest request, CancellationToken ct = default)
         {
             Called = true;
+            LastRequest = request;
             return Task.FromResult(ResponseToReturn);
         }
     }
@@ -322,6 +324,50 @@ public class ProfileFlowServiceTests
         Assert.Equal(2, state.CurrentStep);
         // OCR không ghi đè draft — FE tự ghép điểm rồi lưu nháp
         Assert.Equal(JsonSerializer.Serialize(draft), JsonSerializer.Serialize(state.Draft));
+    }
+
+    [Fact]
+    public async Task UploadDraftTranscriptAsync_SendsOwnerAndActiveParentInfo_ForMasking()
+    {
+        var studentId = Guid.NewGuid();
+        var parentId = Guid.NewGuid();
+        var revokedParentId = Guid.NewGuid();
+        var users = new FakeUserRepository();
+        users.Users.Add(new User
+        {
+            Id = studentId, Email = "chau@test.com", FullName = "Lê Minh Châu", Phone = "0912345678",
+            DateOfBirth = new DateOnly(2008, 5, 12), Role = UserRoles.Student, Status = UserStatuses.Active, PasswordHash = "x"
+        });
+        users.Users.Add(new User { Id = parentId, Email = "p@test.com", FullName = "Lê Văn Hùng", Role = UserRoles.Parent, Status = UserStatuses.Active, PasswordHash = "x" });
+        users.Users.Add(new User { Id = revokedParentId, Email = "q@test.com", FullName = "Trần Thị Cũ", Role = UserRoles.Parent, Status = UserStatuses.Active, PasswordHash = "x" });
+        var links = new FakeParentLinkRepository();
+        await links.AddAsync(new ParentStudentLink { StudentUserId = studentId, ParentUserId = parentId, ParentEmail = "p@test.com", Status = ParentLinkStatuses.Active });
+        await links.AddAsync(new ParentStudentLink { StudentUserId = studentId, ParentUserId = revokedParentId, ParentEmail = "q@test.com", Status = ParentLinkStatuses.Revoked });
+        await links.AddAsync(new ParentStudentLink { StudentUserId = studentId, ParentEmail = "chua@test.com", Status = ParentLinkStatuses.Pending });
+        var ocrClient = new FakeTranscriptOcrClient();
+        var service = new ProfileFlowService(
+            new InMemoryProfileFlowRepository(), new FakeFileStorageService(), ocrClient, users: users, parentLinks: links);
+
+        using var stream = new MemoryStream([1, 2, 3, 4]);
+        await service.UploadDraftTranscriptAsync(studentId, stream, "hoc_ba.png", "image/png", 4);
+
+        var known = ocrClient.LastRequest!.KnownPersonalInfo!;
+        Assert.Equal(["Lê Minh Châu", "Lê Văn Hùng"], known.Names);
+        Assert.Equal(new DateOnly(2008, 5, 12), known.DateOfBirth);
+        Assert.Equal("chau@test.com", known.Email);
+        Assert.Equal("0912345678", known.Phone);
+    }
+
+    [Fact]
+    public async Task UploadDraftTranscriptAsync_WithoutUserRepository_SendsNoKnownInfo()
+    {
+        var ocrClient = new FakeTranscriptOcrClient();
+        var service = new ProfileFlowService(new InMemoryProfileFlowRepository(), new FakeFileStorageService(), ocrClient);
+
+        using var stream = new MemoryStream([1, 2, 3, 4]);
+        await service.UploadDraftTranscriptAsync(Guid.NewGuid(), stream, "hoc_ba.png", "image/png", 4);
+
+        Assert.Null(ocrClient.LastRequest!.KnownPersonalInfo);
     }
 
     /// <summary>Giả lập nháp cũ từ khi còn lưu tệp: gắn đường dẫn tệp nháp vào thông tin tệp đã lưu trong nháp</summary>

@@ -72,13 +72,13 @@ def test_every_required_field_has_a_question_that_exists():
         ("đánh giá hồ sơ cho em", ["assessment"], ["danh_gia"]),
         ("lên lộ trình cho em", ["roadmap"], ["lo_trinh"]),
         ("hồ sơ em thế nào", [], ["danh_gia", "lo_trinh"]),
-        ("gợi ý trường cho em", [], ["goi_y_truong"]),
+        ("gợi ý trường cho em", ["school_list"], ["goi_y_truong"]),
         (
             "đánh giá hồ sơ và đề xuấ trường cho tôi",
             ["assessment", "school_list"],
             ["danh_gia", "goi_y_truong"],
         ),
-        ("lộ trình và gợi ý trường", ["roadmap"], ["lo_trinh", "goi_y_truong"]),
+        ("lộ trình và gợi ý trường", ["roadmap", "school_list"], ["lo_trinh", "goi_y_truong"]),
         (
             "đánh giá, lộ trình, chọn trường",
             ["roadmap", "assessment", "school_list"],

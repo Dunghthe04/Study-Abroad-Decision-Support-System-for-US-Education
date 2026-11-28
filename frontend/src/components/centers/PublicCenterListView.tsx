@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import type { StudyCenter } from "@/types/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { useProvinces } from "@/hooks/use-provinces";
 import { getEnrichedCenterProfile } from "@/lib/center-details";
 import { COMPARE_MAX, COMPARE_MIN, compareHref } from "@/lib/center-compare";
 import { formatRating } from "@/lib/rating";
@@ -61,13 +62,6 @@ interface PublicCenterListViewProps {
 }
 
 type SortKey = "default" | "rating_desc" | "name_asc";
-
-const CITY_OPTIONS = [
-  { value: "Hà Nội", label: "Hà Nội" },
-  { value: "TP.HCM", label: "TP. Hồ Chí Minh" },
-  { value: "Hải Phòng", label: "Hải Phòng" },
-  { value: "Đà Nẵng", label: "Đà Nẵng" },
-];
 
 const TYPE_OPTIONS = [
   { value: "study_abroad", label: "Tư vấn Du học" },
@@ -148,6 +142,11 @@ function CenterFiltersPanel({
   onLicensedOnlyChange,
   onReset,
 }: FilterPanelProps) {
+  const provinces = useProvinces();
+  const cityOptions = useMemo(
+    () => provinces.map((name) => ({ value: name, label: name })),
+    [provinces],
+  );
   const serviceBaseId = useId();
 
   const renderChoice = (
@@ -199,7 +198,7 @@ function CenterFiltersPanel({
             className="h-9 border-ink-3/45 bg-surface pl-9 text-sm"
           />
         </div>
-        {renderChoice("Địa điểm", CITY_OPTIONS, cityFilter, onCityChange, true)}
+        {renderChoice("Địa điểm", cityOptions, cityFilter, onCityChange, true)}
         {renderChoice("Mô hình hoạt động", TYPE_OPTIONS, typeFilter, onTypeChange, true)}
       </FilterCategory>
 
@@ -440,8 +439,8 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
       }
 
       if (cityFilter) {
-        const targetCity = cityFilter === "TP.HCM" ? "hồ chí minh" : cityFilter.toLowerCase();
-        if (!c.city?.toLowerCase().includes(targetCity)) {
+        // API trả city đã đổi về tên chuẩn nên so bằng là đủ
+        if (c.city !== cityFilter) {
           return false;
         }
       }
@@ -528,10 +527,9 @@ export function PublicCenterListView({ initialCenters }: PublicCenterListViewPro
     });
   }
   if (cityFilter) {
-    const cityLabel = CITY_OPTIONS.find((c) => c.value === cityFilter)?.label ?? cityFilter;
     activeChips.push({
       key: "city",
-      label: `Địa điểm: ${cityLabel}`,
+      label: `Địa điểm: ${cityFilter}`,
       onRemove: () => {
         setCityFilter(undefined);
         setPage(1);

@@ -42,6 +42,8 @@ interface Field {
   prefix?: string;
   /** Ô tùy chọn, không bắt buộc điền mới được submit */
   optional?: boolean;
+  /** Ô nhiều lựa chọn: chưa chọn gì là lựa chọn mặc định này (vd "Tất cả các bang"), vẫn gửi được */
+  allLabel?: string;
 }
 
 interface SelectData {
@@ -58,6 +60,8 @@ interface SelectData {
 const controlClass =
   "w-full min-w-0 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-hidden focus:ring-1 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-60";
 const labelClass = "text-xs font-medium text-foreground";
+// Giá trị của lựa chọn "Tất cả các bang" trong ô nhiều lựa chọn (Field.allLabel), không trùng tên bang nào
+const ALL_VALUE = "__all__";
 
 const GPA_PRESETS_10 = [
   { label: "Xuất sắc (9.0 - 10)", value: "9.5" },
@@ -126,7 +130,13 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
     (!f.shownWhen || f.shownWhen.values.includes(values[f.shownWhen.field] ?? ""));
   const shown = fields.filter(isShown);
 
-  const valueOf = (f: Field): string => (f.multiple ? (multi[f.name] ?? []).join(", ") : (values[f.name] ?? "").trim());
+  const valueOf = (f: Field): string => {
+    if (!f.multiple) return (values[f.name] ?? "").trim();
+    const picked = multi[f.name] ?? [];
+    // Chưa chọn gì: gửi chữ của lựa chọn mặc định, vd "Em muốn học ở tất cả các bang" (advisor nhận như bấm nút)
+    if (picked.length === 0 && f.allLabel) return f.allLabel.toLocaleLowerCase("vi");
+    return picked.join(", ");
+  };
 
   const fieldError = (f: Field): string | null => {
     if (f.kind !== "number") return null;
@@ -291,11 +301,20 @@ export function SelectWidget({ data, onPick }: { data?: Record<string, unknown> 
               value=""
               onChange={(e) => {
                 const picked = e.target.value;
-                if (picked) setMulti((prev) => ({ ...prev, [f.name]: [...new Set([...(prev[f.name] ?? []), picked])] }));
+                if (picked === ALL_VALUE) setMulti((prev) => ({ ...prev, [f.name]: [] }));
+                else if (picked) setMulti((prev) => ({ ...prev, [f.name]: [...new Set([...(prev[f.name] ?? []), picked])] }));
               }}
               className={`${controlClass} cursor-pointer appearance-none pr-9`}
             >
-              <option value="">{states.length || f.kind !== "states" ? f.placeholder : "Đang tải…"}</option>
+              <option value="">
+                {f.kind === "states" && !states.length
+                  ? "Đang tải…"
+                  : f.allLabel && (multi[f.name] ?? []).length === 0
+                    ? f.allLabel
+                    : f.placeholder}
+              </option>
+              {/* Đã chọn bang: thêm lựa chọn quay về mặc định (bỏ hết bang đã chọn) */}
+              {f.allLabel && (multi[f.name] ?? []).length > 0 && <option value={ALL_VALUE}>{f.allLabel}</option>}
               {optionsOf(f)
                 .filter((o) => !(multi[f.name] ?? []).includes(o.value))
                 .map((o) => (

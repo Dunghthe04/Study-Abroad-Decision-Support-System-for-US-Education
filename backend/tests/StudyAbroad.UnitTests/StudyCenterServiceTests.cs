@@ -355,7 +355,7 @@ public class StudyCenterServiceTests
         Assert.True(result.Success);
         Assert.NotNull(result.Center);
         Assert.Equal("Tên Trung Tâm Mới", result.Center.Name);
-        Assert.Equal("TP.HCM", result.Center.City);
+        Assert.Equal("TP. Hồ Chí Minh", result.Center.City);
         Assert.Equal("Quận 1", result.Center.District);
         Assert.Equal("45 Lê Duẩn", result.Center.Address);
         Assert.Equal("0988888888", result.Center.Phone);

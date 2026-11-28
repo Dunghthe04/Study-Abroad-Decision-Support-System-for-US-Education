@@ -46,6 +46,7 @@ LABELS = {
     "state": "bang",
     "major": "ngành",
     "max_cost": "mức chi phí",
+    "max_tuition": "mức học phí tối đa",
     "max_ielts": "mức IELTS",
     "max_toefl": "mức TOEFL",
     "max_duolingo": "mức Duolingo",
@@ -169,6 +170,9 @@ async def normalize(filters: dict[str, Any], sort: str | None = None) -> SearchP
         out["aid"] = AID[kind]
     if kind := filters.get("test_policy"):
         out["testPolicy"] = kind  # optional | required, trùng mã bên .NET
+    # Backend chưa lọc theo riêng học phí: báo là chưa lọc được, không đổi thành tổng chi phí và không bỏ lặng lẽ
+    if text := filters.get("max_tuition"):
+        plan.unresolved.append(f"{LABELS['max_tuition']} “{text}”")
     if text := filters.get("max_cost"):
         cost = read_cost_usd(text)
         if cost is None:

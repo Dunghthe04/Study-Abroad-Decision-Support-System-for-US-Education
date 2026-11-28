@@ -27,7 +27,13 @@ public class StudyCenterRepository(AppDbContext db) : IStudyCenterRepository
         if (!string.IsNullOrWhiteSpace(query.Search))
             q = q.Where(x => EF.Functions.ILike(x.Name, $"%{query.Search}%"));
         if (!string.IsNullOrWhiteSpace(query.City))
-            q = q.Where(x => x.City != null && EF.Functions.ILike(x.City, query.City));
+        {
+            // City cũ có thể ghi khác tên chuẩn ("TP.HCM"), nên so theo tỉnh đã chuẩn hóa chứ không so chuỗi
+            var stored = await db.StudyCenters.AsNoTracking()
+                .Where(x => x.City != null).Select(x => x.City!).Distinct().ToListAsync(ct);
+            var matching = stored.Where(c => VietnamProvinces.SameProvince(c, query.City)).ToList();
+            q = q.Where(x => x.City != null && matching.Contains(x.City));
+        }
         if (!string.IsNullOrWhiteSpace(query.Service))
             q = q.Where(x => x.Services.Contains(query.Service));
         if (!string.IsNullOrWhiteSpace(query.StudyLevel))

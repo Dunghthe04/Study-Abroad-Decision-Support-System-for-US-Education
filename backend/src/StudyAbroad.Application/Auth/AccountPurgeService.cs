@@ -1,5 +1,6 @@
 using StudyAbroad.Application.Audit;
 using StudyAbroad.Application.Billing;
+using StudyAbroad.Application.BirthDateChanges;
 using StudyAbroad.Application.Common;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
@@ -38,7 +39,7 @@ public record AccountPurgeFailure(Guid UserId, Exception Error);
 /// [UC-80] Xóa hẳn tài khoản sau thời hạn chờ (mặc định 30 ngày). Mỗi tài khoản một transaction:
 /// kiểm tra lại điều kiện → xóa payload thanh toán → giữ họ tên/email người mua (UC-75 lớp 2) → xóa trắng liên hệ trên yêu cầu
 /// còn giữ (lớp 1b) → ẩn danh mức dùng AI (lớp 3) → xử lý bài diễn đàn → xóa user → ghi nhật ký chỉ có id.
-/// Tệp học bạ, tệp nháp xóa SAU khi DB đã lưu: DB hoàn tác được còn tệp đã xóa thì không.
+/// Tệp học bạ, tệp nháp, ảnh minh chứng ngày sinh trên Cloudinary xóa SAU khi DB đã lưu: DB hoàn tác được còn tệp đã xóa thì không.
 /// Chỉ xử lý vai trò được tự xóa (học sinh, phụ huynh).
 /// </summary>
 public class AccountPurgeService(
@@ -47,7 +48,8 @@ public class AccountPurgeService(
     IUnitOfWork unitOfWork,
     IProfileFileStorageService fileStorage,
     AccountDeletionOptions? options = null,
-    IBillingAccountHooks? billingHooks = null) : IAccountPurgeService
+    IBillingAccountHooks? billingHooks = null,
+    IBirthDateEvidenceStorage? evidenceStorage = null) : IAccountPurgeService
 {
     public const string AuditAction = "user.purge_account";
     public const int AccountingRetentionYears = 10;
@@ -84,6 +86,7 @@ public class AccountPurgeService(
             {
                 var done = false;
                 Func<CancellationToken, Task>? billingAfterCommit = null;
+                List<string> evidencePaths = [];
                 await unitOfWork.ExecuteInTransactionAsync(async txCt =>
                 {
                     // Người dùng có thể vừa khôi phục sau lúc lấy danh sách: kiểm tra lại và khóa dòng
@@ -100,6 +103,9 @@ public class AccountPurgeService(
                     // Nhóm Gia đình và kỳ của chủ gói kết thúc trước khi dòng user mất (cascade xóa nốt)
                     if (billingHooks is not null)
                         billingAfterCommit = await billingHooks.OnBeforePurgeAsync(userId, now, txCt);
+                    // [UC-107 / UC-150] Dòng yêu cầu đổi ngày sinh mất theo cascade: giữ lại khóa tệp minh chứng để xóa trên Cloudinary
+                    if (evidenceStorage is not null)
+                        evidencePaths = await purge.GetBirthDateEvidencePathsAsync(userId, txCt);
                     await purge.DeleteUserAsync(userId, txCt);
 
                     // Nhật ký chỉ giữ id, không giữ email hay tên đã xóa
@@ -131,6 +137,9 @@ public class AccountPurgeService(
                     // User đã mất khỏi DB, không thử lại theo user được nữa: báo để dọn tay
                     fileFailures.Add(new AccountPurgeFailure(userId, ex));
                 }
+                // DeleteAsync không ném lỗi, chỉ ghi log (bản còn sót trên Cloudinary là bản mã)
+                foreach (var path in evidencePaths)
+                    await evidenceStorage!.DeleteAsync(path, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

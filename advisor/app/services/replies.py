@@ -159,6 +159,29 @@ INTAKE_BEFORE_GRADUATION = (
 # Học sinh hỏi hệ thống đang lưu gì (collect_profile, tasks status): đi kèm bảng hồ sơ
 PROFILE_STATUS = 'Đây là hồ sơ mình đang lưu. Đúng thì bạn bấm "Đúng rồi", muốn đổi thì bấm "Cần sửa".'
 PROFILE_NONE_YET = "Hiện mình chưa lưu thông tin hồ sơ nào của bạn."
+# Ngân sách lưu theo khoảng như form, còn gợi ý trường tính tới trần của khoảng: phải nói cho học sinh biết
+BUDGET_NOTE_NEW = "Bạn nói khoảng {said} USD mỗi năm. Mình lưu theo mức {label}."
+BUDGET_NOTE_SAME = "{said} USD vẫn nằm trong mức {label} đang lưu nên hồ sơ không đổi."
+BUDGET_NOTE_CEILING = (
+    " Khi gợi ý trường, hệ thống tính theo mức {ceiling} USD và cho vượt thêm {percent}% (tới {limit} USD) "
+    "nên có thể có trường tốn hơn mức bạn nói."
+)
+BUDGET_REVIEW_HINT = 'Bạn xem bảng hồ sơ: đúng thì bấm "Đúng rồi", muốn đổi thì bấm "Cần sửa".'
+# Nút thử đúng số học sinh nói bằng thử giả định (không lưu vào hồ sơ). Câu gửi đi đã thử trên SLM v6: đúng 16/16
+BUDGET_TRY_LABEL = "Thử với đúng {said} USD"
+BUDGET_TRY_VALUE = "Nếu ngân sách của em là {said} USD một năm thì sao?"
+# Còn thay đổi chưa xác nhận mà hỏi việc phải tính trên hồ sơ (UC-19, UC-154, UC-155): đi kèm bảng hồ sơ
+UNSAVED_REVIEW = (
+    'Bạn vừa đổi thông tin hồ sơ mà chưa xác nhận. Bạn xem bảng bên dưới: đúng thì bấm "Đúng rồi", '
+    "mình lưu rồi trả lời câu bạn vừa hỏi."
+)
+# Chữ của nút trả lời lại câu đang chờ, hiện khi hồ sơ đã lưu mà lần gọi trả lời bị lỗi. Phải khớp ChatResume.cs bên .NET
+RESUME_VALUE = "Trả lời giúp câu em vừa hỏi"
+# Học sinh sửa mà giá trị nói ra trùng giá trị đang lưu: đi kèm bảng hồ sơ
+PROFILE_SAME = (
+    "Thông tin bạn vừa nói trùng với hồ sơ đang lưu nên mình giữ nguyên. "
+    'Bạn xem bảng hồ sơ: đúng thì bấm "Đúng rồi", muốn đổi thì bấm "Cần sửa".'
+)
 # Học sinh muốn làm lại hồ sơ (tasks restart): hỏi lại từng mục, giá trị cũ chỉ đổi khi học sinh trả lời giá trị mới
 PROFILE_RESTART_INTRO = 'Mình hỏi lại từng mục từ đầu. Mục nào không đổi, bạn bấm "Giữ như cũ".'
 

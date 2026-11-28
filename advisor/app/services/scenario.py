@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.schemas.chat import ProfileField, QuickReply
+from app.schemas.slm import BUDGET_ACTIONS
 from app.services.priority import PRIORITY_KEY
 from app.services.skills import exchange_rate, major_catalog, state_catalog, validators
 from app.services.skills.validators import AskAgain
@@ -39,6 +40,9 @@ EC_TIER_MAX = 5  # bậc ngoại khóa 1 đến 5 (3 là trung bình), cùng kho
 MIN_VND_PER_USD = 1_000  # dưới mức này không thể là tỉ giá VNĐ mỗi USD (người dùng nhầm đơn vị)
 # Học sinh nói "bỏ" một yếu tố: kịch bản chỉ đổi giá trị, không xóa được điểm
 SKIP_ACTION = "skip"
+ASK_NEW_BUDGET_TOTAL = (
+    "Mình chưa tự cộng hoặc trừ ngân sách được. Bạn cho mình mức tổng ngân sách mỗi năm sau khi thay đổi nhé."
+)
 GPA_SCALES = {"scale_4": 4, "scale_10": 10}
 SCHOLARSHIP_TEXT = {"optional": "không cần", "preferred": "nên có", "mandatory": "bắt buộc"}
 
@@ -304,6 +308,9 @@ def parse_what_if(
         ):  # ưu tiên đọc riêng (priority.py), không phải giá trị hồ sơ
             continue
         checked = None
+        # SLM nói đây là mức CỘNG THÊM hoặc BỚT ĐI, mô phỏng chưa tính được: hỏi tổng mới, không coi số đó là ngân sách mới
+        if change.get("action") in BUDGET_ACTIONS:
+            raise AskAgain(ASK_NEW_BUDGET_TOTAL)
         if key in SUPPORTED and change.get("action") != SKIP_ACTION:
             checked = _check(key, change.get("value", ""), change.get("unit"), states, majors)
         if checked is None:

@@ -198,6 +198,36 @@ public class ProfileFlowService(
         return ToStateDto(stored, HasCommittedProfile(profile)) with { BudgetLockedUsd = locked?.Usd };
     }
 
+    /// <summary>
+    /// Họ tên, ngày sinh, email, SĐT của chủ hồ sơ cùng họ tên phụ huynh đã liên kết (đang hiệu lực), gửi kèm ảnh bảng điểm để
+    /// advisor che đúng các chuỗi này trước khi chữ lên LLM. userId là chủ hồ sơ: phụ huynh làm thay thì đây là con.
+    /// </summary>
+    private async Task<TranscriptKnownPersonalInfo?> BuildKnownPersonalInfoAsync(Guid userId, CancellationToken ct)
+    {
+        if (users is null)
+            return null;
+        var owner = await users.GetUserById(userId, ct);
+        if (owner is null)
+            return null;
+
+        var names = new List<string> { owner.FullName };
+        if (parentLinks is not null)
+        {
+            foreach (var link in await parentLinks.GetByStudentAsync(userId, ct))
+            {
+                if (link.Status != ParentLinkStatuses.Active || link.ParentUserId is not Guid parentId)
+                    continue;
+                if (await users.GetUserById(parentId, ct) is { } parent)
+                    names.Add(parent.FullName);
+            }
+        }
+        return new TranscriptKnownPersonalInfo(
+            names.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct().ToList(),
+            owner.DateOfBirth,
+            string.IsNullOrWhiteSpace(owner.Email) ? null : owner.Email,
+            owner.Phone);
+    }
+
     public async Task<UploadDraftTranscriptResultDto> UploadDraftTranscriptAsync(
         Guid userId, Stream fileStream, string fileName, string contentType, long length, CancellationToken ct = default)
     {
@@ -224,7 +254,8 @@ public class ProfileFlowService(
                         Files: [new TranscriptFilePayload(base64, fileName, draftInfo.ContentType)],
                         ImageBase64: base64,
                         FileName: fileName,
-                        ContentType: draftInfo.ContentType
+                        ContentType: draftInfo.ContentType,
+                        KnownPersonalInfo: await BuildKnownPersonalInfoAsync(userId, ct)
                     ), ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

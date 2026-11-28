@@ -33,7 +33,7 @@ READERS = {
     "skill_tra_loi.md",  # chỉ CHỌN một ứng viên trong danh sách, không viết lời
 }
 # Prompt của SLM: model đã học đúng chữ này nên không đổi khuôn (xem slm/README.md)
-EXEMPT = {"slm_intents.md"}
+EXEMPT = {"slm_intents.md", "slm_intents_v7.md"}
 
 PRINCIPLE = "NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)"
 

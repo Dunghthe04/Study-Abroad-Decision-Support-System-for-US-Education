@@ -39,6 +39,18 @@ CONTEXT_COLUMN = "context"  # tùy chọn, ở mọi sheet: điều hệ thống
 # Cột bắt buộc, giống nhau ở mọi sheet. Loại chính lấy từ tên sheet, id sinh theo sheet và thứ tự dòng
 COLUMNS = ("question", "profile", "pending_question", "intents", "split")
 SPLITS = ("train", "val", "test")
+# Sheet ghi chú cho người đọc: không có dữ liệu train nên mọi script đều bỏ qua
+NOTE_SHEETS = (
+    "README",
+    "huong_dan_thu_thap",
+    "hop_dong_moi",
+    "ra_soat_cau_hoi",
+    "summary",
+    "model_errors",
+    "mau_hop_dong_moi",
+    "dong_can_gan_lai",
+    "nhat_ky_sua",
+)
 _WORD = re.compile(r"[^\W_]+(?:[-.'/][^\W_]+)*")
 
 
@@ -100,6 +112,9 @@ def check_intents(
             raise ValueError(f"{where}: span có chữ không có trong câu hỏi: {sorted(extra)}")
         if y.type != "collect_profile" and set(y.entities) & set(PROFILE_KEYS):
             raise ValueError(f"{where}: giá trị hồ sơ chỉ ghi ở ý collect_profile, không ghi vào ý {y.type}")
+        for phrase in y.entities.get("unsupported") or []:
+            if phrase not in question:
+                raise ValueError(f"{where}: unsupported '{phrase}' phải là đoạn chữ có trong question")
         for key, value in y.entities.items():
             if (key in PROFILE_KEYS or key == "city") and value not in question:
                 # Câu nối tiếp ("thế còn luyện phỏng vấn") lấy thành phố từ ngữ cảnh: phải đúng thành phố trong ngữ cảnh
@@ -161,7 +176,7 @@ def read_records(path: Path) -> list[dict[str, Any]]:
     workbook = load_workbook(path, read_only=True, data_only=True)
     records: list[dict[str, Any]] = []
     for sheet in workbook.worksheets:
-        if sheet.title in ("README", "summary", "model_errors"):
+        if sheet.title in NOTE_SHEETS:
             continue  # sheet giải thích cho người đọc, không có dữ liệu
         if sheet.title not in TYPES:
             raise ValueError(f"Sheet '{sheet.title}' không phải một loại trong {TYPES} (mỗi loại một sheet)")

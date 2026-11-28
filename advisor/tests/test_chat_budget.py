@@ -17,12 +17,13 @@ async def test_vnd_text_saves_tier_without_qwen():
     assert res.state.question_id != "F1"
 
 
-async def test_amount_at_tier_ceiling_goes_to_upper_tier_like_form():
+# Số học sinh nói là mức tối đa gia đình chi được (đổi 27/11/2026; trước đây xếp sang mức trên như ô số của phụ huynh)
+async def test_amount_at_tier_ceiling_stays_in_that_range():
     res = await turn(
         FakeLLM(), "35.000 USD", current_step="B2", question_id="F1", asked=ASKED, profile=PROFILE
     )
 
-    assert res.state.profile["budget"].value == "tier_35k_50k"
+    assert res.state.profile["budget"].value == "tier_20k_35k"
 
 
 async def test_huge_usd_is_asked_again():

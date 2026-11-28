@@ -44,8 +44,10 @@ from app.services.replies import (
     INTAKE_MORE,
     MENU,
     NEED_MAJOR,
+    NEED_PROFILE,
     NOT_READY,
     PREMIUM_REQUIRED,
+    RESUME_VALUE,
 )
 from app.services.skill_rules import REQUIRED_B3, REQUIRED_B4, missing_fields, unanswered_fields
 from app.services.slm_contract import SlmClassifier
@@ -90,6 +92,8 @@ OPENING_QUESTIONS = {"B0.1", "B0.2"}
 # Loại khác (collect_profile, profile_review...) ghi state nên vẫn chạy lần lượt. Thêm loại vào đây chỉ khi nhánh đó không ghi state
 PARALLEL_SAFE = {"knowledge", "center_referral"}
 # Số ý chạy cùng lúc nhiều nhất trong một tin: tin hỏi 12 câu thì không gửi 12 yêu cầu Claude cùng một lúc
+# Câu hồ sơ đang chờ được nhắc lại tối đa ngần này lần khi học sinh hỏi chuyện khác
+MAX_REMINDERS = 2
 PARALLEL_LIMIT = 4
 # Ý collect_profile thay thế khi SLM không tách ý hồ sơ nhưng tin vẫn có giá trị hồ sơ (nằm trong ý khác)
 PROFILE_ONLY = SlmY(type="collect_profile", span="thông tin hồ sơ")
@@ -288,6 +292,8 @@ class ChatFlow:
         else:
             state = req.state.model_copy(deep=True)
         apply_turn_inputs(state, req)
+        state.can_resume, state.resume_needed = req.can_resume, False
+        await load_provinces(state)
         # Chụp hồ sơ đầu lượt để cuối lượt biết khóa nào đổi (sao chép sâu vì nhánh sửa trực tiếp trên state)
         profile_before = {key: field.model_copy(deep=True) for key, field in state.profile.items()}
         message = last_user_message(req)
@@ -296,6 +302,10 @@ class ChatFlow:
         # Đang chờ học sinh chọn cách điền hồ sơ: nhận lựa chọn bằng chữ trên nút, không cần SLM.
         # Nút "Tiếp tục bằng chat" trên form thì hỏi tiếp trong chat dù chat không đang chờ chọn
         continue_chat = message.strip() == CONTINUE_CHAT
+        # Lần gọi thứ hai của lượt xác nhận (hồ sơ đã lưu, lộ trình mới), hoặc học sinh bấm nút thử lại khi lần gọi đó
+        # lỗi: chỉ trả lời câu đang chờ, không gọi SLM
+        if req.resume or (message.strip() == RESUME_VALUE and state.pending_advice is not None):
+            return await self._answer_waiting(req, state, message, started, profile_before)
         # Lưu form xong, form gửi câu gộp các việc đã tích (vào form bằng "Sửa hồ sơ", không mở từ chat):
         # form đã là bước rà soát, bỏ câu hồ sơ đang treo (vd bảng X1) rồi trả lời câu này như học sinh tự gõ.
         # Câu tư vấn cũ đang chờ hồ sơ thì câu mới từ form thay nó
@@ -321,24 +331,9 @@ class ChatFlow:
                 log_turn(state, message, None, [], (time.perf_counter() - started) * 1000, req.session_id)
                 return self._response(state, output, [], profile_before)
             if continue_chat and state.pending_advice is not None and profile_ready(state):
-                # Khóa trước khi lấy câu tư vấn đang chờ ra, để nâng cấp xong câu đó vẫn còn
-                if not allows(req, "profile_review"):
-                    return self._locked(req, state, message, started, profile_before, ["profile_review"])
-                original = state.pending_advice
-                state.pending_advice = None
-                state.intake_mode = "chat"
-                output = await self._branches["profile_review"].run(
-                    state, original.span, SlmTinResult(intents=[original])
-                )
-                log_turn(
-                    state,
-                    message,
-                    None,
-                    ["profile_review"],
-                    (time.perf_counter() - started) * 1000,
-                    req.session_id,
-                )
-                return self._response(state, output, ["profile_review"], profile_before)
+                if allows(req, state.pending_advice.type):
+                    state.intake_mode = "chat"
+                return await self._answer_waiting(req, state, message, started, profile_before)
             if choice:
                 if not allows(req, "collect_profile"):
                     return self._locked(req, state, message, started, profile_before, ["collect_profile"])
@@ -360,7 +355,9 @@ class ChatFlow:
         pending = (state.question_id, state.last_question)
         # 1. SLM đọc tin nhắn. Bấm nút của câu đang hỏi, hoặc bấm nút ở menu sửa hồ sơ, là trả lời hồ sơ rõ ràng, không cần SLM đoán
         asked_slm = not (
-            (state.question_id and is_button(state.question_id, message)) or is_edit_menu(state, message)
+            await is_province_reply(state, message)
+            or (state.question_id and is_button(state.question_id, message))
+            or is_edit_menu(state, message)
         )
         fell_back = False
         model_intents: list[SlmY] = []
@@ -402,7 +399,14 @@ class ChatFlow:
             and "collect_profile" not in names
             and (state.question_id, state.last_question) == pending
         )
+        if "collect_profile" in names:
+            state.reminded.clear()
+        # Nhắc tối đa MAX_REMINDERS lần rồi thôi để không bám theo mọi câu trả lời. Việc cần hồ sơ bị chặn thì luôn hiện
+        # câu hỏi, vì lời báo chặn không tự nói đang thiếu gì
+        if remind and NEED_PROFILE not in output.answer:
+            remind = state.reminded.get(pending[0], 0) < MAX_REMINDERS
         if remind:
+            state.reminded[pending[0]] = state.reminded.get(pending[0], 0) + 1
             remind_output = recreate_question_output(state, pending[0], pending[1])
             output = combine(output, remind_output)
 
@@ -419,6 +423,31 @@ class ChatFlow:
         response.slm = slm_summary(slm, asked_slm, fell_back, model_intents)
         response.locked_intents = locked
         return response
+
+    # Trả lời câu tư vấn đang chờ, bằng đúng ý SLM đã tách lúc học sinh hỏi. Không còn câu nào chờ thì không nói gì
+    async def _answer_waiting(
+        self,
+        req: ChatRequest,
+        state: ChatState,
+        message: str,
+        started: float,
+        profile_before: dict[str, ProfileField],
+    ) -> ChatResponse:
+        original = state.pending_advice
+        if original is None:
+            return self._response(state, SkillOutput(""), [], profile_before)
+        # Khóa trước khi lấy câu đang chờ ra, để nâng cấp xong câu đó vẫn còn
+        if not allows(req, original.type):
+            return self._locked(req, state, message, started, profile_before, [original.type])
+        state.pending_advice = None
+        output = await self._branches[original.type].run(
+            state, original.span, SlmTinResult(intents=[original])
+        )
+        update_context(state, output)
+        log_turn(
+            state, message, None, [original.type], (time.perf_counter() - started) * 1000, req.session_id
+        )
+        return self._response(state, output, [original.type], profile_before)
 
     # Lượt bị khóa vì gói: câu cần Premium, không chạy nhánh nào (không gọi Claude), state giữ như đang có
     def _locked(
@@ -514,6 +543,7 @@ class ChatFlow:
             form_goals=form_goals(state.pending_advice) if state.intake_mode == "chat" else [],
             action=output.action,
             action_data=output.action_data,
+            resume_needed=state.resume_needed,
         )
 
 
@@ -553,6 +583,23 @@ def is_button(question_id: str | None, message: str) -> bool:
     )
 
 
+# Đang hỏi tỉnh / thành hoặc lượt này có thể hỏi: lấy danh sách trước để câu hỏi có ô chọn.
+# Nhập muộn vì skill_tinh nhập chat_flow
+async def load_provinces(state: ChatState) -> None:
+    from app.services.skills import province_catalog, skill_tinh
+
+    missing = bool(state.roadmap and state.roadmap.get("provinceMissing"))
+    if missing or state.question_id == skill_tinh.PROVINCE_ID:
+        await province_catalog.names()
+
+
+# Câu trả lời đúng câu hỏi tỉnh / thành (bỏ qua hoặc tên tỉnh): không cần SLM. Phải hỏi backend nên tách khỏi is_button
+async def is_province_reply(state: ChatState, message: str) -> bool:
+    from app.services.skills import skill_tinh
+
+    return state.question_id == skill_tinh.PROVINCE_ID and await skill_tinh.is_reply(message)
+
+
 # Không có câu đang hỏi mà tin là câu ô chọn sửa hồ sơ ("Em muốn sửa Mục tiêu", vd nút của câu trả lời kịch bản):
 # cũng là bấm nút, giao nhánh hồ sơ mở luồng sửa
 def is_edit_menu(state: ChatState, message: str) -> bool:
@@ -586,6 +633,7 @@ def back_from_form(state: ChatState) -> None:
         state.question_id = None
         state.last_question = ""
     state.edit_queue = None
+    state.unsaved = False  # form đã lưu hồ sơ
     state.intake_mode = "form"  # đến từ form, để limit_to_required không coi là đang hỏi đủ trong chat
     # Bắt buộc như form: cấp học hiện tại (B1.1, cần để lưu hồ sơ) + mục B3; lộ trình / gợi ý trường cần thêm ngành
     goals = form_goals(state.pending_advice)

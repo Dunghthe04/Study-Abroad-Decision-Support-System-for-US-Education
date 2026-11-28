@@ -31,10 +31,14 @@ public class AuthServiceTests
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeLeadWithdrawalRepository _leadWithdrawals = new();
 
+    private readonly BirthDateChangeServiceTests.FakeRepo _birthDateRequests = new();
+    private readonly BirthDateChangeServiceTests.FakeStorage _birthDateEvidence = new();
+
     private AuthService CreateService(AccountDeletionOptions? accountDeletion = null) => new(
         _repo, new FakeHasher(), _tokens, _emailSender, _links, _auditLogs,
         new ParentLinkService(_links, _repo, _emailSender, _auditLogs), _unitOfWork, _leadWithdrawals,
-        accountDeletion: accountDeletion);
+        accountDeletion: accountDeletion,
+        birthDateRequests: _birthDateRequests, birthDateEvidence: _birthDateEvidence);
 
     // Ngày sinh ứng với tuổi tròn (sinh nhật cách hôm nay ở VN 10 ngày về trước)
     private static DateOnly BornYearsAgo(int years) =>
@@ -689,6 +693,52 @@ public class AuthServiceTests
         Assert.Equal(userId, log.ActorUserId);
         Assert.Equal("127.0.0.1", log.IpAddress);
         Assert.Equal("TestAgent/1.0", log.UserAgent);
+    }
+
+    [Fact]
+    public async Task AnonymizeUserAccount_PendingBirthDateRequest_CancelledAndEvidenceDeleted()
+    {
+        // [UC-75 bước 4] Gửi yêu cầu sửa ngày sinh trước rồi mới bấm xóa tài khoản: yêu cầu bị hủy, minh chứng bị xóa ngay
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Active;
+        const string path = "uploads/birth-date-evidence/x/file.pdf";
+        _birthDateEvidence.Files[path] = [1, 2, 3];
+        var request = new BirthDateChangeRequest
+        {
+            Id = Guid.NewGuid(), UserId = user.Id, Status = BirthDateChangeStatuses.Pending,
+            EvidencePath = path, EvidenceFileName = "khai-sinh.pdf", EvidenceType = "birth_certificate",
+        };
+        _birthDateRequests.Items.Add(request);
+
+        var result = await service.AnonymizeUserAccountAsync(user.Id);
+
+        Assert.Equal(AuthError.None, result.Error);
+        Assert.Equal(BirthDateChangeStatuses.Cancelled, request.Status);
+        Assert.Null(request.ReviewedByUserId);
+        Assert.Null(request.EvidencePath);
+        Assert.Null(request.EvidenceFileName);
+        Assert.Equal("birth_certificate", request.EvidenceType);
+        Assert.Equal([path], _birthDateEvidence.Deleted);
+        Assert.Contains("\"cancelledBirthDateRequest\":true", Assert.Single(_auditLogs.Entries).DetailJson);
+    }
+
+    [Fact]
+    public async Task AnonymizeUserAccount_ClosedBirthDateRequest_Untouched()
+    {
+        var service = CreateService();
+        await service.RegisterAsync(Request());
+        var user = _repo.Users[0];
+        user.Status = UserStatuses.Active;
+        var approved = new BirthDateChangeRequest { Id = Guid.NewGuid(), UserId = user.Id, Status = BirthDateChangeStatuses.Approved };
+        _birthDateRequests.Items.Add(approved);
+
+        await service.AnonymizeUserAccountAsync(user.Id);
+
+        Assert.Equal(BirthDateChangeStatuses.Approved, approved.Status);
+        Assert.Empty(_birthDateEvidence.Deleted);
+        Assert.Contains("\"cancelledBirthDateRequest\":false", Assert.Single(_auditLogs.Entries).DetailJson);
     }
 
     [Fact]

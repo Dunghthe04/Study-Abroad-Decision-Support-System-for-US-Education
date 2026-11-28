@@ -28,6 +28,7 @@ from slm.prepare.export_slm_chat import PROMPT_PATH as TRAIN_PROMPT_PATH
 from slm.prepare.export_slm_chat import TRAIN_PROMPT, to_chat
 
 NAME = "slm_intents"
+NEXT = "slm_intents_v7"
 
 
 def text_of(name: str) -> str:
@@ -40,7 +41,7 @@ def contract_words() -> set[str]:
         "intents", "type", "span", "entities", "question", "profile", "pending_question", "context",
         "tasks", "schools", "school", "fields", "filters", "sort", "follow_up", "centers", "changes",
         "factor", "value", "unit", "action", "skip", "mode", "target_group", "subtype", "service", "city",
-        "scale_4", "scale_10",
+        "scale_4", "scale_10", "unsupported", "add", "subtract",
     }  # fmt: skip
     words |= set(INTENTS) | set(PROFILE_KEYS)
     words |= set(KNOWLEDGE_TASKS) | set(REVIEW_TASKS) | set(CENTER_TASKS) | set(PROFILE_TASKS)
@@ -51,15 +52,16 @@ def contract_words() -> set[str]:
 
 
 def test_the_prompt_names_every_key_and_code_of_the_contract():
-    text = text_of(NAME)
+    text = text_of(NEXT)
 
     missing = sorted(w for w in contract_words() if w not in text)
 
     assert not missing, f"{NAME} thiếu: {missing}"
 
 
-def test_every_example_in_the_prompt_is_a_valid_answer():
-    examples = [line for line in text_of(NAME).splitlines() if line.startswith('{"intents":[{')]
+@pytest.mark.parametrize("name", [NAME, NEXT])
+def test_every_example_in_the_prompt_is_a_valid_answer(name):
+    examples = [line for line in text_of(name).splitlines() if line.startswith('{"intents":[{')]
 
     assert examples
     for line in examples:
@@ -76,10 +78,12 @@ def test_the_prompt_does_not_use_the_old_vietnamese_contract():
     ]
 
 
-def test_the_default_prompt_is_the_one_training_uses():
+# Model đang chạy (v6) học bằng slm_intents: giữ nguyên prompt đó tới khi có model v7. Dữ liệu v7 train bằng prompt mới
+def test_the_running_model_keeps_its_prompt_while_v7_trains_with_the_new_one():
     assert Settings(_env_file=None).slm_prompt == NAME
     assert PROMPT_PATH.stem == NAME
-    assert TRAIN_PROMPT == NAME and TRAIN_PROMPT_PATH.stem == NAME
+    assert TRAIN_PROMPT == NEXT and TRAIN_PROMPT_PATH.stem == NEXT
+    assert "fit_method" not in text_of(NAME)
 
 
 class CaptureSlm:

@@ -23,7 +23,7 @@ Cập nhật 21/11/2026. Căn cứ: Luật Bảo vệ dữ liệu cá nhân số
 | Tin phía trung tâm đang bị báo cáo chưa xử lý | Xem bảng trên | Xóa nốt khi báo cáo được xử lý |
 | Nhật ký (`audit_logs`) | Truy vết thao tác quản trị | Chỉ lưu mã, không lưu tên hay email đã xóa |
 | Bản ghi yêu cầu xóa | Chứng minh đã xử lý đúng hạn | Không còn thông tin nhận diện |
-| Đánh giá và lead cũ của người dùng | Là dữ liệu của người dùng | Trung tâm hiển thị là "Trung tâm đã xóa" |
+| Đánh giá và lead cũ của người dùng | Là dữ liệu của người dùng | Trung tâm hiển thị là "Trung tâm đã ngừng hoạt động" |
 
 ## 3. Điều chưa làm hoặc chưa kiểm tra
 

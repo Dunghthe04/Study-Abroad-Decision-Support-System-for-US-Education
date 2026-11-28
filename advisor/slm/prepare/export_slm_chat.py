@@ -21,7 +21,7 @@ from app.services.skill_call import SKILLS_DIR, load_skill
 from slm.prepare.build_slm_jsonl import DEFAULT_OUT, profile_text
 
 # Prompt tách ý dùng để huấn luyện (tiếng Anh). Chạy thật phải dùng đúng prompt này
-TRAIN_PROMPT = "slm_intents"
+TRAIN_PROMPT = "slm_intents_v7"  # train v7; chạy thật vẫn dùng slm_intents tới khi đổi sang model v7
 PROMPT_PATH = SKILLS_DIR / f"{TRAIN_PROMPT}.md"  # file prompt dùng để huấn luyện (tests đọc để kiểm nội dung)
 OUT_DIR = DEFAULT_OUT.parent / "finetune"
 SPLITS = ("train", "val")

@@ -2,7 +2,7 @@ import hashlib
 import json
 from typing import Any
 
-from app.schemas.chat import ChatState, Widget
+from app.schemas.chat import ChatState, QuickReply, Widget
 from app.schemas.slm import PROFILE_KEYS, SlmTinResult, task_of
 from app.services.chat_flow import (
     OPENING_QUESTIONS,
@@ -13,13 +13,21 @@ from app.services.chat_flow import (
 )
 from app.services.intake import EDIT_ONLY_GOAL, form_goals
 from app.services.replies import (
+    BUDGET_NOTE_CEILING,
+    BUDGET_NOTE_NEW,
+    BUDGET_NOTE_SAME,
+    BUDGET_REVIEW_HINT,
+    BUDGET_TRY_LABEL,
+    BUDGET_TRY_VALUE,
     PROFILE_DONE,
     PROFILE_NONE_YET,
     PROFILE_RESTART_INTRO,
+    PROFILE_SAME,
     PROFILE_STATUS,
 )
 from app.services.skill_rules import REQUIRED_B3, missing_fields
-from app.services.skills import buttons, edit_prefill, skill_bac_hoc, skill_ho_so
+from app.services.skills import buttons, edit_prefill, skill_bac_hoc, skill_ho_so, skill_tinh
+from app.services.skills.validators import BUDGET_RANGES, BUDGET_TOLERANCE_PERCENT
 
 # Giá trị hồ sơ nào do skill nào đọc
 BAC_HOC_FIELDS = set(skill_bac_hoc.READ_FIELDS)
@@ -46,9 +54,23 @@ class ChatProfileHandler:
     # Không có câu chờ: ghi giá trị tự khai rồi hỏi tiếp mục còn thiếu.
     # Hồ sơ vẫn đủ nghĩa là không có gì mới, nên không mở lại bước xác nhận
     async def collect(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
+        state.major_miss, state.budget_said = None, None
+        values_before = profile_values(state)
+        saved = state.profile.get("budget")
+        before = saved.value if saved is not None else None
+        output = await self._route(state, message, slm)
+        if profile_values(state) != values_before:
+            state.unsaved = True
+        if state.major_miss is not None:
+            return report_major_miss(state)
+        return add_budget_note(state, output, before)
+
+    async def _route(self, state: ChatState, message: str, slm: SlmTinResult) -> SkillOutput:
         said = set(slm.profile_values())
         # Tin còn ý khác (câu hỏi): giá trị hồ sơ chỉ là bối cảnh của câu hỏi, không phải phản hồi cho bảng rà soát
         aside = any(y.type != "collect_profile" for y in slm.intents)
+        if await self._answers_province_unclearly(state, message, slm, aside):
+            return await self._province_reply(state, message, said, aside)
         # Xem hồ sơ đang lưu, làm lại từ đầu: không phải khai giá trị. Đang hỏi dở một câu hồ sơ thì giữ luồng hỏi như cũ
         task = None if aside else profile_task(slm)
         if task in ("status", "restart") and (
@@ -79,6 +101,34 @@ class ChatProfileHandler:
         # Không có giá trị nào mới cần xác nhận thì im lặng, câu trả lời của ý kia đứng một mình (bảng rà soát đang chờ vẫn
         # chờ như cũ). Có giá trị mới chưa xác nhận thì vẫn hiện bảng rà soát để học sinh xác nhận
         return skill_ho_so.review(state) if has_unconfirmed_news(state, before) else SkillOutput("")
+
+    # Đang hỏi tỉnh, câu này không phải tên tỉnh, model coi là khai hồ sơ (không phải sửa hay xem hồ sơ, không kèm ý khác)
+    async def _answers_province_unclearly(
+        self, state: ChatState, message: str, slm: SlmTinResult, aside: bool
+    ) -> bool:
+        return (
+            state.question_id == skill_tinh.PROVINCE_ID
+            and not aside
+            and profile_task(slm) is None
+            and not wants_edit(slm)
+            and not await skill_tinh.is_reply(message)
+        )
+
+    # Đọc câu đó như khai hồ sơ. Không ghi nhận được gì mới (kể cả khi model gán một mục mà đọc ra trống, vd câu về nơi ở
+    # bị gán người thân ở Mỹ) thì là câu trả lời tỉnh không rõ: giữ hồ sơ như cũ, hỏi lại kèm ô chọn. Xét theo kết quả,
+    # không đổi nhãn của model
+    async def _province_reply(
+        self, state: ChatState, message: str, said: set[str], aside: bool
+    ) -> SkillOutput:
+        if not said:
+            return skill_tinh.ask_again(state)
+        asked, step, intake = dict(state.asked), state.current_step, state.intake_mode
+        before = skill_ho_so.profile_snapshot(state)
+        output = await self._collect(state, message, said)
+        if skill_ho_so.profile_snapshot(state) != before or state.read_now:
+            return output
+        state.asked, state.current_step, state.intake_mode = asked, step, intake
+        return skill_tinh.ask_again(state)
 
     # Hiện bảng hồ sơ đang lưu (không đổi gì); chưa có gì thì nói chưa có và mời điền
     def _show_saved(self, state: ChatState) -> SkillOutput:
@@ -147,6 +197,7 @@ class ChatProfileHandler:
         waiting = state.question_id if state.question_id in ALL_QUESTION_FIELDS else None
         old_queue, state.edit_queue = state.edit_queue or [], None
         before = skill_ho_so.profile_snapshot(state)
+        state.read_now.clear()
         if waiting is None:  # đang ở bảng rà soát hoặc không có câu chờ
             output = await self._collect(state, message, said)
         else:  # tin này là yêu cầu sửa, không phải câu trả lời cho câu đang chờ: chỉ ghi giá trị đã nói
@@ -154,15 +205,19 @@ class ChatProfileHandler:
             output = skill_ho_so.review(state)
         after = skill_ho_so.profile_snapshot(state)
 
-        def unchanged(names: list[str] | tuple[str, ...]) -> bool:
-            return all(after.get(name) == before.get(name) for name in names)
+        # Mục chưa được trả lời: hồ sơ không đổi VÀ bộ đọc cũng không đọc ra giá trị nào. Nói lại đúng giá trị đang lưu
+        # là đã trả lời, hỏi lại là sai
+        def unanswered(names: list[str] | tuple[str, ...]) -> bool:
+            return all(after.get(name) == before.get(name) and name not in state.read_now for name in names)
 
-        new = [EDIT_QUESTION[name] for name in PROFILE_KEYS if name in said and unchanged([name])]
-        if waiting is not None and unchanged(ALL_QUESTION_FIELDS[waiting]):
+        new = [EDIT_QUESTION[name] for name in PROFILE_KEYS if name in said and unanswered([name])]
+        if waiting is not None and unanswered(ALL_QUESTION_FIELDS[waiting]):
             new.append(waiting)
         queue = list(dict.fromkeys(new + old_queue))  # bỏ câu trùng (vd SAT và ACT cùng câu D3), giữ thứ tự
         if not queue:
-            return output
+            # Nói rõ giá trị nhưng trùng hồ sơ đang lưu: nói thẳng là trùng và cho xem bảng, không hỏi "sửa mục nào"
+            same = said & state.read_now and all(after.get(name) == before.get(name) for name in PROFILE_KEYS)
+            return skill_ho_so.review(state, PROFILE_SAME) if same else output
         # Ở bảng rà soát mà giá trị sai thì skill_ho_so đã soạn câu hỏi lại (không kèm bảng): giữ câu đó
         text = output.answer if at_review and output.widget is None else None
         state.edit_queue = queue[1:]
@@ -196,6 +251,63 @@ class ChatProfileHandler:
         if missing_fields(state.profile, required) or self.pending_question(state) is not None:
             return False
         return all(field.status != "said_in_B0" for field in state.profile.values())
+
+
+# Báo ngành không có trong danh mục và hỏi lại ngành. Đang hỏi dở mục sửa khác thì mục đó hỏi sau.
+# Đã có ngành cũ thì thêm nút giữ như cũ để học sinh không bị kẹt ở câu này
+def report_major_miss(state: ChatState) -> SkillOutput:
+    waiting = state.question_id
+    queue = [q for q in state.edit_queue or [] if q != "B1.3"]
+    if state.edit_queue is not None and waiting in ALL_QUESTION_FIELDS and waiting != "B1.3":
+        queue.insert(0, waiting)
+    has_major = "major" in state.profile
+    state.edit_queue = queue if has_major or state.edit_queue is not None else None
+    output = skill_bac_hoc.ask_major_again(state, state.major_miss)
+    if has_major:
+        output.quick_replies = [*output.quick_replies, skill_ho_so.KEEP_REPLY]
+    return output
+
+
+# Học sinh nói một số thấp hơn trần của khoảng được lưu: nói rõ lưu mức nào và gợi ý trường tính tới đâu.
+# Số khác mà cùng khoảng thì nói đúng lý do hồ sơ không đổi, thay câu "chưa thấy thông tin mới" hay "trùng hồ sơ".
+# Có danh sách gợi ý thì kèm nút thử đúng số đó. Phụ huynh nhập số chính xác thì không cần
+def add_budget_note(state: ChatState, output: SkillOutput, before: str | None) -> SkillOutput:
+    saved = state.profile.get("budget")
+    if state.budget_said is None or state.exact_budget or saved is None or saved.value not in BUDGET_RANGES:
+        return output
+    ceiling = BUDGET_RANGES[saved.value][1]
+    below = ceiling is not None and state.budget_said < ceiling
+    same = saved.value == before
+    if not below and not same:
+        return output
+    said_text = f"{state.budget_said:,.0f}".replace(",", ".")
+    note = (BUDGET_NOTE_SAME if same else BUDGET_NOTE_NEW).format(
+        said=said_text, label=buttons.BUDGET_LABELS[saved.value]
+    )
+    if below:
+        limit = ceiling * (100 + BUDGET_TOLERANCE_PERCENT) // 100
+        note += BUDGET_NOTE_CEILING.format(
+            ceiling=f"{ceiling:,}".replace(",", "."),
+            percent=BUDGET_TOLERANCE_PERCENT,
+            limit=f"{limit:,}".replace(",", "."),
+        )
+    rest = output.answer.replace(PROFILE_SAME, BUDGET_REVIEW_HINT).replace(PROFILE_DONE, "").strip()
+    output.answer = "\n\n".join(part for part in (note, rest) if part)
+    if below and state.has_results:
+        button = QuickReply(
+            label=BUDGET_TRY_LABEL.format(said=said_text), value=BUDGET_TRY_VALUE.format(said=said_text)
+        )
+        output.quick_replies = [*output.quick_replies, button]
+    return output
+
+
+# Giá trị học sinh khai ở từng ô, để biết lượt này có đổi gì không. Không tính: trạng thái (xác nhận chỉ đổi trạng thái),
+# năm tốt nghiệp (code suy từ lớp, lớp đổi thì đã tính ở lớp) và nguồn GPA (.NET thêm khi gửi lại hồ sơ nháp)
+def profile_values(state: ChatState) -> dict:
+    values = {name: f.value for name, f in state.profile.items() if name != "graduation_year"}
+    if isinstance(gpa := values.get("gpa"), dict):
+        values["gpa"] = {key: value for key, value in gpa.items() if key != "source"}
+    return values
 
 
 # Nhiệm vụ của ý hồ sơ (edit, status, restart); None là khai giá trị hoặc trả lời câu đang chờ

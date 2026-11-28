@@ -40,6 +40,9 @@ class Button:
 
 # Câu tùy chọn có thêm nút này; bấm thì không ghi gì, hỏi câu tiếp theo
 SKIP = Button("Bỏ qua")
+# Lựa chọn mặc định của câu N2 và câu frontend ghép khi gửi ô chọn bang để trống
+ALL_STATES_LABEL = "Tất cả các bang"
+ALL_STATES_TEXT = "Em muốn học ở tất cả các bang"
 
 # Mức ngân sách và học bổng: mã và chữ giống DEFAULT_BUDGET_TIERS, SCHOLARSHIP_NEED_OPTIONS của form
 BUDGET_LABELS = {
@@ -292,6 +295,9 @@ def choices_of(question_id: str | None) -> tuple[Button, ...]:
             for term in INTAKE_TERM_LABELS
             for year in years()
         )
+    # N2: ô chọn bang để mặc định "Tất cả các bang" (không giới hạn bang, lưu danh sách rỗng như form)
+    if question_id == "N2":
+        return (Button(ALL_STATES_TEXT, {"preferred_states": confirmed([])}),)
     # D1, F3: ô chọn giống dropdown của form, chọn xong gửi đúng chữ của lựa chọn
     if question_id == "D1":
         return tuple(
@@ -717,6 +723,8 @@ def select_fields(question_id: str) -> dict | None:
                     "multiple": True,
                     "label": "Bang muốn học",
                     "placeholder": "Chọn bang",
+                    # Chưa chọn bang nào là "Tất cả các bang"; gửi luôn được, không cần nút Bỏ qua
+                    "allLabel": ALL_STATES_LABEL,
                 }
             ],
             "format": "Em muốn học ở {states}",

@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, type ReactNode }
 import { actingApi } from "@/lib/acting-api";
 import { authApi } from "@/lib/api";
 import { cancelScheduledRefresh, scheduleRefresh, SESSION_EXPIRED_EVENT } from "@/lib/auth-refresh";
+import { clearUserStorage } from "@/lib/clear-user-storage";
 import type { AuthResponse, LoginRequest, RegisterRequest, TwoFactorChallengeResponse, UserDto } from "@/types/api";
 
 interface AuthContextType {
@@ -86,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Refresh token hết hạn (quá 7 ngày) hoặc phiên bị thu hồi: auth-refresh báo, client coi như đã đăng xuất
   useEffect(() => {
     const onExpired = () => {
+      clearUserStorage();
       setUser(null);
       setActing(null);
     };
@@ -169,6 +171,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Dù có lỗi mạng thì Client vẫn reset trạng thái
     } finally {
       cancelScheduledRefresh();
+      // Xóa nháp/hồ sơ còn lưu trong trình duyệt để người sau dùng chung máy không đọc được
+      clearUserStorage();
       setUser(null);
       setActing(null);
     }

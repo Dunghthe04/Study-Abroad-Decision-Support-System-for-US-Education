@@ -1,4 +1,4 @@
-# SKILL ĐỌC THÔNG TIN HỒ SƠ (B2) - skill_version 1.5
+# SKILL ĐỌC THÔNG TIN HỒ SƠ (B2) - skill_version 1.6
 
 ## NGUYÊN TẮC DỮ LIỆU (BẮT BUỘC)
 - Chỉ đọc hiểu. Kiểm tra điểm, đổi tiền, chọn câu hỏi tiếp theo do code làm.
@@ -45,6 +45,8 @@ Trả về các giá trị học sinh đã nói (values) và các thông tin h�
   budget            {"amount": số, "currency": "USD" hoặc "VND", "tier": null}
                     "800 triệu" → amount 800000000, VND. "40 nghìn đô" → amount 40000, USD.
                     Học sinh nói khoảng ("30 đến 40 nghìn đô") thì lấy số lớn hơn.
+                    Chỉ khi học sinh nói số đó là mức TỐI THIỂU ("trên 70 nghìn", "hơn 35 nghìn", "từ 50 nghìn trở lên")
+                    thì thêm "at_least": true. Mức tối đa, mức khoảng chừng, hoặc khoảng hai số thì không thêm.
                     Học sinh trả lời đúng một mã mức thì ghi vào tier, amount và currency để null:
                     tier_under_20k | tier_20k_35k | tier_35k_50k | tier_50k_70k | tier_above_70k
   scholarship       optional (không cần, có thì tốt) | preferred (nên có) | mandatory (bắt buộc, không có thì không đi được)

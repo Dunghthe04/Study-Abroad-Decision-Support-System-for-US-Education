@@ -1,3 +1,4 @@
+using StudyAbroad.Domain.Constants;
 using StudyAbroad.Domain.Entities;
 
 namespace StudyAbroad.Application.StudyCenters;
@@ -31,8 +32,8 @@ public static class CenterReferral
     public static IReadOnlyList<CityCount> CityCounts(IEnumerable<StudyCenter> centers, string service, string? studyLevel) =>
         Eligible(centers, service, studyLevel)
             .Where(c => !string.IsNullOrWhiteSpace(c.City))
-            .GroupBy(c => c.City!, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new CityCount(g.First().City!, g.Count()))
+            .GroupBy(c => VietnamProvinces.Canonical(c.City)!, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new CityCount(g.Key, g.Count()))
             .OrderByDescending(x => x.Count)
             .ThenBy(x => x.City, StringComparer.Ordinal)
             .ToList();
@@ -46,7 +47,7 @@ public static class CenterReferral
     public static IReadOnlyList<string> Cities(IEnumerable<StudyCenter> centers) =>
         centers
             .Where(c => IsReferable(c) && !string.IsNullOrWhiteSpace(c.City))
-            .Select(c => c.City!)
+            .Select(c => VietnamProvinces.Canonical(c.City)!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(c => c, StringComparer.Ordinal)
             .ToList();
@@ -54,6 +55,5 @@ public static class CenterReferral
     private static bool IsReferable(StudyCenter c) => c.IsActive && c.VerificationStatus == Verified;
 
     private static bool SameCity(string? centerCity, string? studentCity) =>
-        !string.IsNullOrWhiteSpace(studentCity)
-        && string.Equals(centerCity, studentCity, StringComparison.OrdinalIgnoreCase);
+        VietnamProvinces.SameProvince(centerCity, studentCity);
 }

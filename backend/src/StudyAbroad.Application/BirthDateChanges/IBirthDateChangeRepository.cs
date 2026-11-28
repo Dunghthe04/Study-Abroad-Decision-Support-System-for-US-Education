@@ -30,6 +30,9 @@ public interface IBirthDateChangeRepository
     /// </summary>
     Task<bool> TryCloseAsync(Guid id, string newStatus, Guid? reviewedByUserId, string? rejectReason, DateTime at, CancellationToken ct = default);
 
+    /// <summary>Mọi đường dẫn minh chứng còn ghi trong DB (chỉ yêu cầu Chờ duyệt còn giữ, đóng là về null).</summary>
+    Task<IReadOnlyList<string>> GetEvidencePathsAsync(CancellationToken ct = default);
+
     /// <summary>[UC-150] Danh sách theo trạng thái; Chờ duyệt cũ nhất trước, trạng thái khác mới nhất trước.</summary>
     Task<PagedResult<BirthDateRequestListRow>> SearchAsync(string? status, int page, int pageSize, CancellationToken ct = default);
 }

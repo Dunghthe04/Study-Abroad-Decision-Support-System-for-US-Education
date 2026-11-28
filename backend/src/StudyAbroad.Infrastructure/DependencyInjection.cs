@@ -58,7 +58,11 @@ public static class DependencyInjection
         services.AddScoped<StudyAbroad.Application.Policies.IConsentRepository, ConsentRepository>();   // [UC-104] bằng chứng đồng ý điều khoản
         services.AddScoped<StudyAbroad.Application.Leads.ILeadRepository, LeadRepository>();
         services.AddScoped<StudyAbroad.Application.BirthDateChanges.IBirthDateChangeRepository, BirthDateChangeRepository>();   // [UC-107 / UC-150] yêu cầu sửa ngày sinh
-        services.AddSingleton<StudyAbroad.Application.BirthDateChanges.IBirthDateEvidenceStorage, StudyAbroad.Infrastructure.Services.BirthDateEvidenceStorage>();
+        // Minh chứng ngày sinh: mã hóa AES-GCM rồi lưu Cloudinary authenticated; khóa từ EVIDENCE_ENCRYPTION_KEY
+        services.Configure<StudyAbroad.Infrastructure.Services.BirthDateEvidenceOptions>(options =>
+            options.EncryptionKey = NonEmpty(configuration["EVIDENCE_ENCRYPTION_KEY"]) ?? options.EncryptionKey);
+        services.AddHttpClient<StudyAbroad.Application.BirthDateChanges.IBirthDateEvidenceStorage, StudyAbroad.Infrastructure.Services.BirthDateEvidenceStorage>(
+            client => client.Timeout = TimeSpan.FromSeconds(30));
         services.AddScoped<StudyAbroad.Application.Community.ICommunityRepository, CommunityRepository>();
         services.AddScoped<StudyAbroad.Application.Leads.ILeadWithdrawalRepository, LeadWithdrawalRepository>();   // [UC-80] thu hồi lead khi xóa tài khoản
         services.AddScoped<StudyAbroad.Application.Leads.ILeadHoldRepository, LeadHoldRepository>();   // [UC-110 / UC-150] giữ yêu cầu liên hệ khi học sinh về dưới 16
@@ -210,6 +214,7 @@ public static class DependencyInjection
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.BillingBackgroundService>();   // đối soát đơn, chuyển kỳ, nhắc hạn, thông báo hạn mức
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.ParentProfileMigrationBackgroundService>();   // [1.5d] chạy 1 lần lúc khởi động
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.ParentHoldReleaseBackgroundService>();   // [UC-110] học sinh đủ 16, yêu cầu đang giữ quá hạn
+        services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.BirthDateEvidenceSweepBackgroundService>();   // [UC-107/150] mỗi ngày xóa minh chứng không thuộc yêu cầu nào
 
         return services;
     }

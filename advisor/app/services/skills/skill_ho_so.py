@@ -48,8 +48,10 @@ from app.services.skills.validators import (
     check_scholarship,
     check_standardized_plan,
     check_states,
+    money_currency,
     parse_month_year_text,
     read_money,
+    to_usd,
 )
 
 SKILL_PATH = SKILLS_DIR / "skill_ho_so.md"
@@ -86,6 +88,9 @@ REQUIRED_QUESTIONS = ("D2", "E1", "E2", "D3", "E3", "F1", "F2")
 # (gợi ý bang theo người thân). N4 (từng bị từ chối visa) hỏi một lần sau N1, luôn có nút "Bỏ qua" (UC-35, UC-08).
 # N1, N4 chỉ hỏi trong chat, không lưu vào form
 OPTIONAL_QUESTIONS = ("D1", "D4", "D5", "F3", "N1", "N2", "N3", "N4")
+# Câu tùy chọn có nút Bỏ qua. D4, D5, N1, N3 đã có nút trả lời "không có" / "Không lọc", N2 mặc định
+# "Tất cả các bang" nên không cần thêm nút Bỏ qua (nhận xét của thầy 28/11)
+SKIP_QUESTIONS = ("D1", "F3", "N4")
 # Thứ tự hỏi theo trang form: hỏi xong các câu của một trang mới sang trang sau, không quay lại trang trước.
 # Trang 1 mục tiêu (D1, N2, N3), 2 học bạ (D2), 3 tiếng Anh, SAT (E1, E2, D3, E3), 4 tài chính (F1-F3),
 # 5 hoạt động, giải thưởng (D4, D5). Hết form mới hỏi hai thông tin thêm không có trong form: N1 người thân ở Mỹ, N4 visa
@@ -295,6 +300,9 @@ class BudgetRead(BaseModel):
     amount: float | None = None
     currency: str | None = None
     tier: str | None = None
+    at_least: bool | None = (
+        None  # học sinh nói số tiền là mức tối thiểu ("trên 70 nghìn"), không phải mức tối đa
+    )
 
 
 # Một hoạt động như Bước 5 của form. Thiếu ý nào thì để null, validators sẽ hỏi lại đúng ý đó
@@ -353,6 +361,15 @@ class HoSoRead:
     pending_cert: dict | None = None
     # Học sinh không nói thang GPA: thang trong values là đoán. Ở B2 thì hỏi lại thang thay vì ghi
     gpa_guessed: bool = False
+    # Số tiền mỗi năm (USD) học sinh nói là mức tối đa; None khi chỉ chọn mức hoặc nói mức tối thiểu
+    budget_usd: float | None = None
+
+
+# Số tiền (USD) học sinh nói là mức tối đa. Chỉ chọn mức (không có số) hoặc nói mức tối thiểu thì None
+def stated_budget_usd(value: BudgetRead) -> float | None:
+    if value.amount is None or value.at_least:
+        return None
+    return to_usd(value.amount, money_currency(value.amount, value.currency))
 
 
 # Kiểm tra một thông tin bằng validators, trả về giá trị chuẩn để ghi vào hồ sơ. Sai thì ném AskAgain
@@ -380,7 +397,7 @@ def check_value(name: str, value: Any) -> Any:
     if name == "budget":
         # Có số tiền thì tự quy ra mức, không tin mức Qwen đoán
         if value.amount is not None:
-            return check_budget(value.amount, value.currency)
+            return check_budget(value.amount, value.currency, bool(value.at_least))
         if value.tier is not None:
             return check_budget_tier(value.tier)
         raise AskAgain("Gia đình bạn có thể chi khoảng bao nhiêu mỗi năm? Bạn cho mình một con số nhé.")
@@ -490,6 +507,8 @@ def check_values(read: HoSoRaw, question_id: str | None, message: str = "") -> H
             else:
                 result.values[name] = check_value(name, getattr(read.values, name))
                 result.gpa_guessed = result.gpa_guessed or (name == "gpa" and read.values.gpa.scale is None)
+                if name == "budget":
+                    result.budget_usd = stated_budget_usd(read.values.budget)
         except AskAgain as err:
             result.ask_again = result.ask_again or err.question
     # Một thông tin vừa có giá trị vừa "không có" thì tin giá trị
@@ -528,7 +547,28 @@ class HoSoReader:
 # Ghi đè thành said_in_B0 thì hệ thống tưởng có thông tin mới và bắt rà soát lại hồ sơ dù không có gì đổi
 def repeats_confirmed(state: ChatState, name: str, value: object) -> bool:
     saved = state.profile.get(name)
-    return saved is not None and saved.status == "confirmed" and saved.value == value
+    return saved is not None and saved.status == "confirmed" and stated(saved.value) == stated(value)
+
+
+# Phần học sinh khai của một giá trị: GPA .NET gửi lại có thêm nguồn ("source"), không phải học sinh khai
+def stated(value: object) -> object:
+    if isinstance(value, dict) and "source" in value:
+        return {key: item for key, item in value.items() if key != "source"}
+    return value
+
+
+# Bộ đọc được gửi kèm giá trị đang lưu và có khi chép lại nó dù tin không nêu giá trị ("em muốn sửa GPA").
+# Giá trị khác hồ sơ thì chắc chắn đọc từ tin. Giá trị trùng hồ sơ chỉ tính khi con số của nó có trong tin
+# (ngân sách lưu theo mức nên chỉ cần tin có số). Mục không kiểm được bằng số thì coi như chưa nói, hỏi lại
+def really_read(state: ChatState, name: str, value: object, message: str) -> bool:
+    saved = state.profile.get(name)
+    if saved is None or stated(saved.value) != stated(value):
+        return True
+    numbers = {float(found.replace(",", ".")) for found in re.findall(r"\d+(?:[.,]\d+)?", message)}
+    if name == "budget":
+        return bool(numbers)
+    number = value.get("value") if isinstance(value, dict) else value
+    return isinstance(number, int | float) and float(number) in numbers
 
 
 # Ghi kết quả đọc vào hồ sơ. keep_existing=True (thông tin nói ở B0) thì không đè thông tin đã có;
@@ -546,6 +586,11 @@ def save_read(
     fields += [(name, None, "none") for name in read.none_fields]
     if buttons.budget_locked(state):  # ngân sách phụ huynh đã nhập: không ghi đè số học sinh nói
         fields = [field for field in fields if field[0] != "budget"]
+    # Sau khi bỏ ngân sách bị khóa: mục đó không tính là đã nhận, để luồng sửa vẫn báo học sinh là không sửa được.
+    # Xét trước khi ghi, lúc hồ sơ còn giá trị cũ
+    state.read_now.update(name for name, value, _ in fields if really_read(state, name, value, message))
+    if "budget" in state.read_now and read.budget_usd is not None:
+        state.budget_said = read.budget_usd
     written = []
     for name, value, field_status in fields:
         if keep_existing and name in state.profile:
@@ -655,7 +700,9 @@ def needed(state: ChatState, question_id: str) -> bool:
         level = state.profile.get("current_level")
         return level is not None and level.value == "high_school"
     if question_id == "N1":
-        return "preferred_states" not in state.profile
+        # Chưa chọn bang hoặc chọn "Tất cả các bang" (danh sách rỗng) thì hỏi bang có người thân
+        states = state.profile.get("preferred_states")
+        return states is None or not states.value
     if question_id == "F1":
         return not buttons.budget_locked(state)
     return True
@@ -763,7 +810,7 @@ STEP3_TEXT = {
 # Hỏi một câu B2 kèm nút; câu tùy chọn có thêm nút "Bỏ qua". text: câu khác câu chuẩn (câu hỏi lại)
 def ask_question(state: ChatState, question_id: str, text: str | None = None) -> SkillOutput:
     text = text or STEP3_TEXT.get(question_id)
-    return buttons.ask_with_buttons(state, question_id, text, can_skip=question_id in OPTIONAL_QUESTIONS)
+    return buttons.ask_with_buttons(state, question_id, text, can_skip=question_id in SKIP_QUESTIONS)
 
 
 # Hỏi câu tiếp theo của B2, hết câu thì sang rà soát. skill_bac_hoc gọi hàm này khi chuyển sang B2.
@@ -811,6 +858,9 @@ def confirm(state: ChatState) -> SkillOutput:
     if not missing:
         # Sang B3: hồ sơ đủ để tư vấn (nhánh tư vấn dựng skill từ khuôn rồi nhờ Claude viết)
         go_to(state, "B3")
+        state.unsaved = (
+            False  # .NET lưu hồ sơ chính thức ở lượt này; lưu lỗi thì .NET giữ trạng thái cũ, dấu vẫn còn
+        )
         return SkillOutput(SAVED)
     output = ask_question(state, FIELD_QUESTION[missing[0]])
     output.answer = f"{NEED_PROFILE} {output.answer}"
@@ -893,6 +943,7 @@ def save_budget(state: ChatState, amount: float, currency: str | None) -> SkillO
         tier = check_budget(amount, currency)
     except AskAgain as err:
         return ask_question(state, "F1", err.question)
+    state.budget_said = to_usd(amount, money_currency(amount, currency))
     state.profile["budget"] = ProfileField(value=tier, status="confirmed")
     return ask_next(state)
 
@@ -1346,7 +1397,6 @@ def is_form_text(question_id: str | None, message: str) -> bool:
         or read_plan_text(question_id, message) is not None
         or read_item_text(question_id, message) is not None
         or read_cert_text(question_id, message) is not None
-        or skill_tinh.is_province_answer(question_id, message)
     )
 
 
@@ -1385,9 +1435,11 @@ class HoSoHandler:
         await exchange_rate.refresh()
         # Câu tỉnh / thành sau lộ trình (skill_tinh): lưu ở .NET, không ghi hồ sơ chat
         if state.question_id == skill_tinh.PROVINCE_ID:
-            province = skill_tinh.answer_province(state, message)
+            province = await skill_tinh.answer_province(state, message)
             if province is not None:
                 return province
+            # Câu có giá trị hồ sơ: bỏ câu tỉnh, đọc như tin khai hồ sơ
+            state.question_id, state.last_question = None, ""
         question_id = state.question_id
         if question_id == "X1" and is_confirm(message):
             return confirm(state)
@@ -1410,7 +1462,7 @@ class HoSoHandler:
             parent_budget = answer_parent_budget(state, message)
             if parent_budget is not None:
                 return parent_budget
-        button = buttons.pressed(question_id, message, can_skip=question_id in OPTIONAL_QUESTIONS)
+        button = buttons.pressed(question_id, message, can_skip=question_id in SKIP_QUESTIONS)
         if button is not None:
             return press_button(state, button)
         gpa_text = read_gpa_text(message)
@@ -1427,7 +1479,7 @@ class HoSoHandler:
         pending_field = state.profile.get("cert_pending")
         if pending_field is not None and isinstance(pending_field.value, dict):
             # Nếu người dùng bấm nút của câu hỏi (hoặc nút bỏ qua):
-            button = buttons.pressed(question_id, message, can_skip=question_id in OPTIONAL_QUESTIONS)
+            button = buttons.pressed(question_id, message, can_skip=question_id in SKIP_QUESTIONS)
             if button is not None:
                 state.profile.pop("cert_pending", None)
                 return press_button(state, button)
