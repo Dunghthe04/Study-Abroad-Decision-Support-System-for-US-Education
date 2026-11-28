@@ -14,4 +14,10 @@ public interface IBirthDateEvidenceStorage
 
     /// <summary>Xóa tệp; không ném lỗi khi tệp đã mất hoặc nơi lưu tạm lỗi.</summary>
     Task DeleteAsync(string? path, CancellationToken ct = default);
+
+    /// <summary>
+    /// Khóa lưu trữ mọi tệp minh chứng đang nằm ở nơi lưu, tải lên trước <paramref name="uploadedBefore"/>.
+    /// Dùng cho job dọn tệp mồ côi; ném lỗi khi không liệt kê được để job không xóa nhầm.
+    /// </summary>
+    Task<IReadOnlyList<string>> ListAsync(DateTime uploadedBefore, CancellationToken ct = default);
 }

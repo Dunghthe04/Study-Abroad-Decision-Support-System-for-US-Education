@@ -40,6 +40,13 @@ public class BirthDateChangeServiceTests
             Deleted.Add(path);
             return Task.CompletedTask;
         }
+
+        /// <summary>Giờ tải lên của từng tệp, cho test job dọn; tệp không có giờ coi như vừa tải lên.</summary>
+        public Dictionary<string, DateTime> UploadedAt { get; } = [];
+
+        public Task<IReadOnlyList<string>> ListAsync(DateTime uploadedBefore, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<string>>(Files.Keys
+                .Where(p => UploadedAt.TryGetValue(p, out var at) && at < uploadedBefore).ToList());
     }
 
     internal sealed class FakeRepo : IBirthDateChangeRepository
@@ -60,6 +67,9 @@ public class BirthDateChangeServiceTests
             EvidenceSize = r.EvidenceSize, RepresentativeEmail = r.RepresentativeEmail, ReviewedByUserId = r.ReviewedByUserId,
             ReviewedAt = r.ReviewedAt, RejectReason = r.RejectReason,
         };
+
+        public Task<IReadOnlyList<string>> GetEvidencePathsAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<string>>(Items.Where(r => r.EvidencePath != null).Select(r => r.EvidencePath!).ToList());
 
         public Task<BirthDateChangeRequest?> GetPendingByUserAsync(Guid userId, CancellationToken ct = default) =>
             Task.FromResult(Items.FirstOrDefault(r => r.UserId == userId && r.Status == BirthDateChangeStatuses.Pending));

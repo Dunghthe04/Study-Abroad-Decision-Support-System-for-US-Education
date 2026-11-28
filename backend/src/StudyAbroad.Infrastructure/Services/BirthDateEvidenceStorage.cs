@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -137,6 +138,38 @@ public sealed class BirthDateEvidenceStorage : IBirthDateEvidenceStorage
             // Yêu cầu vẫn đóng, đường dẫn trong DB đã về null; bản trên Cloudinary chỉ là bản mã
             _logger.LogWarning(ex, "Không xóa được minh chứng ngày sinh {Path} trên Cloudinary", path);
         }
+    }
+
+    public async Task<IReadOnlyList<string>> ListAsync(DateTime uploadedBefore, CancellationToken ct = default)
+    {
+        var paths = new List<string>();
+        string? cursor = null;
+        do
+        {
+            var result = await _cloudinary.ListResourcesAsync(new ListResourcesByPrefixParams
+            {
+                ResourceType = ResourceType.Raw,
+                Type = DeliveryType,
+                Prefix = _prefix,
+                MaxResults = 500,
+                NextCursor = cursor,
+            }, ct);
+            // Không liệt kê đủ thì ném lỗi: thiếu trang nào cũng không sao, nhưng không được coi là "không có tệp"
+            if (result.Error is not null || (int)result.StatusCode is < 200 or >= 300)
+                throw new InvalidOperationException($"Cloudinary không liệt kê được minh chứng ngày sinh: {(int)result.StatusCode} {result.Error?.Message}");
+
+            foreach (var resource in result.Resources ?? [])
+            {
+                // Không đọc được giờ tải lên thì bỏ qua, không xóa
+                if (IsOwnPath(resource.PublicId)
+                    && DateTime.TryParse(resource.CreatedAt, CultureInfo.InvariantCulture,
+                        DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var createdAt)
+                    && createdAt < uploadedBefore)
+                    paths.Add(resource.PublicId);
+            }
+            cursor = result.NextCursor;
+        } while (!string.IsNullOrEmpty(cursor));
+        return paths;
     }
 
     /// <summary>Chỉ nhận khóa nằm trong thư mục minh chứng, chặn ../ và khóa trỏ sang tệp khác trên Cloudinary.</summary>

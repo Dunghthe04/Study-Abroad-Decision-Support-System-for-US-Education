@@ -161,6 +161,7 @@ public class AccountPurgeServiceTests
             steps.Add($"evidence-delete:{path}");
             return Task.CompletedTask;
         }
+        public Task<IReadOnlyList<string>> ListAsync(DateTime uploadedBefore, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     private readonly FakePurgeRepository _repo = new();

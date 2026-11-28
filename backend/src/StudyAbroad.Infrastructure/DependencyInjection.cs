@@ -214,6 +214,7 @@ public static class DependencyInjection
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.BillingBackgroundService>();   // đối soát đơn, chuyển kỳ, nhắc hạn, thông báo hạn mức
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.ParentProfileMigrationBackgroundService>();   // [1.5d] chạy 1 lần lúc khởi động
         services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.ParentHoldReleaseBackgroundService>();   // [UC-110] học sinh đủ 16, yêu cầu đang giữ quá hạn
+        services.AddHostedService<StudyAbroad.Infrastructure.BackgroundJobs.BirthDateEvidenceSweepBackgroundService>();   // [UC-107/150] mỗi ngày xóa minh chứng không thuộc yêu cầu nào
 
         return services;
     }
