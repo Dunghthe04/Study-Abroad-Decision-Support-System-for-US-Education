@@ -1,18 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangleIcon, CheckIcon, StarIcon, Trash2Icon } from "lucide-react";
+import { AlertTriangleIcon, CheckCircle2Icon, CheckIcon, StarIcon, Trash2Icon } from "lucide-react";
 import { CENTER_REVIEW_REPORT_REASON_LABELS } from "@/components/centers/CenterReviewList";
 import { Segmented } from "@/components/admin/ai-usage/parts";
 import { TablePagination } from "@/components/admin/shared/TablePagination";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogIcon,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -284,43 +287,45 @@ export function CenterReviewReportsView() {
           }
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent variant="form">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="destructive">
+              <Trash2Icon />
+            </AlertDialogIcon>
             <AlertDialogTitle>Gỡ đánh giá vi phạm?</AlertDialogTitle>
             <AlertDialogDescription>
               Đánh giá sẽ bị ẩn khỏi trang công khai và không còn tính vào điểm trung bình của trung tâm. Mọi báo cáo đang mở của đánh giá này sẽ được đóng.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {removeTarget?.isCenterSelfReport ? (
-            <Alert>
-              <AlertDescription className="text-xs">
-                Lưu ý: Báo cáo này do chính trung tâm gửi. Chỉ gỡ khi đánh giá thật sự vi phạm quy chuẩn cộng đồng (không gỡ chỉ vì điểm thấp hoặc chê dịch vụ).
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          <Textarea
-            value={removeReason}
-            onChange={(e) => setRemoveReason(e.target.value)}
-            maxLength={500}
-            rows={2}
-            disabled={busyId !== null}
-            placeholder="Lý do gỡ đánh giá (bắt buộc, tối đa 500 ký tự)"
-            aria-label="Lý do gỡ đánh giá"
-            className="text-sm resize-y"
-          />
-          <AlertDialogFooter>
+          <AlertDialogBody className="space-y-3">
+            {removeTarget?.isCenterSelfReport ? (
+              <Alert>
+                <AlertDescription className="text-xs">
+                  Lưu ý: Báo cáo này do chính trung tâm gửi. Chỉ gỡ khi đánh giá thật sự vi phạm quy chuẩn cộng đồng (không gỡ chỉ vì điểm thấp hoặc chê dịch vụ).
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            <Textarea
+              value={removeReason}
+              onChange={(e) => setRemoveReason(e.target.value)}
+              maxLength={500}
+              rows={2}
+              disabled={busyId !== null}
+              placeholder="Lý do gỡ đánh giá (bắt buộc, tối đa 500 ký tự)"
+              aria-label="Lý do gỡ đánh giá"
+              className="text-sm resize-y"
+            />
+          </AlertDialogBody>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={busyId !== null}>Hủy</AlertDialogCancel>
-            <Button
-              type="button"
-              variant="destructive"
+            <AlertDialogAction
+              tone="destructive"
               onClick={() => void confirmRemoveReview()}
               disabled={busyId !== null || !removeReason.trim()}
               loading={busyId !== null}
-              className="gap-1.5"
             >
-              <Trash2Icon className="size-3.5" />
               Gỡ đánh giá
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -335,35 +340,38 @@ export function CenterReviewReportsView() {
           }
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent variant="form">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="brand">
+              <CheckCircle2Icon />
+            </AlertDialogIcon>
             <AlertDialogTitle>Bác bỏ báo cáo đánh giá?</AlertDialogTitle>
             <AlertDialogDescription>
               Đánh giá sẽ tiếp tục hiển thị bình thường. Bạn có thể ghi chú lý do bác bỏ (tùy chọn) để lưu nhật ký kiểm duyệt.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <Textarea
-            value={dismissNote}
-            onChange={(e) => setDismissNote(e.target.value)}
-            maxLength={500}
-            rows={2}
-            disabled={busyId !== null}
-            placeholder="Ghi chú kiểm duyệt (tùy chọn, tối đa 500 ký tự)"
-            aria-label="Ghi chú bác bỏ báo cáo"
-            className="text-sm resize-y"
-          />
-          <AlertDialogFooter>
+          <AlertDialogBody>
+            <Textarea
+              value={dismissNote}
+              onChange={(e) => setDismissNote(e.target.value)}
+              maxLength={500}
+              rows={2}
+              disabled={busyId !== null}
+              placeholder="Ghi chú kiểm duyệt (tùy chọn, tối đa 500 ký tự)"
+              aria-label="Ghi chú bác bỏ báo cáo"
+              className="text-sm resize-y"
+            />
+          </AlertDialogBody>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={busyId !== null}>Hủy</AlertDialogCancel>
-            <Button
-              type="button"
+            <AlertDialogAction
+              tone="primary"
               onClick={() => void confirmDismiss()}
               disabled={busyId !== null}
               loading={busyId !== null}
-              className="gap-1.5"
             >
-              <CheckIcon className="size-3.5" />
               Bác bỏ báo cáo
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

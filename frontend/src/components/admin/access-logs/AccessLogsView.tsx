@@ -24,10 +24,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -695,17 +698,15 @@ export function AccessLogsView() {
         </div>
       </div>
 
-      {/* Detail Dialog - Fix tràn giao diện bằng sm:max-w-2xl và layout cuộn riêng */}
+      {/* Detail Dialog */}
       <Dialog open={detailItem !== null} onOpenChange={(open) => !open && setDetailItem(null)}>
-        <DialogContent className="w-full sm:max-w-2xl max-h-[88vh] flex flex-col p-6 overflow-hidden">
-          <DialogHeader className="shrink-0 pb-2 border-b border-border">
-            <div className="flex items-center justify-between gap-2 pr-6">
-              <DialogTitle className="flex items-center gap-2 text-base font-bold">
-                <ShieldAlertIcon className="size-5 text-brand" />
-                Chi tiết nhật ký truy cập
-              </DialogTitle>
-            </div>
-            <DialogDescription className="flex items-center gap-2 pt-1 text-xs">
+        <DialogContent variant="form" size="lg">
+          <DialogHeader>
+            <DialogIcon tone="brand">
+              <ShieldAlertIcon />
+            </DialogIcon>
+            <DialogTitle>Chi tiết nhật ký truy cập</DialogTitle>
+            <DialogDescription className="flex items-center gap-2 text-xs">
               <span>Mã bản ghi:</span>
               <code className="font-mono font-medium text-foreground bg-muted px-1.5 py-0.5 rounded text-[11px]">
                 {detailItem?.id}
@@ -726,8 +727,9 @@ export function AccessLogsView() {
             </DialogDescription>
           </DialogHeader>
 
-          {detailItem && (
-            <div className="flex-1 overflow-y-auto pr-1 space-y-4 py-2 text-xs">
+          <DialogBody className="space-y-4 text-xs">
+            {detailItem && (
+              <>
               {/* Thẻ 1: Thông tin người thực hiện & Thiết bị */}
               <div className="rounded-lg border border-border bg-card p-3 shadow-xs space-y-2.5">
                 <div className="font-semibold text-foreground text-xs border-b border-border/60 pb-1 flex items-center justify-between">
@@ -872,13 +874,14 @@ export function AccessLogsView() {
                   </div>
                 )}
               </div>
-            </div>
-          )}
+              </>
+            )}
+          </DialogBody>
 
-          <DialogFooter className="shrink-0 mt-3 pt-3 border-t border-border flex justify-end">
-            <Button type="button" variant="outline" onClick={() => setDetailItem(null)}>
+          <DialogFooter layout="single">
+            <DialogCancel onClick={() => setDetailItem(null)}>
               Đóng
-            </Button>
+            </DialogCancel>
           </DialogFooter>
         </DialogContent>
       </Dialog>
