@@ -10,14 +10,19 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2Icon, MessageSquareIcon, ShieldAlertIcon, SparklesIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -40,8 +45,10 @@ interface ContactRequestDialogProps {
   autoOpen?: boolean;
 }
 
-const SELECT_CLASS =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+const STUDY_LEVEL_OPTIONS = STUDY_LEVELS.map((level) => ({
+  value: level,
+  label: studyLevelLabel(level),
+}));
 
 const DEFAULT_SHARED_FIELDS = LEAD_SHARED_FIELDS.filter((f) => LEAD_SHARED_FIELD_INFO[f].defaultChecked);
 
@@ -189,68 +196,69 @@ export function ContactRequestDialog({
     (!isMinorStudent || acknowledged) &&
     (!isParent || studentUserId !== "");
 
+  const isActionState =
+    isSubmitted || Boolean(ageBlock) || (isParent && children !== null && activeChildren.length === 0);
+
   const renderBody = () => {
     // [UC-116] Học sinh dưới 16 chưa có phụ huynh đồng ý: server trả age_restricted
     if (ageBlock) {
       return (
-        <div className="py-4 text-center space-y-3">
-          <div className="w-12 h-12 bg-amber-500/10 text-amber-600 rounded-full flex items-center justify-center mx-auto">
-            <ShieldAlertIcon className="w-6 h-6" />
-          </div>
+        <>
           <DialogHeader>
-            <DialogTitle className="text-lg text-center">Cần phụ huynh đồng ý trước</DialogTitle>
-            <DialogDescription className="text-center text-sm pt-1">
+            <DialogIcon tone="warning">
+              <ShieldAlertIcon />
+            </DialogIcon>
+            <DialogTitle>Cần phụ huynh đồng ý trước</DialogTitle>
+            <DialogDescription>
               {ageBlock.message} Hoặc phụ huynh đã liên kết có thể gửi thay bạn cho <strong>{centerName}</strong> bằng tài khoản phụ huynh.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Đóng
-            </Button>
-            <Link href="/account" className={buttonVariants()}>
+          <DialogFooter layout="pair">
+            <DialogCancel>Đóng</DialogCancel>
+            <DialogAction tone="primary" render={<Link href="/account" />}>
               Mời phụ huynh
-            </Link>
+            </DialogAction>
           </DialogFooter>
-        </div>
+        </>
       );
     }
 
     // Phụ huynh chưa có con liên kết: hướng dẫn đi liên kết trước
     if (isParent && children !== null && activeChildren.length === 0) {
       return (
-        <div className="py-4 text-center space-y-3">
+        <>
           <DialogHeader>
-            <DialogTitle className="text-lg text-center">Chưa có con đã liên kết</DialogTitle>
-            <DialogDescription className="text-center text-sm pt-1">
+            <DialogIcon tone="warning">
+              <ShieldAlertIcon />
+            </DialogIcon>
+            <DialogTitle>Chưa có con đã liên kết</DialogTitle>
+            <DialogDescription>
               Phụ huynh gửi yêu cầu thay con, nên cần liên kết với tài khoản của con trước. Vào trang tài khoản để xem lời mời liên kết.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Đóng
-            </Button>
-            <Link href="/account" className={buttonVariants()}>
+          <DialogFooter layout="pair">
+            <DialogCancel>Đóng</DialogCancel>
+            <DialogAction tone="primary" render={<Link href="/account" />}>
               Quản lý liên kết
-            </Link>
+            </DialogAction>
           </DialogFooter>
-        </div>
+        </>
       );
     }
 
     return (
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col gap-6">
         <DialogHeader>
-          <div className="flex items-center gap-2 text-brand text-xs font-semibold">
-            <SparklesIcon className="w-3.5 h-3.5" />
-            Kết nối trực tiếp trung tâm
-          </div>
-          <DialogTitle className="text-xl">Gửi yêu cầu liên hệ</DialogTitle>
-          <DialogDescription className="text-xs">
+          <DialogIcon tone="brand">
+            <SparklesIcon />
+          </DialogIcon>
+          <DialogTitle>Gửi yêu cầu liên hệ</DialogTitle>
+          <DialogDescription>
             <strong>{centerName}</strong> sẽ nhận các thông tin bạn chọn bên dưới và liên hệ lại để tư vấn.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3.5 py-4 max-h-[60vh] overflow-y-auto pr-1">
+        <DialogBody className="space-y-3.5">
           {isParent && (
             <div className="space-y-1.5">
               <Label htmlFor="cr-child" className="text-xs font-medium">
@@ -261,23 +269,31 @@ export function ContactRequestDialog({
               ) : childrenError ? (
                 <p className="text-xs text-destructive">{childrenError}</p>
               ) : (
-                <select
-                  id="cr-child"
-                  className={SELECT_CLASS}
-                  value={studentUserId}
-                  onChange={(e) => setStudentUserId(e.target.value)}
-                  required
-                >
-                  <option value="" disabled>
-                    Chọn con
-                  </option>
-                  {activeChildren.map((c) => (
-                    <option key={c.id} value={c.studentUserId}>
-                      {c.studentName}
-                      {c.studentAge !== null ? ` (${c.studentAge} tuổi)` : ""}
-                    </option>
-                  ))}
-                </select>
+                (() => {
+                  const childOptions = activeChildren.map((c) => ({
+                    value: c.studentUserId,
+                    label: `${c.studentName}${c.studentAge !== null ? ` (${c.studentAge} tuổi)` : ""}`,
+                  }));
+                  return (
+                    <Select
+                      value={studentUserId || null}
+                      onValueChange={(v) => setStudentUserId(v ?? "")}
+                      items={childOptions}
+                      required
+                    >
+                      <SelectTrigger id="cr-child" className="h-9 w-full">
+                        <SelectValue placeholder="Chọn con" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {childOptions.map((c) => (
+                          <SelectItem key={c.value} value={c.value}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  );
+                })()
               )}
             </div>
           )}
@@ -300,13 +316,24 @@ export function ContactRequestDialog({
               <Label htmlFor="cr-level" className="text-xs font-medium">
                 Bậc học mong muốn
               </Label>
-              <select id="cr-level" className={SELECT_CLASS} value={studyLevel} onChange={(e) => setStudyLevel(e.target.value)}>
-                {STUDY_LEVELS.map((level) => (
-                  <option key={level} value={level}>
-                    {studyLevelLabel(level)}
-                  </option>
-                ))}
-              </select>
+              <Select
+                value={studyLevel}
+                onValueChange={(v) => {
+                  if (v !== null) setStudyLevel(v);
+                }}
+                items={STUDY_LEVEL_OPTIONS}
+              >
+                <SelectTrigger id="cr-level" className="h-9 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STUDY_LEVEL_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -376,15 +403,13 @@ export function ContactRequestDialog({
               {error}
             </p>
           )}
-        </div>
+        </DialogBody>
 
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-            Hủy
-          </Button>
-          <Button type="submit" disabled={!canSubmit}>
-            {loading ? "Đang gửi..." : "Gửi yêu cầu"}
-          </Button>
+        <DialogFooter layout="pair">
+          <DialogCancel disabled={loading}>Hủy</DialogCancel>
+          <DialogAction type="submit" tone="primary" loading={loading} disabled={!canSubmit}>
+            Gửi yêu cầu
+          </DialogAction>
         </DialogFooter>
       </form>
     );
@@ -403,18 +428,22 @@ export function ContactRequestDialog({
         </Button>
       )}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
+      <Dialog
+        open={open}
+        onOpenChange={(next) => !loading && setOpen(next)}
+        disablePointerDismissal={loading}
+      >
+        <DialogContent variant={isActionState ? "action" : "form"} size={isActionState ? "sm" : "md"}>
           {isSubmitted ? (
-            <div className="py-6 text-center space-y-4">
-              <div className="w-14 h-14 bg-emerald-500/10 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
-                <CheckCircle2Icon className="w-8 h-8" />
-              </div>
+            <>
               <DialogHeader>
-                <DialogTitle className="text-xl text-center">
+                <DialogIcon tone="success">
+                  <CheckCircle2Icon />
+                </DialogIcon>
+                <DialogTitle>
                   {waitingParent ? "Đã gửi, chờ phụ huynh xác nhận" : "Gửi yêu cầu thành công!"}
                 </DialogTitle>
-                <DialogDescription className="text-center text-sm pt-2">
+                <DialogDescription>
                   {waitingParent ? (
                     <>
                       Hệ thống đã gửi email cho phụ huynh của bạn. <strong>{centerName}</strong> chỉ nhận thông tin sau khi phụ huynh bấm
@@ -428,12 +457,12 @@ export function ContactRequestDialog({
                   )}
                 </DialogDescription>
               </DialogHeader>
-              <div className="pt-4">
-                <Button onClick={handleReset} className="w-full">
+              <DialogFooter layout="single">
+                <DialogAction type="button" tone="primary" onClick={handleReset}>
                   Hoàn tất
-                </Button>
-              </div>
-            </div>
+                </DialogAction>
+              </DialogFooter>
+            </>
           ) : (
             renderBody()
           )}

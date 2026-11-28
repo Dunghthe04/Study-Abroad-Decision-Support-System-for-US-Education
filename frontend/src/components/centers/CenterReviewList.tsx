@@ -4,11 +4,14 @@ import { useState } from "react";
 import { Building2Icon, FlagIcon, StarIcon, Trash2Icon } from "lucide-react";
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogIcon,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -299,133 +302,143 @@ export function CenterReviewList({
 
       {/* [UC-57] Moderator gỡ đánh giá */}
       <AlertDialog open={removeTarget !== null} onOpenChange={(open) => !open && closeRemoveDialog()}>
-        <AlertDialogContent>
+        <AlertDialogContent variant="form">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="destructive">
+              <Trash2Icon />
+            </AlertDialogIcon>
             <AlertDialogTitle>Gỡ đánh giá này?</AlertDialogTitle>
             <AlertDialogDescription>
               Đánh giá sẽ biến khỏi danh sách công khai và không còn tính vào điểm trung bình. Việc gỡ được ghi nhật ký kèm lý do.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {removeTarget && (
-            <p className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              {removeTarget.rating} sao{removeTarget.comment ? `: ${removeTarget.comment}` : " (không có nhận xét)"}
-            </p>
-          )}
-          <Textarea
-            value={removeReason}
-            onChange={(e) => setRemoveReason(e.target.value)}
-            maxLength={500}
-            rows={2}
-            disabled={isRemoving}
-            placeholder="Lý do gỡ (bắt buộc, tối đa 500 ký tự)"
-            required
-            aria-label="Lý do gỡ đánh giá"
-            className="text-sm resize-y"
-          />
-          <AlertDialogFooter>
+          <AlertDialogBody className="space-y-3">
+            {removeTarget && (
+              <p className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                {removeTarget.rating} sao{removeTarget.comment ? `: ${removeTarget.comment}` : " (không có nhận xét)"}
+              </p>
+            )}
+            <Textarea
+              value={removeReason}
+              onChange={(e) => setRemoveReason(e.target.value)}
+              maxLength={500}
+              rows={2}
+              disabled={isRemoving}
+              placeholder="Lý do gỡ (bắt buộc, tối đa 500 ký tự)"
+              required
+              aria-label="Lý do gỡ đánh giá"
+              className="text-sm resize-y"
+            />
+          </AlertDialogBody>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={isRemoving}>Hủy</AlertDialogCancel>
-            <Button
+            <AlertDialogAction
               type="button"
-              variant="destructive"
+              tone="destructive"
               onClick={() => void confirmRemove()}
               disabled={isRemoving || removeReason.trim().length === 0}
-              className="gap-1.5"
               loading={isRemoving}
             >
-              <Trash2Icon className="size-3.5" />
               Gỡ đánh giá
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       {/* [UC-53 2b] Moderator gỡ phản hồi của trung tâm */}
       <AlertDialog open={removeReplyTarget !== null} onOpenChange={(open) => !open && closeRemoveReplyDialog()}>
-        <AlertDialogContent>
+        <AlertDialogContent variant="form">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="destructive">
+              <Trash2Icon />
+            </AlertDialogIcon>
             <AlertDialogTitle>Gỡ phản hồi của trung tâm?</AlertDialogTitle>
             <AlertDialogDescription>
               Phản hồi vi phạm sẽ bị ẩn khỏi trang công khai; đánh giá gốc của học sinh / phụ huynh vẫn giữ nguyên. Việc gỡ được ghi nhật ký kèm lý do.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {removeReplyTarget?.centerReply && (
-            <p className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              {removeReplyTarget.centerReply.content}
-            </p>
-          )}
-          <Textarea
-            value={removeReplyReason}
-            onChange={(e) => setRemoveReplyReason(e.target.value)}
-            maxLength={500}
-            rows={2}
-            disabled={isRemovingReply}
-            placeholder="Lý do gỡ phản hồi (bắt buộc, tối đa 500 ký tự)"
-            required
-            aria-label="Lý do gỡ phản hồi"
-            className="text-sm resize-y"
-          />
-          <AlertDialogFooter>
+          <AlertDialogBody className="space-y-3">
+            {removeReplyTarget?.centerReply && (
+              <p className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                {removeReplyTarget.centerReply.content}
+              </p>
+            )}
+            <Textarea
+              value={removeReplyReason}
+              onChange={(e) => setRemoveReplyReason(e.target.value)}
+              maxLength={500}
+              rows={2}
+              disabled={isRemovingReply}
+              placeholder="Lý do gỡ phản hồi (bắt buộc, tối đa 500 ký tự)"
+              required
+              aria-label="Lý do gỡ phản hồi"
+              className="text-sm resize-y"
+            />
+          </AlertDialogBody>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={isRemovingReply}>Hủy</AlertDialogCancel>
-            <Button
+            <AlertDialogAction
               type="button"
-              variant="destructive"
+              tone="destructive"
               onClick={() => void confirmRemoveReply()}
               disabled={isRemovingReply || removeReplyReason.trim().length === 0}
-              className="gap-1.5"
               loading={isRemovingReply}
             >
-              <Trash2Icon className="size-3.5" />
               Gỡ phản hồi
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       {/* [UC-151] Người dùng / trung tâm báo cáo đánh giá */}
       <AlertDialog open={reportTarget !== null} onOpenChange={(open) => !open && closeReportDialog()}>
-        <AlertDialogContent>
+        <AlertDialogContent variant="form">
           <AlertDialogHeader>
+            <AlertDialogIcon tone="warning">
+              <FlagIcon />
+            </AlertDialogIcon>
             <AlertDialogTitle>Báo cáo đánh giá vi phạm</AlertDialogTitle>
             <AlertDialogDescription>
               Chọn lý do báo cáo để kiểm duyệt viên xem xét. Đánh giá vẫn hiển thị trong khi chờ xử lý.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <RadioGroup
-            value={reportReason}
-            onValueChange={(v) => setReportReason(v as CenterReviewReportReason)}
-            className="gap-2"
-          >
-            {CENTER_REVIEW_REPORT_REASON_OPTIONS.map((opt) => (
-              <div key={opt.value} className="flex items-center gap-2.5">
-                <RadioGroupItem id={`review-report-${opt.value}`} value={opt.value} disabled={isReporting} />
-                <Label htmlFor={`review-report-${opt.value}`} className="cursor-pointer text-sm font-normal">
-                  {opt.label}
-                </Label>
-              </div>
-            ))}
-          </RadioGroup>
-          <Textarea
-            value={reportDetail}
-            onChange={(e) => setReportDetail(e.target.value)}
-            maxLength={1000}
-            rows={3}
-            disabled={isReporting}
-            placeholder="Chi tiết bổ sung (tùy chọn, tối đa 1.000 ký tự)"
-            aria-label="Chi tiết báo cáo đánh giá"
-            className="text-sm resize-y"
-          />
-          <AlertDialogFooter>
+          <AlertDialogBody className="space-y-3">
+            <RadioGroup
+              value={reportReason}
+              onValueChange={(v) => setReportReason(v as CenterReviewReportReason)}
+              className="gap-2"
+            >
+              {CENTER_REVIEW_REPORT_REASON_OPTIONS.map((opt) => (
+                <div key={opt.value} className="flex items-center gap-2.5">
+                  <RadioGroupItem id={`review-report-${opt.value}`} value={opt.value} disabled={isReporting} />
+                  <Label htmlFor={`review-report-${opt.value}`} className="cursor-pointer text-sm font-normal">
+                    {opt.label}
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
+            <Textarea
+              value={reportDetail}
+              onChange={(e) => setReportDetail(e.target.value)}
+              maxLength={1000}
+              rows={3}
+              disabled={isReporting}
+              placeholder="Chi tiết bổ sung (tùy chọn, tối đa 1.000 ký tự)"
+              aria-label="Chi tiết báo cáo đánh giá"
+              className="text-sm resize-y"
+            />
+          </AlertDialogBody>
+          <AlertDialogFooter layout="pair">
             <AlertDialogCancel disabled={isReporting}>Hủy</AlertDialogCancel>
-            <Button
+            <AlertDialogAction
               type="button"
+              tone="primary"
               onClick={() => void confirmReport()}
               disabled={isReporting}
               loading={isReporting}
-              className="gap-1.5"
             >
-              <FlagIcon className="size-3.5" />
               Gửi báo cáo
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

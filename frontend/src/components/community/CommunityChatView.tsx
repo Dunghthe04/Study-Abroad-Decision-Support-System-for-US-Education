@@ -18,7 +18,18 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogIcon,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
@@ -969,25 +980,32 @@ export function CommunityChatView() {
         </Card>
 
         {/* Modal Popup Báo cáo tin nhắn */}
-        <Dialog open={!!reportTarget} onOpenChange={(open) => !open && setReportTarget(null)}>
-          <DialogContent className="sm:max-w-md">
+        <Dialog
+          open={!!reportTarget}
+          onOpenChange={(open) => !open && !submittingReport && setReportTarget(null)}
+          disablePointerDismissal={submittingReport}
+        >
+          <DialogContent variant="form" size="sm">
             <DialogHeader>
+              <DialogIcon tone="destructive">
+                <FlagIcon />
+              </DialogIcon>
               <DialogTitle>Báo cáo tin nhắn vi phạm</DialogTitle>
               <DialogDescription>
                 Báo cáo sẽ được gửi tới đội ngũ kiểm duyệt viên để xem xét xử lý.
               </DialogDescription>
             </DialogHeader>
 
-            {reportTarget && (
-              <div className="rounded-md bg-muted/70 p-2.5 text-xs text-muted-foreground border border-border/40 space-y-1">
-                <p className="font-semibold text-foreground">{reportTarget.authorName}:</p>
-                <p className="line-clamp-2">
-                  {reportTarget.content || (reportTarget.imageUrl ? "[Đính kèm hình ảnh]" : "")}
-                </p>
-              </div>
-            )}
+            <DialogBody className="space-y-3">
+              {reportTarget && (
+                <div className="rounded-md bg-muted/70 p-2.5 text-xs text-muted-foreground border border-border/40 space-y-1">
+                  <p className="font-semibold text-foreground">{reportTarget.authorName}:</p>
+                  <p className="line-clamp-2">
+                    {reportTarget.content || (reportTarget.imageUrl ? "[Đính kèm hình ảnh]" : "")}
+                  </p>
+                </div>
+              )}
 
-            <div className="space-y-3 py-1">
               <div className="space-y-1.5">
                 <label htmlFor="report-reason" className="text-xs font-medium">
                   Lý do báo cáo <span className="text-destructive">*</span>
@@ -998,7 +1016,7 @@ export function CommunityChatView() {
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value.slice(0, 64))}
                   placeholder="Ví dụ: Spam quảng cáo, từ ngữ thù địch, xúc phạm..."
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="w-full rounded-xl border border-input bg-background px-3.5 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
                 <p className="text-[10px] text-muted-foreground">Từ 3 đến 64 ký tự.</p>
               </div>
@@ -1013,32 +1031,22 @@ export function CommunityChatView() {
                   onChange={(e) => setReportDetail(e.target.value.slice(0, 1000))}
                   placeholder="Cung cấp thêm ngữ cảnh vi phạm nếu cần..."
                   rows={2}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                  className="w-full rounded-xl border border-input bg-background px-3.5 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
                 />
               </div>
-            </div>
+            </DialogBody>
 
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
+            <DialogFooter layout="pair">
+              <DialogCancel disabled={submittingReport}>Hủy</DialogCancel>
+              <DialogAction
                 type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setReportTarget(null)}
-                disabled={submittingReport}
-                className="cursor-pointer"
-              >
-                Hủy
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
+                tone="destructive"
                 onClick={() => void handleSendReport()}
+                loading={submittingReport}
                 disabled={submittingReport || reportReason.trim().length < 3}
-                className="cursor-pointer"
               >
-                {submittingReport ? <Spinner size="sm" /> : "Gửi báo cáo"}
-              </Button>
+                Gửi báo cáo
+              </DialogAction>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1046,21 +1054,31 @@ export function CommunityChatView() {
         {/* Modal Lightbox xem ảnh lớn */}
         <Dialog open={!!lightboxUrl} onOpenChange={(open) => !open && setLightboxUrl(null)}>
           <DialogContent
-            className="w-[96vw] max-w-[96vw] sm:max-w-[96vw] h-[94vh] max-h-[94vh] p-2 sm:p-4 bg-black/90 backdrop-blur-md border border-white/10 flex flex-col items-center justify-center rounded-2xl shadow-2xl gap-0"
+            variant="action"
+            size="full"
+            className="h-[94dvh] max-h-[94dvh] bg-ink/95 text-white ring-white/10"
           >
             <DialogHeader className="sr-only">
               <DialogTitle>Xem ảnh đính kèm</DialogTitle>
               <DialogDescription>Ảnh xem kích thước lớn</DialogDescription>
             </DialogHeader>
-            {lightboxUrl && (
-              <div className="relative flex size-full items-center justify-center overflow-hidden">
+            <DialogBody className="flex items-center justify-center overflow-hidden p-0">
+              {lightboxUrl && (
                 <img
                   src={lightboxUrl}
                   alt="Ảnh phóng to"
-                  className="max-h-[90vh] max-w-[92vw] w-auto h-auto object-contain rounded-lg select-none drop-shadow-2xl"
+                  className="max-h-full max-w-full w-auto h-auto object-contain rounded-lg select-none drop-shadow-2xl"
                 />
-              </div>
-            )}
+              )}
+            </DialogBody>
+            <DialogFooter layout="single">
+              <DialogCancel
+                tone="tint"
+                className="mx-auto max-w-[200px] bg-white/15 text-white hover:bg-white/25"
+              >
+                Đóng
+              </DialogCancel>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </section>
