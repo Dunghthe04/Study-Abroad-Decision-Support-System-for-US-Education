@@ -296,3 +296,29 @@ Không thêm tên cụ thể nào. Sửa 3 chỗ trong luật của lớp 3 (`ke
 Không request nào còn chứa các tên trên. Test mới 4 test trong `test_transcript_text.py`, toàn bộ advisor 2524 test pass.
 
 **Giới hạn còn lại:** họ tên viết thường hoặc viết in hoa toàn bộ đứng cuối dòng điểm, tên nằm trong ô bảng Markdown `| … |`, và tên đứng giữa dòng điểm thì chưa bắt được.
+
+### 9.6 Suy thứ tự cột khi OCR mất dòng tiêu đề (28/11)
+
+**Vấn đề:** ảnh 1654860257 bị OCR làm mất dòng "Học kỳ I  Học kỳ II  Cả năm". Mỗi dòng môn chỉ còn 3 số, ví dụ "Toàn 6,3 4,9 5,4". Claude phải tự đoán cột nào là kỳ nào, nên có lần ra đúng, có lần ra sai.
+
+**Cơ chế chung:** không viết luật riêng cho trường nào hay mẫu học bạ nào, mà suy từ chính các con số. Hàm `hint_term_columns` (trong `transcript_text.py`) chạy ngay sau lớp lọc dòng của bước B:
+
+1. Lấy các dòng có tên môn và đúng 3 số. Số nguyên 11–100 coi là mất dấu thập phân và hiểu lại theo thang 10.
+2. Ở mỗi dòng, kiểm cột 3 có phải trung bình năm của cột 1 và cột 2 không, cho lệch tối đa 0,11 (sai số do làm tròn). Trung bình năm tính theo một trong hai công thức: (c1 + 2·c2)/3 theo quy chế THPT, hoặc trung bình cộng.
+3. Chỉ kết luận khi đủ bằng chứng: có từ 3 dòng trở lên, ít nhất 80% số dòng khớp, và ít nhất 2 dòng khớp mà 3 số không bằng nhau (dòng "5,0 5,0 5,0" thì công thức nào cũng khớp, nên không tính).
+4. Nếu trong 3 dòng ngay trên bảng đã có dòng tiêu đề (từ 2 chữ chỉ kỳ trở lên, kể cả kiểu OCR chép sai như "Hoc kg I") thì không làm gì cả.
+5. Ngược lại, chèn **một dòng gợi ý** ngay trước dòng môn đầu tiên: "Thứ tự cột điểm …: Học kỳ I, Học kỳ II, Cả năm". Dòng này không chứa chữ số nào, để luật R5 (số phải có trong chữ nguồn) không nhận nhầm. Không sửa con số nào trong bảng.
+
+Phần còn lại vẫn đi như cũ: Claude đọc bảng, R1–R7 kiểm tra, lớp ghép bỏ cột cả năm.
+
+**Kết quả:**
+- Trên 15 ảnh của `lan3`: chỉ ảnh 1654860257 được thêm gợi ý. Ảnh anh-chup đã có tiêu đề nên không thêm. Các ảnh khác không có dạng 3 số khớp công thức.
+- Gửi Claude thật (`claude-haiku-5-5`) 3 lần, kết quả lưu ở `.ocr-eval/che_ten_28_11/goi_y_cot/lan1..3`:
+  - Cả 3 lần đều ra đúng 2 kỳ, HK1 là cột 1 và HK2 là cột 2. Ví dụ Toán: 6,3 rồi 4,9.
+  - Không lọt tên người nào.
+  - Lần 2 thiếu môn Ngữ văn: OCR chép thành "Ngũ v�n" (mất một ký tự), Claude ghi `name_original` là "Ngũ văn" nên bị luật tên gốc loại. Lỗi này nằm ở OCR, không liên quan đến việc suy cột.
+- Test mới: `tests/test_transcript_column_hint.py` (4 test).
+
+**Giới hạn:**
+- Với trung bình cộng thì đổi chỗ cột 1 và cột 2 vẫn khớp, nên không biết cột nào là HK1. Khi đó mặc định cột trái là HK1, theo thứ tự in thông thường.
+- Chỉ xử lý bảng 3 cột kỳ (HK1, HK2, cả năm). Bảng có thêm cột khác (điểm thi lại, xếp loại bằng số) sẽ không được thêm gợi ý, để Claude tự đọc như trước.
