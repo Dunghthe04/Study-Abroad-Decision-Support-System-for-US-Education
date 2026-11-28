@@ -40,8 +40,8 @@ from app.services.pii_mask import mask_known_values, mask_personal_info
 from app.services.transcript_text import keep_score_lines, read_term_tables, tidy_transcription
 from app.services.transcript_validate import (
     Issue,
+    decimal_may_be_lost,
     drop_bad_cells,
-    has_real_decimal_scores,
     lost_decimal_score,
     retry_message,
     validate_parsed,
@@ -865,7 +865,7 @@ class TranscriptReader:
 
         source_numbers = {round(float(n.replace(",", ".")), 2) for n in _NUMBER_RE.findall(source)}
         high_school = data.get("level") == "thpt"
-        restore_decimal = has_real_decimal_scores(data)
+        restore_decimal = decimal_may_be_lost(data)
         if restore_decimal:
             source_numbers |= {
                 v for n in _NUMBER_RE.findall(source) if (v := lost_decimal_score(n)) is not None

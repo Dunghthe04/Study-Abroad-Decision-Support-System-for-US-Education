@@ -1,11 +1,12 @@
-"""OCR làm mất dấu thập phân ("85" thay "8.5", "100" thay "10.0"), gặp thật ở ảnh diem-so-hoc-ba, Hoc-ba-dep.
+"""OCR làm mất dấu thập phân ("85" thay "8.5", "100" thay "10.0"), gặp thật ở ảnh diem-so-hoc-ba, Hoc-ba-dep, anh-chup.
 
-Trên thang 10, số nguyên 11-100 không thể là điểm đúng: hiểu là mất dấu, chỉ khi bảng có ô thập phân thật (chắc là thang 10).
+Trên thang 10, số nguyên 11-100 không thể là điểm đúng: hiểu là mất dấu, chỉ khi chắc là thang 10
+(học bạ THPT, hoặc bảng có ô thập phân thật).
 """
 
 from app.core.config import Settings
 from app.services.transcript_reader import TranscriptReader
-from app.services.transcript_validate import has_real_decimal_scores, lost_decimal_score, validate_parsed
+from app.services.transcript_validate import decimal_may_be_lost, lost_decimal_score, validate_parsed
 
 # Chữ OCR thật của ảnh diem-so-hoc-ba (rút gọn): cột HK2, CN mất dấu ở nhiều môn
 SOURCE = """Hký I Hký II CN
@@ -16,10 +17,10 @@ Tiếng Anh 8.0 85 83
 GD QP-AN 9,6 9,7 9,7"""
 
 
-def _data(*terms: tuple[str, str, dict[str, str]]) -> dict:
+def _data(*terms: tuple[str, str, dict[str, str]], level: str = "thpt") -> dict:
     return {
         "scale": "10",
-        "level": "thpt",
+        "level": level,
         "terms": [
             {
                 "grade": "",
@@ -76,13 +77,26 @@ def test_number_not_in_text_is_still_rejected():
     assert any("không khớp" in w for w in result.warnings)
 
 
-def test_all_integer_table_is_not_guessed():
-    # Không có ô thập phân nào: có thể là thang 100, không tự chia 10
-    data = _data(("HK1", "hk1", {"Toán": "85", "Ngữ văn": "78"}))
-    assert not has_real_decimal_scores(data)
-    assert [i.rule for i in validate_parsed(data, "HK1 85 78")] == ["R5", "R5"]
-    _, merged = _read(data, "HK1 85 78")
-    assert merged == {}
+SOURCE_ALL_LOST = "Toàn 42 47 45 Văn 66 64 63"
+
+
+def test_high_school_with_every_decimal_lost_is_restored():
+    # Ảnh thật anh-chup-man-hinh: học bạ THPT, OCR mất dấu ở mọi ô ("66 64 63"), không còn ô thập phân nào
+    data = _data(("Hoc kg I", "hk1", {"Toán": "42", "Ngữ văn": "66"}))
+    assert decimal_may_be_lost(data)
+    assert validate_parsed(data, SOURCE_ALL_LOST) == []
+    _, merged = _read(data, SOURCE_ALL_LOST)
+    assert merged == {"Hoc kg I": {"Toán": 4.2, "Ngữ văn": 6.6}}
+
+
+def test_all_integer_table_not_high_school_is_not_guessed():
+    # Không phải học bạ THPT, không có ô thập phân nào: có thể là thang 100, không tự chia 10
+    for level in ("dai_hoc", "unknown"):
+        data = _data(("HK1", "hk1", {"Toán": "85", "Ngữ văn": "78"}), level=level)
+        assert not decimal_may_be_lost(data)
+        assert [i.rule for i in validate_parsed(data, "HK1 85 78")] == ["R5", "R5"]
+        _, merged = _read(data, "HK1 85 78")
+        assert merged == {}
 
 
 def test_whole_year_column_with_lost_decimals_is_still_recognised():

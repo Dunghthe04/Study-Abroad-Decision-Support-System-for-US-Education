@@ -141,10 +141,15 @@ def lost_decimal_score(raw: Any) -> float | None:
     return int(text) / 10
 
 
-def has_real_decimal_scores(data: Any) -> bool:
-    """Bảng có ít nhất một ô điểm ghi dấu thập phân trong 0-10: chắc chắn là thang 10, mới được hiểu "85" là 8.5.
-    Bảng toàn số nguyên lớn (thang 100) thì không đoán."""
-    for term in (data.get("terms") or []) if isinstance(data, dict) else []:
+def decimal_may_be_lost(data: Any) -> bool:
+    """Chắc chắn là thang 10 thì mới được hiểu "85" là 8.5: học bạ THPT (phổ thông Việt Nam luôn chấm thang 10, có ảnh
+    mất dấu ở mọi ô), hoặc bảng có ít nhất một ô ghi dấu thập phân trong 0-10. Bảng khác toàn số nguyên (có thể thang
+    100) thì không đoán."""
+    if not isinstance(data, dict):
+        return False
+    if data.get("level") == "thpt":
+        return True
+    for term in data.get("terms") or []:
         for item in (term.get("subjects") or []) if isinstance(term, dict) else []:
             text = str(item.get("score", "")).strip() if isinstance(item, dict) else ""
             if _DECIMAL_RE.fullmatch(text) and float(text.replace(",", ".")) <= 10:
@@ -186,7 +191,7 @@ def validate_parsed(data: Any, source: str) -> list[Issue]:
     language = str(data.get("language") or "vi")
     plain_source = _plain(source)
     source_numbers = {round(float(n.replace(",", ".")), 2) for n in _SCORE_RE.findall(source)}
-    restore_decimal = has_real_decimal_scores(data)
+    restore_decimal = decimal_may_be_lost(data)
     if restore_decimal:  # Claude ghi "8.5" khi văn bản là "85" cũng là chép đúng
         source_numbers |= {v for n in _SCORE_RE.findall(source) if (v := lost_decimal_score(n)) is not None}
     issues: list[Issue] = []
