@@ -169,3 +169,14 @@ Việt chốt: **Q1 có** (che cả họ tên phụ huynh đã liên kết), **Q
 - `read_term_tables` cho kết quả giống hệt nhau trước và sau lọc ở cả 30 bản.
 - Toàn bộ test advisor pass (2495). Toàn bộ unit test backend pass.
 - **Chưa đo lại F1 đầu cuối có gọi Claude:** việc này cần nhãn đúng và tốn token. Phép đo trên chỉ chứng minh không ô nào bị cắt khỏi chữ gửi đi.
+
+### 9.1 Chạy thật trên ảnh `học_ba` (28/11)
+
+- **Cách chạy:** chạy bước A thật bằng glm-ocr trên 11 ảnh, rồi chặn ngay trước chỗ gửi Claude để lấy đúng chữ sẽ gửi đi. Lần này không gọi Claude.
+- **Báo cáo:** `advisor/.ocr-eval/che_ten_28_11/BAO_CAO.md`, gồm chữ gốc, chữ gửi Claude và các dòng bị bỏ của từng ảnh.
+- **Trong chữ gốc có:** họ tên học sinh ("Họ tên học sinh: …", "Họ và tên: …", "Học sinh: …"), ngày sinh, mã học sinh, tên giáo viên bộ môn, tên giáo viên chủ nhiệm.
+- **Lỗ hổng tìm ra:** OCR chép lại tiêu đề trang nhưng làm mất nhãn, còn "Nguyễn Thanh Trā Lớp: 12Tg Nám học 2010. 2011". Lớp 2 không bắt được vì không có nhãn. Lớp 3 lại giữ cả dòng vì có "Lớp".
+- **Đã sửa (commit kế tiếp sau `75d9945d`):** dòng không có điểm, chỉ có lớp/kỳ/năm học thì chỉ giữ từ chữ "Lớp…" trở đi. Dòng bảng `| … |` vẫn giữ nguyên.
+- **Sau khi sửa:** không còn họ tên, ngày sinh hay mã học sinh nào trong chữ gửi đi của cả 11 ảnh. Các cụm chữ viết hoa còn lại chỉ là tên môn ("Tiếng Anh", "Tiếng Việt").
+- **Lớp 1 (họ tên .NET gửi kèm):** che được cả khi OCR chép sai dấu ("Trā" so với "Trà").
+- **Số ô điểm:** vẫn đủ 741/741. Toàn bộ test advisor pass (2497).
