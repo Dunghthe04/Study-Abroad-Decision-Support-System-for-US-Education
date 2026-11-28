@@ -182,7 +182,8 @@ function formatValue(key: string, value: unknown): string {
     case "awards":
       return names(value);
     case "preferred_states":
-      return Array.isArray(value) ? value.map(str).filter(Boolean).join(", ") : str(value);
+      // Danh sách rỗng = không giới hạn bang (lựa chọn mặc định của câu N2 và form)
+      return Array.isArray(value) ? value.map(str).filter(Boolean).join(", ") || "Tất cả các bang" : str(value);
     case "school_type":
       return labelOf(SCHOOL_TYPE_OPTIONS, str(value) as never) || str(value);
     case "visa_refused":

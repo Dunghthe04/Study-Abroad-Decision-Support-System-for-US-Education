@@ -183,7 +183,7 @@ export function ProfileReviewCards({ draft, metadata, draftTranscript, onEditSte
         </div>
         <div>
           <strong className="text-ink">Bang: </strong>
-          {stateNames || "Không lọc"}
+          {stateNames || "Tất cả các bang"}
           {step1.targetSchoolType && step1.targetSchoolType !== "all" && ` · ${labelOf(SCHOOL_TYPE_OPTIONS, step1.targetSchoolType)}`}
         </div>
         {step1.expectedGraduationYear && (

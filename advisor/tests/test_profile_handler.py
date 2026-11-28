@@ -4,7 +4,7 @@ from app.schemas.chat import ChatState, ProfileField
 from app.services.chat_flow import QUESTIONS, ask
 from app.services.intake import INTAKE_ID
 from app.services.skill_rules import REQUIRED_B3
-from app.services.skills import skill_ho_so
+from app.services.skills import buttons, skill_ho_so
 from app.services.skills.profile_handler import ChatProfileHandler
 from app.services.skills.skill_bac_hoc import BacHocHandler
 from app.services.skills.skill_ho_so import HoSoHandler
@@ -482,7 +482,7 @@ async def test_pick_wishes_skips_relatives_when_states_known():
     assert (state.question_id, state.edit_queue) == ("N2", ["N3", "N1"])
     await chat.collect(state, KEEP, MAC_DINH)
     assert (state.question_id, state.edit_queue) == ("N3", ["N1"])
-    output = await chat.collect(state, "Bỏ qua", MAC_DINH)
+    output = await chat.collect(state, "Không lọc", MAC_DINH)  # N3 không còn nút Bỏ qua (28/11)
     assert (state.question_id, state.edit_queue) == ("X1", None)
     assert output.widget.type == "review"
 
@@ -536,7 +536,16 @@ async def test_keep_moves_on_without_change():
     assert llm.calls == []
 
 
-# Giữ hết hoặc bỏ qua câu chưa có giá trị: đi hết lượt điền lại thì về bảng, hồ sơ cũ còn nguyên
+# Câu chưa có giá trị: Bỏ qua nếu có; không thì nút trả lời đầu tiên ("Không lọc", "Em chưa có hoạt động"...),
+# riêng N2 chỉ có ô chọn bang thì gửi "Tất cả các bang" (28/11 bỏ nút Bỏ qua ở N1, N2, N3, D4, D5)
+def answer_without_value(output) -> str:
+    found = labels(output)
+    if "Bỏ qua" in found:
+        return "Bỏ qua"
+    return found[0] if found else buttons.ALL_STATES_TEXT
+
+
+# Giữ hết hoặc trả lời câu chưa có giá trị: đi hết lượt điền lại thì về bảng, giá trị cũ còn nguyên
 async def test_restart_keeping_everything_returns_to_review():
     state = at_review()
     chat = make_handler(FakeLLM())
@@ -544,10 +553,10 @@ async def test_restart_keeping_everything_returns_to_review():
     for _ in range(len(skill_ho_so.EDIT_ORDER)):
         if state.edit_queue is None:
             break
-        output = await chat.collect(state, KEEP if KEEP in labels(output) else "Bỏ qua", MAC_DINH)
+        output = await chat.collect(state, KEEP if KEEP in labels(output) else answer_without_value(output), MAC_DINH)
     assert (state.question_id, state.edit_queue) == ("X1", None)
     assert output.widget.type == "review"
-    assert state.profile == full_profile()
+    assert {name: state.profile[name] for name in full_profile()} == full_profile()
 
 
 # Nút sửa của câu trả lời kịch bản: không có câu đang hỏi mà nhận câu ô chọn thì mở luồng sửa nhóm đó, không gọi Qwen
