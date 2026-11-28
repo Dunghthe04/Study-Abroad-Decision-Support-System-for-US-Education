@@ -44,6 +44,12 @@ public class AccountPurgeRepository(AppDbContext db) : IAccountPurgeRepository
             .Where(p => p.UserId == userId)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.PayloadJson, (string?)null), ct);
 
+    public Task<List<string>> GetBirthDateEvidencePathsAsync(Guid userId, CancellationToken ct = default) =>
+        db.BirthDateChangeRequests.AsNoTracking()
+            .Where(r => r.UserId == userId && r.EvidencePath != null)
+            .Select(r => r.EvidencePath!)
+            .ToListAsync(ct);
+
     public async Task<ForumPurgeResult> PurgeForumPostsAsync(Guid userId, DateTime now, CancellationToken ct = default)
     {
         // Diễn đàn hai tầng: bài gốc và trả lời trỏ thẳng vào bài gốc.

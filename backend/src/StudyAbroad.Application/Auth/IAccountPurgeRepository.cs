@@ -43,6 +43,13 @@ public interface IAccountPurgeRepository
     /// </summary>
     Task ScrubRetainedLeadsAsync(Guid userId, CancellationToken ct = default);
 
+    /// <summary>
+    /// [UC-107 / UC-150] Khóa lưu trữ tệp minh chứng ngày sinh còn trên Cloudinary của người dùng (yêu cầu chưa duyệt/từ chối/hủy).
+    /// Dòng yêu cầu xóa theo cascade cùng user nên phải lấy trước để xóa tệp sau khi DB đã lưu.
+    /// </summary>
+    Task<List<string>> GetBirthDateEvidencePathsAsync(Guid userId, CancellationToken ct = default) =>
+        Task.FromResult(new List<string>());
+
     /// <summary>[UC-75 lớp 3] Mức dùng AI chỉ giữ số tổng hợp: bỏ liên kết tới người dùng, tin chat và kỳ gói của họ.</summary>
     Task<int> AnonymizeAiUsageAsync(Guid userId, CancellationToken ct = default);
 

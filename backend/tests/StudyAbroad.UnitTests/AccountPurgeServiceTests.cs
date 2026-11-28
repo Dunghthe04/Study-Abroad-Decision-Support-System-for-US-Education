@@ -1,5 +1,6 @@
 using StudyAbroad.Application.Auth;
 using StudyAbroad.Application.Billing;
+using StudyAbroad.Application.BirthDateChanges;
 using StudyAbroad.Application.Profile.Flow;
 using StudyAbroad.Domain.Constants;
 
@@ -96,6 +97,14 @@ public class AccountPurgeServiceTests
             return Task.FromResult(2);
         }
 
+        public Dictionary<Guid, List<string>> EvidencePaths { get; } = [];
+
+        public Task<List<string>> GetBirthDateEvidencePathsAsync(Guid userId, CancellationToken ct = default)
+        {
+            Steps.Add($"evidence-paths:{userId}");
+            return Task.FromResult(EvidencePaths.TryGetValue(userId, out var paths) ? paths.ToList() : []);
+        }
+
         public Task DeleteUserAsync(Guid userId, CancellationToken ct = default)
         {
             if (FailOnDelete.Contains(userId)) throw new InvalidOperationException("db lỗi");
@@ -142,6 +151,18 @@ public class AccountPurgeServiceTests
         }
     }
 
+    /// <summary>Kho minh chứng ngày sinh giả: chỉ ghi bước xóa vào cùng danh sách Steps.</summary>
+    private sealed class FakeEvidenceStorage(List<string> steps) : IBirthDateEvidenceStorage
+    {
+        public Task<string> SaveAsync(Guid requestId, byte[] content, string extension, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<Stream?> OpenAsync(string path, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task DeleteAsync(string? path, CancellationToken ct = default)
+        {
+            steps.Add($"evidence-delete:{path}");
+            return Task.CompletedTask;
+        }
+    }
+
     private readonly FakePurgeRepository _repo = new();
     private readonly FakeFileStorage _files;
     private readonly FakeAuditLogRepository _audit = new();
@@ -159,6 +180,40 @@ public class AccountPurgeServiceTests
 
     private AccountPurgeService CreateService(bool withBillingHooks = false) =>
         new(_repo, _audit, _unitOfWork, _files, _options, withBillingHooks ? _billing : null);
+
+    [Fact]
+    public async Task Purge_BirthDateEvidence_PathsReadBeforeDeleteUser_FilesDeletedOnCloudinaryAfterCommit()
+    {
+        var id = Guid.NewGuid();
+        _repo.DueIds.Add(id);
+        _repo.EvidencePaths[id] = ["usas/birth-date-evidence/a/1", "usas/birth-date-evidence/b/2"];
+
+        var summary = await new AccountPurgeService(_repo, _audit, _unitOfWork, _files, _options, null, new FakeEvidenceStorage(_repo.Steps))
+            .PurgeDueAccountsAsync(Now);
+
+        Assert.Equal(1, summary.Purged);
+        Assert.Equal(new[]
+        {
+            $"lock:{id}", $"buyer:{id}", $"payments:{id}", $"leads:{id}", $"ai:{id}", $"forum:{id}",
+            $"evidence-paths:{id}", $"delete:{id}", $"files:{id}",
+            "evidence-delete:usas/birth-date-evidence/a/1", "evidence-delete:usas/birth-date-evidence/b/2",
+        }, _repo.Steps);
+    }
+
+    [Fact]
+    public async Task Purge_DeleteUserFails_BirthDateEvidenceKept()
+    {
+        var id = Guid.NewGuid();
+        _repo.DueIds.Add(id);
+        _repo.FailOnDelete.Add(id);
+        _repo.EvidencePaths[id] = ["usas/birth-date-evidence/a/1"];
+
+        var summary = await new AccountPurgeService(_repo, _audit, _unitOfWork, _files, _options, null, new FakeEvidenceStorage(_repo.Steps))
+            .PurgeDueAccountsAsync(Now);
+
+        Assert.Single(summary.Failures);
+        Assert.DoesNotContain(_repo.Steps, s => s.StartsWith("evidence-delete:"));
+    }
 
     [Fact]
     public async Task Purge_UsesRetentionCutoffAndOnlyStudentParentRoles()
