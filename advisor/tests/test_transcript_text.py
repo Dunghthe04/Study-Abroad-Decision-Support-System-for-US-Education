@@ -1,4 +1,9 @@
-from app.services.transcript_text import cut_repetition, tabulate_spaced_tables
+from app.services.transcript_text import (
+    cut_repetition,
+    keep_score_lines,
+    read_term_tables,
+    tabulate_spaced_tables,
+)
 
 # Văn bản glm-ocr chép thật từ ảnh học bạ chụp nghiêng (giữ nguyên lỗi dấu của OCR)
 SPACED_HIGH_SCHOOL = """Lớp 10:
@@ -50,3 +55,72 @@ def test_cut_repetition_keeps_header_repeated_per_grade_block():
         f"{header}\nHK1 7.2 4.2 7.8 5.1 6.7\n{header}\nHK1 7.7 7.3 9 7.8 6.5\n{header}\nHK1 8.1 7.4 8.5 7.7 7"
     )
     assert cut_repetition(text) == text
+
+
+TRANSCRIPT_WITH_PERSONAL_LINES = """CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
+Độc lập - Tự do - Hạnh phúc
+TRƯỜNG THPT CHU VĂN AN
+Họ và tên: [HỌ TÊN]   Lớp: 10A1
+Địa chỉ: Số 12, ngõ 5, phố Đội Cấn
+| Họ và tên | [HỌ TÊN] |
+| Ngày sinh | [NGÀY SINH] |
+Lớp 10
+| Môn | Toán | Ngữ văn | Tiếng Anh |
+|---|---|---|---|
+| HK1 | 8.5 | 7.0 | 9.1 |
+| HK2 | 8.8 | 7.4 | 9.3 |
+| | Toán | Vật lí | Hóa học |
+|---|---|---|---|
+| Cả năm | 8.6 | 7.9 | 8.0 |
+Điểm trung bình Toán: 8.6
+Nhận xét: Em chăm ngoan, cần cố gắng hơn
+Giáo viên chủ nhiệm: Trần Văn Anh
+Hiệu trưởng (ký, đóng dấu)"""
+
+
+def test_keep_score_lines_keeps_grades_terms_and_tables():
+    kept = keep_score_lines(TRANSCRIPT_WITH_PERSONAL_LINES)
+
+    for line in (
+        "Họ và tên: [HỌ TÊN]   Lớp: 10A1",
+        "Lớp 10",
+        "| Môn | Toán | Ngữ văn | Tiếng Anh |",
+        "| HK1 | 8.5 | 7.0 | 9.1 |",
+        "| | Toán | Vật lí | Hóa học |",
+        "| Cả năm | 8.6 | 7.9 | 8.0 |",
+        "Điểm trung bình Toán: 8.6",
+    ):
+        assert line in kept.splitlines()
+    assert [t["term"] for t in read_term_tables(kept)] == ["HK1", "HK2", "Cả năm"]
+
+
+def test_keep_score_lines_drops_personal_and_decorative_lines():
+    kept = keep_score_lines(TRANSCRIPT_WITH_PERSONAL_LINES)
+
+    for text in (
+        "CỘNG HÒA",
+        "Độc lập",
+        "CHU VĂN AN",
+        "Địa chỉ",
+        "| Họ và tên |",
+        "Ngày sinh",
+        "Nhận xét",
+        "Trần Văn Anh",
+        "Hiệu trưởng",
+    ):
+        assert text not in kept
+    assert "\n\n\n" not in kept
+
+
+def test_keep_score_lines_keeps_spaced_table_and_university_rows():
+    assert keep_score_lines(SPACED_HIGH_SCHOOL).splitlines()[:5] == SPACED_HIGH_SCHOOL.splitlines()[:5]
+    university = "| Term | Course | Score |\n|---|---|---|\n| Fall2023 | Mathematics | 8,2 |"
+    assert keep_score_lines(university) == university
+
+
+def test_keep_score_lines_without_scores_is_empty():
+    assert keep_score_lines("Họ tên: [HỌ TÊN]\nTrường THPT Nguyễn Trãi\nGhi chú: không") == ""
+
+
+def test_keep_score_lines_keeps_plain_line_with_multi_word_subject():
+    assert keep_score_lines("Ngữ văn: 7.5\nGiáo viên: Trần Văn Anh 5") == "Ngữ văn: 7.5"

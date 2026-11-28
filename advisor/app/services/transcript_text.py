@@ -132,6 +132,60 @@ def _try_table(lines: list[str], start: int) -> tuple[list[str], int] | None:
     return md, len(rows) + 1
 
 
+# --- keep_score_lines: chỉ gửi bước B những dòng cần để đọc điểm (danh sách trắng) ---
+# Chữ (không dấu) cho biết dòng thuộc bảng điểm. Chữ "mạnh" đứng cạnh một con số là đủ tin dòng có điểm; chữ dễ trùng
+# tên người / địa chỉ (văn, anh, địa, sinh, hoa...) chỉ được tính khi đếm chữ của dòng tiêu đề bảng.
+_STRONG_SCORE_WORDS = frozenset(
+    "mon subject course term semester score grade gpa credit credits diem tb hk hl toan gdcd gdqp mathematics math "
+    "physics chemistry biology literature english history geography informatics".split()
+)
+_SCORE_WORDS = _STRONG_SCORE_WORDS | frozenset("ly li hoa sinh van su dia anh tin science economics".split())
+_SCORE_PHRASE_RE = re.compile(r"\b(?:" + "|".join(MULTI_WORD_HEADERS) + r")\b")
+# Lớp / kỳ / năm học ở bất kỳ đâu trong dòng: "Họ và tên: [HỌ TÊN]   Lớp: 10A1" vẫn giữ để biết lớp
+_CONTEXT_RE = re.compile(
+    r"(?<![a-z0-9])(?:lop\W*(?:6|7|8|9|10|11|12)(?![0-9])|hk\s*[12i]+(?![a-z0-9])|hoc ky|ca nam|nam hoc|semester"
+    r"|(?:fall|spring|summer)\s*20\d\d)"
+)
+_SCORE_TOKEN_RE = re.compile(r"(?<![\w.,])(?:\d{1,2}(?:[.,]\d{1,2})?)(?![\w.,]?\d)")
+MIN_SCORES_PLAIN_LINE = 3  # "Số 12, ngõ 5" (địa chỉ) có 2 số, không được lọt
+MIN_HEADER_WORDS = 3  # "Trần Văn Anh" trùng 2 chữ tên môn (văn, anh), tiêu đề bảng có nhiều hơn
+
+
+def keep_score_lines(text: str) -> str:
+    """Giữ dòng bảng điểm, dòng lớp/kỳ/năm học, dòng chữ có điểm; bỏ quốc hiệu, tên trường, họ tên, lời phê, chữ ký.
+
+    Thứ không gửi thì không thể lộ, nên đây là lớp che cuối trước LLM. Dòng bị bỏ thay bằng dòng trống để hai bảng liền
+    nhau vẫn tách ra như cũ (read_term_tables coi dòng không bắt đầu bằng "|" là hết bảng).
+    """
+    out: list[str] = []
+    for line in text.splitlines():
+        kept = line if _useful_line(line) else ""
+        if kept or (out and out[-1]):
+            out.append(kept)
+    return "\n".join(out).strip()
+
+
+def _useful_line(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return False
+    flat = plain(stripped)
+    if _CONTEXT_RE.search(flat):
+        return True
+    words = set(re.findall(r"[a-z]+", flat))
+    phrases = set(_SCORE_PHRASE_RE.findall(flat))
+    score_words = len(words & _SCORE_WORDS) + len(phrases)
+    if stripped.startswith("|"):
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        if all(set(c) <= set("-: ") for c in cells) or any(_VALUE_RE.match(c) for c in cells if c):
+            return True
+        return bool(_header_lead(cells[0].split())) or score_words >= MIN_HEADER_WORDS
+    if _header_lead(stripped.split()) or score_words >= MIN_HEADER_WORDS:
+        return True
+    scores = len(_SCORE_TOKEN_RE.findall(stripped))
+    return scores >= MIN_SCORES_PLAIN_LINE or (scores >= 1 and bool(phrases or words & _STRONG_SCORE_WORDS))
+
+
 _GRADE_LINE_RE = re.compile(r"^\W*lop\W*(6|7|8|9|10|11|12)\b")
 _TERM_LABEL_RE = re.compile(r"^(?:hk\s*\w|hoc ky|ky\b|ca nam|semester)")
 
