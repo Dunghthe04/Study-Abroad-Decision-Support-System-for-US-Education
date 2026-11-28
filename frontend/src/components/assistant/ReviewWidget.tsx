@@ -193,6 +193,39 @@ function formatValue(key: string, value: unknown): string {
   }
 }
 
+type Row = { key: string; label: string; text: string; target?: boolean };
+
+/**
+ * Điểm mục tiêu (chứng chỉ dự định thi, kế hoạch thi) tách thành dòng riêng có nhãn "Mục tiêu" và khác màu,
+ * để không đọc nhầm với điểm đã có (nhận xét demo 28/11: IELTS 6.5 hiện có và 8.0 mục tiêu trông giống nhau).
+ * Trả null khi dòng này không có gì cần tách
+ */
+function splitTargetRow(key: string, label: string, value: unknown): Row[] | null {
+  if (key === "certifications" && Array.isArray(value)) {
+    const targets = value.filter((c) => obj(c).isTarget === true);
+    if (targets.length === 0) return null;
+    const current = value.filter((c) => obj(c).isTarget !== true);
+    const rows: Row[] = [];
+    const currentText = current.map(certText).filter(Boolean).join("; ");
+    if (currentText) rows.push({ key: "certifications", label: "Chứng chỉ hiện có", text: currentText });
+    rows.push({ key: "certifications_target", label: "Chứng chỉ mục tiêu", text: targets.map(certText).filter(Boolean).join("; "), target: true });
+    return rows;
+  }
+  if ((key === "english_plan" || key === "standardized_plan") && obj(value).planned !== false) {
+    const text = formatValue(key, value);
+    return text ? [{ key, label, text, target: true }] : null;
+  }
+  return null;
+}
+
+function TargetBadge() {
+  return (
+    <span className="mr-1.5 inline-block rounded bg-gold-wash px-1.5 py-px align-[1px] text-[11px] font-semibold text-gold ring-1 ring-gold/30">
+      Mục tiêu
+    </span>
+  );
+}
+
 /** D4: bảng rà soát hồ sơ trong chat (widget "review" từ skill_ho_so ở câu X1) */
 export function ReviewWidget({ data }: { data?: Record<string, unknown> | null }) {
   const profile = obj(data?.profile) as Record<string, Field>;
@@ -207,6 +240,8 @@ export function ReviewWidget({ data }: { data?: Record<string, unknown> | null }
     const text = STATUS_TEXT[field.status ?? ""] ?? formatValue(key, field.value);
     // Bỏ dòng chưa nói gì, trừ dòng bắt buộc còn thiếu
     if (!text && !isMissing) return [];
+    const split = !isMissing && !STATUS_TEXT[field.status ?? ""] && splitTargetRow(key, label, field.value);
+    if (split) return split.map((r) => ({ ...r, isMissing: false, muted: false }));
     return [{ key, label, text: text || "Còn thiếu", isMissing, muted: !isMissing && Boolean(STATUS_TEXT[field.status ?? ""]) }];
   });
 
@@ -225,9 +260,11 @@ export function ReviewWidget({ data }: { data?: Record<string, unknown> | null }
               className={cn(
                 "min-w-0 flex-1 break-words text-foreground",
                 r.muted && "text-muted-foreground italic",
-                r.isMissing && "font-medium text-warn"
+                r.isMissing && "font-medium text-warn",
+                r.target && "font-medium text-gold"
               )}
             >
+              {r.target && <TargetBadge />}
               {r.text}
             </dd>
           </div>
@@ -244,12 +281,13 @@ export function ReviewWidget({ data }: { data?: Record<string, unknown> | null }
 export function CurrentValues({ current }: { current?: unknown }) {
   const fields = obj(current) as Record<string, Field>;
   const hasCerts = Array.isArray(obj(fields.certifications).value);
-  const rows = ROWS.flatMap(({ key, label }) => {
+  const rows = ROWS.flatMap(({ key, label }): Row[] => {
     if (!(key in fields)) return [];
     const field = obj(fields[key]) as Field;
     if (hasCerts && CERT_ROWS.has(key) && field.value != null) return [];
     const text = STATUS_TEXT[field.status ?? ""] ?? formatValue(key, field.value);
-    return text ? [{ key, label, text }] : [];
+    if (!text) return [];
+    return (!STATUS_TEXT[field.status ?? ""] && splitTargetRow(key, label, field.value)) || [{ key, label, text }];
   });
 
   if (rows.length === 0) return null;
@@ -261,7 +299,10 @@ export function CurrentValues({ current }: { current?: unknown }) {
         {rows.map((r) => (
           <div key={r.key} className="flex gap-3">
             <dt className="w-32 shrink-0 text-muted-foreground">{r.label}</dt>
-            <dd className="min-w-0 flex-1 break-words text-foreground">{r.text}</dd>
+            <dd className={cn("min-w-0 flex-1 break-words text-foreground", r.target && "font-medium text-gold")}>
+              {r.target && <TargetBadge />}
+              {r.text}
+            </dd>
           </div>
         ))}
       </dl>
