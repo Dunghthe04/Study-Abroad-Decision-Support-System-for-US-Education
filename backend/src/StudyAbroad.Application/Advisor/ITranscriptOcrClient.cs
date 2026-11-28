@@ -1,4 +1,5 @@
 using StudyAbroad.Application.Profile.Flow;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,13 +16,25 @@ public record TranscriptFilePayload(
 );
 
 /// <summary>
+/// Thông tin đã biết của chủ hồ sơ và phụ huynh đã liên kết. Advisor dùng để che đúng các chuỗi này trong chữ đọc từ bảng điểm
+/// trước khi gửi LLM, che xong thì bỏ, không lưu.
+/// </summary>
+public record TranscriptKnownPersonalInfo(
+    IReadOnlyList<string> Names,
+    DateOnly? DateOfBirth = null,
+    string? Email = null,
+    string? Phone = null
+);
+
+/// <summary>
 /// [USAS-640] DTO yêu cầu gửi ảnh học bạ (hỗ trợ nhiều ảnh/nhiều trang) sang advisor để OCR
 /// </summary>
 public record TranscriptOcrRequest(
     IReadOnlyList<TranscriptFilePayload>? Files = null,
     string? ImageBase64 = null,
     string? FileName = null,
-    string? ContentType = null
+    string? ContentType = null,
+    TranscriptKnownPersonalInfo? KnownPersonalInfo = null
 );
 
 /// <summary>
