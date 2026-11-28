@@ -36,7 +36,7 @@ Bộ tính điểm chỉ cần đọc các bảng dưới đây, không cần đ
 | `subject`, `score` | Tên môn, điểm thang 10 (0–10) |
 
 `student_profiles`:
-- `overall_gpa`: GPA **thang 4** do BE tính. Mỗi môn lấy trung bình các học kỳ có điểm, rồi lấy trung bình các môn ra GPA10 (làm tròn 2 số), sau đó đổi sang thang 4 theo bảng WES (`TranscriptGpa.To4`, chỉ xét cận dưới mỗi khoảng, ví dụ 8,17 → 3,5).
+- `overall_gpa`: GPA **thang 4** do BE tính. Mỗi môn lấy trung bình cả năm `(HK1 + 2×HK2) / 3` (chỉ có một kỳ thì lấy kỳ đó), rồi lấy trung bình các môn ra GPA10 (làm tròn 2 số), sau đó đổi **một lần** sang thang 4 bằng nội suy giữa các mốc EducationUSA THPT 2025 (`TranscriptGpa.To4`, ví dụ 8,17 → 3,56). Công thức đầy đủ: `docs/BANG_QUY_DOI_DIEM.md` mục 1.
   - Cách quy đổi ghi rõ theo yêu cầu của doc tính điểm (mục "Lưu ý về GPA đầu vào"). Nếu đổi bảng thì tính lại từ `transcript_scores`.
 - `grade_scale`: luôn `"10"`.
 - `transcript_file_url`: file bảng điểm gốc, nếu có tải lên.
