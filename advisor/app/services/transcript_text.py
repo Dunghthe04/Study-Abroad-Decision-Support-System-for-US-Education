@@ -139,7 +139,7 @@ _STRONG_SCORE_WORDS = frozenset(
     "mon subject course term semester score grade gpa credit credits diem tb hk hl toan gdcd gdqp mathematics math "
     "physics chemistry biology literature english history geography informatics".split()
 )
-_SCORE_WORDS = _STRONG_SCORE_WORDS | frozenset("ly li hoa sinh van su dia anh tin science economics".split())
+_SCORE_WORDS = _STRONG_SCORE_WORDS | frozenset("ly li hoa sinh van su dia anh tin tieng science economics".split())
 _SCORE_PHRASE_RE = re.compile(r"\b(?:" + "|".join(MULTI_WORD_HEADERS) + r")\b")
 # Lớp / kỳ / năm học ở bất kỳ đâu trong dòng: "Họ và tên: [HỌ TÊN]   Lớp: 10A1" giữ lại "Lớp: 10A1" để biết lớp.
 # "Học kỳ" OCR hay chép sai chữ "kỳ" (Hoc kg, Hoc kj, Hoc ki): nhận "hoc k" + tối đa 1 chữ, không liệt kê từng kiểu sai
@@ -150,6 +150,12 @@ _CONTEXT_RE = re.compile(
 _SCORE_TOKEN_RE = re.compile(r"(?<![\w.,])(?:\d{1,2}(?:[.,]\d{1,2})?)(?![\w.,]?\d)")
 MIN_SCORES_PLAIN_LINE = 3  # "Số 12, ngõ 5" (địa chỉ) có 2 số, không được lọt
 MIN_HEADER_WORDS = 3  # "Trần Văn Anh" trùng 2 chữ tên môn (văn, anh), tiêu đề bảng có nhiều hơn
+# Tiêu đề bảng gần như toàn chữ môn/cột; câu văn xuôi chỉ tình cờ trùng vài chữ ("cô Di Li post toàn bộ số điểm...")
+MIN_HEADER_DENSITY = 1 / 4
+# Họ tên người: 2-4 chữ đều viết hoa đầu, không chữ nào là tên môn ("Vũ Thị Hà"; "Tiếng Anh", "Ngoại ngữ" không phải)
+NAME_WORDS = range(2, 5)
+# Xếp loại học lực / hạnh kiểm đứng cuối dòng điểm ("Khá Khá", "TB Tốt", "Giỏi Tốt HSG"): bộ từ cố định theo quy chế
+_RATING_WORDS = frozenset("gioi kha tot yeu kem dat chua trung binh xuat sac".split())
 # Model OCR hay chép bảng dọc: mỗi ô một dòng ("Toán" / "8,2" / "8,2" / "8,2"). Các dòng dưới đây giữ cho kiểu đó.
 _LONE_VALUES = frozenset("t k tb y g x | - ⊗".split())  # xếp loại viết tắt, ô trống OCR chép thành | hoặc -
 _COLUMN_WORD_RE = re.compile(r"(?<![a-z])(?:hk\w*|dtb\w*|ddg\w*|tbm\w*|cn|kqht)(?![a-z])")  # HKý I, CN, ĐTBmhkI, ĐĐGtx
@@ -167,8 +173,9 @@ def keep_score_lines(text: str) -> str:
     out: list[str] = []
     for i, line in enumerate(lines):
         next_line = next((ln for ln in lines[i + 1 :] if ln.strip()), "")
-        useful = _useful_line(line) or _vertical_cell(line) or (_short_label(line) and _lone_value_line(next_line))
-        kept = line if useful else _context_tail(line)
+        label = _short_label(line) and not _looks_like_name(line) and _lone_value_line(next_line)
+        useful = _useful_line(line) or _vertical_cell(line) or label
+        kept = _cut_trailing_name(line) if useful else _context_tail(line)
         if kept or (out and out[-1]):
             out.append(kept)
     return "\n".join(out).strip()
@@ -197,6 +204,24 @@ def _short_label(line: str) -> bool:
     return 0 < len(words) <= MAX_LABEL_WORDS and "|" not in line
 
 
+def _cut_trailing_name(line: str) -> str:
+    """Tên giáo viên bộ môn hay đứng cuối dòng điểm ("Toán 6,3 4,9 5,4 Hoàng Lưu"): cắt phần sau số cuối nếu giống họ tên."""
+    if line.lstrip().startswith("|"):
+        return line
+    scores = list(_SCORE_TOKEN_RE.finditer(line))
+    if not scores or not _looks_like_name(line[scores[-1].end() :]):
+        return line
+    return line[: scores[-1].end()]
+
+
+def _looks_like_name(line: str) -> bool:
+    words = re.findall(r"[^\W\d_]+", line)
+    if len(words) not in NAME_WORDS or not all(w[0].isupper() and not w.isupper() for w in words):
+        return False  # chữ viết tắt in hoa (HSG, TB, HL) không phải họ tên
+    flat = plain(" ".join(words))
+    return not (set(flat.split()) & (_SCORE_WORDS | _RATING_WORDS) or _SCORE_PHRASE_RE.search(flat))
+
+
 def _vertical_cell(line: str) -> bool:
     """Ô của bảng chép dọc: chỉ có điểm, tiêu đề cột ngắn (HKý I, CN), hoặc tên môn nhiều chữ đứng riêng (Ngoại ngữ)."""
     if _lone_value_line(line):
@@ -212,15 +237,19 @@ def _useful_line(line: str) -> bool:
     if not stripped:
         return False
     flat = plain(stripped)
-    words = set(re.findall(r"[a-z]+", flat))
+    tokens = re.findall(r"[a-z]+", flat)
+    words = set(tokens)
     phrases = set(_SCORE_PHRASE_RE.findall(flat))
     score_words = len(words & _SCORE_WORDS) + len(phrases)
+    # Mật độ đếm cả chữ lặp và chữ cột ("Điểm kiểm tra HS I Điểm kiểm tra HS II HK TBM")
+    column_tokens = sum(t in _SCORE_WORDS or bool(_COLUMN_WORD_RE.fullmatch(t)) for t in tokens) + len(phrases)
+    header_words = score_words >= MIN_HEADER_WORDS and column_tokens >= MIN_HEADER_DENSITY * len(tokens)
     if stripped.startswith("|"):
         cells = [c.strip() for c in stripped.strip("|").split("|")]
         if _CONTEXT_RE.search(flat) or all(set(c) <= set("-: ") for c in cells) or any(_VALUE_RE.match(c) for c in cells if c):
             return True
-        return bool(_header_lead(cells[0].split())) or score_words >= MIN_HEADER_WORDS
-    if _header_lead(stripped.split()) or score_words >= MIN_HEADER_WORDS:
+        return bool(_header_lead(cells[0].split())) or header_words
+    if _header_lead(stripped.split()) or header_words:
         return True
     scores = len(_SCORE_TOKEN_RE.findall(stripped))
     return scores >= MIN_SCORES_PLAIN_LINE or (scores >= 1 and bool(phrases or words & _STRONG_SCORE_WORDS))

@@ -177,3 +177,35 @@ def test_keep_score_lines_keeps_term_header_with_misread_ky():
     header = "Hoc kg I Hoc kg II Ca nám"
     assert keep_score_lines(f"{header}\nToàn 42 47 45").splitlines()[0] == header
     assert keep_score_lines("Nguyễn Văn Học Kim Lớp 12A\nToán 8.0 8.5 8.3").splitlines()[0] == "Lớp 12A"
+
+
+def test_keep_score_lines_drops_prose_that_happens_to_contain_score_words():
+    # Ảnh thật anh-chup-man-hinh: câu bài đăng có "toàn", "điểm", "Li" (trùng chữ môn) nhưng là văn xuôi, kèm tên người
+    prose = "căng lên như dây dàn nên cô Di Li post toàn bố so diêm của cô lên để khích"
+    header = "Môn Toán Lý Hóa Sinh Ngữ văn TB môn"
+    kept = keep_score_lines(f"{prose}\n{header}\nHK1 7.2 4.2 7.8 5.1 6.7 6.6")
+    assert "Di Li" not in kept
+    assert kept.splitlines()[0] == header
+
+
+def test_keep_score_lines_drops_person_name_before_lone_number():
+    # Ảnh thật 1654860257: chữ ký "Vũ Thị Hà" cạnh số, trước đây bị coi là nhãn môn của bảng chép dọc
+    kept = keep_score_lines("HIỆU TRƯỞNG\nVũ Thị Hà 8\n8\nTRƯỜNG TIỂU HỌC")
+    assert "Vũ Thị Hà" not in kept
+    for label in ("Toán", "Ngoại ngũ", "Tiếng Anh", "Công Nghệ", "Gung...inh"):
+        assert keep_score_lines(f"{label}\n8,2\n8,5").splitlines()[0] == label, label
+
+
+def test_keep_score_lines_keeps_long_header_with_repeated_column_words():
+    # Ảnh thật 20200701: tiêu đề dài, chữ "Điểm" lặp nhiều lần, không có chữ "Môn" đứng đầu
+    header = "TT Môn học Diêm miêng Diêm kiêm tra HS I Diêm kiêm tra HS II HK TBM"
+    assert keep_score_lines(f"{header}\n1 Toán 9 8 9 9").splitlines()[0] == header
+    assert keep_score_lines("Tiêng Pháp\n8,2\n8,5").splitlines()[0] == "Tiêng Pháp"
+
+
+def test_keep_score_lines_cuts_teacher_name_after_scores_on_same_line():
+    # Ảnh thật 1654860257: tên giáo viên bộ môn đứng cuối dòng điểm
+    kept = keep_score_lines(
+        "Toàn 6,3 4,9 5,4 Hoàng Lưu\nSinh học 5,3 4,7 5,1 Ngọc Huong\nTiếng Anh 8,0 8,5 8,3 Khá"
+    )
+    assert kept.splitlines() == ["Toàn 6,3 4,9 5,4", "Sinh học 5,3 4,7 5,1", "Tiếng Anh 8,0 8,5 8,3 Khá"]
