@@ -141,7 +141,7 @@ _STRONG_SCORE_WORDS = frozenset(
 )
 _SCORE_WORDS = _STRONG_SCORE_WORDS | frozenset("ly li hoa sinh van su dia anh tin science economics".split())
 _SCORE_PHRASE_RE = re.compile(r"\b(?:" + "|".join(MULTI_WORD_HEADERS) + r")\b")
-# Lớp / kỳ / năm học ở bất kỳ đâu trong dòng: "Họ và tên: [HỌ TÊN]   Lớp: 10A1" vẫn giữ để biết lớp
+# Lớp / kỳ / năm học ở bất kỳ đâu trong dòng: "Họ và tên: [HỌ TÊN]   Lớp: 10A1" giữ lại "Lớp: 10A1" để biết lớp
 _CONTEXT_RE = re.compile(
     r"(?<![a-z0-9])(?:lop\W*(?:6|7|8|9|10|11|12)(?![0-9])|hk\s*[12i]+(?![a-z0-9])|hoc ky|ca nam|nam hoc|semester"
     r"|(?:fall|spring|summer)\s*20\d\d)"
@@ -167,10 +167,23 @@ def keep_score_lines(text: str) -> str:
     for i, line in enumerate(lines):
         next_line = next((ln for ln in lines[i + 1 :] if ln.strip()), "")
         useful = _useful_line(line) or _vertical_cell(line) or (_short_label(line) and _lone_value_line(next_line))
-        kept = line if useful else ""
+        kept = line if useful else _context_tail(line)
         if kept or (out and out[-1]):
             out.append(kept)
     return "\n".join(out).strip()
+
+
+def _context_tail(line: str) -> str:
+    """Dòng không có điểm nhưng có lớp/kỳ/năm học: chỉ giữ từ chữ "Lớp…" trở đi.
+
+    OCR hay làm mất nhãn "Họ và tên:", còn lại "Nguyễn Văn A  Lớp: 12A1  Năm học 2010-2011": cắt phần trước
+    để không gửi họ tên không nhãn. Không có lớp/kỳ/năm học thì bỏ cả dòng.
+    """
+    tokens = line.split()
+    for i in range(len(tokens)):
+        if _CONTEXT_RE.match(plain(" ".join(tokens[i:]))):
+            return " ".join(tokens[i:])
+    return ""
 
 
 def _lone_value_line(line: str) -> bool:
@@ -198,14 +211,12 @@ def _useful_line(line: str) -> bool:
     if not stripped:
         return False
     flat = plain(stripped)
-    if _CONTEXT_RE.search(flat):
-        return True
     words = set(re.findall(r"[a-z]+", flat))
     phrases = set(_SCORE_PHRASE_RE.findall(flat))
     score_words = len(words & _SCORE_WORDS) + len(phrases)
     if stripped.startswith("|"):
         cells = [c.strip() for c in stripped.strip("|").split("|")]
-        if all(set(c) <= set("-: ") for c in cells) or any(_VALUE_RE.match(c) for c in cells if c):
+        if _CONTEXT_RE.search(flat) or all(set(c) <= set("-: ") for c in cells) or any(_VALUE_RE.match(c) for c in cells if c):
             return True
         return bool(_header_lead(cells[0].split())) or score_words >= MIN_HEADER_WORDS
     if _header_lead(stripped.split()) or score_words >= MIN_HEADER_WORDS:

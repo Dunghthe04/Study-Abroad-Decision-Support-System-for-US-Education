@@ -82,7 +82,7 @@ def test_keep_score_lines_keeps_grades_terms_and_tables():
     kept = keep_score_lines(TRANSCRIPT_WITH_PERSONAL_LINES)
 
     for line in (
-        "Họ và tên: [HỌ TÊN]   Lớp: 10A1",
+        "Lớp: 10A1",
         "Lớp 10",
         "| Môn | Toán | Ngữ văn | Tiếng Anh |",
         "| HK1 | 8.5 | 7.0 | 9.1 |",
@@ -159,3 +159,14 @@ def test_keep_score_lines_keeps_vertical_table_and_drops_teacher_names():
 
 def test_keep_score_lines_drops_long_sentence_before_number():
     assert keep_score_lines("Nhận xét của giáo viên chủ nhiệm về học sinh này là rất tốt\n9") == "9"
+
+
+def test_keep_score_lines_cuts_unlabeled_name_before_class():
+    # OCR làm mất nhãn "Họ và tên:" (gặp thật ở ảnh học bạ): chỉ gửi phần lớp / năm học
+    kept = keep_score_lines("Nguyễn Thanh Trà Lớp: 12Tg Năm học 2010. 2011\nToán 10.0 10.0 10.0")
+    assert kept.splitlines() == ["Lớp: 12Tg Năm học 2010. 2011", "Toán 10.0 10.0 10.0"]
+
+
+def test_keep_score_lines_keeps_whole_table_row_with_term():
+    row = "| Lớp 10 HK1 | 8.5 | 7.0 |"
+    assert keep_score_lines(row) == row
