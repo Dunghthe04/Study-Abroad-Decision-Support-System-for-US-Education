@@ -149,20 +149,48 @@ _CONTEXT_RE = re.compile(
 _SCORE_TOKEN_RE = re.compile(r"(?<![\w.,])(?:\d{1,2}(?:[.,]\d{1,2})?)(?![\w.,]?\d)")
 MIN_SCORES_PLAIN_LINE = 3  # "Số 12, ngõ 5" (địa chỉ) có 2 số, không được lọt
 MIN_HEADER_WORDS = 3  # "Trần Văn Anh" trùng 2 chữ tên môn (văn, anh), tiêu đề bảng có nhiều hơn
+# Model OCR hay chép bảng dọc: mỗi ô một dòng ("Toán" / "8,2" / "8,2" / "8,2"). Các dòng dưới đây giữ cho kiểu đó.
+_LONE_VALUES = frozenset("t k tb y g x | - ⊗".split())  # xếp loại viết tắt, ô trống OCR chép thành | hoặc -
+_COLUMN_WORD_RE = re.compile(r"(?<![a-z])(?:hk\w*|dtb\w*|ddg\w*|tbm\w*|cn|kqht)(?![a-z])")  # HKý I, CN, ĐTBmhkI, ĐĐGtx
+MAX_LABEL_WORDS = 6  # nhãn hàng của bảng dọc ngắn ("Lich sú và dja lý"); câu dài trước một con số không được tính
 
 
 def keep_score_lines(text: str) -> str:
     """Giữ dòng bảng điểm, dòng lớp/kỳ/năm học, dòng chữ có điểm; bỏ quốc hiệu, tên trường, họ tên, lời phê, chữ ký.
 
     Thứ không gửi thì không thể lộ, nên đây là lớp che cuối trước LLM. Dòng bị bỏ thay bằng dòng trống để hai bảng liền
-    nhau vẫn tách ra như cũ (read_term_tables coi dòng không bắt đầu bằng "|" là hết bảng).
+    nhau vẫn tách ra như cũ (read_term_tables coi dòng không bắt đầu bằng "|" là hết bảng). Bảng chép dọc giữ dòng chỉ có
+    điểm, dòng tiêu đề cột ngắn và dòng nhãn ngắn đứng ngay trước dòng điểm (tên môn); tên giáo viên đứng sau điểm bị bỏ.
     """
+    lines = text.splitlines()
     out: list[str] = []
-    for line in text.splitlines():
-        kept = line if _useful_line(line) else ""
+    for i, line in enumerate(lines):
+        next_line = next((ln for ln in lines[i + 1 :] if ln.strip()), "")
+        useful = _useful_line(line) or _vertical_cell(line) or (_short_label(line) and _lone_value_line(next_line))
+        kept = line if useful else ""
         if kept or (out and out[-1]):
             out.append(kept)
     return "\n".join(out).strip()
+
+
+def _lone_value_line(line: str) -> bool:
+    tokens = line.split()
+    return bool(tokens) and all(_VALUE_RE.match(t) or plain(t) in _LONE_VALUES for t in tokens)
+
+
+def _short_label(line: str) -> bool:
+    words = line.split()
+    return 0 < len(words) <= MAX_LABEL_WORDS and "|" not in line
+
+
+def _vertical_cell(line: str) -> bool:
+    """Ô của bảng chép dọc: chỉ có điểm, tiêu đề cột ngắn (HKý I, CN), hoặc tên môn nhiều chữ đứng riêng (Ngoại ngữ)."""
+    if _lone_value_line(line):
+        return True
+    if not _short_label(line):
+        return False
+    flat = plain(line)
+    return bool(_COLUMN_WORD_RE.search(flat) or (len(line.split()) <= 4 and _SCORE_PHRASE_RE.search(flat)))
 
 
 def _useful_line(line: str) -> bool:

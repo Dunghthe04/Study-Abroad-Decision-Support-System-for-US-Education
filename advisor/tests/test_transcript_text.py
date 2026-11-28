@@ -124,3 +124,38 @@ def test_keep_score_lines_without_scores_is_empty():
 
 def test_keep_score_lines_keeps_plain_line_with_multi_word_subject():
     assert keep_score_lines("Ngữ văn: 7.5\nGiáo viên: Trần Văn Anh 5") == "Ngữ văn: 7.5"
+
+
+# Model OCR chép bảng dọc: mỗi ô một dòng, tên giáo viên bộ môn đứng sau điểm
+VERTICAL_TABLE = """Môn học/
+Hký I
+Hký II
+CN
+Toán
+6.2
+7.7
+7.2
+Nguyen Huong Ngun
+Ngoại ngũ
+Gung...inh
+6.2
+7.5
+Thé dúc
+⊗
+⊗
+Trần Thị Luận Minh
+DTB
+các môn
+7.4"""
+
+
+def test_keep_score_lines_keeps_vertical_table_and_drops_teacher_names():
+    kept = keep_score_lines(VERTICAL_TABLE).splitlines()
+    for line in ("Hký I", "Hký II", "CN", "Toán", "6.2", "7.7", "7.2", "Ngoại ngũ", "Gung...inh", "Thé dúc", "⊗", "DTB", "7.4"):
+        assert line in kept
+    assert "Nguyen Huong Ngun" not in kept
+    assert "Trần Thị Luận Minh" not in kept
+
+
+def test_keep_score_lines_drops_long_sentence_before_number():
+    assert keep_score_lines("Nhận xét của giáo viên chủ nhiệm về học sinh này là rất tốt\n9") == "9"
