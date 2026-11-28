@@ -4,15 +4,19 @@
 // Thêm con xong thì vào nhập hồ sơ cho con đó luôn. Vào hay thoát làm thay đều tải lại cả trang (AuthContext).
 
 import { useState, type FormEvent } from "react";
-import { Plus, UserRoundPen } from "lucide-react";
+import { Plus, UserPlusIcon, UserRoundPen } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -135,10 +139,13 @@ export function AddManagedChildButton({
         <Plus data-icon="inline-start" />
         Thêm con
       </Button>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent>
-          <form onSubmit={submit} className="space-y-4">
+      <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal={submitting}>
+        <DialogContent variant="form" size="md">
+          <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col gap-6">
             <DialogHeader>
+              <DialogIcon tone="brand">
+                <UserPlusIcon aria-hidden />
+              </DialogIcon>
               <DialogTitle>Thêm con chưa có tài khoản</DialogTitle>
               <DialogDescription>
                 Bạn nhập hồ sơ thay con. Sau này con tự tạo tài khoản và liên
@@ -146,46 +153,41 @@ export function AddManagedChildButton({
               </DialogDescription>
             </DialogHeader>
 
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+            <DialogBody className="space-y-4">
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
 
-            <Field>
-              <FieldLabel htmlFor="managed-child-name">Tên của con</FieldLabel>
-              <Input
-                id="managed-child-name"
-                autoComplete="off"
-                maxLength={128}
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                disabled={submitting}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="managed-child-dob">Ngày sinh</FieldLabel>
-              <Input
-                id="managed-child-dob"
-                type="date"
-                value={dateOfBirth}
-                onChange={(e) => setDateOfBirth(e.target.value)}
-                disabled={submitting}
-              />
-            </Field>
+              <Field>
+                <FieldLabel htmlFor="managed-child-name">Tên của con</FieldLabel>
+                <Input
+                  id="managed-child-name"
+                  autoComplete="off"
+                  maxLength={128}
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  disabled={submitting}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="managed-child-dob">Ngày sinh</FieldLabel>
+                <Input
+                  id="managed-child-dob"
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  disabled={submitting}
+                />
+              </Field>
+            </DialogBody>
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={submitting}
-              >
-                Hủy
-              </Button>
-              <Button type="submit" disabled={submitting} loading={submitting}>
-                {submitting ? "Đang thêm…" : "Thêm và nhập hồ sơ"}
-              </Button>
+            <DialogFooter layout="pair">
+              <DialogCancel disabled={submitting}>Hủy</DialogCancel>
+              <DialogAction type="submit" tone="primary" disabled={submitting} loading={submitting}>
+                Thêm và nhập hồ sơ
+              </DialogAction>
             </DialogFooter>
           </form>
         </DialogContent>

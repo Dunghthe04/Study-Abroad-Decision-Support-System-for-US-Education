@@ -5,6 +5,8 @@ import {
   AlertTriangleIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
+  ArrowRightLeftIcon,
+  BookOpenIcon,
   CheckCircle2Icon,
   FileTextIcon,
   FileUpIcon,
@@ -21,11 +23,16 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
+  AppDialog,
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -484,6 +491,12 @@ export function Step2Transcript({
   const [isAddSubjectOpen, setIsAddSubjectOpen] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState("");
   const [addSubjectError, setAddSubjectError] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    title: string;
+    description: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+  } | null>(null);
   const fileInputId = useId();
   const overallInputId = useId();
 
@@ -566,9 +579,15 @@ export function Step2Transcript({
     }
     // Chuyển sang GPA tổng thì bỏ điểm môn, để BE và chat không tính nhầm từ điểm cũ
     if (gpa10 !== null) {
-      if (!window.confirm("Chuyển sang nhập GPA tổng sẽ xóa điểm các môn đã nhập. Bạn có chắc không?")) return;
-      onUpdate({ gpaMode: "overall", academicYears: [], manualGpa10Scale: null, calculatedGpa4Scale: null });
-      setShowManualTable(false);
+      setConfirmAction({
+        title: "Chuyển sang nhập GPA tổng?",
+        description: "Chuyển sang nhập GPA tổng sẽ xóa điểm các môn đã nhập. Bạn có chắc không?",
+        confirmLabel: "Chuyển và xóa điểm",
+        onConfirm: () => {
+          onUpdate({ gpaMode: "overall", academicYears: [], manualGpa10Scale: null, calculatedGpa4Scale: null });
+          setShowManualTable(false);
+        },
+      });
       return;
     }
     onUpdate({ gpaMode: "overall" });
@@ -681,35 +700,39 @@ export function Step2Transcript({
       const hasScores = targetYear?.subjects.some(
         (s) => s.semester1Score !== null || s.semester2Score !== null
       );
-      if (
-        hasScores &&
-        !window.confirm(
-          "Khối Lớp 9 đang có điểm. Bạn có chắc muốn xóa và chuyển sang thiết lập lộ trình mục tiêu 4 năm (như Lớp 8) không?"
-        )
-      ) {
+      const applyGrade9EarlyRoadmap = () => {
+        const roadmapYears: AcademicYearDraft[] = ["Lớp 9", "Lớp 10", "Lớp 11", "Lớp 12"].map((g) => ({
+          gradeName: g,
+          subjects: [
+            {
+              subjectName: "GPA Mục Tiêu",
+              semester1Score: null,
+              semester2Score: null,
+            },
+          ],
+        }));
+
+        onUpdate({
+          gpaMode: "transcript",
+          academicYears: roadmapYears,
+          manualGpa10Scale: null,
+          calculatedGpa4Scale: null,
+        });
+        setIsGrade9EarlyRoadmap(true);
+        setActiveYearIndex(0);
+        setValidationError(null);
+      };
+      if (hasScores) {
+        setConfirmAction({
+          title: "Chuyển sang lộ trình mục tiêu 4 năm?",
+          description:
+            "Khối Lớp 9 đang có điểm. Bạn có chắc muốn xóa và chuyển sang thiết lập lộ trình mục tiêu 4 năm (như Lớp 8) không?",
+          confirmLabel: "Xóa và chuyển",
+          onConfirm: applyGrade9EarlyRoadmap,
+        });
         return;
       }
-
-      const roadmapYears: AcademicYearDraft[] = ["Lớp 9", "Lớp 10", "Lớp 11", "Lớp 12"].map((g) => ({
-        gradeName: g,
-        subjects: [
-          {
-            subjectName: "GPA Mục Tiêu",
-            semester1Score: null,
-            semester2Score: null,
-          },
-        ],
-      }));
-
-      onUpdate({
-        gpaMode: "transcript",
-        academicYears: roadmapYears,
-        manualGpa10Scale: null,
-        calculatedGpa4Scale: null,
-      });
-      setIsGrade9EarlyRoadmap(true);
-      setActiveYearIndex(0);
-      setValidationError(null);
+      applyGrade9EarlyRoadmap();
       return;
     }
 
@@ -726,25 +749,30 @@ export function Step2Transcript({
       (s) => s.semester1Score !== null || s.semester2Score !== null
     );
 
-    if (
-      hasScores &&
-      !window.confirm(
-        `Khối ${targetYear.gradeName} đang có điểm. Bạn có chắc muốn xóa khối này (vì chưa hoàn tất năm học) không?`
-      )
-    ) {
+    const applyRemoveGradeYear = () => {
+      setUserRemovedGrades((prev) => [...prev, currentGradeNormalized]);
+      const updatedYears = years.filter((y) => normalizeGrade(y.gradeName) !== currentGradeNormalized);
+      const newGpas = calculateTranscriptGpa(updatedYears);
+      onUpdate({
+        academicYears: updatedYears,
+        manualGpa10Scale: newGpas.gpa10,
+        calculatedGpa4Scale: newGpas.gpa4,
+      });
+      setActiveYearIndex((prev) => Math.max(0, Math.min(prev, updatedYears.length - 1)));
+      setValidationError(null);
+    };
+
+    if (hasScores) {
+      setConfirmAction({
+        title: `Xóa khối ${targetYear.gradeName}?`,
+        description: `Khối ${targetYear.gradeName} đang có điểm. Bạn có chắc muốn xóa khối này (vì chưa hoàn tất năm học) không?`,
+        confirmLabel: "Xóa khối",
+        onConfirm: applyRemoveGradeYear,
+      });
       return;
     }
 
-    setUserRemovedGrades((prev) => [...prev, currentGradeNormalized]);
-    const updatedYears = years.filter((y) => normalizeGrade(y.gradeName) !== currentGradeNormalized);
-    const newGpas = calculateTranscriptGpa(updatedYears);
-    onUpdate({
-      academicYears: updatedYears,
-      manualGpa10Scale: newGpas.gpa10,
-      calculatedGpa4Scale: newGpas.gpa4,
-    });
-    setActiveYearIndex((prev) => Math.max(0, Math.min(prev, updatedYears.length - 1)));
-    setValidationError(null);
+    applyRemoveGradeYear();
   };
 
   // Quay lại chế độ nhập bảng điểm Lớp 9 cho học sinh Lớp 9 đang ở chế độ lộ trình mục tiêu
@@ -1952,21 +1980,26 @@ export function Step2Transcript({
 
       {/* Hộp thêm môn học */}
       <Dialog open={isAddSubjectOpen} onOpenChange={setIsAddSubjectOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent variant="form" size="md">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleConfirmAddSubject();
             }}
+            noValidate
+            className="flex min-h-0 flex-1 flex-col gap-6"
           >
             <DialogHeader>
+              <DialogIcon tone="brand">
+                <BookOpenIcon aria-hidden />
+              </DialogIcon>
               <DialogTitle>Thêm môn học</DialogTitle>
               <DialogDescription>
                 Bổ sung môn vào bảng điểm {years[activeYearIndex]?.gradeName || "năm học này"}.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-5 py-4">
+            <DialogBody className="space-y-5">
               <Field label="Tên môn học" htmlFor="new-subject-input" required error={addSubjectError}>
                 <Input
                   id="new-subject-input"
@@ -1977,7 +2010,7 @@ export function Step2Transcript({
                     setNewSubjectName(e.target.value);
                     if (addSubjectError) setAddSubjectError(null);
                   }}
-                  className={cn("h-10", addSubjectError && "border-destructive focus-visible:ring-destructive")}
+                  className={cn(addSubjectError && "border-destructive focus-visible:ring-destructive")}
                 />
               </Field>
 
@@ -1998,15 +2031,13 @@ export function Step2Transcript({
                   }}
                 />
               </Field>
-            </div>
+            </DialogBody>
 
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsAddSubjectOpen(false)}>
-                Hủy
-              </Button>
-              <Button type="submit" size="sm">
+            <DialogFooter layout="pair">
+              <DialogCancel>Hủy</DialogCancel>
+              <DialogAction type="submit" tone="primary">
                 Thêm môn
-              </Button>
+              </DialogAction>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -2019,8 +2050,11 @@ export function Step2Transcript({
           if (!open) setReassignTargetId(null);
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent variant="form" size="md">
           <DialogHeader>
+            <DialogIcon tone="brand">
+              <ArrowRightLeftIcon aria-hidden />
+            </DialogIcon>
             <DialogTitle>Chọn lại khối lớp</DialogTitle>
             <DialogDescription>
               Điểm đang được điền vào <strong className="text-ink">{reassignTargetId}</strong>. Chuyển toàn bộ điểm này
@@ -2028,7 +2062,7 @@ export function Step2Transcript({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-3">
+          <DialogBody>
             <ChoicePicker
               ariaLabel="Khối lớp"
               options={years.map((y) => ({ value: y.gradeName, label: y.gradeName }))}
@@ -2037,15 +2071,32 @@ export function Step2Transcript({
                 if (v && reassignTargetId) handleReassignGrade(reassignTargetId, v);
               }}
             />
-          </div>
+          </DialogBody>
 
-          <DialogFooter className="sm:justify-end">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setReassignTargetId(null)}>
-              Đóng
-            </Button>
+          <DialogFooter layout="single">
+            <DialogCancel>Đóng</DialogCancel>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AppDialog
+        open={confirmAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmAction(null);
+        }}
+        variant="action"
+        icon={<AlertTriangleIcon aria-hidden />}
+        iconTone="warning"
+        title={confirmAction?.title ?? ""}
+        description={confirmAction?.description}
+        cancelLabel="Hủy"
+        confirmLabel={confirmAction?.confirmLabel ?? "Xác nhận"}
+        confirmTone="destructive"
+        onConfirm={() => {
+          confirmAction?.onConfirm();
+          setConfirmAction(null);
+        }}
+      />
 
       <StepNav onPrev={onPrev}>
         <Button onClick={handleNextClick} size="lg" className="gap-1.5">

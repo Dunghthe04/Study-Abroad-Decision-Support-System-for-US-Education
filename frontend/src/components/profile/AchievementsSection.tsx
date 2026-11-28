@@ -3,17 +3,27 @@
 // [USAS-364] Component quản lý Giải thưởng, Nghiên cứu khoa học và Chứng chỉ
 
 import { useState, useEffect } from "react";
+import { Trash2Icon } from "lucide-react";
 import { getAchievements, addAchievement, deleteAchievement } from "@/lib/profile-api";
 import type { StudentAchievementDto, CreateAchievementRequest } from "@/types/profile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AppDialog } from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { FieldError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+
+const ACHIEVEMENT_CATEGORY_OPTIONS = [
+  { value: "award", label: "Giải thưởng / Học sinh giỏi" },
+  { value: "research", label: "Nghiên cứu khoa học / Bài báo" },
+  { value: "internship", label: "Thực tập / Dự án thực tế" },
+  { value: "certification", label: "Chứng chỉ chuyên môn" },
+  { value: "other", label: "Khác" },
+];
 
 const CATEGORY_MAP: Record<string, { label: string; variant: "brand" | "neutral" }> = {
   award: { label: "Giải thưởng / Học sinh giỏi", variant: "brand" },
@@ -36,6 +46,9 @@ export function AchievementsSection() {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -85,13 +98,19 @@ export function AchievementsSection() {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Bạn có chắc chắn muốn xóa thành tích này không?")) return;
+  async function confirmDelete() {
+    if (!deleteTargetId) return;
+    setDeleteError(null);
+    setDeleting(true);
     try {
-      await deleteAchievement(id);
-      setAchievements(achievements.filter((a) => a.id !== id));
+      await deleteAchievement(deleteTargetId);
+      setAchievements((prev) => prev.filter((a) => a.id !== deleteTargetId));
+      setDeleteTargetId(null);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Không thể xóa thành tích.");
+      setDeleteError(err instanceof Error ? err.message : "Không thể xóa thành tích.");
+      setDeleteTargetId(null);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -110,6 +129,7 @@ export function AchievementsSection() {
       </CardHeader>
 
       <CardContent>
+        {deleteError && <FieldError className="mb-3">{deleteError}</FieldError>}
         {showAddForm && (
           <Card size="sm" className="mb-6">
             <CardContent>
@@ -120,18 +140,24 @@ export function AchievementsSection() {
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="achievement-category">Phân loại *</Label>
-                    <NativeSelect
-                      id="achievement-category"
-                      className="w-full"
+                    <Select
                       value={category}
-                      onChange={(e) => setCategory(e.target.value)}
+                      onValueChange={(v) => {
+                        if (v !== null) setCategory(v);
+                      }}
+                      items={ACHIEVEMENT_CATEGORY_OPTIONS}
                     >
-                      <NativeSelectOption value="award">Giải thưởng / Học sinh giỏi</NativeSelectOption>
-                      <NativeSelectOption value="research">Nghiên cứu khoa học / Bài báo</NativeSelectOption>
-                      <NativeSelectOption value="internship">Thực tập / Dự án thực tế</NativeSelectOption>
-                      <NativeSelectOption value="certification">Chứng chỉ chuyên môn</NativeSelectOption>
-                      <NativeSelectOption value="other">Khác</NativeSelectOption>
-                    </NativeSelect>
+                      <SelectTrigger id="achievement-category" className="w-full bg-surface">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ACHIEVEMENT_CATEGORY_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-1.5">
@@ -228,7 +254,10 @@ export function AchievementsSection() {
                       <Button
                         variant="destructive"
                         size="xs"
-                        onClick={() => handleDelete(ach.id)}
+                        onClick={() => {
+                          setDeleteError(null);
+                          setDeleteTargetId(ach.id);
+                        }}
                         title="Xóa thành tích"
                       >
                         Xóa
@@ -249,6 +278,23 @@ export function AchievementsSection() {
           </div>
         )}
       </CardContent>
+
+      <AppDialog
+        open={deleteTargetId !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteTargetId(null);
+        }}
+        variant="action"
+        icon={<Trash2Icon aria-hidden />}
+        iconTone="destructive"
+        title="Xóa thành tích?"
+        description="Bạn có chắc chắn muốn xóa thành tích này không?"
+        cancelLabel="Hủy"
+        confirmLabel="Xóa"
+        confirmTone="destructive"
+        loading={deleting}
+        onConfirm={() => void confirmDelete()}
+      />
     </Card>
   );
 }

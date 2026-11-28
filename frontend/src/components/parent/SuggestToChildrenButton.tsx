@@ -6,15 +6,19 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { SendIcon } from "lucide-react";
+import { SendIcon, SparklesIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogIcon,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
@@ -169,84 +173,93 @@ export function SuggestToChildrenButton({
       </Button>
       )}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
+      <Dialog open={open} disablePointerDismissal={sending} onOpenChange={(next) => { if (!sending) setOpen(next); }}>
+        <DialogContent variant="form" size="md">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold">Gợi ý {universityName} cho con</DialogTitle>
+            <DialogIcon tone="brand">
+              <SparklesIcon aria-hidden />
+            </DialogIcon>
+            <DialogTitle>Gợi ý {universityName} cho con</DialogTitle>
             <DialogDescription>
               Trường bạn gợi ý chưa vào danh sách của con. Con sẽ chọn thêm vào danh sách hoặc bỏ qua.
             </DialogDescription>
           </DialogHeader>
 
-          {loadError ? (
-            <p className="text-sm text-destructive">Chưa tải được danh sách con. Vui lòng thử lại.</p>
-          ) : children === null ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Spinner /> Đang tải danh sách con...
-            </div>
-          ) : children.length === 0 ? (
-            <div className="space-y-3 text-sm">
-              <p className="text-foreground">Bạn cần liên kết với con trước khi gợi ý trường.</p>
-              <Button nativeButton={false} render={<Link href="/account" />} size="sm">
-                Mở Tài khoản để liên kết
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="space-y-1 rounded-xl border border-line p-2">
-                {children.length >= 2 && (
-                  <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm font-semibold hover:bg-muted">
-                    <Checkbox
-                      checked={allPicked}
-                      disabled={free.length === 0}
-                      onCheckedChange={(checked) => setPicked(checked ? free.map((c) => c.studentId) : [])}
-                    />
-                    Tất cả các con
-                  </label>
-                )}
-                {children.map((c) => (
-                  <label
-                    key={c.studentId}
-                    className={cn(
-                      "flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm",
-                      c.blocked ? "text-muted-foreground" : "cursor-pointer hover:bg-muted",
-                      children.length >= 2 && "pl-6",
-                    )}
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <Checkbox
-                        checked={picked.includes(c.studentId)}
-                        disabled={Boolean(c.blocked)}
-                        onCheckedChange={(checked) => toggle(c.studentId, checked)}
-                      />
-                      {c.name}
-                    </span>
-                    {c.blocked && <span className="text-xs">{c.blocked}</span>}
-                  </label>
-                ))}
+          <DialogBody className="space-y-3">
+            {loadError ? (
+              <p className="text-sm text-destructive">Chưa tải được danh sách con. Vui lòng thử lại.</p>
+            ) : children === null ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Spinner /> Đang tải danh sách con...
               </div>
+            ) : children.length === 0 ? (
+              <p className="text-sm text-foreground">Bạn cần liên kết với con trước khi gợi ý trường.</p>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-1 rounded-xl border border-line p-2">
+                  {children.length >= 2 && (
+                    <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm font-semibold hover:bg-muted">
+                      <Checkbox
+                        checked={allPicked}
+                        disabled={free.length === 0}
+                        onCheckedChange={(checked) => setPicked(checked ? free.map((c) => c.studentId) : [])}
+                      />
+                      Tất cả các con
+                    </label>
+                  )}
+                  {children.map((c) => (
+                    <label
+                      key={c.studentId}
+                      className={cn(
+                        "flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm",
+                        c.blocked ? "text-muted-foreground" : "cursor-pointer hover:bg-muted",
+                        children.length >= 2 && "pl-6",
+                      )}
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <Checkbox
+                          checked={picked.includes(c.studentId)}
+                          disabled={Boolean(c.blocked)}
+                          onCheckedChange={(checked) => toggle(c.studentId, checked)}
+                        />
+                        {c.name}
+                      </span>
+                      {c.blocked && <span className="text-xs">{c.blocked}</span>}
+                    </label>
+                  ))}
+                </div>
 
-              <Textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value.slice(0, MAX_NOTE))}
-                placeholder="Lời nhắn cho con (không bắt buộc), ví dụ lý do bạn thích trường này"
-                aria-label="Lời nhắn cho con"
-                rows={3}
-                className="resize-none text-sm"
-              />
-            </div>
-          )}
+                <Textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value.slice(0, MAX_NOTE))}
+                  placeholder="Lời nhắn cho con (không bắt buộc), ví dụ lý do bạn thích trường này"
+                  aria-label="Lời nhắn cho con"
+                  rows={3}
+                  className="resize-none text-sm"
+                />
+              </div>
+            )}
 
-          {error && <p className="text-xs text-destructive">{error}</p>}
+            {error && <p className="text-xs text-destructive">{error}</p>}
+          </DialogBody>
 
-          {children !== null && children.length > 0 && (
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={sending}>
-                Hủy
-              </Button>
-              <Button type="button" onClick={submit} disabled={sending || picked.length === 0} className="gap-2" loading={sending}>
+          {children !== null && children.length === 0 ? (
+            <DialogFooter layout="pair">
+              <DialogCancel>Đóng</DialogCancel>
+              <DialogAction tone="primary" render={<Link href="/account" />}>
+                Mở Tài khoản để liên kết
+              </DialogAction>
+            </DialogFooter>
+          ) : children !== null && children.length > 0 ? (
+            <DialogFooter layout="pair">
+              <DialogCancel disabled={sending}>Hủy</DialogCancel>
+              <DialogAction tone="primary" onClick={submit} disabled={sending || picked.length === 0} loading={sending}>
                 Gửi gợi ý
-              </Button>
+              </DialogAction>
+            </DialogFooter>
+          ) : (
+            <DialogFooter layout="single">
+              <DialogCancel>Đóng</DialogCancel>
             </DialogFooter>
           )}
         </DialogContent>

@@ -1,14 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { SparklesIcon } from "lucide-react";
 import type { TranscriptScore, UpsertTranscriptScoreItem } from "@/types/academic";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { AppDialog } from "@/components/ui/dialog";
+import { FieldError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -185,6 +188,8 @@ export function TranscriptScoreTable({
   const [filterTerm, setFilterTerm] = useState<number | "all">("all");
   const [searchSubject, setSearchSubject] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [sampleConfirm, setSampleConfirm] = useState<EducationLevel | null>(null);
 
   const handleLevelChange = (newLevel: EducationLevel) => {
     setLevel(newLevel);
@@ -195,15 +200,16 @@ export function TranscriptScoreTable({
 
   const handleAddSubject = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     if (!subject.trim()) {
-      alert("Vui lòng nhập tên môn học.");
+      setFormError("Vui lòng nhập tên môn học.");
       return;
     }
 
     // Fix C365-02: Cho phép độ chính xác thập phân tùy ý trong [0.0, 10.0] (ví dụ: 8.25)
     const numScore = parseFloat(score);
     if (isNaN(numScore) || numScore < 0 || numScore > 10) {
-      alert("Điểm số phải từ 0.0 đến 10.0.");
+      setFormError("Điểm số phải từ 0.0 đến 10.0.");
       return;
     }
 
@@ -212,7 +218,7 @@ export function TranscriptScoreTable({
 
     if (isCustomTerm) {
       if (!customTermName.trim()) {
-        alert("Vui lòng nhập tên kỳ học tùy chỉnh.");
+        setFormError("Vui lòng nhập tên kỳ học tùy chỉnh.");
         return;
       }
       finalTermName = customTermName.trim();
@@ -225,7 +231,7 @@ export function TranscriptScoreTable({
 
     const numCredits = credits ? parseFloat(credits) : null;
     if (numCredits !== null && (isNaN(numCredits) || numCredits <= 0 || numCredits > 30)) {
-      alert("Số tín chỉ/hệ số phải lớn hơn 0 và không quá 30.");
+      setFormError("Số tín chỉ/hệ số phải lớn hơn 0 và không quá 30.");
       return;
     }
 
@@ -249,21 +255,18 @@ export function TranscriptScoreTable({
     }
   };
 
-  const handleLoadSample = async (sampleType: EducationLevel) => {
-    const isHs = sampleType === "highschool";
-    const label = isHs ? "THPT (3 năm - 25 môn)" : "Đại học (4 năm - 28 môn có tín chỉ)";
-    const dataset = isHs ? SAMPLE_HIGHSCHOOL_SCORES : SAMPLE_UNIVERSITY_SCORES;
-
-    if (confirm(`Nạp dữ liệu học tập mẫu ${label} để kiểm thử thuật toán?`)) {
-      setIsSaving(true);
-      try {
-        await onSaveScores(dataset);
-        setLevel(sampleType);
-      } catch {
-        // Lưu thất bại
-      } finally {
-        setIsSaving(false);
-      }
+  const confirmLoadSample = async () => {
+    if (!sampleConfirm) return;
+    const dataset = sampleConfirm === "highschool" ? SAMPLE_HIGHSCHOOL_SCORES : SAMPLE_UNIVERSITY_SCORES;
+    setIsSaving(true);
+    try {
+      await onSaveScores(dataset);
+      setLevel(sampleConfirm);
+      setSampleConfirm(null);
+    } catch {
+      // Lưu thất bại
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -365,7 +368,7 @@ export function TranscriptScoreTable({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => handleLoadSample("highschool")}
+                onClick={() => setSampleConfirm("highschool")}
                 disabled={isSaving}
               >
                 Nạp mẫu THPT (3 năm)
@@ -374,7 +377,7 @@ export function TranscriptScoreTable({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => handleLoadSample("university")}
+                onClick={() => setSampleConfirm("university")}
                 disabled={isSaving}
               >
                 Nạp mẫu Đại học (4 năm)
@@ -463,18 +466,29 @@ export function TranscriptScoreTable({
                   />
                 </div>
               ) : (
-                <NativeSelect
-                  id="transcript-term-select"
-                  value={selectedTermOrder}
-                  onChange={(e) => setSelectedTermOrder(parseInt(e.target.value))}
-                  className="w-full"
-                >
-                  {currentTerms.map((t) => (
-                    <NativeSelectOption key={t.order} value={t.order}>
-                      {t.name}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                (() => {
+                  const termItems = currentTerms.map((t) => ({ value: String(t.order), label: t.name }));
+                  return (
+                    <Select
+                      value={String(selectedTermOrder)}
+                      onValueChange={(v) => {
+                        if (v !== null) setSelectedTermOrder(parseInt(v, 10));
+                      }}
+                      items={termItems}
+                    >
+                      <SelectTrigger id="transcript-term-select" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {termItems.map((t) => (
+                          <SelectItem key={t.value} value={t.value}>
+                            {t.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  );
+                })()
               )}
             </div>
 
@@ -538,6 +552,7 @@ export function TranscriptScoreTable({
               </Button>
             </div>
           </form>
+          {formError && <FieldError>{formError}</FieldError>}
         </div>
 
         {/* Filter and Search Bar */}
@@ -661,6 +676,26 @@ export function TranscriptScoreTable({
           )}
         </Table>
       </CardContent>
+
+      <AppDialog
+        open={sampleConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open && !isSaving) setSampleConfirm(null);
+        }}
+        variant="action"
+        icon={<SparklesIcon aria-hidden />}
+        iconTone="brand"
+        title="Nạp dữ liệu học tập mẫu?"
+        description={
+          sampleConfirm === "highschool"
+            ? "Nạp dữ liệu học tập mẫu THPT (3 năm - 25 môn) để kiểm thử thuật toán?"
+            : "Nạp dữ liệu học tập mẫu Đại học (4 năm - 28 môn có tín chỉ) để kiểm thử thuật toán?"
+        }
+        cancelLabel="Hủy"
+        confirmLabel="Nạp dữ liệu mẫu"
+        loading={isSaving}
+        onConfirm={() => void confirmLoadSample()}
+      />
     </Card>
   );
 }
