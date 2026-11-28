@@ -1362,7 +1362,7 @@ export default function DialogAuditPage() {
       </AppDialog>
 
       <Dialog open={active === "comm-lightbox"} onOpenChange={(o) => !o && closeActive()}>
-        <DialogContent variant="action" size="full" className="bg-ink text-white ring-white/10">
+        <DialogContent variant="action" size="full" className="bg-[#0f2233] dark:bg-black/95 text-white ring-white/10">
           <DialogHeader>
             <DialogIcon tone="muted" className="text-white/80">
               <ImageIcon />
