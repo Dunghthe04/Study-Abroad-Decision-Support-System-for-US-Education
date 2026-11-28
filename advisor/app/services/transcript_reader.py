@@ -893,6 +893,7 @@ class TranscriptReader:
             result.warnings.append(
                 f"Tệp '{file_name}': bỏ {len(dropped)} điểm không khớp với ảnh ({sample}). Bạn kiểm tra và điền lại các ô còn trống."
             )
+        self._combine_same_semester(result.terms)
         for label in self._drop_whole_year_terms(result.terms):
             result.warnings.append(
                 f"Tệp '{file_name}': cột \"{label}\" có điểm bằng trung bình hai học kỳ nên là điểm cả năm, đã bỏ."
@@ -903,6 +904,23 @@ class TranscriptReader:
                     f"Tệp '{file_name}': chưa rõ \"{t.label}\" là học kỳ 1 hay học kỳ 2, bạn chọn lại tên kỳ trong bảng giúp nhé."
                 )
         return result
+
+    @staticmethod
+    def _combine_same_semester(terms: list[_RawTerm]) -> None:
+        """Cùng một tệp, không ghi lớp / năm học, cùng học kỳ nhưng mỗi chỗ một tên ("Kết quả học kỳ 1" và dòng
+        "HK1" ở bảng tổng kết): là một kỳ, gộp điểm. Môn nào hai chỗ ghi khác điểm thì để riêng cho học sinh xem."""
+        kept: dict[int, _RawTerm] = {}
+        for t in list(terms):
+            if t.grade_name is not None or t.academic_year is not None or t.semester not in (1, 2):
+                continue
+            first = kept.get(t.semester)
+            if first is None:
+                kept[t.semester] = t
+            elif all(first.scores[s] == v for s, v in t.scores.items() if s in first.scores):
+                first.scores = {**first.scores, **t.scores}
+                first.label = f"HK{t.semester}"
+                first.from_image = first.from_image or t.from_image
+                terms.remove(t)
 
     @staticmethod
     def _drop_whole_year_terms(terms: list[_RawTerm]) -> list[str]:

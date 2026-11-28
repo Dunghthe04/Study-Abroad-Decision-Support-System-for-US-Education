@@ -152,6 +152,27 @@ def test_university_semester_numbers_still_count_from_course_start():
     assert TranscriptReader._resolve_term("Lớp 12", "HK3").semester is None
 
 
+def test_same_semester_written_twice_without_grade_is_one_term():
+    # Ảnh thật 20200701: mục "Kết quả học tập học kỳ 1" và dòng "HK1" ở bảng tổng kết là cùng một kỳ
+    part = {"Toán": "7,2", "Ngữ văn": "6,7"}
+    full = {"Toán": "7,2", "Ngữ văn": "6,7", "Tin học": "8,0"}
+    _, merged = _read(
+        _term("Kết quả học tập học kỳ 1", part, "hk1", grade=""),
+        _term("HK1", full, "hk1", grade=""),
+        source="7,2 6,7 8,0",
+    )
+    assert merged == {"HK1": {"Toán": 7.2, "Ngữ văn": 6.7, "Tin học": 8.0}}
+
+
+def test_same_semester_with_conflicting_scores_stays_separate():
+    _, merged = _read(
+        _term("Học kỳ 1", {"Toán": "7,2"}, "hk1", grade=""),
+        _term("HK1", {"Toán": "8,0"}, "hk1", grade=""),
+        source="7,2 8,0",
+    )
+    assert len(merged) == 2
+
+
 # --- Lớp 2: R7 ---
 
 R7_SOURCE = "Lớp 12\n7,2 6,7 7,5 7,1"
