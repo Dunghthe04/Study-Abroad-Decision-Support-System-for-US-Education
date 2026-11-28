@@ -47,7 +47,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<SlmTrainingSample> SlmTrainingSamples => Set<SlmTrainingSample>();
     public DbSet<SlmSampleVersion> SlmSampleVersions => Set<SlmSampleVersion>();
     public DbSet<AiCall> AiCalls => Set<AiCall>();
-    public DbSet<RoadmapStep> RoadmapSteps => Set<RoadmapStep>();
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<BirthDateChangeRequest> BirthDateChangeRequests => Set<BirthDateChangeRequest>();
     public DbSet<ForumPost> ForumPosts => Set<ForumPost>();
@@ -58,20 +57,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Media> Media => Set<Media>();
 
     // 13 thực thể bổ sung chuẩn hóa toàn diện 42 bảng DB First
-    public DbSet<ExpertRule> ExpertRules => Set<ExpertRule>();
     public DbSet<WhatIfSimulation> WhatIfSimulations => Set<WhatIfSimulation>();
     public DbSet<LeadMessage> LeadMessages => Set<LeadMessage>();
-    public DbSet<CenterSuspensionProposal> CenterSuspensionProposals => Set<CenterSuspensionProposal>();
     public DbSet<CenterReview> CenterReviews => Set<CenterReview>();
     public DbSet<CenterReviewReport> CenterReviewReports => Set<CenterReviewReport>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
     public DbSet<UserSubscription> UserSubscriptions => Set<UserSubscription>();
-    public DbSet<UserDailyUsage> UserDailyUsages => Set<UserDailyUsage>();
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
     public DbSet<DeletedBuyerRetention> DeletedBuyerRetentions => Set<DeletedBuyerRetention>();
     public DbSet<FamilyGroup> FamilyGroups => Set<FamilyGroup>();
     public DbSet<FamilyMember> FamilyMembers => Set<FamilyMember>();
-    public DbSet<PolicyAlert> PolicyAlerts => Set<PolicyAlert>();
     public DbSet<FieldEvidence> FieldEvidences => Set<FieldEvidence>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
