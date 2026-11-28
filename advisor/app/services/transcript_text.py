@@ -141,9 +141,10 @@ _STRONG_SCORE_WORDS = frozenset(
 )
 _SCORE_WORDS = _STRONG_SCORE_WORDS | frozenset("ly li hoa sinh van su dia anh tin science economics".split())
 _SCORE_PHRASE_RE = re.compile(r"\b(?:" + "|".join(MULTI_WORD_HEADERS) + r")\b")
-# Lớp / kỳ / năm học ở bất kỳ đâu trong dòng: "Họ và tên: [HỌ TÊN]   Lớp: 10A1" giữ lại "Lớp: 10A1" để biết lớp
+# Lớp / kỳ / năm học ở bất kỳ đâu trong dòng: "Họ và tên: [HỌ TÊN]   Lớp: 10A1" giữ lại "Lớp: 10A1" để biết lớp.
+# "Học kỳ" OCR hay chép sai chữ "kỳ" (Hoc kg, Hoc kj, Hoc ki): nhận "hoc k" + tối đa 1 chữ, không liệt kê từng kiểu sai
 _CONTEXT_RE = re.compile(
-    r"(?<![a-z0-9])(?:lop\W*(?:6|7|8|9|10|11|12)(?![0-9])|hk\s*[12i]+(?![a-z0-9])|hoc ky|ca nam|nam hoc|semester"
+    r"(?<![a-z0-9])(?:lop\W*(?:6|7|8|9|10|11|12)(?![0-9])|hk\s*[12i]+(?![a-z0-9])|hoc k[a-z]?(?![a-z])|ca nam|nam hoc|semester"
     r"|(?:fall|spring|summer)\s*20\d\d)"
 )
 _SCORE_TOKEN_RE = re.compile(r"(?<![\w.,])(?:\d{1,2}(?:[.,]\d{1,2})?)(?![\w.,]?\d)")

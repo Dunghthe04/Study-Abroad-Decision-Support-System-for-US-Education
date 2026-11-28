@@ -170,3 +170,10 @@ def test_keep_score_lines_cuts_unlabeled_name_before_class():
 def test_keep_score_lines_keeps_whole_table_row_with_term():
     row = "| Lớp 10 HK1 | 8.5 | 7.0 |"
     assert keep_score_lines(row) == row
+
+
+def test_keep_score_lines_keeps_term_header_with_misread_ky():
+    # Ảnh thật anh-chup-man-hinh: OCR chép "Học kỳ" thành "Hoc kg", trước đây chỉ còn "Ca nám" nên mất cột HK1, HK2
+    header = "Hoc kg I Hoc kg II Ca nám"
+    assert keep_score_lines(f"{header}\nToàn 42 47 45").splitlines()[0] == header
+    assert keep_score_lines("Nguyễn Văn Học Kim Lớp 12A\nToán 8.0 8.5 8.3").splitlines()[0] == "Lớp 12A"
