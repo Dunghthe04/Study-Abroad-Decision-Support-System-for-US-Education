@@ -102,7 +102,7 @@ export const dialogBodyClassName =
   "[&_[data-slot=field-label]]:text-[0.8125rem] [&_[data-slot=field-label]]:font-medium [&_[data-slot=field-label]]:text-ink"
 
 export const dialogOverlayClassName =
-  "fixed inset-0 isolate z-50 bg-ink/30 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"
+  "fixed inset-0 isolate z-50 bg-[#0f2233]/30 dark:bg-black/60 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"
 
 export const dialogPopupBaseClassName =
   "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-[18px] bg-surface px-5 pt-7 pb-5 text-sm text-ink shadow-[0_20px_50px_-14px_rgba(15,34,51,0.2),0_4px_14px_-4px_rgba(15,34,51,0.08)] ring-1 ring-ink/[0.08] duration-100 outline-none sm:px-6 sm:pt-8 sm:pb-6 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"

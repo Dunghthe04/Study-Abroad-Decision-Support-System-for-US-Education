@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Loader2Icon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Ảnh từ link ngoài: có khung xương (skeleton) trong lúc tải, và khi link hỏng hoặc không có ảnh
+ * Ảnh từ link ngoài: có vòng xoay tải ở giữa ảnh trong lúc tải, và khi link hỏng hoặc không có ảnh
  * thì hiện `fallback` thay vì biểu tượng ảnh vỡ. Chiếm đầy khung cha (cha cần `relative` + kích thước).
  * Dùng cho mọi ảnh bìa, logo, ảnh trung tâm lấy từ URL người dùng nhập.
  */
@@ -40,7 +41,16 @@ export function SafeImage({
 
   return (
     <>
-      {status === "loading" && <span aria-hidden="true" className="absolute inset-0 animate-pulse bg-muted" />}
+      {/* Vòng xoay mờ dần khi ảnh tải xong, cùng lúc ảnh hiện lên */}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity duration-500 ease-out",
+          status === "loaded" ? "opacity-0" : "opacity-100",
+        )}
+      >
+        <Loader2Icon className="size-6 animate-spin text-ink-3" />
+      </span>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         ref={ref}
