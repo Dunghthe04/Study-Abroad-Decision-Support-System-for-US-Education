@@ -7,6 +7,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function CenterTypeBadge({
   centerType,
@@ -116,3 +117,20 @@ export function CenterLegalModeBadge({ mode }: { mode: "licensed" | "notified" }
   return <Badge variant="neutral">Thông báo hoạt động Sở GD</Badge>;
 }
 
+
+/** Dấu nhỏ cạnh tên trung tâm (đã xác minh, giấy tờ pháp lý); chi tiết hiện khi rê chuột. Dùng chung thẻ danh bạ và trang chi tiết. */
+export function TrustIcon({ label, lines, children }: { label: string; lines?: string[]; children: React.ReactNode }) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger delay={150} render={<span />} className="cursor-help">
+          {children}
+          <span className="sr-only">{label}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top" sideOffset={8}>
+          {lines ? lines.map((line) => <div key={line}>{line}</div>) : label}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
